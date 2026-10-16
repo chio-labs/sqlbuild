@@ -21,6 +21,7 @@ use sqlbuild_scopes::scope_report::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::{
@@ -80,8 +81,8 @@ impl LookupReports {
 
 /// The reports of a `ScopeLookup`: its native lookup with its canonical declarations' values.
 fn lookup_reports(lookup: &Bound<'_, PyAny>) -> PyResult<LookupReports> {
-    let index: Bound<'_, PyAny> = lookup.getattr("index")?;
-    let native: Py<NativeScopeLookup> = lookup.getattr("native")?.extract()?;
+    let index: Bound<'_, PyAny> = native_field(lookup, "index")?;
+    let native: Py<NativeScopeLookup> = native_field(lookup, "native")?.extract()?;
     let rows: Vec<DeclarationValues> = index
         .getattr("declarations")?
         .try_iter()?
@@ -164,7 +165,8 @@ pub(crate) fn scope_report(
     let native: &NativeScopeLookup = reports.lookup.get();
     match build_scope_report(reports.source(native), &request) {
         Ok(report) => {
-            let diagnostics: Bound<'_, PyAny> = lookup.getattr("index")?.getattr("diagnostics")?;
+            let diagnostics: Bound<'_, PyAny> =
+                native_field(lookup, "index")?.getattr("diagnostics")?;
             Ok(report_object(&classes, report, (&selected, &diagnostics))?.unbind())
         }
         Err(failure) => Err(failure_error(py, &failure)?),
@@ -190,7 +192,7 @@ pub(crate) fn scope_explain(
     match explain_scope_declaration(reports.source(native), &request) {
         Ok((explanation, diagnostics)) => {
             let index_diagnostics: Bound<'_, PyAny> =
-                lookup.getattr("index")?.getattr("diagnostics")?;
+                native_field(lookup, "index")?.getattr("diagnostics")?;
             Ok((
                 explanation_object(&classes, explanation)?.unbind(),
                 diagnostics_object(&classes, &index_diagnostics, raised(diagnostics))?.unbind(),
@@ -228,7 +230,7 @@ pub(crate) fn scope_browse(
     let request: FolderRequest = folder_request(&classes, request, None)?;
     let native: &NativeScopeLookup = reports.lookup.get();
     let result = browse_scope_folders(reports.source(native), &request);
-    let diagnostics: Bound<'_, PyAny> = lookup.getattr("index")?.getattr("diagnostics")?;
+    let diagnostics: Bound<'_, PyAny> = native_field(lookup, "index")?.getattr("diagnostics")?;
     Ok(browse_object(&classes, result, &diagnostics)?.unbind())
 }
 
@@ -246,7 +248,8 @@ pub(crate) fn scope_list(
     let native: &NativeScopeLookup = reports.lookup.get();
     match list_scope_declarations(reports.source(native), &request) {
         Ok(result) => {
-            let diagnostics: Bound<'_, PyAny> = lookup.getattr("index")?.getattr("diagnostics")?;
+            let diagnostics: Bound<'_, PyAny> =
+                native_field(lookup, "index")?.getattr("diagnostics")?;
             Ok(list_object(&classes, result, &diagnostics)?.unbind())
         }
         Err(failure) => Err(failure_error(py, &failure)?),
@@ -272,7 +275,7 @@ pub(crate) fn scope_move_preview(
     match preview_scope_move(reports.source(native), &request) {
         Ok((preview, diagnostics)) => {
             let index_diagnostics: Bound<'_, PyAny> =
-                lookup.getattr("index")?.getattr("diagnostics")?;
+                native_field(lookup, "index")?.getattr("diagnostics")?;
             Ok((
                 preview
                     .map(|preview| Ok::<_, PyErr>(move_object(&classes, preview)?.unbind()))

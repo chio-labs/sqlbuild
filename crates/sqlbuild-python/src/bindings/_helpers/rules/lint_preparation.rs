@@ -7,6 +7,7 @@ use sqlbuild_rules::lint_text::models::{ExpansionSpan, LintSqlBody};
 
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::lint_pipeline::{
@@ -70,7 +71,7 @@ pub(crate) fn prepare_lint_body<'py>(
     let file_path: Bound<'py, PyAny> = arguments.value("file_path")?;
     let contents: String = arguments.value("contents")?.extract()?;
     let dialect: String = arguments.value("dialect")?.extract()?;
-    let kind: Option<String> = role.getattr("declaration_kind")?.extract()?;
+    let kind: Option<String> = native_field(&role, "declaration_kind")?.extract()?;
     let prepared: SingleBody = prepare_single_body(&SingleBodyRequest {
         context: &SqlExpansionInputs::from_record(&arguments.value("context")?)?,
         file_path: &file_path,
@@ -78,8 +79,8 @@ pub(crate) fn prepare_lint_body<'py>(
         range: arguments.value("body_range")?.extract()?,
         role: BodyRole {
             kind: kind.as_deref(),
-            in_project: role.getattr("in_project")?.is_truthy()?,
-            in_hook_directory: role.getattr("in_hook_directory")?.is_truthy()?,
+            in_project: native_field(&role, "in_project")?.is_truthy()?,
+            in_hook_directory: native_field(&role, "in_hook_directory")?.is_truthy()?,
         },
         dialect: &dialect,
     })?;

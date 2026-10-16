@@ -5,6 +5,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::config;
 use crate::bindings::_helpers::planner_migrations::models::ModelMigrationDeclaration;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
@@ -39,7 +40,7 @@ pub(super) fn declared<'py>(
     let result = PyDict::new(state.py());
     for item in declarations {
         let fingerprint = call_with(
-            &state.getattr("model_fingerprint")?,
+            &native_field(state, "model_fingerprint")?,
             &[
                 ("location", item.origin_location.clone()),
                 ("model_name", item.origin_model.clone()),
@@ -49,7 +50,7 @@ pub(super) fn declared<'py>(
         let origin = if explicit.is_truthy()? {
             explicit
         } else if !fingerprint.is_none() {
-            fingerprint.getattr("node_name")?
+            native_field(&fingerprint, "node_name")?
         } else {
             state.py().None().into_bound(state.py())
         };
@@ -76,8 +77,8 @@ pub(super) fn renames<'py>(
         .collect::<PyResult<_>>()?;
     for (index, event) in events.iter().enumerate() {
         ordered.append((
-            event.getattr("created_at")?,
-            event.getattr("event_id")?,
+            native_field(event, "created_at")?,
+            native_field(event, "event_id")?,
             index,
         ))?;
     }
@@ -86,14 +87,14 @@ pub(super) fn renames<'py>(
     for item in ordered.iter() {
         let index: usize = item.get_item(2)?.extract()?;
         let event = &events[index];
-        let event_target = event.getattr("target_name")?;
+        let event_target = native_field(event, "target_name")?;
         if event_target.is_none() || event_target.eq(&target)? {
-            latest.set_item(event.getattr("destination_model")?, event)?;
+            latest.set_item(native_field(event, "destination_model")?, event)?;
         }
     }
     let result = PyDict::new(py);
     for (name, event) in latest.iter() {
-        let origin = event.getattr("origin_model")?;
+        let origin = native_field(&event, "origin_model")?;
         if names.contains(&name)? && !origin.is_none() && !names.contains(&origin)? {
             result.set_item(name, origin)?;
         }
@@ -111,24 +112,24 @@ pub(super) fn resumed<'py>(
     let target = runtime
         .getattr("project")?
         .getattr("effective_target_name")?;
-    let events = state.getattr("events")?;
+    let events = native_field(state, "events")?;
     for item in models {
-        let name = item.getattr("name")?;
+        let name = native_field(item, "name")?;
         if !unbuilt.contains(&name)? || !(history(item)? || identity(item)?) {
             continue;
         }
-        let destination = item.getattr("destination")?;
+        let destination = native_field(item, "destination")?;
         let event = newest(&events, &destination)?;
         if event.is_none() {
             continue;
         }
-        let event_target = event.getattr("target_name")?;
+        let event_target = native_field(&event, "target_name")?;
         if event
             .getattr("destination")?
             .call_method1("matches", (relation(&destination)?,))?
             .is_truthy()?
             && (event_target.is_none() || event_target.eq(&target)?)
-            && event.getattr("decision")?.eq("renamed")? == identity(item)?
+            && native_field(&event, "decision")?.eq("renamed")? == identity(item)?
         {
             result.set_item(name, event)?;
         }
@@ -137,7 +138,7 @@ pub(super) fn resumed<'py>(
 }
 
 pub(super) fn key<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
-    let schema = location.getattr("schema")?;
+    let schema = native_field(location, "schema")?;
     let schema = if schema.is_truthy()? {
         schema
     } else {
@@ -147,7 +148,7 @@ pub(super) fn key<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTu
         location.py(),
         [
             schema.call_method0("lower")?,
-            location.getattr("name")?.call_method0("lower")?,
+            native_field(location, "name")?.call_method0("lower")?,
         ],
     )
 }

@@ -6,6 +6,7 @@ use crate::bindings::_helpers::fingerprints::query_hashes::compute_query_hash;
 use crate::bindings::_helpers::planner_migrations::column_objects::{replace, text};
 use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_MODEL_NAME_METADATA_KEY;
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::timestamps::presumed_utc;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -20,7 +21,8 @@ pub(super) fn applies(
         .getattr("models")?
         .call_method1("get", (model_reads::name_object(model)?,))?;
     Ok(own.is_none()
-        || presumed_utc(&own.getattr("ts")?)? < presumed_utc(&event.getattr("created_at")?)?)
+        || presumed_utc(&native_field(&own, "ts")?)?
+            < presumed_utc(&native_field(event, "created_at")?)?)
 }
 
 pub(super) fn handover<'py>(
@@ -32,11 +34,11 @@ pub(super) fn handover<'py>(
         return Ok(fingerprint.clone());
     }
     let py = model.py();
-    let mut metadata = fingerprint.getattr("metadata_json")?;
+    let mut metadata = native_field(fingerprint, "metadata_json")?;
     let json = py.import("json")?;
     let payload = match json.call_method1("loads", (&metadata,)) {
         Ok(payload) => payload,
-        Err(error) if error.is_instance(py, &json.getattr("JSONDecodeError")?) => {
+        Err(error) if error.is_instance(py, &native_field(&json, "JSONDecodeError")?) => {
             py.None().into_bound(py)
         }
         Err(error) => return Err(error),
@@ -50,22 +52,22 @@ pub(super) fn handover<'py>(
         kwargs.set_item("sort_keys", true)?;
         kwargs.set_item("separators", (",", ":"))?;
         kwargs.set_item("default", imported(py, "builtins", "str")?)?;
-        metadata = json.getattr("dumps")?.call((payload,), Some(&kwargs))?;
+        metadata = native_field(&json, "dumps")?.call((payload,), Some(&kwargs))?;
     }
     let destination = model_reads::destination(model)?;
     replace(
         fingerprint,
         &[
             ("node_name", model_reads::name_object(model)?),
-            ("target_database", destination.getattr("database")?),
-            ("target_schema", destination.getattr("schema")?),
-            ("target_name", destination.getattr("name")?),
+            ("target_database", native_field(&destination, "database")?),
+            ("target_schema", native_field(&destination, "schema")?),
+            ("target_name", native_field(&destination, "name")?),
             (
                 "version_hash",
                 if version.is_truthy()? {
                     version.clone()
                 } else {
-                    fingerprint.getattr("version_hash")?
+                    native_field(fingerprint, "version_hash")?
                 },
             ),
             ("metadata_json", metadata),

@@ -8,6 +8,7 @@ use sqlbuild_analysis::fingerprint_storage::main::insert_sql::insert_sql;
 use sqlbuild_analysis::fingerprint_storage::models::StoredFingerprint;
 
 use crate::bindings::_helpers::fingerprints::latest_rows::fingerprint_input_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// One `INSERT` of a single fingerprint.
 pub(crate) fn fingerprint_insert_sql(
@@ -46,17 +47,17 @@ pub(crate) fn fingerprint_insert_batches<'py>(
 
 fn stored_fingerprint(fingerprint: &Bound<'_, PyAny>) -> PyResult<StoredFingerprint> {
     Ok(StoredFingerprint {
-        node_type: fingerprint.getattr("node_type")?.extract()?,
-        node_name: fingerprint.getattr("node_name")?.extract()?,
-        target_database: fingerprint.getattr("target_database")?.extract()?,
-        target_schema: fingerprint.getattr("target_schema")?.extract()?,
-        target_name: fingerprint.getattr("target_name")?.extract()?,
+        node_type: native_field(fingerprint, "node_type")?.extract()?,
+        node_name: native_field(fingerprint, "node_name")?.extract()?,
+        target_database: native_field(fingerprint, "target_database")?.extract()?,
+        target_schema: native_field(fingerprint, "target_schema")?.extract()?,
+        target_name: native_field(fingerprint, "target_name")?.extract()?,
         run_id: formatted(fingerprint, "run_id")?,
         definition_hash: formatted(fingerprint, "definition_hash")?,
         version_hash: formatted(fingerprint, "version_hash")?,
         schema_fingerprint: formatted(fingerprint, "schema_fingerprint")?,
-        definition: fingerprint.getattr("definition")?.extract()?,
-        metadata_json: fingerprint.getattr("metadata_json")?.extract()?,
+        definition: native_field(fingerprint, "definition")?.extract()?,
+        metadata_json: native_field(fingerprint, "metadata_json")?.extract()?,
         ts: fingerprint
             .getattr("ts")?
             .call_method0("isoformat")?

@@ -6,6 +6,7 @@ use crate::bindings::_helpers::graph::views::edge_dict;
 use crate::bindings::_helpers::planner_scope::values::{
     dependency_names, edges, keys, loader_graph, loader_names, project_graph,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, pyfunction};
@@ -34,8 +35,8 @@ pub(crate) fn loader_to_source_entry<'py>(
     loader: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
-    let name = loader.getattr("name")?;
-    let mut destination = loader.getattr("destination")?;
+    let name = native_field(loader, "name")?;
+    let mut destination = native_field(loader, "destination")?;
     if destination.is_none() {
         destination = format!("__loader__{}", name.extract::<String>()?)
             .into_pyobject(py)?
@@ -47,11 +48,11 @@ pub(crate) fn loader_to_source_entry<'py>(
             ("destination", destination),
             (
                 "default_database",
-                project.getattr("effective_target_database")?,
+                native_field(project, "effective_target_database")?,
             ),
             (
                 "default_schema",
-                project.getattr("effective_target_schema")?,
+                native_field(project, "effective_target_schema")?,
             ),
         ],
     )?;
@@ -84,9 +85,9 @@ pub(crate) fn intermediate_map<'py>(
     let graph = project_graph(project)?;
     let names = intermediate_sources(&graph, &keys(selected)?, upstream);
     let loaders = PyDict::new(project.py());
-    for loader in project.getattr("loader_functions")?.try_iter()? {
+    for loader in native_field(project, "loader_functions")?.try_iter()? {
         let loader = loader?;
-        loaders.set_item(loader.getattr("name")?, &loader)?;
+        loaders.set_item(native_field(&loader, "name")?, &loader)?;
     }
     let result = PyDict::new(project.py());
     for name in names {

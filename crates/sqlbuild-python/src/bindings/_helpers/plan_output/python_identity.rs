@@ -1,5 +1,6 @@
 //! The source texts a changed Python node's identity diffs compare.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 
@@ -16,7 +17,9 @@ fn json_object<'py>(raw_json: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, 
     let json: Bound<'py, PyModule> = py.import("json")?;
     let payload: Bound<'py, PyAny> = match json.call_method1("loads", (raw_json,)) {
         Ok(payload) => payload,
-        Err(error) if error.is_instance(py, &json.getattr("JSONDecodeError")?) => return Ok(None),
+        Err(error) if error.is_instance(py, &native_field(&json, "JSONDecodeError")?) => {
+            return Ok(None);
+        }
         Err(error) => return Err(error),
     };
     let Ok(payload) = payload.downcast_into::<PyDict>() else {

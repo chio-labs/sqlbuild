@@ -17,6 +17,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -46,8 +47,8 @@ pub(crate) fn environment_sources<'py>(
     let py: Python<'py> = discovered.py();
     let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let mut sources: Vec<Bound<'py, PyAny>> = Vec::new();
-    for source_file in discovered.getattr("source_files")?.try_iter()? {
-        for source in source_file?.getattr("source_entries")?.try_iter()? {
+    for source_file in native_field(discovered, "source_files")?.try_iter()? {
+        for source in native_field(&source_file?, "source_entries")?.try_iter()? {
             let source: Bound<'py, PyAny> = source?;
             let changes: Bound<'py, PyDict> = PyDict::new(py);
             for field in ["database", "schema"] {
@@ -74,11 +75,11 @@ impl<'py> LoadProject<'py> {
         let sources: Vec<Bound<'py, PyAny>> = environment_sources(discovered, target_config)?;
         let mut graph: LoadGraph = LoadGraph::default();
         for source in &sources {
-            let loader: Bound<'py, PyAny> = source.getattr("loader")?;
+            let loader: Bound<'py, PyAny> = native_field(source, "loader")?;
             if !loader.is_none() {
                 graph
                     .sources
-                    .push((source.getattr("name")?.extract()?, loader.extract()?));
+                    .push((native_field(source, "name")?.extract()?, loader.extract()?));
             }
         }
         let functions: Vec<Bound<'py, PyAny>> = discovered
@@ -87,13 +88,16 @@ impl<'py> LoadProject<'py> {
             .collect::<PyResult<_>>()?;
         let names_by_function: Bound<'py, PyDict> = PyDict::new(py);
         for function in &functions {
-            names_by_function.set_item(function.getattr("function")?, function.getattr("name")?)?;
+            names_by_function.set_item(
+                native_field(function, "function")?,
+                native_field(function, "name")?,
+            )?;
         }
         let mut loaders: HashMap<String, Bound<'py, PyAny>> = HashMap::new();
         for function in functions {
-            let name: String = function.getattr("name")?.extract()?;
+            let name: String = native_field(&function, "name")?.extract()?;
             let mut dependencies: Vec<String> = Vec::new();
-            for dependency in function.getattr("depends_on")?.try_iter()? {
+            for dependency in native_field(&function, "depends_on")?.try_iter()? {
                 if let Some(dependency) = names_by_function.get_item(dependency?)? {
                     dependencies.push(dependency.extract()?);
                 }
@@ -116,7 +120,7 @@ impl<'py> LoadProject<'py> {
     ) -> PyResult<Bound<'py, PyAny>> {
         let loader: &Bound<'py, PyAny> = &self.loaders[name];
         let py: Python<'py> = loader.py();
-        let destination: Bound<'py, PyAny> = loader.getattr("destination")?;
+        let destination: Bound<'py, PyAny> = native_field(loader, "destination")?;
         let destination: Bound<'py, PyAny> = if destination.is_none() {
             PyString::new(py, &format!("{LOADER_TABLE_PREFIX}{name}")).into_any()
         } else {
@@ -137,16 +141,16 @@ impl<'py> LoadProject<'py> {
             &registry::class(py, RecordId::SourceEntry)?,
             &[
                 ("name", name_value.clone()),
-                ("database", parts.getattr("database")?),
-                ("schema", parts.getattr("schema")?),
-                ("table", parts.getattr("table")?),
+                ("database", native_field(&parts, "database")?),
+                ("schema", native_field(&parts, "schema")?),
+                ("table", native_field(&parts, "table")?),
                 ("loader", name_value),
-                ("write_strategy", loader.getattr("write_strategy")?),
-                ("cursor_column", loader.getattr("cursor_column")?),
-                ("unique_key", loader.getattr("unique_key")?),
-                ("contract", loader.getattr("contract")?),
+                ("write_strategy", native_field(loader, "write_strategy")?),
+                ("cursor_column", native_field(loader, "cursor_column")?),
+                ("unique_key", native_field(loader, "unique_key")?),
+                ("contract", native_field(loader, "contract")?),
                 ("meta", meta.into_any()),
-                ("columns", loader.getattr("columns")?),
+                ("columns", native_field(loader, "columns")?),
             ],
         )
     }
@@ -162,8 +166,8 @@ impl<'py> LoadProject<'py> {
             .map_err(|error| unknown_selector(py, &error))?;
         let mut managed: HashMap<String, &Bound<'py, PyAny>> = HashMap::new();
         for source in &self.sources {
-            if !source.getattr("loader")?.is_none() {
-                managed.insert(source.getattr("name")?.extract()?, source);
+            if !native_field(source, "loader")?.is_none() {
+                managed.insert(native_field(source, "name")?.extract()?, source);
             }
         }
         entries
@@ -185,8 +189,8 @@ impl<'py> LoadProject<'py> {
             .iter()
             .map(|source| {
                 Ok((
-                    source.getattr("name")?.extract()?,
-                    source.getattr("loader")?.extract()?,
+                    native_field(source, "name")?.extract()?,
+                    native_field(source, "loader")?.extract()?,
                 ))
             })
             .collect::<PyResult<_>>()?;
@@ -264,8 +268,11 @@ pub(crate) fn loader_defaults<'py>(
     let adapter_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(discovered, "project_config")?,
+            ),
+            ("local_config", native_field(discovered, "local_config")?),
         ],
     )?;
     let duckdb: Bound<'py, PyAny> =

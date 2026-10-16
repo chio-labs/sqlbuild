@@ -12,6 +12,7 @@ use sqlbuild_core::cost_report::main::read_cost_artifact::read_cost_artifact;
 use sqlbuild_core::cost_report::models::CostRun;
 
 use crate::bindings::_helpers::cost_report::records::artifact_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
 
 const ARTIFACT_NAME: &str = "run.json";
@@ -52,7 +53,7 @@ fn load(py: Python<'_>, path: &Path) -> PyResult<Result<CostRun, CostArtifactErr
     let json: Bound<'_, PyModule> = py.import("json")?;
     let payload: Bound<'_, PyAny> = match json.call_method1("loads", (text,)) {
         Ok(payload) => payload,
-        Err(error) if error.is_instance(py, &json.getattr("JSONDecodeError")?) => {
+        Err(error) if error.is_instance(py, &native_field(&json, "JSONDecodeError")?) => {
             return Ok(Err(invalid("cost run artifact is not valid JSON")));
         }
         Err(error) => return Err(error),

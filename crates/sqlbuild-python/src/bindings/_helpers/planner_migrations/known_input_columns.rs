@@ -1,5 +1,6 @@
 //! Physical columns of the relations a model reads, as inspected by the planner.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyFrozenSet;
 use pyo3::{pyclass, pymethods};
@@ -43,7 +44,11 @@ impl KnownInputColumns {
         }
         let mut names: Vec<String> = Vec::new();
         for column in columns.try_iter()? {
-            names.push(column?.getattr("name")?.extract::<String>()?.to_lowercase());
+            names.push(
+                native_field(&column?, "name")?
+                    .extract::<String>()?
+                    .to_lowercase(),
+            );
         }
         PyFrozenSet::new(py, names).map(Some)
     }

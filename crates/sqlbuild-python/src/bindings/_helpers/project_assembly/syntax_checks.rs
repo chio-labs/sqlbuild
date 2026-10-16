@@ -8,6 +8,7 @@ use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
 use crate::bindings::_helpers::project_assembly::syntax_validation::hook_sql_statements;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
 
@@ -49,7 +50,7 @@ fn analysis_sql<'py>(model_input: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyA
         py,
         &analysis_cursor_sql(
             py,
-            &model_input.getattr("query_sql")?.extract::<String>()?,
+            &native_field(model_input, "query_sql")?.extract::<String>()?,
             &config_value(model_input, "cursor_type")?,
         )?,
     )
@@ -63,7 +64,7 @@ fn syntax_checks<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = model_input.py();
     let name: String = model_name(model_input)?;
-    if !model_input.getattr("sql_validation_enabled")?.is_truthy()?
+    if !native_field(model_input, "sql_validation_enabled")?.is_truthy()?
         || (!analysis_model_names.is_none() && !analysis_model_names.contains(&name)?)
     {
         return Ok(PyTuple::empty(py));

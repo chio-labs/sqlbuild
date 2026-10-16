@@ -20,6 +20,7 @@ use crate::bindings::_helpers::microbatches::conversion::{optional_text, state_e
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MISSING_SCHEMA: &str = "microbatch history requires a target schema";
 const EMPTY_INSERT: &str = "bulk microbatch event insert requires at least one event";
@@ -91,13 +92,13 @@ fn scope_table(
     scope: &Bound<'_, PyAny>,
 ) -> PyResult<String> {
     let py: Python<'_> = scope.py();
-    let schema: Bound<'_, PyAny> = scope.getattr("target_schema")?;
+    let schema: Bound<'_, PyAny> = native_field(scope, "target_schema")?;
     if schema.is_none() {
         return Err(state_error(py, MISSING_SCHEMA));
     }
     qualified_table(
         render_qualified_name,
-        (&scope.getattr("target_database")?, &schema),
+        (&native_field(scope, "target_database")?, &schema),
     )?
     .ok_or_else(|| state_error(py, MISSING_SCHEMA))
 }
@@ -112,7 +113,7 @@ fn events_table<'py>(
     let Some(first) = listed.first() else {
         return Err(state_error(events.py(), empty));
     };
-    let table: String = scope_table(render_qualified_name, &first.getattr("scope")?)?;
+    let table: String = scope_table(render_qualified_name, &native_field(first, "scope")?)?;
     Ok((listed, table))
 }
 
@@ -160,14 +161,14 @@ fn read_scope(
     let layout: Layout = Layout::new(py)?;
     let wildcard: String =
         host::entry(py, ExecutorHost::MicrobatchGenerationWildcard)?.extract()?;
-    let generation: Bound<'_, PyAny> = scope.getattr("physical_generation_id")?;
+    let generation: Bound<'_, PyAny> = native_field(scope, "physical_generation_id")?;
     let generation: Option<String> = if generation.extract::<String>()? == wildcard {
         None
     } else {
         Some(layout.literal("physical_generation_id", &generation)?)
     };
-    let scope_kind: String = layout.literal("scope_kind", &scope.getattr("scope_kind")?)?;
-    let scope_key: String = layout.literal("scope_key", &scope.getattr("scope_key")?)?;
+    let scope_kind: String = layout.literal("scope_kind", &native_field(scope, "scope_kind")?)?;
+    let scope_key: String = layout.literal("scope_key", &native_field(scope, "scope_key")?)?;
     Ok(read_scope_sql(
         &table,
         &ScopeRead {
@@ -193,10 +194,10 @@ fn create_table(request: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
     let render_framework_type: Bound<'_, PyAny> = request.get("render_framework_type")?;
     let framework: Bound<'_, PyAny> = host::entry(py, AdapterHost::FrameworkType)?;
     let text_type: String = render_framework_type
-        .call1((framework.getattr("STRING")?,))?
+        .call1((native_field(&framework, "STRING")?,))?
         .extract()?;
     let timestamp_type: String = render_framework_type
-        .call1((framework.getattr("TIMESTAMP")?,))?
+        .call1((native_field(&framework, "TIMESTAMP")?,))?
         .extract()?;
     let layout: Layout = Layout::new(py)?;
     let columns: Vec<TableColumn> = layout

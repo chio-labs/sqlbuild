@@ -1,5 +1,6 @@
 //! The `--debug` stderr line of one Python log record.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::exceptions::PyOverflowError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyInt, PyString};
@@ -72,8 +73,8 @@ fn format_diagnostics_console_record(
         None
     };
     let text = DiagnosticRecordText {
-        level_name: record.getattr("levelname")?.extract()?,
-        logger_name: record.getattr("name")?.extract()?,
+        level_name: native_field(record, "levelname")?.extract()?,
+        logger_name: native_field(record, "name")?.extract()?,
         message: record.call_method0("getMessage")?.extract()?,
         subject,
         name: text_field(record, "sqlbuild_name")?,

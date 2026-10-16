@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_scenario::{
     sql::{required_target, resolve_sql, source_label},
     values::{error, string},
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -17,7 +18,7 @@ pub(super) fn extract_fixtures<'py>(
     prefix: &str,
 ) -> PyResult<Bound<'py, PyDict>> {
     crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes(
-        &scenario.getattr("authored_ctes")?,
+        &native_field(scenario, "authored_ctes")?,
         prefix,
     )
 }
@@ -30,9 +31,9 @@ pub(super) fn fixture_plans<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py = scenario.py();
     let mut helpers: Vec<String> = Vec::new();
-    for cte in scenario.getattr("authored_ctes")?.try_iter()? {
+    for cte in native_field(scenario, "authored_ctes")?.try_iter()? {
         let cte = cte?;
-        let name: String = cte.getattr("name")?.extract()?;
+        let name: String = native_field(&cte, "name")?.extract()?;
         if ["__source__", "__ref__", "__seed__", "__dbt_ref__"]
             .iter()
             .any(|prefix| name.starts_with(prefix))
@@ -41,7 +42,7 @@ pub(super) fn fixture_plans<'py>(
         }
         let sql = resolve_sql(
             context,
-            &cte.getattr("sql_body")?.extract::<String>()?,
+            &native_field(&cte, "sql_body")?.extract::<String>()?,
             true,
         )?;
         helpers.push(format!("{name} AS ({sql})"));

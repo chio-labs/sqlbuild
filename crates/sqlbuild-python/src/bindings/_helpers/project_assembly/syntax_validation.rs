@@ -11,6 +11,7 @@ use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_a
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 
 use crate::bindings::_helpers::project_assembly::resources::syntax_error_message;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -63,7 +64,7 @@ fn parse_error(context: &SyntaxContext<'_, '_>, sql: &str) -> PyResult<Option<St
 }
 
 fn sql_entry_label(prefix: &str, entry: &Bound<'_, PyAny>) -> PyResult<String> {
-    let name: Bound<'_, PyAny> = entry.getattr("name")?;
+    let name: Bound<'_, PyAny> = native_field(entry, "name")?;
     Ok(if name.is_none() {
         format!("{prefix} inline_sql(\"...\")")
     } else {
@@ -96,13 +97,13 @@ fn check_hook_value(
             Some(label) => label,
             None => sql_entry_label(site.hook_name, value)?,
         };
-        let relative_path: Bound<'_, PyAny> = value.getattr("relative_path")?;
+        let relative_path: Bound<'_, PyAny> = native_field(value, "relative_path")?;
         let file_path = if relative_path.is_truthy()? {
             relative_path
         } else {
             site.file_path
         };
-        let statement: Bound<'_, PyAny> = value.getattr("statement")?;
+        let statement: Bound<'_, PyAny> = native_field(value, "statement")?;
         return check_hook_value(
             context,
             &statement,
@@ -214,7 +215,7 @@ pub(crate) fn hook_statements(
         return Ok(vec![value.extract()?]);
     }
     if value.is_instance(sql_hook_entry)? {
-        return hook_statements(&value.getattr("statement")?, sql_hook_entry);
+        return hook_statements(&native_field(value, "statement")?, sql_hook_entry);
     }
     let mut statements: Vec<String> = Vec::new();
     if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {

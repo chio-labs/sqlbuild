@@ -20,6 +20,7 @@ use crate::bindings::_helpers::analysis_session::session::{
     infer_expression_source_shapes, prove_dynamic_column_contracts,
 };
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
@@ -109,7 +110,7 @@ fn infer_native_expression_source_shapes<'py>(
     let profile: Bound<'py, PyAny> = request.get("profile")?;
     let dialect: String = aliased_dialect(py, profile_dialect(&profile)?)?;
     let catalog: Bound<'py, PyAny> = profile_catalog(&profile, &dialect)?;
-    let cache: Bound<'py, PyAny> = catalog.getattr("expression_shapes")?;
+    let cache: Bound<'py, PyAny> = native_field(&catalog, "expression_shapes")?;
     let pending: Bound<'py, PyDict> = PyDict::new(py);
     for expression in expressions.try_iter()? {
         let expression: Bound<'py, PyAny> = expression?;
@@ -119,7 +120,7 @@ fn infer_native_expression_source_shapes<'py>(
     }
     if !pending.is_empty() {
         let (rules, adapter_rules) = nullability_rules(&profile)?;
-        let native: PyRef<'py, ProjectCatalog> = catalog.getattr("native")?.extract()?;
+        let native: PyRef<'py, ProjectCatalog> = native_field(&catalog, "native")?.extract()?;
         let pending_names: Vec<String> = pending
             .keys()
             .iter()
@@ -181,7 +182,7 @@ fn prove_native_dynamic_contracts<'py>(
         rows.push((sql, family_rows(&families)?));
     }
     let contracts: Vec<ContractRow> = if session.is_none() {
-        let by_table: Bound<'py, PyAny> = tables.getattr("dynamic_families_by_table")?;
+        let by_table: Bound<'py, PyAny> = native_field(&tables, "dynamic_families_by_table")?;
         let mut families: Vec<(String, Vec<FamilyRow>)> = Vec::new();
         for item in by_table.call_method0("items")?.try_iter()? {
             let (name, declared): (String, Bound<'py, PyAny>) = item?.extract()?;
@@ -190,10 +191,13 @@ fn prove_native_dynamic_contracts<'py>(
         prove_dynamic_column_contracts(
             py,
             (
-                dialect_or_generic(&tables.getattr("dialect")?)?,
-                shape_rows(&tables.getattr("column_types_by_table")?)?,
-                shape_rows(&tables.getattr("authoritative_column_types_by_table")?)?,
-                shape_rows(&tables.getattr("column_nullability_by_table")?)?,
+                dialect_or_generic(&native_field(&tables, "dialect")?)?,
+                shape_rows(&native_field(&tables, "column_types_by_table")?)?,
+                shape_rows(&native_field(
+                    &tables,
+                    "authoritative_column_types_by_table",
+                )?)?,
+                shape_rows(&native_field(&tables, "column_nullability_by_table")?)?,
                 families,
                 rows,
             ),
@@ -215,12 +219,12 @@ pub(crate) fn family_rows(families: &Bound<'_, PyAny>) -> PyResult<Vec<FamilyRow
     for family in families.try_iter()? {
         let family: Bound<'_, PyAny> = family?;
         rows.push((
-            family.getattr("name")?.extract()?,
-            family.getattr("pivot_column")?.extract()?,
-            family.getattr("value_column")?.extract()?,
-            family.getattr("aggregate")?.extract()?,
-            family.getattr("type")?.extract()?,
-            family.getattr("name_pattern")?.extract()?,
+            native_field(&family, "name")?.extract()?,
+            native_field(&family, "pivot_column")?.extract()?,
+            native_field(&family, "value_column")?.extract()?,
+            native_field(&family, "aggregate")?.extract()?,
+            native_field(&family, "type")?.extract()?,
+            native_field(&family, "name_pattern")?.extract()?,
         ));
     }
     Ok(rows)
@@ -250,13 +254,16 @@ pub(crate) fn query_column_rows(
     let dialect: String = aliased_dialect(py, normalization_dialect.clone())?;
     let mut batch: bool = false;
     for query in &queries {
-        if query.getattr("mode")?.eq(BATCH_MODE)? {
+        if native_field(query, "mode")?.eq(BATCH_MODE)? {
             batch = true;
             break;
         }
     }
     let catalog: Option<Bound<'_, PyAny>> = if batch {
-        Some(profile_catalog(profile, &dialect)?.getattr("native")?)
+        Some(native_field(
+            &profile_catalog(profile, &dialect)?,
+            "native",
+        )?)
     } else {
         None
     };
@@ -284,7 +291,7 @@ pub(crate) fn query_column_rows(
 }
 
 fn query_row(query: &Bound<'_, PyAny>) -> PyResult<QueryRow> {
-    let placeholders: Bound<'_, PyAny> = query.getattr("placeholders")?;
+    let placeholders: Bound<'_, PyAny> = native_field(query, "placeholders")?;
     let placeholders: Pairs = if placeholders.is_truthy()? {
         placeholders
             .call_method0("items")?
@@ -296,10 +303,10 @@ fn query_row(query: &Bound<'_, PyAny>) -> PyResult<QueryRow> {
     };
     let mut analysis_names: Vec<String> = Vec::new();
     let mut lineage: Vec<(String, String, String)> = Vec::new();
-    for reference in query.getattr("references")?.try_iter()? {
+    for reference in native_field(query, "references")?.try_iter()? {
         let reference: Bound<'_, PyAny> = reference?;
-        let kind: String = reference.getattr("ref_kind")?.extract()?;
-        let name: String = reference.getattr("ref_name")?.extract()?;
+        let kind: String = native_field(&reference, "ref_kind")?.extract()?;
+        let name: String = native_field(&reference, "ref_name")?.extract()?;
         let analysis_name: String = if kind == TABLE_FUNCTION_KIND {
             format!("{TABLE_FUNCTION_ANALYSIS_PREFIX}{name}")
         } else {
@@ -321,12 +328,12 @@ fn query_row(query: &Bound<'_, PyAny>) -> PyResult<QueryRow> {
         }
     }
     Ok((
-        query.getattr("sql")?.extract()?,
+        native_field(query, "sql")?.extract()?,
         placeholders,
         analysis_names,
         lineage,
-        query.getattr("recover_cte_facts")?.extract()?,
-        query.getattr("mode")?.extract()?,
+        native_field(query, "recover_cte_facts")?.extract()?,
+        native_field(query, "mode")?.extract()?,
     ))
 }
 

@@ -37,6 +37,7 @@ use crate::bindings::_helpers::compiled_project::source_loop::{
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::header_metadata::thresholds;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::header_metadata::main::parse_measurement_policy::parse_measurement_policy;
 
@@ -288,7 +289,7 @@ impl<'py> AuditScope<'_, 'py> {
                 );
                 return Err(compile_error(self.context.classes, &message, None));
             }
-            let severity: &'static str = if thresholds.getattr("error")?.is_none() {
+            let severity: &'static str = if native_field(&thresholds, "error")?.is_none() {
                 "warn"
             } else {
                 "error"
@@ -352,7 +353,7 @@ impl<'py> AuditScope<'_, 'py> {
     ) -> PyResult<AttachedAudit> {
         let py: Python<'py> = self.context.host.py();
         let (owner_file, column) = attachment;
-        let definition_name: String = instance.getattr("definition_name")?.extract()?;
+        let definition_name: String = native_field(instance, "definition_name")?.extract()?;
         let Some(definition) = definitions.get(&definition_name) else {
             let message: String =
                 format!("{owner_file} references unknown generic audit '{definition_name}'");
@@ -369,9 +370,9 @@ impl<'py> AuditScope<'_, 'py> {
             &consumer,
             (owner.kind, &owner.name, &owner.path),
         )?;
-        let thresholds: Bound<'py, PyAny> = instance.getattr("thresholds")?;
-        let minimum_samples: Bound<'py, PyAny> = instance.getattr("minimum_samples")?;
-        let instance_severity: Option<String> = instance.getattr("severity")?.extract()?;
+        let thresholds: Bound<'py, PyAny> = native_field(instance, "thresholds")?;
+        let minimum_samples: Bound<'py, PyAny> = native_field(instance, "minimum_samples")?;
+        let instance_severity: Option<String> = native_field(instance, "severity")?.extract()?;
         let label: String = format!("{owner_file} audit '{definition_name}'");
         let measurement: bool = definition.block.4;
         if measurement {
@@ -407,12 +408,13 @@ impl<'py> AuditScope<'_, 'py> {
             sql_body: definition.block.2.clone(),
             evidence_sql: definition.block.3.clone(),
             implicit_arguments: implicit,
-            explicit_arguments: argument_pairs(instance.getattr("arguments")?.downcast()?)?,
+            explicit_arguments: argument_pairs(native_field(instance, "arguments")?.downcast()?)?,
             has_thresholds: !thresholds.is_none(),
-            threshold_error: !thresholds.is_none() && !thresholds.getattr("error")?.is_none(),
+            threshold_error: !thresholds.is_none()
+                && !native_field(&thresholds, "error")?.is_none(),
             instance_severity,
             default_severity: self.settings.default_severity.clone(),
-            instance_run_scope: instance.getattr("run_scope")?.extract()?,
+            instance_run_scope: native_field(instance, "run_scope")?.extract()?,
             default_run_scope: self.settings.default_run_scope.clone(),
         });
         let rendered = match rendering {
@@ -438,7 +440,7 @@ impl<'py> AuditScope<'_, 'py> {
             .policies
             .map_err(|message| compile_error(self.context.classes, &message, None))?;
         let run_scope: String = match source {
-            PolicySource::Instance => instance.getattr("run_scope")?.extract()?,
+            PolicySource::Instance => native_field(instance, "run_scope")?.extract()?,
             PolicySource::Default => self.settings.default_run_scope.clone().unwrap_or_default(),
             PolicySource::Fallback => "delta_and_final".to_owned(),
         };
@@ -461,7 +463,7 @@ impl<'py> AuditScope<'_, 'py> {
             evidence_sql: expanded.evidence_sql,
             thresholds: thresholds.unbind(),
             minimum_samples: minimum_samples.unbind(),
-            evidence_limit: instance.getattr("evidence_limit")?.unbind(),
+            evidence_limit: native_field(instance, "evidence_limit")?.unbind(),
             references: expanded.references,
             target: Some(AttachedTarget {
                 kind: owner.kind.to_owned(),
@@ -472,8 +474,8 @@ impl<'py> AuditScope<'_, 'py> {
             run_scope,
             always_run: instance.getattr(ALWAYS_RUN_KEY)?.is_truthy()?,
             usages: PyTuple::new(py, usages)?.unbind(),
-            name: instance.getattr("name")?.extract()?,
-            description: instance.getattr("description")?.extract()?,
+            name: native_field(instance, "name")?.extract()?,
+            description: native_field(instance, "description")?.extract()?,
         })
     }
 
@@ -684,7 +686,7 @@ pub(crate) fn model_owner<'py>(
             continue;
         }
         let column_owner: &str = fact.location_path.as_deref().unwrap_or(&path);
-        for audit in columns.get_item(index)?.getattr("audits")?.try_iter()? {
+        for audit in native_field(&columns.get_item(index)?, "audits")?.try_iter()? {
             let audit: Bound<'py, PyAny> = audit?;
             let owner_file: String =
                 location_path(&audit)?.unwrap_or_else(|| column_owner.to_owned());
@@ -721,8 +723,8 @@ pub(crate) fn resource_owner<'py>(
     }
     for column in columns.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
-        let column_name: String = column.getattr("name")?.extract()?;
-        for audit in column.getattr("audits")?.try_iter()? {
+        let column_name: String = native_field(&column, "name")?.extract()?;
+        for audit in native_field(&column, "audits")?.try_iter()? {
             instances.push((owner_file.clone(), Some(column_name.clone()), audit?));
         }
     }
@@ -742,15 +744,15 @@ pub(crate) fn resource_owner<'py>(
 
 /// `_explicit_audit_column_name`: the instance's `column` argument when it is a string.
 fn explicit_column(audit: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    let arguments: Bound<'_, PyDict> = audit.getattr("arguments")?.downcast_into()?;
+    let arguments: Bound<'_, PyDict> = native_field(audit, "arguments")?.downcast_into()?;
     header_text(&arguments, COLUMN_ARGUMENT)
 }
 
 /// The path of a spec's authored location, if it has one.
 fn location_path(spec: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    let location: Bound<'_, PyAny> = spec.getattr("location")?;
+    let location: Bound<'_, PyAny> = native_field(spec, "location")?;
     if location.is_none() {
         return Ok(None);
     }
-    Ok(Some(location.getattr("path")?.str()?.to_string()))
+    Ok(Some(native_field(&location, "path")?.str()?.to_string()))
 }

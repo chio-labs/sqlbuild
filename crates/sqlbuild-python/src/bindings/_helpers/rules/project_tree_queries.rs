@@ -22,6 +22,7 @@ use sqlbuild_rules::project_tree::main::read_project_text::read_project_text;
 use sqlbuild_rules::project_tree::main::resolve_project_path::resolve_project_path;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::rule_api::{usage_error_for, validate_project_relative};
@@ -38,7 +39,7 @@ fn node_values<'py>(nodes: &Bound<'py, PyAny>) -> PyResult<(Vec<Bound<'py, PyAny
     let nodes: Vec<Bound<'py, PyAny>> = nodes.try_iter()?.collect::<PyResult<_>>()?;
     let values: Vec<PathBuf> = nodes
         .iter()
-        .map(|node| node.getattr("value")?.extract())
+        .map(|node| native_field(node, "value")?.extract())
         .collect::<PyResult<_>>()?;
     Ok((nodes, values))
 }

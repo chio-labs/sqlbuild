@@ -13,6 +13,7 @@ use sqlbuild_scopes::scope_cache::main::write_scope_cache::write_scope_cache;
 use sqlbuild_scopes::scope_cache::models::{CachedIndex, Fingerprint, FingerprintInputs};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, index_object, read_completeness, read_index,
 };
@@ -25,9 +26,9 @@ const UNKNOWN_VERSION: &str = "0+unknown";
 /// `importlib.metadata.version("sqlbuild")`, or `0+unknown` when it is not installed.
 fn sqlbuild_version(py: Python<'_>) -> PyResult<String> {
     let metadata: Bound<'_, PyModule> = py.import(METADATA_MODULE)?;
-    match metadata.getattr("version")?.call1((DISTRIBUTION_NAME,)) {
+    match native_field(&metadata, "version")?.call1((DISTRIBUTION_NAME,)) {
         Ok(version) => version.extract(),
-        Err(error) if error.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
+        Err(error) if error.is_instance(py, &native_field(&metadata, "PackageNotFoundError")?) => {
             Ok(UNKNOWN_VERSION.to_owned())
         }
         Err(error) => Err(error),

@@ -1,5 +1,6 @@
 //! Audit gate identities of planned audits, built as `AuditGateIdentity` objects.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -13,7 +14,7 @@ use sqlbuild_analysis::auditing::models::{
 const MEASUREMENT_MODE: &str = "measurement";
 
 fn enum_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
-    value.getattr("value")?.extract()
+    native_field(value, "value")?.extract()
 }
 
 /// One `MeasurementThresholdBound`, or `None`.
@@ -21,13 +22,13 @@ pub(crate) fn threshold_bound(bound: &Bound<'_, PyAny>) -> PyResult<Option<Thres
     if bound.is_none() {
         return Ok(None);
     }
-    let operator: String = enum_value(&bound.getattr("operator")?)?;
+    let operator: String = enum_value(&native_field(bound, "operator")?)?;
     Ok(Some(match operator.as_str() {
-        "below" => ThresholdBound::Below(bound.getattr("limit")?.extract()?),
-        "above" => ThresholdBound::Above(bound.getattr("limit")?.extract()?),
+        "below" => ThresholdBound::Below(native_field(bound, "limit")?.extract()?),
+        "above" => ThresholdBound::Above(native_field(bound, "limit")?.extract()?),
         _ => ThresholdBound::Outside(
-            bound.getattr("lower")?.extract()?,
-            bound.getattr("upper")?.extract()?,
+            native_field(bound, "lower")?.extract()?,
+            native_field(bound, "upper")?.extract()?,
         ),
     }))
 }
@@ -38,36 +39,37 @@ pub(crate) fn thresholds(value: &Bound<'_, PyAny>) -> PyResult<Option<Thresholds
         return Ok(None);
     }
     Ok(Some(Thresholds {
-        warn: threshold_bound(&value.getattr("warn")?)?,
-        error: threshold_bound(&value.getattr("error")?)?,
+        warn: threshold_bound(&native_field(value, "warn")?)?,
+        error: threshold_bound(&native_field(value, "error")?)?,
     }))
 }
 
 fn planned_audit(audit: &Bound<'_, PyAny>) -> PyResult<PlannedAudit> {
     let measurement: Option<MeasurementFacts> =
-        if enum_value(&audit.getattr("evaluation_mode")?)? == MEASUREMENT_MODE {
+        if enum_value(&native_field(audit, "evaluation_mode")?)? == MEASUREMENT_MODE {
             Some(MeasurementFacts {
-                value_column: audit.getattr("value_column")?.extract()?,
-                sample_count_column: audit.getattr("sample_count_column")?.extract()?,
-                sample_unit: audit.getattr("sample_unit")?.extract()?,
-                thresholds: thresholds(&audit.getattr("thresholds")?)?,
-                minimum_samples: audit.getattr("minimum_samples")?.extract()?,
-                evidence_unresolved_sql: audit.getattr("evidence_unresolved_sql")?.extract()?,
-                evidence_resolved_sql: audit.getattr("evidence_resolved_sql")?.extract()?,
+                value_column: native_field(audit, "value_column")?.extract()?,
+                sample_count_column: native_field(audit, "sample_count_column")?.extract()?,
+                sample_unit: native_field(audit, "sample_unit")?.extract()?,
+                thresholds: thresholds(&native_field(audit, "thresholds")?)?,
+                minimum_samples: native_field(audit, "minimum_samples")?.extract()?,
+                evidence_unresolved_sql: native_field(audit, "evidence_unresolved_sql")?
+                    .extract()?,
+                evidence_resolved_sql: native_field(audit, "evidence_resolved_sql")?.extract()?,
             })
         } else {
             None
         };
     Ok(PlannedAudit {
-        name: audit.getattr("name")?.extract()?,
-        attachment_kind: enum_value(&audit.getattr("attachment_kind")?)?,
-        attached_target_name: audit.getattr("attached_target_name")?.extract()?,
-        attached_column_name: audit.getattr("attached_column_name")?.extract()?,
-        severity: enum_value(&audit.getattr("severity")?)?,
-        run_scope: enum_value(&audit.getattr("effective_run_scope")?)?,
-        always_run: audit.getattr("always_run")?.is_truthy()?,
-        unresolved_sql: audit.getattr("unresolved_sql")?.extract()?,
-        resolved_sql: audit.getattr("resolved_sql")?.extract()?,
+        name: native_field(audit, "name")?.extract()?,
+        attachment_kind: enum_value(&native_field(audit, "attachment_kind")?)?,
+        attached_target_name: native_field(audit, "attached_target_name")?.extract()?,
+        attached_column_name: native_field(audit, "attached_column_name")?.extract()?,
+        severity: enum_value(&native_field(audit, "severity")?)?,
+        run_scope: enum_value(&native_field(audit, "effective_run_scope")?)?,
+        always_run: native_field(audit, "always_run")?.is_truthy()?,
+        unresolved_sql: native_field(audit, "unresolved_sql")?.extract()?,
+        resolved_sql: native_field(audit, "resolved_sql")?.extract()?,
         measurement,
     })
 }
@@ -104,7 +106,7 @@ fn build_audit_gate_identity<'py>(
                     "binding_key",
                     identity.binding_key.into_pyobject(py)?.into_any(),
                 ),
-                ("audit_name", entry.getattr("name")?),
+                ("audit_name", native_field(entry, "name")?),
                 (
                     "definition_fingerprint",
                     identity
@@ -116,24 +118,24 @@ fn build_audit_gate_identity<'py>(
                     "execution_fingerprint",
                     identity.execution_fingerprint.into_pyobject(py)?.into_any(),
                 ),
-                ("severity", entry.getattr("severity")?),
+                ("severity", native_field(entry, "severity")?),
                 (
                     "run_scope_phase",
-                    entry.getattr("effective_run_scope")?.getattr("value")?,
+                    native_field(entry, "effective_run_scope")?.getattr("value")?,
                 ),
                 (
                     "attachment_kind",
-                    entry.getattr("attachment_kind")?.getattr("value")?,
+                    native_field(entry, "attachment_kind")?.getattr("value")?,
                 ),
                 (
                     "attached_target_name",
-                    entry.getattr("attached_target_name")?,
+                    native_field(entry, "attached_target_name")?,
                 ),
                 (
                     "attached_column_name",
-                    entry.getattr("attached_column_name")?,
+                    native_field(entry, "attached_column_name")?,
                 ),
-                ("always_run", entry.getattr("always_run")?),
+                ("always_run", native_field(entry, "always_run")?),
             ],
         )?);
     }

@@ -9,6 +9,7 @@ use sqlbuild_core::format_command::models::{LintFinding, LintReport, RuleFixLine
 use sqlbuild_core::text::main::python_splitlines::python_splitlines;
 
 use crate::bindings::_helpers::format_command::run::FormatOutcome;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const FAULT_SEVERITY: &str = "fault";
 const APPLIED_STATUS: &str = "applied";
@@ -48,20 +49,20 @@ fn finding(
     contents: &Bound<'_, PyDict>,
     root: &Path,
 ) -> PyResult<LintFinding> {
-    let path: Bound<'_, PyAny> = violation.getattr("file_path")?;
-    let line: i64 = violation.getattr("line")?.extract()?;
-    let remediation: Bound<'_, PyAny> = violation.getattr("remediation")?;
+    let path: Bound<'_, PyAny> = native_field(violation, "file_path")?;
+    let line: i64 = native_field(violation, "line")?.extract()?;
+    let remediation: Bound<'_, PyAny> = native_field(violation, "remediation")?;
     Ok(LintFinding {
         file: text(&path)?,
         display_path: display_path(&path.extract::<PathBuf>()?, root),
         line,
-        column: violation.getattr("column")?.extract()?,
-        end_line: violation.getattr("end_line")?.extract()?,
-        end_column: violation.getattr("end_column")?.extract()?,
-        code: violation.getattr("code")?.extract()?,
-        message: violation.getattr("message")?.extract()?,
-        fault: text(&violation.getattr("severity")?)? == FAULT_SEVERITY,
-        engine: violation.getattr("engine")?.extract()?,
+        column: native_field(violation, "column")?.extract()?,
+        end_line: native_field(violation, "end_line")?.extract()?,
+        end_column: native_field(violation, "end_column")?.extract()?,
+        code: native_field(violation, "code")?.extract()?,
+        message: native_field(violation, "message")?.extract()?,
+        fault: text(&native_field(violation, "severity")?)? == FAULT_SEVERITY,
+        engine: native_field(violation, "engine")?.extract()?,
         remediation: if remediation.is_none() {
             None
         } else {
@@ -72,14 +73,14 @@ fn finding(
 }
 
 fn rule_fix(report: &Bound<'_, PyAny>, declined: &BTreeSet<PathBuf>) -> PyResult<RuleFixLine> {
-    let path: Bound<'_, PyAny> = report.getattr("file_path")?;
-    let status: String = report.getattr("status")?.extract()?;
-    let reason: String = report.getattr("reason")?.extract()?;
+    let path: Bound<'_, PyAny> = native_field(report, "file_path")?;
+    let status: String = native_field(report, "status")?.extract()?;
+    let reason: String = native_field(report, "reason")?.extract()?;
     let refused: bool = status == APPLIED_STATUS && declined.contains(&path.extract::<PathBuf>()?);
     Ok(RuleFixLine {
         file: text(&path)?,
-        code: report.getattr("code")?.extract()?,
-        line: report.getattr("line")?.extract()?,
+        code: native_field(report, "code")?.extract()?,
+        line: native_field(report, "line")?.extract()?,
         status: if refused {
             REFUSED_STATUS.to_owned()
         } else {

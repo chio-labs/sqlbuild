@@ -32,6 +32,7 @@ use crate::bindings::_helpers::result_output::documents::write_execution_json_ou
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME as STATE_TABLE_NAME;
@@ -81,15 +82,15 @@ fn source_names_for_keys(
     let py: Python<'_> = graph.py();
     let source_type: Bound<'_, PyAny> =
         imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("SOURCE")?;
-    let upstream_deps: Bound<'_, PyAny> = graph.getattr("upstream_deps")?;
+    let upstream_deps: Bound<'_, PyAny> = native_field(graph, "upstream_deps")?;
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
         let upstream: Bound<'_, PyAny> =
             expand_project_upstream_keys(key.clone(), &upstream_deps)?.into_any();
         for candidate in std::iter::once(Ok(key.clone())).chain(upstream.try_iter()?) {
             let candidate: Bound<'_, PyAny> = candidate?;
-            if candidate.getattr("resource_type")?.eq(&source_type)? {
-                names.insert(candidate.getattr("name")?.extract()?);
+            if native_field(&candidate, "resource_type")?.eq(&source_type)? {
+                names.insert(native_field(&candidate, "name")?.extract()?);
             }
         }
     }
@@ -113,7 +114,7 @@ fn selected_source_names(
     let selected_keys: Bound<'_, PyAny> = if select.is_truthy()? {
         graph_keys(graph, select)?
     } else {
-        graph.getattr("all_keys")?.call_method0("values")?
+        native_field(graph, "all_keys")?.call_method0("values")?
     };
     let selected: BTreeSet<String> = source_names_for_keys(graph, &selected_keys)?;
     let excluded: BTreeSet<String> = if exclude.is_truthy()? {
@@ -135,12 +136,12 @@ fn previous_records<'py>(
     let mut schemas: BTreeSet<String> = BTreeSet::new();
     for collection in ["models", "seeds", "functions"] {
         for item in project.getattr(collection)?.try_iter()? {
-            let destination: Bound<'py, PyAny> = item?.getattr("destination")?;
-            let destination_database: Bound<'py, PyAny> = destination.getattr("database")?;
+            let destination: Bound<'py, PyAny> = native_field(&item?, "destination")?;
+            let destination_database: Bound<'py, PyAny> = native_field(&destination, "database")?;
             if database.is_none() && !destination_database.is_none() {
                 database = Some(destination_database);
             }
-            let schema: Bound<'py, PyAny> = destination.getattr("schema")?;
+            let schema: Bound<'py, PyAny> = native_field(&destination, "schema")?;
             if !schema.is_none() {
                 schemas.insert(schema.extract()?);
             }
@@ -173,9 +174,9 @@ fn previous_records<'py>(
     )?;
     let read: StateRead<'py> = StateRead {
         connection: connection.clone(),
-        execute: adapter.getattr("execute")?,
-        render_qualified_name: adapter.getattr("render_qualified_name")?,
-        render_read_latest_sql: adapter.getattr("render_read_latest_source_freshness_sql")?,
+        execute: native_field(adapter, "execute")?,
+        render_qualified_name: native_field(adapter, "render_qualified_name")?,
+        render_read_latest_sql: native_field(adapter, "render_read_latest_source_freshness_sql")?,
     };
     let records: Bound<'py, PyDict> = PyDict::new(py);
     for schema in &schemas {
@@ -210,16 +211,19 @@ fn observe(
             &[
                 ("discovered_inputs", discovered),
                 ("project_dir", project_dir),
-                ("selected_target", &request.getattr("selected_target")?),
-                ("cli_vars", &request.getattr("cli_vars")?),
+                (
+                    "selected_target",
+                    &native_field(request, "selected_target")?,
+                ),
+                ("cli_vars", &native_field(request, "cli_vars")?),
             ],
         )?),
     )?;
     let connection: Bound<'_, PyAny> = adapter.call_method1("connect", (connection_config,))?;
     let observed = (|| {
-        let project: Bound<'_, PyAny> = graph.getattr("project")?;
+        let project: Bound<'_, PyAny> = native_field(graph, "project")?;
         let by_identity: Option<Bound<'_, PyAny>> =
-            if request.getattr("compare_state")?.extract::<bool>()? {
+            if native_field(request, "compare_state")?.extract::<bool>()? {
                 Some(previous_records(adapter, &connection, &project)?.into_any())
             } else {
                 None
@@ -227,7 +231,7 @@ fn observe(
         let sources: Vec<Bound<'_, PyAny>> = project
             .getattr("sources")?
             .try_iter()?
-            .map(|source| source?.getattr("source_entry"))
+            .map(|source| native_field(&source?, "source_entry"))
             .collect::<PyResult<_>>()?;
         let observed_at: Bound<'_, PyAny> = imported(py, "datetime", "datetime")?
             .call_method1("now", (imported(py, "datetime", "UTC")?,))?;
@@ -240,7 +244,7 @@ fn observe(
         observe_freshness(
             &observer,
             (&PyTuple::new(py, sources)?.into_any(), names, &[]),
-            (project.getattr("run_id")?.extract()?, &state),
+            (native_field(&project, "run_id")?.extract()?, &state),
         )
     })();
     let closed: PyResult<Bound<'_, PyAny>> = adapter.call_method1("close", (&connection,));
@@ -266,26 +270,26 @@ fn write_json_output(
 #[pyfunction]
 #[pyo3(signature = (*, request))]
 fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let fail_on_stale: bool = request.getattr("fail_on_stale")?.extract()?;
-    let fail_on_error: bool = request.getattr("fail_on_error")?.extract()?;
-    if fail_on_stale && !request.getattr("compare_state")?.extract::<bool>()? {
+    let fail_on_stale: bool = native_field(request, "fail_on_stale")?.extract()?;
+    let fail_on_error: bool = native_field(request, "fail_on_error")?.extract()?;
+    if fail_on_stale && !native_field(request, "compare_state")?.extract::<bool>()? {
         return Err(user_error(
             py,
             (STALE_REQUIRES_STATE_MESSAGE, STALE_REQUIRES_STATE_CODE),
         ));
     }
-    let project_dir: Bound<'_, PyAny> = match request.getattr("project_dir")? {
+    let project_dir: Bound<'_, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
     let discovered: Bound<'_, PyAny> =
         discover_project_inputs(py, Some(keywords(py, &[("project_dir", &project_dir)])?))?;
-    let select: Bound<'_, PyAny> = request.getattr("select")?;
-    let exclude: Bound<'_, PyAny> = request.getattr("exclude")?;
+    let select: Bound<'_, PyAny> = native_field(request, "select")?;
+    let exclude: Bound<'_, PyAny> = native_field(request, "exclude")?;
     reject_unit_test_selectors(&select, &exclude, &discovered)?;
     let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
-        &discovered.getattr("project_config")?,
-        &discovered.getattr("local_config")?,
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
     )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
     let graph: Bound<'_, PyAny> = build_project_graph(
@@ -295,9 +299,15 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
             &[
                 ("discovered_inputs", &discovered),
                 ("adapter", &adapter),
-                ("selected_target", &request.getattr("selected_target")?),
-                ("no_sql_validation", &request.getattr("no_sql_validation")?),
-                ("cli_vars", &request.getattr("cli_vars")?),
+                (
+                    "selected_target",
+                    &native_field(request, "selected_target")?,
+                ),
+                (
+                    "no_sql_validation",
+                    &native_field(request, "no_sql_validation")?,
+                ),
+                ("cli_vars", &native_field(request, "cli_vars")?),
             ],
         )?),
     )?;
@@ -314,15 +324,15 @@ fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult
     };
     let payload: String =
         freshness_json(&results).map_err(|error| PyValueError::new_err(format!("{error:?}")))?;
-    let json_output_path: Bound<'_, PyAny> = request.getattr("json_output_path")?;
-    if request.getattr("json_output")?.extract::<bool>()? {
+    let json_output_path: Bound<'_, PyAny> = native_field(request, "json_output_path")?;
+    if native_field(request, "json_output")?.extract::<bool>()? {
         write_json_output(py, &payload, (true, &json_output_path))?;
     } else {
         if !json_output_path.is_none() {
             write_json_output(py, &payload, (false, &json_output_path))?;
         }
         let use_color: bool =
-            !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
+            !native_field(request, "no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
         write(py, &render_freshness_text(&results, CliStyle { use_color }))?;
     }
     Ok(freshness_exit_code(

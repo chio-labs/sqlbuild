@@ -5,6 +5,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_cursor::algebra::models::{CivilDate, LocalDateTime};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 pub(crate) const DATETIME_MODULE: &str = "datetime";
 const MICROS_PER_SECOND: i64 = 1_000_000;
@@ -13,9 +14,9 @@ const SECONDS_PER_DAY: i64 = 86_400;
 /// The year, month and day of a `date` or `datetime`.
 pub(crate) fn civil_date(value: &Bound<'_, PyAny>) -> PyResult<CivilDate> {
     Ok(CivilDate {
-        year: value.getattr("year")?.extract()?,
-        month: value.getattr("month")?.extract()?,
-        day: value.getattr("day")?.extract()?,
+        year: native_field(value, "year")?.extract()?,
+        month: native_field(value, "month")?.extract()?,
+        day: native_field(value, "day")?.extract()?,
     })
 }
 
@@ -23,18 +24,18 @@ pub(crate) fn civil_date(value: &Bound<'_, PyAny>) -> PyResult<CivilDate> {
 pub(crate) fn local_date_time(value: &Bound<'_, PyAny>) -> PyResult<LocalDateTime> {
     Ok(LocalDateTime {
         date: civil_date(value)?,
-        hour: value.getattr("hour")?.extract()?,
-        minute: value.getattr("minute")?.extract()?,
-        second: value.getattr("second")?.extract()?,
-        microsecond: value.getattr("microsecond")?.extract()?,
+        hour: native_field(value, "hour")?.extract()?,
+        minute: native_field(value, "minute")?.extract()?,
+        second: native_field(value, "second")?.extract()?,
+        microsecond: native_field(value, "microsecond")?.extract()?,
     })
 }
 
 /// A `timedelta` as whole microseconds.
 pub(crate) fn timedelta_micros(delta: &Bound<'_, PyAny>) -> PyResult<i64> {
-    let days: i64 = delta.getattr("days")?.extract()?;
-    let seconds: i64 = delta.getattr("seconds")?.extract()?;
-    let microseconds: i64 = delta.getattr("microseconds")?.extract()?;
+    let days: i64 = native_field(delta, "days")?.extract()?;
+    let seconds: i64 = native_field(delta, "seconds")?.extract()?;
+    let microseconds: i64 = native_field(delta, "microseconds")?.extract()?;
     Ok((days * SECONDS_PER_DAY + seconds) * MICROS_PER_SECOND + microseconds)
 }
 
@@ -46,7 +47,7 @@ pub(crate) fn replaced<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = template.py();
     call_with(
-        &template.getattr("replace")?,
+        &native_field(template, "replace")?,
         &[
             ("year", local.date.year.into_pyobject(py)?.into_any()),
             ("month", local.date.month.into_pyobject(py)?.into_any()),

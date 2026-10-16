@@ -14,6 +14,7 @@ use crate::bindings::_helpers::records::error_classes::{
     BoundErrorInitializer, ErrorInitializer, class_value,
 };
 use crate::bindings::_helpers::records::fields::all_specs;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::models::{
     BoundNativeMethod, EnumSpec, ErrorSpec, NativeMethod, NativeProperty, NativeRecord,
     RecordAttribute, RecordSpec,
@@ -133,7 +134,8 @@ fn dataclass_fields<'py>(
         let options: Bound<'py, PyDict> = PyDict::new(py);
         options.set_item("compare", field.compared)?;
         options.set_item("repr", field.shown)?;
-        let declared: Bound<'py, PyAny> = dataclasses.getattr("field")?.call((), Some(&options))?;
+        let declared: Bound<'py, PyAny> =
+            native_field(dataclasses, "field")?.call((), Some(&options))?;
         declared.setattr("name", field.name)?;
         declared.setattr("type", "object")?;
         declared.setattr("_field_type", &field_kind)?;

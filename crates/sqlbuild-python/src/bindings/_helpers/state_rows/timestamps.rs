@@ -5,6 +5,7 @@ use sqlbuild_cursor::algebra::models::LocalDateTime;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// Whether `value` is a `datetime`.
 pub(crate) fn date_time_typed(value: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -13,7 +14,7 @@ pub(crate) fn date_time_typed(value: &Bound<'_, PyAny>) -> PyResult<bool> {
 
 /// Whether `value` has a `tzinfo` that reports an offset.
 pub(crate) fn offset_aware(value: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(!value.getattr("tzinfo")?.is_none() && !value.call_method0("utcoffset")?.is_none())
+    Ok(!native_field(value, "tzinfo")?.is_none() && !value.call_method0("utcoffset")?.is_none())
 }
 
 /// `value.astimezone(UTC)`.

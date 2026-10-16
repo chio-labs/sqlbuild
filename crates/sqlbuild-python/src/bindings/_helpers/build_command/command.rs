@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within}
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -31,7 +32,7 @@ fn run_with_providers(context: &BuildContext<'_>) -> PyResult<i32> {
             context.get("discovered_inputs")?.getattr("providers")?,
         )],
     )?;
-    let built: PyResult<i32> = run_planned_build(context, &session.getattr("providers")?);
+    let built: PyResult<i32> = run_planned_build(context, &native_field(&session, "providers")?);
     let closed: PyResult<Bound<'_, PyAny>> = session.call_method0("close");
     let exit_code: i32 = built?;
     closed?;
@@ -75,11 +76,11 @@ fn run_within_limits(
         &[
             (
                 "max_duration_seconds",
-                limits.getattr("max_duration_seconds")?,
+                native_field(&limits, "max_duration_seconds")?,
             ),
-            ("max_duration", limits.getattr("max_duration")?),
+            ("max_duration", native_field(&limits, "max_duration")?),
             ("target_name", context.get("effective_target_name")?),
-            ("remediation", limits.getattr("remediation")?),
+            ("remediation", native_field(&limits, "remediation")?),
         ],
     )?;
     within(&deadline, |_| run_with_providers(&context))
@@ -93,7 +94,7 @@ fn run_build_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32
         registry::native(py, NativeAttr::BuildPhaseTimingTracker)?.call0()?;
     let reporting: Bound<'_, PyAny> = call_with(
         &host::entry(py, ExecutorHost::ProcessResourceReporting)?,
-        &[("enabled", request.getattr("debug")?)],
+        &[("enabled", native_field(request, "debug")?)],
     )?;
     within(&reporting, |_| {
         within(&tracker.call_method0("scope")?, |_| {

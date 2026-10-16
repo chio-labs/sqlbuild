@@ -19,6 +19,7 @@ use sqlbuild_core::format_command::main::format_path_selectors::format_path_sele
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -218,7 +219,7 @@ fn selector_inputs<'py>(
         .collect::<PyResult<_>>()?;
     let summary_class: Bound<'py, PyAny> = registry::class(py, RecordId::SelectorFileSummary)?;
     let mut files: Vec<Bound<'py, PyAny>> = Vec::new();
-    for raw_path in args.getattr("select_file")?.try_iter()? {
+    for raw_path in native_field(args, "select_file")?.try_iter()? {
         let path: Bound<'py, PyAny> = path_class(py)?.call1((raw_path?,))?;
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
         keywords.set_item("encoding", UTF8)?;
@@ -286,7 +287,7 @@ fn routed_command<'py>(
     handlers: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = args.py();
-    let raw_project_dir: Bound<'py, PyAny> = args.getattr("project_dir")?;
+    let raw_project_dir: Bound<'py, PyAny> = native_field(args, "project_dir")?;
     let project_dir: Bound<'py, PyAny> = if raw_project_dir.is_none() {
         raw_project_dir
     } else {
@@ -295,7 +296,7 @@ fn routed_command<'py>(
             .call_method0("resolve")?
     };
     let (select, selector_files) = selector_inputs(args)?;
-    if args.getattr("select_file")?.is_truthy()? {
+    if native_field(args, "select_file")?.is_truthy()? {
         withhold_launch_record(py)?;
     }
     let invocation = Invocation {
@@ -312,7 +313,7 @@ fn routed_command<'py>(
                 Some(handlers) => {
                     let slot: Bound<'py, PyAny> = handlers.getattr(route.slot)?;
                     if slot.is_none() {
-                        let command: String = args.getattr("command")?.str()?.to_string();
+                        let command: String = native_field(args, "command")?.str()?.to_string();
                         let code: &str = route.unavailable_code.unwrap_or("C000");
                         return Err(user_error(py, unavailable_handler(&command, code)));
                     }
@@ -334,9 +335,9 @@ pub(crate) fn dispatch_command<'py>(
     handlers: Option<Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = args.py();
-    let warehouse: Bound<'py, PyAny> = args.getattr("warehouse")?;
+    let warehouse: Bound<'py, PyAny> = native_field(args, "warehouse")?;
     if !warehouse.is_none() {
-        let raw_project_dir: Bound<'py, PyAny> = args.getattr("project_dir")?;
+        let raw_project_dir: Bound<'py, PyAny> = native_field(args, "project_dir")?;
         let project_dir: Bound<'py, PyAny> = if raw_project_dir.is_none() {
             path_class(py)?.call_method0("cwd")?
         } else {
@@ -355,9 +356,9 @@ pub(crate) fn dispatch_command<'py>(
     let scope: Bound<'py, PyAny> = Bound::new(
         py,
         command_warehouse_scope(
-            &args.getattr("command")?,
+            &native_field(args, "command")?,
             &warehouse,
-            Some(&args.getattr("vars")?),
+            Some(&native_field(args, "vars")?),
         )?,
     )?
     .into_any();

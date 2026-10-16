@@ -10,6 +10,7 @@ use sqlbuild_sqltext::sql_scan::main::reads_differently_from_generic::reads_diff
 use sqlbuild_sqltext::sql_scan::main::unsupported_line_comment_prefixes::unsupported_line_comment_prefixes;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -30,12 +31,12 @@ fn sorted_texts(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 fn record_syntax(instance: &Bound<'_, PyAny>) -> PyResult<LexicalSyntax> {
     let flag = |name: &str| -> PyResult<bool> { instance.getattr(name)?.is_truthy() };
     Ok(LexicalSyntax {
-        backslash_escape_quotes: sorted_texts(&instance.getattr("backslash_escape_quotes")?)?,
+        backslash_escape_quotes: sorted_texts(&native_field(instance, "backslash_escape_quotes")?)?,
         escape_string_prefix: flag("escape_string_prefix")?,
         raw_string_prefix: flag("raw_string_prefix")?,
         triple_quoted_strings: flag("triple_quoted_strings")?,
         nested_block_comments: flag("nested_block_comments")?,
-        line_comment_prefixes: sorted_texts(&instance.getattr("line_comment_prefixes")?)?,
+        line_comment_prefixes: sorted_texts(&native_field(instance, "line_comment_prefixes")?)?,
     })
 }
 

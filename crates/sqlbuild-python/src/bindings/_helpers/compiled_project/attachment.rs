@@ -26,6 +26,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_CTE_SCAN_ALGORITHM;
@@ -65,7 +66,7 @@ fn members_by_value<'py>(enum_class: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
     let members: Bound<'py, PyDict> = PyDict::new(enum_class.py());
     for member in enum_class.try_iter()? {
         let member: Bound<'py, PyAny> = member?;
-        members.set_item(member.getattr("value")?, member)?;
+        members.set_item(native_field(&member, "value")?, member)?;
     }
     Ok(members)
 }
@@ -244,7 +245,7 @@ fn test_block_row(block: Bound<'_, PyAny>) -> PyResult<TestBlockRow> {
         block.clone().unbind(),
         attr(&block, "name")?,
         attr(&block, "sql_body")?,
-        attr(&block.getattr("mode")?, "value")?,
+        attr(&native_field(&block, "mode")?, "value")?,
         items(&block, "parameters")?
             .iter()
             .map(|parameter| attr(parameter, "name"))
@@ -354,7 +355,10 @@ fn sql_test_settings<'py>(
         registry::member(py, RecordId::UsageKind, "RUNTIME")?,
     )?;
     settings.set_item("render_parameter", parameter_renderer(value_renderer)?)?;
-    settings.set_item("adapter_name", value_renderer.getattr("adapter_name")?)?;
+    settings.set_item(
+        "adapter_name",
+        native_field(value_renderer, "adapter_name")?,
+    )?;
     settings.set_item(
         "source_location",
         registry::class(py, RecordId::SourceLocation)?,
@@ -362,7 +366,10 @@ fn sql_test_settings<'py>(
     settings.set_item("scan_store", scan_cache.call_method0("opened")?)?;
     settings.set_item(
         "scan_key",
-        (SQL_TEST_CTE_SCAN_ALGORITHM, syntax.getattr("cache_key")?),
+        (
+            SQL_TEST_CTE_SCAN_ALGORITHM,
+            native_field(syntax, "cache_key")?,
+        ),
     )?;
     Ok(settings)
 }
@@ -376,7 +383,7 @@ fn audit_block_row(block: Bound<'_, PyAny>) -> PyResult<AuditBlockRow> {
         attr(&block, "name")?,
         attr(&block, "sql_body")?,
         attr(&block, "evidence_sql")?,
-        block.getattr("evaluation_mode")?.eq(measurement)?,
+        native_field(&block, "evaluation_mode")?.eq(measurement)?,
         attr(&block, "header_values")?,
     ))
 }
@@ -389,7 +396,7 @@ fn audit_file_row(file: Bound<'_, PyAny>) -> PyResult<AuditFileRow> {
         text(&file, "relative_path")?,
         stem(&file, "file_path")?,
         file.clone().unbind(),
-        file.getattr("declaration_kind")?.is(&generic),
+        native_field(&file, "declaration_kind")?.is(&generic),
         attr(&file, "contents")?,
         items(&file, "blocks")?
             .into_iter()
@@ -436,7 +443,7 @@ fn audit_settings<'py>(
     effective_settings: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let settings: Bound<'py, PyDict> = PyDict::new(py);
-    let severity: Bound<'py, PyAny> = effective_settings.getattr("default_audit_severity")?;
+    let severity: Bound<'py, PyAny> = native_field(effective_settings, "default_audit_severity")?;
     settings.set_item(
         "default_severity",
         if severity.is_none() {
@@ -447,7 +454,7 @@ fn audit_settings<'py>(
     )?;
     settings.set_item(
         "default_run_scope",
-        effective_settings.getattr("default_audit_run_scope")?,
+        native_field(effective_settings, "default_audit_run_scope")?,
     )?;
     let builtins: Vec<AuditFileRow> = BUILTIN_AUDITS
         .iter()
@@ -477,7 +484,7 @@ fn audit_settings<'py>(
 fn loader_rows<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<HashMap<String, LoaderRow>> {
     let mut rows: HashMap<String, LoaderRow> = HashMap::new();
     for loader in items(discovered, "loader_functions")? {
-        let relative_path: Bound<'py, PyAny> = loader.getattr("relative_path")?;
+        let relative_path: Bound<'py, PyAny> = native_field(&loader, "relative_path")?;
         rows.insert(
             attr(&loader, "name")?,
             (
@@ -529,9 +536,9 @@ fn diagnostic_settings<'py>(
             PyTuple::new(
                 py,
                 [
-                    scenario.getattr("name")?,
+                    native_field(scenario, "name")?,
                     text(scenario, "relative_path")?.into_bound_py_any(py)?,
-                    scenario.getattr("contents")?,
+                    native_field(scenario, "contents")?,
                     scenario
                         .getattr("header_values")?
                         .call_method1("get", (DESCRIPTION_KEY,))?,
@@ -546,9 +553,9 @@ fn diagnostic_settings<'py>(
             PyTuple::new(
                 py,
                 [
-                    hook.getattr("name")?,
+                    native_field(hook, "name")?,
                     text(hook, "relative_path")?.into_bound_py_any(py)?,
-                    hook.getattr("contents")?,
+                    native_field(hook, "contents")?,
                     hook.getattr(DESCRIPTION_KEY)?,
                 ],
             )

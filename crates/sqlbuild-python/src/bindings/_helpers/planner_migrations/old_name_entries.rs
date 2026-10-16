@@ -12,6 +12,7 @@ use crate::bindings::_helpers::planner_migrations::old_names::declared_column_al
 use crate::bindings::_helpers::planner_migrations::old_names::old_name_view_skip_reason;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -30,14 +31,14 @@ impl<'py> OldNamePlanner<'py> {
         let config = if project_config.is_none() {
             registry::class(py, RecordId::MigrationsConfig)?.call0()?
         } else {
-            project_config.getattr("migrations")?
+            native_field(&project_config, "migrations")?
         };
         Ok(Self {
             models,
             histories,
             views,
             columns: columns.clone(),
-            retention: config.getattr("old_name_views")?,
+            retention: native_field(&config, "old_name_views")?,
             now: runtime_field(&runtime, |runtime| &runtime.invocation_time)?,
             runtime,
         })
@@ -50,7 +51,7 @@ impl<'py> OldNamePlanner<'py> {
     ) -> PyResult<Option<Bound<'py, PyAny>>> {
         let mut newest: Option<(Bound<'py, PyTuple>, Bound<'py, PyAny>)> = None;
         for history in &self.histories {
-            let movement = history.getattr("move")?;
+            let movement = native_field(history, "move")?;
             if !movement
                 .getattr("destination")?
                 .call_method1("matches", (destination,))?
@@ -69,8 +70,8 @@ impl<'py> OldNamePlanner<'py> {
             let key = PyTuple::new(
                 self.runtime.py(),
                 [
-                    movement.getattr("created_at")?,
-                    movement.getattr("event_id")?,
+                    native_field(&movement, "created_at")?,
+                    native_field(&movement, "event_id")?,
                 ],
             )?;
             if let Some((previous, _)) = &newest
@@ -88,19 +89,22 @@ impl<'py> OldNamePlanner<'py> {
         entry: &Bound<'py, PyAny>,
         item: &Bound<'py, PyAny>,
     ) -> PyResult<Option<Bound<'py, PyAny>>> {
-        if entry.getattr("blocks_build")?.is_truthy()? {
+        if native_field(entry, "blocks_build")?.is_truthy()? {
             return Ok(None);
         }
-        let decision = entry.getattr("decision")?;
-        let completed = !entry.getattr("completed_at")?.is_none();
-        if decision.getattr("moves_data")?.is_truthy()? || (decision.eq("renamed")? && !completed) {
+        let decision = native_field(entry, "decision")?;
+        let completed = !native_field(entry, "completed_at")?.is_none();
+        if native_field(&decision, "moves_data")?.is_truthy()?
+            || (decision.eq("renamed")? && !completed)
+        {
             return self.new_move(entry, item).map(Some);
         }
         if decision.eq("done")? || (decision.eq("renamed")? && completed) {
-            let origin = relation(&entry.getattr("origin")?)?;
-            if let Some(history) =
-                self.newest(&relation(&entry.getattr("destination")?)?, Some(&origin))?
-            {
+            let origin = relation(&native_field(entry, "origin")?)?;
+            if let Some(history) = self.newest(
+                &relation(&native_field(entry, "destination")?)?,
+                Some(&origin),
+            )? {
                 return self.resume(&history, item);
             }
         }
@@ -111,22 +115,23 @@ impl<'py> OldNamePlanner<'py> {
         &self,
         item: &Bound<'py, PyAny>,
     ) -> PyResult<Option<Bound<'py, PyAny>>> {
-        let Some(history) = self.newest(&relation(&item.getattr("destination")?)?, None)? else {
+        let Some(history) = self.newest(&relation(&native_field(item, "destination")?)?, None)?
+        else {
             return Ok(None);
         };
         if !history
             .getattr("move")?
             .getattr("destination_model")?
-            .eq(item.getattr("name")?)?
+            .eq(native_field(item, "name")?)?
         {
             return Ok(None);
         }
         let Some(planned) = self.resume(&history, item)? else {
             return Ok(None);
         };
-        if planned.getattr("runs_steps")?.is_truthy()?
-            || (planned.getattr("action")?.eq("none")?
-                && !planned.getattr("migration_event_id")?.is_none())
+        if native_field(&planned, "runs_steps")?.is_truthy()?
+            || (native_field(&planned, "action")?.eq("none")?
+                && !native_field(&planned, "migration_event_id")?.is_none())
         {
             Ok(Some(planned))
         } else {
@@ -169,15 +174,15 @@ impl<'py> OldNamePlanner<'py> {
         let mut aliases: Vec<Bound<'py, PyTuple>> = Vec::new();
         for entry in self.columns.try_iter()? {
             let entry = entry?;
-            let decision = entry.getattr("decision")?;
-            if entry.getattr("model_name")?.eq(item.getattr("name")?)?
+            let decision = native_field(&entry, "decision")?;
+            if native_field(&entry, "model_name")?.eq(native_field(item, "name")?)?
                 && (decision.eq("rename")? || decision.eq("record")?)
             {
                 aliases.push(PyTuple::new(
                     py,
                     [
-                        entry.getattr("origin_column")?,
-                        entry.getattr("destination_column")?,
+                        native_field(&entry, "origin_column")?,
+                        native_field(&entry, "destination_column")?,
                     ],
                 )?);
             }
@@ -195,15 +200,15 @@ impl<'py> OldNamePlanner<'py> {
         let py = self.runtime.py();
         let retention = retention(item, &self.retention)?;
         let reason = self.skip(
-            &entry.getattr("origin")?,
-            entry.getattr("origin_tracked")?,
+            &native_field(entry, "origin")?,
+            native_field(entry, "origin_tracked")?,
             &retention,
         )?;
         let mut fields = vec![
-            ("model_name", entry.getattr("model_name")?),
-            ("origin", entry.getattr("origin")?),
-            ("destination", entry.getattr("destination")?),
-            ("target_name", entry.getattr("target_name")?),
+            ("model_name", native_field(entry, "model_name")?),
+            ("origin", native_field(entry, "origin")?),
+            ("destination", native_field(entry, "destination")?),
+            ("target_name", native_field(entry, "target_name")?),
         ];
         if !reason.is_none() || retention.is_none() {
             fields.extend([
@@ -248,8 +253,11 @@ impl<'py> OldNamePlanner<'py> {
         item: &Bound<'py, PyAny>,
     ) -> PyResult<Option<Bound<'py, PyAny>>> {
         let py = self.runtime.py();
-        let status: String =
-            call_with(&history.getattr("status")?, &[("now", self.now.clone())])?.extract()?;
+        let status: String = call_with(
+            &native_field(history, "status")?,
+            &[("now", self.now.clone())],
+        )?
+        .extract()?;
         let action_name = match status.as_str() {
             "pending_archive" => "ARCHIVE_AND_VIEW",
             "pending_view" => "VIEW_ONLY",
@@ -258,7 +266,7 @@ impl<'py> OldNamePlanner<'py> {
         };
         if status == PENDING_ARCHIVE || status == PENDING_VIEW {
             let reason = self.skip(
-                &location(&self.runtime, &history.getattr("old")?)?,
+                &location(&self.runtime, &native_field(history, "old")?)?,
                 py.None().into_bound(py),
                 &retention(item, &self.retention)?,
             )?;
@@ -269,21 +277,24 @@ impl<'py> OldNamePlanner<'py> {
                     &[
                         (
                             "model_name",
-                            history.getattr("move")?.getattr("destination_model")?,
+                            native_field(history, "move")?.getattr("destination_model")?,
                         ),
-                        ("origin", location(&self.runtime, &history.getattr("old")?)?),
+                        (
+                            "origin",
+                            location(&self.runtime, &native_field(history, "old")?)?,
+                        ),
                         (
                             "destination",
-                            location(&self.runtime, &history.getattr("new")?)?,
+                            location(&self.runtime, &native_field(history, "new")?)?,
                         ),
                         ("action", action(&self.runtime, "NONE")?),
                         (
                             "target_name",
-                            history.getattr("move")?.getattr("target_name")?,
+                            native_field(history, "move")?.getattr("target_name")?,
                         ),
                         (
                             "migration_event_id",
-                            history.getattr("move")?.getattr("event_id")?,
+                            native_field(history, "move")?.getattr("event_id")?,
                         ),
                         ("reason", reason),
                     ],
@@ -291,7 +302,7 @@ impl<'py> OldNamePlanner<'py> {
                 .map(Some);
             }
         }
-        let retention = history.getattr("required")?.getattr("view_retention")?;
+        let retention = native_field(history, "required")?.getattr("view_retention")?;
         let duration = registry::class(py, RecordId::Duration)?.call_method1(
             "parse",
             (if retention.is_truthy()? {
@@ -300,9 +311,9 @@ impl<'py> OldNamePlanner<'py> {
                 text(py, "")
             },),
         )?;
-        let created = history.getattr("created")?;
+        let created = native_field(history, "created")?;
         let expires_at = if !created.is_none() {
-            created.getattr("expires_at")?
+            native_field(&created, "expires_at")?
         } else if duration.is_none() {
             py.None().into_bound(py)
         } else {
@@ -311,22 +322,25 @@ impl<'py> OldNamePlanner<'py> {
         let grants = if created.is_none() {
             py.None().into_bound(py)
         } else {
-            created.getattr("grants_copied")?
+            native_field(&created, "grants_copied")?
         };
         model(
             py,
             RecordId::OldNameViewPlanEntry,
             &[
-                ("model_name", item.getattr("name")?),
-                ("origin", location(&self.runtime, &history.getattr("old")?)?),
+                ("model_name", native_field(item, "name")?),
+                (
+                    "origin",
+                    location(&self.runtime, &native_field(history, "old")?)?,
+                ),
                 (
                     "destination",
-                    location(&self.runtime, &history.getattr("new")?)?,
+                    location(&self.runtime, &native_field(history, "new")?)?,
                 ),
                 ("action", action(&self.runtime, action_name)?),
                 (
                     "target_name",
-                    history.getattr("move")?.getattr("target_name")?,
+                    native_field(history, "move")?.getattr("target_name")?,
                 ),
                 ("retention", retention),
                 ("expires_at", expires_at),
@@ -335,7 +349,7 @@ impl<'py> OldNamePlanner<'py> {
                     if created.is_none() {
                         self.aliases(item)?
                     } else {
-                        created.getattr("column_aliases")?
+                        native_field(&created, "column_aliases")?
                     },
                 ),
                 (
@@ -344,7 +358,7 @@ impl<'py> OldNamePlanner<'py> {
                 ),
                 (
                     "migration_event_id",
-                    history.getattr("move")?.getattr("event_id")?,
+                    native_field(history, "move")?.getattr("event_id")?,
                 ),
                 (
                     "grants_copied",
@@ -362,7 +376,7 @@ impl<'py> OldNamePlanner<'py> {
                 ),
                 (
                     "archived",
-                    PyBool::new(py, !history.getattr("archived")?.is_none())
+                    PyBool::new(py, !native_field(history, "archived")?.is_none())
                         .to_owned()
                         .into_any(),
                 ),

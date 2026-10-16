@@ -16,6 +16,7 @@ use crate::bindings::_helpers::frontier::constants::{
     COMPILER_CACHE_DIRECTORY_NAME, RETIRED_CACHE_NAMESPACE_SUFFIXES,
 };
 use crate::bindings::_helpers::model_config::template_data::{early_model_templates, run_id};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::IntoPyObjectExt;
 
 const DATABASE_KEY: &str = "database";
@@ -27,8 +28,8 @@ fn resolved_target<'py>(
     selected_target: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = discovered.py();
-    let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
-    let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
+    let project_config: Bound<'py, PyAny> = native_field(discovered, "project_config")?;
+    let local_config: Bound<'py, PyAny> = native_field(discovered, "local_config")?;
     let target_name: Bound<'py, PyAny> = resolve_target_name(
         py,
         &project_config.clone(),
@@ -56,7 +57,7 @@ pub(crate) fn build_compile_target_context<'py>(
     let py: Python<'py> = discovered_inputs.py();
     let (target_name, target_config) = resolved_target(discovered_inputs, selected_target)?;
     let cache_dir: Bound<'py, PyAny> = compile_cache_root(
-        &discovered_inputs.getattr("project_dir")?,
+        &native_field(discovered_inputs, "project_dir")?,
         &target_config,
         no_cache,
     )?;

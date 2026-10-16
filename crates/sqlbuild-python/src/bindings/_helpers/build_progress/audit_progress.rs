@@ -22,6 +22,7 @@ use crate::bindings::_helpers::build_progress::terminal::{
     shared_lines, tty_flag, write,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// The identity an audit plan entry or result reports to the progress projector.
 fn resource_id(value: &Bound<'_, PyAny>, name_field: &str) -> PyResult<String> {
@@ -192,7 +193,7 @@ impl AuditProgressReporter {
         Ok(Self {
             is_tty: tty_flag(&stream)?,
             stream: stream.unbind(),
-            lock: lines.getattr("lock")?.unbind(),
+            lock: native_field(&lines, "lock")?.unbind(),
             lines: lines.unbind(),
             style: CliStyle {
                 use_color: arguments.value("use_color")?.is_truthy()?,

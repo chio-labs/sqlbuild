@@ -7,6 +7,7 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -47,8 +48,11 @@ pub(crate) fn native_config_classes<'py>(
     dict(
         py,
         vec![
-            ("builder", session.getattr("builder")?),
-            ("inherited_storage", session.getattr("inherited_storage")?),
+            ("builder", native_field(session, "builder")?),
+            (
+                "inherited_storage",
+                native_field(session, "inherited_storage")?,
+            ),
             ("table_backed", PyTuple::new(py, table_backed)?.into_any()),
             (
                 "compile_model_config",
@@ -87,16 +91,20 @@ fn named_records<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
         .iter()
         .map(|name| registry::member(py, RecordId::DeclarationKind, name))
         .collect::<PyResult<_>>()?;
-    let declarations: Bound<'py, PyAny> = resolver.getattr("lookup")?.getattr("declarations")?;
+    let declarations: Bound<'py, PyAny> =
+        native_field(resolver, "lookup")?.getattr("declarations")?;
     for pair in declarations.call_method0("items")?.try_iter()? {
         let (identity, records_of): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
-        let kind: Bound<'py, PyAny> = identity.getattr("kind")?;
+        let kind: Bound<'py, PyAny> = native_field(&identity, "kind")?;
         if kinds.iter().any(|named| kind.is(named))
-            && identity.getattr("owner")?.is_none()
+            && native_field(&identity, "owner")?.is_none()
             && records_of.is_truthy()?
         {
             records.set_item(
-                (kind.getattr("value")?, identity.getattr("name")?),
+                (
+                    native_field(&kind, "value")?,
+                    native_field(&identity, "name")?,
+                ),
                 records_of.get_item(0)?,
             )?;
         }
@@ -114,14 +122,14 @@ fn schema_enums<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict
     let enum_kind: Bound<'py, PyAny> = registry::member(py, RecordId::DeclarationKind, "ENUM")?;
     let enum_class: Bound<'py, PyAny> = registry::class(py, RecordId::EnumDeclaration)?;
     let declarations: Bound<'py, PyAny> =
-        resolver.getattr("projection")?.getattr("declarations")?;
+        native_field(resolver, "projection")?.getattr("declarations")?;
     for pair in declarations.call_method0("items")?.try_iter()? {
         let (identity, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
-        if identity.getattr("kind")?.is(&enum_kind)
-            && identity.getattr("owner")?.is_none()
+        if native_field(&identity, "kind")?.is(&enum_kind)
+            && native_field(&identity, "owner")?.is_none()
             && value.is_instance(&enum_class)?
         {
-            enums.set_item(identity.getattr("name")?, value)?;
+            enums.set_item(native_field(&identity, "name")?, value)?;
         }
     }
     Ok(enums)
@@ -132,7 +140,7 @@ fn schema_enums<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict
 fn hook_signature<'py>(function: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let py: Python<'py> = function.py();
     let inspect: Bound<'py, PyAny> = py.import("inspect")?.into_any();
-    let empty: Bound<'py, PyAny> = inspect.getattr("Parameter")?.getattr("empty")?;
+    let empty: Bound<'py, PyAny> = native_field(&inspect, "Parameter")?.getattr("empty")?;
     let mut parameters: Vec<(String, i64, bool)> = Vec::new();
     for parameter in inspect
         .call_method1("signature", (function,))?
@@ -142,12 +150,12 @@ fn hook_signature<'py>(function: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLi
     {
         let parameter: Bound<'py, PyAny> = parameter?;
         parameters.push((
-            parameter.getattr("name")?.extract()?,
+            native_field(&parameter, "name")?.extract()?,
             parameter
                 .getattr("kind")?
                 .call_method0("__int__")?
                 .extract()?,
-            !parameter.getattr("default")?.is(&empty),
+            !native_field(&parameter, "default")?.is(&empty),
         ));
     }
     PyList::new(py, parameters)
@@ -159,22 +167,24 @@ fn visibility_classes<'py>(
     visible_declarations: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = context.py();
-    let resolver: Bound<'py, PyAny> = context.getattr("declaration_resolver")?;
+    let resolver: Bound<'py, PyAny> = native_field(context, "declaration_resolver")?;
     let (projects, resource_specific) = if resolver.is_none() {
         (false, PyFrozenSet::empty(py)?)
     } else {
-        let lookup: Bound<'py, PyAny> = resolver.getattr("lookup")?;
-        let declarations: Bound<'py, PyAny> = lookup.getattr("index")?.getattr("declarations")?;
+        let lookup: Bound<'py, PyAny> = native_field(&resolver, "lookup")?;
+        let declarations: Bound<'py, PyAny> =
+            native_field(&lookup, "index")?.getattr("declarations")?;
         let private: Bound<'py, PyAny> = registry::member(py, RecordId::ScopeKind, "PRIVATE")?;
         let mut owners: Vec<Bound<'py, PyAny>> = Vec::new();
         for declaration in declarations.try_iter()? {
             let declaration: Bound<'py, PyAny> = declaration?;
-            let owner: Bound<'py, PyAny> = declaration.getattr("identity")?.getattr("owner")?;
-            if declaration.getattr("scope")?.is(&private) && !owner.is_none() {
+            let owner: Bound<'py, PyAny> =
+                native_field(&declaration, "identity")?.getattr("owner")?;
+            if native_field(&declaration, "scope")?.is(&private) && !owner.is_none() {
                 owners.push(owner);
             }
         }
-        for resource in lookup.getattr("grants_by_resource")?.try_iter()? {
+        for resource in native_field(&lookup, "grants_by_resource")?.try_iter()? {
             owners.push(resource?);
         }
         (declarations.is_truthy()?, PyFrozenSet::new(py, &owners)?)
@@ -185,8 +195,11 @@ fn visibility_classes<'py>(
             ("resolver", resolver),
             ("projects", projects.into_bound_py_any(py)?),
             ("resource_specific", resource_specific.into_any()),
-            ("public_enums", context.getattr("public_enums")?),
-            ("public_constants", context.getattr("public_constants")?),
+            ("public_enums", native_field(context, "public_enums")?),
+            (
+                "public_constants",
+                native_field(context, "public_constants")?,
+            ),
             ("visible_declarations", visible_declarations.clone()),
             (
                 "resource_identity",
@@ -355,7 +368,7 @@ pub(crate) fn model_loop_classes<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = context.py();
     let host = |key: &str| -> PyResult<Bound<'py, PyAny>> { host_inputs.as_any().get_item(key) };
-    let resolver: Bound<'py, PyAny> = context.getattr("declaration_resolver")?;
+    let resolver: Bound<'py, PyAny> = native_field(context, "declaration_resolver")?;
     let mut provider_names: Vec<String> = host("provider_names")?
         .try_iter()?
         .map(|name| name?.extract())
@@ -418,7 +431,10 @@ pub(crate) fn model_loop_classes<'py>(
                 "contract_enforced",
                 registry::member(py, RecordId::ContractPolicy, "ENFORCED")?,
             ),
-            ("model_schemas", context.getattr("public_model_schemas")?),
+            (
+                "model_schemas",
+                native_field(context, "public_model_schemas")?,
+            ),
             ("named_records", named_records(&resolver)?.into_any()),
             ("schema_enums", schema_enums(&resolver)?.into_any()),
             (

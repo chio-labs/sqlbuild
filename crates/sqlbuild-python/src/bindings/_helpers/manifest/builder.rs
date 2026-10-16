@@ -21,6 +21,7 @@ use crate::bindings::_helpers::manifest::rows::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -90,7 +91,7 @@ pub(crate) fn build_manifest(options: Option<&Bound<'_, PyDict>>) -> PyResult<Py
         .call_method0("isoformat")?
         .extract()?;
     let hook_identities: Bound<'_, PyAny> = host::entry(py, UserCodeHost::BuildHookIdentities)?
-        .call1((project.getattr("hook_functions")?,))?;
+        .call1((native_field(&project, "hook_functions")?,))?;
     compiler_guard(|| {
         let python_hooks = python_hooks(&project, &hook_identities)?;
         let ProjectRows {

@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, render_value};
 use crate::bindings::_helpers::model_config::config_values::config_str;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::{
@@ -46,8 +47,9 @@ pub(super) fn uses_cursor_intrinsics(py: Python<'_>, sql: &str) -> PyResult<bool
 
 /// Whether a SQL test header declares its own cursor window.
 pub(super) fn declares_cursor_window(test: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let block = test.getattr("test_block")?;
-    Ok(!block.getattr("cursor_start")?.is_none() || !block.getattr("cursor_end")?.is_none())
+    let block = native_field(test, "test_block")?;
+    Ok(!native_field(&block, "cursor_start")?.is_none()
+        || !native_field(&block, "cursor_end")?.is_none())
 }
 
 /// SQL with intrinsics rendered from the test's declared window, or the wide default window.
@@ -66,7 +68,7 @@ pub(super) fn render_test_cursor_intrinsics<'py>(
     let (start, end) = test_window(&cursor, test)?;
     let literal = |value: &Bound<'py, PyAny>| -> PyResult<String> {
         call_with(
-            &adapter.getattr("render_cursor_bound_literal")?,
+            &native_field(adapter, "render_cursor_bound_literal")?,
             &[
                 ("value", PyString::new(py, &render_value(value)?).into_any()),
                 ("cursor_type", cursor.cursor_type.clone()),
@@ -111,7 +113,9 @@ fn test_window<'py>(
     cursor: &ModelCursor<'py>,
     test: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
-    let block = test.map(|test| test.getattr("test_block")).transpose()?;
+    let block = test
+        .map(|test| native_field(test, "test_block"))
+        .transpose()?;
     let declared = |name: &str| -> PyResult<Option<Bound<'py, PyAny>>> {
         let Some(block) = &block else {
             return Ok(None);
@@ -234,7 +238,7 @@ fn ordering(left: &Bound<'_, PyAny>, right: &Bound<'_, PyAny>) -> PyResult<Order
 /// The cursor type and timestamp grain a model's config declares.
 fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
     let py = model.py();
-    let values = model.getattr("config")?.getattr("values")?;
+    let values = native_field(model, "config")?.getattr("values")?;
     let declared = config_str(&values, "cursor_type")?.filter(|value| {
         value
             .extract::<String>()
@@ -243,14 +247,14 @@ fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
     let cursor_type = registry::class(py, RecordId::CursorType)?.call1((
         declared.unwrap_or_else(|| PyString::new(py, TIMESTAMP_CURSOR_TYPE).into_any()),
     ))?;
-    let type_name: String = cursor_type.getattr("value")?.extract()?;
+    let type_name: String = native_field(&cursor_type, "value")?.extract()?;
     let grain = match config_str(&values, "cursor_grain")? {
         Some(grain) if type_name == TIMESTAMP_CURSOR_TYPE => {
             let grain = registry::class(py, RecordId::CursorGrain)?.call1((grain,))?;
             let session = CursorSession::new(py)?;
             session
                 .grain(&grain)?
-                .map(|known| PyResult::Ok((grain.getattr("value")?.extract()?, known)))
+                .map(|known| PyResult::Ok((native_field(&grain, "value")?.extract()?, known)))
                 .transpose()?
         }
         _ => None,
@@ -267,7 +271,9 @@ fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
 fn test_label(test: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(format!(
         "SQL test '{}' in '{}'",
-        test.getattr("name")?.str()?,
-        test.getattr("test_file")?.getattr("relative_path")?.str()?
+        native_field(test, "name")?.str()?,
+        native_field(test, "test_file")?
+            .getattr("relative_path")?
+            .str()?
     ))
 }

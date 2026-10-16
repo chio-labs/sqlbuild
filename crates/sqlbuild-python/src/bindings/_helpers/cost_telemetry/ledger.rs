@@ -21,6 +21,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::cost_telemetry::health::mark_ledger_failure;
 use crate::bindings::_helpers::cost_telemetry::values::process_object;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -61,25 +62,30 @@ fn ledger_line(arguments: &KeywordArguments<'_>, context: &Bound<'_, PyAny>) -> 
     } else {
         Some(error.get_type().name()?.extract()?)
     };
-    let attempt: String = context.getattr("attempt")?.extract::<i128>()?.to_string();
+    let attempt: String = native_field(context, "attempt")?
+        .extract::<i128>()?
+        .to_string();
     let isoformat = |name: &str| -> PyResult<JsonValue> {
         text(&arguments.value(name)?.call_method0("isoformat")?)
     };
     let mut fields: Vec<(String, JsonValue)> = vec![
-        ("run_id".to_owned(), text(&context.getattr("run_id")?)?),
+        (
+            "run_id".to_owned(),
+            text(&native_field(context, "run_id")?)?,
+        ),
         (
             "statement_id".to_owned(),
             text(&arguments.value("statement_id")?)?,
         ),
         (
             "resource_type".to_owned(),
-            text(&context.getattr("resource_type")?)?,
+            text(&native_field(context, "resource_type")?)?,
         ),
         (
             "resource_name".to_owned(),
-            text(&context.getattr("resource_name")?)?,
+            text(&native_field(context, "resource_name")?)?,
         ),
-        ("phase".to_owned(), text(&context.getattr("phase")?)?),
+        ("phase".to_owned(), text(&native_field(context, "phase")?)?),
         (
             "attempt".to_owned(),
             JsonValue::Integer(JsonInteger::parse(&attempt).ok_or_else(|| {
@@ -139,7 +145,7 @@ fn record_statement(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRes
         ),
     )?;
     let context: Bound<'_, PyAny> = arguments.value("context")?;
-    let path: Bound<'_, PyAny> = context.getattr("ledger_path")?;
+    let path: Bound<'_, PyAny> = native_field(&context, "ledger_path")?;
     if path.is_none() {
         return Ok(());
     }
@@ -153,7 +159,7 @@ fn record_statement(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRes
     match appended {
         Ok(()) => Ok(()),
         Err(error) if error.is_instance_of::<pyo3::exceptions::PyException>(py) => {
-            mark_failure(&context.getattr("run_id")?, error.value(py).as_any())
+            mark_failure(&native_field(&context, "run_id")?, error.value(py).as_any())
         }
         Err(error) => Err(error),
     }

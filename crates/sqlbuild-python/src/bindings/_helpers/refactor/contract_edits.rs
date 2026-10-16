@@ -15,6 +15,7 @@ use sqlbuild_refactor::refactoring::models::{
 use sqlbuild_refactor::refactoring::types::PhysicalColumn;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -59,8 +60,8 @@ fn physical_rows(columns: &Bound<'_, PyAny>) -> PyResult<Vec<PhysicalColumn>> {
     for column in columns.try_iter()? {
         let column: Bound<'_, PyAny> = column?;
         rows.push((
-            column.getattr("name")?.extract()?,
-            column.getattr("type")?.extract()?,
+            native_field(&column, "name")?.extract()?,
+            native_field(&column, "type")?.extract()?,
         ));
     }
     Ok(rows)
@@ -75,32 +76,33 @@ fn edit_contract_model(
     physical_columns: &Bound<'_, PyAny>,
     overwrite: bool,
 ) -> PyResult<(Option<String>, Option<String>)> {
-    let schema: Bound<'_, PyAny> = model.getattr("schema_entry")?;
+    let schema: Bound<'_, PyAny> = native_field(model, "schema_entry")?;
     let mut columns: Vec<ContractModelColumn> = Vec::new();
     let mut dynamic_patterns: Vec<Option<String>> = Vec::new();
-    let shared_schema: bool = !schema.is_none() && !schema.getattr("model_schema")?.is_none();
+    let shared_schema: bool =
+        !schema.is_none() && !native_field(&schema, "model_schema")?.is_none();
     if !schema.is_none() {
-        for column in schema.getattr("columns")?.try_iter()? {
+        for column in native_field(&schema, "columns")?.try_iter()? {
             let column: Bound<'_, PyAny> = column?;
-            let location: Bound<'_, PyAny> = column.getattr("location")?;
+            let location: Bound<'_, PyAny> = native_field(&column, "location")?;
             let location_path: Option<String> = if location.is_none() {
                 None
             } else {
-                Some(location.getattr("path")?.str()?.extract()?)
+                Some(native_field(&location, "path")?.str()?.extract()?)
             };
             columns.push(ContractModelColumn {
-                name: column.getattr("name")?.extract()?,
-                declared_type: column.getattr("type")?.extract()?,
+                name: native_field(&column, "name")?.extract()?,
+                declared_type: native_field(&column, "type")?.extract()?,
                 location_path,
             });
         }
-        for family in schema.getattr("dynamic_columns")?.try_iter()? {
-            dynamic_patterns.push(family?.getattr("name_pattern")?.extract()?);
+        for family in native_field(&schema, "dynamic_columns")?.try_iter()? {
+            dynamic_patterns.push(native_field(&family?, "name_pattern")?.extract()?);
         }
     }
     let request = ContractModelRequest {
-        contents: model.getattr("authored_sql")?.extract()?,
-        relative_path: model.getattr("relative_path")?.str()?.extract()?,
+        contents: native_field(model, "authored_sql")?.extract()?,
+        relative_path: native_field(model, "relative_path")?.str()?.extract()?,
         shared_schema,
         columns,
         dynamic_patterns,
@@ -132,14 +134,14 @@ fn edit_contract_source(
     {
         let column: Bound<'_, PyAny> = column?;
         columns.push((
-            column.getattr("name")?.extract()?,
-            column.getattr("type")?.extract()?,
+            native_field(&column, "name")?.extract()?,
+            native_field(&column, "type")?.extract()?,
         ));
     }
     let request = ContractSourceRequest {
         contents: contents.unwrap_or_else(|| discovered_contents.clone()),
         discovered_contents,
-        name: source.getattr("name")?.extract()?,
+        name: native_field(source, "name")?.extract()?,
         columns,
         physical_columns: physical_rows(physical_columns)?,
         overwrite,
@@ -166,8 +168,8 @@ fn remaining_contract_findings<'py>(
             ));
         };
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
-        keywords.set_item("resource_type", first.getattr("resource_type")?)?;
-        keywords.set_item("resource_name", first.getattr("resource_name")?)?;
+        keywords.set_item("resource_type", native_field(first, "resource_type")?)?;
+        keywords.set_item("resource_name", native_field(first, "resource_name")?)?;
         keywords.set_item(
             "kind",
             registry::class(py, RecordId::ContractFindingKind)?.getattr("OWNERSHIP_CONFLICT")?,
@@ -181,7 +183,7 @@ fn remaining_contract_findings<'py>(
     }
     let mut remaining: Vec<Bound<'py, PyAny>> = Vec::new();
     for finding in findings {
-        let kind: String = finding.getattr("kind")?.str()?.extract()?;
+        let kind: String = native_field(&finding, "kind")?.str()?.extract()?;
         let resolved: bool = RESOLVED_KINDS.0.contains(&kind.as_str())
             || (overwrite && RESOLVED_KINDS.1.contains(&kind.as_str()));
         if !resolved {

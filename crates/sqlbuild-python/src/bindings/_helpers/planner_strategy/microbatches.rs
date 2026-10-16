@@ -22,6 +22,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::durations::shifted_moment;
 use crate::bindings::_helpers::plan_output::display::aligned_timestamp_bounds;
 use crate::bindings::_helpers::planner_strategy::values::text;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -82,7 +83,7 @@ fn typed_bounds<'py>(
     classes: &[RecordId],
 ) -> PyResult<Option<BoundPair<'py>>> {
     let py: Python<'py> = bounds.py();
-    let (start, end) = (bounds.getattr("start")?, bounds.getattr("end")?);
+    let (start, end) = (native_field(bounds, "start")?, native_field(bounds, "end")?);
     for value in [&start, &end] {
         let mut typed: bool = false;
         for class in classes {
@@ -101,8 +102,8 @@ fn integer_bounds(bounds: &Bound<'_, PyAny>) -> PyResult<Option<(i128, i128)>> {
         return Ok(None);
     };
     Ok(Some((
-        start.getattr("value")?.extract()?,
-        end.getattr("value")?.extract()?,
+        native_field(&start, "value")?.extract()?,
+        native_field(&end, "value")?.extract()?,
     )))
 }
 
@@ -184,7 +185,10 @@ pub(crate) fn capped_microbatch_bounds<'py>(
         CAP_FROM_END => CapDirection::FromEnd,
         _ => return Ok(bounds),
     };
-    let (start, end) = (bounds.getattr("start")?, bounds.getattr("end")?);
+    let (start, end) = (
+        native_field(&bounds, "start")?,
+        native_field(&bounds, "end")?,
+    );
     let capped: CappedBound<Bound<'py, PyAny>> = if cursor_type == INTEGER_CURSOR {
         let Some(range) = integer_bounds(&bounds)? else {
             return Ok(bounds);

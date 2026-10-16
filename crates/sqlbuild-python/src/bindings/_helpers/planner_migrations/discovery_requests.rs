@@ -9,6 +9,7 @@ use crate::bindings::_helpers::planner_migrations::discovery_events::{
 use crate::bindings::_helpers::planner_migrations::models::{
     ModelMigrationDeclaration, ModelMigrationRequest,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -26,20 +27,20 @@ fn location<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let fields = if event {
         [
-            ("database", item.getattr("database")?),
-            ("schema", item.getattr("schema")?),
-            ("name", item.getattr("name")?),
+            ("database", native_field(item, "database")?),
+            ("schema", native_field(item, "schema")?),
+            ("name", native_field(item, "name")?),
         ]
     } else {
-        let target = item.getattr("target_name")?;
+        let target = native_field(item, "target_name")?;
         let name = if target.is_truthy()? {
             target
         } else {
-            item.getattr("node_name")?
+            native_field(item, "node_name")?
         };
         [
-            ("database", item.getattr("target_database")?),
-            ("schema", item.getattr("target_schema")?),
+            ("database", native_field(item, "target_database")?),
+            ("schema", native_field(item, "target_schema")?),
             ("name", name),
         ]
     };
@@ -58,10 +59,10 @@ pub(super) fn candidates<'py>(
         excluded.add(key(&declaration.origin_location)?)?;
     }
     for (_, event) in claims.1.iter() {
-        excluded.add(key(&event.getattr("origin")?)?)?;
+        excluded.add(key(&native_field(&event, "origin")?)?)?;
     }
     let orphans = call_with(
-        &state.getattr("orphan_fingerprints")?,
+        &native_field(state, "orphan_fingerprints")?,
         &[(
             "project_model_names",
             PyFrozenSet::new(py, names.keys().iter())?.into_any(),
@@ -71,16 +72,16 @@ pub(super) fn candidates<'py>(
     let mut locations: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in orphans.try_iter()? {
         let item = item?;
-        let metadata: String = item.getattr("metadata_json")?.extract()?;
+        let metadata: String = native_field(&item, "metadata_json")?.extract()?;
         if stored_migration_fingerprint(&metadata).is_some()
-            && !item.getattr("target_name")?.is_none()
+            && !native_field(&item, "target_name")?.is_none()
         {
             locations.push(location(runtime, &item, false)?);
             fingerprints.push(item);
         }
     }
     call_with(
-        &state.getattr("inspect_relations")?,
+        &native_field(state, "inspect_relations")?,
         &[("locations", PyTuple::new(py, &locations)?.into_any())],
     )?;
     let mut result: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -90,7 +91,7 @@ pub(super) fn candidates<'py>(
         {
             continue;
         }
-        let event = newest(&state.getattr("events")?, &location)?;
+        let event = newest(&native_field(state, "events")?, &location)?;
         if !event.is_none()
             && event
                 .getattr("origin")?
@@ -115,25 +116,25 @@ pub(super) fn automatic<'py>(
     for item in models {
         if !scope
             .getattr("selected_keys")?
-            .contains(item.getattr("key")?)?
+            .contains(native_field(item, "key")?)?
         {
             continue;
         }
-        let name = item.getattr("name")?;
+        let name = native_field(item, "name")?;
         let event = matches.1.get_item(&name)?;
         let candidate = matches.0.call_method1("get", (&name,))?;
         let origin = if let Some(event) = event {
             Some((
-                location(runtime, &event.getattr("origin")?, true)?,
-                event.getattr("origin_model")?,
+                location(runtime, &native_field(&event, "origin")?, true)?,
+                native_field(&event, "origin_model")?,
             ))
         } else if !candidate.is_none() {
             let materialized: Option<String> = config(item, "materialized")?.extract()?;
-            let metadata: String = candidate.getattr("metadata_json")?.extract()?;
+            let metadata: String = native_field(&candidate, "metadata_json")?.extract()?;
             if discovery_materialization(materialized.as_deref().unwrap_or_default(), &metadata) {
                 Some((
                     location(runtime, &candidate, false)?,
-                    candidate.getattr("node_name")?,
+                    native_field(&candidate, "node_name")?,
                 ))
             } else {
                 None
@@ -167,9 +168,9 @@ pub(super) fn warnings<'py>(
     for item in models {
         if scope
             .getattr("selected_keys")?
-            .contains(item.getattr("key")?)?
+            .contains(native_field(item, "key")?)?
         {
-            selected.add(item.getattr("name")?)?;
+            selected.add(native_field(item, "name")?)?;
         }
     }
     let ambiguous: BTreeMap<String, String> = ambiguous.extract()?;

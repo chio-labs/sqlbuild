@@ -31,6 +31,7 @@ use crate::bindings::_helpers::janitor::janitor_phases::{
 use crate::bindings::_helpers::janitor::janitor_plan::{janitor_plan_text, janitor_result_counts};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -77,31 +78,31 @@ fn flush(py: Python<'_>) -> PyResult<()> {
 
 /// Discover the project and resolve the target and output context.
 fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let project_dir: Bound<'py, PyAny> = match request.getattr("project_dir")? {
+    let project_dir: Bound<'py, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
     let discovered: Bound<'py, PyAny> =
         discover_project_inputs(py, Some(keywords(py, &[("project_dir", &project_dir)])?))?;
-    let as_target: Bound<'py, PyAny> = request.getattr("as_target")?;
+    let as_target: Bound<'py, PyAny> = native_field(request, "as_target")?;
     validate_preview_target(
         py,
         discovered.clone(),
         as_target.extract::<Option<String>>()?,
         COMMAND_NAME.to_owned(),
     )?;
-    let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
+    let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
     let active_target: Bound<'py, PyAny> = object(
         py,
         resolve_target_name(
             py,
-            &discovered.getattr("project_config")?,
-            &discovered.getattr("local_config")?,
+            &native_field(&discovered, "project_config")?,
+            &native_field(&discovered, "local_config")?,
             &selected_target,
         )?,
     )?;
     let use_color: bool =
-        !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
+        !native_field(request, "no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
     let options: Bound<'py, PyDict> = keywords(
         py,
         &[
@@ -123,16 +124,16 @@ fn settings<'py>(
     janitor: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let retention_days: Bound<'py, PyAny> = resolve_retention_days(
-        request.getattr("retention_days")?.extract()?,
-        janitor.getattr("retention_days")?.extract()?,
+        native_field(request, "retention_days")?.extract()?,
+        native_field(janitor, "retention_days")?.extract()?,
     )
     .into_pyobject(py)?
     .into_any();
     validate_janitor_settings(retention_days.extract()?, 0)
         .map_err(|error| settings_error(py, error))?;
-    let requested: Bound<'py, PyAny> = request.getattr("direct_state_history_versions")?;
+    let requested: Bound<'py, PyAny> = native_field(request, "direct_state_history_versions")?;
     let history: Bound<'py, PyAny> = if requested.is_none() {
-        janitor.getattr("direct_state_history_versions")?
+        native_field(janitor, "direct_state_history_versions")?
     } else {
         requested
     };
@@ -144,11 +145,11 @@ fn settings<'py>(
             ("direct_state_history_versions", &history),
             (
                 "archive_retention_days",
-                &janitor.getattr("archive_retention_days")?,
+                &native_field(janitor, "archive_retention_days")?,
             ),
             (
                 "drop_old_name_views",
-                &request.getattr("drop_old_name_views")?,
+                &native_field(request, "drop_old_name_views")?,
             ),
         ],
     )?;
@@ -177,16 +178,16 @@ fn clean(
     (compiled, connection): (&JanitorCompiled<'_>, &Bound<'_, PyAny>),
 ) -> PyResult<i32> {
     let style: CliStyle = CliStyle {
-        use_color: invocation.getattr("use_color")?.extract()?,
+        use_color: native_field(invocation, "use_color")?.extract()?,
     };
     let planning: Bound<'_, PyAny> =
         build_janitor_execution_plan((invocation, settings), compiled, connection)?;
     let plan: JanitorPlanText = janitor_plan_text(&planning)?;
     write(py, &render_janitor_plan(&plan, style))?;
     let blocked: i32 = i32::from(!plan.blocked_schemas.is_empty());
-    let as_target: Option<String> = invocation.getattr("as_target")?.extract()?;
+    let as_target: Option<String> = native_field(invocation, "as_target")?.extract()?;
     if let Some(as_target) = as_target {
-        let active: Option<String> = invocation.getattr("active_target_name")?.extract()?;
+        let active: Option<String> = native_field(invocation, "active_target_name")?.extract()?;
         write(
             py,
             &janitor_preview_complete_text(&as_target, active.as_deref(), style),
@@ -199,7 +200,7 @@ fn clean(
     if !janitor_plan_has_work(&plan) {
         return Ok(0);
     }
-    if !request.getattr("auto_approve")?.extract::<bool>()? && !confirmed(py, &plan)? {
+    if !native_field(request, "auto_approve")?.extract::<bool>()? && !confirmed(py, &plan)? {
         write(py, "Janitor cancelled.\n")?;
         return Ok(1);
     }
@@ -217,20 +218,20 @@ fn clean(
 fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = invocation(py, request)?;
     let style: CliStyle = CliStyle {
-        use_color: invocation.getattr("use_color")?.extract()?,
+        use_color: native_field(&invocation, "use_color")?.extract()?,
     };
     let janitor: Bound<'_, PyAny> = invocation
         .getattr("discovered_inputs")?
         .getattr("project_config")?
         .getattr("janitor")?;
-    if !janitor.getattr("enabled")?.is_truthy()? {
+    if !native_field(&janitor, "enabled")?.is_truthy()? {
         write(py, &janitor_disabled_text(style))?;
         return Ok(0);
     }
     let settings: Bound<'_, PyAny> = settings(py, request, &janitor)?;
-    let as_target: Option<String> = invocation.getattr("as_target")?.extract()?;
+    let as_target: Option<String> = native_field(&invocation, "as_target")?.extract()?;
     if let Some(as_target) = &as_target {
-        let active: Option<String> = invocation.getattr("active_target_name")?.extract()?;
+        let active: Option<String> = native_field(&invocation, "active_target_name")?.extract()?;
         write(
             py,
             &janitor_preview_start_text(as_target, active.as_deref()),

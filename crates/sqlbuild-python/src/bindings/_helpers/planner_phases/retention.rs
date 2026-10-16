@@ -15,6 +15,7 @@ use crate::bindings::_helpers::planner_phases::objects::{
     planner_model, replace, sorted_names, text, tuple,
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
@@ -54,7 +55,7 @@ fn selected_models<'py>(
     runtime: &Bound<'py, PyAny>,
     scope: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let names: BTreeSet<String> = model_key_names(&scope.getattr("selected_keys")?)?
+    let names: BTreeSet<String> = model_key_names(&native_field(scope, "selected_keys")?)?
         .into_iter()
         .collect();
     let mut models: Vec<_> = Vec::new();
@@ -120,9 +121,9 @@ pub(crate) fn plan_table_types<'py>(
     let materialization = registry::class(py, RecordId::MaterializationType)?;
     let mut entries: Vec<_> = Vec::new();
     for model in models {
-        let config = model.getattr("config")?;
+        let config = native_field(&model, "config")?;
         let backed = call_with(
-            &materialization.getattr("is_table_backed")?,
+            &native_field(&materialization, "is_table_backed")?,
             &[(
                 "materialized",
                 config
@@ -137,9 +138,9 @@ pub(crate) fn plan_table_types<'py>(
         if relation.is_none() {
             continue;
         }
-        let table_type = config.getattr("table_type")?;
-        let desired_transient = table_type.getattr("value")?.eq(TRANSIENT_TABLE_TYPE)?;
-        let actual = relation.getattr("is_transient")?;
+        let table_type = native_field(&config, "table_type")?;
+        let desired_transient = native_field(&table_type, "value")?.eq(TRANSIENT_TABLE_TYPE)?;
+        let actual = native_field(&relation, "is_transient")?;
         let actual: Option<bool> = if actual.is_none() {
             None
         } else {
@@ -153,7 +154,7 @@ pub(crate) fn plan_table_types<'py>(
         let limit: i64 = adapter
             .call_method0("maximum_identifier_length")?
             .extract()?;
-        let target_name: String = destination.getattr("name")?.extract()?;
+        let target_name: String = native_field(&destination, "name")?.extract()?;
         entries.push(planner_model(
             py,
             RecordId::TableTypePlanEntry,
@@ -161,7 +162,7 @@ pub(crate) fn plan_table_types<'py>(
                 ("model_name", model_reads::name_object(&model)?),
                 ("destination", destination),
                 ("copy_name", text(py, &copy_name(&target_name, limit))),
-                ("desired_type", table_type.getattr("value")?.getattr("value")?),
+                ("desired_type", native_field(&table_type, "value")?.getattr("value")?),
                 (
                     "actual_type",
                     optional_text(
@@ -175,11 +176,11 @@ pub(crate) fn plan_table_types<'py>(
                         }),
                     ),
                 ),
-                ("source", table_type.getattr("source")?.getattr("value")?),
+                ("source", native_field(&table_type, "source")?.getattr("value")?),
                 ("downgrade", downgrade.into_pyobject(py)?.to_owned().into_any()),
                 (
                     "downgrade_policy",
-                    target.getattr("table_type_downgrade")?.getattr("value")?,
+                    native_field(&target, "table_type_downgrade")?.getattr("value")?,
                 ),
                 (
                     "irreversible_warning",
@@ -250,7 +251,7 @@ fn entry<'py>(
 fn flatten<'py>(changes: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let mut statements: Vec<_> = Vec::new();
     for change in changes.try_iter()? {
-        for statement in change?.getattr("statements")?.try_iter()? {
+        for statement in native_field(&change?, "statements")?.try_iter()? {
             statements.push(statement?);
         }
     }
@@ -279,7 +280,10 @@ fn inspect<'py>(
     request: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &runtime_field(runtime, |runtime| &runtime.adapter)?.getattr("inspect_retention")?,
+        &native_field(
+            &runtime_field(runtime, |runtime| &runtime.adapter)?,
+            "inspect_retention",
+        )?,
         &[
             (
                 "connection",
@@ -297,7 +301,7 @@ fn state_direction(state: &Bound<'_, PyAny>, desired_days: i64) -> PyResult<&'st
             optional("delta_log_retention_days")?,
             optional("delta_deleted_file_retention_days")?,
         ],
-        state.getattr("effective_days")?.extract()?,
+        native_field(state, "effective_days")?.extract()?,
         desired_days,
     ))
 }
@@ -319,18 +323,20 @@ fn relation_retention<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = runtime.py();
     let name: String = model_reads::model_name(model)?;
-    let config = model.getattr("config")?;
-    let retention = config.getattr("time_travel_retention")?;
-    if retention.getattr("desired_days")?.is_none() || retention.getattr("source")?.is_none() {
+    let config = native_field(model, "config")?;
+    let retention = native_field(&config, "time_travel_retention")?;
+    if native_field(&retention, "desired_days")?.is_none()
+        || native_field(&retention, "source")?.is_none()
+    {
         return Err(planner_error(
             py,
             &format!("model '{name}': managed retention is incomplete"),
             (None, None),
         ));
     }
-    let desired_days: i64 = retention.getattr("desired_days")?.extract()?;
+    let desired_days: i64 = native_field(&retention, "desired_days")?.extract()?;
     let destination = model_reads::destination(model)?;
-    let schema = destination.getattr("schema")?;
+    let schema = native_field(&destination, "schema")?;
     if schema.is_none() {
         return Err(planner_error(
             py,
@@ -347,20 +353,20 @@ fn relation_retention<'py>(
                 "scope",
                 member(py, AdapterHost::RetentionScope, "relation")?,
             ),
-            ("database", destination.getattr("database")?),
+            ("database", native_field(&destination, "database")?),
             ("schema", schema.clone()),
-            ("name", destination.getattr("name")?),
-            ("desired_days", retention.getattr("desired_days")?),
+            ("name", native_field(&destination, "name")?),
+            ("desired_days", native_field(&retention, "desired_days")?),
         ],
     )?;
     let mut base = RetentionEntry {
         request: request.clone(),
         model_names: tuple(py, vec![model_reads::name_object(model)?])?,
         state: None,
-        source: retention.getattr("source")?.getattr("value")?,
+        source: native_field(&retention, "source")?.getattr("value")?,
     };
     let snowflake = adapter_is(runtime, SNOWFLAKE_ADAPTER)?;
-    let table_type = config.getattr("table_type")?.getattr("value")?;
+    let table_type = native_field(&config, "table_type")?.getattr("value")?;
     let relations = warehouse
         .getattr("snapshot")?
         .getattr("existing_relations")?;
@@ -376,17 +382,17 @@ fn relation_retention<'py>(
         )?]);
     }
     let relation = relations.get_item(model_reads::name_object(model)?)?;
-    let relation_transient = relation.getattr("is_transient")?;
+    let relation_transient = native_field(&relation, "is_transient")?;
     let lookup = call_with(
         &host::entry(py, AdapterHost::RelationLookup)?.getattr("key")?,
         &[
-            ("database", destination.getattr("database")?),
+            ("database", native_field(&destination, "database")?),
             ("schema", schema),
-            ("name", destination.getattr("name")?),
+            ("name", native_field(&destination, "name")?),
         ],
     )?;
     let mut listed = py.None().into_bound(py);
-    if relation.getattr("identity")?.eq(&lookup)? {
+    if native_field(&relation, "identity")?.eq(&lookup)? {
         listed = call_with(
             &runtime
                 .getattr("adapter")?
@@ -399,7 +405,7 @@ fn relation_retention<'py>(
     } else {
         inspect(runtime, &request)?
     };
-    if state.getattr("is_transient")?.is_truthy()?
+    if native_field(&state, "is_transient")?.is_truthy()?
         && desired_days > 1
         && table_type.eq(TRANSIENT_TABLE_TYPE)?
     {
@@ -435,11 +441,11 @@ fn relation_retention<'py>(
     let mut entries: Vec<_> = Vec::new();
     for change in changes.try_iter()? {
         let change = change?;
-        let phase: String = change.getattr("phase")?.str()?.extract()?;
+        let phase: String = native_field(&change, "phase")?.str()?.extract()?;
         entries.push(entry(
             &base,
             retention_change(&phase, direction),
-            change.getattr("statements")?,
+            native_field(&change, "statements")?,
         )?);
     }
     Ok(entries)
@@ -468,18 +474,18 @@ fn bigquery_retention<'py>(
         .try_iter()?
     {
         let model = model?;
-        let retention = model.getattr("config")?.getattr("time_travel_retention")?;
+        let retention = native_field(&model, "config")?.getattr("time_travel_retention")?;
         let destination = model_reads::destination(&model)?;
-        if retention.getattr("unmanaged")?.is_truthy()?
-            || retention.getattr("desired_days")?.is_none()
-            || destination.getattr("schema")?.is_none()
+        if native_field(&retention, "unmanaged")?.is_truthy()?
+            || native_field(&retention, "desired_days")?.is_none()
+            || native_field(&destination, "schema")?.is_none()
         {
             continue;
         }
         managed
             .entry((
-                destination.getattr("database")?.extract()?,
-                destination.getattr("schema")?.extract()?,
+                native_field(&destination, "database")?.extract()?,
+                native_field(&destination, "schema")?.extract()?,
             ))
             .or_default()
             .push(model);
@@ -487,8 +493,8 @@ fn bigquery_retention<'py>(
     let mut scopes: BTreeSet<(String, String, Option<String>)> = BTreeSet::new();
     for model in models {
         let destination = model_reads::destination(model)?;
-        let database: Option<String> = destination.getattr("database")?.extract()?;
-        let schema: String = destination.getattr("schema")?.str()?.extract()?;
+        let database: Option<String> = native_field(&destination, "database")?.extract()?;
+        let schema: String = native_field(&destination, "schema")?.str()?.extract()?;
         scopes.insert((database.clone().unwrap_or_default(), schema, database));
     }
     let mut entries: Vec<_> = Vec::new();
@@ -502,21 +508,21 @@ fn bigquery_retention<'py>(
         let mut sources: BTreeSet<String> = BTreeSet::new();
         let mut names: Vec<_> = Vec::new();
         for item in &scope_models {
-            let retention = item.getattr("config")?.getattr("time_travel_retention")?;
-            let desired = retention.getattr("desired_days")?;
+            let retention = native_field(item, "config")?.getattr("time_travel_retention")?;
+            let desired = native_field(&retention, "desired_days")?;
             details.push(format!(
                 "{}={}d",
-                item.getattr("name")?.str()?,
+                native_field(item, "name")?.str()?,
                 desired.str()?
             ));
             if !desired.is_none() {
                 desired_values.insert(desired.extract()?);
             }
-            let source = retention.getattr("source")?;
+            let source = native_field(&retention, "source")?;
             if !source.is_none() {
-                sources.insert(source.getattr("value")?.extract()?);
+                sources.insert(native_field(&source, "value")?.extract()?);
             }
-            names.push(item.getattr("name")?.extract::<String>()?);
+            names.push(native_field(item, "name")?.extract::<String>()?);
         }
         let prefix = database
             .as_ref()
@@ -553,7 +559,7 @@ fn bigquery_retention<'py>(
             state: Some(state.clone()),
             source: text(py, &sources.into_iter().collect::<Vec<_>>().join(",")),
         };
-        if !state.getattr("exists")?.is_truthy()? {
+        if !native_field(&state, "exists")?.is_truthy()? {
             let changes = render_changes(runtime, &request, None)?;
             entries.push(entry(
                 &base,
@@ -591,9 +597,9 @@ pub(crate) fn plan_retention<'py>(
     let py = runtime.py();
     let mut models: Vec<_> = Vec::new();
     for model in selected_models(runtime, scope)? {
-        let retention = model.getattr("config")?.getattr("time_travel_retention")?;
-        if !retention.getattr("unmanaged")?.is_truthy()?
-            && !retention.getattr("desired_days")?.is_none()
+        let retention = native_field(&model, "config")?.getattr("time_travel_retention")?;
+        if !native_field(&retention, "unmanaged")?.is_truthy()?
+            && !native_field(&retention, "desired_days")?.is_none()
         {
             models.push(model);
         }

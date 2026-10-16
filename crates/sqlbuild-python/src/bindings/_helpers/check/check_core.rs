@@ -19,6 +19,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MISSING_RELATION_CODE: &str = "C682";
 const MODEL_KIND: &str = "model";
@@ -56,13 +57,13 @@ fn load_result_as_python_result<'py>(
     let py: Python<'py> = name.py();
     let execution: Bound<'py, PyAny> = host::entry(py, ExecutorHost::ExecutionStatus)?;
     let node_status: Bound<'py, PyAny> = host::entry(py, UserCodeHost::PythonNodeStatus)?;
-    let status: Bound<'py, PyAny> = result.getattr("status")?;
-    let mapped: Bound<'py, PyAny> = if status.eq(execution.getattr("SUCCESS")?)? {
-        node_status.getattr("SUCCESS")?
-    } else if status.eq(execution.getattr("SKIPPED")?)? {
-        node_status.getattr("SKIPPED")?
+    let status: Bound<'py, PyAny> = native_field(result, "status")?;
+    let mapped: Bound<'py, PyAny> = if status.eq(native_field(&execution, "SUCCESS")?)? {
+        native_field(&node_status, "SUCCESS")?
+    } else if status.eq(native_field(&execution, "SKIPPED")?)? {
+        native_field(&node_status, "SKIPPED")?
     } else {
-        node_status.getattr("FAILED")?
+        native_field(&node_status, "FAILED")?
     };
     call_with(
         &host::entry(py, ExecutorHost::PythonNodeExecutionResult)?,
@@ -74,7 +75,7 @@ fn load_result_as_python_result<'py>(
             ),
             ("status", mapped),
             ("payload", result.clone()),
-            ("error_message", result.getattr("error_message")?),
+            ("error_message", native_field(result, "error_message")?),
         ],
     )
 }
@@ -88,7 +89,7 @@ pub(crate) fn load_results_by_loader_name<'py>(
     let loader_by_source: Bound<'py, PyDict> = PyDict::new(py);
     for item in source_map.call_method0("items")?.try_iter()? {
         let (name, source): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
-        let loader: Bound<'py, PyAny> = source.getattr("loader")?;
+        let loader: Bound<'py, PyAny> = native_field(&source, "loader")?;
         if !loader.is_none() {
             loader_by_source.set_item(name, loader)?;
         }
@@ -96,7 +97,7 @@ pub(crate) fn load_results_by_loader_name<'py>(
     let by_loader: Bound<'py, PyDict> = PyDict::new(py);
     for result in load_results.try_iter()? {
         let result: Bound<'py, PyAny> = result?;
-        if let Some(loader) = loader_by_source.get_item(result.getattr("source_name")?)?
+        if let Some(loader) = loader_by_source.get_item(native_field(&result, "source_name")?)?
             && !loader.is_none()
         {
             by_loader.set_item(loader, result)?;
@@ -115,7 +116,7 @@ pub(crate) fn record_python_run_state_results<'py>(
     let py: Python<'py> = discovered_inputs.py();
     let record = |function: Bound<'py, PyAny>, result: Bound<'py, PyAny>| -> PyResult<()> {
         call_with(
-            &run_state.getattr("record_result")?,
+            &native_field(run_state, "record_result")?,
             &[("node_function", function), ("result", result)],
         )?;
         Ok(())
@@ -123,13 +124,16 @@ pub(crate) fn record_python_run_state_results<'py>(
     let result_by_name: Bound<'py, PyDict> = PyDict::new(py);
     for result in python_results.try_iter()? {
         let result: Bound<'py, PyAny> = result?;
-        result_by_name.set_item(result.getattr("node_name")?, result)?;
+        result_by_name.set_item(native_field(&result, "node_name")?, result)?;
     }
     let node_by_name: Bound<'py, PyDict> = PyDict::new(py);
     for attribute in ["task_functions", "asset_functions"] {
         for node in discovered_inputs.getattr(attribute)?.try_iter()? {
             let node: Bound<'py, PyAny> = node?;
-            node_by_name.set_item(node.getattr("name")?, node.getattr("function")?)?;
+            node_by_name.set_item(
+                native_field(&node, "name")?,
+                native_field(&node, "function")?,
+            )?;
         }
     }
     for (name, function) in node_by_name.iter() {
@@ -146,14 +150,14 @@ pub(crate) fn record_python_run_state_results<'py>(
         }
         _ => PyDict::new(py),
     };
-    for loader in discovered_inputs.getattr("loader_functions")?.try_iter()? {
+    for loader in native_field(discovered_inputs, "loader_functions")?.try_iter()? {
         let loader: Bound<'py, PyAny> = loader?;
-        let name: Bound<'py, PyAny> = loader.getattr("name")?;
+        let name: Bound<'py, PyAny> = native_field(&loader, "name")?;
         let Some(result) = by_loader.get_item(&name)? else {
             continue;
         };
         record(
-            loader.getattr("function")?,
+            native_field(&loader, "function")?,
             load_result_as_python_result(&name, &result)?,
         )?;
     }
@@ -169,7 +173,7 @@ pub(crate) fn build_check_relation_targets<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = adapter.py();
     let required: Bound<'py, PyAny> = call_with(
-        &python_graph.getattr("selected_sql_refs")?,
+        &native_field(python_graph, "selected_sql_refs")?,
         &[("selected_names", selected_python_names)],
     )?;
     object(
@@ -180,8 +184,8 @@ pub(crate) fn build_check_relation_targets<'py>(
                 py,
                 &[
                     ("adapter", adapter.clone()),
-                    ("project", pipeline_result.getattr("project")?),
-                    ("plan_output", pipeline_result.getattr("plan_output")?),
+                    ("project", native_field(pipeline_result, "project")?),
+                    ("plan_output", native_field(pipeline_result, "plan_output")?),
                     ("required_refs", required),
                 ],
             )?),
@@ -203,12 +207,12 @@ pub(crate) fn relevant_check_functions<'py>(
     )?;
     let check_kind: Bound<'py, PyAny> =
         host::entry(py, UserCodeHost::PythonNodeKind)?.getattr("CHECK")?;
-    let upstream_deps: Bound<'py, PyAny> = python_graph.getattr("upstream_deps")?;
+    let upstream_deps: Bound<'py, PyAny> = native_field(python_graph, "upstream_deps")?;
     let mut check_names: Vec<Bound<'py, PyAny>> = Vec::new();
-    for node in python_graph.getattr("nodes")?.try_iter()? {
+    for node in native_field(python_graph, "nodes")?.try_iter()? {
         let node: Bound<'py, PyAny> = node?;
-        let name: Bound<'py, PyAny> = node.getattr("name")?;
-        if !node.getattr("kind")?.eq(&check_kind)? || excluded.contains(&name)? {
+        let name: Bound<'py, PyAny> = native_field(&node, "name")?;
+        if !native_field(&node, "kind")?.eq(&check_kind)? || excluded.contains(&name)? {
             continue;
         }
         let upstream: Vec<Bound<'py, PyAny>> = upstream_deps
@@ -216,8 +220,8 @@ pub(crate) fn relevant_check_functions<'py>(
             .try_iter()?
             .collect::<PyResult<_>>()?;
         let mut sql_names: Vec<Bound<'py, PyAny>> = Vec::new();
-        for reference in node.getattr("sql_deps")?.try_iter()? {
-            sql_names.push(reference?.getattr("name")?);
+        for reference in native_field(&node, "sql_deps")?.try_iter()? {
+            sql_names.push(native_field(&reference?, "name")?);
         }
         if upstream.is_empty() && sql_names.is_empty() {
             continue;
@@ -235,9 +239,9 @@ pub(crate) fn relevant_check_functions<'py>(
     }
     let check_names: Bound<'py, PyFrozenSet> = PyFrozenSet::new(py, &check_names)?;
     let mut checks: Vec<Bound<'py, PyAny>> = Vec::new();
-    for check in discovered_inputs.getattr("check_functions")?.try_iter()? {
+    for check in native_field(discovered_inputs, "check_functions")?.try_iter()? {
         let check: Bound<'py, PyAny> = check?;
-        if check_names.contains(check.getattr("name")?)? {
+        if check_names.contains(native_field(&check, "name")?)? {
             checks.push(check);
         }
     }
@@ -259,7 +263,7 @@ pub(crate) struct ReadSideInputs<'py> {
 }
 
 fn reference_kind(reference: &Bound<'_, PyAny>) -> PyResult<String> {
-    reference.getattr("kind")?.getattr("value")?.extract()
+    native_field(reference, "kind")?.getattr("value")?.extract()
 }
 
 /// A plan source the check can look up as a table: not an expression, with a table name.
@@ -271,8 +275,8 @@ fn table_source<'py>(
         .getattr("python_source_entries")?
         .call_method1("get", (name,))?;
     if source.is_none()
-        || !source.getattr("expression")?.is_none()
-        || source.getattr("table")?.is_none()
+        || !native_field(&source, "expression")?.is_none()
+        || native_field(&source, "table")?.is_none()
     {
         return Ok(None);
     }
@@ -290,7 +294,7 @@ fn located<'py>(
     };
     let location: Bound<'py, PyAny> = plan_output
         .getattr(attribute)?
-        .call_method1("get", (reference.getattr("name")?,))?;
+        .call_method1("get", (native_field(reference, "name")?,))?;
     Ok((!location.is_none()).then_some(location))
 }
 
@@ -302,22 +306,22 @@ fn lookup_location<'py>(
     let py: Python<'py> = plan_output.py();
     let parts: (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>) =
         if reference_kind(reference)? == SOURCE_KIND {
-            let Some(source) = table_source(plan_output, &reference.getattr("name")?)? else {
+            let Some(source) = table_source(plan_output, &native_field(reference, "name")?)? else {
                 return Ok(None);
             };
             (
-                source.getattr("database")?,
-                source.getattr("schema")?,
-                source.getattr("table")?,
+                native_field(&source, "database")?,
+                native_field(&source, "schema")?,
+                native_field(&source, "table")?,
             )
         } else {
             let Some(location) = located(plan_output, reference)? else {
                 return Ok(None);
             };
             (
-                location.getattr("database")?,
-                location.getattr("schema")?,
-                location.getattr("name")?,
+                native_field(&location, "database")?,
+                native_field(&location, "schema")?,
+                native_field(&location, "name")?,
             )
         };
     Ok(Some(
@@ -330,7 +334,7 @@ fn relation_exists(
     (database, schema, name): (Bound<'_, PyAny>, Bound<'_, PyAny>, Bound<'_, PyAny>),
 ) -> PyResult<bool> {
     call_with(
-        &lookup.getattr("exists")?,
+        &native_field(lookup, "exists")?,
         &[("database", database), ("schema", schema), ("name", name)],
     )?
     .is_truthy()
@@ -343,9 +347,9 @@ fn validate_reference_exists(
     reference: &Bound<'_, PyAny>,
 ) -> Result<(), PyErr> {
     let py: Python<'_> = reference.py();
-    let plan_output: Bound<'_, PyAny> = inputs.pipeline_result.getattr("plan_output")?;
+    let plan_output: Bound<'_, PyAny> = native_field(&inputs.pipeline_result, "plan_output")?;
     let kind: String = reference_kind(reference)?;
-    let name: Bound<'_, PyAny> = reference.getattr("name")?;
+    let name: Bound<'_, PyAny> = native_field(reference, "name")?;
     let (exists, relation): (bool, Bound<'_, PyAny>) = match kind.as_str() {
         MODEL_KIND | SEED_KIND => {
             let Some(location) = located(&plan_output, reference)? else {
@@ -365,9 +369,9 @@ fn validate_reference_exists(
             let exists: bool = relation_exists(
                 lookup,
                 (
-                    location.getattr("database")?,
-                    location.getattr("schema")?,
-                    location.getattr("name")?,
+                    native_field(&location, "database")?,
+                    native_field(&location, "schema")?,
+                    native_field(&location, "name")?,
                 ),
             )?;
             let relation: Bound<'_, PyAny> = call_with(
@@ -383,9 +387,9 @@ fn validate_reference_exists(
             let exists: bool = relation_exists(
                 lookup,
                 (
-                    source.getattr("database")?,
-                    source.getattr("schema")?,
-                    source.getattr("table")?,
+                    native_field(&source, "database")?,
+                    native_field(&source, "schema")?,
+                    native_field(&source, "table")?,
                 ),
             )?;
             (exists, inputs.relation_targets.get_item(reference)?)
@@ -411,7 +415,7 @@ fn sorted_references<'py>(references: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<
         let reference: Bound<'py, PyAny> = reference?;
         let key: (String, String) = (
             reference_kind(&reference)?,
-            reference.getattr("name")?.extract()?,
+            native_field(&reference, "name")?.extract()?,
         );
         keyed.push((key, reference));
     }
@@ -424,10 +428,10 @@ fn read_side_references<'py>(
     read_side_names: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = python_graph.py();
-    let nodes: Bound<'py, PyAny> = python_graph.getattr("nodes_by_name")?;
+    let nodes: Bound<'py, PyAny> = native_field(python_graph, "nodes_by_name")?;
     let mut references: Vec<Bound<'py, PyAny>> = Vec::new();
     for name in read_side_names.try_iter()? {
-        for reference in nodes.get_item(name?)?.getattr("sql_deps")?.try_iter()? {
+        for reference in native_field(&nodes.get_item(name?)?, "sql_deps")?.try_iter()? {
             references.push(reference?);
         }
     }
@@ -436,16 +440,16 @@ fn read_side_references<'py>(
 
 fn node_runtime<'py>(inputs: &ReadSideInputs<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.adapter.py();
-    let project: Bound<'py, PyAny> = inputs.pipeline_result.getattr("project")?;
+    let project: Bound<'py, PyAny> = native_field(&inputs.pipeline_result, "project")?;
     call_with(
         &host::entry(py, ExecutorHost::PythonNodeRuntime)?,
         &[
             ("adapter", inputs.adapter.clone()),
             ("connection_config", inputs.connection_config.clone()),
             ("connection", inputs.connection.clone()),
-            ("run_id", project.getattr("run_id")?),
-            ("target", project.getattr("effective_target_name")?),
-            ("vars", project.getattr("effective_vars")?),
+            ("run_id", native_field(&project, "run_id")?),
+            ("target", native_field(&project, "effective_target_name")?),
+            ("vars", native_field(&project, "effective_vars")?),
             ("is_reload", false.into_pyobject(py)?.to_owned().into_any()),
             (
                 "default_database",
@@ -476,7 +480,7 @@ pub(crate) fn run_read_side_dependencies<'py>(
         inputs.validation_refs.clone()
     };
     let references: Vec<Bound<'py, PyAny>> = sorted_references(&to_validate)?;
-    let plan_output: Bound<'py, PyAny> = inputs.pipeline_result.getattr("plan_output")?;
+    let plan_output: Bound<'py, PyAny> = native_field(&inputs.pipeline_result, "plan_output")?;
     let mut locations: Vec<Bound<'py, PyAny>> = Vec::new();
     for reference in &references {
         if let Some(location) = lookup_location(&plan_output, reference)? {
@@ -508,7 +512,7 @@ pub(crate) fn run_read_side_dependencies<'py>(
     )?;
     tracker.call_method0("dispatch_ready_python_nodes")?;
     tracker.call_method0("finalize_unrun_python_nodes")?;
-    tracker.getattr("results")
+    native_field(&tracker, "results")
 }
 
 /// Run read-side Python dependencies for checks against existing SQL relations.

@@ -23,6 +23,7 @@ use crate::bindings::_helpers::lifecycle_events::validation::{
     frozen_json, known_event_check, optional_text_check, required_text_check, schema_version_check,
     timestamp_check,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const EVENT_REQUIRED_TEXT: [&str; 5] = [
     "event_id",
@@ -107,9 +108,9 @@ fn lifecycle_event_check(event: &Bound<'_, PyAny>) -> PyResult<()> {
     for field in EVENT_REQUIRED_TEXT {
         required_text_check(&event.getattr(field)?, field)?;
     }
-    let schema_version: Bound<'_, PyAny> = event.getattr("schema_version")?;
+    let schema_version: Bound<'_, PyAny> = native_field(event, "schema_version")?;
     schema_version_check(&schema_version)?;
-    let sequence: Bound<'_, PyAny> = event.getattr("invocation_sequence")?;
+    let sequence: Bound<'_, PyAny> = native_field(event, "invocation_sequence")?;
     let sequence: SequenceFact = if sequence.is_none() {
         SequenceFact::Absent
     } else if nonnegative_int(&sequence)? {
@@ -117,13 +118,13 @@ fn lifecycle_event_check(event: &Bound<'_, PyAny>) -> PyResult<()> {
     } else {
         SequenceFact::Invalid
     };
-    let has_external_context: bool = event.getattr("external_context")?.is_truthy()?;
+    let has_external_context: bool = native_field(event, "external_context")?.is_truthy()?;
     if let Some(problem) =
         lifecycle_version_problem(saturated(&schema_version)?, sequence, has_external_context)
     {
         return Err(validation_error(py, &problem));
     }
-    timestamp_check(&event.getattr("occurred_at")?)?;
+    timestamp_check(&native_field(event, "occurred_at")?)?;
     for field in EVENT_OPTIONAL_TEXT {
         optional_text_check(&event.getattr(field)?, field)?;
     }
@@ -147,7 +148,7 @@ fn invocation_sequence_check(value: &Bound<'_, PyAny>) -> PyResult<()> {
 #[pyo3(signature = (*, record))]
 fn diagnostic_log_check(record: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = record.py();
-    let schema_version: Bound<'_, PyAny> = record.getattr("schema_version")?;
+    let schema_version: Bound<'_, PyAny> = native_field(record, "schema_version")?;
     schema_version_check(&schema_version)?;
     if let Some(problem) = diagnostic_version_problem(saturated(&schema_version)?) {
         return Err(validation_error(py, &problem));
@@ -155,11 +156,11 @@ fn diagnostic_log_check(record: &Bound<'_, PyAny>) -> PyResult<()> {
     for field in DIAGNOSTIC_REQUIRED_TEXT {
         required_text_check(&record.getattr(field)?, field)?;
     }
-    let severity: String = record.getattr("severity")?.extract()?;
+    let severity: String = native_field(record, "severity")?.extract()?;
     if let Some(problem) = diagnostic_severity_problem(&severity) {
         return Err(validation_error(py, problem));
     }
-    timestamp_check(&record.getattr("occurred_at")?)?;
+    timestamp_check(&native_field(record, "occurred_at")?)?;
     for field in DIAGNOSTIC_OPTIONAL_TEXT {
         optional_text_check(&record.getattr(field)?, field)?;
     }

@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
@@ -130,7 +131,7 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
                 "declaration_identity",
                 registry::class(py, RecordId::DeclarationIdentity)?,
             ),
-            ("macro_kind", declaration_kind.getattr("MACRO")?),
+            ("macro_kind", native_field(&declaration_kind, "MACRO")?),
             ("declaration_kind", declaration_kind),
             ("usage_record", registry::class(py, RecordId::UsageRecord)?),
             (

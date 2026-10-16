@@ -7,6 +7,7 @@ use pyo3::types::{
     PyTypeMethods,
 };
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::main::python_float_repr::python_float_repr;
 use sqlbuild_core::json::models::{JsonDialect, JsonInteger, JsonValue, StdlibJsonOptions};
@@ -56,8 +57,8 @@ impl<'py> Encoder<'py> {
         let builtins = py.import(BUILTINS_MODULE)?;
         Ok(Self {
             default_str,
-            int_repr: builtins.getattr("int")?.getattr("__repr__")?,
-            sorted: builtins.getattr("sorted")?,
+            int_repr: native_field(&builtins, "int")?.getattr("__repr__")?,
+            sorted: native_field(&builtins, "sorted")?,
         })
     }
 

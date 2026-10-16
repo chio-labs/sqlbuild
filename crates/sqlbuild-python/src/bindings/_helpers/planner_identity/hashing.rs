@@ -14,6 +14,7 @@ use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -67,8 +68,8 @@ fn fingerprint_error(py: Python<'_>, subject: &str, message: String) -> PyErr {
 /// The graph key of a `CompiledObjectKey`-like value: its resource type text and name.
 pub(crate) fn graph_key(key: &Bound<'_, PyAny>) -> PyResult<GraphKey> {
     Ok(GraphKey {
-        kind: key.getattr("resource_type")?.str()?.extract()?,
-        name: key.getattr("name")?.extract()?,
+        kind: native_field(key, "resource_type")?.str()?.extract()?,
+        name: native_field(key, "name")?.extract()?,
     })
 }
 

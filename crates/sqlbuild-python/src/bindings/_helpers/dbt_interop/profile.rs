@@ -15,6 +15,7 @@ use sqlbuild_config::dbt_profile::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -106,7 +107,7 @@ fn normalize_dbt_profile_connection<'py>(
     resolved: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let output: Bound<'py, PyDict> = PyDict::new(py);
-    output.update(&resolved.getattr("output")?.cast_into()?)?;
+    output.update(&native_field(&resolved, "output")?.cast_into()?)?;
     let mut entries: Vec<ProfileEntry> = Vec::new();
     for (key, value) in output.iter() {
         entries.push(ProfileEntry {

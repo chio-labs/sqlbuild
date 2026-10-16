@@ -10,6 +10,7 @@ use sqlbuild_rules::sql_quality::main::declared_relation_keys::declared_relation
 use sqlbuild_rules::sql_quality::models::{DeclaredKeyColumn, DeclaredRelation};
 
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::lint_inputs::model_key_row;
 
 const MATERIALIZED_CONFIG: &str = "materialized";
@@ -58,7 +59,7 @@ pub(crate) fn relation_key_row(
                 .downcast::<PyDict>()?
                 .get_item(UNIQUE_AUDIT_COLUMN_ARGUMENT)?;
             audits.push((
-                audit.getattr("definition_name")?.extract()?,
+                native_field(&audit, "definition_name")?.extract()?,
                 argument
                     .filter(pyo3::types::PyAnyMethods::is_instance_of::<PyString>)
                     .map(|value| value.extract())
@@ -149,7 +150,7 @@ pub(crate) fn relation_keys<'py>(
     for (kind, entries) in [(RELATION_KIND_SEED, seeds), (RELATION_KIND_SOURCE, sources)] {
         for entry in entries.try_iter()? {
             let entry: Bound<'py, PyAny> = entry?;
-            let name: String = entry.getattr("name")?.extract()?;
+            let name: String = native_field(&entry, "name")?.extract()?;
             rows.push(entry_relation_key_row(
                 kind,
                 name,
@@ -192,16 +193,16 @@ fn declared_relation_keys<'py>(
 pub(crate) fn project_relation_keys(project: &Bound<'_, PyAny>) -> PyResult<RelationKeys> {
     let py: Python<'_> = project.py();
     let mut rows: Vec<RelationKeyRow> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         rows.push(model_key_row(&model?)?);
     }
     let mut seeds: Vec<Bound<'_, PyAny>> = Vec::new();
-    for seed in project.getattr("seeds")?.try_iter()? {
-        seeds.push(seed?.getattr("schema_entry")?);
+    for seed in native_field(project, "seeds")?.try_iter()? {
+        seeds.push(native_field(&seed?, "schema_entry")?);
     }
     let mut sources: Vec<Bound<'_, PyAny>> = Vec::new();
-    for source in project.getattr("sources")?.try_iter()? {
-        sources.push(source?.getattr("source_entry")?);
+    for source in native_field(project, "sources")?.try_iter()? {
+        sources.push(native_field(&source?, "source_entry")?);
     }
     relation_keys(
         py,

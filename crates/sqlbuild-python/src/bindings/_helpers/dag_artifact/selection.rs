@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const PATHLIB_MODULE: &str = "pathlib";
 const JSON_MODULE: &str = "json";
@@ -156,8 +157,8 @@ fn load_sqlbuild_dag<'py>(
         let json: Bound<'py, PyModule> = py.import(JSON_MODULE)?;
         let loaded: Bound<'py, PyAny> = match json.call_method1("loads", (content,)) {
             Ok(loaded) => loaded,
-            Err(error) if error.is_instance(py, &json.getattr("JSONDecodeError")?) => {
-                let message: String = error.value(py).getattr("msg")?.extract()?;
+            Err(error) if error.is_instance(py, &native_field(&json, "JSONDecodeError")?) => {
+                let message: String = native_field(error.value(py), "msg")?.extract()?;
                 return Err(raised(
                     error_class,
                     format!(

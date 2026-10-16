@@ -6,6 +6,7 @@ use sqlbuild_analysis::lineage::models::{
 };
 
 use crate::bindings::_helpers::analysis::model_reads::{declared_rows, inferred_rows};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 type TypedColumns = Vec<(String, Option<String>)>;
 
@@ -57,11 +58,11 @@ pub(crate) fn inferred_names(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> 
 
 fn project_columns(project: &Bound<'_, PyAny>) -> PyResult<Vec<ProjectColumns>> {
     let mut resources: Vec<ProjectColumns> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'_, PyAny> = model?;
         resources.push(ProjectColumns {
             resource_type: LineageResourceType::Model,
-            name: model.getattr("name")?.extract()?,
+            name: native_field(&model, "name")?.extract()?,
             typed: inferred_columns(&model)?,
             schema: schema_columns(&model)?,
         });
@@ -73,16 +74,16 @@ fn project_columns(project: &Bound<'_, PyAny>) -> PyResult<Vec<ProjectColumns>> 
         for resource in project.getattr(attribute)?.try_iter()? {
             let resource: Bound<'_, PyAny> = resource?;
             let mut typed: TypedColumns = Vec::new();
-            for column in resource.getattr(entry)?.getattr("columns")?.try_iter()? {
+            for column in native_field(&resource.getattr(entry)?, "columns")?.try_iter()? {
                 let column: Bound<'_, PyAny> = column?;
                 typed.push((
-                    column.getattr("name")?.extract()?,
-                    column.getattr("type")?.extract()?,
+                    native_field(&column, "name")?.extract()?,
+                    native_field(&column, "type")?.extract()?,
                 ));
             }
             resources.push(ProjectColumns {
                 resource_type,
-                name: resource.getattr("name")?.extract()?,
+                name: native_field(&resource, "name")?.extract()?,
                 typed,
                 schema: Vec::new(),
             });

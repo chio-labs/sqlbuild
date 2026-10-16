@@ -1,6 +1,7 @@
 //! Fixture column inference computed once per fixture body and inference profile.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
@@ -40,7 +41,7 @@ impl FixtureColumnInferences {
                 ],
             )
         };
-        if !inference_profile.getattr("binding_catalog")?.is_none() {
+        if !native_field(inference_profile, "binding_catalog")?.is_none() {
             return compute();
         }
         let inferred = self.profile_results(py, inference_profile)?;

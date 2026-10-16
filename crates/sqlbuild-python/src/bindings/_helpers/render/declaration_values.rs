@@ -9,6 +9,7 @@ use pyo3::{IntoPyObject, pyclass, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
@@ -50,10 +51,14 @@ fn runtime_declarations<'py>(
     let declarations: Bound<'py, PyDict> = PyDict::new(py);
     for (files, kind) in [("enum_files", "ENUM"), ("constant_files", "CONSTANT")] {
         for file in discovered.getattr(files)?.try_iter()? {
-            for declaration in file?.getattr("declarations")?.try_iter()? {
+            for declaration in native_field(&file?, "declarations")?.try_iter()? {
                 let declaration: Bound<'py, PyAny> = declaration?;
-                let identity =
-                    declaration_identity(&classes, kind, &declaration.getattr("name")?, None)?;
+                let identity = declaration_identity(
+                    &classes,
+                    kind,
+                    &native_field(&declaration, "name")?,
+                    None,
+                )?;
                 declarations.set_item(identity, declaration)?;
             }
         }
@@ -61,7 +66,7 @@ fn runtime_declarations<'py>(
     let resource_identity: Bound<'py, PyAny> = registry::class(py, RecordId::ResourceIdentity)?;
     let model_kind: Bound<'py, PyAny> =
         registry::class(py, RecordId::ResourceKind)?.getattr("MODEL")?;
-    for model_file in discovered.getattr("model_files")?.try_iter()? {
+    for model_file in native_field(discovered, "model_files")?.try_iter()? {
         let model_file: Bound<'py, PyAny> = model_file?;
         let name: Bound<'py, PyAny> = model_file
             .getattr("header_values")?
@@ -69,7 +74,7 @@ fn runtime_declarations<'py>(
         let name: Bound<'py, PyAny> = if name.is_instance_of::<PyString>() && name.is_truthy()? {
             name
         } else {
-            model_file.getattr("relative_path")?.getattr("stem")?
+            native_field(&model_file, "relative_path")?.getattr("stem")?
         };
         let owner: Bound<'py, PyAny> = resource_identity.call1((&model_kind, name))?;
         for (attribute, kind) in [
@@ -81,7 +86,7 @@ fn runtime_declarations<'py>(
                 let identity = declaration_identity(
                     &classes,
                     kind,
-                    &declaration.getattr("name")?,
+                    &native_field(&declaration, "name")?,
                     Some(&owner),
                 )?;
                 declarations.set_item(identity, declaration)?;
@@ -91,8 +96,12 @@ fn runtime_declarations<'py>(
     if !loaded_macros.is_none() {
         for name_and_macro in loaded_macros.call_method0("values")?.try_iter()? {
             let declared_macro: Bound<'py, PyAny> = name_and_macro?;
-            let identity =
-                declaration_identity(&classes, "MACRO", &declared_macro.getattr("name")?, None)?;
+            let identity = declaration_identity(
+                &classes,
+                "MACRO",
+                &native_field(&declared_macro, "name")?,
+                None,
+            )?;
             declarations.set_item(identity, declared_macro)?;
         }
     }
@@ -105,15 +114,15 @@ fn resource_specific<'py>(scope_index: &Bound<'py, PyAny>) -> PyResult<Bound<'py
     let private: Bound<'py, PyAny> =
         registry::class(py, RecordId::ScopeKind)?.getattr("PRIVATE")?;
     let mut resources: Vec<Bound<'py, PyAny>> = Vec::new();
-    for declaration in scope_index.getattr("declarations")?.try_iter()? {
+    for declaration in native_field(scope_index, "declarations")?.try_iter()? {
         let declaration: Bound<'py, PyAny> = declaration?;
-        let owner: Bound<'py, PyAny> = declaration.getattr("identity")?.getattr("owner")?;
-        if declaration.getattr("scope")?.is(&private) && !owner.is_none() {
+        let owner: Bound<'py, PyAny> = native_field(&declaration, "identity")?.getattr("owner")?;
+        if native_field(&declaration, "scope")?.is(&private) && !owner.is_none() {
             resources.push(owner);
         }
     }
-    for grant in scope_index.getattr("grants")?.try_iter()? {
-        resources.push(grant?.getattr("resource")?);
+    for grant in native_field(scope_index, "grants")?.try_iter()? {
+        resources.push(native_field(&grant?, "resource")?);
     }
     PyFrozenSet::new(py, resources)
 }
@@ -143,7 +152,7 @@ pub(crate) fn declaration_scope_resolver<'py>(
     call_with(
         &registry::class(py, RecordId::DeclarationScopeResolver)?,
         &[
-            ("project_dir", discovered.getattr("project_dir")?),
+            ("project_dir", native_field(discovered, "project_dir")?),
             ("lookup", lookup),
             ("projection", projection),
             (
@@ -207,11 +216,11 @@ pub(crate) fn native_declaration_contexts<'py>(
         registry::class(py, RecordId::ConstantDeclaration)?,
         registry::class(py, RecordId::LoadedMacro)?,
     ];
-    let index: Bound<'py, PyAny> = lookup.getattr("visibility_index")?;
-    let lookup_declarations: Bound<'py, PyAny> = lookup.getattr("declarations")?;
+    let index: Bound<'py, PyAny> = native_field(lookup, "visibility_index")?;
+    let lookup_declarations: Bound<'py, PyAny> = native_field(lookup, "declarations")?;
     let identity_keys: Bound<'py, PyDict> = PyDict::new(py);
     let mut positions: Vec<Bound<'py, PyTuple>> = Vec::new();
-    for identity in index.getattr("identities")?.try_iter()? {
+    for identity in native_field(&index, "identities")?.try_iter()? {
         let identity: Bound<'py, PyAny> = identity?;
         let key: Bound<'py, PyAny> =
             identity_keys.call_method1("setdefault", (&identity, identity_keys.len()))?;
@@ -221,8 +230,8 @@ pub(crate) fn native_declaration_contexts<'py>(
             [
                 identity.clone(),
                 lookup_declarations.get_item(&identity)?.get_item(0)?,
-                identity.getattr("name")?,
-                kind_code(&kinds, &identity.getattr("kind")?)
+                native_field(&identity, "name")?,
+                kind_code(&kinds, &native_field(&identity, "kind")?)
                     .into_pyobject(py)?
                     .into_any(),
                 value.clone(),
@@ -236,7 +245,7 @@ pub(crate) fn native_declaration_contexts<'py>(
     let reasons: Bound<'py, PyDict> = PyDict::new(py);
     for reason in registry::class(py, RecordId::VisibilityReason)?.try_iter()? {
         let reason: Bound<'py, PyAny> = reason?;
-        reasons.set_item(reason.getattr("value")?, reason)?;
+        reasons.set_item(native_field(&reason, "value")?, reason)?;
     }
     let classes: Bound<'py, PyDict> = PyDict::new(py);
     classes.set_item(
@@ -250,15 +259,24 @@ pub(crate) fn native_declaration_contexts<'py>(
     classes.set_item("reasons", reasons)?;
     let keys: Bound<'py, PyDict> = PyDict::new(py);
     keys.set_item("identity_keys", identity_keys)?;
-    keys.set_item("private_positions", index.getattr("private_positions")?)?;
-    keys.set_item("grants_by_resource", lookup.getattr("grants_by_resource")?)?;
+    keys.set_item(
+        "private_positions",
+        native_field(&index, "private_positions")?,
+    )?;
+    keys.set_item(
+        "grants_by_resource",
+        native_field(lookup, "grants_by_resource")?,
+    )?;
     let lookups: Bound<'py, PyDict> = PyDict::new(py);
-    lookups.set_item("resources_by_path", lookup.getattr("resources_by_path")?)?;
-    lookups.set_item("resources", lookup.getattr("resources")?)?;
+    lookups.set_item(
+        "resources_by_path",
+        native_field(lookup, "resources_by_path")?,
+    )?;
+    lookups.set_item("resources", native_field(lookup, "resources")?)?;
     lookups.set_item("declarations", &lookup_declarations)?;
     lookups.set_item(
         "index_declarations",
-        lookup.getattr("index")?.getattr("declarations")?,
+        native_field(lookup, "index")?.getattr("declarations")?,
     )?;
     for (name, class) in [
         ("resource_record", RecordId::ResourceRecord),
@@ -296,8 +314,8 @@ pub(crate) fn native_declaration_contexts<'py>(
         PyList::new(py, positions)?,
         (
             global_positions,
-            listed_positions(&index.getattr("local_positions")?)?,
-            listed_positions(&index.getattr("inherited_positions")?)?,
+            listed_positions(&native_field(&index, "local_positions")?)?,
+            listed_positions(&native_field(&index, "inherited_positions")?)?,
         ),
         classes,
         (keys, lookups),
@@ -335,8 +353,8 @@ fn rendered_constant<'py>(
     value_renderer: &Bound<'py, PyAny>,
     selected: &Bound<'py, PyAny>,
 ) -> PyResult<String> {
-    let value: Bound<'py, PyAny> = declaration.getattr("value")?;
-    let kind: String = value.getattr("kind")?.str()?.extract()?;
+    let value: Bound<'py, PyAny> = native_field(declaration, "value")?;
+    let kind: String = native_field(&value, "kind")?.str()?.extract()?;
     let method: &str = if SCALAR_KINDS.contains(&kind.as_str()) {
         "render_typed_scalar"
     } else if COLLECTION_KINDS.contains(&kind.as_str()) {
@@ -354,8 +372,8 @@ fn rendered_constant<'py>(
     if size > MAX_SQL_VALUE_SIZE {
         let context: String = format!(
             "{} constant '{}'",
-            declaration.getattr("relative_path")?.str()?,
-            declaration.getattr("name")?.str()?
+            native_field(declaration, "relative_path")?.str()?,
+            native_field(declaration, "name")?.str()?
         );
         return Err(PyErr::from_value(
             registry::native(declaration.py(), NativeAttr::SqlValueValidationError)?
@@ -374,7 +392,7 @@ pub(crate) fn constant_declaration_sql<'py>(
     (collection_rendering, file_path): (&Bound<'py, PyAny>, Option<&str>),
 ) -> PyResult<String> {
     let py: Python<'py> = declaration.py();
-    let render_as: Bound<'py, PyAny> = declaration.getattr("render_as")?;
+    let render_as: Bound<'py, PyAny> = native_field(declaration, "render_as")?;
     let selected: Bound<'py, PyAny> = if render_as.is_truthy()? {
         render_as
     } else {
@@ -391,7 +409,7 @@ pub(crate) fn constant_declaration_sql<'py>(
     if !(raised.is_instance(&rendering_error)? || raised.is_instance(&validation_error)?) {
         return Err(error);
     }
-    let relative_path: Bound<'py, PyAny> = declaration.getattr("relative_path")?;
+    let relative_path: Bound<'py, PyAny> = native_field(declaration, "relative_path")?;
     let location: String = match file_path {
         Some(file_path) => file_path.to_owned(),
         None => relative_path.str()?.to_string(),
@@ -400,10 +418,10 @@ pub(crate) fn constant_declaration_sql<'py>(
         registry::error(py, ErrorId::CompileInput)?.call1((format!(
             "{} constant '{}' could not be rendered in '{}' by adapter '{}' as {}: {}",
             relative_path.str()?,
-            declaration.getattr("name")?.str()?,
+            native_field(declaration, "name")?.str()?,
             location,
-            value_renderer.getattr("adapter_name")?.str()?,
-            selected.getattr("value")?.str()?,
+            native_field(value_renderer, "adapter_name")?.str()?,
+            native_field(&selected, "value")?.str()?,
             raised.str()?,
         ),))?;
     compile_error.setattr("__cause__", &raised)?;

@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::cost_telemetry::values::process_object;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const CONTEXT_VARIABLE_NAME: &str = "sqlbuild_cost_resource_context";
 const DEFAULT_PHASE: &str = "execute";
@@ -161,14 +162,14 @@ impl CostContext {
         let context: Bound<'_, PyAny> = call_with(
             &host::entry(py, ExecutorHost::CostResourceContext)?,
             &[
-                ("run_id", current.getattr("run_id")?),
+                ("run_id", native_field(&current, "run_id")?),
                 ("resource_type", arguments.value("resource_type")?),
                 ("resource_name", arguments.value("resource_name")?),
-                ("ledger_path", current.getattr("ledger_path")?),
+                ("ledger_path", native_field(&current, "ledger_path")?),
                 (
                     "phase",
                     if phase.is_none() {
-                        current.getattr("phase")?
+                        native_field(&current, "phase")?
                     } else {
                         phase
                     },
@@ -176,7 +177,7 @@ impl CostContext {
                 ("attempt", attempt),
                 (
                     "on_statement_complete",
-                    current.getattr("on_statement_complete")?,
+                    native_field(&current, "on_statement_complete")?,
                 ),
             ],
         )?;

@@ -6,6 +6,7 @@ use pyo3::types::{PyFloat, PyInt};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::values::text;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::resource_ids::{audit_identity, sql_test_identity};
 use crate::bindings::_helpers::result_output::terminal_index::{TerminalEventIndex, current_index};
 
@@ -87,7 +88,7 @@ pub(crate) fn resource_identity(result: &Bound<'_, PyAny>) -> PyResult<Option<(S
         }
         ResultKind::PythonNode => {
             let resource: String = name("node_name")?;
-            let kind: String = text(&result.getattr("kind")?.getattr("value")?)?;
+            let kind: String = text(&native_field(result, "kind")?.getattr("value")?)?;
             (resource.clone(), format!("{kind}:{resource}"))
         }
         ResultKind::PythonCheck => {

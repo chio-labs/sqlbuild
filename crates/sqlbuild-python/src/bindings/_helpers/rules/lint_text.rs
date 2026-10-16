@@ -23,6 +23,7 @@ use sqlbuild_rules::lint_text::models::{
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::lint_pipeline::{
@@ -127,7 +128,7 @@ fn scan_fixture_typed_null_candidates<'py>(
 fn named_declaration_role_kind<'py>(
     relative_path: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let parts: Vec<String> = relative_path.getattr("parts")?.extract()?;
+    let parts: Vec<String> = native_field(relative_path, "parts")?.extract()?;
     match role_kind(&parts) {
         Some(kind) => Ok(Some(
             registry::class(relative_path.py(), RecordId::DeclarationKind)?.call1((kind,))?,
@@ -178,15 +179,15 @@ fn suppressible(
     violation: &Bound<'_, PyAny>,
     index_by_path: &Bound<'_, PyDict>,
 ) -> PyResult<SuppressibleViolation> {
-    let file: Option<usize> = match index_by_path.get_item(violation.getattr("file_path")?)? {
+    let file: Option<usize> = match index_by_path.get_item(native_field(violation, "file_path")?)? {
         Some(index) => Some(index.extract()?),
         None => None,
     };
     Ok(SuppressibleViolation {
         file: file.unwrap_or(usize::MAX),
-        line: violation.getattr("line")?.extract()?,
-        code: violation.getattr("code")?.extract()?,
-        native: violation.getattr("engine")?.extract::<String>()? == NATIVE_ENGINE,
+        line: native_field(violation, "line")?.extract()?,
+        code: native_field(violation, "code")?.extract()?,
+        native: native_field(violation, "engine")?.extract::<String>()? == NATIVE_ENGINE,
     })
 }
 
@@ -220,8 +221,8 @@ fn format_lint_sql_bodies<'py>(
             })
         })
         .collect::<PyResult<_>>()?;
-    let dialect: String = config.getattr("dialect")?.extract()?;
-    let line_width: usize = config.getattr("line_width")?.extract()?;
+    let dialect: String = native_field(config, "dialect")?.extract()?;
+    let line_width: usize = native_field(config, "line_width")?.extract()?;
     let result: FormattedBodies = py
         .compiler_detach(|| {
             format_sql_bodies(&inputs, &dialect, line_width).map_err(|error| error.to_string())

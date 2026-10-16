@@ -13,6 +13,7 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
@@ -98,7 +99,7 @@ fn scanned<'py>(
     sql: &str,
     syntax: &Bound<'py, PyAny>,
 ) -> PyResult<ScannedObjects<'py>> {
-    let input: LexicalSyntaxInput = syntax.getattr("native_mapping")?.extract()?;
+    let input: LexicalSyntaxInput = native_field(syntax, "native_mapping")?.extract()?;
     let syntax: LexicalSyntax = input.into();
     let scan = match compiler_guard(|| Ok(extract_sql_references(sql, &syntax)))? {
         ReferenceExtraction::Extracted(scan) => scan,
@@ -191,14 +192,14 @@ pub(crate) fn extract_references<'py>(
                     registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
                 ),
                 ("code", text(py, REFERENCE_CALL_SYNTAX_CODE)?),
-                ("message", call.getattr("message")?),
-                ("help", call.getattr("help")?),
+                ("message", native_field(&call, "message")?),
+                ("help", native_field(&call, "help")?),
             ],
         )?;
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
         keywords.set_item(
             "key",
-            (REFERENCE_CALL_SYNTAX_CODE, "", call.getattr("call")?),
+            (REFERENCE_CALL_SYNTAX_CODE, "", native_field(&call, "call")?),
         )?;
         keywords.set_item("diagnostic", diagnostic)?;
         report.call((), Some(&keywords))?;

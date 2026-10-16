@@ -14,6 +14,7 @@ use sqlbuild_analysis::dag_artifact::types::DagValue;
 use sqlbuild_analysis::dag_artifact::types::DagColumnLineage;
 
 use crate::bindings::_helpers::python_values::values::python_value;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const AUDIT_SEVERITY_MODULE: &str = "sqlbuild.compiler.auditing.types";
 const DECIMAL_KIND: &str = "decimal";
@@ -44,7 +45,7 @@ fn enum_value(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> 
     if member.is_none() {
         return Ok(None);
     }
-    member.getattr("value")?.extract().map(Some)
+    native_field(&member, "value")?.extract().map(Some)
 }
 
 fn texts(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<String>> {
@@ -384,7 +385,7 @@ fn check_severity(node: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if check.is_none() {
         return Ok(None);
     }
-    let severity: Bound<'_, PyAny> = check.getattr("severity")?.getattr("value")?;
+    let severity: Bound<'_, PyAny> = native_field(&check, "severity")?.getattr("value")?;
     node.py()
         .import(AUDIT_SEVERITY_MODULE)?
         .getattr("AuditSeverity")?

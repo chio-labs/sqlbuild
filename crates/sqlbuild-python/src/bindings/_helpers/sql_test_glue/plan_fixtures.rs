@@ -5,6 +5,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
 use crate::bindings::_helpers::sql_test_glue::fixture_validation::validated_fixtures;
 use crate::bindings::_helpers::sql_test_glue::plan_driver::resolve_sql_test_model_chains;
@@ -17,9 +18,9 @@ pub(super) fn validated_test<'py>(
     context: &RelationFixturePlanningContext,
 ) -> PyResult<Result<Bound<'py, PyAny>, Vec<String>>> {
     let py = test.py();
-    let payload = test.getattr("payload")?;
-    let ctes = payload.getattr("authored_ctes")?;
-    let expected = payload.getattr("expected_ctes")?;
+    let payload = native_field(test, "payload")?;
+    let ctes = native_field(&payload, "authored_ctes")?;
+    let expected = native_field(&payload, "expected_ctes")?;
     let completed = match validated_fixtures(
         test,
         (
@@ -41,11 +42,12 @@ pub(super) fn validated_test<'py>(
     let mut authored: Vec<Bound<'py, PyAny>> = Vec::new();
     for cte in ctes.try_iter()? {
         let cte = cte?;
-        let name: String = cte.getattr("name")?.extract()?;
+        let name: String = native_field(&cte, "name")?.extract()?;
         let mut replacement = cte.clone();
         for (index, prefix) in ["__ref__", "__source__", "__seed__"].iter().enumerate() {
             if let Some(name) = name.strip_prefix(prefix) {
-                let sql = completed[index].call_method1("get", (name, cte.getattr("sql_body")?))?;
+                let sql = completed[index]
+                    .call_method1("get", (name, native_field(&cte, "sql_body")?))?;
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("sql_body", sql)?;
                 replacement = replace.call((&cte,), Some(&kwargs))?;
@@ -57,12 +59,12 @@ pub(super) fn validated_test<'py>(
     let mut expected_ctes: Vec<Bound<'py, PyAny>> = Vec::new();
     for cte in expected.try_iter()? {
         let cte = cte?;
-        let name: String = cte.getattr("name")?.extract()?;
+        let name: String = native_field(&cte, "name")?.extract()?;
         let name = name.strip_prefix("__expected__").unwrap_or(&name);
         let kwargs = PyDict::new(py);
         kwargs.set_item(
             "sql_body",
-            completed[3].call_method1("get", (name, cte.getattr("sql_body")?))?,
+            completed[3].call_method1("get", (name, native_field(&cte, "sql_body")?))?,
         )?;
         expected_ctes.push(replace.call((&cte,), Some(&kwargs))?);
     }

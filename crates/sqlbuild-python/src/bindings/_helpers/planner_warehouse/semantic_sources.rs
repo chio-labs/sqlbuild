@@ -7,6 +7,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{text, tuple};
 use crate::bindings::_helpers::planner_warehouse::constants::ACTIVE_CATALOG;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{columns_for, list_relations};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
@@ -18,23 +19,23 @@ fn casefold(value: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 fn wanted_name<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let table = entry.getattr("table")?;
+    let table = native_field(entry, "table")?;
     if table.is_truthy()? {
         Ok(table)
     } else {
-        entry.getattr("name")
+        native_field(entry, "name")
     }
 }
 
 fn matches(entry: &Bound<'_, PyAny>, relation: &Bound<'_, PyAny>) -> PyResult<bool> {
-    if casefold(&relation.getattr("name")?)? != casefold(&wanted_name(entry)?)? {
+    if casefold(&native_field(relation, "name")?)? != casefold(&wanted_name(entry)?)? {
         return Ok(false);
     }
-    let schema = entry.getattr("schema")?;
+    let schema = native_field(entry, "schema")?;
     if schema.is_none() {
         return Ok(true);
     }
-    let relation_schema = relation.getattr("schema")?;
+    let relation_schema = native_field(relation, "schema")?;
     let relation_schema = if relation_schema.is_truthy()? {
         relation_schema
     } else {
@@ -64,11 +65,14 @@ fn source_candidates<'py>(
     )?;
     let mut scoped: Vec<_> = Vec::new();
     for entry in entries {
-        if !entry.getattr("schema")?.is_none() {
+        if !native_field(entry, "schema")?.is_none() {
             scoped.push(entry.clone());
         }
     }
-    if !catalog.is_none() && catalog.getattr("schema_scoped")?.is_truthy()? && !scoped.is_empty() {
+    if !catalog.is_none()
+        && native_field(&catalog, "schema_scoped")?.is_truthy()?
+        && !scoped.is_empty()
+    {
         let mut schemas: BTreeSet<_> = BTreeSet::new();
         let mut names: BTreeSet<_> = BTreeSet::new();
         for entry in &scoped {
@@ -121,7 +125,7 @@ fn source_candidates<'py>(
     }
     let unique = PyDict::new(py);
     for relation in relations {
-        let identity = relation.getattr("identity")?;
+        let identity = native_field(&relation, "identity")?;
         if !unique.contains(&identity)? {
             unique.set_item(identity, relation)?;
         }
@@ -187,7 +191,7 @@ pub(crate) fn semantic_source_columns<'py>(
         return Ok(columns.clone());
     }
     let mut required: BTreeSet<String> = BTreeSet::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         let analysis = model
             .getattr("config")?
@@ -198,10 +202,10 @@ pub(crate) fn semantic_source_columns<'py>(
         {
             continue;
         }
-        for reference in model.getattr("references")?.try_iter()? {
+        for reference in native_field(&model, "references")?.try_iter()? {
             let reference = reference?;
-            if reference.getattr("ref_kind")?.eq("source")? {
-                required.insert(reference.getattr("ref_name")?.extract()?);
+            if native_field(&reference, "ref_kind")?.eq("source")? {
+                required.insert(native_field(&reference, "ref_name")?.extract()?);
             }
         }
     }
@@ -212,12 +216,12 @@ pub(crate) fn semantic_source_columns<'py>(
         }
         let entry = source_read_map.call_method1("get", (&name,))?;
         if entry.is_none()
-            || !entry.getattr("expression")?.is_none()
-            || entry.getattr("contract")?.eq("enforced")?
+            || !native_field(&entry, "expression")?.is_none()
+            || native_field(&entry, "contract")?.eq("enforced")?
         {
             continue;
         }
-        let database = entry.getattr("database")?;
+        let database = native_field(&entry, "database")?;
         let mut placed = false;
         for (group, entries) in groups.iter_mut() {
             if group.eq(&database)? {
@@ -242,7 +246,7 @@ pub(crate) fn semantic_source_columns<'py>(
                 }
             }
             if candidates.len() == 1 {
-                let name = entry.getattr("name")?;
+                let name = native_field(entry, "name")?;
                 match chosen
                     .iter_mut()
                     .find(|(chosen_name, _)| chosen_name.eq(&name).unwrap_or(false))
@@ -275,9 +279,9 @@ pub(crate) fn semantic_source_columns<'py>(
             let identity = PyTuple::new(
                 py,
                 [
-                    lower(relation.getattr("database")?)?,
-                    lower(relation.getattr("schema")?)?,
-                    relation.getattr("name")?.call_method0("lower")?,
+                    lower(native_field(&relation, "database")?)?,
+                    lower(native_field(&relation, "schema")?)?,
+                    native_field(&relation, "name")?.call_method0("lower")?,
                 ],
             )?;
             if inspected.contains(&identity)? {

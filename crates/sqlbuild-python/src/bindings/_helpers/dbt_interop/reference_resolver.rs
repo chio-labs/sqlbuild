@@ -12,6 +12,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -146,7 +147,7 @@ impl DbtCompileReferenceResolver {
             }
             names.add(model_name)?;
         }
-        for key in manifest.getattr("models_by_package_and_name")?.try_iter()? {
+        for key in native_field(&manifest, "models_by_package_and_name")?.try_iter()? {
             let key: Bound<'py, PyTuple> = key?.cast_into()?;
             let qualified: String =
                 format!("{}__{}", key.get_item(0)?.str()?, key.get_item(1)?.str()?);
@@ -336,7 +337,7 @@ fn manifest_contents<'py>(
         return Ok(py.None().into_bound(py));
     }
     call_with(
-        &manifest.getattr("read_text")?,
+        &native_field(&manifest, "read_text")?,
         &[("encoding", PyString::new(py, "utf-8").into_any())],
     )
 }

@@ -12,6 +12,7 @@ use sqlbuild_core::scenario_command::models::SqlAnalysisCommand;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
 use crate::bindings::_helpers::scenario_command::presentation::{
     CompletionKind, SectionStatus, activity, begin_section, connection_hooks, progress_relay,
@@ -37,7 +38,7 @@ fn count(label: &str, value: usize) -> SummaryCount {
 #[pyfunction]
 #[pyo3(signature = (*, request))]
 fn run_scenario_capture_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let no_sql_validation: Bound<'_, PyAny> = request.getattr("no_sql_validation")?;
+    let no_sql_validation: Bound<'_, PyAny> = native_field(request, "no_sql_validation")?;
     if let Some(error) = sql_analysis_required_error(
         SqlAnalysisCommand::Capture,
         no_sql_validation.is_truthy()?,
@@ -82,7 +83,7 @@ fn run_scenario_capture_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
         (
             &adapter_name,
             &capture_dialect,
-            request.getattr("retain")?.is_truthy()?,
+            native_field(request, "retain")?.is_truthy()?,
         ),
         limits,
     )?;
@@ -123,10 +124,13 @@ fn run_scenario_capture_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
             ),
             ("settings", settings),
             ("connection_hooks", hooks),
-            ("on_scenario_start", relay.getattr("on_scenario_start")?),
+            (
+                "on_scenario_start",
+                native_field(&relay, "on_scenario_start")?,
+            ),
             (
                 "on_scenario_complete",
-                relay.getattr("on_scenario_complete")?,
+                native_field(&relay, "on_scenario_complete")?,
             ),
         ],
     )?

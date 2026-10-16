@@ -19,6 +19,7 @@ use crate::bindings::_helpers::build_progress::terminal::{
     terminal_columns, tty_flag, write,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MIN_NAME_WIDTH: usize = 50;
 const ITEM_OPTIONS: (&[&str], &[&str]) = (
@@ -214,7 +215,7 @@ impl NestedCommandProgressCallbacks {
         Ok(Self {
             is_tty: tty_flag(&stream)?,
             stream: stream.unbind(),
-            lock: lines.getattr("lock")?.unbind(),
+            lock: native_field(&lines, "lock")?.unbind(),
             lines: lines.unbind(),
             label: arguments.value("label")?.extract()?,
             name_width: name_width.max(MIN_NAME_WIDTH),

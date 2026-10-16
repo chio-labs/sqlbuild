@@ -14,6 +14,7 @@ use sqlbuild_scopes::scope_text::main::scope_result_failed::scope_result_failed;
 use sqlbuild_scopes::scope_text::models::ScopeTextRequest;
 
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
@@ -65,24 +66,24 @@ fn target_matches(
 ) -> PyResult<(BTreeSet<String>, Vec<String>)> {
     let mut bare: BTreeSet<String> = BTreeSet::new();
     let mut prefixed: BTreeSet<String> = BTreeSet::new();
-    for identity in lookup.getattr("resources")?.try_iter()? {
+    for identity in native_field(lookup, "resources")?.try_iter()? {
         let identity: Bound<'_, PyAny> = identity?;
-        if identity.getattr("name")?.extract::<String>()? != target {
+        if native_field(&identity, "name")?.extract::<String>()? != target {
             continue;
         }
-        let kind: String = identity.getattr("kind")?.str()?.extract()?;
+        let kind: String = native_field(&identity, "kind")?.str()?.extract()?;
         if BARE_KINDS.contains(&kind.as_str()) {
             bare.insert(kind);
         } else {
             prefixed.insert(format!("{kind}:{target}"));
         }
     }
-    for identity in lookup.getattr("declarations")?.try_iter()? {
+    for identity in native_field(lookup, "declarations")?.try_iter()? {
         let identity: Bound<'_, PyAny> = identity?;
-        if identity.getattr("owner")?.is_none()
-            && identity.getattr("name")?.extract::<String>()? == target
+        if native_field(&identity, "owner")?.is_none()
+            && native_field(&identity, "name")?.extract::<String>()? == target
         {
-            let kind: String = identity.getattr("kind")?.str()?.extract()?;
+            let kind: String = native_field(&identity, "kind")?.str()?.extract()?;
             prefixed.insert(format!("{kind}:{target}"));
         }
     }
@@ -132,26 +133,26 @@ fn qualify_target(
 
 fn text_request(request: &Bound<'_, PyAny>, target: Option<String>) -> PyResult<ScopeTextRequest> {
     let mut kinds: Vec<String> = Vec::new();
-    for kind in request.getattr("kinds")?.try_iter()? {
+    for kind in native_field(request, "kinds")?.try_iter()? {
         kinds.push(kind?.extract()?);
     }
     Ok(ScopeTextRequest {
         target,
-        at: request.getattr("at")?.extract()?,
-        as_path: request.getattr("as_path")?.extract()?,
-        defined_under: request.getattr("defined_under")?.extract()?,
+        at: native_field(request, "at")?.extract()?,
+        as_path: native_field(request, "as_path")?.extract()?,
+        defined_under: native_field(request, "defined_under")?.extract()?,
         kinds,
-        glob: request.getattr("match")?.extract()?,
-        used_only: request.getattr("used_only")?.extract()?,
-        include_nearby: request.getattr("include_nearby")?.extract()?,
-        nearby_depth: request.getattr("nearby_depth")?.extract()?,
-        dependency_depth: request.getattr("dependency_depth")?.extract()?,
-        explain: request.getattr("explain")?.extract()?,
-        globals: request.getattr("globals")?.extract()?,
-        page_size: request.getattr("page_size")?.extract()?,
-        paths: request.getattr("paths")?.extract()?,
-        verbose: request.getattr("verbose")?.extract()?,
-        no_cache: request.getattr("no_cache")?.extract()?,
+        glob: native_field(request, "match")?.extract()?,
+        used_only: native_field(request, "used_only")?.extract()?,
+        include_nearby: native_field(request, "include_nearby")?.extract()?,
+        nearby_depth: native_field(request, "nearby_depth")?.extract()?,
+        dependency_depth: native_field(request, "dependency_depth")?.extract()?,
+        explain: native_field(request, "explain")?.extract()?,
+        globals: native_field(request, "globals")?.extract()?,
+        page_size: native_field(request, "page_size")?.extract()?,
+        paths: native_field(request, "paths")?.extract()?,
+        verbose: native_field(request, "verbose")?.extract()?,
+        no_cache: native_field(request, "no_cache")?.extract()?,
     })
 }
 
@@ -161,22 +162,25 @@ fn report_filters<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let kind_class: Bound<'_, PyAny> = registry::class(py, RecordId::DeclarationKind)?;
     let mut kinds: Vec<Bound<'_, PyAny>> = Vec::new();
-    for kind in request.getattr("kinds")?.try_iter()? {
+    for kind in native_field(request, "kinds")?.try_iter()? {
         kinds.push(kind_class.call1((kind?,))?);
     }
     let options: Bound<'_, PyDict> = keywords(
         py,
         &[
-            ("include_nearby", request.getattr("include_nearby")?),
-            ("defined_under", request.getattr("defined_under")?),
+            ("include_nearby", native_field(request, "include_nearby")?),
+            ("defined_under", native_field(request, "defined_under")?),
             ("kinds", PyTuple::new(py, kinds)?.into_any()),
-            ("glob", request.getattr("match")?),
-            ("used_only", request.getattr("used_only")?),
-            ("dependency_depth", request.getattr("dependency_depth")?),
-            ("cursor", request.getattr("after")?),
-            ("page_size", request.getattr("page_size")?),
-            ("nearby_depth", request.getattr("nearby_depth")?),
-            ("globals", request.getattr("globals")?),
+            ("glob", native_field(request, "match")?),
+            ("used_only", native_field(request, "used_only")?),
+            (
+                "dependency_depth",
+                native_field(request, "dependency_depth")?,
+            ),
+            ("cursor", native_field(request, "after")?),
+            ("page_size", native_field(request, "page_size")?),
+            ("nearby_depth", native_field(request, "nearby_depth")?),
+            ("globals", native_field(request, "globals")?),
         ],
     )?;
     registry::class(py, RecordId::ScopeReportFilters)?.call((), Some(&options))
@@ -201,8 +205,8 @@ fn merged<'py>(
     (diagnostics, complete): (Bound<'py, PyAny>, bool),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = report.py();
-    let combined: Bound<'py, PyAny> = report.getattr("diagnostics")?.add(diagnostics)?;
-    let complete: bool = report.getattr("complete")?.extract::<bool>()? && complete;
+    let combined: Bound<'py, PyAny> = native_field(report, "diagnostics")?.add(diagnostics)?;
+    let complete: bool = native_field(report, "complete")?.extract::<bool>()? && complete;
     let changes: Bound<'py, PyDict> = keywords(
         py,
         &[
@@ -230,9 +234,9 @@ fn query_result<'py>(
     lookup: &Bound<'py, PyAny>,
     (request, target): (&Bound<'py, PyAny>, Option<String>),
 ) -> PyResult<Bound<'py, PyAny>> {
-    let at: Option<String> = request.getattr("at")?.extract()?;
+    let at: Option<String> = native_field(request, "at")?.extract()?;
     let prospective: bool = at.is_some();
-    let browse: Option<String> = request.getattr("browse")?.extract()?;
+    let browse: Option<String> = native_field(request, "browse")?.extract()?;
     if let Some(folder) = browse {
         return Ok(scope_browse(
             py,
@@ -242,7 +246,7 @@ fn query_result<'py>(
         .into_bound(py));
     }
     let filters: Bound<'_, PyAny> = report_filters(py, request)?;
-    let list_path: Option<String> = request.getattr("list_path")?.extract()?;
+    let list_path: Option<String> = native_field(request, "list_path")?.extract()?;
     if let Some(folder) = list_path {
         return Ok(scope_list(
             py,
@@ -270,7 +274,7 @@ fn query_result<'py>(
         ),
     )?
     .into_bound(py);
-    let explain: Option<String> = request.getattr("explain")?.extract()?;
+    let explain: Option<String> = native_field(request, "explain")?.extract()?;
     if let Some(declaration) = explain {
         let (explanation, diagnostics): (Bound<'_, PyAny>, Bound<'_, PyAny>) = scope_explain(
             py,
@@ -285,14 +289,14 @@ fn query_result<'py>(
         .map(|(explanation, diagnostics)| {
             (explanation.into_bound(py), diagnostics.into_bound(py))
         })?;
-        let complete: bool = explanation.getattr("complete")?.extract()?;
+        let complete: bool = native_field(&explanation, "complete")?.extract()?;
         report = merged(
             &report,
             ("explanation", explanation),
             (diagnostics, complete),
         )?;
     }
-    let as_path: Option<String> = request.getattr("as_path")?.extract()?;
+    let as_path: Option<String> = native_field(request, "as_path")?.extract()?;
     if let Some(destination) = as_path {
         let (preview, diagnostics): (Bound<'_, PyAny>, Bound<'_, PyAny>) = scope_move_preview(
             py,
@@ -309,7 +313,7 @@ fn query_result<'py>(
                 diagnostics.into_bound(py),
             )
         })?;
-        let complete: bool = !preview.is_none() && preview.getattr("complete")?.extract()?;
+        let complete: bool = !preview.is_none() && native_field(&preview, "complete")?.extract()?;
         report = merged(&report, ("move_preview", preview), (diagnostics, complete))?;
     }
     Ok(report)
@@ -320,7 +324,7 @@ fn use_color(
     request: &Bound<'_, PyAny>,
     output_stream: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<bool> {
-    if output_stream.is_some() || request.getattr("no_color")?.extract::<bool>()? {
+    if output_stream.is_some() || native_field(request, "no_color")?.extract::<bool>()? {
         return Ok(false);
     }
     stdout_supports_color(py)
@@ -335,7 +339,7 @@ fn run_scope_command(
     load_scope_index: Option<Bound<'_, PyAny>>,
     output_stream: Option<Bound<'_, PyAny>>,
 ) -> PyResult<i32> {
-    let project_dir: Bound<'_, PyAny> = match request.getattr("project_dir")? {
+    let project_dir: Bound<'_, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
@@ -347,17 +351,17 @@ fn run_scope_command(
         py,
         &[
             ("project_dir", project_dir),
-            ("no_cache", request.getattr("no_cache")?),
+            ("no_cache", native_field(request, "no_cache")?),
         ],
     )?;
     let index: Bound<'_, PyAny> = loader.call((), Some(&options))?;
     let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
     let target: Option<String> =
-        qualify_target(py, &lookup, request.getattr("target")?.extract()?)?;
+        qualify_target(py, &lookup, native_field(request, "target")?.extract()?)?;
     let result: Bound<'_, PyAny> = query_result(py, &lookup, (request, target.clone()))?;
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     let (output, native_result): (String, ScopeResult) =
-        if request.getattr("json_output")?.extract()? {
+        if native_field(request, "json_output")?.extract()? {
             let output: String = serialize_scope_report(py, &result)?;
             (output, read_result(&classes, &result)?)
         } else {
@@ -387,7 +391,7 @@ fn render_scope_result(
     use_color: bool,
 ) -> PyResult<String> {
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
-    let target: Option<String> = request.getattr("target")?.extract()?;
+    let target: Option<String> = native_field(request, "target")?.extract()?;
     Ok(render_scope_text(
         &read_result(&classes, result)?,
         &text_request(request, target)?,

@@ -15,6 +15,7 @@ use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::freshness::support::{
     INPUT_ERROR, exception_text, freshness_error, optional_str, presumed_utc_datetime, text,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::state_tables::state_table_create_sql;
@@ -171,7 +172,7 @@ freshness table to regenerate source freshness state."
     let records: Bound<'py, PyDict> = PyDict::new(py);
     for row in result.call_method0("fetchall")?.try_iter()? {
         let record: Bound<'py, PyAny> = row_record(&row?)?;
-        records.set_item(record.getattr("identity")?, record)?;
+        records.set_item(native_field(&record, "identity")?, record)?;
     }
     call_with(
         &registry::class(py, RecordId::SourceFreshnessSet)?,
@@ -293,18 +294,18 @@ pub(crate) fn write_source_freshness_records<'py>(
     let location = || -> Vec<(&str, Bound<'py, PyAny>)> {
         vec![("database", database.clone()), ("schema", schema.clone())]
     };
-    let render_create: Bound<'py, PyAny> = renderers.getattr("render_create_table_sql")?;
+    let render_create: Bound<'py, PyAny> = native_field(renderers, "render_create_table_sql")?;
     let create_sql: Bound<'py, PyAny> = if render_create.is_none() {
         create_table_sql(
             (database, schema),
-            &renderers.getattr("render_qualified_name")?,
-            &renderers.getattr("render_framework_type")?,
+            &native_field(renderers, "render_qualified_name")?,
+            &native_field(renderers, "render_framework_type")?,
         )?
     } else {
         call_with(&render_create, &location())?
     };
     execute_sql((execute, connection), create_sql)?;
-    let render_indexes: Bound<'py, PyAny> = renderers.getattr("render_create_index_sqls")?;
+    let render_indexes: Bound<'py, PyAny> = native_field(renderers, "render_create_index_sqls")?;
     if !render_indexes.is_none() {
         for index_sql in call_with(&render_indexes, &location())?.try_iter()? {
             execute_sql((execute, connection), index_sql?)?;
@@ -312,8 +313,10 @@ pub(crate) fn write_source_freshness_records<'py>(
     }
     let mut insert: Vec<(&str, Bound<'py, PyAny>)> = location();
     insert.push(("records", records.clone()));
-    let insert_sql: Bound<'py, PyAny> =
-        call_with(&renderers.getattr("render_insert_records_sql")?, &insert)?;
+    let insert_sql: Bound<'py, PyAny> = call_with(
+        &native_field(renderers, "render_insert_records_sql")?,
+        &insert,
+    )?;
     execute_sql((execute, connection), insert_sql)
 }
 

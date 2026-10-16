@@ -1,5 +1,6 @@
 //! `CompiledObjectKey`s for native `(resource type, name)` pairs, converted once per pair.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -55,7 +56,7 @@ impl<'py> KeyCache<'py> {
 /// The native `(resource type, name)` pair of a `CompiledObjectKey`.
 pub(crate) fn native_key(key: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     Ok((
-        key.getattr("resource_type")?.str()?.extract()?,
-        key.getattr("name")?.extract()?,
+        native_field(key, "resource_type")?.str()?.extract()?,
+        native_field(key, "name")?.extract()?,
     ))
 }

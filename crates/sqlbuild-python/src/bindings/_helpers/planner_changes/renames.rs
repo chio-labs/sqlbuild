@@ -17,6 +17,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -32,14 +33,14 @@ pub(crate) fn origin_names(
     (recorded_hash, dialect): (&str, &Bound<'_, PyAny>),
 ) -> PyResult<Option<Vec<(String, String)>>> {
     let py: Python<'_> = fingerprint.py();
-    let recorded_at: Bound<'_, PyAny> = utc(&fingerprint.getattr("ts")?)?;
+    let recorded_at: Bound<'_, PyAny> = utc(&native_field(fingerprint, "ts")?)?;
     let mut candidates: Vec<RenameCandidate> = Vec::new();
     for rename in renames.try_iter()? {
         let rename: Bound<'_, PyAny> = rename?;
-        let renamed_at: Bound<'_, PyAny> = rename.getattr("recorded_at")?;
+        let renamed_at: Bound<'_, PyAny> = native_field(&rename, "recorded_at")?;
         candidates.push(RenameCandidate {
-            new_name: rename.getattr("new_name")?.extract()?,
-            origin_name: rename.getattr("origin_name")?.extract()?,
+            new_name: native_field(&rename, "new_name")?.extract()?,
+            origin_name: native_field(&rename, "origin_name")?.extract()?,
             applies: renamed_at.is_none() || recorded_at.lt(utc(&renamed_at)?)?,
         });
     }
@@ -106,8 +107,8 @@ fn ref_call_name(text: &str) -> Option<(usize, &str)> {
 fn utc<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     let zone: Bound<'py, PyAny> = imported(py, "datetime", "UTC")?;
-    if value.getattr("tzinfo")?.is_none() || value.call_method0("utcoffset")?.is_none() {
-        return call_with(&value.getattr("replace")?, &[("tzinfo", zone)]);
+    if native_field(value, "tzinfo")?.is_none() || value.call_method0("utcoffset")?.is_none() {
+        return call_with(&native_field(value, "replace")?, &[("tzinfo", zone)]);
     }
     value.call_method1("astimezone", (zone,))
 }
@@ -122,7 +123,7 @@ fn origin_reference_names_of<'py>(
     dialect: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyDict>>> {
     let py: Python<'py> = recorded.py();
-    let recorded_hash: String = recorded.getattr("definition_hash")?.extract()?;
+    let recorded_hash: String = native_field(recorded, "definition_hash")?.extract()?;
     let Some(mapping) = origin_names((query_sql, recorded), renames, (&recorded_hash, dialect))?
     else {
         return Ok(None);
@@ -166,7 +167,7 @@ pub(crate) fn plan_reference_renames<'py>(
     if !changed_referencing_query(scope, snapshot)? {
         return Ok(PyTuple::empty(py));
     }
-    let state_schemas: Bound<'py, PyAny> = snapshot.getattr("migration_state_schemas")?;
+    let state_schemas: Bound<'py, PyAny> = native_field(snapshot, "migration_state_schemas")?;
     let inspected: Bound<'py, PySet> = PySet::empty(py)?;
     for schema in schemas.try_iter()? {
         let schema: Bound<'py, PyAny> = schema?;
@@ -175,7 +176,7 @@ pub(crate) fn plan_reference_renames<'py>(
         }
     }
     call_with(
-        &state.getattr("inspect_migration_events")?,
+        &native_field(&state, "inspect_migration_events")?,
         &[("schemas", inspected.into_any())],
     )?;
     let target_name: Bound<'py, PyAny> = runtime
@@ -193,11 +194,11 @@ pub(crate) fn plan_reference_renames<'py>(
             )?);
         }
     }
-    for event in state.getattr("events")?.try_iter()? {
+    for event in native_field(&state, "events")?.try_iter()? {
         let event: Bound<'py, PyAny> = event?;
-        let event_target: Bound<'py, PyAny> = event.getattr("target_name")?;
-        let origin: Bound<'py, PyAny> = event.getattr("origin_model")?;
-        let destination: Bound<'py, PyAny> = event.getattr("destination_model")?;
+        let event_target: Bound<'py, PyAny> = native_field(&event, "target_name")?;
+        let origin: Bound<'py, PyAny> = native_field(&event, "origin_model")?;
+        let destination: Bound<'py, PyAny> = native_field(&event, "destination_model")?;
         if (event_target.is_none() || event_target.eq(&target_name)?)
             && !origin.is_none()
             && origin.ne(&destination)?
@@ -207,7 +208,7 @@ pub(crate) fn plan_reference_renames<'py>(
                 &[
                     ("new_name", destination),
                     ("origin_name", origin),
-                    ("recorded_at", event.getattr("created_at")?),
+                    ("recorded_at", native_field(&event, "created_at")?),
                 ],
             )?);
         }
@@ -220,19 +221,20 @@ fn changed_referencing_query(
     snapshot: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
     let py: Python<'_> = scope.py();
-    let models_by_name: Bound<'_, PyAny> = scope.getattr("models_by_name")?;
+    let models_by_name: Bound<'_, PyAny> = native_field(scope, "models_by_name")?;
     let mut selected: Vec<Bound<'_, PyAny>> = Vec::new();
-    for key in scope.getattr("selected_keys")?.try_iter()? {
+    for key in native_field(scope, "selected_keys")?.try_iter()? {
         let model: Bound<'_, PyAny> =
-            models_by_name.call_method1("get", (key?.getattr("name")?,))?;
+            models_by_name.call_method1("get", (native_field(&key?, "name")?,))?;
         if !model.is_none() {
             selected.push(model);
         }
     }
-    let recorded_models: Bound<'_, PyAny> = snapshot.getattr("fingerprints")?.getattr("models")?;
+    let recorded_models: Bound<'_, PyAny> =
+        native_field(snapshot, "fingerprints")?.getattr("models")?;
     let ref_kind: Bound<'_, PyAny> =
         registry::class(py, RecordId::SqlReferenceKind)?.getattr("REF")?;
-    let dialect: Option<String> = snapshot.getattr("column_dialect")?.extract()?;
+    let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
     for model in selected {
         let recorded: Bound<'_, PyAny> =
             recorded_models.call_method1("get", (model_reads::name_object(&model)?,))?;
@@ -240,8 +242,8 @@ fn changed_referencing_query(
             continue;
         }
         let mut references_models: bool = false;
-        for reference in model.getattr("references")?.try_iter()? {
-            if reference?.getattr("ref_kind")?.eq(&ref_kind)? {
+        for reference in native_field(&model, "references")?.try_iter()? {
+            if native_field(&reference?, "ref_kind")?.eq(&ref_kind)? {
                 references_models = true;
                 break;
             }
@@ -254,7 +256,7 @@ fn changed_referencing_query(
                     &model_reads::query_sql(&model)?.extract::<String>()?,
                     dialect.as_deref(),
                 ),
-            )? != recorded.getattr("definition_hash")?.extract::<String>()?
+            )? != native_field(&recorded, "definition_hash")?.extract::<String>()?
         {
             return Ok(true);
         }

@@ -8,6 +8,7 @@ use sqlbuild_scopes::scope_index::models::{
     OwnershipRoot, OwnershipRootKind, ResourceIdentity, ResourceKind, ResourceRecord,
 };
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, enum_text, field, optional_item, read_resource, root_object, tuple_attribute,
@@ -82,7 +83,7 @@ fn order_key(diagnostic: &Bound<'_, PyAny>) -> PyResult<DiagnosticOrderKey> {
         path: field(diagnostic, "path")?,
         line: field(diagnostic, "line")?,
         column: field(diagnostic, "column")?,
-        code: enum_text(&diagnostic.getattr("code")?)?,
+        code: enum_text(&native_field(diagnostic, "code")?)?,
         message: field(diagnostic, "message")?,
     })
 }
@@ -95,7 +96,7 @@ fn prospective_resource(path: &Bound<'_, PyAny>) -> PyResult<Option<ResourceReco
             return Ok(Some(ResourceRecord {
                 identity: ResourceIdentity {
                     kind,
-                    name: path.getattr("stem")?.extract()?,
+                    name: native_field(path, "stem")?.extract()?,
                 },
                 path: relative,
                 ownership_root: OwnershipRoot {
@@ -191,7 +192,7 @@ pub(crate) fn scope_tolerant_index(
     diagnostics.discovery_faults(&snapshot_relationship_faults, RELATIONSHIP_PARSE_ERROR)?;
     diagnostics.discovery_faults(&config_faults, CONFIG_PARSE_ERROR)?;
     for fault in &macro_faults {
-        let path: String = posix(&fault.getattr("relative_path")?)?;
+        let path: String = posix(&native_field(fault, "relative_path")?)?;
         diagnostics.push(MACRO_PARSE_ERROR, field(fault, "message")?, Some(path))?;
     }
     for (path, message) in &relationship_faults {

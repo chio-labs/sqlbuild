@@ -21,6 +21,7 @@ const EXECUTION_LOGGER: &str = "sqlbuild.execution";
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
 
@@ -92,7 +93,7 @@ fn destination_keys<'py>(
     let mut keys: Vec<(Key, Bound<'py, PyAny>)> = Vec::new();
     for node in project.getattr(field)?.try_iter()? {
         let node: Bound<'py, PyAny> = node?;
-        keys.push((Key::of(&node.getattr("destination")?)?, node));
+        keys.push((Key::of(&native_field(&node, "destination")?)?, node));
     }
     Ok(keys)
 }
@@ -130,10 +131,10 @@ fn source_schemas(
     (default_database, default_schema): (Option<String>, Option<String>),
 ) -> PyResult<Vec<(SchemaKey, BTreeSet<String>)>> {
     let mut schemas: Vec<(SchemaKey, BTreeSet<String>)> = Vec::new();
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source: Bound<'_, PyAny> = source?;
-        let entry: Bound<'_, PyAny> = source.getattr("source_entry")?;
-        if !entry.getattr("expression")?.is_none() {
+        let entry: Bound<'_, PyAny> = native_field(&source, "source_entry")?;
+        if !native_field(&entry, "expression")?.is_none() {
             continue;
         }
         let database: Option<String> = entry
@@ -144,7 +145,7 @@ fn source_schemas(
             .getattr("schema")?
             .extract::<Option<String>>()?
             .or_else(|| default_schema.clone());
-        let name: String = source.getattr("name")?.extract()?;
+        let name: String = native_field(&source, "name")?.extract()?;
         let key: SchemaKey = (database, schema);
         match schemas.iter_mut().find(|(listed, _)| *listed == key) {
             Some((_, names)) => {
@@ -193,8 +194,8 @@ fn list_target_schema_relations<'py>(
         for relation in listed.try_iter()? {
             let relation: Bound<'py, PyAny> = relation?;
             let folded: SchemaKey = folded_schema(&(
-                relation.getattr("database")?.extract()?,
-                relation.getattr("schema")?.extract()?,
+                native_field(&relation, "database")?.extract()?,
+                native_field(&relation, "schema")?.extract()?,
             ));
             let Some(target) = target_schemas
                 .iter()
@@ -254,7 +255,7 @@ fn lookup_exists(
 ) -> PyResult<bool> {
     let py: Python<'_> = lookup.py();
     call_with(
-        &lookup.getattr("exists")?,
+        &native_field(lookup, "exists")?,
         &[
             ("database", optional(py, database)?),
             ("schema", text(py, schema)),
@@ -297,7 +298,7 @@ fn tracked_relation_keys(
             py,
             &[
                 ("connection", warehouse.connection.clone()),
-                ("execute", warehouse.adapter.getattr("execute")?),
+                ("execute", native_field(&warehouse.adapter, "execute")?),
                 (
                     "table_exists",
                     PyBool::new(py, exists).to_owned().into_any(),
@@ -306,7 +307,7 @@ fn tracked_relation_keys(
                 ("schema", text(py, schema)),
                 (
                     "render_qualified_name",
-                    warehouse.adapter.getattr("render_qualified_name")?,
+                    native_field(&warehouse.adapter, "render_qualified_name")?,
                 ),
                 (
                     "render_read_latest_sql",
@@ -348,14 +349,16 @@ fn tracked_relation_keys(
             .try_iter()?
         {
             let fingerprint: Bound<'_, PyAny> = fingerprint?;
-            let target_schema: Option<String> = fingerprint.getattr("target_schema")?.extract()?;
-            let target_name: Option<String> = fingerprint.getattr("target_name")?.extract()?;
+            let target_schema: Option<String> =
+                native_field(&fingerprint, "target_schema")?.extract()?;
+            let target_name: Option<String> =
+                native_field(&fingerprint, "target_name")?.extract()?;
             let (Some(target_schema), Some(target_name)) = (target_schema, target_name) else {
                 continue;
             };
             tracked.insert(
                 Key {
-                    database: fingerprint.getattr("target_database")?.extract()?,
+                    database: native_field(&fingerprint, "target_database")?.extract()?,
                     schema: Some(target_schema),
                     name: target_name,
                 }
@@ -476,7 +479,7 @@ pub(crate) fn query_diff_artifact_candidates<'py>(
     let mut skipped: Vec<Bound<'py, PyAny>> = Vec::new();
     for (database, schema) in sorted {
         let inspection: Bound<'py, PyAny> = call_with(
-            &lifecycle.getattr("inspect")?,
+            &native_field(&lifecycle, "inspect")?,
             &[
                 ("adapter", warehouse.adapter.clone()),
                 ("connection", warehouse.connection.clone()),
@@ -485,7 +488,7 @@ pub(crate) fn query_diff_artifact_candidates<'py>(
                 ("now", now.clone()),
             ],
         )?;
-        for artifact in inspection.getattr("expired")?.try_iter()? {
+        for artifact in native_field(&inspection, "expired")?.try_iter()? {
             let key: Key = Key::of(&artifact?)?;
             candidates.push(record(
                 py,
@@ -493,7 +496,7 @@ pub(crate) fn query_diff_artifact_candidates<'py>(
                 &[("key", key.to_python(py)?)],
             )?);
         }
-        for relation in inspection.getattr("untracked")?.try_iter()? {
+        for relation in native_field(&inspection, "untracked")?.try_iter()? {
             let relation: Bound<'py, PyAny> = relation?;
             skipped.push(skipped_relation(
                 &Key::of(&relation)?,

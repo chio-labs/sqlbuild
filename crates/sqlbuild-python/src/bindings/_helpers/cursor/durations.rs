@@ -13,6 +13,7 @@ use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::values::{
     DATETIME_MODULE, civil_date, local_date_time, replaced,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MONTHS_PER_YEAR: i64 = 12;
 
@@ -64,7 +65,7 @@ pub(crate) fn shifted_moment<'py>(
     let typed: Moment = if is_timestamp {
         Moment::Timestamp {
             local: local_date_time(moment)?,
-            fold: moment.getattr("fold")?.extract::<u8>()? != 0,
+            fold: native_field(moment, "fold")?.extract::<u8>()? != 0,
         }
     } else {
         Moment::Date(civil_date(moment)?)
@@ -73,7 +74,7 @@ pub(crate) fn shifted_moment<'py>(
     match shifted {
         Moment::Timestamp { local, fold } => replaced(moment, &local, fold),
         Moment::Date(date) => call_with(
-            &moment.getattr("replace")?,
+            &native_field(moment, "replace")?,
             &[
                 ("year", date.year.into_pyobject(py)?.into_any()),
                 ("month", date.month.into_pyobject(py)?.into_any()),

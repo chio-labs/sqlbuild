@@ -5,6 +5,7 @@ use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_core::nested_progress::main::audit_resource_id::audit_resource_id as audit_id;
 use sqlbuild_core::nested_progress::main::sql_test_resource_id::sql_test_resource_id as sql_test_id;
 
@@ -61,7 +62,7 @@ fn audit_identity_of(
     let column: Option<String> = column.extract()?;
     Ok(audit_id(
         &audit_name.extract::<String>()?,
-        &kind.getattr("value")?.extract::<String>()?,
+        &native_field(kind, "value")?.extract::<String>()?,
         (target.as_deref(), column.as_deref()),
     ))
 }
@@ -73,26 +74,26 @@ pub(crate) fn sql_test_identity(
 ) -> PyResult<String> {
     sql_test_resource_id(
         &result.getattr(test_name_field)?.extract::<String>()?,
-        result.getattr("source_path")?,
-        result.getattr("block_index")?.extract()?,
-        result.getattr("case_name")?.extract()?,
+        native_field(result, "source_path")?,
+        native_field(result, "block_index")?.extract()?,
+        native_field(result, "case_name")?.extract()?,
     )
 }
 
 /// `audit_resource_id` of one audit result.
 pub(crate) fn audit_identity(result: &Bound<'_, PyAny>) -> PyResult<String> {
-    let target_kind: Bound<'_, PyAny> = result.getattr("attached_target_kind")?;
+    let target_kind: Bound<'_, PyAny> = native_field(result, "attached_target_kind")?;
     let kind: Bound<'_, PyAny> = if target_kind.is_none() {
-        result.getattr("attachment_kind")?
+        native_field(result, "attachment_kind")?
     } else {
         target_kind
     };
     audit_identity_of(
-        &result.getattr("audit_name")?,
+        &native_field(result, "audit_name")?,
         &kind,
         (
-            &result.getattr("attached_target_name")?,
-            &result.getattr("attached_column_name")?,
+            &native_field(result, "attached_target_name")?,
+            &native_field(result, "attached_column_name")?,
         ),
     )
 }

@@ -24,6 +24,7 @@ use crate::bindings::_helpers::planner_identity::hashing::{graph_key, model_quer
 use crate::bindings::_helpers::planner_identity::metadata::{
     function_local_hashes, model_version_identity_metadata_json, seed_identity,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -56,7 +57,7 @@ fn hook_version_hashes<'py>(hook_functions: &Bound<'py, PyAny>) -> PyResult<Boun
         host::entry(py, UserCodeHost::BuildHookIdentities)?.call1((hook_functions,))?;
     for item in identities.call_method0("items")?.try_iter()? {
         let (name, identity): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
-        hashes.set_item(name, identity.getattr("version_hash")?)?;
+        hashes.set_item(name, native_field(&identity, "version_hash")?)?;
     }
     Ok(hashes)
 }
@@ -91,14 +92,14 @@ pub(crate) fn build_direct_model_version_identities<'py>(
     let mut graph = IdentityGraph::default();
     for function in functions.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        let name: String = function.getattr("name")?.extract()?;
+        let name: String = native_field(&function, "name")?.extract()?;
         let Some(function_hash) = function_hashes.get_item(&name)? else {
             continue;
         };
         graph.nodes.insert(
-            graph_key(&function.getattr("key")?)?,
+            graph_key(&native_field(&function, "key")?)?,
             IdentityNode {
-                upstream_keys: graph_keys(&function.getattr("deps")?)?,
+                upstream_keys: graph_keys(&native_field(&function, "deps")?)?,
                 local_hash: Some(function_hash.extract()?),
             },
         );
@@ -110,7 +111,7 @@ pub(crate) fn build_direct_model_version_identities<'py>(
         for seed in seeds.try_iter()? {
             let seed: Bound<'py, PyAny> = seed?;
             let (seed_hash, metadata_json): (String, String) = seed_identity(&seed)?;
-            let name: Bound<'py, PyAny> = seed.getattr("name")?;
+            let name: Bound<'py, PyAny> = native_field(&seed, "name")?;
             seed_hashes.set_item(&name, &seed_hash)?;
             seed_metadata.set_item(&name, metadata_json)?;
         }
@@ -138,8 +139,8 @@ pub(crate) fn build_direct_model_version_identities<'py>(
     }
     let model_metadata: Bound<'py, PyDict> = PyDict::new(py);
     let model_local: Bound<'py, PyDict> = PyDict::new(py);
-    let models_by_name: Bound<'py, PyAny> = scope.getattr("models_by_name")?;
-    for key in scope.getattr("execution_order")?.try_iter()? {
+    let models_by_name: Bound<'py, PyAny> = native_field(&scope, "models_by_name")?;
+    for key in native_field(&scope, "execution_order")?.try_iter()? {
         let key: Bound<'py, PyAny> = key?;
         let order_key: GraphKey = graph_key(&key)?;
         graph.execution_order.push(order_key.clone());
@@ -170,7 +171,7 @@ pub(crate) fn build_direct_model_version_identities<'py>(
         graph.nodes.insert(
             key_of(MODEL_RESOURCE, &name),
             IdentityNode {
-                upstream_keys: graph_keys(&model.getattr("deps")?)?,
+                upstream_keys: graph_keys(&native_field(&model, "deps")?)?,
                 local_hash: Some(local_hash),
             },
         );
@@ -218,10 +219,10 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
     let snapshot: Bound<'py, PyAny> = arguments.value("snapshot")?;
     let changes: Bound<'py, PyAny> = arguments.value("changes")?;
     let identities: Bound<'py, PyAny> = arguments.value("version_identities")?;
-    let selected_python: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
+    let selected_python: Bound<'py, PyAny> = native_field(&scope, "selected_keys")?;
     let selected: HashSet<GraphKey> = graph_keys(&selected_python)?.into_iter().collect();
     let function_hashes: Vec<(String, String)> =
-        string_pairs(&identities.getattr("function_local_hashes")?)?;
+        string_pairs(&native_field(&identities, "function_local_hashes")?)?;
     let mut graph = IdentityGraph::default();
     let mut base_hashes: Vec<(GraphKey, String)> = Vec::new();
     let mut function_deps: HashMap<GraphKey, Vec<GraphKey>> = HashMap::new();
@@ -252,8 +253,9 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
             base_hashes.push((function_key, function_hash.clone()));
         }
     }
-    let recorded_seeds: Bound<'py, PyAny> = snapshot.getattr("fingerprints")?.getattr("seeds")?;
-    for (name, seed_hash) in string_pairs(&identities.getattr("seed_version_hashes")?)? {
+    let recorded_seeds: Bound<'py, PyAny> =
+        native_field(&snapshot, "fingerprints")?.getattr("seeds")?;
+    for (name, seed_hash) in string_pairs(&native_field(&identities, "seed_version_hashes")?)? {
         let seed_key: GraphKey = key_of(SEED_RESOURCE, &name);
         graph.nodes.insert(
             seed_key.clone(),
@@ -266,11 +268,11 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         let write_hash: String = if selected.contains(&seed_key) || fingerprint.is_none() {
             seed_hash
         } else {
-            fingerprint.getattr("version_hash")?.extract()?
+            native_field(&fingerprint, "version_hash")?.extract()?
         };
         base_hashes.push((seed_key, write_hash));
     }
-    let local_hashes: Bound<'py, PyAny> = identities.getattr("model_local_hashes")?;
+    let local_hashes: Bound<'py, PyAny> = native_field(&identities, "model_local_hashes")?;
     for model in scope
         .getattr("models_by_name")?
         .call_method0("values")?
@@ -281,15 +283,16 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         graph.nodes.insert(
             key_of(MODEL_RESOURCE, &name.extract::<String>()?),
             IdentityNode {
-                upstream_keys: graph_keys(&model.getattr("deps")?)?,
+                upstream_keys: graph_keys(&native_field(&model, "deps")?)?,
                 local_hash: local_hashes.call_method1("get", (&name,))?.extract()?,
             },
         );
     }
-    let recorded_models: Bound<'py, PyAny> = snapshot.getattr("fingerprints")?.getattr("models")?;
+    let recorded_models: Bound<'py, PyAny> =
+        native_field(&snapshot, "fingerprints")?.getattr("models")?;
     for item in recorded_models.call_method0("items")?.try_iter()? {
         let (name, fingerprint): (String, Bound<'py, PyAny>) = item?.extract()?;
-        let version_hash: Bound<'py, PyAny> = fingerprint.getattr("version_hash")?;
+        let version_hash: Bound<'py, PyAny> = native_field(&fingerprint, "version_hash")?;
         if version_hash.is_truthy()? {
             base_hashes.push((key_of(MODEL_RESOURCE, &name), version_hash.extract()?));
         }
@@ -300,7 +303,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
             base_hashes.push((key_of(MODEL_RESOURCE, &name), model_hash));
         }
     }
-    graph.execution_order = graph_keys(&scope.getattr("execution_order")?)?;
+    graph.execution_order = graph_keys(&native_field(&scope, "execution_order")?)?;
     let write_hashes: HashMap<GraphKey, String> =
         graph_write_identity_hashes(&graph, &selected, base_hashes)
             .into_iter()
@@ -313,8 +316,8 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
             .downcast::<PyDict>()?
             .as_mapping(),
     )?;
-    let models_by_name: Bound<'py, PyAny> = scope.getattr("models_by_name")?;
-    for key in scope.getattr("execution_order")?.try_iter()? {
+    let models_by_name: Bound<'py, PyAny> = native_field(&scope, "models_by_name")?;
+    for key in native_field(&scope, "execution_order")?.try_iter()? {
         let key: Bound<'py, PyAny> = key?;
         let order_key: GraphKey = graph_key(&key)?;
         if order_key.kind != MODEL_RESOURCE || !selected.contains(&order_key) {
@@ -360,7 +363,7 @@ pub(crate) fn merge_recomputed_model_changes<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = resolved_actions.py();
     let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;
-    let recomputed: Bound<'py, PyAny> = changes.getattr("models")?;
+    let recomputed: Bound<'py, PyAny> = native_field(changes, "models")?;
     let merged: Bound<'py, PyDict> = PyDict::new(py);
     for item in resolved_actions
         .getattr("models")?
@@ -370,7 +373,7 @@ pub(crate) fn merge_recomputed_model_changes<'py>(
         let (name, resolved): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         let mut change: Bound<'py, PyAny> = recomputed.call_method1("get", (&name,))?;
         if change.is_none() {
-            change = resolved.getattr("change")?;
+            change = native_field(&resolved, "change")?;
         }
         merged.set_item(name, replace_with(&replace, &resolved, ("change", change))?)?;
     }

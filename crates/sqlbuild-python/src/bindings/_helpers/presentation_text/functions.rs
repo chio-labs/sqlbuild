@@ -14,6 +14,7 @@ use sqlbuild_core::cli_text::main::split_count_header::split_count_header;
 use sqlbuild_core::cli_text::models::{AlignedRow, CliStyle, CompletionState, SummaryCount};
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const ALIGNED_OPTIONS: (&[&str], &[&str]) = (
     &["plain_name", "styled_name", "value", "name_column_width"],
@@ -30,7 +31,7 @@ const WARN_STATE: &str = "warn";
 /// The native style of a Python `CliStyle`.
 pub(crate) fn style_of(style: &Bound<'_, PyAny>) -> PyResult<CliStyle> {
     Ok(CliStyle {
-        use_color: style.getattr("use_color")?.is_truthy()?,
+        use_color: native_field(style, "use_color")?.is_truthy()?,
     })
 }
 
@@ -141,7 +142,7 @@ fn visible_entries<'py>(
     entries: Bound<'py, PyAny>,
     options: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let limit: Bound<'py, PyAny> = options.getattr("max_entries_per_section")?;
+    let limit: Bound<'py, PyAny> = native_field(options, "max_entries_per_section")?;
     if limit.is_none() {
         return Ok(entries);
     }

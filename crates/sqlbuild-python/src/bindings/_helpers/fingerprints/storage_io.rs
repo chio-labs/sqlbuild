@@ -22,6 +22,7 @@ use crate::bindings::_helpers::fingerprints::storage_sql::{
 
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
@@ -83,10 +84,10 @@ fn create_sql(
     let py: Python<'_> = render_framework_type.py();
     let framework: Bound<'_, PyAny> = host::entry(py, AdapterHost::FrameworkType)?;
     let string_type: String = render_framework_type
-        .call1((framework.getattr("STRING")?,))?
+        .call1((native_field(&framework, "STRING")?,))?
         .extract()?;
     let timestamp_type: String = render_framework_type
-        .call1((framework.getattr("TIMESTAMP")?,))?
+        .call1((native_field(&framework, "TIMESTAMP")?,))?
         .extract()?;
     Ok(create_table_sql(
         &qualified_table_name(location)?,
@@ -369,8 +370,8 @@ fn write_fingerprint<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<()> 
     )?);
     execute_with_retry(&writer, &sqls, &|error| {
         let mut details: Vec<Bound<'py, PyAny>> = vec![
-            fingerprint.getattr("node_type")?,
-            fingerprint.getattr("node_name")?,
+            native_field(&fingerprint, "node_type")?,
+            native_field(&fingerprint, "node_name")?,
         ];
         details.extend(error_details(py, error)?);
         Ok((SINGLE_RETRY_MESSAGE, details))
@@ -385,8 +386,8 @@ fn batch_warning<'py>(batch: &[Bound<'py, PyAny>], error: &PyErr) -> PyResult<Re
     let py: Python<'py> = first.py();
     let mut details: Vec<Bound<'py, PyAny>> = vec![
         batch.len().into_pyobject(py)?.into_any(),
-        first.getattr("node_type")?,
-        first.getattr("node_name")?,
+        native_field(first, "node_type")?,
+        native_field(first, "node_name")?,
     ];
     details.extend(error_details(py, error)?);
     Ok((BATCH_RETRY_MESSAGE, details))

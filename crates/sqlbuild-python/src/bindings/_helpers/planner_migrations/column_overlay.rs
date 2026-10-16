@@ -12,6 +12,7 @@ use crate::bindings::_helpers::planner_migrations::models::{
 };
 use crate::bindings::_helpers::planner_migrations::projections::renames_explain_change;
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -27,28 +28,32 @@ pub(super) fn overlay<'py>(
     }
     let py = snapshot.py();
     let columns =
-        imported(py, "builtins", "dict")?.call1((snapshot.getattr("existing_columns")?,))?;
-    let stored = snapshot.getattr("fingerprints")?;
-    let fingerprints = imported(py, "builtins", "dict")?.call1((stored.getattr("models")?,))?;
+        imported(py, "builtins", "dict")?.call1((native_field(snapshot, "existing_columns")?,))?;
+    let stored = native_field(snapshot, "fingerprints")?;
+    let fingerprints =
+        imported(py, "builtins", "dict")?.call1((native_field(&stored, "models")?,))?;
     for candidate in candidates {
         let name = model_reads::name_object(&candidate.model)?;
         let renames = PyDict::new(py);
         let pending = PyDict::new(py);
         let mut blocked = false;
         for entry in entries {
-            if !entry.getattr("model_name")?.eq(&name)? {
+            if !native_field(entry, "model_name")?.eq(&name)? {
                 continue;
             }
-            blocked |= entry.getattr("blocks_build")?.is_truthy()?
-                || entry.getattr("origin_missing")?.is_truthy()?;
+            blocked |= native_field(entry, "blocks_build")?.is_truthy()?
+                || native_field(entry, "origin_missing")?.is_truthy()?;
             renames.set_item(
-                entry.getattr("origin_column")?,
-                entry.getattr("destination_column")?,
+                native_field(entry, "origin_column")?,
+                native_field(entry, "destination_column")?,
             )?;
-            if entry.getattr("decision")?.getattr("renames")?.is_truthy()? {
+            if native_field(entry, "decision")?
+                .getattr("renames")?
+                .is_truthy()?
+            {
                 pending.set_item(
-                    lower(&entry.getattr("origin_column")?)?,
-                    entry.getattr("destination_column")?,
+                    lower(&native_field(entry, "origin_column")?)?,
+                    native_field(entry, "destination_column")?,
                 )?;
             }
         }
@@ -62,7 +67,7 @@ pub(super) fn overlay<'py>(
             .try_iter()?
         {
             let column = column?;
-            let old = column.getattr("name")?;
+            let old = native_field(&column, "name")?;
             let new = pending.get_item(lower(&old)?)?.unwrap_or(old);
             renamed.push(replace(&column, &[("name", new)])?);
         }
@@ -113,9 +118,9 @@ pub(super) fn overlay<'py>(
                     RecordId::WarehouseFingerprints,
                     &[
                         ("models", fingerprints),
-                        ("functions", stored.getattr("functions")?),
-                        ("seeds", stored.getattr("seeds")?),
-                        ("python_nodes", stored.getattr("python_nodes")?),
+                        ("functions", native_field(&stored, "functions")?),
+                        ("seeds", native_field(&stored, "seeds")?),
+                        ("python_nodes", native_field(&stored, "python_nodes")?),
                     ],
                 )?,
             ),
@@ -130,21 +135,23 @@ pub(super) fn cursors<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = snapshot.py();
     let scope = phase.scope.clone();
-    let models = scope.getattr("models_by_name")?;
+    let models = native_field(&scope, "models_by_name")?;
     let origins = PyDict::new(py);
     for entry in entries {
-        let name = entry.getattr("model_name")?;
+        let name = native_field(entry, "model_name")?;
         let model = models.call_method1("get", (&name,))?;
         let cursor = if model.is_truthy()? {
             config(&model, "cursor")?
         } else {
             py.None().into_bound(py)
         };
-        if entry.getattr("decision")?.getattr("renames")?.is_truthy()?
+        if native_field(entry, "decision")?
+            .getattr("renames")?
+            .is_truthy()?
             && !cursor.is_none()
-            && lower(&cursor)? == lower(&entry.getattr("destination_column")?)?
+            && lower(&cursor)? == lower(&native_field(entry, "destination_column")?)?
         {
-            origins.set_item(name, entry.getattr("origin_column")?)?;
+            origins.set_item(name, native_field(entry, "origin_column")?)?;
         }
     }
     if origins.is_empty() {
@@ -170,11 +177,14 @@ pub(super) fn cursors<'py>(
     }
     let redirected = super::planning_boundary::redirected_cursor_snapshots(
         phase,
-        (snapshot.getattr("existing_relations")?, targets.into_any()),
+        (
+            native_field(&snapshot, "existing_relations")?,
+            targets.into_any(),
+        ),
         Some(origins.into_any()),
     )?;
     let cursors =
-        imported(py, "builtins", "dict")?.call1((snapshot.getattr("cursor_snapshots")?,))?;
+        imported(py, "builtins", "dict")?.call1((native_field(&snapshot, "cursor_snapshots")?,))?;
     cursors.call_method1("update", (redirected,))?;
     replace(&snapshot, &[("cursor_snapshots", cursors)])
 }

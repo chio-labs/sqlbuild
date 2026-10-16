@@ -13,6 +13,7 @@ use sqlbuild_core::dbt_command::models::DbtInitSummary;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -42,7 +43,7 @@ fn optional_path<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// The dbt project directory: the option, else `.` when the working directory is a dbt project.
 fn dbt_project_dir<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let given: Bound<'py, PyAny> = request.getattr("dbt_project_dir")?;
+    let given: Bound<'py, PyAny> = native_field(request, "dbt_project_dir")?;
     if !given.is_none() {
         return optional_path(given);
     }
@@ -89,28 +90,28 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     let callbacks: Bound<'_, PyAny> = call_with(
         &registry::class(py, RecordId::DbtInitProgressCallbacks)?,
         &[
-            ("start", progress.getattr("start")?),
-            ("complete", progress.getattr("complete")?),
+            ("start", native_field(&progress, "start")?),
+            ("complete", native_field(&progress, "complete")?),
         ],
     )?;
     let init_request: Bound<'_, PyAny> = call_with(
         &registry::class(py, RecordId::DbtInitRequest)?,
         &[
-            ("cwd", request.getattr("cwd")?),
+            ("cwd", native_field(request, "cwd")?),
             ("dbt_project_dir", project_dir),
             (
                 "profiles_dir",
-                optional_path(request.getattr("profiles_dir")?)?,
+                optional_path(native_field(request, "profiles_dir")?)?,
             ),
-            ("profile_name", request.getattr("profile_name")?),
-            ("target_name", request.getattr("target_name")?),
+            ("profile_name", native_field(request, "profile_name")?),
+            ("target_name", native_field(request, "target_name")?),
             (
                 "sqb_output_dir",
-                optional_path(request.getattr("sqb_output_dir")?)?,
+                optional_path(native_field(request, "sqb_output_dir")?)?,
             ),
-            ("dry_run", request.getattr("dry_run")?),
-            ("overwrite", request.getattr("overwrite")?),
-            ("skip_dbt_debug", request.getattr("skip_dbt_debug")?),
+            ("dry_run", native_field(request, "dry_run")?),
+            ("overwrite", native_field(request, "overwrite")?),
+            ("skip_dbt_debug", native_field(request, "skip_dbt_debug")?),
             ("progress_callbacks", callbacks),
         ],
     )?;
@@ -124,7 +125,7 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     )?;
     let style: CliStyle = CliStyle { use_color };
     let stdout: Bound<'_, PyAny> = stream(py, "stdout")?;
-    if request.getattr("dry_run")?.is_truthy()? {
+    if native_field(request, "dry_run")?.is_truthy()? {
         stdout.call_method1(
             "write",
             (render_dbt_init_preview(&summary(&result)?, style),),
@@ -135,7 +136,7 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
         "write",
         (render_dbt_init_summary(&summary(&result)?, style),),
     )?;
-    for warning in result.getattr("warnings")?.try_iter()? {
+    for warning in native_field(&result, "warnings")?.try_iter()? {
         stream(py, "stderr")?
             .call_method1("write", (format!("Warning: {}\n", warning?.str()?),))?;
     }

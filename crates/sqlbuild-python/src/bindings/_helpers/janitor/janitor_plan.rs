@@ -1,5 +1,6 @@
 //! Display facts of the executor's janitor plan and execution result.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
@@ -18,7 +19,7 @@ fn display_name(item: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 fn key_name(item: &Bound<'_, PyAny>) -> PyResult<String> {
-    display_name(&item.getattr("key")?)
+    display_name(&native_field(item, "key")?)
 }
 
 /// `format(value, pattern)`, as an f-string format spec renders a datetime.
@@ -36,7 +37,9 @@ fn age_days(value: &Bound<'_, PyAny>, planned_at: &Bound<'_, PyAny>) -> PyResult
     if value.is_none() || planned_at.is_none() {
         return Ok(None);
     }
-    Ok(Some(planned_at.sub(value)?.getattr("days")?.extract()?))
+    Ok(Some(
+        native_field(&planned_at.sub(value)?, "days")?.extract()?,
+    ))
 }
 
 fn names(items: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -47,13 +50,13 @@ fn archived(
     item: &Bound<'_, PyAny>,
     planned_at: &Bound<'_, PyAny>,
 ) -> PyResult<ArchivedRelationText> {
-    let archived_at: Bound<'_, PyAny> = item.getattr("archived_at")?;
+    let archived_at: Bound<'_, PyAny> = native_field(item, "archived_at")?;
     Ok(ArchivedRelationText {
         name: key_name(item)?,
-        archived_in_run: !item.getattr("original_key")?.is_none(),
+        archived_in_run: !native_field(item, "original_key")?.is_none(),
         archived_at: formatted(&archived_at, TIMESTAMP_FORMAT)?,
         age_days: age_days(&archived_at, planned_at)?,
-        expires_at: formatted(&item.getattr("expires_at")?, TIMESTAMP_FORMAT)?,
+        expires_at: formatted(&native_field(item, "expires_at")?, TIMESTAMP_FORMAT)?,
     })
 }
 
@@ -71,11 +74,11 @@ fn old_name_views(views: &Bound<'_, PyAny>) -> PyResult<Vec<OldNameViewText>> {
     let mut read: Vec<OldNameViewText> = Vec::new();
     for view in views.try_iter()? {
         let view: Bound<'_, PyAny> = view?;
-        let expires_at: Bound<'_, PyAny> = view.getattr("expires_at")?;
-        let drop_reason: Bound<'_, PyAny> = view.getattr("drop_reason")?;
+        let expires_at: Bound<'_, PyAny> = native_field(&view, "expires_at")?;
+        let drop_reason: Bound<'_, PyAny> = native_field(&view, "drop_reason")?;
         read.push(OldNameViewText {
             name: key_name(&view)?,
-            destination_model: view.getattr("destination_model")?.str()?.extract()?,
+            destination_model: native_field(&view, "destination_model")?.str()?.extract()?,
             expires_on: if expires_at.is_none() {
                 None
             } else {
@@ -86,8 +89,8 @@ fn old_name_views(views: &Bound<'_, PyAny>) -> PyResult<Vec<OldNameViewText>> {
             } else {
                 Some(drop_reason.str()?.extract()?)
             },
-            occupied: view.getattr("occupied")?.is_truthy()?,
-            claimed_by: view.getattr("claimed_by")?.extract()?,
+            occupied: native_field(&view, "occupied")?.is_truthy()?,
+            claimed_by: native_field(&view, "claimed_by")?.extract()?,
         });
     }
     Ok(read)
@@ -99,8 +102,8 @@ fn source_schemas(schemas: &Bound<'_, PyAny>, blocked: bool) -> PyResult<Vec<Sou
         let schema: Bound<'_, PyAny> = schema?;
         let (suppressed_candidates, suppressed_archive_deletions) = if blocked {
             (
-                names(&schema.getattr("suppressed_candidates")?)?,
-                names(&schema.getattr("suppressed_archive_deletions")?)?,
+                names(&native_field(&schema, "suppressed_candidates")?)?,
+                names(&native_field(&schema, "suppressed_archive_deletions")?)?,
             )
         } else {
             (Vec::new(), Vec::new())
@@ -121,58 +124,58 @@ fn source_schemas(schemas: &Bound<'_, PyAny>, blocked: bool) -> PyResult<Vec<Sou
 
 /// The display facts of one executor `JanitorPlan`.
 pub(crate) fn janitor_plan_text(plan: &Bound<'_, PyAny>) -> PyResult<JanitorPlanText> {
-    let planned_at: Bound<'_, PyAny> = plan.getattr("planned_at")?;
+    let planned_at: Bound<'_, PyAny> = native_field(plan, "planned_at")?;
     let mut archive_candidates: Vec<ArchiveCandidateText> = Vec::new();
-    for candidate in plan.getattr("archive_candidates")?.try_iter()? {
+    for candidate in native_field(plan, "archive_candidates")?.try_iter()? {
         let candidate: Bound<'_, PyAny> = candidate?;
-        let expires_at: Bound<'_, PyAny> = candidate.getattr("expires_at")?;
+        let expires_at: Bound<'_, PyAny> = native_field(&candidate, "expires_at")?;
         archive_candidates.push(ArchiveCandidateText {
             name: key_name(&candidate)?,
-            archive_name: display_name(&candidate.getattr("archive_key")?)?,
-            age_days: age_days(&candidate.getattr("age_timestamp")?, &planned_at)?,
-            expires_now: expires_at.le(candidate.getattr("archived_at")?)?,
+            archive_name: display_name(&native_field(&candidate, "archive_key")?)?,
+            age_days: age_days(&native_field(&candidate, "age_timestamp")?, &planned_at)?,
+            expires_now: expires_at.le(native_field(&candidate, "archived_at")?)?,
             expires_at: formatted(&expires_at, TIMESTAMP_FORMAT)?,
         });
     }
     let mut state_prunes: Vec<(String, i64)> = Vec::new();
-    for candidate in plan.getattr("direct_state_prune_candidates")?.try_iter()? {
+    for candidate in native_field(plan, "direct_state_prune_candidates")?.try_iter()? {
         let candidate: Bound<'_, PyAny> = candidate?;
         state_prunes.push((
             display_name(&candidate)?,
-            candidate.getattr("retain_versions")?.extract()?,
+            native_field(&candidate, "retain_versions")?.extract()?,
         ));
     }
     let mut skipped_relations: Vec<(String, String)> = Vec::new();
-    for skipped in plan.getattr("skipped_relations")?.try_iter()? {
+    for skipped in native_field(plan, "skipped_relations")?.try_iter()? {
         let skipped: Bound<'_, PyAny> = skipped?;
         skipped_relations.push((
             key_name(&skipped)?,
-            skipped.getattr("reason")?.str()?.extract()?,
+            native_field(&skipped, "reason")?.str()?.extract()?,
         ));
     }
-    let views: Bound<'_, PyAny> = plan.getattr("old_name_views")?;
+    let views: Bound<'_, PyAny> = native_field(plan, "old_name_views")?;
     Ok(JanitorPlanText {
-        target_name: plan.getattr("target_name")?.extract()?,
-        retention_days: plan.getattr("retention_days")?.extract()?,
-        direct_mode: plan.getattr("direct_mode")?.is_truthy()?,
-        archive_retention_days: plan.getattr("archive_retention_days")?.extract()?,
-        age_metadata_supported: plan.getattr("age_metadata_supported")?.is_truthy()?,
-        scanned_schema_count: plan.getattr("scanned_schema_count")?.extract()?,
-        candidates: names(&plan.getattr("candidates")?)?,
+        target_name: native_field(plan, "target_name")?.extract()?,
+        retention_days: native_field(plan, "retention_days")?.extract()?,
+        direct_mode: native_field(plan, "direct_mode")?.is_truthy()?,
+        archive_retention_days: native_field(plan, "archive_retention_days")?.extract()?,
+        age_metadata_supported: native_field(plan, "age_metadata_supported")?.is_truthy()?,
+        scanned_schema_count: native_field(plan, "scanned_schema_count")?.extract()?,
+        candidates: names(&native_field(plan, "candidates")?)?,
         archive_candidates,
         archive_deletions: archived_list(
-            &plan.getattr("archive_deletion_candidates")?,
+            &native_field(plan, "archive_deletion_candidates")?,
             &planned_at,
         )?,
-        retained_archives: archived_list(&plan.getattr("retained_archives")?, &planned_at)?,
-        old_name_drops: old_name_views(&views.getattr("drops")?)?,
-        old_name_live: old_name_views(&views.getattr("live")?)?,
-        old_name_missing: old_name_views(&views.getattr("missing")?)?,
-        query_artifacts: names(&plan.getattr("query_diff_artifact_candidates")?)?,
+        retained_archives: archived_list(&native_field(plan, "retained_archives")?, &planned_at)?,
+        old_name_drops: old_name_views(&native_field(&views, "drops")?)?,
+        old_name_live: old_name_views(&native_field(&views, "live")?)?,
+        old_name_missing: old_name_views(&native_field(&views, "missing")?)?,
+        query_artifacts: names(&native_field(plan, "query_diff_artifact_candidates")?)?,
         state_prunes,
         skipped_relations,
-        skipped_schemas: source_schemas(&plan.getattr("skipped_schemas")?, false)?,
-        blocked_schemas: source_schemas(&plan.getattr("blocked_schemas")?, true)?,
+        skipped_schemas: source_schemas(&native_field(plan, "skipped_schemas")?, false)?,
+        blocked_schemas: source_schemas(&native_field(plan, "blocked_schemas")?, true)?,
     })
 }
 

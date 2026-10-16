@@ -9,6 +9,7 @@ use crate::bindings::_helpers::discovery::locations::project_relative_path;
 use crate::bindings::_helpers::event_exporting::scope::current_scope;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
@@ -88,7 +89,7 @@ impl<'py> ProjectDir<'py> {
             return Ok(None);
         }
         let cached: Bound<'py, PyAny> = call_with(
-            &scope.getattr("cached_extensions")?,
+            &native_field(&scope, "cached_extensions")?,
             &[("project_dir", self.path.clone())],
         )?;
         Ok((!cached.is_none()).then_some(cached))
@@ -147,7 +148,7 @@ pub(crate) fn provider_by_name<'py>(providers: &Bound<'py, PyAny>) -> PyResult<B
     let by_name: Bound<'py, PyDict> = PyDict::new(providers.py());
     for provider in providers.try_iter()? {
         let provider: Bound<'py, PyAny> = provider?;
-        by_name.set_item(provider.getattr("name")?, provider)?;
+        by_name.set_item(native_field(&provider, "name")?, provider)?;
     }
     Ok(by_name)
 }

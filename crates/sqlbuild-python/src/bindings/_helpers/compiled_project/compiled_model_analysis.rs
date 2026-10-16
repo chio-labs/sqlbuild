@@ -25,6 +25,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::ModelInputRec
 use crate::bindings::_helpers::record_behaviours::lineage_facts::{
     confidence_member, transform_kind_member,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const COMPILE_PHASE: &str = "compile";
 const MODEL_RESOURCE: &str = "model";
@@ -156,8 +157,8 @@ fn located(
     }
     let cleaned: Cow<'_, str> = resolved_cleaned_sql(outcome).map_err(compiler_error)?;
     let model_file: &Bound<'_, PyAny> = input.model_file.bind(py);
-    let authored: String = model_file.getattr("contents")?.extract()?;
-    let query: String = model_file.getattr("query_sql")?.extract()?;
+    let authored: String = native_field(model_file, "contents")?.extract()?;
+    let query: String = native_field(model_file, "query_sql")?.extract()?;
     let expansion = &input.expansion;
     let passes: Vec<Vec<Expansion>> = vec![
         expansion.declaration_spans.clone(),

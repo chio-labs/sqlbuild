@@ -22,6 +22,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::{field, replaced};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -502,7 +503,7 @@ fn replace<'py>(
 fn model_contents<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     match model.cast::<NativeModelFile>() {
         Ok(native) => Ok(native.get().texts(model.py()).1.clone().into_any()),
-        Err(_) => model.getattr("contents"),
+        Err(_) => native_field(model, "contents"),
     }
 }
 
@@ -510,7 +511,7 @@ fn model_contents<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 fn model_file_path<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     match model.cast::<NativeModelFile>() {
         Ok(native) => Ok(native.get().paths(model.py()).0.clone()),
-        Err(_) => model.getattr("file_path"),
+        Err(_) => native_field(model, "file_path"),
     }
 }
 
@@ -521,8 +522,8 @@ fn edited_model<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
     let Ok(native) = model.cast::<NativeModelFile>() else {
-        let current = model.getattr("contents")?;
-        let start = current.call_method1("index", (model.getattr("query_sql")?,))?;
+        let current = native_field(model, "contents")?;
+        let start = current.call_method1("index", (native_field(model, "query_sql")?,))?;
         let query = text
             .get_item(pyo3::types::PySlice::new(
                 py,

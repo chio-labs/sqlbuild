@@ -30,6 +30,7 @@ use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_e
 use crate::bindings::_helpers::output_capture::values::{
     freeze, object, output_error, pass_text, python_text, unencodable,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const THREAD_NAME: &str = "sqlbuild-output-exporter";
 /// Attribute naming a capture thread's worker, for the exit hook.
@@ -147,7 +148,7 @@ fn stop_output_capture_threads(py: Python<'_>) -> PyResult<()> {
     for thread in threads {
         if thread.call_method0("is_alive")?.is_truthy()? {
             call_with(
-                &thread.getattr("join")?,
+                &native_field(&thread, "join")?,
                 &[("timeout", object(py, EXIT_JOIN_SECONDS)?)],
             )?;
         }
@@ -471,7 +472,7 @@ impl OutputCaptureDispatcher {
         {
             return Ok(());
         }
-        let stream = match stream.getattr("value")?.extract::<String>()?.as_str() {
+        let stream = match native_field(stream, "value")?.extract::<String>()?.as_str() {
             "stderr" => OutputStream::Stderr,
             _ => OutputStream::Stdout,
         };
@@ -518,7 +519,7 @@ impl OutputCaptureDispatcher {
         }
         let thread = self.thread.bind(py);
         call_with(
-            &thread.getattr("join")?,
+            &native_field(thread, "join")?,
             &[(
                 "timeout",
                 object(py, shared.shutdown_timeout_seconds.max(0.0))?,

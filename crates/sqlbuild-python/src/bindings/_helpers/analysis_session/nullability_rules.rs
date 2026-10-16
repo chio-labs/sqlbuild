@@ -2,6 +2,7 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Py, PyAny, PyAnyMethods, PyDictMethods, PyErr, Python};
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_analysis::assembly::analysis_session::models::NullabilityCallback;
@@ -31,7 +32,8 @@ pub(crate) fn nullability_callback(
                     .map(|value| enum_type.call1((*value,)))
                     .collect::<Result<Vec<_>, _>>()?;
                 let result = rule.call1((PyTuple::new(python, values)?,))?;
-                let value: String = enum_type.call1((result,))?.getattr("value")?.extract()?;
+                let value: String =
+                    native_field(&enum_type.call1((result,))?, "value")?.extract()?;
                 Ok(NULLABILITIES
                     .into_iter()
                     .find(|known| *known == value)

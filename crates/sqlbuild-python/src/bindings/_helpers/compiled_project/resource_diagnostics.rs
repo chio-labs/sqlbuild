@@ -22,6 +22,7 @@ use sqlbuild_analysis::resource_diagnostics::main::yaml_help::yaml_help;
 use sqlbuild_analysis::resource_diagnostics::models::{CursorModel, HeaderHelp};
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MISSING_DESCRIPTION_CODE: &str = "P010";
 const CURSOR_WITHOUT_INPUTS_CODE: &str = "P011";
@@ -252,8 +253,10 @@ fn missing_descriptions<'py>(
     for record in project.inputs() {
         let model_file: &Bound<'py, PyAny> = record.model_file.bind(py);
         let name: String = record.name.clone();
-        let path: String = model_file.getattr("relative_path")?.str()?.extract()?;
-        let contents: String = model_file.getattr("contents")?.extract()?;
+        let path: String = native_field(model_file, "relative_path")?
+            .str()?
+            .extract()?;
+        let contents: String = native_field(model_file, "contents")?.extract()?;
         let entry: String = format!("description \"What one row of {name} represents\"");
         let help: String = header_help(&HeaderHelp {
             kind: "model",
@@ -301,10 +304,12 @@ fn missing_descriptions<'py>(
         let (_, _, entry, schema_file) = seed.parts();
         let entry: &Bound<'py, PyAny> = entry.bind(py);
         let schema_file: &Bound<'py, PyAny> = schema_file.bind(py);
-        let name: String = entry.getattr("name")?.extract()?;
-        let description: Option<String> = entry.getattr("description")?.extract()?;
-        let path: String = schema_file.getattr("relative_path")?.str()?.extract()?;
-        let contents_value = schema_file.getattr("contents")?;
+        let name: String = native_field(entry, "name")?.extract()?;
+        let description: Option<String> = native_field(entry, "description")?.extract()?;
+        let path: String = native_field(schema_file, "relative_path")?
+            .str()?
+            .extract()?;
+        let contents_value = native_field(schema_file, "contents")?;
         let contents = contents_value.downcast::<PyString>()?.to_str()?;
         found.push(diagnostics.described(
             ("seed", &name, Some("seed")),
@@ -364,10 +369,12 @@ fn source_description<'py>(
     let attached = source.attached();
     let name: &str = &attached.name;
     let source_file: &Bound<'py, PyAny> = attached.source_file.bind(py);
-    let path: String = source_file.getattr("relative_path")?.str()?.extract()?;
-    let contents_value = source_file.getattr("contents")?;
+    let path: String = native_field(source_file, "relative_path")?
+        .str()?
+        .extract()?;
+    let contents_value = native_field(source_file, "contents")?;
     let contents = contents_value.downcast::<PyString>()?.to_str()?;
-    let loader_name: Option<String> = attached.entry.bind(py).getattr("loader")?.extract()?;
+    let loader_name: Option<String> = native_field(attached.entry.bind(py), "loader")?.extract()?;
     let loader: Option<(&String, &LoaderRow)> = loader_name
         .as_ref()
         .and_then(|loader| diagnostics.settings.loaders.get_key_value(loader));
@@ -408,8 +415,10 @@ fn function_description<'py>(
     let attached = &function.attached;
     let name: &str = &attached.name;
     let function_file: &Bound<'py, PyAny> = attached.function_file.bind(py);
-    let path: String = function_file.getattr("relative_path")?.str()?.extract()?;
-    let contents: String = function_file.getattr("contents")?.extract()?;
+    let path: String = native_field(function_file, "relative_path")?
+        .str()?
+        .extract()?;
+    let contents: String = native_field(function_file, "contents")?.extract()?;
     let resource_type: &str = if attached.return_columns.is_empty() {
         "udf"
     } else {
@@ -471,7 +480,7 @@ fn cursor_without_inputs<'py>(
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
     for record in project.inputs() {
         let values: Bound<'py, PyDict> =
-            record.config.bind(py).getattr("values")?.downcast_into()?;
+            native_field(record.config.bind(py), "values")?.downcast_into()?;
         let kinds: Vec<&str> = record
             .references
             .iter()
@@ -496,8 +505,10 @@ fn cursor_without_inputs<'py>(
         ) else {
             continue;
         };
-        let path: String = model_file.getattr("relative_path")?.str()?.extract()?;
-        let contents: String = model_file.getattr("contents")?.extract()?;
+        let path: String = native_field(model_file, "relative_path")?
+            .str()?
+            .extract()?;
+        let contents: String = native_field(model_file, "contents")?.extract()?;
         let span: Option<(usize, usize)> =
             model_header_entry_span(&contents, CURSOR_KEY).map_err(PyValueError::new_err)?;
         let start: TextPosition = text_position(&contents, span.map_or(0, |span| span.0));

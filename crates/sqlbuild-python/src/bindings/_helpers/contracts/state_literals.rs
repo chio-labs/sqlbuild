@@ -15,6 +15,7 @@ const BOOLEAN_TYPE: &str = "boolean";
 const TIMESTAMP_TYPE: &str = "timestamp";
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_state::freshness::constants::TEXT_TIMESTAMP_STATE_VALUE_TYPE as TEXT_TIMESTAMP_TYPE;
 const DATE_TYPE: &str = "date";
 const JSON_TYPE: &str = "json";
@@ -62,8 +63,8 @@ pub(crate) fn render_state_sql_literal(
         TIMESTAMP_TYPE | TEXT_TIMESTAMP_TYPE => timestamp_literal(value, declared_type),
         DATE_TYPE => {
             let datetime = py.import(DATETIME_MODULE)?;
-            if value.is_instance(&datetime.getattr("datetime")?)?
-                || !value.is_instance(&datetime.getattr("date")?)?
+            if value.is_instance(&native_field(&datetime, "datetime")?)?
+                || !value.is_instance(&native_field(&datetime, "date")?)?
             {
                 return Err(rendering_error(
                     py,
@@ -83,15 +84,15 @@ pub(crate) fn render_state_sql_literal(
 fn timestamp_literal(value: &Bound<'_, PyAny>, declared_type: &str) -> PyResult<String> {
     let py: Python<'_> = value.py();
     let datetime = py.import(DATETIME_MODULE)?;
-    if !value.is_instance(&datetime.getattr("datetime")?)? {
+    if !value.is_instance(&native_field(&datetime, "datetime")?)? {
         return Err(rendering_error(
             py,
             "state timestamp columns require datetime values",
         ));
     }
-    let utc: Bound<'_, PyAny> = datetime.getattr("UTC")?;
+    let utc: Bound<'_, PyAny> = native_field(&datetime, "UTC")?;
     let normalized: Bound<'_, PyAny> =
-        if value.getattr("tzinfo")?.is_none() || value.call_method0("utcoffset")?.is_none() {
+        if native_field(value, "tzinfo")?.is_none() || value.call_method0("utcoffset")?.is_none() {
             let arguments: Bound<'_, PyDict> = PyDict::new(py);
             arguments.set_item("tzinfo", &utc)?;
             value.call_method("replace", (), Some(&arguments))?

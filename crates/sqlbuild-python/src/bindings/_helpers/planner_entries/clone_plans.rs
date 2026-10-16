@@ -23,6 +23,7 @@ use crate::bindings::_helpers::planner_resolution::orchestration::{Resolution, r
 use crate::bindings::_helpers::planner_selection::selectors::resolve_graph_selection;
 use crate::bindings::_helpers::planner_strategy::strategy::materialization_of;
 use crate::bindings::_helpers::planner_warehouse::source_columns::gather_source_columns;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::PyRef;
@@ -108,16 +109,22 @@ fn clone_resolution<'py>(
     (adapter, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<CloneResolution<'py>> {
     let py = project.py();
-    let model_locations = object(py, build_model_locations(&project.getattr("models")?)?)?;
-    let seed_locations = object(py, build_seed_locations(&project.getattr("seeds")?)?)?;
+    let model_locations = object(
+        py,
+        build_model_locations(&native_field(project, "models")?)?,
+    )?;
+    let seed_locations = object(py, build_seed_locations(&native_field(project, "seeds")?)?)?;
     let function_locations = object(
         py,
-        build_function_locations(&project.getattr("functions")?)?,
+        build_function_locations(&native_field(project, "functions")?)?,
     )?;
     let source_map = PyDict::new(py);
-    for source in source_project.getattr("sources")?.try_iter()? {
+    for source in native_field(source_project, "sources")?.try_iter()? {
         let source = source?;
-        source_map.set_item(source.getattr("name")?, source.getattr("source_entry")?)?;
+        source_map.set_item(
+            native_field(&source, "name")?,
+            native_field(&source, "source_entry")?,
+        )?;
     }
     let source_warehouse_columns = object(
         py,
@@ -149,7 +156,7 @@ fn model_entry<'py>(
         &[
             ("key", model_reads::model_key(model)?),
             ("name", model_reads::name_object(model)?),
-            ("relative_path", model.getattr("relative_path")?),
+            ("relative_path", native_field(model, "relative_path")?),
             ("materialization_type", materialization_type),
             ("action", planner_type(py, RecordId::PlanAction, action)?),
             (
@@ -171,9 +178,9 @@ fn clone_model_entries<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let resolution = clone_resolution(project, source_project, (adapter, connection))?;
-    let selected = plan.getattr("selected_keys")?;
+    let selected = native_field(plan, "selected_keys")?;
     let entries = PyDict::new(py);
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         if !selected.contains(model_reads::model_key(&model)?)? || disabled_model(&model)? {
             continue;
@@ -181,9 +188,9 @@ fn clone_model_entries<'py>(
         let materialization_type = materialization_of(&model)?;
         let resolved_sql = if materialization_type.eq(VIEW_MATERIALIZATION)? {
             let functions = PyDict::new(py);
-            for function in project.getattr("functions")?.try_iter()? {
+            for function in native_field(project, "functions")?.try_iter()? {
                 let function = function?;
-                functions.set_item(function.getattr("name")?, function)?;
+                functions.set_item(native_field(&function, "name")?, function)?;
             }
             let context = Bound::new(
                 py,
@@ -232,7 +239,7 @@ fn clone_model_entries<'py>(
             model_entry(&model, materialization_type, resolved_sql)?,
         )?;
     }
-    in_order(&entries, &plan.getattr("execution_order")?)
+    in_order(&entries, &native_field(plan, "execution_order")?)
 }
 
 fn clone_source_entries<'py>(
@@ -242,25 +249,25 @@ fn clone_source_entries<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let entries = PyDict::new(py);
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        let entry = source.getattr("source_entry")?;
-        if !selected.contains(source.getattr("key")?)?
-            || !entry.getattr("managed")?.is_truthy()?
-            || entry.getattr("loader")?.is_none()
-            || !entry.getattr("expression")?.is_none()
+        let entry = native_field(&source, "source_entry")?;
+        if !selected.contains(native_field(&source, "key")?)?
+            || !native_field(&entry, "managed")?.is_truthy()?
+            || native_field(&entry, "loader")?.is_none()
+            || !native_field(&entry, "expression")?.is_none()
         {
             continue;
         }
-        let table = entry.getattr("table")?;
+        let table = native_field(&entry, "table")?;
         let relation_name = if table.is_truthy()? {
             table
         } else {
-            entry.getattr("name")?
+            native_field(&entry, "name")?
         };
         let kwargs = PyDict::new(py);
-        kwargs.set_item("database", entry.getattr("database")?)?;
-        kwargs.set_item("schema", entry.getattr("schema")?)?;
+        kwargs.set_item("database", native_field(&entry, "database")?)?;
+        kwargs.set_item("schema", native_field(&entry, "schema")?)?;
         kwargs.set_item("name", &relation_name)?;
         let qualified = adapter
             .getattr("render_qualified_name")?
@@ -269,21 +276,21 @@ fn clone_source_entries<'py>(
             (),
             Some(&{
                 let location = PyDict::new(py);
-                location.set_item("database", entry.getattr("database")?)?;
-                location.set_item("schema", entry.getattr("schema")?)?;
+                location.set_item("database", native_field(&entry, "database")?)?;
+                location.set_item("schema", native_field(&entry, "schema")?)?;
                 location.set_item("name", relation_name)?;
                 location.set_item("qualified_name", qualified)?;
                 location
             }),
         )?;
         entries.set_item(
-            source.getattr("key")?,
+            native_field(&source, "key")?,
             planner_model(
                 py,
                 RecordId::CloneSourcePlanEntry,
                 &[
-                    ("key", source.getattr("key")?),
-                    ("name", source.getattr("name")?),
+                    ("key", native_field(&source, "key")?),
+                    ("name", native_field(&source, "name")?),
                     ("destination", destination),
                 ],
             )?,
@@ -299,11 +306,11 @@ fn clone_function_entries<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let resolution = clone_resolution(project, source_project, (adapter, connection))?;
-    let selected = plan.getattr("selected_keys")?;
+    let selected = native_field(plan, "selected_keys")?;
     let entries = PyDict::new(py);
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(project, "functions")?.try_iter()? {
         let function = function?;
-        if !selected.contains(function.getattr("key")?)? {
+        if !selected.contains(native_field(&function, "key")?)? {
             continue;
         }
         let body_sql = resolve_function_sql(
@@ -353,9 +360,9 @@ fn clone_function_entries<'py>(
                 ("packages", field("packages")?),
             ],
         )?;
-        entries.set_item(function.getattr("key")?, entry)?;
+        entries.set_item(native_field(&function, "key")?, entry)?;
     }
-    in_order(&entries, &plan.getattr("execution_order")?)
+    in_order(&entries, &native_field(plan, "execution_order")?)
 }
 
 fn seed_entry<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -364,17 +371,17 @@ fn seed_entry<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         py,
         RecordId::SeedPlanEntry,
         &[
-            ("key", seed.getattr("key")?),
-            ("name", seed.getattr("name")?),
-            ("destination", seed.getattr("destination")?),
+            ("key", native_field(seed, "key")?),
+            ("name", native_field(seed, "name")?),
+            ("destination", native_field(seed, "destination")?),
             (
                 "file_path",
-                seed.getattr("seed_file")?.getattr("file_path")?,
+                native_field(seed, "seed_file")?.getattr("file_path")?,
             ),
             ("columns", PyTuple::empty(py).into_any()),
             (
                 "csv_settings",
-                seed.getattr("schema_entry")?.getattr("csv_settings")?,
+                native_field(seed, "schema_entry")?.getattr("csv_settings")?,
             ),
         ],
     )
@@ -387,7 +394,7 @@ fn seed_entries<'py>(
     wanted: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for seed in project.getattr("seeds")?.try_iter()? {
+    for seed in native_field(project, "seeds")?.try_iter()? {
         let seed = seed?;
         if wanted.contains(seed.getattr(field)?)? {
             entries.push(seed_entry(&seed)?);
@@ -402,7 +409,7 @@ fn origin_model_entries<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         if !selected_names.contains(model_reads::name_object(&model)?)? || disabled_model(&model)? {
             continue;
@@ -416,7 +423,7 @@ fn origin_model_entries<'py>(
 fn names_of<'py>(entries: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in entries.try_iter()? {
-        names.push(entry?.getattr("name")?);
+        names.push(native_field(&entry?, "name")?);
     }
     Ok(PyFrozenSet::new(entries.py(), names)?.into_any())
 }
@@ -429,12 +436,12 @@ fn origin_source_entries<'py>(
     let py = project.py();
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut order: Vec<Bound<'py, PyAny>> = Vec::new();
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        if selected_names.contains(source.getattr("name")?)? {
-            keys.push(source.getattr("key")?);
+        if selected_names.contains(native_field(&source, "name")?)? {
+            keys.push(native_field(&source, "key")?);
         }
-        order.push(source.getattr("key")?);
+        order.push(native_field(&source, "key")?);
     }
     clone_source_entries(
         project,
@@ -481,7 +488,7 @@ fn run_clone_planning<'py>(
         (&adapter, &connection),
         &destination_sources,
     )?;
-    let seeds = seed_entries(&project, "key", &plan.getattr("selected_keys")?)?;
+    let seeds = seed_entries(&project, "key", &native_field(&plan, "selected_keys")?)?;
     let functions = clone_function_entries(
         (&project, &plan),
         (&adapter, &connection),
@@ -490,13 +497,13 @@ fn run_clone_planning<'py>(
     let mut sources = PyTuple::empty(py).into_any();
     if destination_sources
         .getattr("effective_target_name")?
-        .eq(project.getattr("effective_target_name")?)?
+        .eq(native_field(&project, "effective_target_name")?)?
     {
         sources = clone_source_entries(
             &project,
             (
-                &plan.getattr("selected_keys")?,
-                &plan.getattr("execution_order")?,
+                &native_field(&plan, "selected_keys")?,
+                &native_field(&plan, "execution_order")?,
             ),
             &adapter,
         )?;
@@ -512,18 +519,18 @@ fn run_clone_planning<'py>(
     let origin_by_name = PyDict::new(py);
     for entry in origin_sources.try_iter()? {
         let entry = entry?;
-        origin_by_name.set_item(entry.getattr("name")?, entry)?;
+        origin_by_name.set_item(native_field(&entry, "name")?, entry)?;
     }
     let mut kept_sources: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut kept_origins: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in sources.try_iter()? {
         let entry = entry?;
-        let Some(origin) = origin_by_name.get_item(entry.getattr("name")?)? else {
+        let Some(origin) = origin_by_name.get_item(native_field(&entry, "name")?)? else {
             continue;
         };
         if origin
             .getattr("destination")?
-            .ne(entry.getattr("destination")?)?
+            .ne(native_field(&entry, "destination")?)?
         {
             kept_origins.push(origin);
             kept_sources.push(entry);

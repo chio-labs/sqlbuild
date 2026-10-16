@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyString, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -39,9 +40,9 @@ fn retention<'py>(
     let mut policy: Option<(Bound<'py, PyAny>, &str)> = None;
     if let Some(entry) = entry {
         if !target.is_none() {
-            policy = present(target.getattr("time_travel_retention")?).map(|p| (p, "TARGET"));
+            policy = present(native_field(target, "time_travel_retention")?).map(|p| (p, "TARGET"));
         }
-        if let Some(found) = present(entry.getattr("time_travel_retention")?) {
+        if let Some(found) = present(native_field(entry, "time_travel_retention")?) {
             policy = Some((found, "MATERIALIZATION"));
         }
         if !target.is_none()
@@ -60,8 +61,8 @@ fn retention<'py>(
     call_with(
         &resolved,
         &[
-            ("desired_days", policy.getattr("desired_days")?),
-            ("unmanaged", policy.getattr("unmanaged")?),
+            ("desired_days", native_field(&policy, "desired_days")?),
+            ("unmanaged", native_field(&policy, "unmanaged")?),
             ("source", source(py, class, member)?),
         ],
     )
@@ -77,9 +78,9 @@ fn table_type<'py>(
     let mut declared: Option<(Bound<'py, PyAny>, &str)> = None;
     if let Some(entry) = entry {
         if !target.is_none() {
-            declared = present(target.getattr("default_table_type")?).map(|v| (v, "TARGET"));
+            declared = present(native_field(target, "default_table_type")?).map(|v| (v, "TARGET"));
         }
-        if let Some(found) = present(entry.getattr("table_type")?) {
+        if let Some(found) = present(native_field(entry, "table_type")?) {
             declared = Some((found, "MATERIALIZATION"));
         }
     }

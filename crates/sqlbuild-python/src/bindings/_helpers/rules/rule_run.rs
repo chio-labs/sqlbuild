@@ -13,6 +13,7 @@ use sqlbuild_rules::rule_results::models::RuleFinding;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::fields::field as record_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::fact_replay::project_models;
@@ -150,7 +151,7 @@ pub(crate) fn freed_memory_released(py: Python<'_>) {
     }
     let trim = || -> PyResult<()> {
         let process: Bound<'_, PyAny> = imported(py, CTYPES_MODULE, "CDLL")?.call1((py.None(),))?;
-        let _ = process.getattr("malloc_trim")?.call1((0,))?;
+        let _ = native_field(&process, "malloc_trim")?.call1((0,))?;
         Ok(())
     };
     let _ = trim();

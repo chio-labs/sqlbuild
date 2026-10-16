@@ -12,6 +12,7 @@ use sqlbuild_cli::compute_logs::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const EPOCH_TEXT: &str = "1970-01-01T00:00:00+00:00";
 const UTC_OFFSET: &str = "+00:00";
@@ -68,7 +69,7 @@ pub(crate) fn capture_id(value: &Bound<'_, PyAny>) -> PyResult<String> {
 pub(crate) fn stream_index(stream: &Bound<'_, PyAny>) -> PyResult<usize> {
     let py = stream.py();
     if stream.is_instance(&host::entry(py, ExecutorHost::ComputeLogStream)?)? {
-        let value: String = stream.getattr("value")?.extract()?;
+        let value: String = native_field(stream, "value")?.extract()?;
         if let Some(index) = STREAM_VALUES.iter().position(|name| *name == value) {
             return Ok(index);
         }
@@ -84,7 +85,7 @@ fn instant(value: &Bound<'_, PyAny>) -> PyResult<CaptureInstant> {
     let py = value.py();
     let text: String = value.call_method0("isoformat")?.extract()?;
     let text = text.replace(UTC_OFFSET, UTC_SUFFIX);
-    if value.getattr("tzinfo")?.is_none() || value.call_method0("utcoffset")?.is_none() {
+    if native_field(value, "tzinfo")?.is_none() || value.call_method0("utcoffset")?.is_none() {
         return Ok(CaptureInstant {
             micros: 0,
             aware: false,
@@ -118,8 +119,8 @@ fn count(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<i64> {
 /// A Python `CaptureMetadata` or `FinalCaptureMetadata` as a native capture document.
 pub(crate) fn document(metadata: &Bound<'_, PyAny>) -> PyResult<CaptureDocument> {
     let py = metadata.py();
-    let invocation_id = capture_id(&metadata.getattr("invocation_id")?)?;
-    let version = metadata.getattr("format_version")?;
+    let invocation_id = capture_id(&native_field(metadata, "invocation_id")?)?;
+    let version = native_field(metadata, "format_version")?;
     let format_version: i64 = if is_exact_int(&version) {
         version.extract().unwrap_or(0)
     } else {
@@ -128,11 +129,11 @@ pub(crate) fn document(metadata: &Bound<'_, PyAny>) -> PyResult<CaptureDocument>
     let completion =
         if metadata.is_instance(&host::entry(py, ExecutorHost::FinalCaptureMetadata)?)? {
             Some(CaptureCompletion {
-                completed_at: instant(&metadata.getattr("completed_at")?)?,
-                exit_code: count(py, &metadata.getattr("exit_code")?)?,
-                stdout_bytes: count(py, &metadata.getattr("stdout_bytes")?)?,
-                stderr_bytes: count(py, &metadata.getattr("stderr_bytes")?)?,
-                diagnostics_bytes: count(py, &metadata.getattr("diagnostics_bytes")?)?,
+                completed_at: instant(&native_field(metadata, "completed_at")?)?,
+                exit_code: count(py, &native_field(metadata, "exit_code")?)?,
+                stdout_bytes: count(py, &native_field(metadata, "stdout_bytes")?)?,
+                stderr_bytes: count(py, &native_field(metadata, "stderr_bytes")?)?,
+                diagnostics_bytes: count(py, &native_field(metadata, "diagnostics_bytes")?)?,
             })
         } else {
             None
@@ -140,12 +141,12 @@ pub(crate) fn document(metadata: &Bound<'_, PyAny>) -> PyResult<CaptureDocument>
     Ok(CaptureDocument {
         format_version,
         invocation_id,
-        command: metadata.getattr("command")?.extract()?,
-        project_dir: metadata.getattr("project_dir")?.extract()?,
-        started_at: instant(&metadata.getattr("started_at")?)?,
-        capture_date: metadata.getattr("capture_date")?.extract()?,
-        target: metadata.getattr("target")?.extract()?,
-        run_id: metadata.getattr("run_id")?.extract()?,
+        command: native_field(metadata, "command")?.extract()?,
+        project_dir: native_field(metadata, "project_dir")?.extract()?,
+        started_at: instant(&native_field(metadata, "started_at")?)?,
+        capture_date: native_field(metadata, "capture_date")?.extract()?,
+        target: native_field(metadata, "target")?.extract()?,
+        run_id: native_field(metadata, "run_id")?.extract()?,
         completion,
     })
 }

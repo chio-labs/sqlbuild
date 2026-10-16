@@ -23,6 +23,7 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     NativeCompiledModel, SqlRuleInputs, SqlRuleKey,
 };
 use crate::bindings::_helpers::records::fields::field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
@@ -247,8 +248,8 @@ fn sql_rule_model(model: Bound<'_, PyAny>, keyed: bool) -> PyResult<Option<SqlRu
     let key: Option<SqlRuleKey> = keyed
         .then(|| -> PyResult<SqlRuleKey> {
             Ok(SqlRuleKey {
-                authored_sql: model.getattr("authored_sql")?.extract()?,
-                query_sql: model.getattr("query_sql")?.extract()?,
+                authored_sql: native_field(&model, "authored_sql")?.extract()?,
+                query_sql: native_field(&model, "query_sql")?.extract()?,
                 contract: contract_text(&model)?,
             })
         })
@@ -305,7 +306,7 @@ fn model_rule_identities(run: &SqlRun<'_, '_>, lint_key: &str) -> PyResult<Vec<(
 /// Canonical text of a hand-built model's dynamic column contract that SQL rule findings depend on.
 fn contract_text(model: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     let py: Python<'_> = model.py();
-    let contract: Bound<'_, PyAny> = model.getattr("dynamic_column_contract")?;
+    let contract: Bound<'_, PyAny> = native_field(model, "dynamic_column_contract")?;
     if contract.is_none() {
         return Ok(None);
     }

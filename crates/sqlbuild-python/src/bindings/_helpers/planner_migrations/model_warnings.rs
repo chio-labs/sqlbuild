@@ -4,6 +4,7 @@ use crate::bindings::_helpers::planner_migrations::column_warnings::{
     missing_origin_outcome, warning,
 };
 use crate::bindings::_helpers::planner_migrations::constants::HIDDEN_ORIGIN_REMEDY;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyString;
 use sqlbuild_analysis::planner_migrations::main::model_warning::model_warning;
@@ -11,35 +12,35 @@ use sqlbuild_analysis::planner_migrations::models::ModelWarning;
 
 pub(super) fn entry_warning<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = entry.py();
-    let name: String = entry.getattr("model_name")?.extract()?;
-    let origin = display(&entry.getattr("origin")?)?;
-    let destination = display(&entry.getattr("destination")?)?;
-    let decision: String = entry.getattr("decision")?.extract()?;
-    let completed = entry.getattr("completed_at")?;
+    let name: String = native_field(entry, "model_name")?.extract()?;
+    let origin = display(&native_field(entry, "origin")?)?;
+    let destination = display(&native_field(entry, "destination")?)?;
+    let decision: String = native_field(entry, "decision")?.extract()?;
+    let completed = native_field(entry, "completed_at")?;
     let completed: Option<String> = if completed.is_none() {
         None
     } else {
         Some(completed.call_method0("isoformat")?.extract()?)
     };
-    let target: String = entry.getattr("target_label")?.extract()?;
-    let policy = entry.getattr("missing_origin_policy")?;
+    let target: String = native_field(entry, "target_label")?.extract()?;
+    let policy = native_field(entry, "missing_origin_policy")?;
     let remedy: String = HIDDEN_ORIGIN_REMEDY.to_owned();
     let outcome: String = missing_origin_outcome(&policy)?.to_owned();
     let findings: String = PyString::new(py, "; ")
-        .call_method1("join", (entry.getattr("compatibility_findings")?,))?
+        .call_method1("join", (native_field(entry, "compatibility_findings")?,))?
         .extract()?;
     let facts = ModelWarning {
         name: &name,
         origin: &origin,
         destination: &destination,
         decision: &decision,
-        manual: entry.getattr("discovery")?.eq("manual")?,
+        manual: native_field(entry, "discovery")?.eq("manual")?,
         completed: completed.as_deref(),
         target: &target,
-        hidden: entry.getattr("origin_hidden")?.is_truthy()?,
-        missing: entry.getattr("origin_missing")?.is_truthy()?,
+        hidden: native_field(entry, "origin_hidden")?.is_truthy()?,
+        missing: native_field(entry, "origin_missing")?.is_truthy()?,
         deny: policy.eq("deny")?,
-        blocked: entry.getattr("blocks_build")?.is_truthy()?,
+        blocked: native_field(entry, "blocks_build")?.is_truthy()?,
         remedy: &remedy,
         outcome: &outcome,
         findings: &findings,
@@ -50,10 +51,10 @@ pub(super) fn entry_warning<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Option<B
 }
 
 fn display(location: &Bound<'_, PyAny>) -> PyResult<String> {
-    let qualified = location.getattr("qualified_name")?;
+    let qualified = native_field(location, "qualified_name")?;
     if qualified.is_truthy()? {
         qualified.extract()
     } else {
-        location.getattr("name")?.extract()
+        native_field(location, "name")?.extract()
     }
 }

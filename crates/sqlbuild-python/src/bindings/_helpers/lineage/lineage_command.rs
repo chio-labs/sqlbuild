@@ -38,6 +38,7 @@ use crate::bindings::_helpers::lineage::lineage_cache::{
 };
 use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views, lineage_keys};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -146,8 +147,8 @@ fn reject_unit_tests(
     let options: Bound<'_, PyDict> = keywords(
         py,
         &[
-            ("select", &request.getattr("select")?),
-            ("exclude", &request.getattr("exclude")?),
+            ("select", &native_field(request, "select")?),
+            ("exclude", &native_field(request, "exclude")?),
             ("discovered_inputs", discovered),
         ],
     )?;
@@ -165,7 +166,7 @@ fn prepare_source<'py>(
     let fingerprint: Option<String> = if compiled {
         None
     } else {
-        lineage_fingerprint(project_dir, &request.getattr("cli_vars")?)?
+        lineage_fingerprint(project_dir, &native_field(request, "cli_vars")?)?
     };
     if let Some(fingerprint) = &fingerprint
         && let Some(index) = read_lineage_cache(py, &directory, fingerprint)?
@@ -181,19 +182,23 @@ fn prepare_source<'py>(
             Some(&keywords(
                 py,
                 &[
-                    ("project_config", &discovered.getattr("project_config")?),
-                    ("local_config", &discovered.getattr("local_config")?),
+                    (
+                        "project_config",
+                        &native_field(&discovered, "project_config")?,
+                    ),
+                    ("local_config", &native_field(&discovered, "local_config")?),
                 ],
             )?),
         )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
-    let no_validation: bool = request.getattr("no_sql_validation")?.extract::<bool>()? || !compiled;
+    let no_validation: bool =
+        native_field(request, "no_sql_validation")?.extract::<bool>()? || !compiled;
     let options: Bound<'py, PyDict> = keywords(
         py,
         &[
             ("discovered_inputs", &discovered),
             ("adapter", &adapter),
-            ("cli_vars", &request.getattr("cli_vars")?),
+            ("cli_vars", &native_field(request, "cli_vars")?),
         ],
     )?;
     options.set_item("no_sql_validation", no_validation)?;
@@ -225,15 +230,17 @@ fn compiled_graph_error(py: Python<'_>, message: &str, help: bool) -> PyErr {
 }
 
 fn semantic_use(value: &Bound<'_, PyAny>) -> PyResult<SemanticUse> {
-    let source: Bound<'_, PyAny> = value.getattr("source")?;
+    let source: Bound<'_, PyAny> = native_field(value, "source")?;
     Ok(SemanticUse {
-        consumer_model: value.getattr("consumer_model")?.str()?.extract()?,
-        context: value.getattr("context")?.str()?.extract()?,
-        expression: value.getattr("expression_sql")?.str()?.extract()?,
+        consumer_model: native_field(value, "consumer_model")?.str()?.extract()?,
+        context: native_field(value, "context")?.str()?.extract()?,
+        expression: native_field(value, "expression_sql")?.str()?.extract()?,
         source: lineage_column(&source)?,
-        confidence: value.getattr("confidence")?.getattr("value")?.extract()?,
-        line: value.getattr("line")?.extract()?,
-        column: value.getattr("column")?.extract()?,
+        confidence: native_field(value, "confidence")?
+            .getattr("value")?
+            .extract()?,
+        line: native_field(value, "line")?.extract()?,
+        column: native_field(value, "column")?.extract()?,
     })
 }
 
@@ -255,14 +262,14 @@ fn semantic_uses(
             false,
         ));
     };
-    let targets: Vec<String> = strings(&request.getattr("targets")?)?;
+    let targets: Vec<String> = strings(&native_field(request, "targets")?)?;
     let model_names: Vec<String> = if targets.is_empty() {
         let options: Bound<'_, PyDict> = keywords(
             py,
             &[
                 ("graph", graph),
-                ("select", &request.getattr("select")?),
-                ("exclude", &request.getattr("exclude")?),
+                ("select", &native_field(request, "select")?),
+                ("exclude", &native_field(request, "exclude")?),
             ],
         )?;
         let keys: Vec<LineageKey> = lineage_keys(
@@ -284,7 +291,7 @@ fn semantic_uses(
     };
     let uses: Bound<'_, PyAny> =
         registry::native(py, NativeAttr::BuildDirectSemanticUses)?.call1((
-            graph.getattr("project")?,
+            native_field(graph, "project")?,
             adapter.call_method0("sql_analysis_dialect")?,
             PyFrozenSet::new(py, model_names)?,
         ))?;
@@ -295,18 +302,18 @@ fn semantic_uses(
 
 fn lineage_column(column: &Bound<'_, PyAny>) -> PyResult<LineageColumn> {
     Ok(LineageColumn {
-        resource_type: column.getattr("resource_type")?.str()?.extract()?,
-        resource_name: column.getattr("resource_name")?.extract()?,
-        column_name: column.getattr("column_name")?.extract()?,
+        resource_type: native_field(column, "resource_type")?.str()?.extract()?,
+        resource_name: native_field(column, "resource_name")?.extract()?,
+        column_name: native_field(column, "column_name")?.extract()?,
     })
 }
 
 fn column_edge(edge: &Bound<'_, PyAny>) -> PyResult<LineageColumnEdge> {
     Ok(LineageColumnEdge {
-        source: lineage_column(&edge.getattr("source")?)?,
-        target: lineage_column(&edge.getattr("target")?)?,
-        transform: edge.getattr("transform_kind")?.str()?.extract()?,
-        confidence: edge.getattr("confidence")?.str()?.extract()?,
+        source: lineage_column(&native_field(edge, "source")?)?,
+        target: lineage_column(&native_field(edge, "target")?)?,
+        transform: native_field(edge, "transform_kind")?.str()?.extract()?,
+        confidence: native_field(edge, "confidence")?.str()?.extract()?,
     })
 }
 
@@ -374,7 +381,7 @@ fn column_lineage<'py>(
         (&message, rich && count >= RICH_STATUS_MODEL_THRESHOLD),
         || {
             registry::native(py, NativeAttr::BuildProjectColumnLineage)?.call1((
-                graph.getattr("project")?,
+                native_field(graph, "project")?,
                 py.None(),
                 mode,
                 PyFrozenSet::new(py, &candidates.model_names)?,
@@ -435,7 +442,7 @@ fn column_trace(
         },
         trace: traced_edges(&lineage, (&key.name, column_name), (direction, depth))?,
         direction: direction.to_owned(),
-        mode: mode.getattr("value")?.extract()?,
+        mode: native_field(mode, "value")?.extract()?,
         max_depth: depth,
         analyzed_model_count: candidates.model_names.len(),
         truncated: candidates.truncated,
@@ -448,7 +455,7 @@ fn selector_views<'py>(
     source: &LineageSource<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     match source {
-        LineageSource::Compiled { graph, .. } => graph.getattr("lineage_views"),
+        LineageSource::Compiled { graph, .. } => native_field(graph, "lineage_views"),
         LineageSource::Cached(index) => index_views(py, index),
     }
 }
@@ -493,8 +500,8 @@ fn selector_anchors(
             for part in token.split(SELECTOR_INTERSECTION_MARKER) {
                 let parsed: Bound<'_, PyAny> = parse.call1((part,))?;
                 if parsed.is_instance(&path_class)? {
-                    let start: LineageKey = named(parsed.getattr("start_name")?.extract()?)?;
-                    let end: LineageKey = named(parsed.getattr("end_name")?.extract()?)?;
+                    let start: LineageKey = named(native_field(&parsed, "start_name")?.extract()?)?;
+                    let end: LineageKey = named(native_field(&parsed, "end_name")?.extract()?)?;
                     anchors
                         .retained
                         .extend(lineage_path_nodes(index, &start, &end));
@@ -502,7 +509,7 @@ fn selector_anchors(
                     anchors.downstream.push(end);
                     continue;
                 }
-                let kind: String = parsed.getattr("kind")?.str()?.extract()?;
+                let kind: String = native_field(&parsed, "kind")?.str()?.extract()?;
                 let set_kind: bool = SET_SELECTOR_KINDS.contains(&kind.as_str());
                 if set_kind && require_clear_anchors {
                     return Err(user_error(
@@ -517,8 +524,8 @@ fn selector_anchors(
                     view_options(views, &["all_keys", "tag_index", "path_index"])?;
                 options.set_item("parsed", &parsed)?;
                 let matched: Vec<LineageKey> = lineage_keys(&matcher.call((), Some(&options))?)?;
-                let upstream: bool = parsed.getattr("upstream")?.extract()?;
-                let downstream: bool = parsed.getattr("downstream")?.extract()?;
+                let upstream: bool = native_field(&parsed, "upstream")?.extract()?;
+                let downstream: bool = native_field(&parsed, "downstream")?.extract()?;
                 if set_kind || upstream {
                     anchors.upstream.extend(matched.iter().cloned());
                 }
@@ -542,8 +549,8 @@ fn selector_rendering(
     (depth, style): (Option<i64>, CliStyle),
 ) -> PyResult<LineageRendering> {
     let views: Bound<'_, PyAny> = selector_views(py, source)?;
-    let select: Bound<'_, PyAny> = request.getattr("select")?;
-    let exclude: Bound<'_, PyAny> = request.getattr("exclude")?;
+    let select: Bound<'_, PyAny> = native_field(request, "select")?;
+    let exclude: Bound<'_, PyAny> = native_field(request, "exclude")?;
     let options: Bound<'_, PyDict> = view_options(&views, &GRAPH_VIEW_NAMES)?;
     options.set_item("select", &select)?;
     options.set_item("exclude", &exclude)?;
@@ -551,8 +558,8 @@ fn selector_rendering(
         &registry::native(py, NativeAttr::ResolveProjectSelectors)?.call((), Some(&options))?,
     )?;
     let index: &LineageIndex = source.index();
-    let direction: Option<String> = request.getattr("direction")?.extract()?;
-    let output_format: String = request.getattr("output_format")?.extract()?;
+    let direction: Option<String> = native_field(request, "direction")?.extract()?;
+    let output_format: String = native_field(request, "output_format")?.extract()?;
     let graph = if let Some(direction) = direction {
         let options: Bound<'_, PyDict> = view_options(&views, &GRAPH_VIEW_NAMES)?;
         options.set_item("selectors", &exclude)?;
@@ -580,7 +587,8 @@ fn selector_failure(
         let planner_error: Bound<'_, PyAny> = registry::error(py, ErrorId::PlannerInput)?;
         if !matches!(source, LineageSource::Cached(_))
             || !error.is_instance(py, &planner_error)
-            || error.value(py).getattr("code")?.extract::<String>()? != UNKNOWN_SELECTOR_ERROR_CODE
+            || native_field(error.value(py), "code")?.extract::<String>()?
+                != UNKNOWN_SELECTOR_ERROR_CODE
         {
             return Ok(());
         }
@@ -598,8 +606,8 @@ fn rendering(
     (source, project_dir): (&LineageSource<'_>, &Bound<'_, PyAny>),
     (depth, style): (Option<i64>, CliStyle),
 ) -> PyResult<LineageRendering> {
-    let targets: Vec<String> = strings(&request.getattr("targets")?)?;
-    let output_format: String = request.getattr("output_format")?.extract()?;
+    let targets: Vec<String> = strings(&native_field(request, "targets")?)?;
+    let output_format: String = native_field(request, "output_format")?.extract()?;
     if targets.is_empty() {
         return selector_rendering(py, request, source, (depth, style))
             .map_err(|error| selector_failure(py, request, (source, project_dir), error));
@@ -613,7 +621,7 @@ fn rendering(
         && let Some(trace) = column_trace(
             py,
             source,
-            (target, &request.getattr("lineage_mode")?),
+            (target, &native_field(request, "lineage_mode")?),
             (&direction, depth),
         )?
     {
@@ -626,9 +634,9 @@ fn rendering(
 
 fn request_shape(request: &Bound<'_, PyAny>) -> PyResult<LineageRequestShape> {
     Ok(LineageRequestShape {
-        targets: strings(&request.getattr("targets")?)?,
-        select: strings(&request.getattr("select")?)?,
-        exclude: strings(&request.getattr("exclude")?)?,
+        targets: strings(&native_field(request, "targets")?)?,
+        select: strings(&native_field(request, "select")?)?,
+        exclude: strings(&native_field(request, "exclude")?)?,
     })
 }
 
@@ -638,13 +646,14 @@ fn request_shape(request: &Bound<'_, PyAny>) -> PyResult<LineageRequestShape> {
 fn run_lineage_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let shape: LineageRequestShape = request_shape(request)?;
     validate_lineage_request(&shape).map_err(|error| user_error(py, error))?;
-    let depth: Option<i64> = parse_lineage_depth(&request.getattr("depth")?.extract::<String>()?)
-        .map_err(|error| user_error(py, error))?;
-    let project_dir: Bound<'_, PyAny> = match request.getattr("project_dir")? {
+    let depth: Option<i64> =
+        parse_lineage_depth(&native_field(request, "depth")?.extract::<String>()?)
+            .map_err(|error| user_error(py, error))?;
+    let project_dir: Bound<'_, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let include_uses: bool = request.getattr("include_uses")?.extract()?;
+    let include_uses: bool = native_field(request, "include_uses")?.extract()?;
     let compiled: bool = include_uses
         || shape
             .targets

@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_migrations::models::{
     ColumnCandidate, ColumnMigrationInputs, MigrationPhase,
 };
 use crate::bindings::_helpers::planner_migrations::projections::parse_query_shape;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 
@@ -19,16 +20,16 @@ pub(super) fn candidates<'py>(
     let snapshot = phase.snapshot.clone();
     let py = scope.py();
     let mut result: Vec<ColumnCandidate<'py>> = Vec::new();
-    for key in scope.getattr("execution_order")?.try_iter()? {
+    for key in native_field(&scope, "execution_order")?.try_iter()? {
         let key = key?;
-        if !scope.getattr("selected_keys")?.contains(&key)?
-            || !key.getattr("resource_type")?.eq("model")?
+        if !native_field(&scope, "selected_keys")?.contains(&key)?
+            || !native_field(&key, "resource_type")?.eq("model")?
         {
             continue;
         }
         let model = scope
             .getattr("models_by_name")?
-            .call_method1("get", (key.getattr("name")?,))?;
+            .call_method1("get", (native_field(&key, "name")?,))?;
         if model.is_none() {
             continue;
         }
@@ -38,7 +39,7 @@ pub(super) fn candidates<'py>(
         }
         let name = model_reads::name_object(&model)?;
         if columns.full_refresh_model_names.contains(&name)?
-            || !snapshot.getattr("existing_relations")?.contains(&name)?
+            || !native_field(&snapshot, "existing_relations")?.contains(&name)?
         {
             continue;
         }
@@ -46,13 +47,16 @@ pub(super) fn candidates<'py>(
             .getattr("existing_columns")?
             .call_method1("get", (&name, PyTuple::empty(py)))?;
         let declared = PyDict::new(py);
-        let schema = model.getattr("schema_entry")?;
+        let schema = native_field(&model, "schema_entry")?;
         if !schema.is_none() {
-            for column in schema.getattr("columns")?.try_iter()? {
+            for column in native_field(&schema, "columns")?.try_iter()? {
                 let column = column?;
-                let origin = column.getattr("migrate_from")?;
+                let origin = native_field(&column, "migrate_from")?;
                 if !origin.is_none() {
-                    declared.set_item(column.getattr("name")?, origin.call_method0("strip")?)?;
+                    declared.set_item(
+                        native_field(&column, "name")?,
+                        origin.call_method0("strip")?,
+                    )?;
                 }
             }
         }
@@ -70,12 +74,12 @@ pub(super) fn candidates<'py>(
         let by_name = PyDict::new(py);
         for column in warehouse.try_iter()? {
             let column = column?;
-            by_name.set_item(lower(&column.getattr("name")?)?, column)?;
+            by_name.set_item(lower(&native_field(&column, "name")?)?, column)?;
         }
         let previous = if changed {
             parse_query_shape(
                 py,
-                &fingerprint.getattr("definition")?.extract::<String>()?,
+                &native_field(&fingerprint, "definition")?.extract::<String>()?,
                 dialect.extract::<Option<String>>()?.as_deref(),
             )?
         } else {

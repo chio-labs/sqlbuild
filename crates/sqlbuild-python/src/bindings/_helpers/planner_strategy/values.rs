@@ -14,6 +14,7 @@ use sqlbuild_analysis::planner_strategy::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -77,22 +78,22 @@ fn change_kind(value: &str) -> PlanChangeKind {
 
 /// One `SchemaFinding` as a native row.
 fn finding_row(finding: &Bound<'_, PyAny>) -> PyResult<SchemaFindingRow> {
-    let kind: SchemaChangeKind = match text(&finding.getattr("kind")?)?.as_str() {
+    let kind: SchemaChangeKind = match text(&native_field(finding, "kind")?)?.as_str() {
         "column_added" => SchemaChangeKind::ColumnAdded,
         "column_removed" => SchemaChangeKind::ColumnRemoved,
         _ => SchemaChangeKind::ColumnTypeChanged,
     };
-    let source: SchemaColumnSource = if text(&finding.getattr("source")?)? == YML_SOURCE {
+    let source: SchemaColumnSource = if text(&native_field(finding, "source")?)? == YML_SOURCE {
         SchemaColumnSource::Yml
     } else {
         SchemaColumnSource::SqlAnalysis
     };
     Ok(SchemaFindingRow {
         kind,
-        column_name: text(&finding.getattr("column_name")?)?,
+        column_name: text(&native_field(finding, "column_name")?)?,
         source,
-        expected_type: finding.getattr("expected_type")?.extract()?,
-        actual_type: finding.getattr("actual_type")?.extract()?,
+        expected_type: native_field(finding, "expected_type")?.extract()?,
+        actual_type: native_field(finding, "actual_type")?.extract()?,
     })
 }
 
@@ -106,19 +107,19 @@ pub(crate) fn finding_rows(findings: &Bound<'_, PyAny>) -> PyResult<Vec<SchemaFi
 
 /// The parts of a `ChangeDetectionResult` the strategy reads.
 pub(crate) fn change_facts(change: &Bound<'_, PyAny>) -> PyResult<ChangeFacts> {
-    let backfill: String = text(&change.getattr("backfill")?.getattr("action")?)?;
+    let backfill: String = text(&native_field(change, "backfill")?.getattr("action")?)?;
     Ok(ChangeFacts {
-        kind: change_kind(&text(&change.getattr("change_kind")?)?),
+        kind: change_kind(&text(&native_field(change, "change_kind")?)?),
         backfill_full: backfill == FULL_BACKFILL,
         backfill_forward_only: backfill == FORWARD_ONLY_BACKFILL,
-        query_changed: change.getattr("query_changed")?.is_truthy()?,
+        query_changed: native_field(change, "query_changed")?.is_truthy()?,
         changed_functions: change
             .getattr("changed_functions")?
             .try_iter()?
             .map(|name| text(&name?))
             .collect::<PyResult<_>>()?,
-        config_changed: change.getattr("config_changed")?.is_truthy()?,
-        schema_findings: finding_rows(&change.getattr("schema_findings")?)?,
+        config_changed: native_field(change, "config_changed")?.is_truthy()?,
+        schema_findings: finding_rows(&native_field(change, "schema_findings")?)?,
         recorded_build_relation_missing: change
             .getattr("recorded_build_relation_missing")?
             .is_truthy()?,

@@ -13,6 +13,7 @@ use crate::bindings::_helpers::build_progress::terminal::{
     join_spinner, release, shared_lines, start_spinner, terminal_columns, tty_flag, write,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const NO_PROGRESS_VARIABLE: &str = "SQLBUILD_NO_PROGRESS";
 const PROGRESS_DISABLED_VALUES: [&str; 4] = ["1", "on", "true", "yes"];
@@ -96,7 +97,7 @@ impl TransientStatusReporter {
         let register_hook: bool =
             !std::mem::replace(&mut reporter.state().exit_hook_registered, true);
         if register_hook {
-            imported(py, "atexit", "register")?.call1((slf.getattr("close")?,))?;
+            imported(py, "atexit", "register")?.call1((native_field(slf, "close")?,))?;
         }
         let stream: &Bound<'_, PyAny> = reporter.stream.bind(py);
         write(stream, HIDE_CURSOR)?;
@@ -153,7 +154,7 @@ impl TransientStatusReporter {
         Ok(Self {
             enabled: enabled && !progress_spinners_disabled() && tty_flag(stream)?,
             stream: stream.clone().unbind(),
-            lock: lines.getattr("lock")?.unbind(),
+            lock: native_field(&lines, "lock")?.unbind(),
             lines: lines.unbind(),
             style: CliStyle { use_color },
             state: Mutex::new(StatusState::default()),

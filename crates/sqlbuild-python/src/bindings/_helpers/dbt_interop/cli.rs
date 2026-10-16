@@ -21,6 +21,7 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -59,7 +60,7 @@ pub(crate) fn option_values(options: &Bound<'_, PyAny>) -> PyResult<DbtCliOption
         target_path: attribute_text(options, "target_path")?,
         vars: attribute_text(options, "vars")?,
         state: attribute_text(options, "state")?,
-        defer: options.getattr("defer")?.is_truthy()?,
+        defer: native_field(options, "defer")?.is_truthy()?,
     })
 }
 
@@ -260,8 +261,8 @@ fn parsed_flags(parsed: &Bound<'_, PyAny>) -> PyResult<DbtParsedFlags> {
     let value = |name: &str| attribute_text(parsed, name);
     let flag = |name: &str| -> PyResult<bool> { parsed.getattr(name)?.is_truthy() };
     Ok(DbtParsedFlags {
-        select: texts(&parsed.getattr("select")?)?,
-        exclude: texts(&parsed.getattr("exclude")?)?,
+        select: texts(&native_field(parsed, "select")?)?,
+        exclude: texts(&native_field(parsed, "exclude")?)?,
         vars: value("vars")?,
         threads: value("threads")?,
         full_refresh: flag("full_refresh")?,
@@ -282,7 +283,7 @@ fn parsed_flags(parsed: &Bound<'_, PyAny>) -> PyResult<DbtParsedFlags> {
         defer_to: value("defer_to")?,
         fail_fast: flag("fail_fast")?,
         hard_copy: flag("hard_copy")?,
-        dbt_passthrough: texts(&parsed.getattr("dbt_passthrough")?)?,
+        dbt_passthrough: texts(&native_field(parsed, "dbt_passthrough")?)?,
     })
 }
 

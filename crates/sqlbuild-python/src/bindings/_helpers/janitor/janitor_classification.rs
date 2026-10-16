@@ -26,6 +26,7 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::planner_scenario::artifacts::is_scenario_artifact_physical_name;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::relation_naming::fitting::shared_error;
 
 /// Protection rules for one plan.
@@ -458,7 +459,10 @@ pub(crate) fn plan_archives<'py>(
         archive_candidates.push(record);
         if same_run_expiry {
             same_run.push(archived_relation(
-                (&archive_key, candidate.relation.getattr("relation_type")?),
+                (
+                    &archive_key,
+                    native_field(&candidate.relation, "relation_type")?,
+                ),
                 (&archived_at, &expires_at),
                 Some(&candidate.key),
             )?);
@@ -502,7 +506,7 @@ pub(crate) fn plan_archives<'py>(
             let parsed_at: Bound<'py, PyAny> = utc_datetime(py, parsed.archived_at)?;
             let parsed_expiry: Bound<'py, PyAny> = parsed_at.add(&retention)?;
             let archived: Bound<'py, PyAny> = archived_relation(
-                (&key, relation.getattr("relation_type")?),
+                (&key, native_field(relation, "relation_type")?),
                 (&parsed_at, &parsed_expiry),
                 None,
             )?;

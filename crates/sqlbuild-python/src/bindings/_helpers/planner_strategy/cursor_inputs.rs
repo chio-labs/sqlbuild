@@ -21,13 +21,14 @@ use crate::bindings::_helpers::planner_strategy::constants::{
 use crate::bindings::_helpers::planner_strategy::lineage::resolve_lineage_reference;
 use crate::bindings::_helpers::planner_strategy::models::CursorInputLookups;
 use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
 /// A model's authored config values.
 pub(crate) fn model_values<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    model.getattr("config")?.getattr("values")
+    native_field(model, "config")?.getattr("values")
 }
 
 /// Whether a model is incremental with a cursor column.
@@ -47,7 +48,7 @@ fn incremental_cursor_flag(
 fn names(items: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     items
         .try_iter()?
-        .map(|item| text(&item?.getattr("name")?))
+        .map(|item| text(&native_field(&item?, "name")?))
         .collect()
 }
 
@@ -115,8 +116,8 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
                 models_by_name.clone(),
                 lookups.functions_by_name.clone(),
             )?;
-            let kind: String = text(&reference.getattr("ref_kind")?)?;
-            let name: String = text(&reference.getattr("ref_name")?)?;
+            let kind: String = text(&native_field(&reference, "ref_kind")?)?;
+            let name: String = text(&native_field(&reference, "ref_name")?)?;
             let check = |owner, known_columns| CursorInputColumnCheck {
                 model_name: model_name.clone(),
                 owner,
@@ -133,11 +134,11 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
                 {
                     continue;
                 }
-                let entry: Bound<'py, PyAny> = upstream.getattr("schema_entry")?;
+                let entry: Bound<'py, PyAny> = native_field(&upstream, "schema_entry")?;
                 let declared: Vec<String> = if entry.is_none() {
                     Vec::new()
                 } else {
-                    names(&entry.getattr("columns")?)?
+                    names(&native_field(&entry, "columns")?)?
                 };
                 check_column(check(CursorInputColumnOwner::ModelContract, declared), py)?;
                 continue;
@@ -146,8 +147,8 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
                 continue;
             }
             let source: Bound<'py, PyAny> = source_map.call_method1("get", (&name,))?;
-            if !source.is_none() && source.getattr("contract")?.eq(ENFORCED_CONTRACT)? {
-                let declared: Vec<String> = names(&source.getattr("columns")?)?;
+            if !source.is_none() && native_field(&source, "contract")?.eq(ENFORCED_CONTRACT)? {
+                let declared: Vec<String> = names(&native_field(&source, "columns")?)?;
                 check_column(check(CursorInputColumnOwner::SourceContract, declared), py)?;
                 continue;
             }
@@ -192,7 +193,7 @@ fn input_relation<'py>(
     if location.is_none() {
         return Ok(None);
     }
-    location.getattr("qualified_name")?.extract()
+    native_field(&location, "qualified_name")?.extract()
 }
 
 /// The resource kind a resolved cursor input reference reads.
@@ -270,7 +271,7 @@ pub(crate) fn build_cursor_input_relations<'py>(
     let class: Bound<'py, PyAny> = registry::class(py, RecordId::CursorInputRelation)?;
     let mut relations: Vec<Bound<'py, PyAny>> = Vec::new();
     let watermarks: Bound<'py, PyAny> =
-        resolve_cursor_input_roles(&model)?.getattr("watermark_inputs")?;
+        native_field(&resolve_cursor_input_roles(&model)?, "watermark_inputs")?;
     for item in watermarks.call_method0("items")?.try_iter()? {
         let (input_name, column): (String, Bound<'py, PyAny>) = item?.extract()?;
         let reference: Bound<'py, PyAny> = resolve_lineage_reference(
@@ -279,8 +280,8 @@ pub(crate) fn build_cursor_input_relations<'py>(
             models_by_name.clone(),
             functions_by_name.clone(),
         )?;
-        let kind: String = text(&reference.getattr("ref_kind")?)?;
-        let name: Bound<'py, PyAny> = reference.getattr("ref_name")?;
+        let kind: String = text(&native_field(&reference, "ref_kind")?)?;
+        let name: Bound<'py, PyAny> = native_field(&reference, "ref_name")?;
         let name_text: String = text(&name)?;
         let Some(relation) = input_relation((lookups, adapter), (&kind, &name_text))? else {
             continue;
@@ -337,14 +338,14 @@ pub(crate) fn runtime_cursor_producer_names<'py>(
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let py: Python<'py> = scope.py();
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
-    for key in scope.getattr("selected_keys")?.try_iter()? {
+    for key in native_field(scope, "selected_keys")?.try_iter()? {
         let key: Bound<'py, PyAny> = key?;
-        let name: Bound<'py, PyAny> = key.getattr("name")?;
-        match text(&key.getattr("resource_type")?)?.as_str() {
+        let name: Bound<'py, PyAny> = native_field(&key, "name")?;
+        match text(&native_field(&key, "resource_type")?)?.as_str() {
             "model" | "seed" => names.push(name),
             "source" => {
                 let source: Bound<'py, PyAny> = source_map.call_method1("get", (&name,))?;
-                if !source.is_none() && !source.getattr("loader")?.is_none() {
+                if !source.is_none() && !native_field(&source, "loader")?.is_none() {
                     names.push(name);
                 }
             }

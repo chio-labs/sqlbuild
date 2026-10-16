@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::errors::ProofError;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyValueError;
@@ -13,23 +14,23 @@ use sqlbuild_analysis::planner_migrations::models::{QueryProjection, QueryShape}
 
 fn read_shape(shape: &Bound<'_, PyAny>) -> PyResult<QueryShape> {
     let mut projections: Vec<QueryProjection> = Vec::new();
-    for item in shape.getattr("projections")?.try_iter()? {
+    for item in native_field(shape, "projections")?.try_iter()? {
         let item = item?;
         projections.push(QueryProjection {
-            name: item.getattr("name")?.extract()?,
-            expression: item.getattr("expression")?.extract()?,
-            references: item.getattr("references")?.extract()?,
-            passthrough: item.getattr("passthrough")?.extract()?,
+            name: native_field(&item, "name")?.extract()?,
+            expression: native_field(&item, "expression")?.extract()?,
+            references: native_field(&item, "references")?.extract()?,
+            passthrough: native_field(&item, "passthrough")?.extract()?,
         });
     }
     Ok(QueryShape {
         projections,
-        body: shape.getattr("body")?.extract()?,
-        alias_clauses: shape.getattr("alias_clauses")?.extract()?,
-        positional: shape.getattr("positional")?.extract()?,
-        input_relations: shape.getattr("input_relations")?.extract()?,
-        local_input_columns: shape.getattr("local_input_columns")?.extract()?,
-        clause_references: shape.getattr("clause_references")?.extract()?,
+        body: native_field(shape, "body")?.extract()?,
+        alias_clauses: native_field(shape, "alias_clauses")?.extract()?,
+        positional: native_field(shape, "positional")?.extract()?,
+        input_relations: native_field(shape, "input_relations")?.extract()?,
+        local_input_columns: native_field(shape, "local_input_columns")?.extract()?,
+        clause_references: native_field(shape, "clause_references")?.extract()?,
     })
 }
 

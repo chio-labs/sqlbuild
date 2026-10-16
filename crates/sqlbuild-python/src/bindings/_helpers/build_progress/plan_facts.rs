@@ -11,6 +11,7 @@ use sqlbuild_core::plan_display::models::ModelLabelFacts;
 
 use crate::bindings::_helpers::build_progress::result_text::text;
 use crate::bindings::_helpers::plan_output::display::optional_facts;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SOURCE_TYPE: &str = "source";
 const SQL_TEST_TYPE: &str = "sql_test";
@@ -44,21 +45,22 @@ fn names(plan: &Bound<'_, PyAny>, field: &str) -> PyResult<Vec<String>> {
 
 /// Whether the execution-order key is a source with a loader.
 fn loaded_source(plan: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let source: Bound<'_, PyAny> = plan.getattr("source_map")?.call_method1("get", (name,))?;
-    Ok(!source.is_none() && !source.getattr("loader")?.is_none())
+    let source: Bound<'_, PyAny> =
+        native_field(plan, "source_map")?.call_method1("get", (name,))?;
+    Ok(!source.is_none() && !native_field(&source, "loader")?.is_none())
 }
 
 fn test_tree_children(plan: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let mut children: Vec<String> = Vec::new();
-    for entry in plan.getattr("test_entries")?.try_iter()? {
+    for entry in native_field(plan, "test_entries")?.try_iter()? {
         let entry: Bound<'_, PyAny> = entry?;
-        for step in entry.getattr("chain")?.try_iter()? {
+        for step in native_field(&entry, "chain")?.try_iter()? {
             let step: Bound<'_, PyAny> = step?;
-            if step.getattr("expected_cte_sql")?.is_truthy()? {
+            if native_field(&step, "expected_cte_sql")?.is_truthy()? {
                 children.push(text(&step, "model_name")?);
             }
         }
-        for assertion in entry.getattr("assertions")?.try_iter()? {
+        for assertion in native_field(&entry, "assertions")?.try_iter()? {
             children.push(format!("assertion {}", text(&assertion?, "name")?));
         }
     }
@@ -68,7 +70,7 @@ fn test_tree_children(plan: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 pub(crate) fn build_plan_facts(plan: &Bound<'_, PyAny>) -> PyResult<BuildPlanFacts> {
     let mut models: HashMap<String, ModelRowFacts> = HashMap::new();
     let mut row_names: Vec<String> = Vec::new();
-    for entry in plan.getattr("model_entries")?.try_iter()? {
+    for entry in native_field(plan, "model_entries")?.try_iter()? {
         let entry: Bound<'_, PyAny> = entry?;
         let name: String = text(&entry, "name")?;
         let facts: ModelRowFacts = row_facts(
@@ -88,10 +90,10 @@ pub(crate) fn build_plan_facts(plan: &Bound<'_, PyAny>) -> PyResult<BuildPlanFac
     let test_names: Vec<String> = names(plan, "test_entries")?;
     let mut ordinals: Vec<(String, usize)> = Vec::new();
     let mut loaded_sources: usize = 0;
-    for key in plan.getattr("execution_order")?.try_iter()? {
+    for key in native_field(plan, "execution_order")?.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
         let resource_type: String = text(&key, "resource_type")?;
-        let name: Bound<'_, PyAny> = key.getattr("name")?;
+        let name: Bound<'_, PyAny> = native_field(&key, "name")?;
         if resource_type == SQL_TEST_TYPE {
             continue;
         }

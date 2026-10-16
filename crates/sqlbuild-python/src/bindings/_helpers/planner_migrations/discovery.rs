@@ -10,6 +10,7 @@ use crate::bindings::_helpers::planner_migrations::models::{
 use crate::bindings::_helpers::planner_migrations::{
     discovery_events, discovery_models, discovery_requests,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple, PyTupleMethods};
 use std::collections::BTreeSet;
@@ -51,13 +52,13 @@ pub(super) fn discover_model_migrations<'py>(
         fingerprints: cache,
     };
     call_with(
-        &state.getattr("inspect_schemas")?,
+        &native_field(&state, "inspect_schemas")?,
         &[("schemas", project_schemas)],
     )?;
     let declared = discovery_events::declared(&declarations, &state)?;
     let names = PyDict::new(py);
     for item in &models {
-        names.set_item(item.getattr("name")?, item)?;
+        names.set_item(native_field(item, "name")?, item)?;
     }
     let event_renames = discovery_events::renames(&runtime, &names, &state)?;
     for (name, origin) in declared.iter() {
@@ -75,10 +76,10 @@ pub(super) fn discover_model_migrations<'py>(
     }
     let unbuilt = PyDict::new(py);
     for item in &models {
-        let name = item.getattr("name")?;
+        let name = native_field(item, "name")?;
         if !declared_names.contains(&name)?
             && call_with(
-                &state.getattr("named_fingerprint")?,
+                &native_field(&state, "named_fingerprint")?,
                 &[("model_name", name.clone())],
             )?
             .is_none()

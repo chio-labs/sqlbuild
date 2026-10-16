@@ -9,6 +9,7 @@ use sqlbuild_rules::lint_text::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
 use crate::bindings::types::CompilerDetach;
 
@@ -21,10 +22,10 @@ fn pass_spans(pass: &Bound<'_, PyAny>) -> PyResult<Vec<ExpansionSpan>> {
         .map(|span| {
             let span: Bound<'_, PyAny> = span?;
             Ok(ExpansionSpan {
-                source_start: span.getattr("source_start")?.extract()?,
-                source_end: span.getattr("source_end")?.extract()?,
-                output_start: span.getattr("output_start")?.extract()?,
-                output_end: span.getattr("output_end")?.extract()?,
+                source_start: native_field(&span, "source_start")?.extract()?,
+                source_end: native_field(&span, "source_end")?.extract()?,
+                output_start: native_field(&span, "output_start")?.extract()?,
+                output_end: native_field(&span, "output_end")?.extract()?,
             })
         })
         .collect()
@@ -36,7 +37,7 @@ fn relation_keys(
     declared: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<(String, Vec<Vec<String>>)>> {
     let mut keys: Vec<(String, Vec<Vec<String>>)> = Vec::new();
-    for relation in body.getattr("dependency_relations")?.try_iter()? {
+    for relation in native_field(body, "dependency_relations")?.try_iter()? {
         let (sentinel, name): (String, Bound<'_, PyAny>) = relation?.extract()?;
         let found: Bound<'_, PyAny> = declared.call_method1("get", (name,))?;
         if found.is_truthy()? {
@@ -53,30 +54,30 @@ fn lint_body(
 ) -> PyResult<LintSqlBody> {
     let file: usize = index_by_path
         .as_any()
-        .get_item(body.getattr("file_path")?)?
+        .get_item(native_field(body, "file_path")?)?
         .extract()?;
     Ok(LintSqlBody {
         file,
-        body_start: body.getattr("body_start")?.extract()?,
-        lint_text: body.getattr("lint_text")?.extract()?,
-        passes: spans(&body.getattr("passes")?)?,
-        external_identifiers: body.getattr("external_identifiers")?.extract()?,
-        dependency_identifiers: body.getattr("dependency_identifiers")?.extract()?,
-        externally_referenced_ctes: body.getattr("externally_referenced_ctes")?.extract()?,
-        allows_ceremonial_select: body.getattr("allows_ceremonial_select")?.extract()?,
-        allows_dynamic_output_star: body.getattr("allows_dynamic_output_star")?.extract()?,
-        allows_empty_fixture_star: body.getattr("allows_empty_fixture_star")?.extract()?,
+        body_start: native_field(body, "body_start")?.extract()?,
+        lint_text: native_field(body, "lint_text")?.extract()?,
+        passes: spans(&native_field(body, "passes")?)?,
+        external_identifiers: native_field(body, "external_identifiers")?.extract()?,
+        dependency_identifiers: native_field(body, "dependency_identifiers")?.extract()?,
+        externally_referenced_ctes: native_field(body, "externally_referenced_ctes")?.extract()?,
+        allows_ceremonial_select: native_field(body, "allows_ceremonial_select")?.extract()?,
+        allows_dynamic_output_star: native_field(body, "allows_dynamic_output_star")?.extract()?,
+        allows_empty_fixture_star: native_field(body, "allows_empty_fixture_star")?.extract()?,
         relation_keys: relation_keys(body, declared)?,
     })
 }
 
 fn options(config: &Bound<'_, PyAny>) -> PyResult<LintSqlOptions> {
     Ok(LintSqlOptions {
-        dialect: config.getattr("dialect")?.extract()?,
-        enabled_rules: config.getattr("enabled_native_rules")?.extract()?,
-        ignored_rules: config.getattr("ignored_native_rules")?.extract()?,
-        max_literal_length: config.getattr("max_literal_length")?.extract()?,
-        max_ranking_order_by: config.getattr("max_ranking_order_by")?.extract()?,
+        dialect: native_field(config, "dialect")?.extract()?,
+        enabled_rules: native_field(config, "enabled_native_rules")?.extract()?,
+        ignored_rules: native_field(config, "ignored_native_rules")?.extract()?,
+        max_literal_length: native_field(config, "max_literal_length")?.extract()?,
+        max_ranking_order_by: native_field(config, "max_ranking_order_by")?.extract()?,
     })
 }
 
@@ -96,7 +97,7 @@ fn lint_native_sql_bodies<'py>(
         paths.push(path);
         texts.push(text.extract()?);
     }
-    let declared: Bound<'py, PyAny> = config.getattr("relation_keys")?;
+    let declared: Bound<'py, PyAny> = native_field(&config, "relation_keys")?;
     let inputs: Vec<LintSqlBody> = bodies
         .iter()
         .map(|body| lint_body(body, &index_by_path, &declared))

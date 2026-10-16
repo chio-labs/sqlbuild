@@ -20,6 +20,7 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
     RELATIONS_MAIN_COLUMNS, RELATIONS_MAIN_LIST,
 };
 use crate::bindings::_helpers::planner_warehouse::cursors::{CursorInputs, cursor_snapshots};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -79,7 +80,7 @@ pub(crate) fn destination_nodes<'py>(
 }
 
 fn selected_node(selected: &Bound<'_, PyAny>, node: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(selected.is_none() || selected.contains(node.getattr("key")?)?)
+    Ok(selected.is_none() || selected.contains(native_field(node, "key")?)?)
 }
 
 fn relevant_state_keys<'py>(
@@ -102,12 +103,12 @@ fn resolve_database<'py>(
         if !selected_node(selected, &node)? {
             continue;
         }
-        let database = node.getattr("destination")?.getattr("database")?;
+        let database = native_field(&node, "destination")?.getattr("database")?;
         if !database.is_none() {
             return Ok(database);
         }
     }
-    project.getattr("effective_target_database")
+    native_field(project, "effective_target_database")
 }
 
 fn target_schemas(
@@ -119,12 +120,12 @@ fn target_schemas(
         if !selected_node(selected, &node)? {
             continue;
         }
-        let schema = node.getattr("destination")?.getattr("schema")?;
+        let schema = native_field(&node, "destination")?.getattr("schema")?;
         if !schema.is_none() {
             schemas.insert(schema.extract()?);
         }
     }
-    let fallback = project.getattr("effective_target_schema")?;
+    let fallback = native_field(project, "effective_target_schema")?;
     if schemas.is_empty() && !fallback.is_none() {
         schemas.insert(fallback.extract()?);
     }
@@ -132,11 +133,11 @@ fn target_schemas(
 }
 
 fn source_table_name(entry: &Bound<'_, PyAny>) -> PyResult<String> {
-    let table = entry.getattr("table")?;
+    let table = native_field(entry, "table")?;
     if table.is_truthy()? {
         table.extract()
     } else {
-        entry.getattr("name")?.extract()
+        native_field(entry, "name")?.extract()
     }
 }
 
@@ -146,17 +147,21 @@ fn model_upstream_names(
     selected_names: &HashSet<String>,
 ) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
-    for reference in model.getattr("references")?.try_iter()? {
+    for reference in native_field(model, "references")?.try_iter()? {
         let reference = reference?;
-        let kind = reference.getattr("ref_kind")?;
-        let name: String = reference.getattr("ref_name")?.extract()?;
+        let kind = native_field(&reference, "ref_kind")?;
+        let name: String = native_field(&reference, "ref_name")?.extract()?;
         let is_ref = kind.eq("ref")?;
         if !(is_ref || kind.eq("seed")?) || selected_names.contains(&name) {
             continue;
         }
         let lookup = if is_ref { models } else { seeds };
         if let Some(node) = lookup.get_item(&name)? {
-            names.insert(node.getattr("destination")?.getattr("name")?.extract()?);
+            names.insert(
+                native_field(&node, "destination")?
+                    .getattr("name")?
+                    .extract()?,
+            );
         }
     }
     Ok(names)
@@ -171,23 +176,27 @@ fn metadata_name_filter(
     if selected.is_none() {
         for field in ["models", "seeds"] {
             for node in project.getattr(field)?.try_iter()? {
-                names.insert(node?.getattr("destination")?.getattr("name")?.extract()?);
+                names.insert(
+                    native_field(&node?, "destination")?
+                        .getattr("name")?
+                        .extract()?,
+                );
             }
         }
     } else {
         let selected_names: HashSet<String> = selected
             .try_iter()?
-            .map(|key| key?.getattr("name")?.extract::<String>())
+            .map(|key| native_field(&key?, "name")?.extract::<String>())
             .collect::<PyResult<_>>()?;
         let models = by_name(project, "models")?;
         let seeds = by_name(project, "seeds")?;
         let sources = PyDict::new(py);
-        for source in project.getattr("sources")?.try_iter()? {
-            let entry = source?.getattr("source_entry")?;
-            sources.set_item(entry.getattr("name")?, entry)?;
+        for source in native_field(project, "sources")?.try_iter()? {
+            let entry = native_field(&source?, "source_entry")?;
+            sources.set_item(native_field(&entry, "name")?, entry)?;
         }
         for key in selected.try_iter()? {
-            let name = key?.getattr("name")?;
+            let name = native_field(&key?, "name")?;
             if let Some(model) = models.get_item(&name)? {
                 names.insert(
                     model_reads::destination(&model)?
@@ -200,7 +209,11 @@ fn metadata_name_filter(
                     &selected_names,
                 )?);
             } else if let Some(seed) = seeds.get_item(&name)? {
-                names.insert(seed.getattr("destination")?.getattr("name")?.extract()?);
+                names.insert(
+                    native_field(&seed, "destination")?
+                        .getattr("name")?
+                        .extract()?,
+                );
             } else if let Some(entry) = sources.get_item(&name)? {
                 names.insert(source_table_name(&entry)?);
             }
@@ -249,7 +262,7 @@ pub(crate) fn inspection_concurrency(
     if catalog.is_none() {
         return Ok(1);
     }
-    catalog.getattr("concurrency")?.extract()
+    native_field(&catalog, "concurrency")?.extract()
 }
 
 fn prefetch_schemas<'py>(
@@ -267,21 +280,28 @@ fn prefetch_schemas<'py>(
     for schema in schemas {
         scopes.push(PyTuple::new(py, [database.clone(), text(py, schema)])?.into_any());
     }
-    for source in request.project.getattr("sources")?.try_iter()? {
+    for source in native_field(&request.project, "sources")?.try_iter()? {
         let source = source?;
-        let entry = source.getattr("source_entry")?;
-        if (!relevant.is_none() && !relevant.contains(source.getattr("key")?)?)
-            || !entry.getattr("expression")?.is_none()
-            || entry.getattr("schema")?.is_none()
+        let entry = native_field(&source, "source_entry")?;
+        if (!relevant.is_none() && !relevant.contains(native_field(&source, "key")?)?)
+            || !native_field(&entry, "expression")?.is_none()
+            || native_field(&entry, "schema")?.is_none()
         {
             continue;
         }
         scopes.push(
-            PyTuple::new(py, [entry.getattr("database")?, entry.getattr("schema")?])?.into_any(),
+            PyTuple::new(
+                py,
+                [
+                    native_field(&entry, "database")?,
+                    native_field(&entry, "schema")?,
+                ],
+            )?
+            .into_any(),
         );
     }
     call_with(
-        &catalog.getattr("prefetch_schema_listings")?,
+        &native_field(&catalog, "prefetch_schema_listings")?,
         &[
             ("scopes", tuple(py, scopes)?),
             ("best_effort", true.into_pyobject(py)?.to_owned().into_any()),
@@ -363,16 +383,16 @@ fn gather_relations<'py>(
     let logical = PyDict::new(py);
     for node in destination_nodes(&request.project)? {
         logical.set_item(
-            location_identity(&node.getattr("destination")?)?,
-            node.getattr("name")?,
+            location_identity(&native_field(&node, "destination")?)?,
+            native_field(&node, "name")?,
         )?;
     }
     let result = PyDict::new(py);
     let mut states = StateSchemas::default();
     for relation in relations.try_iter()? {
         let relation = relation?;
-        let name: String = relation.getattr("name")?.extract()?;
-        let schema = relation.getattr("schema")?;
+        let name: String = native_field(&relation, "name")?.extract()?;
+        let schema = native_field(&relation, "schema")?;
         let schema = if schema.is_none() {
             None
         } else {
@@ -398,7 +418,7 @@ fn gather_relations<'py>(
             }
             continue;
         }
-        let identity = relation.getattr("identity")?;
+        let identity = native_field(&relation, "identity")?;
         let key = logical
             .get_item(&identity)?
             .unwrap_or_else(|| PyString::new(py, &name).into_any());
@@ -414,7 +434,7 @@ fn gather_columns<'py>(
     let py = request.project.py();
     let mut node_names: HashSet<String> = HashSet::new();
     for node in destination_nodes(&request.project)? {
-        node_names.insert(node.getattr("name")?.extract()?);
+        node_names.insert(native_field(&node, "name")?.extract()?);
     }
     let mut needed: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
     for (logical, relation) in relations.iter() {
@@ -437,7 +457,7 @@ fn gather_columns<'py>(
         )?,
     )?;
     for (logical, relation) in needed {
-        let identity = relation.getattr("identity")?;
+        let identity = native_field(&relation, "identity")?;
         if all.contains(&identity)? {
             result.set_item(logical, all.get_item(identity)?)?;
         }
@@ -451,11 +471,11 @@ fn shares_unfiltered(project: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) ->
     }
     let names: HashSet<String> = selected
         .try_iter()?
-        .map(|key| key?.getattr("name")?.extract::<String>())
+        .map(|key| native_field(&key?, "name")?.extract::<String>())
         .collect::<PyResult<_>>()?;
     let mut all_selected = true;
     let mut any_migration = false;
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         if !names.contains(&model_reads::model_name(&model)?) {
             all_selected = false;
@@ -488,7 +508,7 @@ fn gather_fingerprints<'py>(
         Some(
             relevant
                 .try_iter()?
-                .map(|key| key?.getattr("name")?.extract::<String>())
+                .map(|key| native_field(&key?, "name")?.extract::<String>())
                 .collect::<PyResult<_>>()?,
         )
     };
@@ -530,7 +550,7 @@ fn gather_fingerprints<'py>(
                 ("schema", text(py, schema)),
                 (
                     "render_qualified_name",
-                    request.adapter.getattr("render_qualified_name")?,
+                    native_field(&request.adapter, "render_qualified_name")?,
                 ),
                 (
                     "render_read_latest_sql",
@@ -550,7 +570,7 @@ fn gather_fingerprints<'py>(
             ],
         )?))?;
         if read_unfiltered {
-            let by_identity = set.getattr("fingerprints_by_identity")?;
+            let by_identity = native_field(&set, "fingerprints_by_identity")?;
             let values: Vec<Bound<'py, PyAny>> = if by_identity.is_none() {
                 Vec::new()
             } else {
@@ -569,8 +589,11 @@ fn gather_fingerprints<'py>(
                 )?;
             }
         }
-        for (name, fingerprint) in set.getattr("fingerprints")?.downcast::<PyDict>()?.iter() {
-            let node_type: String = fingerprint.getattr("node_type")?.extract()?;
+        for (name, fingerprint) in native_field(&set, "fingerprints")?
+            .downcast::<PyDict>()?
+            .iter()
+        {
+            let node_type: String = native_field(&fingerprint, "node_type")?.extract()?;
             if node_type == NODE_TYPE_MODEL {
                 models.set_item(name, fingerprint)?;
             } else if FUNCTION_NODE_TYPES.contains(&node_type.as_str()) {
@@ -579,11 +602,11 @@ fn gather_fingerprints<'py>(
                 seeds.set_item(name, fingerprint)?;
             }
         }
-        let by_identity = set.getattr("fingerprints_by_identity")?;
+        let by_identity = native_field(&set, "fingerprints_by_identity")?;
         if !by_identity.is_none() {
             for item in by_identity.call_method0("items")?.try_iter()? {
                 let (key, fingerprint): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
-                let node_type: String = fingerprint.getattr("node_type")?.extract()?;
+                let node_type: String = native_field(&fingerprint, "node_type")?.extract()?;
                 if node_type != NODE_TYPE_MODEL
                     && node_type != NODE_TYPE_SEED
                     && !FUNCTION_NODE_TYPES.contains(&node_type.as_str())
@@ -652,7 +675,7 @@ pub(crate) fn warehouse_snapshot<'py>(
     let cursor_selected = if scope.is_none() {
         request.selected_keys.clone()
     } else {
-        scope.getattr("model_keys")?
+        native_field(scope, "model_keys")?
     };
     let cursors = cursor_snapshots(
         request,
@@ -802,7 +825,7 @@ pub(crate) fn gather_redirected_cursor_snapshots<'py>(
         project: project.clone(),
         adapter: adapter.clone(),
         connection: connection.clone(),
-        execute: adapter.getattr("execute")?,
+        execute: native_field(adapter, "execute")?,
         selected_keys: frozenset(py, &keys)?,
         full_refresh: false,
         full_refresh_model_names: full_refresh_model_names.clone(),
@@ -817,10 +840,10 @@ pub(crate) fn gather_redirected_cursor_snapshots<'py>(
             selected_keys: frozenset(py, &keys)?,
             full_refresh_model_names: full_refresh_model_names.clone(),
             deferred_locations: deferred_locations.clone(),
-            runtime_producer_keys: cursor_scope.getattr("runtime_producer_keys")?,
-            invocation_time: cursor_scope.getattr("invocation_time")?,
-            start_cursor_config: cursor_scope.getattr("start_cursor_config")?,
-            cursor_overrides: cursor_scope.getattr("cursor_overrides")?,
+            runtime_producer_keys: native_field(cursor_scope, "runtime_producer_keys")?,
+            invocation_time: native_field(cursor_scope, "invocation_time")?,
+            start_cursor_config: native_field(cursor_scope, "start_cursor_config")?,
+            cursor_overrides: native_field(cursor_scope, "cursor_overrides")?,
             target_relation_overrides: Some(target_relations),
             origin_cursor_column_overrides: if origin_cursor_columns.is_none() {
                 None
@@ -839,7 +862,7 @@ pub(crate) fn gather_redirected_cursor_snapshots<'py>(
                     &snapshot,
                     &[(
                         "target_relation",
-                        model_reads::destination(&model)?.getattr("qualified_name")?,
+                        native_field(&model_reads::destination(&model)?, "qualified_name")?,
                     )],
                 )?,
             )?;

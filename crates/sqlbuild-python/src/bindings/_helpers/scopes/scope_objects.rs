@@ -17,6 +17,7 @@ use sqlbuild_scopes::scope_report::models::{
     ProjectionGrant, ProjectionIndex, ProjectionStanding, ProjectionUsage, ReportValues,
 };
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::placement::{
@@ -58,13 +59,13 @@ impl<'py> ScopeClasses<'py> {
 pub(crate) fn enum_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
     let enum_type = value.py().import(ENUM_MODULE)?.getattr("Enum")?;
     if value.is_instance(&enum_type)? {
-        return value.getattr("value")?.str()?.extract();
+        return native_field(value, "value")?.str()?.extract();
     }
     value.str()?.extract()
 }
 
 pub(crate) fn value_of(item: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    item.getattr(name)?.getattr("value")?.extract()
+    native_field(&item.getattr(name)?, "value")?.extract()
 }
 
 pub(crate) fn field<'py, T: pyo3::FromPyObject<'py>>(
@@ -126,7 +127,7 @@ fn read_optional_qualified(
 
 fn root_row(root: &Bound<'_, PyAny>) -> PyResult<RootRow> {
     let resource_kind: Option<String> = optional_item(root, "resource_kind")?
-        .map(|kind| kind.getattr("value")?.extract())
+        .map(|kind| native_field(&kind, "value")?.extract())
         .transpose()?;
     Ok((field(root, "path")?, value_of(root, "kind")?, resource_kind))
 }
@@ -138,9 +139,9 @@ fn read_root(root: &Bound<'_, PyAny>) -> PyResult<OwnershipRoot> {
 /// One `ResourceRecord` as its native record.
 pub(crate) fn read_resource(record: &Bound<'_, PyAny>) -> PyResult<ResourceRecord> {
     Ok(ResourceRecord {
-        identity: read_resource_identity(&record.getattr("identity")?)?,
+        identity: read_resource_identity(&native_field(record, "identity")?)?,
         path: field(record, "path")?,
-        ownership_root: read_root(&record.getattr("ownership_root")?)?,
+        ownership_root: read_root(&native_field(record, "ownership_root")?)?,
     })
 }
 
@@ -179,12 +180,12 @@ fn read_constant(facts: &Bound<'_, PyAny>) -> PyResult<ConstantFacts> {
 pub(crate) fn read_declaration(record: &Bound<'_, PyAny>) -> PyResult<CachedDeclaration> {
     Ok(CachedDeclaration {
         record: declaration_record((
-            qualified_row(&record.getattr("identity")?)?,
+            qualified_row(&native_field(record, "identity")?)?,
             field(record, "path")?,
             field(record, "line")?,
             field(record, "column")?,
             value_of(record, "scope")?,
-            root_row(&record.getattr("ownership_root")?)?,
+            root_row(&native_field(record, "ownership_root")?)?,
             field(record, "owning_path")?,
         ))?,
         macro_facts: optional_item(record, "macro")?
@@ -201,8 +202,8 @@ pub(crate) fn read_declaration(record: &Bound<'_, PyAny>) -> PyResult<CachedDecl
 
 fn read_usage(usage: &Bound<'_, PyAny>) -> PyResult<CachedUsage> {
     Ok(CachedUsage {
-        consumer: read_qualified(&usage.getattr("consumer")?)?,
-        declaration: read_declaration_identity(&usage.getattr("declaration")?)?,
+        consumer: read_qualified(&native_field(usage, "consumer")?)?,
+        declaration: read_declaration_identity(&native_field(usage, "declaration")?)?,
         kind: value_of(usage, "kind")?,
         through: read_optional_qualified(usage, "through")?,
         enum_member: field(usage, "enum_member")?,
@@ -211,17 +212,17 @@ fn read_usage(usage: &Bound<'_, PyAny>) -> PyResult<CachedUsage> {
 
 fn read_grant(grant: &Bound<'_, PyAny>) -> PyResult<ReportGrant> {
     Ok(ReportGrant {
-        resource: read_resource_identity(&grant.getattr("resource")?)?,
-        declaration: read_declaration_identity(&grant.getattr("declaration")?)?,
-        through: read_qualified(&grant.getattr("through")?)?,
+        resource: read_resource_identity(&native_field(grant, "resource")?)?,
+        declaration: read_declaration_identity(&native_field(grant, "declaration")?)?,
+        through: read_qualified(&native_field(grant, "through")?)?,
         kind: grant_kind(&value_of(grant, "kind")?)?,
     })
 }
 
 fn read_visibility(fact: &Bound<'_, PyAny>) -> PyResult<CachedVisibility> {
     Ok(CachedVisibility {
-        resource: read_resource_identity(&fact.getattr("resource")?)?,
-        declaration: read_declaration_identity(&fact.getattr("declaration")?)?,
+        resource: read_resource_identity(&native_field(fact, "resource")?)?,
+        declaration: read_declaration_identity(&native_field(fact, "declaration")?)?,
         reason: value_of(fact, "reason")?,
         through: read_optional_qualified(fact, "through")?,
     })
@@ -229,8 +230,8 @@ fn read_visibility(fact: &Bound<'_, PyAny>) -> PyResult<CachedVisibility> {
 
 fn read_inaccessible(fact: &Bound<'_, PyAny>) -> PyResult<CachedInaccessible> {
     Ok(CachedInaccessible {
-        resource: read_resource_identity(&fact.getattr("resource")?)?,
-        declaration: read_declaration_identity(&fact.getattr("declaration")?)?,
+        resource: read_resource_identity(&native_field(fact, "resource")?)?,
+        declaration: read_declaration_identity(&native_field(fact, "declaration")?)?,
         reason: value_of(fact, "reason")?,
     })
 }
@@ -238,9 +239,9 @@ fn read_inaccessible(fact: &Bound<'_, PyAny>) -> PyResult<CachedInaccessible> {
 /// One `ScopeDiagnostic`, with its code and severity as their text.
 pub(crate) fn read_diagnostic(diagnostic: &Bound<'_, PyAny>) -> PyResult<CachedDiagnostic> {
     Ok(CachedDiagnostic {
-        code: enum_text(&diagnostic.getattr("code")?)?,
+        code: enum_text(&native_field(diagnostic, "code")?)?,
         message: field(diagnostic, "message")?,
-        severity: enum_text(&diagnostic.getattr("severity")?)?,
+        severity: enum_text(&native_field(diagnostic, "severity")?)?,
         path: field(diagnostic, "path")?,
         line: field(diagnostic, "line")?,
         column: field(diagnostic, "column")?,
@@ -255,7 +256,7 @@ pub(crate) fn read_diagnostic(diagnostic: &Bound<'_, PyAny>) -> PyResult<CachedD
 
 /// The six `ScopeCompleteness` sections in field order.
 pub(crate) fn read_completeness(index: &Bound<'_, PyAny>) -> PyResult<[bool; 6]> {
-    let done: Bound<'_, PyAny> = index.getattr("completeness")?;
+    let done: Bound<'_, PyAny> = native_field(index, "completeness")?;
     Ok([
         field(&done, "discovery")?,
         field(&done, "static_visibility")?,
@@ -298,8 +299,8 @@ pub(crate) fn read_placement_index(index: &Bound<'_, PyAny>) -> PyResult<Placeme
         })?,
         usages: read_all(index, "usages", |usage| {
             Ok(PlacementUsage {
-                consumer: read_qualified(&usage.getattr("consumer")?)?,
-                declaration: read_declaration_identity(&usage.getattr("declaration")?)?,
+                consumer: read_qualified(&native_field(usage, "consumer")?)?,
+                declaration: read_declaration_identity(&native_field(usage, "declaration")?)?,
                 through: read_optional_qualified(usage, "through")?,
             })
         })?,

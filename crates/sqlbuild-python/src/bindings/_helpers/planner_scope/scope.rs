@@ -5,6 +5,7 @@ use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_scope::loaders::expand_selected_loader_dependencies;
 use crate::bindings::_helpers::planner_scope::values::{edges, keys};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -24,10 +25,13 @@ pub(crate) fn managed_source_upstream_keys<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let mut managed: HashSet<String> = HashSet::new();
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        if !source.getattr("source_entry")?.getattr("loader")?.is_none() {
-            managed.insert(source.getattr("name")?.extract()?);
+        if !native_field(&source, "source_entry")?
+            .getattr("loader")?
+            .is_none()
+        {
+            managed.insert(native_field(&source, "name")?.extract()?);
         }
     }
     let selected = managed_sources(&keys(selected_keys)?, &edges(upstream_deps)?, &managed);
@@ -67,7 +71,7 @@ pub(crate) fn build_planner_scope<'py>(
         registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((&project,))?;
     let mut downstream =
         registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
-    let lineage = project.getattr("lineage_graph")?;
+    let lineage = native_field(&project, "lineage_graph")?;
     let all_keys = registry::native(py, NativeAttr::LineageGraphNames)?.call1((&lineage,))?;
     let mut selected = args.value("selected_keys")?;
     if selected.is_none() {
@@ -126,9 +130,9 @@ pub(crate) fn build_planner_scope<'py>(
         ],
     )?;
     let models = PyDict::new(py);
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(&project, "models")?.try_iter()? {
         let model = model?;
-        models.set_item(model.getattr("name")?, model)?;
+        models.set_item(native_field(&model, "name")?, model)?;
     }
     let mut reads = args.value("python_read_source_names")?;
     if reads.is_none() {

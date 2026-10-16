@@ -22,6 +22,7 @@ use crate::bindings::_helpers::discovery::constants::SQL_HOOK_OUTPUT_FIELDS;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
@@ -71,7 +72,7 @@ impl<'py> ReportInputs<'py> {
         let graph: Bound<'py, PyAny> = arguments.value("graph")?;
         let lineage_mode: Bound<'py, PyAny> = arguments.value("lineage_mode")?;
         Ok(Self {
-            project: graph.getattr("project")?,
+            project: native_field(&graph, "project")?,
             graph,
             written: arguments.value("written")?,
             manifest: arguments.flag("manifest")?,
@@ -103,8 +104,8 @@ impl<'py> ReportInputs<'py> {
         let names: Bound<'py, PySet> = PySet::empty(self.py())?;
         for key in self.selected_keys.try_iter()? {
             let key: Bound<'py, PyAny> = key?;
-            if key.getattr("resource_type")?.eq(resource_type)? {
-                names.add(key.getattr("name")?)?;
+            if native_field(&key, "resource_type")?.eq(resource_type)? {
+                names.add(native_field(&key, "name")?)?;
             }
         }
         Ok(Some(names))
@@ -122,7 +123,7 @@ impl<'py> ReportInputs<'py> {
         };
         let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
         for model in models {
-            if names.contains(model.getattr("name")?)? {
+            if names.contains(native_field(&model, "name")?)? {
                 selected.push(model);
             }
         }
@@ -145,7 +146,7 @@ impl<'py> ReportInputs<'py> {
             return Ok(count);
         }
         for key in self.selected_keys.try_iter()? {
-            let kind: String = key?.getattr("resource_type")?.str()?.to_string();
+            let kind: String = native_field(&key?, "resource_type")?.str()?.to_string();
             count += usize::from(types.contains(&kind.as_str()));
         }
         Ok(count)
@@ -154,7 +155,7 @@ impl<'py> ReportInputs<'py> {
     fn severity_count(&self, severity: &str) -> PyResult<usize> {
         let mut count: usize = 0;
         for diagnostic in &self.diagnostics {
-            count += usize::from(diagnostic.getattr("severity")?.eq(severity)?);
+            count += usize::from(native_field(diagnostic, "severity")?.eq(severity)?);
         }
         Ok(count)
     }
@@ -197,7 +198,7 @@ impl<'py> ReportInputs<'py> {
             .written
             .getattr("target_dir")?
             .div(COMPILED_DIRECTORY)?;
-        let parts: Bound<'py, PyTuple> = path.getattr("parts")?.downcast_into()?;
+        let parts: Bound<'py, PyTuple> = native_field(&path, "parts")?.downcast_into()?;
         for (index, part) in parts.iter().enumerate() {
             if part.eq(TARGET_DIRECTORY)? {
                 let kept: Bound<'py, PyTuple> = parts.get_slice(index, parts.len());
@@ -221,17 +222,20 @@ fn optional_number(value: &Bound<'_, PyAny>) -> PyResult<Option<i64>> {
 /// Each authored file's text by path: models with SQL, then sources, then SQL tests.
 fn source_texts<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let texts: Bound<'py, PyDict> = PyDict::new(project.py());
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        let authored: Bound<'py, PyAny> = model.getattr("authored_sql")?;
+        let authored: Bound<'py, PyAny> = native_field(&model, "authored_sql")?;
         if authored.is_truthy()? {
-            texts.set_item(model.getattr("relative_path")?, authored)?;
+            texts.set_item(native_field(&model, "relative_path")?, authored)?;
         }
     }
     for (collection, file) in [("sources", "source_file"), ("sql_tests", "test_file")] {
         for resource in project.getattr(collection)?.try_iter()? {
             let file: Bound<'py, PyAny> = resource?.getattr(file)?;
-            texts.set_item(file.getattr("relative_path")?, file.getattr("contents")?)?;
+            texts.set_item(
+                native_field(&file, "relative_path")?,
+                native_field(&file, "contents")?,
+            )?;
         }
     }
     Ok(texts)
@@ -242,13 +246,13 @@ fn location_text(
     location: &Bound<'_, PyAny>,
     texts: &Bound<'_, PyDict>,
 ) -> PyResult<LocationText> {
-    let path: Bound<'_, PyAny> = location.getattr("path")?;
+    let path: Bound<'_, PyAny> = native_field(location, "path")?;
     Ok(LocationText {
         path: reader.text(&path)?,
-        line: location.getattr("line")?.extract()?,
-        column: location.getattr("column")?.extract()?,
-        end_line: optional_number(&location.getattr("end_line")?)?,
-        end_column: optional_number(&location.getattr("end_column")?)?,
+        line: native_field(location, "line")?.extract()?,
+        column: native_field(location, "column")?.extract()?,
+        end_line: optional_number(&native_field(location, "end_line")?)?,
+        end_column: optional_number(&native_field(location, "end_column")?)?,
         source: texts
             .get_item(path)?
             .map(|text| reader.text(&text))
@@ -266,32 +270,32 @@ fn diagnostic_text(
     texts: &Bound<'_, PyDict>,
     occurrences: usize,
 ) -> PyResult<DiagnosticText> {
-    let location: Bound<'_, PyAny> = diagnostic.getattr("location")?;
+    let location: Bound<'_, PyAny> = native_field(diagnostic, "location")?;
     let mut related: Vec<RelatedText> = Vec::new();
-    for item in diagnostic.getattr("related_locations")?.try_iter()? {
+    for item in native_field(diagnostic, "related_locations")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
         related.push(RelatedText {
-            label: reader.text(&item.getattr("label")?)?,
-            location: location_text(reader, &item.getattr("location")?, texts)?,
-            message: reader.optional(&item.getattr("message")?)?,
+            label: reader.text(&native_field(&item, "label")?)?,
+            location: location_text(reader, &native_field(&item, "location")?, texts)?,
+            message: reader.optional(&native_field(&item, "message")?)?,
         });
     }
     Ok(DiagnosticText {
-        severity: reader.text(&diagnostic.getattr("severity")?)?,
-        code: reader.text(&diagnostic.getattr("code")?)?,
-        message: reader.text(&diagnostic.getattr("message")?)?,
-        resource_type: reader.optional(&diagnostic.getattr("resource_type")?)?,
-        resource_name: reader.optional(&diagnostic.getattr("resource_name")?)?,
+        severity: reader.text(&native_field(diagnostic, "severity")?)?,
+        code: reader.text(&native_field(diagnostic, "code")?)?,
+        message: reader.text(&native_field(diagnostic, "message")?)?,
+        resource_type: reader.optional(&native_field(diagnostic, "resource_type")?)?,
+        resource_name: reader.optional(&native_field(diagnostic, "resource_name")?)?,
         location: if location.is_none() {
             None
         } else {
             Some(location_text(reader, &location, texts)?)
         },
-        path: reader.optional(&diagnostic.getattr("path")?)?,
+        path: reader.optional(&native_field(diagnostic, "path")?)?,
         related,
-        notes: texts_of(reader, &diagnostic.getattr("notes")?)?,
-        affected_rules: texts_of(reader, &diagnostic.getattr("affected_rules")?)?,
-        help: reader.optional(&diagnostic.getattr("help")?)?,
+        notes: texts_of(reader, &native_field(diagnostic, "notes")?)?,
+        affected_rules: texts_of(reader, &native_field(diagnostic, "affected_rules")?)?,
+        help: reader.optional(&native_field(diagnostic, "help")?)?,
         occurrences,
     })
 }
@@ -308,7 +312,7 @@ fn shown_diagnostics(
     let texts: Bound<'_, PyDict> = source_texts(&inputs.project)?;
     let warning_counts: Bound<'_, PyDict> = PyDict::new(py);
     for diagnostic in &inputs.diagnostics {
-        if diagnostic.getattr("severity")?.eq(WARNING_SEVERITY)? {
+        if native_field(diagnostic, "severity")?.eq(WARNING_SEVERITY)? {
             let count: usize = warning_counts
                 .get_item(diagnostic)?
                 .map_or(Ok(0), |count| count.extract())?;
@@ -321,7 +325,7 @@ fn shown_diagnostics(
         if shown_warnings.contains(diagnostic)? {
             continue;
         }
-        if diagnostic.getattr("severity")?.eq(WARNING_SEVERITY)? {
+        if native_field(diagnostic, "severity")?.eq(WARNING_SEVERITY)? {
             shown_warnings.set_item(diagnostic, true)?;
         }
         let occurrences: usize = warning_counts
@@ -336,10 +340,10 @@ fn shown_diagnostics(
 fn error_models<'py>(inputs: &ReportInputs<'py>) -> PyResult<Bound<'py, PySet>> {
     let names: Bound<'py, PySet> = PySet::empty(inputs.py())?;
     for diagnostic in &inputs.diagnostics {
-        let name: Bound<'_, PyAny> = diagnostic.getattr("resource_name")?;
-        if diagnostic.getattr("is_error")?.is_truthy()?
+        let name: Bound<'_, PyAny> = native_field(diagnostic, "resource_name")?;
+        if native_field(diagnostic, "is_error")?.is_truthy()?
             && !name.is_none()
-            && !diagnostic.getattr("resource_type")?.eq(SQL_TEST_TYPE)?
+            && !native_field(diagnostic, "resource_type")?.eq(SQL_TEST_TYPE)?
         {
             names.add(name)?;
         }
@@ -361,11 +365,11 @@ pub(crate) fn format_compile_text<'py>(
     let failed: Bound<'py, PySet> = error_models(&inputs)?;
     let mut models: Vec<ModelLine> = Vec::new();
     for model in inputs.selected_models()? {
-        let name: Bound<'py, PyAny> = model.getattr("name")?;
+        let name: Bound<'py, PyAny> = native_field(&model, "name")?;
         models.push(ModelLine {
             failed: failed.contains(&name)?,
             name: reader.text(&name)?,
-            column_count: model.getattr("output_column_count")?.extract()?,
+            column_count: native_field(&model, "output_column_count")?.extract()?,
         });
     }
     let lineage: LineageNote = if !inputs.lineage.is_none() && inputs.lineage_mode == RICH_LINEAGE {
@@ -409,7 +413,7 @@ pub(crate) fn json_semantic_notice<'py>(
     let py: Python<'py> = graph.py();
     let reader: SurrogateText = SurrogateText::default();
     let notice: Option<String> = ReportInputs {
-        project: graph.getattr("project")?,
+        project: native_field(graph, "project")?,
         graph: graph.clone(),
         written: py.None().into_bound(py),
         manifest: false,
@@ -456,9 +460,9 @@ fn location_json<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
     let payload: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("path", location.getattr("path")?.str()?.into_any()),
-            ("line", location.getattr("line")?),
-            ("column", location.getattr("column")?),
+            ("path", native_field(location, "path")?.str()?.into_any()),
+            ("line", native_field(location, "line")?),
+            ("column", native_field(location, "column")?),
         ],
     )?;
     for key in ["end_line", "end_column"] {
@@ -476,16 +480,19 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     let payload: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("phase", diagnostic.getattr("phase")?.str()?.into_any()),
+            (
+                "phase",
+                native_field(diagnostic, "phase")?.str()?.into_any(),
+            ),
             (
                 "severity",
-                diagnostic.getattr("severity")?.str()?.into_any(),
+                native_field(diagnostic, "severity")?.str()?.into_any(),
             ),
-            ("code", diagnostic.getattr("code")?),
-            ("message", diagnostic.getattr("message")?),
+            ("code", native_field(diagnostic, "code")?),
+            ("message", native_field(diagnostic, "message")?),
         ],
     )?;
-    let resource_type: Bound<'py, PyAny> = diagnostic.getattr("resource_type")?;
+    let resource_type: Bound<'py, PyAny> = native_field(diagnostic, "resource_type")?;
     if !resource_type.is_none() {
         payload.set_item("resource_type", resource_type.str()?)?;
     }
@@ -495,7 +502,7 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
             payload.set_item(key, value)?;
         }
     }
-    let path: Bound<'py, PyAny> = diagnostic.getattr("path")?;
+    let path: Bound<'py, PyAny> = native_field(diagnostic, "path")?;
     if !path.is_none() {
         payload.set_item("path", path.str()?)?;
     }
@@ -505,11 +512,11 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
             payload.set_item(key, value)?;
         }
     }
-    let location: Bound<'py, PyAny> = diagnostic.getattr("location")?;
+    let location: Bound<'py, PyAny> = native_field(diagnostic, "location")?;
     if !location.is_none() {
         payload.set_item("location", location_json(&location)?)?;
     }
-    let related: Bound<'py, PyAny> = diagnostic.getattr("related_locations")?;
+    let related: Bound<'py, PyAny> = native_field(diagnostic, "related_locations")?;
     if related.is_truthy()? {
         let mut items: Vec<Bound<'py, PyDict>> = Vec::new();
         for item in related.try_iter()? {
@@ -517,14 +524,14 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
             let entry: Bound<'py, PyDict> = dict(
                 py,
                 vec![
-                    ("label", item.getattr("label")?),
+                    ("label", native_field(&item, "label")?),
                     (
                         "location",
-                        location_json(&item.getattr("location")?)?.into_any(),
+                        location_json(&native_field(&item, "location")?)?.into_any(),
                     ),
                 ],
             )?;
-            let message: Bound<'py, PyAny> = item.getattr("message")?;
+            let message: Bound<'py, PyAny> = native_field(&item, "message")?;
             if !message.is_none() {
                 entry.set_item("message", message)?;
             }
@@ -532,7 +539,7 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         }
         payload.set_item("related_locations", PyList::new(py, items)?)?;
     }
-    let help: Bound<'py, PyAny> = diagnostic.getattr("help")?;
+    let help: Bound<'py, PyAny> = native_field(diagnostic, "help")?;
     if !help.is_none() {
         payload.set_item("help", help)?;
     }
@@ -550,7 +557,8 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
 
 /// `item[key] = value.qualified_name` when the destination names a relation.
 fn qualified_name(item: &Bound<'_, PyDict>, resource: &Bound<'_, PyAny>) -> PyResult<()> {
-    let name: Bound<'_, PyAny> = resource.getattr("destination")?.getattr("qualified_name")?;
+    let name: Bound<'_, PyAny> =
+        native_field(resource, "destination")?.getattr("qualified_name")?;
     if !name.is_none() {
         item.set_item("qualified_name", name)?;
     }
@@ -562,7 +570,7 @@ fn lineage_summary<'py>(
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
-    let name: Bound<'py, PyAny> = model.getattr("name")?;
+    let name: Bound<'py, PyAny> = native_field(model, "name")?;
     if lineage.is_none() || !lineage.call_method1("has_model", (&name,))?.is_truthy()? {
         return dict(py, vec![("available", any(py, false)?)]);
     }
@@ -570,7 +578,7 @@ fn lineage_summary<'py>(
         py,
         vec![
             ("available", any(py, true)?),
-            ("column_count", model.getattr("output_column_count")?),
+            ("column_count", native_field(model, "output_column_count")?),
             (
                 "edge_count",
                 lineage.call_method1("edge_count_targeting", (&name,))?,
@@ -588,28 +596,31 @@ fn model_resource<'py>(
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
-    let key: Bound<'py, PyAny> = model.getattr("key")?;
+    let key: Bound<'py, PyAny> = native_field(model, "key")?;
     let mut depends_on: Vec<Bound<'py, PyDict>> = Vec::new();
     for upstream in inputs
         .graph
         .getattr("native")?
         .call_method1(
             "upstream",
-            ((key.getattr("resource_type")?.str()?, key.getattr("name")?),),
+            ((
+                native_field(&key, "resource_type")?.str()?,
+                native_field(&key, "name")?,
+            ),),
         )?
         .try_iter()?
     {
         let (kind, name): (Bound<'py, PyAny>, Bound<'py, PyAny>) = upstream?.extract()?;
         depends_on.push(dict(py, vec![("resource_type", kind), ("name", name)])?);
     }
-    let values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
+    let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
     let item: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("name", model.getattr("name")?),
+            ("name", native_field(model, "name")?),
             (
                 "relative_path",
-                model.getattr("relative_path")?.str()?.into_any(),
+                native_field(model, "relative_path")?.str()?.into_any(),
             ),
             (
                 "materialized",
@@ -618,13 +629,13 @@ fn model_resource<'py>(
                     .str()?
                     .into_any(),
             ),
-            ("column_count", model.getattr("output_column_count")?),
+            ("column_count", native_field(model, "output_column_count")?),
             ("depends_on", PyList::new(py, depends_on)?.into_any()),
             (
                 "lineage",
                 lineage_summary(&inputs.lineage, model)?.into_any(),
             ),
-            ("query_sql", model.getattr("query_sql")?),
+            ("query_sql", native_field(model, "query_sql")?),
         ],
     )?;
     qualified_name(&item, model)?;
@@ -643,40 +654,43 @@ fn model_resource<'py>(
 fn hook_definitions<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let py: Python<'py> = project.py();
     let mut definitions: Vec<Bound<'py, PyDict>> = Vec::new();
-    for hook in project.getattr("sql_hook_files")?.try_iter()? {
+    for hook in native_field(project, "sql_hook_files")?.try_iter()? {
         let hook: Bound<'py, PyAny> = hook?;
         definitions.push(dict(
             py,
             vec![
                 ("type", any(py, "sql")?),
-                ("name", hook.getattr("name")?),
+                ("name", native_field(&hook, "name")?),
                 (
                     "relative_path",
-                    hook.getattr("relative_path")?.call_method0("as_posix")?,
+                    native_field(&hook, "relative_path")?.call_method0("as_posix")?,
                 ),
-                ("description", hook.getattr("description")?),
-                ("sql", hook.getattr("sql_body")?),
+                ("description", native_field(&hook, "description")?),
+                ("sql", native_field(&hook, "sql_body")?),
             ],
         )?);
     }
-    let functions: Bound<'py, PyAny> = project.getattr("hook_functions")?;
+    let functions: Bound<'py, PyAny> = native_field(project, "hook_functions")?;
     let identities: Bound<'py, PyAny> =
         host::entry(py, UserCodeHost::BuildHookIdentities)?.call1((&functions,))?;
     for hook in functions.try_iter()? {
         let hook: Bound<'py, PyAny> = hook?;
-        let identity: Bound<'py, PyAny> = identities.get_item(hook.getattr("name")?)?;
+        let identity: Bound<'py, PyAny> = identities.get_item(native_field(&hook, "name")?)?;
         definitions.push(dict(
             py,
             vec![
                 ("type", any(py, "python")?),
-                ("name", hook.getattr("name")?),
+                ("name", native_field(&hook, "name")?),
                 (
                     "relative_path",
-                    hook.getattr("relative_path")?.call_method0("as_posix")?,
+                    native_field(&hook, "relative_path")?.call_method0("as_posix")?,
                 ),
-                ("description", hook.getattr("description")?),
-                ("definition_hash", identity.getattr("definition_hash")?),
-                ("version_hash", identity.getattr("version_hash")?),
+                ("description", native_field(&hook, "description")?),
+                (
+                    "definition_hash",
+                    native_field(&identity, "definition_hash")?,
+                ),
+                ("version_hash", native_field(&identity, "version_hash")?),
             ],
         )?);
     }
@@ -685,28 +699,31 @@ fn hook_definitions<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyL
 
 fn function_resource<'py>(function: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = function.py();
-    let return_columns: Bound<'py, PyAny> = function.getattr("return_columns")?;
+    let return_columns: Bound<'py, PyAny> = native_field(function, "return_columns")?;
     let mut columns: Vec<Bound<'py, PyDict>> = Vec::new();
     for column in return_columns.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
         columns.push(dict(
             py,
             vec![
-                ("name", column.getattr("name")?),
-                ("type", column.getattr("type")?),
+                ("name", native_field(&column, "name")?),
+                ("type", native_field(&column, "type")?),
             ],
         )?);
     }
     let item: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("name", function.getattr("name")?),
+            ("name", native_field(function, "name")?),
             (
                 "relative_path",
-                function.getattr("relative_path")?.str()?.into_any(),
+                native_field(function, "relative_path")?.str()?.into_any(),
             ),
-            ("language", function.getattr("language")?.getattr("value")?),
-            ("description", function.getattr("description")?),
+            (
+                "language",
+                native_field(function, "language")?.getattr("value")?,
+            ),
+            ("description", native_field(function, "description")?),
             (
                 "return_kind",
                 any(
@@ -718,7 +735,7 @@ fn function_resource<'py>(function: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
                     },
                 )?,
             ),
-            ("returns", function.getattr("returns")?),
+            ("returns", native_field(function, "returns")?),
             ("return_columns", PyList::new(py, columns)?.into_any()),
         ],
     )?;
@@ -731,7 +748,7 @@ fn audit_resource<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
     let item: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("name", audit.getattr("name")?),
+            ("name", native_field(audit, "name")?),
             (
                 "relative_path",
                 audit
@@ -742,14 +759,17 @@ fn audit_resource<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ),
         ],
     )?;
-    let kind: Bound<'py, PyAny> = audit.getattr("attached_target_kind")?;
-    let target: Bound<'py, PyAny> = audit.getattr("attached_target_name")?;
+    let kind: Bound<'py, PyAny> = native_field(audit, "attached_target_kind")?;
+    let target: Bound<'py, PyAny> = native_field(audit, "attached_target_name")?;
     if !kind.is_none() && !target.is_none() {
         let attached: Bound<'py, PyDict> = dict(
             py,
-            vec![("resource_type", kind.getattr("value")?), ("name", target)],
+            vec![
+                ("resource_type", native_field(&kind, "value")?),
+                ("name", target),
+            ],
         )?;
-        let column: Bound<'py, PyAny> = audit.getattr("attached_column_name")?;
+        let column: Bound<'py, PyAny> = native_field(audit, "attached_column_name")?;
         if !column.is_none() {
             attached.set_item("column_name", column)?;
         }
@@ -760,7 +780,7 @@ fn audit_resource<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
 
 fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = test.py();
-    let payload: Bound<'py, PyAny> = test.getattr("payload")?;
+    let payload: Bound<'py, PyAny> = native_field(test, "payload")?;
     let expected_models: Bound<'py, PyList> =
         if payload.is_instance(&registry::class(py, RecordId::CompiledModelSqlTestPayload)?)? {
             PyList::new(
@@ -773,16 +793,17 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
         } else {
             PyList::empty(py)
         };
-    let test_file_path: Bound<'py, PyAny> = test.getattr("test_file")?.getattr("relative_path")?;
+    let test_file_path: Bound<'py, PyAny> =
+        native_field(test, "test_file")?.getattr("relative_path")?;
     let item: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("name", test.getattr("name")?),
+            ("name", native_field(test, "name")?),
             ("relative_path", test_file_path.str()?.into_any()),
             ("expected_models", expected_models.into_any()),
         ],
     )?;
-    let case_name: Bound<'py, PyAny> = test.getattr("case_name")?;
+    let case_name: Bound<'py, PyAny> = native_field(test, "case_name")?;
     if case_name.is_none() {
         return Ok(item);
     }
@@ -793,24 +814,27 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
     let types: Bound<'py, PyDict> = PyDict::new(py);
     let mut parameter_schema: Vec<Bound<'py, PyDict>> = Vec::new();
     for parameter in &schema {
-        let kind: Bound<'py, PyAny> = parameter.getattr("value_type")?.getattr("value")?;
-        types.set_item(parameter.getattr("name")?, &kind)?;
+        let kind: Bound<'py, PyAny> = native_field(parameter, "value_type")?.getattr("value")?;
+        types.set_item(native_field(parameter, "name")?, &kind)?;
     }
     for parameter in &schema {
         parameter_schema.push(dict(
             py,
             vec![
-                ("name", parameter.getattr("name")?),
-                ("type", parameter.getattr("value_type")?.getattr("value")?),
-                ("nullable", parameter.getattr("nullable")?),
+                ("name", native_field(parameter, "name")?),
+                (
+                    "type",
+                    native_field(parameter, "value_type")?.getattr("value")?,
+                ),
+                ("nullable", native_field(parameter, "nullable")?),
             ],
         )?);
     }
     let mut parameters: Vec<Bound<'py, PyDict>> = Vec::new();
-    for pair in test.getattr("parameter_values")?.try_iter()? {
+    for pair in native_field(test, "parameter_values")?.try_iter()? {
         let (name, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
-        let inner: Bound<'py, PyAny> = value.getattr("value")?;
-        let shown: Bound<'py, PyAny> = if value.getattr("kind")?.eq(DECIMAL_KIND)? {
+        let inner: Bound<'py, PyAny> = native_field(&value, "value")?;
+        let shown: Bound<'py, PyAny> = if native_field(&value, "kind")?.eq(DECIMAL_KIND)? {
             inner.str()?.into_any()
         } else {
             inner
@@ -821,7 +845,7 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
             vec![("name", name), ("type", kind), ("value", shown)],
         )?);
     }
-    let source_path: Bound<'py, PyAny> = test.getattr("source_path")?;
+    let source_path: Bound<'py, PyAny> = native_field(test, "source_path")?;
     let source_path: Bound<'py, PyAny> = if source_path.is_truthy()? {
         source_path
     } else {
@@ -829,11 +853,11 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
     };
     for (key, value) in [
         ("source_path", source_path.call_method0("as_posix")?),
-        ("block_index", test.getattr("block_index")?),
-        ("parent_name", test.getattr("parent_name")?),
+        ("block_index", native_field(test, "block_index")?),
+        ("parent_name", native_field(test, "parent_name")?),
         ("case_name", case_name),
-        ("case_index", test.getattr("case_index")?),
-        ("case_fingerprint", test.getattr("case_fingerprint")?),
+        ("case_index", native_field(test, "case_index")?),
+        ("case_fingerprint", native_field(test, "case_fingerprint")?),
         (
             "parameter_schema",
             PyList::new(py, parameter_schema)?.into_any(),
@@ -864,7 +888,7 @@ fn source_resource<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
     dict(
         py,
         vec![
-            ("name", source.getattr("name")?),
+            ("name", native_field(source, "name")?),
             (
                 "relative_path",
                 source
@@ -877,7 +901,9 @@ fn source_resource<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
                 "column_count",
                 any(
                     py,
-                    source.getattr("source_entry")?.getattr("columns")?.len()?,
+                    native_field(source, "source_entry")?
+                        .getattr("columns")?
+                        .len()?,
                 )?,
             ),
         ],
@@ -889,17 +915,22 @@ fn seed_resource<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
     let item: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("name", seed.getattr("name")?),
+            ("name", native_field(seed, "name")?),
             (
                 "relative_path",
-                seed.getattr("seed_file")?
+                native_field(seed, "seed_file")?
                     .getattr("relative_path")?
                     .str()?
                     .into_any(),
             ),
             (
                 "column_count",
-                any(py, seed.getattr("schema_entry")?.getattr("columns")?.len()?)?,
+                any(
+                    py,
+                    native_field(seed, "schema_entry")?
+                        .getattr("columns")?
+                        .len()?,
+                )?,
             ),
         ],
     )?;
@@ -921,7 +952,7 @@ pub(crate) fn format_compile_json(
     let mut has_errors: bool = false;
     let mut diagnostics: Vec<Bound<'_, PyDict>> = Vec::new();
     for diagnostic in &inputs.diagnostics {
-        has_errors = has_errors || diagnostic.getattr("is_error")?.is_truthy()?;
+        has_errors = has_errors || native_field(diagnostic, "is_error")?.is_truthy()?;
         diagnostics.push(diagnostic_json(diagnostic)?);
     }
     let length = |collection: &str| -> PyResult<usize> { project.getattr(collection)?.len() };
@@ -1033,9 +1064,9 @@ pub(crate) fn format_compile_error_json<'py>(
         (location.clone(), location.clone(), location.clone())
     } else {
         (
-            location.getattr("path")?,
-            location.getattr("line")?,
-            location.getattr("column")?,
+            native_field(&location, "path")?,
+            native_field(&location, "line")?,
+            native_field(&location, "column")?,
         )
     };
     let diagnostic: Bound<'py, PyAny> = call_with(

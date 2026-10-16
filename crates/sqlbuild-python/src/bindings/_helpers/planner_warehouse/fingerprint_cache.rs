@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_changes::metadata::without_declared_colum
 use crate::bindings::_helpers::planner_migrations::fingerprint::migration_fingerprint_ref_names;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{optional_text, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::{PyOSError, PyValueError};
@@ -219,7 +220,7 @@ impl MigrationFingerprintCache {
                 let created = call_with(
                     &match path
                         .getattr("parent")
-                        .and_then(|parent| parent.getattr("mkdir"))
+                        .and_then(|parent| native_field(&parent, "mkdir"))
                     {
                         Ok(mkdir) => mkdir,
                         Err(error) => return (None, Err(error)),

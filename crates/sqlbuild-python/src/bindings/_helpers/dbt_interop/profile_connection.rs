@@ -14,6 +14,7 @@ use crate::bindings::_helpers::dbt_interop::profile_load::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -128,25 +129,25 @@ fn resolve_raw_dbt_profile_connection<'py>(
     if !is_profile {
         return Ok(py.None().into_bound(py));
     }
-    let dbt_config: Bound<'py, PyAny> = project_config.getattr("dbt")?;
+    let dbt_config: Bound<'py, PyAny> = native_field(&project_config, "dbt")?;
     let dbt_project_dir: Bound<'py, PyAny> = resolved_path(
         &project_dir,
         or_config(
             optional_str(&raw_config, "project_dir")?,
-            &dbt_config.getattr("project_dir")?,
+            &native_field(&dbt_config, "project_dir")?,
         )?,
     )?;
     let profiles_dir: Bound<'py, PyAny> = resolved_path(
         &project_dir,
         or_config(
             optional_str(&raw_config, "profiles_dir")?,
-            &dbt_config.getattr("profiles_dir")?,
+            &native_field(&dbt_config, "profiles_dir")?,
         )?,
     )?;
     let profile_name: Option<String> = optional_str(&raw_config, "profile")?;
     let target_name: Option<String> = or_config(
         optional_str(&raw_config, "target")?,
-        &dbt_config.getattr("target")?,
+        &native_field(&dbt_config, "target")?,
     )?;
     let cli_vars: Bound<'py, PyAny> = if cli_vars.is_none() {
         PyDict::new(py).into_any()
@@ -159,7 +160,7 @@ fn resolve_raw_dbt_profile_connection<'py>(
         (profile_name, target_name),
         cli_vars,
     )?;
-    let resolved_adapter: Bound<'py, PyAny> = resolved.getattr("adapter")?;
+    let resolved_adapter: Bound<'py, PyAny> = native_field(&resolved, "adapter")?;
     if !resolved_adapter.eq(&adapter_name)? {
         return Err(profile_error(
             py,

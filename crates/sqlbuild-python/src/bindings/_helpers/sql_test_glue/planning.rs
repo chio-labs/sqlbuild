@@ -15,6 +15,7 @@ use sqlbuild_analysis::compiler::models::{
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
 
@@ -178,13 +179,13 @@ fn plan_model(
 /// The names of the models among a compiled model's dependencies, in dependency order.
 fn model_dependencies(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let mut names: Vec<String> = Vec::new();
-    for dependency in model.getattr("deps")?.try_iter()? {
+    for dependency in native_field(model, "deps")?.try_iter()? {
         let dependency = dependency?;
         if dependency
             .getattr("resource_type")?
             .eq(MODEL_RESOURCE_TYPE)?
         {
-            names.push(dependency.getattr("name")?.extract()?);
+            names.push(native_field(&dependency, "name")?.extract()?);
         }
     }
     Ok(names)
@@ -212,12 +213,12 @@ fn plan_test(
     test: &Bound<'_, PyAny>,
     rendered_overrides: Option<BTreeMap<String, String>>,
 ) -> PyResult<SqlTestPlanTest> {
-    let payload = test.getattr("payload")?;
+    let payload = native_field(test, "payload")?;
     let payload: SqlTestPlanPayload = if payload.hasattr("actual_cte")? {
         SqlTestPlanPayload::Direct {
-            mode: payload.getattr("mode")?.extract()?,
-            actual_cte: cte(&payload.getattr("actual_cte")?)?,
-            expected_cte: cte(&payload.getattr("expected_cte")?)?,
+            mode: native_field(&payload, "mode")?.extract()?,
+            actual_cte: cte(&native_field(&payload, "actual_cte")?)?,
+            expected_cte: cte(&native_field(&payload, "expected_cte")?)?,
             helper_ctes: ctes(&payload, "helper_ctes")?,
         }
     } else {
@@ -225,19 +226,19 @@ fn plan_test(
             authored_ctes: ctes(&payload, "authored_ctes")?,
             model_query_overrides: match rendered_overrides {
                 Some(overrides) => overrides,
-                None => payload.getattr("model_query_overrides")?.extract()?,
+                None => native_field(&payload, "model_query_overrides")?.extract()?,
             },
             expected_ctes: ctes(&payload, "expected_ctes")?,
-            expected_model_names: payload.getattr("expected_model_names")?.extract()?,
+            expected_model_names: native_field(&payload, "expected_model_names")?.extract()?,
             assertion_ctes: ctes(&payload, "assertion_ctes")?,
-            read_helper_names: Some(test.getattr("read_helper_names")?.extract()?),
+            read_helper_names: Some(native_field(test, "read_helper_names")?.extract()?),
             reference_target_model_names: Some(
-                test.getattr("reference_target_model_names")?.extract()?,
+                native_field(test, "reference_target_model_names")?.extract()?,
             ),
         }
     };
     Ok(SqlTestPlanTest {
-        name: test.getattr("name")?.extract()?,
+        name: native_field(test, "name")?.extract()?,
         file_label: test
             .getattr("test_file")?
             .getattr("relative_path")?
@@ -257,8 +258,8 @@ fn ctes(owner: &Bound<'_, PyAny>, attribute: &str) -> PyResult<Vec<SqlTestCte>> 
 
 fn cte(value: &Bound<'_, PyAny>) -> PyResult<SqlTestCte> {
     Ok(SqlTestCte {
-        name: value.getattr("name")?.extract()?,
-        sql_body: value.getattr("sql_body")?.extract()?,
+        name: native_field(value, "name")?.extract()?,
+        sql_body: native_field(value, "sql_body")?.extract()?,
     })
 }
 

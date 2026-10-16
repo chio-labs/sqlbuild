@@ -6,6 +6,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -14,17 +15,17 @@ const REQUIRED_OPTION_FIELDS: [&str; 3] = ["name", "default", "description"];
 
 /// `pathlib.Path(value)` of a `ProjectPath`.
 fn project_path<'py>(instance: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    imported(instance.py(), "pathlib", "Path")?.call1((instance.getattr("value")?,))
+    imported(instance.py(), "pathlib", "Path")?.call1((native_field(instance, "value")?,))
 }
 
 /// `ProjectPath.parts`.
 pub(crate) fn project_path_parts(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(project_path(instance)?.getattr("parts")?.unbind())
+    Ok(native_field(&project_path(instance)?, "parts")?.unbind())
 }
 
 /// `ProjectPath.name`.
 pub(crate) fn project_path_name(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(project_path(instance)?.getattr("name")?.unbind())
+    Ok(native_field(&project_path(instance)?, "name")?.unbind())
 }
 
 /// `ProjectPath.depth`: the number of path parts.

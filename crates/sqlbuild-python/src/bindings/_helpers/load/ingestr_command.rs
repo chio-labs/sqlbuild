@@ -19,6 +19,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const INGESTR_ERROR: ThirdPartyHost = ThirdPartyHost::IngestrIntegrationError;
 const INGESTR_SOURCE_CONFIG: ThirdPartyHost = ThirdPartyHost::IngestrSourceConfig;
@@ -45,15 +46,15 @@ fn ingestr_error(py: Python<'_>, message: String) -> PyErr {
 /// The source's ingestr config, raising when the source declares no valid one.
 fn ingestr_config<'py>(source_entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = source_entry.py();
-    let name: String = source_entry.getattr("name")?.str()?.extract()?;
-    let loader: Bound<'py, PyAny> = source_entry.getattr("integration_loader")?;
-    if loader.is_none() || !loader.getattr("kind")?.eq(host::entry(py, INGESTR_KIND)?)? {
+    let name: String = native_field(source_entry, "name")?.str()?.extract()?;
+    let loader: Bound<'py, PyAny> = native_field(source_entry, "integration_loader")?;
+    if loader.is_none() || !native_field(&loader, "kind")?.eq(host::entry(py, INGESTR_KIND)?)? {
         return Err(ingestr_error(
             py,
             format!("Source '{name}' does not define ingestr config"),
         ));
     }
-    let config: Bound<'py, PyAny> = loader.getattr("config")?;
+    let config: Bound<'py, PyAny> = native_field(&loader, "config")?;
     if !config.is_instance(&host::entry(py, INGESTR_SOURCE_CONFIG)?)? {
         return Err(ingestr_error(
             py,
@@ -177,7 +178,7 @@ fn build_ingestr_command<'py>(
         &connection(request.get("connection_config")?.downcast()?)?,
     )
     .map_err(|error| ingestr_error(py, error.message))?;
-    let schema: Option<String> = source_entry.getattr("schema")?.extract()?;
+    let schema: Option<String> = native_field(&source_entry, "schema")?.extract()?;
     let destination_name: String = request.get("destination_name")?.extract()?;
     let destination: IngestrDestination = IngestrDestination {
         uri,

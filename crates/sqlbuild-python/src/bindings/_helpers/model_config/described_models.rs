@@ -10,6 +10,7 @@ use crate::bindings::_helpers::model_config::model_config_builder::{
     layered_values, raised_config_error,
 };
 use crate::bindings::_helpers::model_config::project_defaults::project_defaults_mapping;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DESCRIPTION_KEY: &str = "description";
 const MODEL_SCHEMA_KEY: &str = "model_schema";
@@ -29,20 +30,22 @@ fn externally_described_models<'py>(
     model_schemas: Bound<'py, PyDict>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = inputs.py();
-    let project_config: Bound<'py, PyAny> = inputs.getattr("project_config")?;
+    let project_config: Bound<'py, PyAny> = native_field(&inputs, "project_config")?;
     let defaults: Bound<'py, PyDict> =
-        project_defaults_mapping(&project_config.getattr("defaults")?)?;
+        project_defaults_mapping(&native_field(&project_config, "defaults")?)?;
     let path_defaults: Bound<'py, PyDict> =
-        project_config.getattr("path_defaults")?.downcast_into()?;
+        native_field(&project_config, "path_defaults")?.downcast_into()?;
     let path_keys: Vec<String> = path_defaults
         .keys()
         .iter()
         .map(|key| key.extract::<String>())
         .collect::<PyResult<_>>()?;
     let mut described: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model_file in inputs.getattr("model_files")?.try_iter()? {
+    for model_file in native_field(&inputs, "model_files")?.try_iter()? {
         let model_file: Bound<'py, PyAny> = model_file?;
-        let relative_path: String = model_file.getattr("relative_path")?.str()?.extract()?;
+        let relative_path: String = native_field(&model_file, "relative_path")?
+            .str()?
+            .extract()?;
         let mut values: Bound<'py, PyDict> = defaults.copy()?;
         match select_path_default(&relative_path, &path_keys) {
             PathDefaultChoice::Selected(Some(key)) => {
@@ -53,7 +56,8 @@ fn externally_described_models<'py>(
             PathDefaultChoice::Selected(None) => {}
             PathDefaultChoice::Conflict(error) => return Err(raised_config_error(py, error)),
         }
-        let header: Bound<'py, PyDict> = model_file.getattr("header_values")?.downcast_into()?;
+        let header: Bound<'py, PyDict> =
+            native_field(&model_file, "header_values")?.downcast_into()?;
         values = layered_values(py, &values, &header)?;
         let schema_description: Option<Bound<'py, PyAny>> =
             match values.get_item(MODEL_SCHEMA_KEY)? {
@@ -65,7 +69,7 @@ fn externally_described_models<'py>(
             };
         if non_empty_text(values.get_item(DESCRIPTION_KEY)?)? || non_empty_text(schema_description)?
         {
-            described.push(model_file.getattr("file_path")?);
+            described.push(native_field(&model_file, "file_path")?);
         }
     }
     Ok(described)

@@ -15,6 +15,7 @@ use crate::bindings::_helpers::compiled_project::model_loop::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::reference_row;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::macro_expansion::{
     ExpansionOutput, NativeMacroExpansion, expanded,
 };
@@ -192,7 +193,7 @@ fn located(
     }
     let relocated = (|| -> PyResult<Option<PyErr>> {
         let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
-        let offset: usize = value.getattr("offset")?.extract()?;
+        let offset: usize = native_field(&value, "offset")?.extract()?;
         let passes: Vec<Vec<SplicedSpan>> = vec![model.declaration_spans.to_vec()];
         let Some(authored) =
             authored_model_offset(model.contents, model.authored_query, (sql, offset), &passes)

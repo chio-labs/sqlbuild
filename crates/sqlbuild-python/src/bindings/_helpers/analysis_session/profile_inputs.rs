@@ -9,6 +9,7 @@ use crate::bindings::_helpers::analysis::binding_catalog::{
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -84,7 +85,7 @@ pub(crate) fn pairs(mapping: &Bound<'_, PyAny>) -> PyResult<Pairs> {
 
 /// `profile.sql_analysis_dialect or "generic"`.
 pub(crate) fn profile_dialect(profile: &Bound<'_, PyAny>) -> PyResult<String> {
-    dialect_or_generic(&profile.getattr("sql_analysis_dialect")?)
+    dialect_or_generic(&native_field(profile, "sql_analysis_dialect")?)
 }
 
 /// `dialect or "generic"`.
@@ -126,7 +127,7 @@ pub(crate) fn profile_catalog<'py>(
     profile: &Bound<'py, PyAny>,
     dialect: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let catalog: Bound<'py, PyAny> = profile.getattr("binding_catalog")?;
+    let catalog: Bound<'py, PyAny> = native_field(profile, "binding_catalog")?;
     if catalog.is_truthy()? {
         return Ok(catalog);
     }
@@ -148,5 +149,5 @@ pub(crate) fn profile_catalog<'py>(
 
 /// `profile.function_return_types` items in order.
 pub(crate) fn return_types(profile: &Bound<'_, PyAny>) -> PyResult<Pairs> {
-    pairs(&profile.getattr("function_return_types")?)
+    pairs(&native_field(profile, "function_return_types")?)
 }

@@ -58,6 +58,7 @@ use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::config_errors::raised_config_exception;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
     expand_declarations,
@@ -239,13 +240,13 @@ fn index_sql_hook_definitions(loop_classes: &Bound<'_, PyDict>) -> PyResult<()> 
     let definitions: Bound<'_, PyDict> = PyDict::new(py);
     for hook_file in hooks.as_any().get_item(HOOK_FILES_KEY)?.try_iter()? {
         let hook_file: Bound<'_, PyAny> = hook_file?;
-        let name: Bound<'_, PyAny> = hook_file.getattr("name")?;
+        let name: Bound<'_, PyAny> = native_field(&hook_file, "name")?;
         if let Some(existing) = definitions.get_item(&name)? {
             let message: String = format!(
                 "Duplicate SQL hook name '{}' found in {} and {}",
                 name.str()?,
-                existing.getattr("relative_path")?.str()?,
-                hook_file.getattr("relative_path")?.str()?
+                native_field(&existing, "relative_path")?.str()?,
+                native_field(&hook_file, "relative_path")?.str()?
             );
             let error: Bound<'_, PyAny> = loop_classes
                 .as_any()

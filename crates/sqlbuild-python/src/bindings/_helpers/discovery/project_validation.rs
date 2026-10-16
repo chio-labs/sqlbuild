@@ -10,6 +10,7 @@ use sqlbuild_discovery::project_validation::models::{ProjectFacts, ValidationFai
 
 use crate::bindings::_helpers::discovery::project_facts::{NodeRow, project_facts};
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const CSV_MODULE: &str = "csv";
 const BUILTINS_MODULE: &str = "builtins";
@@ -42,7 +43,7 @@ fn validate_discovered_project_inputs(
             failure,
         } => match py
             .import(PATHLIB_MODULE)
-            .and_then(|module| module.getattr("Path"))
+            .and_then(|module| native_field(&module, "Path"))
             .and_then(|path| path.call1((absolute_path,)))
         {
             Ok(file_path) => read_error(failure, &file_path),
@@ -50,7 +51,7 @@ fn validate_discovered_project_inputs(
         },
         ValidationFailure::Csv(message) => raised(
             py.import(CSV_MODULE)
-                .and_then(|module| module.getattr("Error"))
+                .and_then(|module| native_field(&module, "Error"))
                 .and_then(|class| class.call1((message,))),
         ),
         ValidationFailure::CsvDialect(error) => {

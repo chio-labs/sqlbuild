@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelIn
 use crate::bindings::_helpers::compiled_project::project::{NativeCompiledProject, model_facts};
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::schema_facts::entry_schema_fact;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -47,7 +48,7 @@ fn record<'py>(value: &Bound<'py, PyAny>, class: RecordId) -> PyResult<Bound<'py
         .call1((&class,))?
         .try_iter()?
     {
-        let name: Bound<'py, PyAny> = field?.getattr("name")?;
+        let name: Bound<'py, PyAny> = native_field(&field?, "name")?;
         fields.set_item(
             &name,
             value.getattr(name.downcast::<pyo3::types::PyString>()?)?,
@@ -154,7 +155,7 @@ pub(crate) fn with_type_recovery<'py>(
     poisoned: &Bound<'py, PyFrozenSet>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let name: String = model.getattr("name")?.extract()?;
+    let name: String = native_field(model, "name")?.extract()?;
     let mut unchecked: Vec<String> = Vec::new();
     for pair in poisoned.iter() {
         let (model_name, column): (String, String) = pair.extract()?;
@@ -165,14 +166,14 @@ pub(crate) fn with_type_recovery<'py>(
     if !model.is_instance(&registry::class(py, RecordId::CompiledModel)?)? {
         return model.call_method1("with_type_recovery", (diagnostics, unchecked));
     }
-    let inferred: Bound<'py, PyAny> = model.getattr("inferred_columns")?;
+    let inferred: Bound<'py, PyAny> = native_field(model, "inferred_columns")?;
     let columns: Bound<'py, PyAny> = if inferred.is_none() {
         inferred
     } else {
         let mut columns: Vec<Bound<'py, PyAny>> = Vec::new();
         for column in inferred.try_iter()? {
             let column: Bound<'py, PyAny> = column?;
-            let key = (name.as_str(), column.getattr("name")?);
+            let key = (name.as_str(), native_field(&column, "name")?);
             columns.push(if poisoned.contains(key)? {
                 replace(&column, &[("type", py.None().into_bound(py))])?
             } else {
@@ -259,8 +260,8 @@ pub(crate) fn compile_inputs_view<'py>(
 #[pyfunction]
 pub(crate) fn plain_typed_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    let kind: String = value.getattr("kind")?.getattr("value")?.extract()?;
-    let inner: Bound<'py, PyAny> = value.getattr("value")?;
+    let kind: String = native_field(value, "kind")?.getattr("value")?.extract()?;
+    let inner: Bound<'py, PyAny> = native_field(value, "value")?;
     if kind == DECIMAL_KIND {
         return Ok(inner.str()?.into_any());
     }
@@ -290,13 +291,16 @@ fn enum_row<'py>(declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple
         .try_iter()?
         .map(|member| {
             let member: Bound<'py, PyAny> = member?;
-            Ok((member.getattr("name")?, member.getattr("value")?))
+            Ok((
+                native_field(&member, "name")?,
+                native_field(&member, "value")?,
+            ))
         })
         .collect::<PyResult<_>>()?;
     PyTuple::new(
         py,
         [
-            declaration.getattr("name")?,
+            native_field(declaration, "name")?,
             declaration
                 .getattr("relative_path")?
                 .call_method0("as_posix")?,
@@ -311,23 +315,23 @@ fn enum_row<'py>(declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple
 /// A constant declaration as the native project row, its value made JSON-safe.
 fn constant_row<'py>(declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = declaration.py();
-    let render_as: Bound<'py, PyAny> = declaration.getattr("render_as")?;
+    let render_as: Bound<'py, PyAny> = native_field(declaration, "render_as")?;
     PyTuple::new(
         py,
         [
-            declaration.getattr("name")?,
+            native_field(declaration, "name")?,
             declaration
                 .getattr("relative_path")?
                 .call_method0("as_posix")?,
             PyList::empty(py).into_any(),
-            plain_typed_value(&declaration.getattr("value")?)?,
+            plain_typed_value(&native_field(declaration, "value")?)?,
             declaration
                 .getattr("logical_type")?
                 .getattr("display_name")?,
             if render_as.is_none() {
                 render_as
             } else {
-                render_as.getattr("value")?
+                native_field(&render_as, "value")?
             },
         ],
     )
@@ -361,13 +365,13 @@ fn family_types<'py>(
         .try_iter()?
         .map(|family| {
             let family: Bound<'py, PyAny> = family?;
-            let name: Bound<'py, PyAny> = family.getattr("name")?;
+            let name: Bound<'py, PyAny> = native_field(&family, "name")?;
             let name: String = if casefold {
                 name.call_method0("casefold")?.extract()?
             } else {
                 name.extract()?
             };
-            Ok((name, family.getattr("inferred_type")?.extract()?))
+            Ok((name, native_field(&family, "inferred_type")?.extract()?))
         })
         .collect()
 }
@@ -393,22 +397,22 @@ pub(crate) fn record_model_analyses<'py>(
         if model.is_instance_of::<NativeCompiledModel>() {
             continue;
         }
-        let inferred: Bound<'py, PyAny> = model.getattr("inferred_rows")?;
+        let inferred: Bound<'py, PyAny> = native_field(model, "inferred_rows")?;
         let rows: Vec<(String, Option<String>, Bound<'py, PyAny>)> = if inferred.is_none() {
             Vec::new()
         } else {
             inferred.extract()?
         };
-        let proof: Bound<'py, PyAny> = model.getattr("dynamic_column_contract")?;
+        let proof: Bound<'py, PyAny> = native_field(model, "dynamic_column_contract")?;
         let proof = if proof.is_none() {
             None
         } else {
-            let families: Bound<'py, PyAny> = proof.getattr("families")?;
+            let families: Bound<'py, PyAny> = native_field(&proof, "families")?;
             Some((
-                proof.getattr("output_proven")?.extract()?,
-                proof.getattr("bare_dynamic_pivot")?.extract()?,
+                native_field(&proof, "output_proven")?.extract()?,
+                native_field(&proof, "bare_dynamic_pivot")?.extract()?,
                 family_types(&families, true)?,
-                proof.getattr("failure_reason")?.extract()?,
+                native_field(&proof, "failure_reason")?.extract()?,
                 family_types(&families, false)?,
             ))
         };
@@ -420,14 +424,14 @@ pub(crate) fn record_model_analyses<'py>(
             rows.iter()
                 .map(|(_, _, nullability)| nullability.eq(&nullable))
                 .collect::<PyResult<_>>()?,
-            model.getattr("fast_lineage_has_star")?.is_truthy()?,
+            native_field(model, "fast_lineage_has_star")?.is_truthy()?,
             model
                 .getattr("unchecked_output_columns")?
                 .try_iter()?
                 .map(|column| column?.extract())
                 .collect::<PyResult<_>>()?,
         );
-        let name: String = model.getattr("name")?.extract()?;
+        let name: String = native_field(model, "name")?.extract()?;
         transferred += usize::from(
             project
                 .borrow_mut()
@@ -444,13 +448,13 @@ fn hand_built_project<'py>(
     let py: Python<'py> = project.py();
     let native: Bound<'py, NativeCompiledProject> =
         Bound::new(py, NativeCompiledProject::default())?;
-    let models: Bound<'py, PyAny> = project.getattr("models")?;
+    let models: Bound<'py, PyAny> = native_field(project, "models")?;
     for model in models.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let mut facts: CompiledModelFacts = model_facts(model_row(&model)?.as_any().extract()?)?;
         facts.schema = entry_schema_fact(
-            &model.getattr("schema_entry")?,
-            &model.getattr("relative_path")?,
+            &native_field(&model, "schema_entry")?,
+            &native_field(&model, "relative_path")?,
         )?;
         native.borrow_mut().retain(facts);
     }
@@ -466,7 +470,7 @@ pub(crate) fn compiled_project_facts<'py>(
     if let Ok(view) = project.downcast::<NativeProjectView>() {
         return Ok(view.get().owner().bind(project.py()).clone());
     }
-    let retained: Bound<'py, PyAny> = project.getattr("native_project")?;
+    let retained: Bound<'py, PyAny> = native_field(project, "native_project")?;
     if !retained.is_none() {
         return Ok(retained.downcast_into()?);
     }
@@ -475,8 +479,8 @@ pub(crate) fn compiled_project_facts<'py>(
 
 fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = model.py();
-    let relative_path: Bound<'py, PyAny> = model.getattr("relative_path")?;
-    let config: Bound<'py, PyAny> = model.getattr("config")?;
+    let relative_path: Bound<'py, PyAny> = native_field(model, "relative_path")?;
+    let config: Bound<'py, PyAny> = native_field(model, "config")?;
     let references: Vec<Bound<'py, PyTuple>> = model
         .getattr("references")?
         .try_iter()?
@@ -485,16 +489,16 @@ fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
             PyTuple::new(
                 py,
                 [
-                    reference.getattr("ref_kind")?.str()?.into_any(),
-                    reference.getattr("ref_name")?,
-                    reference.getattr("ref_package")?,
+                    native_field(&reference, "ref_kind")?.str()?.into_any(),
+                    native_field(&reference, "ref_name")?,
+                    native_field(&reference, "ref_package")?,
                 ],
             )
         })
         .collect::<PyResult<_>>()?;
     let (enums, constants) = declaration_rows(
-        &model.getattr("enum_declarations")?,
-        &model.getattr("constant_declarations")?,
+        &native_field(model, "enum_declarations")?,
+        &native_field(model, "constant_declarations")?,
     )?;
     PyTuple::new(
         py,
@@ -502,18 +506,18 @@ fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
             PyTuple::new(
                 py,
                 [
-                    model.getattr("name")?,
+                    native_field(model, "name")?,
                     relative_path.call_method0("as_posix")?,
-                    model.getattr("query_sql")?,
-                    model.getattr("authored_query_sql")?,
-                    model.getattr("authored_sql")?,
+                    native_field(model, "query_sql")?,
+                    native_field(model, "authored_query_sql")?,
+                    native_field(model, "authored_sql")?,
                 ],
             )?
             .into_any(),
             PyTuple::new(
                 py,
                 [
-                    config.getattr("values")?,
+                    native_field(&config, "values")?,
                     PyList::new(
                         py,
                         config
@@ -522,7 +526,7 @@ fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
                             .collect::<PyResult<Vec<_>>>()?,
                     )?
                     .into_any(),
-                    config.getattr("layer_schema")?,
+                    native_field(&config, "layer_schema")?,
                 ],
             )?
             .into_any(),

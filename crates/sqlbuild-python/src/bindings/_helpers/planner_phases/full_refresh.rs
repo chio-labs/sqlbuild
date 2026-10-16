@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::planner_phases::constants::FULL_REFRESH_DISABLED_REBUILD_CODE;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, planner_error, strings};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::PyBool;
@@ -38,7 +39,7 @@ pub(crate) fn effectively_full_refreshed_model_names<'py>(
     cli_full_refresh: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let mut names: Vec<_> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         if resolve_model_full_refresh(&model, cli_full_refresh)? {
             names.push(model_reads::name_object(&model)?);
@@ -59,9 +60,9 @@ pub(crate) fn describe_full_rebuild_cause(
             .getattr("change_kind")?
             .str()?
             .extract::<String>()?,
-        query_changed: change_result.getattr("query_changed")?.is_truthy()?,
-        changed_functions: strings(&change_result.getattr("changed_functions")?)?,
-        has_schema_findings: change_result.getattr("schema_findings")?.is_truthy()?,
+        query_changed: native_field(change_result, "query_changed")?.is_truthy()?,
+        changed_functions: strings(&native_field(change_result, "changed_functions")?)?,
+        has_schema_findings: native_field(change_result, "schema_findings")?.is_truthy()?,
     }))
 }
 
@@ -76,8 +77,8 @@ pub(crate) fn check_full_rebuild_allowed(
     if !configured_full_refresh(model)?.is(PyBool::new(py, false)) {
         return Ok(());
     }
-    if change_result.getattr("change_kind")?.eq("first_run")?
-        || change_result.getattr("query_changed")?.is_truthy()?
+    if native_field(change_result, "change_kind")?.eq("first_run")?
+        || native_field(change_result, "query_changed")?.is_truthy()?
     {
         return Ok(());
     }

@@ -11,6 +11,7 @@ use sqlbuild_core::integration_results::main::normalize_integration_record::norm
 use sqlbuild_core::integration_results::main::strip_optional_enrichment::strip_optional_enrichment;
 use sqlbuild_core::json::models::JsonValue;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_values::{json_value, validation_error};
 use crate::bindings::_helpers::scopes::scope_report_objects::json_to_python;
 
@@ -75,7 +76,7 @@ fn parsed(py: Python<'_>, line: &str) -> PyResult<Result<JsonValue, IntegrationR
     let json: Bound<'_, PyModule> = py.import("json")?;
     let payload: Bound<'_, PyAny> = match json.call_method1("loads", (line,)) {
         Ok(payload) => payload,
-        Err(error) if error.is_instance(py, &json.getattr("JSONDecodeError")?) => {
+        Err(error) if error.is_instance(py, &native_field(&json, "JSONDecodeError")?) => {
             return Ok(Err(IntegrationRecordError {
                 message: "malformed integration result JSON".to_owned(),
             }));

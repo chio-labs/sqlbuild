@@ -32,6 +32,7 @@ use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
 
@@ -75,7 +76,7 @@ fn resolve_invocation<'py>(
             &error,
         ));
     }
-    let project_dir: Bound<'py, PyAny> = match request.getattr("project_dir")? {
+    let project_dir: Bound<'py, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => imported(py, "pathlib", "Path")?.call_method0("cwd")?,
     };
@@ -90,8 +91,8 @@ fn resolve_invocation<'py>(
     call(
         &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
-            ("select", &request.getattr("select")?),
-            ("exclude", &request.getattr("exclude")?),
+            ("select", &native_field(request, "select")?),
+            ("exclude", &native_field(request, "exclude")?),
             ("discovered_inputs", &discovered),
         ],
     )?;
@@ -183,13 +184,13 @@ fn run_query_diff(
         Err(error) => return Err(query_execution_error(py, error)?),
     };
     let models: Vec<DiffModelFacts> = diff_facts(&result)?;
-    let schema_only: bool = request.getattr("schema_only")?.is_truthy()?;
+    let schema_only: bool = native_field(request, "schema_only")?.is_truthy()?;
     let (outcome, exit_code) = diff_exit_code(&models, !schema_only);
     let published: PyResult<()> = publish_diff_output(
         request,
         (
-            &preparation.getattr("left_label")?.extract::<String>()?,
-            &preparation.getattr("right_label")?.extract::<String>()?,
+            &native_field(&preparation, "left_label")?.extract::<String>()?,
+            &native_field(&preparation, "right_label")?.extract::<String>()?,
         ),
         (
             preparation
@@ -226,8 +227,11 @@ fn target_max_full_rows<'py>(
     let configured: Bound<'py, PyAny> = call(
         &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
-            ("project_config", &discovered.getattr("project_config")?),
-            ("local_config", &discovered.getattr("local_config")?),
+            (
+                "project_config",
+                &native_field(discovered, "project_config")?,
+            ),
+            ("local_config", &native_field(discovered, "local_config")?),
             ("target_name", target),
         ],
     )?
@@ -249,15 +253,18 @@ fn diff_to_target<'py>(
     from_target: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let to_name: Bound<'py, PyAny> = request.getattr("to_name")?;
+    let to_name: Bound<'py, PyAny> = native_field(request, "to_name")?;
     if !to_name.is_none() {
         return Ok(to_name);
     }
     let active: Bound<'py, PyAny> = call(
         &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
-            ("project_config", &discovered.getattr("project_config")?),
-            ("local_config", &discovered.getattr("local_config")?),
+            (
+                "project_config",
+                &native_field(discovered, "project_config")?,
+            ),
+            ("local_config", &native_field(discovered, "local_config")?),
             ("selected_target", &none(py)),
         ],
     )?;
@@ -287,13 +294,13 @@ fn diff_to_target<'py>(
 }
 
 fn side_facts(side: &Bound<'_, PyAny>) -> PyResult<FullDiffSideFacts> {
-    let detail: Bound<'_, PyAny> = side.getattr("detail")?;
+    let detail: Bound<'_, PyAny> = native_field(side, "detail")?;
     Ok(FullDiffSideFacts {
-        target: side.getattr("target")?.extract()?,
-        relation: side.getattr("relation")?.extract()?,
-        row_count: side.getattr("row_count")?.extract()?,
-        max_rows: side.getattr("max_rows")?.extract()?,
-        exceeds_limit: side.getattr("exceeds_limit")?.is_truthy()?,
+        target: native_field(side, "target")?.extract()?,
+        relation: native_field(side, "relation")?.extract()?,
+        row_count: native_field(side, "row_count")?.extract()?,
+        max_rows: native_field(side, "max_rows")?.extract()?,
+        exceeds_limit: native_field(side, "exceeds_limit")?.is_truthy()?,
         detail: if detail.is_none() {
             None
         } else {
@@ -311,16 +318,16 @@ fn size_guard_error(
 ) -> PyResult<PyErr> {
     let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
     let mut blocked: Vec<FullDiffModelFacts> = Vec::new();
-    for model in value.getattr("blocked")?.try_iter()? {
+    for model in native_field(&value, "blocked")?.try_iter()? {
         let model: Bound<'_, PyAny> = model?;
         blocked.push(FullDiffModelFacts {
-            name: model.getattr("name")?.extract()?,
-            has_cursor: model.getattr("has_cursor")?.is_truthy()?,
-            left: side_facts(&model.getattr("left")?)?,
-            right: side_facts(&model.getattr("right")?)?,
+            name: native_field(&model, "name")?.extract()?,
+            has_cursor: native_field(&model, "has_cursor")?.is_truthy()?,
+            left: side_facts(&native_field(&model, "left")?)?,
+            right: side_facts(&native_field(&model, "right")?)?,
         });
     }
-    let message: String = value.getattr("message")?.extract()?;
+    let message: String = native_field(&value, "message")?.extract()?;
     let report: SizeGuardReport = size_guard_report(facts, targets, &message, &blocked);
     let details_text: String = dumps(
         &report.details,
@@ -351,7 +358,8 @@ fn run_model_diff(
     };
     let to_target: Bound<'_, PyAny> = diff_to_target(request, discovered, from_name)?;
     let to_name: String = to_target.extract()?;
-    let targets: Bound<'_, PyAny> = discovered.getattr("project_config")?.getattr("targets")?;
+    let targets: Bound<'_, PyAny> =
+        native_field(discovered, "project_config")?.getattr("targets")?;
     if !targets.contains(from_name)? {
         return Err(rejected(
             py,
@@ -370,7 +378,7 @@ fn run_model_diff(
     }
     let from_target: Bound<'_, PyAny> = object(py, from_name)?;
     let (_, adapter) = project_adapter(discovered, project_dir)?;
-    let cli_vars: Bound<'_, PyAny> = request.getattr("cli_vars")?;
+    let cli_vars: Bound<'_, PyAny> = native_field(request, "cli_vars")?;
     let connection_config: Bound<'_, PyAny> = call(
         &registry::native(py, NativeAttr::ResolveTargetConnectionConfig)?,
         &[
@@ -395,9 +403,12 @@ fn run_model_diff(
             ("from_target", &from_target),
             ("to_target", &to_target),
             ("resolved_connection", &connection_config),
-            ("no_sql_validation", &request.getattr("no_sql_validation")?),
-            ("select", &request.getattr("select")?),
-            ("exclude", &request.getattr("exclude")?),
+            (
+                "no_sql_validation",
+                &native_field(request, "no_sql_validation")?,
+            ),
+            ("select", &native_field(request, "select")?),
+            ("exclude", &native_field(request, "exclude")?),
             ("cli_vars", &cli_vars),
             ("external_sql_reference_resolver", &resolver),
         ],
@@ -414,7 +425,7 @@ fn run_model_diff(
             ),
         ));
     }
-    let verbose: bool = request.getattr("verbose")?.is_truthy()?;
+    let verbose: bool = native_field(request, "verbose")?.is_truthy()?;
     let column_examples: i64 = effective_max_examples(facts.max_column_examples, verbose);
     let row_only_examples: i64 = effective_max_examples(facts.max_row_only_examples, verbose);
     let limits: Bound<'_, PyAny> = if facts.full || facts.schema_only || facts.bounded.is_some() {
@@ -438,10 +449,10 @@ fn run_model_diff(
     };
     let connection: Bound<'_, PyAny> = adapter.call_method1("connect", (&connection_config,))?;
     let extras: [(&str, Bound<'_, PyAny>); 5] = [
-        ("bounded", request.getattr("bounded")?),
+        ("bounded", native_field(request, "bounded")?),
         ("max_column_examples", object(py, column_examples)?),
         ("max_row_only_examples", object(py, row_only_examples)?),
-        ("max_models", request.getattr("max_models")?),
+        ("max_models", native_field(request, "max_models")?),
         ("full_size_limits", limits),
     ];
     let extra: Vec<(&str, &Bound<'_, PyAny>)> =

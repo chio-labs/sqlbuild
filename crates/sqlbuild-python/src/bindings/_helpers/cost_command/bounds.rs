@@ -12,6 +12,7 @@ use sqlbuild_core::cost_command::main::is_zero_cost_duration::is_zero_cost_durat
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -84,7 +85,7 @@ pub(crate) fn parse_bound<'py>(
     if value.chars().count() == ISO_DATE_LENGTH {
         return Ok(parsed);
     }
-    if parsed.getattr("tzinfo")?.is_none() {
+    if native_field(&parsed, "tzinfo")?.is_none() {
         return Err(cost_error(
             py,
             &CostCommandError::new(
@@ -122,7 +123,7 @@ pub(crate) fn parse_since<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'
     now(py)?.sub(timedelta(
         py,
         "seconds",
-        duration.getattr("fixed_seconds")?,
+        native_field(&duration, "fixed_seconds")?,
     )?)
 }
 

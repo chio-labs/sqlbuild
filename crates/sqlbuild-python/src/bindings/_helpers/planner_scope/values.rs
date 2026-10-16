@@ -1,6 +1,7 @@
 //! Python function identity and compiled graph conversion.
 
 use crate::bindings::_helpers::graph::keys::native_key;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyDict;
 use pyo3::types::PyDictMethods;
@@ -30,7 +31,10 @@ pub(crate) fn loader_names<'py>(loaders: &Bound<'py, PyAny>) -> PyResult<Bound<'
     let names = PyDict::new(loaders.py());
     for loader in loaders.try_iter()? {
         let loader = loader?;
-        names.set_item(loader.getattr("function")?, loader.getattr("name")?)?;
+        names.set_item(
+            native_field(&loader, "function")?,
+            native_field(&loader, "name")?,
+        )?;
     }
     Ok(names)
 }
@@ -40,7 +44,7 @@ pub(crate) fn dependency_names(
     names: &Bound<'_, PyDict>,
 ) -> PyResult<Vec<String>> {
     let mut dependencies: Vec<String> = Vec::new();
-    for dependency in loader.getattr("depends_on")?.try_iter()? {
+    for dependency in native_field(loader, "depends_on")?.try_iter()? {
         if let Some(name) = names.get_item(dependency?)? {
             dependencies.push(name.extract()?);
         }
@@ -54,7 +58,7 @@ pub(crate) fn loader_graph(loaders: &Bound<'_, PyAny>) -> PyResult<LoaderGraph> 
     for loader in loaders.try_iter()? {
         let loader = loader?;
         graph.loaders.insert(
-            loader.getattr("name")?.extract()?,
+            native_field(&loader, "name")?.extract()?,
             dependency_names(&loader, &names)?,
         );
     }
@@ -62,12 +66,12 @@ pub(crate) fn loader_graph(loaders: &Bound<'_, PyAny>) -> PyResult<LoaderGraph> 
 }
 
 pub(crate) fn project_graph(project: &Bound<'_, PyAny>) -> PyResult<LoaderGraph> {
-    let mut graph = loader_graph(&project.getattr("loader_functions")?)?;
-    for source in project.getattr("sources")?.try_iter()? {
-        let entry = source?.getattr("source_entry")?;
+    let mut graph = loader_graph(&native_field(project, "loader_functions")?)?;
+    for source in native_field(project, "sources")?.try_iter()? {
+        let entry = native_field(&source?, "source_entry")?;
         graph.sources.push((
-            entry.getattr("name")?.extract()?,
-            entry.getattr("loader")?.extract()?,
+            native_field(&entry, "name")?.extract()?,
+            native_field(&entry, "loader")?.extract()?,
         ));
     }
     Ok(graph)

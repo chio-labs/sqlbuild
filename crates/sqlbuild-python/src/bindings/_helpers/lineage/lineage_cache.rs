@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyResult, Python};
@@ -96,9 +97,9 @@ fn skips_cache(py: Python<'_>, error: &PyErr) -> PyResult<bool> {
 /// Python's `sqlbuild` distribution version, as the cache key records it.
 fn sqlbuild_version(py: Python<'_>) -> PyResult<String> {
     let metadata: Bound<'_, PyModule> = py.import("importlib.metadata")?;
-    match metadata.getattr("version")?.call1(("sqlbuild",)) {
+    match native_field(&metadata, "version")?.call1(("sqlbuild",)) {
         Ok(version) => version.extract(),
-        Err(error) if error.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
+        Err(error) if error.is_instance(py, &native_field(&metadata, "PackageNotFoundError")?) => {
             Ok(UNKNOWN_VERSION.to_owned())
         }
         Err(error) => Err(error),

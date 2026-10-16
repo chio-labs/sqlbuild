@@ -8,6 +8,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyString};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -36,12 +37,12 @@ fn matches_any_class(py: Python<'_>, error: &PyErr, classes: &[ErrorId]) -> PyRe
 fn compile_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bound<'py, PyAny>> {
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
     let code: Bound<'py, PyAny> = if value.hasattr("code")? {
-        value.getattr("code")?.str()?.into_any()
+        native_field(&value, "code")?.str()?.into_any()
     } else {
         PyString::new(py, DEFAULT_ERROR_CODE).into_any()
     };
     let message: Bound<'py, PyAny> = if value.hasattr("message")? {
-        value.getattr("message")?.str()?.into_any()
+        native_field(&value, "message")?.str()?.into_any()
     } else {
         value.str()?.into_any()
     };
@@ -67,7 +68,7 @@ fn planning_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bo
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
     let location: Bound<'py, PyAny> =
         if value.is_instance(&registry::error(py, ErrorId::SqlTestReference)?)? {
-            value.getattr("location")?
+            native_field(&value, "location")?
         } else {
             py.None().into_bound(py)
         };
@@ -79,9 +80,9 @@ fn planning_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bo
                 "severity",
                 enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?,
             ),
-            ("code", value.getattr("code")?),
+            ("code", native_field(&value, "code")?),
             ("message", value.str()?.into_any()),
-            ("help", value.getattr("help")?),
+            ("help", native_field(&value, "help")?),
             ("location", location),
         ],
     )
@@ -91,7 +92,7 @@ fn error_diagnostics<'py>(diagnostics: Bound<'py, PyAny>) -> PyResult<Vec<Bound<
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
     for diagnostic in diagnostics.try_iter()? {
         let diagnostic: Bound<'py, PyAny> = diagnostic?;
-        if diagnostic.getattr("is_error")?.is_truthy()? {
+        if native_field(&diagnostic, "is_error")?.is_truthy()? {
             errors.push(diagnostic);
         }
     }
@@ -150,7 +151,8 @@ pub(crate) fn compile_for_refactor<'py>(
         }
         Err(error) => return Err(error),
     };
-    let mut errors: Vec<Bound<'py, PyAny>> = error_diagnostics(analysis.getattr("diagnostics")?)?;
+    let mut errors: Vec<Bound<'py, PyAny>> =
+        error_diagnostics(native_field(&analysis, "diagnostics")?)?;
     if errors.is_empty() {
         let planned: PyResult<Bound<'py, PyAny>> = call_with(
             &registry::native(py, NativeAttr::StaticSqlTestPlanningDiagnostics)?,
@@ -159,8 +161,11 @@ pub(crate) fn compile_for_refactor<'py>(
                     "target_dir",
                     project_dir.join("target").into_pyobject(py)?.into_any(),
                 ),
-                ("adapter", analysis.getattr("adapter")?),
-                ("project", analysis.getattr("graph")?.getattr("project")?),
+                ("adapter", native_field(&analysis, "adapter")?),
+                (
+                    "project",
+                    native_field(&analysis, "graph")?.getattr("project")?,
+                ),
             ],
         );
         match planned {
@@ -181,8 +186,8 @@ pub(crate) fn compile_for_refactor<'py>(
         &registry::class(py, RecordId::RefactorProject)?,
         &[
             ("project_dir", project_dir.into_pyobject(py)?.into_any()),
-            ("graph", analysis.getattr("graph")?),
-            ("discovered", analysis.getattr("discovered_inputs")?),
+            ("graph", native_field(&analysis, "graph")?),
+            ("discovered", native_field(&analysis, "discovered_inputs")?),
         ],
     )?;
     Ok(OfflineCompile { project, errors })

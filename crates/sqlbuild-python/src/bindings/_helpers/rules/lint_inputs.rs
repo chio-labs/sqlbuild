@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     ExpansionRecord, ModelInputRecord, NativeModelInput, model_relation_key_row,
 };
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledExpansion, CompiledSource, span_pass,
 };
@@ -28,7 +29,7 @@ pub(crate) fn model_key_row(model: &Bound<'_, PyAny>) -> PyResult<RelationKeyRow
     if let Ok(compiled) = model.downcast::<NativeCompiledModel>() {
         return compiled.get().relation_key_row(py);
     }
-    model.getattr("relation_key_row")?.extract()
+    native_field(model, "relation_key_row")?.extract()
 }
 
 /// The model file path of a native input record.
@@ -75,9 +76,9 @@ pub(crate) fn model_lint_expansion(
             )))
         });
     }
-    let mut record: Bound<'_, PyAny> = model.getattr("lint_expansion")?;
+    let mut record: Bound<'_, PyAny> = native_field(model, "lint_expansion")?;
     if !record.is_truthy()? {
-        record = model.getattr("sql_expansion")?;
+        record = native_field(model, "sql_expansion")?;
     }
     if record.is_none() {
         return Ok(None);
@@ -115,7 +116,8 @@ pub(crate) fn project_sql_expansions(
         }
         return Ok(expansions);
     }
-    crate::bindings::_helpers::rules::run_lint::compiled_expansion_records(
-        &project.getattr("sql_expansions")?,
-    )
+    crate::bindings::_helpers::rules::run_lint::compiled_expansion_records(&native_field(
+        project,
+        "sql_expansions",
+    )?)
 }

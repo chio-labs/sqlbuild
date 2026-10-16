@@ -10,6 +10,7 @@ use sqlbuild_analysis::required_columns::models::{ColumnRead, ReferenceInput};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -27,8 +28,8 @@ fn analyze_resolved_column_reads<'py>(
     for reference in references.try_iter()? {
         let reference: Bound<'py, PyAny> = reference?;
         inputs.push(ReferenceInput {
-            kind: reference.getattr("ref_kind")?.str()?.extract()?,
-            name: reference.getattr("ref_name")?.extract()?,
+            kind: native_field(&reference, "ref_kind")?.str()?.extract()?,
+            name: native_field(&reference, "ref_name")?.extract()?,
         });
     }
     let reads: Vec<ColumnRead> = py

@@ -27,6 +27,7 @@ use crate::bindings::_helpers::janitor::janitor_old_names::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::relation_naming::fitting::shared_error;
 
 const LIFECYCLE: ExecutorHost = ExecutorHost::OperationLifecycle;
@@ -129,7 +130,10 @@ fn artifact_only_plan<'py>(
         py,
         ExecutorHost::JanitorPlan,
         &[
-            ("target_name", project.getattr("effective_target_name")?),
+            (
+                "target_name",
+                native_field(project, "effective_target_name")?,
+            ),
             ("retention_days", integer(py, settings.retention_days)?),
             ("direct_mode", bool_value(py, settings.direct_mode)),
             (
@@ -174,7 +178,7 @@ pub(crate) fn build_plan<'py>(
         .extract::<Option<String>>()?
     {
         push_artifact_schema(
-            project.getattr("effective_target_database")?.extract()?,
+            native_field(project, "effective_target_database")?.extract()?,
             schema,
         );
     }
@@ -266,7 +270,10 @@ pub(crate) fn build_plan<'py>(
         py,
         ExecutorHost::JanitorPlan,
         &[
-            ("target_name", project.getattr("effective_target_name")?),
+            (
+                "target_name",
+                native_field(project, "effective_target_name")?,
+            ),
             ("retention_days", integer(py, settings.retention_days)?),
             ("direct_mode", bool_value(py, settings.direct_mode)),
             (

@@ -9,6 +9,7 @@ use crate::bindings::_helpers::compile_outputs::json_report::indented_json;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::values::{any, dict, items, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::aggregation::aggregated_from_lists;
 use crate::bindings::_helpers::result_output::assets::{
     clone_asset, function_assets, load_assets, model_assets, python_node_assets, seed_assets,
@@ -93,7 +94,7 @@ fn emitted<'py>(
     let py: Python<'py> = document.summary.py();
     let mut status: String = document.status;
     if let Some(terminal) = projection.lifecycle_terminal()?
-        && text(&terminal.getattr("event_type")?)?.ends_with(FAILED)
+        && text(&native_field(&terminal, "event_type")?)?.ends_with(FAILED)
     {
         status = FAILED.to_owned();
     }
@@ -129,7 +130,7 @@ fn emitted<'py>(
 fn count_status(results: &[Bound<'_, PyAny>], field: &str, status: &str) -> PyResult<usize> {
     let mut count: usize = 0;
     for result in results {
-        if result.getattr(field)?.getattr("value")?.eq(status)? {
+        if native_field(&result.getattr(field)?, "value")?.eq(status)? {
             count += 1;
         }
     }
@@ -301,9 +302,9 @@ fn build_json<'py>(
     let check_pass: usize = count_truthy(&checks_run, "passed")?;
     let mut python_warnings: usize = 0;
     for warned in nodes.iter().chain(&checks_run).chain(&retained[3]) {
-        python_warnings += warned.getattr("warning_messages")?.len()?;
+        python_warnings += native_field(warned, "warning_messages")?.len()?;
     }
-    let result_status: String = text(&result.getattr("status")?.getattr("value")?)?;
+    let result_status: String = text(&native_field(&result, "status")?.getattr("value")?)?;
     let status: String = if result_status == FAILED || python_fail > 0 || check_fail > 0 {
         FAILED.to_owned()
     } else {
@@ -320,7 +321,7 @@ fn build_json<'py>(
     for model in &retained[0] {
         checks.extend(audit_checks(
             &projection,
-            &model.getattr("audit_results")?,
+            &native_field(model, "audit_results")?,
             projection.terminal_recorded(model)?,
         )?);
     }
@@ -450,13 +451,13 @@ fn format_clone_execution_json<'py>(
     let projection: Projection<'py> = Projection::installed(py)?;
     let mut assets: Vec<Bound<'py, PyDict>> = Vec::new();
     let (mut failure_count, mut warning_count): (usize, usize) = (0, 0);
-    for item in items(&result.getattr("item_results")?)? {
-        let name: String = text(&item.getattr("name")?)?;
+    for item in items(&native_field(&result, "item_results")?)? {
+        let name: String = text(&native_field(&item, "name")?)?;
         let resource_type: String = text(&resource_types_by_name.get_item(&name)?)?;
         if !projection.resource_terminal_recorded(&name, &format!("{resource_type}:{name}"))? {
             continue;
         }
-        let status: Bound<'py, PyAny> = item.getattr("status")?.getattr("value")?;
+        let status: Bound<'py, PyAny> = native_field(&item, "status")?.getattr("value")?;
         failure_count += usize::from(status.eq(FAILED)?);
         warning_count += usize::from(status.eq("warning")?);
         assets.push(clone_asset(&projection, &item, &resource_type)?);
@@ -590,13 +591,13 @@ fn namespace_execution<'py>(
 
 fn scenario_failed(result: &Bound<'_, PyAny>, local: bool) -> PyResult<bool> {
     if !local {
-        return result.getattr("status")?.getattr("value")?.eq(FAILED);
+        return native_field(result, "status")?.getattr("value")?.eq(FAILED);
     }
-    let local_status: Bound<'_, PyAny> = result.getattr("local_status")?;
+    let local_status: Bound<'_, PyAny> = native_field(result, "local_status")?;
     if local_status.is_none() {
         return Ok(false);
     }
-    let value: Bound<'_, PyAny> = local_status.getattr("value")?;
+    let value: Bound<'_, PyAny> = native_field(&local_status, "value")?;
     Ok(value.eq("FAIL")? || value.eq("ERROR")?)
 }
 
@@ -621,7 +622,7 @@ fn format_scenario_execution_json<'py>(
     let mut projection: Projection<'py> = Projection::installed(py)?;
     let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
     for result in items(&results)? {
-        let name: String = text(&result.getattr("scenario_name")?)?;
+        let name: String = text(&native_field(&result, "scenario_name")?)?;
         if projection.resource_terminal_recorded(&name, &format!("sql_scenario:{name}"))? {
             kept.push(result);
         }
@@ -630,20 +631,20 @@ fn format_scenario_execution_json<'py>(
     let (mut assets, mut checks, mut scenarios) = (Vec::new(), Vec::new(), Vec::new());
     for result in &kept {
         fail_count += usize::from(scenario_failed(result, local)?);
-        projection.scenario = Some(text(&result.getattr("scenario_name")?)?);
+        projection.scenario = Some(text(&native_field(result, "scenario_name")?)?);
         assets.extend(seed_assets(
             &projection,
-            &items(&result.getattr("seed_results")?)?,
+            &items(&native_field(result, "seed_results")?)?,
             None,
         )?);
         assets.extend(function_assets(
             &projection,
-            &items(&result.getattr("function_results")?)?,
+            &items(&native_field(result, "function_results")?)?,
             None,
         )?);
         assets.extend(model_assets(
             &projection,
-            &items(&result.getattr("model_results")?)?,
+            &items(&native_field(result, "model_results")?)?,
             None,
         )?);
         projection.scenario = None;

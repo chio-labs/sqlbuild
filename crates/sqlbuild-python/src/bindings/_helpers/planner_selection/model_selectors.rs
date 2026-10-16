@@ -14,6 +14,7 @@ use sqlbuild_analysis::planner_selection::models::{
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -68,7 +69,7 @@ fn model_tags(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 
 fn selectable_model(model: &Bound<'_, PyAny>) -> PyResult<SelectableModel> {
     Ok(SelectableModel {
-        name: model.getattr("name")?.extract()?,
+        name: native_field(model, "name")?.extract()?,
         tags: model_tags(model)?,
         folder: model
             .getattr("relative_path")?

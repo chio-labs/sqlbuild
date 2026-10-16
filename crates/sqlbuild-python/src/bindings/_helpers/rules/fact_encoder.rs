@@ -19,6 +19,7 @@ use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, JsonValue, OrjsonOptions};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::record_spec;
 use crate::bindings::_helpers::records::models::NativeRecord;
 
@@ -197,7 +198,7 @@ impl FactEncoder {
                 }
                 let encoded: JsonValue = JsonValue::Array(vec![
                     JsonValue::String(qualified_name),
-                    self.encode(&value.getattr("value")?)?,
+                    self.encode(&native_field(value, "value")?)?,
                 ]);
                 self.enums
                     .borrow_mut()

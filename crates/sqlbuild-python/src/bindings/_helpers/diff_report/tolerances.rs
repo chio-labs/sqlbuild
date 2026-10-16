@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DECIMAL_MODULE: &str = "decimal";
 const ABSOLUTE_KEY: &str = "absolute";
@@ -185,7 +186,7 @@ fn optional_decimal<'py>(
     };
     let py: Python<'py> = raw.py();
     let decimal_module: Bound<'py, PyModule> = py.import(DECIMAL_MODULE)?;
-    let decimal_class: Bound<'py, PyAny> = decimal_module.getattr("Decimal")?;
+    let decimal_class: Bound<'py, PyAny> = native_field(&decimal_module, "Decimal")?;
     let numeric: bool = !raw.is_instance_of::<PyBool>()
         && (raw.is_instance_of::<PyString>()
             || raw.is_instance_of::<PyInt>()
@@ -196,7 +197,9 @@ fn optional_decimal<'py>(
     }
     match decimal_class.call1((raw.str()?,)) {
         Ok(value) => Ok(Some(value)),
-        Err(error) if error.is_instance(py, &decimal_module.getattr("InvalidOperation")?) => {
+        Err(error)
+            if error.is_instance(py, &native_field(&decimal_module, "InvalidOperation")?) =>
+        {
             let replacement: PyErr = input_error(py, format!("{label} must be numeric"), "X405");
             replacement.set_cause(py, Some(error));
             Err(replacement)
@@ -273,7 +276,7 @@ fn resolve_row_diff_sampling<'py>(
     let request = Request::new("resolve_row_diff_sampling", options)?;
     let py: Python<'py> = request.py();
     let override_values: Bound<'py, PyAny> = request.get("override")?;
-    if override_values.getattr("exhaustive")?.is_truthy()? {
+    if native_field(&override_values, "exhaustive")?.is_truthy()? {
         return Ok(None);
     }
     let label: String = request.get("label")?.extract()?;
@@ -336,7 +339,7 @@ fn merge_row_diff_tolerances<'py>(
         &[
             ("by_type", merged("by_type")?),
             ("by_column", merged("by_column")?),
-            ("sampling", base.getattr("sampling")?),
+            ("sampling", native_field(&base, "sampling")?),
         ],
     )
 }

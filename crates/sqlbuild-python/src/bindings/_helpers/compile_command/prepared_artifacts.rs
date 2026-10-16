@@ -15,6 +15,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::compile_outputs::artifacts::staged_artifact_files;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -46,7 +47,7 @@ pub(crate) struct PreparedCompileArtifacts {
 }
 
 fn owner_lock_path<'py>(staging_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let name: String = staging_dir.getattr("name")?.extract()?;
+    let name: String = native_field(staging_dir, "name")?.extract()?;
     staging_dir.call_method1("with_name", (format!("{name}{LOCK_SUFFIX}"),))
 }
 
@@ -61,7 +62,7 @@ fn owns_staging_directory(staging_dir: &Bound<'_, PyAny>) -> PyResult<bool> {
         )?),
     );
     match read {
-        Ok(text) => text.eq(staging_dir.getattr("name")?),
+        Ok(text) => text.eq(native_field(staging_dir, "name")?),
         Err(error) if error.is_instance_of::<PyOSError>(py) => Ok(false),
         Err(error) => Err(error),
     }
@@ -71,7 +72,7 @@ fn owns_staging_directory(staging_dir: &Bound<'_, PyAny>) -> PyResult<bool> {
 fn release_and_unlink(lock: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = lock.py();
     let unlinked: PyResult<Bound<'_, PyAny>> = imported(py, "pathlib", "Path")?
-        .call1((lock.getattr("lock_file")?,))?
+        .call1((native_field(lock, "lock_file")?,))?
         .call_method(
             "unlink",
             (),
@@ -116,7 +117,7 @@ fn remove_abandoned_directory(directory: &Bound<'_, PyAny>) -> PyResult<bool> {
                 py,
                 "skipped abandoned staging cleanup in %s: %s",
                 (
-                    directory.getattr("parent")?,
+                    native_field(directory, "parent")?,
                     error.value(py).clone().into_any(),
                 ),
             )?;
@@ -164,7 +165,7 @@ fn submit_in_context<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = executor.py();
     let context: Bound<'py, PyAny> = imported(py, "contextvars", "copy_context")?.call0()?;
-    executor.call_method1("submit", (context.getattr("run")?, task))
+    executor.call_method1("submit", (native_field(&context, "run")?, task))
 }
 
 fn is_os_error(py: Python<'_>, error: &pyo3::PyErr) -> bool {
@@ -185,10 +186,10 @@ impl PreparedCompileArtifacts {
 
     /// Whether staging pays off: uncached, mid-sized projects whose memory stays within budget.
     fn stages_artifacts(slf: &Bound<'_, Self>, project: &Bound<'_, PyAny>) -> PyResult<bool> {
-        let models: usize = project.getattr("models")?.len()?;
-        let minimum: usize = slf.getattr("min_prepared_models")?.extract()?;
-        let maximum: usize = slf.getattr("max_prepared_models")?.extract()?;
-        Ok(project.getattr("compile_cache_dir")?.is_none()
+        let models: usize = native_field(project, "models")?.len()?;
+        let minimum: usize = native_field(slf, "min_prepared_models")?.extract()?;
+        let maximum: usize = native_field(slf, "max_prepared_models")?.extract()?;
+        Ok(native_field(project, "compile_cache_dir")?.is_none()
             && minimum <= models
             && models <= maximum)
     }
@@ -327,7 +328,7 @@ impl PreparedCompileArtifacts {
             return Ok(None);
         };
         Ok(Some((
-            planned.bind(py).getattr("result")?,
+            native_field(planned.bind(py), "result")?,
             [
                 project.bind(py).clone(),
                 adapter.bind(py).clone(),
@@ -453,7 +454,7 @@ impl PreparedCompileArtifacts {
             .call1((target_dir.call_method1("glob", (format!("{STAGING_PREFIX}*"),))?,))?;
         for directory in directories.try_iter()? {
             let directory: Bound<'_, PyAny> = directory?;
-            if directory.getattr("suffix")?.eq(LOCK_SUFFIX)? {
+            if native_field(&directory, "suffix")?.eq(LOCK_SUFFIX)? {
                 continue;
             }
             if !remove_abandoned_directory(&directory)? {
@@ -469,7 +470,7 @@ impl PreparedCompileArtifacts {
         let _ = staging_dir.call_method0("mkdir")?;
         let _ = staging_dir.div(OWNER_MARKER)?.call_method(
             "write_text",
-            (staging_dir.getattr("name")?,),
+            (native_field(staging_dir, "name")?,),
             Some(&keywords(
                 py,
                 &[("encoding", "utf-8".into_bound_py_any(py)?)],
@@ -504,7 +505,7 @@ impl PreparedCompileArtifacts {
         {
             return Ok(());
         }
-        if project.getattr("sql_tests")?.is_truthy()? {
+        if native_field(project, "sql_tests")?.is_truthy()? {
             Self::start_test_planning(slf, project, adapter, target_dir)?;
         }
         Ok(())
@@ -542,7 +543,7 @@ impl PreparedCompileArtifacts {
         let (prepared, expected_files): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
             result.extract()?;
         if !owns_staging_directory(&staging_dir)? {
-            let name: String = staging_dir.getattr("name")?.extract()?;
+            let name: String = native_field(&staging_dir, "name")?.extract()?;
             return Err(staging_changed(
                 py,
                 &format!(
@@ -582,7 +583,7 @@ impl PreparedCompileArtifacts {
             return Ok(None);
         };
         match Self::staged_result(&future)? {
-            Some(result) => Ok(Some(result.get_item(0)?.getattr("diagnostics")?)),
+            Some(result) => Ok(Some(native_field(&result.get_item(0)?, "diagnostics")?)),
             None => Ok(None),
         }
     }

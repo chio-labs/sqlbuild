@@ -14,6 +14,7 @@ use crate::bindings::_helpers::planner_scope::sources::build_source_load_entries
 use crate::bindings::_helpers::planner_strategy::audit_entries::build_selected_audit_entries;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestAssembly;
@@ -58,7 +59,7 @@ fn by_name<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let lookup = PyDict::new(items.py());
     for item in items.try_iter()? {
         let item = item?;
-        lookup.set_item(item.getattr("name")?, item)?;
+        lookup.set_item(native_field(&item, "name")?, item)?;
     }
     Ok(lookup)
 }
@@ -105,31 +106,31 @@ fn seed_entries<'py>(
     extras: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = project.py();
-    let version_hashes = extras.getattr("seed_version_hashes")?;
-    let metadata_jsons = extras.getattr("seed_metadata_jsons")?;
-    let plan_reasons = extras.getattr("seed_plan_reasons")?;
+    let version_hashes = native_field(extras, "seed_version_hashes")?;
+    let metadata_jsons = native_field(extras, "seed_metadata_jsons")?;
+    let plan_reasons = native_field(extras, "seed_plan_reasons")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for seed in project.getattr("seeds")?.try_iter()? {
+    for seed in native_field(project, "seeds")?.try_iter()? {
         let seed = seed?;
-        if !selected_keys.contains(seed.getattr("key")?)? {
+        if !selected_keys.contains(native_field(&seed, "key")?)? {
             continue;
         }
-        let name = seed.getattr("name")?;
+        let name = native_field(&seed, "name")?;
         entries.push(planner_model(
             py,
             RecordId::SeedPlanEntry,
             &[
-                ("key", seed.getattr("key")?),
+                ("key", native_field(&seed, "key")?),
                 ("name", name.clone()),
-                ("destination", seed.getattr("destination")?),
+                ("destination", native_field(&seed, "destination")?),
                 (
                     "file_path",
-                    seed.getattr("seed_file")?.getattr("file_path")?,
+                    native_field(&seed, "seed_file")?.getattr("file_path")?,
                 ),
                 ("columns", object(py, extract_seed_columns(&seed)?)?),
                 (
                     "csv_settings",
-                    seed.getattr("schema_entry")?.getattr("csv_settings")?,
+                    native_field(&seed, "schema_entry")?.getattr("csv_settings")?,
                 ),
                 (
                     "fingerprint_definition",
@@ -171,15 +172,18 @@ fn provider_usages<'py>(
             py,
             RecordId::PlanProviderUsage,
             &[
-                ("provider_name", usage.getattr("provider_name")?),
+                ("provider_name", native_field(&usage, "provider_name")?),
                 ("consumer_kind", string(py, consumer_kind)),
                 ("consumer_name", consumer_name.clone()),
-                ("parameter_name", usage.getattr("parameter_name")?),
+                ("parameter_name", native_field(&usage, "parameter_name")?),
                 (
                     "annotation_class_name",
-                    usage.getattr("annotation_class_name")?,
+                    native_field(&usage, "annotation_class_name")?,
                 ),
-                ("annotation_module", usage.getattr("annotation_module")?),
+                (
+                    "annotation_module",
+                    native_field(&usage, "annotation_module")?,
+                ),
             ],
         )?);
     }
@@ -211,13 +215,13 @@ fn hook_provider_usages<'py>(
         if !hook.is_instance(&python_hook)? {
             continue;
         }
-        let Some(discovered) = hook_by_name.get_item(hook.getattr("name")?)? else {
+        let Some(discovered) = hook_by_name.get_item(native_field(&hook, "name")?)? else {
             continue;
         };
         usages.extend(provider_usages(
-            &discovered.getattr("provider_usages")?,
+            &native_field(&discovered, "provider_usages")?,
             HOOK_CONSUMER,
-            &discovered.getattr("name")?,
+            &native_field(&discovered, "name")?,
         )?);
     }
     Ok(usages)
@@ -231,23 +235,23 @@ fn plan_provider_usages<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
-    let loader_by_name = by_name(&project.getattr("loader_functions")?)?;
+    let loader_by_name = by_name(&native_field(project, "loader_functions")?)?;
     for entry in source_load_entries.try_iter()? {
-        let Some(loader) = loader_by_name.get_item(entry?.getattr("loader")?)? else {
+        let Some(loader) = loader_by_name.get_item(native_field(&entry?, "loader")?)? else {
             continue;
         };
         usages.extend(provider_usages(
-            &loader.getattr("provider_usages")?,
+            &native_field(&loader, "provider_usages")?,
             LOADER_CONSUMER,
-            &loader.getattr("name")?,
+            &native_field(&loader, "name")?,
         )?);
     }
-    let hook_by_name = by_name(&project.getattr("hook_functions")?)?;
-    let materialization_by_name = by_name(&project.getattr("materialization_files")?)?;
+    let hook_by_name = by_name(&native_field(project, "hook_functions")?)?;
+    let materialization_by_name = by_name(&native_field(project, "materialization_files")?)?;
     for entry in model_entries.try_iter()? {
         let entry = entry?;
         usages.extend(hook_provider_usages(&entry, &hook_by_name)?);
-        let custom = entry.getattr("custom_materialization_name")?;
+        let custom = native_field(&entry, "custom_materialization_name")?;
         if custom.is_none() {
             continue;
         }
@@ -255,9 +259,9 @@ fn plan_provider_usages<'py>(
             continue;
         };
         usages.extend(provider_usages(
-            &materialization.getattr("provider_usages")?,
+            &native_field(&materialization, "provider_usages")?,
             MATERIALIZATION_CONSUMER,
-            &materialization.getattr("name")?,
+            &native_field(&materialization, "name")?,
         )?);
     }
     tuple_of(py, usages)
@@ -271,22 +275,23 @@ fn require_intermediate_loader_targets<'py>(
     source_load_entries: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     let py = project.py();
-    let loader_functions = project.getattr("loader_functions")?;
+    let loader_functions = native_field(project, "loader_functions")?;
     let loader_by_name = by_name(&loader_functions)?;
     let selected_names = PyFrozenSet::new(
         py,
         source_load_entries
             .try_iter()?
-            .map(|entry| entry?.getattr("name"))
+            .map(|entry| native_field(&entry?, "name"))
             .collect::<PyResult<Vec<_>>>()?,
     )?;
-    let existing = snapshot.getattr("existing_relations")?;
+    let existing = native_field(snapshot, "existing_relations")?;
     for entry in source_load_entries.try_iter()? {
-        let source_entry = source_map.call_method1("get", (entry?.getattr("name")?,))?;
-        if source_entry.is_none() || source_entry.getattr("loader")?.is_none() {
+        let source_entry = source_map.call_method1("get", (native_field(&entry?, "name")?,))?;
+        if source_entry.is_none() || native_field(&source_entry, "loader")?.is_none() {
             continue;
         }
-        let Some(loader_function) = loader_by_name.get_item(source_entry.getattr("loader")?)?
+        let Some(loader_function) =
+            loader_by_name.get_item(native_field(&source_entry, "loader")?)?
         else {
             continue;
         };
@@ -297,19 +302,21 @@ fn require_intermediate_loader_targets<'py>(
         for dependency_name in dependencies.try_iter()? {
             let dependency_name = dependency_name?;
             let dependency = source_map.call_method1("get", (&dependency_name,))?;
-            if dependency.is_none() || selected_names.contains(dependency.getattr("name")?)? {
+            if dependency.is_none()
+                || selected_names.contains(native_field(&dependency, "name")?)?
+            {
                 continue;
             }
-            let table = dependency.getattr("table")?;
+            let table = native_field(&dependency, "table")?;
             let target = if table.is_truthy()? {
                 table
             } else {
-                dependency.getattr("name")?
+                native_field(&dependency, "name")?
             };
             if existing.contains(&target)? {
                 continue;
             }
-            let source_name = source_entry.getattr("name")?.str()?;
+            let source_name = native_field(&source_entry, "name")?.str()?;
             return Err(error_of(
                 py,
                 ErrorId::PlannerInput,
@@ -346,20 +353,23 @@ pub(super) fn function_entry<'py>(
             &[
                 ("adapter", adapter.clone()),
                 ("function", function.clone()),
-                ("model_locations", relations.getattr("model_locations")?),
-                ("seed_locations", relations.getattr("seed_locations")?),
+                (
+                    "model_locations",
+                    native_field(relations, "model_locations")?,
+                ),
+                ("seed_locations", native_field(relations, "seed_locations")?),
                 (
                     "function_locations",
-                    relations.getattr("function_locations")?,
+                    native_field(relations, "function_locations")?,
                 ),
-                ("source_map", relations.getattr("source_read_map")?),
+                ("source_map", native_field(relations, "source_read_map")?),
                 (
                     "source_warehouse_columns",
-                    relations.getattr("source_warehouse_columns")?,
+                    native_field(relations, "source_warehouse_columns")?,
                 ),
                 (
                     "star_exclude_keyword",
-                    relations.getattr("star_exclude_keyword")?,
+                    native_field(relations, "star_exclude_keyword")?,
                 ),
             ],
         )?),
@@ -397,18 +407,18 @@ fn function_entries<'py>(
     selected_keys: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = project.py();
-    let functions = changes.getattr("functions")?;
-    let previous = snapshot.getattr("fingerprints")?.getattr("functions")?;
+    let functions = native_field(changes, "functions")?;
+    let previous = native_field(snapshot, "fingerprints")?.getattr("functions")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(project, "functions")?.try_iter()? {
         let function = function?;
-        if !selected_keys.contains(function.getattr("key")?)? {
+        if !selected_keys.contains(native_field(&function, "key")?)? {
             continue;
         }
-        let name = function.getattr("name")?;
+        let name = native_field(&function, "name")?;
         let change = functions.get_item(&name)?;
         let previous_query_sql = if previous.contains(&name)? {
-            previous.get_item(&name)?.getattr("definition")?
+            native_field(&previous.get_item(&name)?, "definition")?
         } else {
             none(py)
         };
@@ -417,9 +427,9 @@ fn function_entries<'py>(
             adapter,
             relations,
             (
-                change.getattr("fingerprint_sql")?,
+                native_field(&change, "fingerprint_sql")?,
                 previous_query_sql,
-                change.getattr("reason")?,
+                native_field(&change, "reason")?,
             ),
         )?);
     }
@@ -432,17 +442,17 @@ pub(super) fn test_selected(
     selected_keys: &Bound<'_, PyAny>,
     selection: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
-    let parent = test.getattr("parent_name")?;
+    let parent = native_field(test, "parent_name")?;
     let name = if parent.is_truthy()? {
         parent
     } else {
-        test.getattr("name")?
+        native_field(test, "name")?
     };
-    if selection.getattr("excluded_names")?.contains(&name)? {
+    if native_field(selection, "excluded_names")?.contains(&name)? {
         return Ok(false);
     }
-    Ok(selection.getattr("names")?.contains(&name)?
-        || scope_overlaps(&test.getattr("scope_deps")?, selected_keys)?)
+    Ok(native_field(selection, "names")?.contains(&name)?
+        || scope_overlaps(&native_field(test, "scope_deps")?, selected_keys)?)
 }
 
 /// Planned SQL test entries and the warnings planning them produced.
@@ -460,12 +470,12 @@ pub(super) fn selected_test_entries<'py>(
 ) -> PyResult<SelectedTests<'py>> {
     let py = project.py();
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
-    for test in project.getattr("sql_tests")?.try_iter()? {
+    for test in native_field(project, "sql_tests")?.try_iter()? {
         let test = test?;
         if !test_selected(&test, selected_keys, selection)? {
             continue;
         }
-        if !case_name.is_none() && test.getattr("case_name")?.ne(case_name)? {
+        if !case_name.is_none() && native_field(&test, "case_name")?.ne(case_name)? {
             continue;
         }
         selected.push(test);
@@ -475,7 +485,7 @@ pub(super) fn selected_test_entries<'py>(
     if selected.is_empty() {
         return Ok(SelectedTests { entries, warnings });
     }
-    let analysis = project.getattr("settings")?.getattr("sql_analysis")?;
+    let analysis = native_field(project, "settings")?.getattr("sql_analysis")?;
     let fixture_context = if analysis.is_truthy()? {
         Bound::new(py, planning_context(project, None)?)?.into_any()
     } else {
@@ -493,15 +503,15 @@ pub(super) fn selected_test_entries<'py>(
     let mut diagnostics: Vec<String> = Vec::new();
     for result in results.try_iter()? {
         let result = result?;
-        let entry = result.getattr("entry")?;
+        let entry = native_field(&result, "entry")?;
         if entry.is_none() {
-            for diagnostic in result.getattr("fixture_diagnostics")?.try_iter()? {
+            for diagnostic in native_field(&result, "fixture_diagnostics")?.try_iter()? {
                 diagnostics.push(diagnostic?.str()?.to_string());
             }
             continue;
         }
         entries.push(entry);
-        for warning in result.getattr("warnings")?.try_iter()? {
+        for warning in native_field(&result, "warnings")?.try_iter()? {
             warnings.push(warning?);
         }
     }
@@ -559,9 +569,9 @@ pub(crate) fn plan_output_fields<'py>(
     } else {
         extras
     };
-    let selected_keys = scope.getattr("selected_keys")?;
-    let execution_order = scope.getattr("execution_order")?;
-    let source_map = relations.getattr("source_map")?;
+    let selected_keys = native_field(&scope, "selected_keys")?;
+    let execution_order = native_field(&scope, "execution_order")?;
+    let source_map = native_field(&relations, "source_map")?;
     let seeds = seed_entries(&project, &snapshot, &selected_keys, &extras)?;
     let source_load_entries = object(
         py,
@@ -582,8 +592,8 @@ pub(crate) fn plan_output_fields<'py>(
     let materializations = PyDict::new(py);
     for entry in &model_entries {
         materializations.set_item(
-            entry.getattr("name")?,
-            entry.getattr("materialization_type")?,
+            native_field(entry, "name")?,
+            native_field(entry, "materialization_type")?,
         )?;
     }
     let audit_entries = object(
@@ -599,18 +609,18 @@ pub(crate) fn plan_output_fields<'py>(
             ],
         )?))?,
     )?;
-    let selection = scope.getattr("sql_test_selection")?;
-    let mut planned = extras.getattr("planned_sql_tests")?;
+    let selection = native_field(&scope, "sql_test_selection")?;
+    let mut planned = native_field(&extras, "planned_sql_tests")?;
     if planned.is_none()
-        || planned.getattr("selected_keys")?.ne(&selected_keys)?
-        || planned.getattr("sql_test_selection")?.ne(&selection)?
+        || native_field(&planned, "selected_keys")?.ne(&selected_keys)?
+        || native_field(&planned, "sql_test_selection")?.ne(&selection)?
     {
         planned = planned_sql_tests(&project, &adapter, &selected_keys, &selection)?;
     }
-    let test_entries = planned.getattr("entries")?;
+    let test_entries = native_field(&planned, "entries")?;
     let mut test_keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in test_entries.try_iter()? {
-        test_keys.push(entry?.getattr("key")?);
+        test_keys.push(native_field(&entry?, "key")?);
     }
     let scoped_keys = selected_keys.call_method1("__or__", (PyFrozenSet::new(py, test_keys)?,))?;
     let mut scoped_order: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -621,7 +631,7 @@ pub(crate) fn plan_output_fields<'py>(
         }
     }
     let mut warnings: Vec<Bound<'py, PyAny>> = model_warnings;
-    for warning in planned.getattr("warnings")?.try_iter()? {
+    for warning in native_field(&planned, "warnings")?.try_iter()? {
         warnings.push(warning?);
     }
     let model_entries = tuple_of(py, model_entries)?;
@@ -650,24 +660,33 @@ pub(crate) fn plan_output_fields<'py>(
         ),
         ("selected_keys", selected_keys),
         ("warnings", tuple_of(py, warnings)?),
-        ("upstream_deps", scope.getattr("upstream_deps")?),
-        ("downstream_deps", scope.getattr("downstream_deps")?),
-        ("model_locations", relations.getattr("model_locations")?),
-        ("seed_locations", relations.getattr("seed_locations")?),
+        ("upstream_deps", native_field(&scope, "upstream_deps")?),
+        ("downstream_deps", native_field(&scope, "downstream_deps")?),
+        (
+            "model_locations",
+            native_field(&relations, "model_locations")?,
+        ),
+        (
+            "seed_locations",
+            native_field(&relations, "seed_locations")?,
+        ),
         (
             "function_locations",
-            relations.getattr("function_locations")?,
+            native_field(&relations, "function_locations")?,
         ),
         ("source_map", source_map),
-        ("source_read_map", relations.getattr("source_read_map")?),
+        (
+            "source_read_map",
+            native_field(&relations, "source_read_map")?,
+        ),
         (
             "python_source_read_map",
-            relations.getattr("python_source_read_map")?,
+            native_field(&relations, "python_source_read_map")?,
         ),
-        ("hook_functions", project.getattr("hook_functions")?),
+        ("hook_functions", native_field(&project, "hook_functions")?),
         (
             "enforce_explicit_references",
-            project.getattr("enforce_explicit_references")?,
+            native_field(&project, "enforce_explicit_references")?,
         ),
         (
             "provider_usages",
@@ -675,7 +694,7 @@ pub(crate) fn plan_output_fields<'py>(
         ),
         (
             "python_identity_fingerprints",
-            snapshot.getattr("fingerprints")?.getattr("python_nodes")?,
+            native_field(&snapshot, "fingerprints")?.getattr("python_nodes")?,
         ),
     ])
 }
@@ -736,7 +755,7 @@ fn sql_test_model_chain_names_by_key<'py>(
     let chains = resolve_sql_test_model_chains(project, tests)?;
     let by_key = PyDict::new(py);
     for (test, chain) in tests.try_iter()?.zip(chains.try_iter()?) {
-        by_key.set_item(test?.getattr("key")?, chain?)?;
+        by_key.set_item(native_field(&test?, "key")?, chain?)?;
     }
     Ok(by_key)
 }

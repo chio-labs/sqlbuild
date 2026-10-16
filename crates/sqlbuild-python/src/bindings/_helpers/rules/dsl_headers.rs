@@ -13,6 +13,7 @@ use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderSpan, HeaderV
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
@@ -39,8 +40,8 @@ fn text(contents: &Bound<'_, PyAny>) -> PyResult<Vec<char>> {
 
 pub(crate) fn rules_config(config: &Bound<'_, PyAny>) -> PyResult<HeaderRulesConfig> {
     Ok(HeaderRulesConfig {
-        line_width: config.getattr("line_width")?.extract()?,
-        max_description_lines: config.getattr("max_description_lines")?.extract()?,
+        line_width: native_field(config, "line_width")?.extract()?,
+        max_description_lines: native_field(config, "max_description_lines")?.extract()?,
     })
 }
 
@@ -50,9 +51,9 @@ fn spans(headers: &Bound<'_, PyAny>) -> PyResult<Vec<HeaderSpan>> {
         .map(|header| {
             let header: Bound<'_, PyAny> = header?;
             Ok(HeaderSpan {
-                kind: header.getattr("kind")?.extract()?,
-                start: header.getattr("start")?.extract()?,
-                end: header.getattr("end")?.extract()?,
+                kind: native_field(&header, "kind")?.extract()?,
+                start: native_field(&header, "start")?.extract()?,
+                end: native_field(&header, "end")?.extract()?,
             })
         })
         .collect()

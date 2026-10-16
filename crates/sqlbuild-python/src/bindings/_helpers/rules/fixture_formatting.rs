@@ -11,6 +11,7 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::discovery::sql_test_records::parse_sql_test_file;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::constants::MODEL_TEST_MODE;
 use crate::bindings::_helpers::rules::fixture_schemas;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
@@ -18,7 +19,7 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 #[pyfunction]
 #[pyo3(signature = (*, sql, relation))]
 fn simplify_fixture_null_projections(sql: &str, relation: &Bound<'_, PyAny>) -> PyResult<String> {
-    let columns = fixture_schemas::columns(&relation.getattr("columns")?)?;
+    let columns = fixture_schemas::columns(&native_field(relation, "columns")?)?;
     compiler_guard(|| simplify_fixture_nulls(sql, &columns).map_err(value_error))
 }
 
@@ -38,9 +39,9 @@ fn format_redundant_fixture_nulls<'py>(
             .extract::<LexicalSyntaxInput>()?
             .into();
         let updated = PyDict::new(py);
-        for file in discovered_inputs.getattr("test_files")?.try_iter()? {
+        for file in native_field(discovered_inputs, "test_files")?.try_iter()? {
             let file = file?;
-            let relative = file.getattr("relative_path")?;
+            let relative = native_field(&file, "relative_path")?;
             let path = project_dir
                 .call_method1("__truediv__", (&relative,))?
                 .call_method0("resolve")?;
@@ -65,7 +66,7 @@ fn format_redundant_fixture_nulls<'py>(
                 .map(|block| {
                     let block = block?;
                     Ok(FixtureFormatBlock {
-                        sql_body: block.getattr("sql_body")?.extract()?,
+                        sql_body: native_field(&block, "sql_body")?.extract()?,
                         model_mode: block
                             .getattr("mode")?
                             .getattr("value")?

@@ -12,6 +12,7 @@ use sqlbuild_core::migration_values::models::{DecisionTraits, ModelMigrationFact
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -40,7 +41,7 @@ fn flag(py: Python<'_>, value: bool) -> PyResult<Py<PyAny>> {
 
 /// `RetentionPlanEntry.decreases`: whether the entry lowers any live retention value.
 pub(crate) fn retention_decreases(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let direction: String = text(&instance.getattr("direction")?)?;
+    let direction: String = text(&native_field(instance, "direction")?)?;
     flag(
         instance.py(),
         DECREASING_DIRECTIONS.contains(&direction.as_str()),
@@ -49,7 +50,7 @@ pub(crate) fn retention_decreases(instance: &Bound<'_, PyAny>) -> PyResult<Py<Py
 
 /// `OldNameViewPlanEntry.runs_steps`: whether the build archives the old relation or creates the view.
 pub(crate) fn old_name_runs_steps(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let action: String = text(&instance.getattr("action")?)?;
+    let action: String = text(&native_field(instance, "action")?)?;
     flag(instance.py(), STEP_ACTIONS.contains(&action.as_str()))
 }
 
@@ -61,7 +62,7 @@ pub(crate) fn plan_python_source_entries(instance: &Bound<'_, PyAny>) -> PyResul
             return Ok(entries.unbind());
         }
     }
-    Ok(instance.getattr("source_map")?.unbind())
+    Ok(native_field(instance, "source_map")?.unbind())
 }
 
 /// `MaterializationType.is_table_backed(materialized=...)`.
@@ -79,7 +80,7 @@ pub(crate) fn materialization_is_table_backed(
 }
 
 fn decision_traits(entry: &Bound<'_, PyAny>) -> PyResult<(String, DecisionTraits)> {
-    let decision: String = text(&entry.getattr("decision")?)?;
+    let decision: String = text(&native_field(entry, "decision")?)?;
     let traits: DecisionTraits = migration_decision_traits(&decision);
     Ok((decision, traits))
 }
@@ -88,10 +89,10 @@ fn model_facts(entry: &Bound<'_, PyAny>) -> PyResult<ModelMigrationFacts> {
     let (decision, traits) = decision_traits(entry)?;
     Ok(ModelMigrationFacts {
         origin_missing: decision == ORIGIN_MISSING,
-        origin_tracked: entry.getattr("origin_tracked")?.is_truthy()?,
-        deny_missing_origin: text(&entry.getattr("missing_origin_policy")?)? == DENY_POLICY,
+        origin_tracked: native_field(entry, "origin_tracked")?.is_truthy()?,
+        deny_missing_origin: text(&native_field(entry, "missing_origin_policy")?)? == DENY_POLICY,
         decision: traits,
-        incompatible: text(&entry.getattr("compatibility")?)? == INCOMPATIBLE,
+        incompatible: text(&native_field(entry, "compatibility")?)? == INCOMPATIBLE,
     })
 }
 
@@ -108,8 +109,8 @@ pub(crate) fn model_migration_origin_hidden(entry: &Bound<'_, PyAny>) -> PyResul
 
 /// `ModelMigrationPlanEntry.storage_transition`: the table-type transition label, when known.
 pub(crate) fn model_migration_storage_transition(entry: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let origin: bool = entry.getattr("origin_is_transient")?.is_truthy()?;
-    let stage: Bound<'_, PyAny> = entry.getattr("stage_is_transient")?;
+    let origin: bool = native_field(entry, "origin_is_transient")?.is_truthy()?;
+    let stage: Bound<'_, PyAny> = native_field(entry, "stage_is_transient")?;
     let stage: Option<bool> = if stage.is_none() {
         None
     } else {
@@ -120,7 +121,7 @@ pub(crate) fn model_migration_storage_transition(entry: &Bound<'_, PyAny>) -> Py
 
 /// `ModelMigrationPlanEntry.target_label`: the target name, naming the unnamed target `default`.
 pub(crate) fn model_migration_target_label(entry: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let target: Bound<'_, PyAny> = entry.getattr("target_name")?;
+    let target: Bound<'_, PyAny> = native_field(entry, "target_name")?;
     if target.is_truthy()? {
         return Ok(target.unbind());
     }
@@ -136,17 +137,17 @@ pub(crate) fn model_migration_blocks_build(entry: &Bound<'_, PyAny>) -> PyResult
 pub(crate) fn column_migration_origin_missing(entry: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     flag(
         entry.py(),
-        text(&entry.getattr("decision")?)? == SOURCE_MISSING,
+        text(&native_field(entry, "decision")?)? == SOURCE_MISSING,
     )
 }
 
 /// `ColumnMigrationPlanEntry.blocks_build`.
 pub(crate) fn column_migration_blocks_build(entry: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let decision: Bound<'_, PyAny> = entry.getattr("decision")?;
+    let decision: Bound<'_, PyAny> = native_field(entry, "decision")?;
     let blocks: bool = if text(&decision)? == SOURCE_MISSING {
-        text(&entry.getattr("missing_origin_policy")?)? == DENY_POLICY
+        text(&native_field(entry, "missing_origin_policy")?)? == DENY_POLICY
     } else {
-        decision.getattr("blocks_build")?.is_truthy()?
+        native_field(&decision, "blocks_build")?.is_truthy()?
     };
     flag(entry.py(), blocks)
 }
@@ -235,7 +236,7 @@ pub(crate) fn finish_cursor_overrides(
 /// `CursorOverrides.has_untyped`: whether `--start-cursor` or `--end-cursor` awaits a type.
 pub(crate) fn overrides_have_untyped(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let untyped: bool =
-        !instance.getattr("start")?.is_none() || !instance.getattr("end")?.is_none();
+        !native_field(instance, "start")?.is_none() || !native_field(instance, "end")?.is_none();
     flag(instance.py(), untyped)
 }
 
@@ -324,7 +325,7 @@ pub(crate) fn finish_scenario_artifact_kind(
 
 /// `ColumnRenameHint.message`: the one-line hint shown beside the added column.
 pub(crate) fn rename_hint_message(hint: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let relation: &str = if hint.getattr("identical")?.is_truthy()? {
+    let relation: &str = if native_field(hint, "identical")?.is_truthy()? {
         "same expression as"
     } else {
         "similar to"
@@ -341,12 +342,14 @@ pub(crate) fn rename_hint_message(hint: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>
     format!(
         "{relation} {}; if this is a rename, add {} (migrate_from {origin})",
         candidates.join(", "),
-        hint.getattr("added_column")?.str()?
+        native_field(hint, "added_column")?.str()?
     )
     .into_py_any(hint.py())
 }
 
 /// `QueryProjection.key`: the case-insensitive output name.
 pub(crate) fn projection_key(projection: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(projection.getattr("name")?.call_method0("lower")?.unbind())
+    Ok(native_field(projection, "name")?
+        .call_method0("lower")?
+        .unbind())
 }

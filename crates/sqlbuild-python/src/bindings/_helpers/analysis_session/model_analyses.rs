@@ -22,6 +22,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
@@ -66,7 +67,7 @@ pub(crate) fn analyze_models<'py>(
             session: None,
         });
     }
-    let catalog: Bound<'py, PyAny> = request.profile.getattr("binding_catalog")?;
+    let catalog: Bound<'py, PyAny> = native_field(&request.profile, "binding_catalog")?;
     let (rules, adapter_rules) = nullability_rules(&request.profile)?;
     let session_request: RequestRow = session_request(request, &catalog, rules)?.extract()?;
     let (cache, adapter) = match adapter_rules {
@@ -76,7 +77,7 @@ pub(crate) fn analyze_models<'py>(
     let session: Bound<'py, NativeModelAnalysisSession> = Bound::new(
         py,
         start_model_analysis_session(
-            catalog.getattr("native")?.extract()?,
+            native_field(&catalog, "native")?.extract()?,
             session_request,
             cache,
             adapter,
@@ -100,7 +101,7 @@ fn session_request<'py>(
     }
     let items: Vec<Bound<'py, PyAny>> = vec![
         profile_dialect(profile)?.into_bound_py_any(py)?,
-        case_sensitive_shapes(profile, &profile.getattr("sql_analysis_dialect")?)?
+        case_sensitive_shapes(profile, &native_field(profile, "sql_analysis_dialect")?)?
             .into_bound_py_any(py)?,
         return_types(profile)?.into_bound_py_any(py)?,
         rules.into_bound_py_any(py)?,
@@ -108,7 +109,7 @@ fn session_request<'py>(
         shape_rows(&request.column_types)?.into_bound_py_any(py)?,
         shape_rows(&request.nullability)?.into_bound_py_any(py)?,
         shape_rows(&request.complete_schemas)?.into_bound_py_any(py)?,
-        shape_rows(&catalog.getattr("schemas")?)?.into_bound_py_any(py)?,
+        shape_rows(&native_field(catalog, "schemas")?)?.into_bound_py_any(py)?,
         families.into_bound_py_any(py)?,
         model_rows(py, &request.model_inputs)?,
     ];
@@ -121,12 +122,14 @@ fn analysis_store(request: &ModelAnalysisRequest<'_>) -> PyResult<Option<(PathBu
     if context.is_none() {
         return Ok(None);
     }
-    let path: PathBuf = context.getattr("root")?.div(STORE_FILE_NAME)?.extract()?;
+    let path: PathBuf = native_field(context, "root")?
+        .div(STORE_FILE_NAME)?
+        .extract()?;
     let environment: String = content_digest(vec![
         STORE_VERSION.to_owned(),
         current_code_identity(context.py())?,
-        context.getattr("shared_fingerprint")?.extract()?,
-        context.getattr("signature_namespace")?.extract()?,
+        native_field(context, "shared_fingerprint")?.extract()?,
+        native_field(context, "signature_namespace")?.extract()?,
     ]);
     Ok(Some((path, environment)))
 }
@@ -187,7 +190,7 @@ fn record_catalog_changes<'py>(
     (types, nullability): (&Bound<'py, PyDict>, &Bound<'py, PyDict>),
 ) -> PyResult<()> {
     let py: Python<'py> = catalog.py();
-    let schemas: Bound<'py, PyAny> = catalog.getattr("schemas")?;
+    let schemas: Bound<'py, PyAny> = native_field(catalog, "schemas")?;
     let additions: Bound<'py, PyDict> = PyDict::new(py);
     for (name, shape) in schema_additions {
         if !schemas.contains(&name)? {
@@ -259,13 +262,13 @@ fn model_rows<'py>(
         registry::class(py, RecordId::MaterializationType)?.getattr("SNAPSHOT")?;
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::with_capacity(model_inputs.len());
     for model_input in model_inputs {
-        let values: Bound<'py, PyAny> = model_input.getattr("config")?.getattr("values")?;
+        let values: Bound<'py, PyAny> = native_field(model_input, "config")?.getattr("values")?;
         let get = |key: &str| values.call_method1("get", (key,));
         let query_sql: Bound<'py, PyAny> = PyString::new(
             py,
             &analysis_cursor_sql(
                 py,
-                &model_input.getattr("query_sql")?.extract::<String>()?,
+                &native_field(model_input, "query_sql")?.extract::<String>()?,
                 &get("cursor_type")?,
             )?,
         )
@@ -279,7 +282,7 @@ fn model_rows<'py>(
             }
         }
         let mut references: Vec<(String, String)> = Vec::new();
-        for row in model_input.getattr("reference_rows")?.try_iter()? {
+        for row in native_field(model_input, "reference_rows")?.try_iter()? {
             let row: Bound<'py, PyAny> = row?;
             references.push((
                 row.get_item(0)?.str()?.extract()?,

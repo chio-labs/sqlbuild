@@ -11,6 +11,7 @@ use crate::bindings::_helpers::sql_test_glue::constants::{TABLE_FN, UDF};
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
 use sqlbuild_analysis::compiler::main::missing_expected_columns::missing_expected_columns;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
@@ -18,9 +19,12 @@ use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
 fn prefixed_names<'py>(test: &Bound<'py, PyAny>, prefix: &str) -> PyResult<Bound<'py, PyAny>> {
     let py = test.py();
     let mut names: Vec<String> = if model_payload(test)? {
-        prefixed_ctes(&test.getattr("payload")?.getattr("authored_ctes")?, prefix)?
-            .keys()
-            .extract()?
+        prefixed_ctes(
+            &native_field(test, "payload")?.getattr("authored_ctes")?,
+            prefix,
+        )?
+        .keys()
+        .extract()?
     } else {
         Vec::new()
     };
@@ -37,7 +41,7 @@ fn function_deps<'py>(
     let py = test.py();
     let deps = PyDict::new(py);
     if model_payload(test)? {
-        let names: Vec<String> = plan.getattr("model_names")?.extract()?;
+        let names: Vec<String> = native_field(plan, "model_names")?.extract()?;
         let mocked: std::collections::HashSet<String> =
             inputs.0.extract::<Vec<String>>()?.into_iter().collect();
         let models = inputs.1;
@@ -45,14 +49,16 @@ fn function_deps<'py>(
             let Some(model) = models.get_item(name)? else {
                 continue;
             };
-            for dep in model.getattr("deps")?.try_iter()? {
+            for dep in native_field(&model, "deps")?.try_iter()? {
                 let dep = dep?;
-                let resource: String = dep.getattr("resource_type")?.getattr("value")?.extract()?;
+                let resource: String = native_field(&dep, "resource_type")?
+                    .getattr("value")?
+                    .extract()?;
                 if resource != UDF && resource != TABLE_FN {
                     continue;
                 }
                 if resource == TABLE_FN
-                    && mocked.contains(&dep.getattr("name")?.extract::<String>()?)
+                    && mocked.contains(&native_field(&dep, "name")?.extract::<String>()?)
                 {
                     continue;
                 }
@@ -60,23 +66,25 @@ fn function_deps<'py>(
             }
         }
     } else {
-        let payload = test.getattr("payload")?;
-        let mode: String = payload.getattr("mode")?.getattr("value")?.extract()?;
+        let payload = native_field(test, "payload")?;
+        let mode: String = native_field(&payload, "mode")?
+            .getattr("value")?
+            .extract()?;
         if mode == UDF || mode == TABLE_FN {
             let names: std::collections::HashSet<String> = payload
                 .getattr("tested_resource_names")?
                 .extract::<Vec<String>>()?
                 .into_iter()
                 .collect();
-            for function in project.getattr("functions")?.try_iter()? {
+            for function in native_field(project, "functions")?.try_iter()? {
                 let function = function?;
-                let key = function.getattr("key")?;
+                let key = native_field(&function, "key")?;
                 if key
                     .getattr("resource_type")?
                     .getattr("value")?
                     .extract::<String>()?
                     == mode
-                    && names.contains(&function.getattr("name")?.extract::<String>()?)
+                    && names.contains(&native_field(&function, "name")?.extract::<String>()?)
                 {
                     deps.set_item(key, py.None())?;
                 }
@@ -125,8 +133,8 @@ pub(super) fn entry<'py>(
         "function_deps",
         function_deps(test, plan, inputs.0, (&mocks, inputs.1))?,
     )?;
-    fields.set_item("chain", plan.getattr("chain")?)?;
-    fields.set_item("assertions", plan.getattr("assertions")?)?;
+    fields.set_item("chain", native_field(plan, "chain")?)?;
+    fields.set_item("assertions", native_field(plan, "assertions")?)?;
     fields.set_item("sql_analysis_enabled", analysis)?;
     registry::class(py, RecordId::SqlTestPlanEntry)?.call((), Some(&fields))
 }
@@ -142,14 +150,14 @@ pub(super) fn expected_diagnostics(
     };
     let py = test.py();
     let resource_types = imported(py, COMPILE_TYPES, "CompiledResourceType")?;
-    for step in plan.getattr("chain")?.try_iter()? {
+    for step in native_field(plan, "chain")?.try_iter()? {
         let step = step?;
-        let name = step.getattr("model_name")?;
+        let name = native_field(&step, "model_name")?;
         let model_name: String = name.extract()?;
         let available = context
             .authoritative_columns
             .get(&(MODEL_REFERENCE_KIND.to_owned(), model_name));
-        let expected = step.getattr("expected_columns")?;
+        let expected = native_field(&step, "expected_columns")?;
         let Some(available) = available else {
             continue;
         };
@@ -165,12 +173,12 @@ pub(super) fn expected_diagnostics(
         };
         let location = super::fixture_validation::fixture_location(
             test,
-            &resource_types.getattr("SQL_TEST")?,
+            &native_field(&resource_types, "SQL_TEST")?,
             &name.extract::<String>()?,
         )?;
         result.push(format!(
             "SQL test '{}': {}: {}",
-            test.getattr("name")?.extract::<String>()?,
+            native_field(test, "name")?.extract::<String>()?,
             location,
             message
         ));

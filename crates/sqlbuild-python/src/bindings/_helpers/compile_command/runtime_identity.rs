@@ -6,6 +6,7 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cli::replay::main::output_file_identities::output_file_identities;
 
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -28,10 +29,10 @@ const REQUEST_CHOICES: [&str; 9] = [
 pub(crate) fn interpreter_values(py: Python<'_>) -> PyResult<[String; 4]> {
     let sys: Bound<'_, PyModule> = py.import("sys")?;
     Ok([
-        sys.getattr("version")?.extract()?,
-        sys.getattr("executable")?.extract()?,
-        sys.getattr("platform")?.extract()?,
-        sys.getattr("implementation")?
+        native_field(&sys, "version")?.extract()?,
+        native_field(&sys, "executable")?.extract()?,
+        native_field(&sys, "platform")?.extract()?,
+        native_field(&sys, "implementation")?
             .getattr("cache_tag")?
             .str()?
             .extract()?,
@@ -73,7 +74,7 @@ pub(crate) fn invocation_identity<'py>(
     let py: Python<'py> = request.py();
     let payload: Bound<'py, PyDict> = PyDict::new(py);
     payload.set_item("project_dir", project_dir)?;
-    let requested: Bound<'py, PyAny> = request.getattr("project_dir")?;
+    let requested: Bound<'py, PyAny> = native_field(request, "project_dir")?;
     let requested: Bound<'py, PyAny> = if requested.is_none() {
         requested
     } else {
@@ -85,8 +86,8 @@ pub(crate) fn invocation_identity<'py>(
     }
     payload.set_item("cwd", py.import("os")?.getattr("getcwd")?.call0()?)?;
     payload.set_item("use_color", use_color)?;
-    payload.set_item("select", listed(request.getattr("select")?)?)?;
-    payload.set_item("exclude", listed(request.getattr("exclude")?)?)?;
+    payload.set_item("select", listed(native_field(request, "select")?)?)?;
+    payload.set_item("exclude", listed(native_field(request, "exclude")?)?)?;
     payload.set_item("sys_path", listed(py.import("sys")?.getattr("path")?)?)?;
     let options: Bound<'py, PyDict> = keywords(
         py,

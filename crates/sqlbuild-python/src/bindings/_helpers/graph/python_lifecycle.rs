@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -65,11 +66,12 @@ pub(crate) fn build_python_sql_run_lifecycle<'py>(
 }
 
 fn lifecycle_node(node: &Bound<'_, PyAny>) -> PyResult<LifecycleNode> {
-    let loader: Bound<'_, PyAny> = node.getattr("loader")?;
+    let loader: Bound<'_, PyAny> = native_field(node, "loader")?;
     let external_loader: bool = !loader.is_none()
-        && loader.getattr("connection_mode")?.extract::<String>()? == EXTERNAL_CONNECTION_MODE;
+        && native_field(&loader, "connection_mode")?.extract::<String>()?
+            == EXTERNAL_CONNECTION_MODE;
     Ok(LifecycleNode {
-        kind: node.getattr("kind")?.extract()?,
+        kind: native_field(node, "kind")?.extract()?,
         external_loader,
     })
 }

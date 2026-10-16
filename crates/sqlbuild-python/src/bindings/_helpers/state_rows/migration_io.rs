@@ -12,6 +12,7 @@ use sqlbuild_state::events::models::RecordedRenameKey;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::constants::{
     COLUMN_KIND, LOGGING_MODULE, MIGRATION_LOGGER, MIGRATION_WRITE_ATTEMPTS,
     MIGRATION_WRITE_RETRY_BASE_SECONDS, MIGRATION_WRITE_RETRY_MESSAGE, MODEL_KIND, OLD_NAME_KIND,
@@ -86,7 +87,7 @@ pub(crate) fn stored_old_name_columns<'py>(
 ) -> PyResult<Vec<String>> {
     let py: Python<'py> = adapter.py();
     let columns: Bound<'py, PyAny> = call_with(
-        &adapter.getattr("get_columns")?,
+        &native_field(adapter, "get_columns")?,
         &[
             ("connection", connection.clone()),
             ("database", database),
@@ -99,23 +100,23 @@ pub(crate) fn stored_old_name_columns<'py>(
     )?;
     columns
         .try_iter()?
-        .map(|column| column?.getattr("name")?.extract())
+        .map(|column| native_field(&column?, "name")?.extract())
         .collect()
 }
 
 fn subject(table: EventTable, event: &Bound<'_, PyAny>) -> PyResult<String> {
     let text = |value: Bound<'_, PyAny>| -> PyResult<String> { Ok(value.str()?.to_string()) };
     Ok(match table {
-        EventTable::Model => text(event.getattr("destination_model")?)?,
+        EventTable::Model => text(native_field(event, "destination_model")?)?,
         EventTable::Column => format!(
             "{}.{}",
-            text(event.getattr("model_name")?)?,
-            text(event.getattr("destination_column")?)?
+            text(native_field(event, "model_name")?)?,
+            text(native_field(event, "destination_column")?)?
         ),
         EventTable::OldName => format!(
             "{} old name {}",
-            text(event.getattr("destination_model")?)?,
-            text(event.getattr("old")?.getattr("name")?)?
+            text(native_field(event, "destination_model")?)?,
+            text(native_field(event, "old")?.getattr("name")?)?
         ),
     })
 }
@@ -249,7 +250,7 @@ fn read_renames<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py
     let py: Python<'py> = request.py();
     let relation: Bound<'py, PyAny> = request.get("relation")?;
     let since = presumed_utc(&request.get("since")?)?;
-    let schema: Bound<'py, PyAny> = relation.getattr("schema")?;
+    let schema: Bound<'py, PyAny> = native_field(&relation, "schema")?;
     let schema: Bound<'py, PyAny> = if schema.is_none() {
         PyString::new(py, "").into_any()
     } else {
@@ -258,7 +259,7 @@ fn read_renames<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py
     let events: Bound<'py, PyTuple> = read_events(
         &access(&request)?,
         &layout(COLUMN_KIND)?,
-        (relation.getattr("database")?, schema),
+        (native_field(&relation, "database")?, schema),
         None,
     )?;
     let keys: Vec<RecordedRenameKey> = events
@@ -266,7 +267,7 @@ fn read_renames<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py
         .map(|event| {
             Ok(RecordedRenameKey {
                 order: event_order(&event)?,
-                relation: event_relation(&event.getattr("relation")?)?,
+                relation: event_relation(&native_field(&event, "relation")?)?,
                 records_event: event
                     .getattr("decision")?
                     .getattr("records_event")?

@@ -6,6 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -66,7 +67,7 @@ pub(crate) fn resolve_cursor_input_roles<'py>(
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
+    let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
     let authored: Bound<'py, PyAny> = values.call_method1("get", (CURSOR_INPUTS_KEY,))?;
     let strategy: Bound<'py, PyAny> = values.call_method1("get", ("microbatch_strategy",))?;
     let rolling: bool = strategy.eq(ROLLING_WINDOW_STRATEGY)?;

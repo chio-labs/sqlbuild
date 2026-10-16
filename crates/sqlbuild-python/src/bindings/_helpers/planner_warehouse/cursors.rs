@@ -28,6 +28,7 @@ use crate::bindings::_helpers::planner_warehouse::snapshot::{
     SnapshotRequest, inspection_concurrency,
 };
 use crate::bindings::_helpers::planner_warehouse::watermarks::validate_watermark_column;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
@@ -168,7 +169,7 @@ fn target_has_cursor_column(
     };
     let wanted = strip(&text(py, cursor_column))?;
     for column in columns.try_iter()? {
-        if strip(&column?.getattr("name")?)? == wanted {
+        if strip(&native_field(&column?, "name")?)? == wanted {
             return Ok(true);
         }
     }
@@ -192,16 +193,19 @@ fn runtime_producer_names(
         return Ok(names);
     }
     let mut loaded: HashSet<String> = HashSet::new();
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        if !source.getattr("source_entry")?.getattr("loader")?.is_none() {
-            loaded.insert(source.getattr("name")?.extract()?);
+        if !native_field(&source, "source_entry")?
+            .getattr("loader")?
+            .is_none()
+        {
+            loaded.insert(native_field(&source, "name")?.extract()?);
         }
     }
     for key in selected.try_iter()? {
         let key = key?;
-        let kind = key.getattr("resource_type")?;
-        let name: String = key.getattr("name")?.extract()?;
+        let kind = native_field(&key, "resource_type")?;
+        let name: String = native_field(&key, "name")?.extract()?;
         if kind.eq("model")? || kind.eq("seed")? || (kind.eq("source")? && loaded.contains(&name)) {
             names.insert(name);
         }
@@ -216,18 +220,18 @@ fn upstream_relation<'py>(
     (deferred, selected): (&Bound<'py, PyAny>, Option<&HashSet<String>>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = reference.py();
-    let kind = reference.getattr("ref_kind")?;
-    let name = reference.getattr("ref_name")?;
+    let kind = native_field(reference, "ref_kind")?;
+    let name = native_field(reference, "ref_name")?;
     let name_text: String = name.extract()?;
     let is_selected = selected.is_some_and(|names| names.contains(&name_text));
     let qualified =
-        |node: Bound<'py, PyAny>| node.getattr("destination")?.getattr("qualified_name");
+        |node: Bound<'py, PyAny>| native_field(&node, "destination")?.getattr("qualified_name");
     if (kind.eq("ref")? || kind.eq("seed")?)
         && !deferred.is_none()
         && deferred.contains(&name)?
         && !is_selected
     {
-        return deferred.get_item(&name)?.getattr("qualified_name");
+        return native_field(&deferred.get_item(&name)?, "qualified_name");
     }
     if kind.eq("ref")? {
         if let Some(model) = maps.models.get_item(&name)? {
@@ -246,7 +250,7 @@ fn upstream_relation<'py>(
         return object(
             py,
             render_source_relation(
-                &source.getattr("source_entry")?,
+                &native_field(&source, "source_entry")?,
                 Some(adapter).filter(|value| !value.is_none()),
             )?,
         );
@@ -273,15 +277,15 @@ fn terminal_bound<'py>(
     (key, cursor_type): (&str, Option<&str>),
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = reference.py();
-    if !reference.getattr("ref_kind")?.eq("ref")? {
+    if !native_field(reference, "ref_kind")?.eq("ref")? {
         return Ok(None);
     }
-    let Some(upstream) = maps.models.get_item(reference.getattr("ref_name")?)? else {
+    let Some(upstream) = maps.models.get_item(native_field(reference, "ref_name")?)? else {
         return Ok(None);
     };
     let value = object(
         py,
-        config_cursor_bound(&upstream.getattr("config")?.getattr("values")?, key)?,
+        config_cursor_bound(&native_field(&upstream, "config")?.getattr("values")?, key)?,
     )?;
     if value.is_none() {
         return Ok(None);
@@ -296,10 +300,10 @@ fn terminal_bound<'py>(
 }
 
 fn input_grain(reference: &Bound<'_, PyAny>, maps: &ModelMaps<'_>) -> PyResult<Option<String>> {
-    if !reference.getattr("ref_kind")?.eq("ref")? {
+    if !native_field(reference, "ref_kind")?.eq("ref")? {
         return Ok(None);
     }
-    match maps.models.get_item(reference.getattr("ref_name")?)? {
+    match maps.models.get_item(native_field(reference, "ref_name")?)? {
         Some(upstream) => config_str(&upstream, "cursor_grain"),
         None => Ok(None),
     }
@@ -310,8 +314,8 @@ fn start_override_set(model: &Bound<'_, PyAny>, overrides: &Bound<'_, PyAny>) ->
         return Ok(false);
     }
     match config_str(model, "cursor_type")?.as_deref() {
-        Some(CURSOR_TYPE_TIMESTAMP) => Ok(!overrides.getattr("start_ts")?.is_none()),
-        Some(CURSOR_TYPE_INTEGER) => Ok(!overrides.getattr("start_int")?.is_none()),
+        Some(CURSOR_TYPE_TIMESTAMP) => Ok(!native_field(overrides, "start_ts")?.is_none()),
+        Some(CURSOR_TYPE_INTEGER) => Ok(!native_field(overrides, "start_int")?.is_none()),
         _ => Ok(false),
     }
 }
@@ -335,13 +339,13 @@ fn collect_models<'py>(
         Some(
             producers
                 .try_iter()?
-                .map(|key| key?.getattr("name")?.extract::<String>())
+                .map(|key| native_field(&key?, "name")?.extract::<String>())
                 .collect::<PyResult<_>>()?,
         )
     };
     let runtime_names = runtime_producer_names(project, &producers)?;
     let mut models: Vec<_> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         let name_value = model_reads::name_object(&model)?;
         let model_name: String = name_value.extract()?;
@@ -357,7 +361,8 @@ fn collect_models<'py>(
         else {
             continue;
         };
-        let watermark_inputs = resolve_cursor_input_roles(&model)?.getattr("watermark_inputs")?;
+        let watermark_inputs =
+            native_field(&resolve_cursor_input_roles(&model)?, "watermark_inputs")?;
         let watermark_inputs: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = watermark_inputs
             .call_method0("items")?
             .try_iter()?
@@ -382,13 +387,13 @@ fn collect_models<'py>(
             None => None,
         };
         let target_info = existing_relations.get_item(&name_value)?;
-        let qualified = model_reads::destination(&model)?.getattr("qualified_name")?;
+        let qualified = native_field(&model_reads::destination(&model)?, "qualified_name")?;
         if let Some(redirected) = redirected.filter(|value| !value.is_none()) {
             target_tag = Some(format!("{model_name}__target__max"));
             target_relation = Some(redirected.extract::<String>()?);
         } else if !qualified.is_none()
             && let Some(info) = target_info
-            && info.getattr("name")?.eq(&name_value)?
+            && native_field(&info, "name")?.eq(&name_value)?
         {
             if target_has_cursor_column(
                 py,
@@ -406,7 +411,7 @@ fn collect_models<'py>(
             let upstream_column: String = upstream_column.extract()?;
             let reference = lineage_reference(&model, input_name, maps)?;
             validate_watermark_column(&model, &reference, &upstream_column, maps_tuple(maps))?;
-            let ref_name: String = reference.getattr("ref_name")?.extract()?;
+            let ref_name: String = native_field(&reference, "ref_name")?.extract()?;
             if runtime_names.contains(&ref_name) {
                 continue;
             }
@@ -420,7 +425,7 @@ fn collect_models<'py>(
                 continue;
             }
             if !existing_relations.contains(&ref_name)?
-                && !reference.getattr("ref_kind")?.eq("source")?
+                && !native_field(&reference, "ref_kind")?.eq("source")?
             {
                 continue;
             }
@@ -822,7 +827,7 @@ fn eligible_target_maxes<'py>(
             continue;
         };
         if config.is_none()
-            || config.getattr("max_ahead")?.is_none()
+            || native_field(config, "max_ahead")?.is_none()
             || info.cursor_type.as_deref() != Some(CURSOR_TYPE_TIMESTAMP)
             || info.target_relation.is_none()
             || info.has_start_override
@@ -839,7 +844,7 @@ fn eligible_target_maxes<'py>(
                         ("discovered_value", render(target_max)?),
                         ("cursor_grain", info.effective_grain.clone()),
                         ("invocation_time", invocation_time.clone()),
-                        ("max_ahead", config.getattr("max_ahead")?),
+                        ("max_ahead", native_field(config, "max_ahead")?),
                     ],
                 )?),
             )?,
@@ -850,7 +855,7 @@ fn eligible_target_maxes<'py>(
             continue;
         }
         let sql = call_with(
-            &request.adapter.getattr("render_max_cursor_at_or_before")?,
+            &native_field(&request.adapter, "render_max_cursor_at_or_before")?,
             &[
                 (
                     "relation",
@@ -1052,9 +1057,10 @@ fn assemble<'py>(
                 if available.is_none()
                     && let Some(max_value) = max_value
                 {
-                    available = Some(
-                        partition(max_value, &cursor_grain(py, info, upstream)?)?.getattr("end")?,
-                    );
+                    available = Some(native_field(
+                        &partition(max_value, &cursor_grain(py, info, upstream)?)?,
+                        "end",
+                    )?);
                 }
                 if let Some(available) = available.filter(|value| !value.is_none()) {
                     availability.push(available);

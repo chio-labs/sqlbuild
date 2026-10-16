@@ -18,6 +18,7 @@ use crate::bindings::_helpers::planner_resolution::refs::{
     resolve_udf_references,
 };
 use crate::bindings::_helpers::planner_resolution::sources::resolve_sources;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -109,7 +110,7 @@ impl<'py> Resolution<'py> {
             let kwargs = PyDict::new(py);
             kwargs.set_item(
                 "statement",
-                self.unbounded(value.getattr("statement")?, label)?,
+                self.unbounded(native_field(&value, "statement")?, label)?,
             )?;
             return imported(py, "dataclasses", "replace")?.call((value,), Some(&kwargs));
         }
@@ -170,8 +171,8 @@ fn resolve_model_sql_of<'py>(
         backfill: args.value("backfill")?,
         full_refresh: args.flag("full_refresh")?,
         cursor_overrides: (
-            overrides.getattr("start_cursor_override")?,
-            overrides.getattr("end_cursor_override")?,
+            native_field(&overrides, "start_cursor_override")?,
+            native_field(&overrides, "end_cursor_override")?,
         ),
         replaces_relation: args.flag("replaces_relation")?,
         full_rebuild_cause: if cause.is_truthy()? {
@@ -192,14 +193,16 @@ pub(crate) fn resolve_model_sql<'py>(
 ) -> PyResult<String> {
     let model = &request.model;
     let py = model.py();
-    let cursor_type =
-        authored_config_str(&model.getattr("config")?.getattr("values")?, "cursor_type")?
-            .unwrap_or_else(|| py.None().into_bound(py));
+    let cursor_type = authored_config_str(
+        &native_field(model, "config")?.getattr("values")?,
+        "cursor_type",
+    )?
+    .unwrap_or_else(|| py.None().into_bound(py));
     let bounds = compute_model_cursor_bounds(request, context)?;
     let roles = resolve_cursor_input_roles(model)?;
     let filtering = CursorFiltering {
         bounds: bounds.clone(),
-        filter_inputs: roles.getattr("filter_inputs")?,
+        filter_inputs: native_field(&roles, "filter_inputs")?,
         cursor_type: cursor_type.clone(),
         lower_bound_inclusive: append_cursor_inclusive(model)?,
     };
@@ -228,7 +231,7 @@ pub(crate) fn resolve_model_sql<'py>(
 fn append_cursor_inclusive(model: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = model.py();
     let strategy = authored_config_str(
-        &model.getattr("config")?.getattr("values")?,
+        &native_field(model, "config")?.getattr("values")?,
         "incremental_strategy",
     )?
     .unwrap_or_else(|| py.None().into_bound(py));
@@ -249,7 +252,7 @@ fn intrinsic_bounds<'py>(
     let py = adapter.py();
     let literal = |field: &str| -> PyResult<String> {
         call_with(
-            &adapter.getattr("render_cursor_bound_literal")?,
+            &native_field(adapter, "render_cursor_bound_literal")?,
             &[
                 (
                     "value",
@@ -313,9 +316,11 @@ pub(crate) fn resolve_function_sql<'py>(
         function_locations: args.value("function_locations")?,
     };
     let function = args.value("function")?;
-    let name: String = function.getattr("name")?.extract()?;
-    let sql: String =
-        resolution.unbounded(function.getattr("body_sql")?, &format!("Function '{name}'"))?;
+    let name: String = native_field(&function, "name")?.extract()?;
+    let sql: String = resolution.unbounded(
+        native_field(&function, "body_sql")?,
+        &format!("Function '{name}'"),
+    )?;
     Ok(PyString::new(py, &sql).into_any())
 }
 
@@ -336,7 +341,7 @@ pub(crate) fn model_hook_entries<'py>(
     model: &Bound<'py, PyAny>,
     resolution: &Resolution<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let values = model.getattr("config")?.getattr("values")?;
+    let values = native_field(model, "config")?.getattr("values")?;
     let name: String = model_reads::model_name(model)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ["pre_hooks", "post_hooks"] {

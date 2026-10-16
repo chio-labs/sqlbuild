@@ -26,6 +26,7 @@ use crate::bindings::_helpers::format_command::run::{FormatOutcome, FormatReques
 use crate::bindings::_helpers::format_command::selection::{LintInputs, resolve_lint_inputs};
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -96,9 +97,10 @@ fn resolve_inputs<'py>(
                 selected,
                 discovered,
             }) => {
-                resolved.has_fixture_candidates = discovered.getattr("test_files")?.is_truthy()?;
+                resolved.has_fixture_candidates =
+                    native_field(&discovered, "test_files")?.is_truthy()?;
                 let adapter_dialect: Bound<'py, PyAny> =
-                    adapter.getattr("sql_analysis_dialect_name")?;
+                    native_field(&adapter, "sql_analysis_dialect_name")?;
                 resolved.dialect = if adapter_dialect.is_truthy()? {
                     adapter_dialect.extract()?
                 } else {
@@ -131,14 +133,14 @@ fn fixture_inputs<'py>(resolved: &Resolved<'py>) -> PyResult<Option<Bound<'py, P
     if !resolved.has_fixture_candidates {
         return Ok(None);
     }
-    let local: Bound<'py, PyAny> = discovered.getattr("local_config")?;
+    let local: Bound<'py, PyAny> = native_field(discovered, "local_config")?;
     let settings_owner: Bound<'py, PyAny> = if local
         .getattr("setting_overrides")?
         .contains(SQL_ANALYSIS_SETTING_KEY)?
     {
         local
     } else {
-        discovered.getattr("project_config")?
+        native_field(discovered, "project_config")?
     };
     let enabled: bool = settings_owner
         .getattr("settings")?
@@ -194,7 +196,7 @@ fn complete_status(status: &Bound<'_, PyAny>, report: &LintReport, elapsed: f64)
         status.call_method1("error", (message,))?;
     } else {
         call_with(
-            &status.getattr("complete")?,
+            &native_field(status, "complete")?,
             &[("message", PyString::new(status.py(), &message).into_any())],
         )?;
     }

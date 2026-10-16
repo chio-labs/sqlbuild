@@ -7,6 +7,7 @@ use crate::bindings::_helpers::analysis::binding_catalog::ignores_quoted_case;
 use crate::bindings::_helpers::analysis::schema_request::{
     SchemaRequestParts, schema_validation_request,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_checks::resource_sql::resource_sql_diagnostics_of;
@@ -39,17 +40,17 @@ pub(crate) fn sql_test_columns<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project.py();
     let bodies: Bound<'py, PyDict> = PyDict::new(py);
-    for test in project.getattr("sql_tests")?.try_iter()? {
-        let payload: Bound<'py, PyAny> = test?.getattr("payload")?;
+    for test in native_field(project, "sql_tests")?.try_iter()? {
+        let payload: Bound<'py, PyAny> = native_field(&test?, "payload")?;
         if !payload.is_instance(model_test_payload)? {
             continue;
         }
         for cte in payload
             .getattr("authored_ctes")?
             .try_iter()?
-            .chain(payload.getattr("expected_ctes")?.try_iter()?)
+            .chain(native_field(&payload, "expected_ctes")?.try_iter()?)
         {
-            bodies.set_item(cte?.getattr("sql_body")?, py.None())?;
+            bodies.set_item(native_field(&cte?, "sql_body")?, py.None())?;
         }
     }
     let columns: Bound<'py, PyDict> = PyDict::new(py);
@@ -73,10 +74,10 @@ pub(crate) fn sql_test_columns<'py>(
     for (sql, analysis) in bodies.keys().iter().zip(analyses.try_iter()?) {
         let analysis: Bound<'py, PyAny> = analysis?;
         let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
-        let inferred: Bound<'py, PyAny> = analysis.getattr("columns")?;
+        let inferred: Bound<'py, PyAny> = native_field(&analysis, "columns")?;
         if !inferred.is_none() {
             for column in inferred.try_iter()? {
-                names.push(column?.getattr("name")?);
+                names.push(native_field(&column?, "name")?);
             }
         }
         columns.set_item(sql, PyTuple::new(py, names)?)?;
@@ -91,28 +92,29 @@ pub(crate) fn revalidation_request<'py>(
     shapes: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let dialect: Bound<'py, PyAny> = project.getattr("sql_analysis_dialect")?;
-    let functions: Bound<'py, PyAny> = project.getattr("functions")?;
+    let dialect: Bound<'py, PyAny> = native_field(project, "sql_analysis_dialect")?;
+    let functions: Bound<'py, PyAny> = native_field(project, "functions")?;
     let schema: Bound<'py, PyDict> = PyDict::new(py);
-    for reference in model.getattr("references")?.try_iter()? {
-        let name: Bound<'py, PyAny> = reference?.getattr("ref_name")?;
+    for reference in native_field(model, "references")?.try_iter()? {
+        let name: Bound<'py, PyAny> = native_field(&reference?, "ref_name")?;
         let shape: Bound<'py, PyAny> = match shapes.get_item(&name)? {
             Some(shape) => shape,
             None => PyDict::new(py).into_any(),
         };
         schema.set_item(name, shape)?;
     }
-    let ignores: bool = ignores_quoted_case(&project.getattr("effective_connection")?, &dialect)?;
+    let ignores: bool =
+        ignores_quoted_case(&native_field(project, "effective_connection")?, &dialect)?;
     schema_validation_request(
         py,
         SchemaRequestParts {
-            query_sql: model.getattr("query_sql")?.extract()?,
+            query_sql: native_field(model, "query_sql")?.extract()?,
             placeholders: py.None().into_bound(py),
             known_functions: PyTuple::new(py, function_names(&functions)?)?.into_any(),
             known_types: PyTuple::new(py, declared_types(&functions, shapes.as_any())?)?.into_any(),
             dialect,
             schema: schema.into_any(),
-            catalog: project.getattr("binding_catalog")?,
+            catalog: native_field(project, "binding_catalog")?,
             quoted_identifiers_ignore_case: ignores,
         },
     )
@@ -124,7 +126,7 @@ pub(crate) fn resource_sql_diagnostics<'py>(
     shapes: &Bound<'py, PyAny>,
     profile: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let native: Bound<'py, PyAny> = project.getattr("binding_catalog")?.getattr("native")?;
+    let native: Bound<'py, PyAny> = native_field(project, "binding_catalog")?.getattr("native")?;
     Ok(resource_sql_diagnostics_of(
         native.extract::<PyRef<'py, ProjectCatalog>>()?,
         project,

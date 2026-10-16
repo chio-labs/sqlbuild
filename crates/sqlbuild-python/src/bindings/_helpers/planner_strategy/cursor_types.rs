@@ -16,6 +16,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_changes::results::planner_enum;
 use crate::bindings::_helpers::planner_strategy::values::{optional_string, plan_warning, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const PLANNER_LOGGER: &str = "sqlbuild.planner";
@@ -107,8 +108,8 @@ pub(crate) fn warehouse_column_types(
     for column in columns.try_iter()? {
         let column = column?;
         pairs.push((
-            text(&column.getattr("name")?)?,
-            text(&column.getattr("type")?)?,
+            text(&native_field(&column, "name")?)?,
+            text(&native_field(&column, "type")?)?,
         ));
     }
     Ok(pairs)

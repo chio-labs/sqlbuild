@@ -19,6 +19,7 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -95,11 +96,11 @@ pub(crate) fn model_schema_scope_usages<'py>(
     }
     let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut record_rows: Vec<(IdentityRow, RecordRow)> = Vec::new();
-    let declarations = resolver.getattr("lookup")?.getattr("declarations")?;
+    let declarations = native_field(resolver, "lookup")?.getattr("declarations")?;
     for item in declarations.call_method0("items")?.try_iter()? {
         let (identity, found): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         if !found.is_truthy()?
-            || !identity.getattr("owner")?.is_none()
+            || !native_field(&identity, "owner")?.is_none()
             || !SCHEMA_USAGE_KINDS.contains(
                 &identity
                     .getattr("kind")?
@@ -111,11 +112,13 @@ pub(crate) fn model_schema_scope_usages<'py>(
             continue;
         }
         let record: Bound<'py, PyAny> = found.get_item(0)?;
-        let recorded: Bound<'py, PyAny> = record.getattr("identity")?;
+        let recorded: Bound<'py, PyAny> = native_field(&record, "identity")?;
         record_rows.push((
             (
-                recorded.getattr("kind")?.getattr("value")?.extract()?,
-                recorded.getattr("name")?.extract()?,
+                native_field(&recorded, "kind")?
+                    .getattr("value")?
+                    .extract()?,
+                native_field(&recorded, "name")?.extract()?,
             ),
             record_row(&record)?,
         ));
@@ -123,19 +126,19 @@ pub(crate) fn model_schema_scope_usages<'py>(
     }
     let mut schemas: Vec<SchemaRow> = Vec::new();
     for file in schema_files.try_iter()? {
-        for declaration in file?.getattr("declarations")?.try_iter()? {
+        for declaration in native_field(&file?, "declarations")?.try_iter()? {
             let declaration: Bound<'py, PyAny> = declaration?;
             let mut columns: Vec<(String, Option<String>)> = Vec::new();
-            for column in declaration.getattr("columns")?.try_iter()? {
+            for column in native_field(&declaration, "columns")?.try_iter()? {
                 let column: Bound<'py, PyAny> = column?;
                 columns.push((
-                    column.getattr("name")?.extract()?,
-                    column.getattr("type")?.extract()?,
+                    native_field(&column, "name")?.extract()?,
+                    native_field(&column, "type")?.extract()?,
                 ));
             }
             schemas.push((
-                declaration.getattr("name")?.extract()?,
-                declaration.getattr("extends")?.extract()?,
+                native_field(&declaration, "name")?.extract()?,
+                native_field(&declaration, "extends")?.extract()?,
                 columns,
             ));
         }
@@ -151,8 +154,8 @@ pub(crate) fn model_schema_scope_usages<'py>(
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(usages.len());
     for (consumer, used) in usages {
         let fields: Bound<'py, PyDict> = PyDict::new(py);
-        fields.set_item("consumer", records[consumer].getattr("identity")?)?;
-        fields.set_item("declaration", records[used].getattr("identity")?)?;
+        fields.set_item("consumer", native_field(&records[consumer], "identity")?)?;
+        fields.set_item("declaration", native_field(&records[used], "identity")?)?;
         built.push(usage_record.call((), Some(&fields))?);
     }
     PyTuple::new(py, built)
@@ -160,20 +163,20 @@ pub(crate) fn model_schema_scope_usages<'py>(
 
 /// A declaration record's path, scope, private owner, owning path and ownership root path.
 fn record_row(record: &Bound<'_, PyAny>) -> PyResult<RecordRow> {
-    let identity: Bound<'_, PyAny> = record.getattr("identity")?;
-    let owner: Bound<'_, PyAny> = identity.getattr("owner")?;
+    let identity: Bound<'_, PyAny> = native_field(record, "identity")?;
+    let owner: Bound<'_, PyAny> = native_field(&identity, "owner")?;
     Ok((
-        record.getattr("path")?.extract()?,
-        record.getattr("scope")?.getattr("value")?.extract()?,
+        native_field(record, "path")?.extract()?,
+        native_field(record, "scope")?.getattr("value")?.extract()?,
         if owner.is_none() {
             None
         } else {
             Some((
-                owner.getattr("kind")?.getattr("value")?.extract()?,
-                owner.getattr("name")?.extract()?,
+                native_field(&owner, "kind")?.getattr("value")?.extract()?,
+                native_field(&owner, "name")?.extract()?,
             ))
         },
-        record.getattr("owning_path")?.extract()?,
+        native_field(record, "owning_path")?.extract()?,
         record
             .getattr("ownership_root")?
             .getattr("path")?

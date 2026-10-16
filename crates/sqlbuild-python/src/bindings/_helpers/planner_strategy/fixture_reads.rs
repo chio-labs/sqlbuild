@@ -22,6 +22,7 @@ use crate::bindings::_helpers::planner_strategy::models::{
     FixtureReadCacheHost, RelationFixturePlanningContext,
 };
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -63,13 +64,13 @@ pub(crate) fn required_fixture_columns(
             continue;
         };
         let mut references: Vec<FixtureReadReference> = Vec::new();
-        for reference in model.getattr("references")?.try_iter()? {
+        for reference in native_field(&model, "references")?.try_iter()? {
             let reference = reference?;
             references.push((
-                reference.getattr("ref_kind")?.extract()?,
-                reference.getattr("ref_name")?.extract()?,
-                reference.getattr("ref_package")?.extract()?,
-                reference.getattr("call_argument_count")?.extract()?,
+                native_field(&reference, "ref_kind")?.extract()?,
+                native_field(&reference, "ref_name")?.extract()?,
+                native_field(&reference, "ref_package")?.extract()?,
+                native_field(&reference, "call_argument_count")?.extract()?,
             ));
         }
         models.push(FixtureReadModel {

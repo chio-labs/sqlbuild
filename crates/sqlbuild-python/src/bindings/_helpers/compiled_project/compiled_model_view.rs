@@ -22,6 +22,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::relation_keys::RelationKeyRow;
 
 const DATABASE_KEY: &str = "database";
@@ -754,7 +755,7 @@ impl NativeCompiledModel {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, py| {
             let name: String = model_name(record);
-            let path: Bound<'_, PyAny> = record.model_file.bind(py).getattr("relative_path")?;
+            let path: Bound<'_, PyAny> = native_field(record.model_file.bind(py), "relative_path")?;
             compiled_of(record)?
                 .analysis
                 .binding_tuple(py, &classes.compiled, (&name, &path))

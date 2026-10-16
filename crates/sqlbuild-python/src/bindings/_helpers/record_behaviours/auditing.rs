@@ -8,6 +8,7 @@ use sqlbuild_model_config::header_metadata::main::check_threshold_bound::check_t
 use sqlbuild_model_config::header_metadata::main::check_threshold_pair::check_threshold_pair;
 use sqlbuild_model_config::header_metadata::models::{ThresholdBound, ThresholdInput};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -62,11 +63,11 @@ fn record_bound(bound: &Bound<'_, PyAny>) -> PyResult<Option<ThresholdBound>> {
     if bound.is_none() {
         return Ok(None);
     }
-    let operator: String = bound.getattr("operator")?.str()?.extract()?;
+    let operator: String = native_field(bound, "operator")?.str()?.extract()?;
     let inputs = (
-        threshold_input(&bound.getattr("limit")?)?,
-        threshold_input(&bound.getattr("lower")?)?,
-        threshold_input(&bound.getattr("upper")?)?,
+        threshold_input(&native_field(bound, "limit")?)?,
+        threshold_input(&native_field(bound, "lower")?)?,
+        threshold_input(&native_field(bound, "upper")?)?,
     );
     check_threshold_bound(&operator, inputs)
         .map(Some)

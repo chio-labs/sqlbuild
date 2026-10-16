@@ -5,6 +5,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::relation_keys::entry_relation_key_row;
@@ -92,9 +93,9 @@ pub(crate) fn finish_compiler_diagnostic(
     }
     let location: Bound<'_, PyAny> = values[DIAGNOSTIC_LOCATION_FIELD].bind(py).clone();
     if !location.is_none() {
-        values[DIAGNOSTIC_PATH_FIELD] = location.getattr("path")?.unbind();
-        values[DIAGNOSTIC_LINE_FIELD] = location.getattr("line")?.unbind();
-        values[DIAGNOSTIC_COLUMN_FIELD] = location.getattr("column")?.unbind();
+        values[DIAGNOSTIC_PATH_FIELD] = native_field(&location, "path")?.unbind();
+        values[DIAGNOSTIC_LINE_FIELD] = native_field(&location, "line")?.unbind();
+        values[DIAGNOSTIC_COLUMN_FIELD] = native_field(&location, "column")?.unbind();
     }
     Ok(values)
 }
@@ -104,7 +105,9 @@ pub(crate) fn diagnostic_is_error(instance: &Bound<'_, PyAny>) -> PyResult<Py<Py
     let py: Python<'_> = instance.py();
     let error: Bound<'_, PyAny> =
         registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?;
-    instance.getattr("severity")?.eq(error)?.into_py_any(py)
+    native_field(instance, "severity")?
+        .eq(error)?
+        .into_py_any(py)
 }
 
 /// `CompileSqlReference`: its kind coerced to `SqlReferenceKind`.
@@ -159,12 +162,12 @@ pub(crate) fn finish_sql_scenario(
     values[SCENARIO_SOURCE_PATH_FIELD] = or_fallback(
         py,
         &values[SCENARIO_SOURCE_PATH_FIELD],
-        scenario_file.getattr("relative_path")?,
+        native_field(&scenario_file, "relative_path")?,
     );
     values[SCENARIO_OWNERSHIP_ROOT_FIELD] = or_fallback(
         py,
         &values[SCENARIO_OWNERSHIP_ROOT_FIELD],
-        scenario_file.getattr("ownership_root")?,
+        native_field(&scenario_file, "ownership_root")?,
     );
     if !values[SCENARIO_TARGET_MODELS_FIELD].bind(py).is_truthy()? {
         let targets: Bound<'_, PyAny> = merged_names(
@@ -186,19 +189,19 @@ pub(crate) fn finish_sql_test(
     values[TEST_SOURCE_PATH_FIELD] = or_fallback(
         py,
         &values[TEST_SOURCE_PATH_FIELD],
-        test_file.getattr("relative_path")?,
+        native_field(&test_file, "relative_path")?,
     );
     values[TEST_OWNERSHIP_ROOT_FIELD] = or_fallback(
         py,
         &values[TEST_OWNERSHIP_ROOT_FIELD],
-        test_file.getattr("ownership_root")?,
+        native_field(&test_file, "ownership_root")?,
     );
     values[TEST_BLOCK_INDEX_FIELD] = or_fallback(
         py,
         &values[TEST_BLOCK_INDEX_FIELD],
-        test_block.getattr("test_index")?,
+        native_field(&test_block, "test_index")?,
     );
-    let block_name: Bound<'_, PyAny> = test_block.getattr("name")?;
+    let block_name: Bound<'_, PyAny> = native_field(&test_block, "name")?;
     if !block_name.is_none() {
         values[TEST_EXPLICIT_NAME_FIELD] =
             or_fallback(py, &values[TEST_EXPLICIT_NAME_FIELD], block_name.clone());
@@ -207,7 +210,7 @@ pub(crate) fn finish_sql_test(
         let parent: Bound<'_, PyAny> = if block_name.is_truthy()? {
             block_name
         } else {
-            test_file.getattr("relative_path")?.getattr("stem")?
+            native_field(&test_file, "relative_path")?.getattr("stem")?
         };
         values[TEST_PARENT_NAME_FIELD] = parent.unbind();
     }
@@ -221,10 +224,10 @@ fn reference_rows(references: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     for reference in references.try_iter()? {
         let reference: Bound<'_, PyAny> = reference?;
         rows.append((
-            reference.getattr("ref_kind")?.str()?,
-            reference.getattr("ref_name")?,
-            reference.getattr("ref_package")?,
-            reference.getattr("call_argument_count")?,
+            native_field(&reference, "ref_kind")?.str()?,
+            native_field(&reference, "ref_name")?,
+            native_field(&reference, "ref_package")?,
+            native_field(&reference, "call_argument_count")?,
         ))?;
     }
     Ok(rows.into_any().unbind())
@@ -232,17 +235,17 @@ fn reference_rows(references: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
 
 /// `CompileModelInput.reference_rows` and `CompiledModel.reference_rows`.
 pub(crate) fn record_reference_rows(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    reference_rows(&instance.getattr("references")?)
+    reference_rows(&native_field(instance, "references")?)
 }
 
 /// The declared key facts of model `name` with `instance`'s config and schema entry.
 fn model_relation_key_row(instance: &Bound<'_, PyAny>, name: String) -> PyResult<Py<PyAny>> {
-    let values: Bound<'_, PyAny> = instance.getattr("config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(instance, "config")?.getattr("values")?;
     entry_relation_key_row(
         "ref",
         name,
         values.cast::<PyDict>()?,
-        &instance.getattr("schema_entry")?,
+        &native_field(instance, "schema_entry")?,
     )?
     .into_py_any(instance.py())
 }
@@ -259,24 +262,24 @@ pub(crate) fn input_relation_key_row(instance: &Bound<'_, PyAny>) -> PyResult<Py
 
 /// `CompiledModel.relation_key_row`: keyed by the model name.
 pub(crate) fn model_relation_key_row_property(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let name: String = instance.getattr("name")?.extract()?;
+    let name: String = native_field(instance, "name")?.extract()?;
     model_relation_key_row(instance, name)
 }
 
 /// `CompileModelInput.attached_schema_name`: the attached schema entry's name, or `None`.
 pub(crate) fn input_attached_schema_name(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let entry: Bound<'_, PyAny> = instance.getattr("schema_entry")?;
+    let entry: Bound<'_, PyAny> = native_field(instance, "schema_entry")?;
     if entry.is_none() {
         return Ok(entry.unbind());
     }
-    Ok(entry.getattr("name")?.unbind())
+    Ok(native_field(&entry, "name")?.unbind())
 }
 
 /// `(resource type, name)` of one compiled object key.
 fn key_row<'py>(key: &Bound<'py, PyAny>) -> PyResult<(String, String)> {
     Ok((
-        key.getattr("resource_type")?.str()?.extract()?,
-        key.getattr("name")?.extract()?,
+        native_field(key, "resource_type")?.str()?.extract()?,
+        native_field(key, "name")?.extract()?,
     ))
 }
 
@@ -287,28 +290,28 @@ fn key_rows(keys: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
 
 /// `CompiledModel.key_row`.
 pub(crate) fn model_key_row(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    key_row(&instance.getattr("key")?)?.into_py_any(instance.py())
+    key_row(&native_field(instance, "key")?)?.into_py_any(instance.py())
 }
 
 /// `CompiledModel.dep_rows`.
 pub(crate) fn model_dep_rows(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    key_rows(&instance.getattr("deps")?)?.into_py_any(instance.py())
+    key_rows(&native_field(instance, "deps")?)?.into_py_any(instance.py())
 }
 
 /// `CompiledModel.destination_row`: `(database, schema, name)` of the destination.
 pub(crate) fn model_destination_row(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let destination: Bound<'_, PyAny> = instance.getattr("destination")?;
+    let destination: Bound<'_, PyAny> = native_field(instance, "destination")?;
     (
-        destination.getattr("database")?,
-        destination.getattr("schema")?,
-        destination.getattr("name")?,
+        native_field(&destination, "database")?,
+        native_field(&destination, "schema")?,
+        native_field(&destination, "name")?,
     )
         .into_py_any(instance.py())
 }
 
 /// `CompiledModel.inferred_rows`: each inferred column as `(name, type, nullability)`.
 pub(crate) fn model_inferred_rows(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let columns: Bound<'_, PyAny> = instance.getattr("inferred_columns")?;
+    let columns: Bound<'_, PyAny> = native_field(instance, "inferred_columns")?;
     if columns.is_none() {
         return Ok(columns.unbind());
     }
@@ -316,9 +319,9 @@ pub(crate) fn model_inferred_rows(instance: &Bound<'_, PyAny>) -> PyResult<Py<Py
     for column in columns.try_iter()? {
         let column: Bound<'_, PyAny> = column?;
         rows.append((
-            column.getattr("name")?,
-            column.getattr("type")?,
-            column.getattr("nullability")?.str()?,
+            native_field(&column, "name")?,
+            native_field(&column, "type")?,
+            native_field(&column, "nullability")?.str()?,
         ))?;
     }
     Ok(rows.into_any().unbind())
@@ -326,33 +329,36 @@ pub(crate) fn model_inferred_rows(instance: &Bound<'_, PyAny>) -> PyResult<Py<Py
 
 /// `CompiledModel.schema_column_rows`: each declared schema column as `(name, type)`.
 pub(crate) fn model_schema_column_rows(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let entry: Bound<'_, PyAny> = instance.getattr("schema_entry")?;
+    let entry: Bound<'_, PyAny> = native_field(instance, "schema_entry")?;
     if entry.is_none() {
         return Ok(entry.unbind());
     }
     let rows: Bound<'_, PyList> = PyList::empty(instance.py());
-    for column in entry.getattr("columns")?.try_iter()? {
+    for column in native_field(&entry, "columns")?.try_iter()? {
         let column: Bound<'_, PyAny> = column?;
-        rows.append((column.getattr("name")?, column.getattr("type")?))?;
+        rows.append((
+            native_field(&column, "name")?,
+            native_field(&column, "type")?,
+        ))?;
     }
     Ok(rows.into_any().unbind())
 }
 
 /// `CompiledModel.has_dynamic_columns`.
 pub(crate) fn model_has_dynamic_columns(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let entry: Bound<'_, PyAny> = instance.getattr("schema_entry")?;
-    let dynamic: bool = !entry.is_none() && entry.getattr("dynamic_columns")?.is_truthy()?;
+    let entry: Bound<'_, PyAny> = native_field(instance, "schema_entry")?;
+    let dynamic: bool = !entry.is_none() && native_field(&entry, "dynamic_columns")?.is_truthy()?;
     dynamic.into_py_any(instance.py())
 }
 
 /// `CompiledModel.output_column_count`: inferred, else declared, columns, else zero.
 pub(crate) fn model_output_column_count(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let inferred: Bound<'_, PyAny> = instance.getattr("inferred_columns")?;
-    let entry: Bound<'_, PyAny> = instance.getattr("schema_entry")?;
+    let inferred: Bound<'_, PyAny> = native_field(instance, "inferred_columns")?;
+    let entry: Bound<'_, PyAny> = native_field(instance, "schema_entry")?;
     let count: usize = if !inferred.is_none() {
         inferred.len()?
     } else if !entry.is_none() {
-        entry.getattr("columns")?.len()?
+        native_field(&entry, "columns")?.len()?
     } else {
         0
     };
@@ -365,20 +371,20 @@ pub(crate) fn build_context_declaration_expansion(
 ) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = instance.py();
     let declarations: Bound<'_, PyDict> = PyDict::new(py);
-    declarations.set_item("enums", instance.getattr("public_enums")?)?;
-    declarations.set_item("constants", instance.getattr("public_constants")?)?;
+    declarations.set_item("enums", native_field(instance, "public_enums")?)?;
+    declarations.set_item("constants", native_field(instance, "public_constants")?)?;
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item(
         "declarations",
         registry::class(py, RecordId::DeclarationResolutionContext)?
             .call((), Some(&declarations))?,
     )?;
-    keywords.set_item("value_renderer", instance.getattr("value_renderer")?)?;
+    keywords.set_item("value_renderer", native_field(instance, "value_renderer")?)?;
     keywords.set_item(
         "collection_rendering",
-        instance.getattr("collection_rendering")?,
+        native_field(instance, "collection_rendering")?,
     )?;
-    keywords.set_item("resolver", instance.getattr("declaration_resolver")?)?;
+    keywords.set_item("resolver", native_field(instance, "declaration_resolver")?)?;
     Ok(registry::class(py, RecordId::DeclarationExpansionContext)?
         .call((), Some(&keywords))?
         .unbind())

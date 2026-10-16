@@ -6,6 +6,7 @@ use crate::bindings::_helpers::planner_resolution::values::{
     cursor_wrap, filtering_of, method, string,
 };
 use crate::bindings::_helpers::planner_strategy::values::input_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::type_system::equality::types_equal;
@@ -29,8 +30,8 @@ fn rows(value: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>)>> {
         .map(|row| {
             let row = row?;
             Ok((
-                row.getattr("name")?.extract()?,
-                row.getattr("type")?.extract()?,
+                native_field(&row, "name")?.extract()?,
+                native_field(&row, "type")?.extract()?,
             ))
         })
         .collect()
@@ -43,7 +44,7 @@ fn check_columns(
     relation: &str,
 ) -> PyResult<()> {
     let py = entry.py();
-    let declared = rows(&entry.getattr("columns")?)?;
+    let declared = rows(&native_field(entry, "columns")?)?;
     let available = rows(columns)?;
     let available: std::collections::HashMap<String, Option<String>> = available
         .into_iter()
@@ -83,7 +84,7 @@ fn check_columns(
             continue;
         }
         let equal: bool = types_equal(
-            &adapter.getattr("sql_analysis_dialect_name")?,
+            &native_field(adapter, "sql_analysis_dialect_name")?,
             actual,
             &kind,
         )?;
@@ -130,13 +131,13 @@ fn cast_source(
     adapter: &Bound<'_, PyAny>,
     relation: String,
 ) -> PyResult<String> {
-    let declared = rows(&entry.getattr("columns")?)?;
+    let declared = rows(&native_field(entry, "columns")?)?;
     if !declared.iter().any(|(_, kind)| kind.is_some()) {
         return Ok(relation);
     }
     let py = entry.py();
-    let expression = !entry.getattr("expression")?.is_none();
-    let source_name: String = entry.getattr("name")?.extract()?;
+    let expression = !native_field(entry, "expression")?.is_none();
+    let source_name: String = native_field(entry, "name")?.extract()?;
     if columns.is_none() {
         if expression {
             return Err(source_error(
@@ -261,7 +262,7 @@ fn resolve_one(
     let adapter = adapter.clone();
     let mut relation = render_source_read_relation(&adapter, &entry)?;
     let columns = warehouse_columns.call_method1("get", (name,))?;
-    let expression = !entry.getattr("expression")?.is_none();
+    let expression = !native_field(&entry, "expression")?.is_none();
     if columns.is_truthy()?
         && (!expression
             || entry
@@ -277,7 +278,7 @@ fn resolve_one(
         };
         check_columns(&entry, &columns, &adapter, &label)?;
     }
-    if entry.getattr("type_enforcement")?.is_truthy()? {
+    if native_field(&entry, "type_enforcement")?.is_truthy()? {
         relation = cast_source(&entry, &columns, &adapter, relation)?;
     }
     cursor_wrap(&adapter, filtering, relation, (name, false))

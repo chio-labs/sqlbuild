@@ -27,6 +27,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::dbt_interop::runner::{
     dbt_command_lifecycle, launch_failure, launch_os_error, report_exit,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -200,7 +201,7 @@ fn handle_line<'py>(
     if update.is_none() {
         return Ok(());
     }
-    let message: Bound<'py, PyAny> = update.getattr("status_message")?;
+    let message: Bound<'py, PyAny> = native_field(&update, "status_message")?;
     if !message.is_none() && output.enable_status {
         let mut state = locked(py, shared)?;
         let status: Bound<'py, PyAny> = match state.status.take() {
@@ -217,14 +218,14 @@ fn handle_line<'py>(
         };
         state.status = Some(status.unbind());
     }
-    let result: Bound<'py, PyAny> = update.getattr("result")?;
-    let row: Bound<'py, PyAny> = update.getattr("row")?;
+    let result: Bound<'py, PyAny> = native_field(&update, "result")?;
+    let row: Bound<'py, PyAny> = native_field(&update, "row")?;
     if result.is_none() || row.is_none() {
         return Ok(());
     }
     close_status(py, shared)?;
-    let finished: bool = update.getattr("finished")?.is_truthy()?;
-    let unique_id: String = result.getattr("unique_id")?.extract()?;
+    let finished: bool = native_field(&update, "finished")?.is_truthy()?;
+    let unique_id: String = native_field(&result, "unique_id")?.extract()?;
     if finished {
         locked(py, shared)?
             .active_nodes
@@ -240,7 +241,7 @@ fn handle_line<'py>(
         let mut state = locked(py, shared)?;
         if !finished {
             let started: f64 = shared.epoch.elapsed().as_secs_f64();
-            let name: String = result.getattr("node_name")?.extract()?;
+            let name: String = native_field(&result, "node_name")?.extract()?;
             match state
                 .active_nodes
                 .iter_mut()

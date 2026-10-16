@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_strategy::cursor_types::classify_cursor_s
 use crate::bindings::_helpers::planner_warehouse::constants::{
     CURSOR_TYPE_INTEGER, CURSOR_TYPE_TIMESTAMP, WATERMARK_CONTRACT_CODE,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods};
@@ -38,11 +39,13 @@ fn declared_columns<'py>(columns: &Bound<'py, PyAny>) -> PyResult<DeclaredColumn
     let mut types: HashMap<_, _> = HashMap::new();
     for column in columns.try_iter()? {
         let column = column?;
-        let name: String = column.getattr("name")?.extract()?;
-        let column_type = column.getattr("type")?;
+        let name: String = native_field(&column, "name")?.extract()?;
+        let column_type = native_field(&column, "type")?;
         if !column_type.is_none() {
             types.insert(
-                column.getattr("name")?.call_method0("lower")?.extract()?,
+                native_field(&column, "name")?
+                    .call_method0("lower")?
+                    .extract()?,
                 column_type,
             );
         }
@@ -63,8 +66,8 @@ pub(crate) fn validate_watermark_column<'py>(
     ),
 ) -> Result<(), PyErr> {
     let py = model.py();
-    let kind = reference.getattr("ref_kind")?;
-    let ref_name: String = reference.getattr("ref_name")?.extract()?;
+    let kind = native_field(reference, "ref_kind")?;
+    let ref_name: String = native_field(reference, "ref_name")?.extract()?;
     let model_name: String = model_reads::model_name(model)?;
     let lowered =
         |value: &str| -> PyResult<String> { text(py, value).call_method0("lower")?.extract() };
@@ -88,30 +91,30 @@ pub(crate) fn validate_watermark_column<'py>(
                 (Some(WATERMARK_CONTRACT_CODE), None),
             ));
         }
-        let values = upstream.getattr("config")?.getattr("values")?;
+        let values = native_field(&upstream, "config")?.getattr("values")?;
         if !values.call_method1("get", ("contract",))?.eq("enforced")? {
             return Ok(());
         }
-        let schema = upstream.getattr("schema_entry")?;
+        let schema = native_field(&upstream, "schema_entry")?;
         if schema.is_none() {
             (Vec::new(), HashMap::new())
         } else {
-            declared_columns(&schema.getattr("columns")?)?
+            declared_columns(&native_field(&schema, "columns")?)?
         }
     } else if kind.eq("source")? {
         let Some(source) = sources.get_item(&ref_name)? else {
             return Ok(());
         };
-        let entry = source.getattr("source_entry")?;
-        if !entry.getattr("contract")?.eq("enforced")? {
+        let entry = native_field(&source, "source_entry")?;
+        if !native_field(&entry, "contract")?.eq("enforced")? {
             return Ok(());
         }
-        declared_columns(&entry.getattr("columns")?)?
+        declared_columns(&native_field(&entry, "columns")?)?
     } else if kind.eq("seed")? {
         let Some(seed) = seeds.get_item(&ref_name)? else {
             return Ok(());
         };
-        declared_columns(&seed.getattr("schema_entry")?.getattr("columns")?)?
+        declared_columns(&native_field(&seed, "schema_entry")?.getattr("columns")?)?
     } else {
         return Ok(());
     };

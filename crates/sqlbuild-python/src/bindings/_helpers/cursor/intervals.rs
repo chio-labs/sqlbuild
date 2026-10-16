@@ -22,6 +22,7 @@ use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::as_scalar;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const RAW_INTERVAL_CURSOR_TYPES: [&str; 2] = ["timestamp", "integer"];
 
@@ -121,8 +122,8 @@ fn merge_raw_intervals<'py>(
     for interval in intervals.try_iter()? {
         let interval: Bound<'py, PyAny> = interval?;
         parsed.push(RawInterval {
-            start: as_scalar(&session, &interval.getattr("start")?, cursor_type)?,
-            end: as_scalar(&session, &interval.getattr("end")?, cursor_type)?,
+            start: as_scalar(&session, &native_field(&interval, "start")?, cursor_type)?,
+            end: as_scalar(&session, &native_field(&interval, "end")?, cursor_type)?,
             interval,
         });
     }
@@ -153,8 +154,8 @@ fn merge_raw_intervals<'py>(
             last.interval = call_with(
                 &class,
                 &[
-                    ("start", last.interval.getattr("start")?),
-                    ("end", next.interval.getattr("end")?),
+                    ("start", native_field(&last.interval, "start")?),
+                    ("end", native_field(&next.interval, "end")?),
                 ],
             )?;
             last.end = next.end;

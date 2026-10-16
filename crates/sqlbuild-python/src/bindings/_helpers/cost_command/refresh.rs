@@ -14,15 +14,18 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
 fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
     Ok(CostCoverage {
-        status: summary.getattr("status")?.getattr("value")?.extract()?,
-        expected_statement_count: summary.getattr("expected_statement_count")?.extract()?,
-        observed_statement_count: summary.getattr("observed_statement_count")?.extract()?,
-        query_count: summary.getattr("query_count")?.extract()?,
+        status: native_field(summary, "status")?
+            .getattr("value")?
+            .extract()?,
+        expected_statement_count: native_field(summary, "expected_statement_count")?.extract()?,
+        observed_statement_count: native_field(summary, "observed_statement_count")?.extract()?,
+        query_count: native_field(summary, "query_count")?.extract()?,
         limitations: summary
             .getattr("limitations")?
             .try_iter()?
@@ -69,7 +72,7 @@ fn target_database<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_config.py();
     if !target_config.is_none() {
-        let database: Bound<'py, PyAny> = target_config.getattr("database")?;
+        let database: Bound<'py, PyAny> = native_field(target_config, "database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -82,11 +85,11 @@ fn target_database<'py>(
 }
 
 fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
-    let selector: Bound<'_, PyAny> = request.getattr("selector")?;
+    let selector: Bound<'_, PyAny> = native_field(request, "selector")?;
     if selector.extract::<String>()? == HISTORY_SELECTOR {
         return Ok(());
     }
-    let requested: Bound<'_, PyAny> = request.getattr("project_dir")?;
+    let requested: Bound<'_, PyAny> = native_field(request, "project_dir")?;
     let project_dir: Bound<'_, PyAny> = if requested.is_none() {
         imported(py, "pathlib", "Path")?.call_method0("cwd")?
     } else {
@@ -96,12 +99,14 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
     if record.is_none() {
         return Ok(());
     }
-    let current: Bound<'_, PyAny> = record.getattr("cost")?;
-    let status: String = current.getattr("status")?.getattr("value")?.extract()?;
+    let current: Bound<'_, PyAny> = native_field(&record, "cost")?;
+    let status: String = native_field(&current, "status")?
+        .getattr("value")?
+        .extract()?;
     if !REFRESHABLE_STATUSES.contains(&status.as_str()) {
         return Ok(());
     }
-    let target_name: Bound<'_, PyAny> = record.getattr("target_name")?;
+    let target_name: Bound<'_, PyAny> = native_field(&record, "target_name")?;
     let discovered: Bound<'_, PyAny> = call_with(
         &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
@@ -116,8 +121,11 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
     let adapter_name: Bound<'_, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
+            ("local_config", native_field(&discovered, "local_config")?),
         ],
     )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
@@ -140,14 +148,14 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
             ("selected_target", target_name),
         ],
     )?;
-    let run_id: Bound<'_, PyAny> = record.getattr("run_id")?;
+    let run_id: Bound<'_, PyAny> = native_field(&record, "run_id")?;
     let ledger: Bound<'_, PyAny> = project_dir
         .call_method1("__truediv__", ("target",))?
         .call_method1("__truediv__", ("executions",))?
         .call_method1("__truediv__", (&run_id,))?
         .call_method1("__truediv__", ("statements.jsonl",))?;
     let summary: Bound<'_, PyAny> = call_with(
-        &adapter.getattr("collect_run_cost")?,
+        &native_field(&adapter, "collect_run_cost")?,
         &[
             ("connection_config", connection_config.clone()),
             (
@@ -155,11 +163,11 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
                 target_database(&target_config, &connection_config)?,
             ),
             ("run_id", run_id),
-            ("started_at", record.getattr("started_at")?),
-            ("completed_at", record.getattr("completed_at")?),
+            ("started_at", native_field(&record, "started_at")?),
+            ("completed_at", native_field(&record, "completed_at")?),
             ("statement_ledger_path", ledger),
-            ("usd_per_credit", current.getattr("usd_per_credit")?),
-            ("rate_source", current.getattr("rate_source")?),
+            ("usd_per_credit", native_field(&current, "usd_per_credit")?),
+            ("rate_source", native_field(&current, "rate_source")?),
         ],
     )?;
     if accepts_cost_refresh(&coverage(&current)?, &coverage(&summary)?) != Some(true) {

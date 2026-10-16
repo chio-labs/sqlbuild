@@ -22,6 +22,7 @@ use crate::bindings::_helpers::dbt_interop::graph::{
 };
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
 use crate::bindings::_helpers::dbt_interop::plan::build_dbt_interop_plan;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -46,20 +47,20 @@ fn listed<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = runner.py();
     let result: Bound<'py, PyAny> = call_with(
-        &runner.getattr("ls")?,
+        &native_field(runner, "ls")?,
         &[
             ("options", dbt_options.clone()),
             ("select", select),
             ("exclude", exclude.clone()),
         ],
     )?;
-    let command: Bound<'py, PyAny> = result.getattr("command")?;
-    if command.getattr("returncode")?.extract::<i64>()? == 0 {
+    let command: Bound<'py, PyAny> = native_field(&result, "command")?;
+    if native_field(&command, "returncode")?.extract::<i64>()? == 0 {
         return Ok(result);
     }
     let detail: Option<String> = dbt_failure_detail(
-        &command.getattr("stderr")?.extract::<String>()?,
-        &command.getattr("stdout")?.extract::<String>()?,
+        &native_field(&command, "stderr")?.extract::<String>()?,
+        &native_field(&command, "stdout")?.extract::<String>()?,
     );
     let help: Bound<'py, PyAny> = detail.map_or_else(
         || py.None().into_bound(py),
@@ -72,14 +73,14 @@ fn listed<'py>(
 
 fn unique_ids<'py>(listing: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let mut ids: Vec<Bound<'py, PyAny>> = Vec::new();
-    for node in listing.getattr("nodes")?.try_iter()? {
-        ids.push(node?.getattr("unique_id")?);
+    for node in native_field(listing, "nodes")?.try_iter()? {
+        ids.push(native_field(&node?, "unique_id")?);
     }
     PyTuple::new(listing.py(), ids)
 }
 
 fn command_kind(command: &Bound<'_, PyAny>) -> PyResult<DbtInteropCommandKind> {
-    let value: String = command.getattr("value")?.extract()?;
+    let value: String = native_field(command, "value")?.extract()?;
     match value.as_str() {
         "plan" => Ok(DbtInteropCommandKind::Plan),
         "run" => Ok(DbtInteropCommandKind::Run),
@@ -100,7 +101,7 @@ fn required_terms(
     arguments: &KeywordArguments<'_>,
     selection: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<String>> {
-    let required: Vec<String> = texts(&selection.getattr("dbt_required_unique_ids")?)?;
+    let required: Vec<String> = texts(&native_field(selection, "dbt_required_unique_ids")?)?;
     if required.is_empty() {
         return Ok(Vec::new());
     }
@@ -110,15 +111,15 @@ fn required_terms(
         py,
         arguments.value("project")?,
         arguments.value("manifest")?,
-        Some(selection.getattr("sqlbuild_model_names")?),
+        Some(native_field(selection, "sqlbuild_model_names")?),
     )?
     .try_iter()?
     {
         let (_model, dbt_model): (Bound<'_, PyAny>, Bound<'_, PyAny>) = pair?.extract()?;
         referenced.push(DbtReferencedModel {
-            unique_id: dbt_model.getattr("unique_id")?.extract()?,
-            fqn: texts(&dbt_model.getattr("fqn")?)?,
-            name: dbt_model.getattr("name")?.extract()?,
+            unique_id: native_field(&dbt_model, "unique_id")?.extract()?,
+            fqn: texts(&native_field(&dbt_model, "fqn")?)?,
+            name: native_field(&dbt_model, "name")?.extract()?,
         });
     }
     Ok(dbt_required_selector_terms(&referenced, &required))
@@ -145,8 +146,8 @@ fn plan_dbt_interop_command<'py>(
         registry::class(py, RecordId::DbtInteropCommand)?.call1((arguments.value("command")?,))?;
     let command_args: Bound<'py, PyAny> = arguments.value("command_args")?;
     let (select, exclude) = (
-        command_args.getattr("select")?,
-        command_args.getattr("exclude")?,
+        native_field(&command_args, "select")?,
+        native_field(&command_args, "exclude")?,
     );
     let (runner, dbt_options) = (
         arguments.value("dbt_runner")?,
@@ -181,13 +182,13 @@ fn plan_dbt_interop_command<'py>(
     let required_selector_terms: Vec<String> = required_terms(&arguments, &selection)?;
     let options: DbtCliOptionValues = option_values(&dbt_options)?;
     let (dbt_executable, sqlbuild_executable): (String, String) = (
-        command_args.getattr("dbt_executable")?.extract()?,
-        command_args.getattr("sqlbuild_executable")?.extract()?,
+        native_field(&command_args, "dbt_executable")?.extract()?,
+        native_field(&command_args, "sqlbuild_executable")?.extract()?,
     );
     let (dbt_command_args, sqlbuild_command_args, selected_model_names) = (
-        texts(&command_args.getattr("dbt_command_args")?)?,
-        texts(&command_args.getattr("sqlbuild_command_args")?)?,
-        texts(&selection.getattr("sqlbuild_model_names")?)?,
+        texts(&native_field(&command_args, "dbt_command_args")?)?,
+        texts(&native_field(&command_args, "sqlbuild_command_args")?)?,
+        texts(&native_field(&selection, "sqlbuild_model_names")?)?,
     );
     let argvs: DbtPlanArgvs = dbt_plan_argvs(&DbtPlanArgvRequest {
         command: command_kind(&command)?,
@@ -209,7 +210,7 @@ fn plan_dbt_interop_command<'py>(
                     "dbt_command_argv",
                     PyTuple::new(py, argvs.dbt_command_argv)?.into_any(),
                 ),
-                ("dbt_ls_nodes", full_listing.getattr("nodes")?),
+                ("dbt_ls_nodes", native_field(&full_listing, "nodes")?),
                 (
                     "sqlbuild_command_argvs",
                     argv_tuples(py, argvs.sqlbuild_command_argvs)?,

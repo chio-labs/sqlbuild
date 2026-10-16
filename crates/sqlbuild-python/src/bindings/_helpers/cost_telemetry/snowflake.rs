@@ -22,6 +22,7 @@ use crate::bindings::_helpers::cost_telemetry::allocation::{
 use crate::bindings::_helpers::cost_telemetry::health::consume_ledger_failure;
 use crate::bindings::_helpers::cost_telemetry::ledger::read_ledger;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -441,7 +442,7 @@ fn ledger_attributed<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = observation.py();
     let entry: Option<Bound<'py, PyAny>> =
-        pyo3::types::PyDictMethods::get_item(ledger, observation.getattr("query_id")?)?;
+        pyo3::types::PyDictMethods::get_item(ledger, native_field(observation, "query_id")?)?;
     let field = |name: &str| -> PyResult<Bound<'py, PyAny>> {
         match &entry {
             Some(entry) => entry.getattr(name),
@@ -478,7 +479,7 @@ fn collect<'py>(
     let failure: Option<String> = consume_ledger_failure(py, &run_id)?;
     let by_query_id: Bound<'py, PyDict> = PyDict::new(py);
     for entry in &ledger {
-        let id: Bound<'py, PyAny> = entry.getattr("query_id")?;
+        let id: Bound<'py, PyAny> = native_field(entry, "query_id")?;
         if !id.is_none() {
             by_query_id.set_item(id, entry)?;
         }
@@ -487,7 +488,7 @@ fn collect<'py>(
     let mut classification: Vec<String> = Vec::new();
     for (id, entry) in pyo3::types::PyDictMethods::iter(&by_query_id) {
         let id: String = id.extract()?;
-        if !entry.getattr("resource_type")?.eq(HOOK_RESOURCE_TYPE)? {
+        if !native_field(&entry, "resource_type")?.eq(HOOK_RESOURCE_TYPE)? {
             classification.push(id.clone());
         }
         expected_ids.insert(id);

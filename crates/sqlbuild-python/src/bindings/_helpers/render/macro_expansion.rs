@@ -15,6 +15,7 @@ use sqlbuild_render::macro_calls::models::{
     MacroCallEntry, MacroCallEvent, MacroCallScan, MacroCallSite, MacroScanFailure, MacroSpliceSpan,
 };
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::usage_visibility;
 use crate::bindings::_helpers::render::macro_call_classes::{
     CallClass, ClassInputs, StoreTokenClasses,
@@ -321,13 +322,14 @@ impl NativeMacroExpansion {
         let macros: Bound<'py, PyAny> = if declarations.is_none() {
             self.loaded_macros.bind(py).clone().into_any()
         } else {
-            declarations.getattr("macros")?
+            native_field(declarations, "macros")?
         };
         if !declarations.is_none() {
-            let inaccessible: Bound<'py, PyAny> = declarations.getattr("inaccessible_macros")?;
+            let inaccessible: Bound<'py, PyAny> =
+                native_field(declarations, "inaccessible_macros")?;
             if inaccessible.contains(name)? {
                 let record: Bound<'py, PyAny> = inaccessible.get_item(name)?;
-                let owning: Bound<'py, PyAny> = record.getattr("owning_path")?;
+                let owning: Bound<'py, PyAny> = native_field(&record, "owning_path")?;
                 let owner: String = if owning.is_truthy()? {
                     owning.str()?.to_string()
                 } else {
@@ -337,9 +339,9 @@ impl NativeMacroExpansion {
                     "Macro '@{name}' in '{}' is inaccessible. Defined at '{}:{}:{}' with scope \
                      owner '{owner}'; consumer/definition path is '{}'. Visible macros: {}",
                     self.file_label,
-                    record.getattr("path")?.str()?,
-                    record.getattr("line")?.str()?,
-                    record.getattr("column")?.str()?,
+                    native_field(&record, "path")?.str()?,
+                    native_field(&record, "line")?.str()?,
+                    native_field(&record, "column")?.str()?,
                     self.file_label,
                     sorted_names(&macros)?,
                 );
@@ -391,7 +393,7 @@ impl NativeMacroExpansion {
                 usages.push(usage(
                     classes,
                     (consumer, identity),
-                    Some(&visible.getattr("through")?),
+                    Some(&native_field(&visible, "through")?),
                 )?);
             }
             usages
@@ -424,7 +426,7 @@ impl NativeMacroExpansion {
         let consumer: Bound<'_, PyAny> = if own_consumer.is_truthy()? {
             own_consumer.clone()
         } else {
-            declarations.getattr("consumer")?
+            native_field(declarations, "consumer")?
         };
         if consumer.is_none() {
             return Ok(());
@@ -444,15 +446,15 @@ impl NativeMacroExpansion {
             {
                 usages.push(usage(
                     classes,
-                    (&consumer, &visible.getattr("declaration")?),
-                    Some(&visible.getattr("through")?),
+                    (&consumer, &native_field(&visible, "declaration")?),
+                    Some(&native_field(&visible, "through")?),
                 )?);
             }
         } else {
             let declaration: Bound<'_, PyAny> = declarations
                 .getattr(if constant { "constants" } else { "enums" })?
                 .get_item(name)?;
-            let model_name: Bound<'_, PyAny> = declaration.getattr("model_name")?;
+            let model_name: Bound<'_, PyAny> = native_field(&declaration, "model_name")?;
             let owner: Option<Bound<'_, PyAny>> = if model_name.is_none() {
                 None
             } else {
@@ -528,7 +530,7 @@ impl NativeMacroExpansion {
                             PyErr::new::<pyo3::exceptions::PyKeyError, _>(macro_name.clone())
                         })?
                 } else {
-                    declarations.getattr("macros")?.get_item(&macro_name)?
+                    native_field(declarations, "macros")?.get_item(&macro_name)?
                 };
                 self.report_generated(classes, &macro_name, &loaded_macro, &sql)
             }
@@ -680,8 +682,10 @@ fn top_level_output(
 /// A `SqlResourceRef`'s kind value and name.
 pub(crate) fn resource_key(reference: &Bound<'_, PyAny>) -> PyResult<ResourceRef> {
     Ok((
-        reference.getattr("kind")?.getattr("value")?.extract()?,
-        reference.getattr("name")?.extract()?,
+        native_field(reference, "kind")?
+            .getattr("value")?
+            .extract()?,
+        native_field(reference, "name")?.extract()?,
     ))
 }
 
@@ -707,7 +711,9 @@ fn relationship_consumer(
     if !consumer.is_instance(&classes.resource_identity)? {
         return Ok(false);
     }
-    let kind: String = consumer.getattr("kind")?.getattr("value")?.extract()?;
+    let kind: String = native_field(consumer, "kind")?
+        .getattr("value")?
+        .extract()?;
     Ok(RELATIONSHIP_CONSUMER_KINDS.contains(&kind.as_str()))
 }
 

@@ -10,6 +10,7 @@ use sqlbuild_core::json::models::JsonInteger;
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_outputs::json_report::float_key;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DATACLASS_FIELDS: &str = "__dataclass_fields__";
 const SURROGATE_KEY: &str = "a JSON artifact mapping key holds a lone surrogate, which the native \
@@ -94,7 +95,7 @@ fn dataclass_value(value: &Bound<'_, PyAny>) -> PyResult<PythonValue> {
         .call1((value,))?;
     let mut entries: Vec<(PythonKey, PythonValue)> = Vec::new();
     for field in fields.try_iter()? {
-        let name: Bound<'_, PyAny> = field?.getattr("name")?;
+        let name: Bound<'_, PyAny> = native_field(&field?, "name")?;
         let item: Bound<'_, PyAny> = value.getattr(name.downcast::<PyString>()?)?;
         entries.push((key_value(&name)?, python_value(&item, true)?));
     }

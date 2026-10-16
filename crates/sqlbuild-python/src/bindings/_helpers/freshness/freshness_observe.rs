@@ -17,6 +17,7 @@ use crate::bindings::_helpers::freshness::observation::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 use sqlbuild_core::freshness_text::main::freshness_status::freshness_status;
 use sqlbuild_core::freshness_text::models::{
@@ -56,9 +57,9 @@ fn target_result(
     message: Option<String>,
 ) -> PyResult<FreshnessSourceResult> {
     let mut result: FreshnessSourceResult = FreshnessSourceResult::new(name, status);
-    result.target_database = optional_text(source.getattr("database")?)?;
-    result.target_schema = optional_text(source.getattr("schema")?)?;
-    result.target_name = optional_text(source.getattr("table")?)?;
+    result.target_database = optional_text(native_field(source, "database")?)?;
+    result.target_schema = optional_text(native_field(source, "schema")?)?;
+    result.target_name = optional_text(native_field(source, "table")?)?;
     result.message = message;
     Ok(result)
 }
@@ -70,7 +71,8 @@ fn previous_record<'py>(
     let Some(lookup) = &state.by_identity else {
         return Ok(None);
     };
-    let found: Bound<'py, PyAny> = lookup.call_method1("get", (record.getattr("identity")?,))?;
+    let found: Bound<'py, PyAny> =
+        lookup.call_method1("get", (native_field(record, "identity")?,))?;
     Ok(found.is_truthy()?.then_some(found))
 }
 
@@ -85,19 +87,19 @@ fn observed_result(
         source,
         &PyString::new(py, OBSERVATION_RUN_ID).into_any(),
     )?;
-    let freshness: Bound<'_, PyAny> = source.getattr("freshness")?;
+    let freshness: Bound<'_, PyAny> = native_field(source, "freshness")?;
     let (lag_tolerance, policy) = if freshness.is_none() {
         (py.None().into_bound(py), py.None().into_bound(py))
     } else {
         (
-            freshness.getattr("lag_tolerance")?,
-            freshness.getattr("age_policy")?,
+            native_field(&freshness, "lag_tolerance")?,
+            native_field(&freshness, "age_policy")?,
         )
     };
     let age_status: Option<Bound<'_, PyAny>> = age_policy(
         &policy,
-        &observation.getattr("data_version")?,
-        &observation.getattr("observed_at")?,
+        &native_field(observation, "data_version")?,
+        &native_field(observation, "observed_at")?,
     )?;
     let previous: Option<Bound<'_, PyAny>> = previous_record(state, &current)?;
     let comparison: StateComparison = match &previous {
@@ -109,7 +111,7 @@ fn observed_result(
                 StateComparison::Equivalent {
                     same_hash: previous
                         .getattr("data_version_hash")?
-                        .eq(current.getattr("data_version_hash")?)?,
+                        .eq(native_field(&current, "data_version_hash")?)?,
                 }
             } else {
                 StateComparison::Different
@@ -118,23 +120,23 @@ fn observed_result(
     };
     let mut result: FreshnessSourceResult =
         FreshnessSourceResult::new(name, freshness_status(comparison));
-    result.strategy = optional_text(current.getattr("strategy")?)?;
-    result.value_kind = optional_text(current.getattr("value_kind")?)?;
-    result.current_data_version = optional_text(current.getattr("data_version")?)?;
+    result.strategy = optional_text(native_field(&current, "strategy")?)?;
+    result.value_kind = optional_text(native_field(&current, "value_kind")?)?;
+    result.current_data_version = optional_text(native_field(&current, "data_version")?)?;
     result.previous_data_version = match &previous {
-        Some(previous) => optional_text(previous.getattr("data_version")?)?,
+        Some(previous) => optional_text(native_field(previous, "data_version")?)?,
         None => None,
     };
     result.lag_tolerance = optional_text(lag_tolerance)?;
-    result.target_database = optional_text(current.getattr("target_database")?)?;
-    result.target_schema = optional_text(current.getattr("target_schema")?)?;
-    result.target_name = optional_text(current.getattr("target_name")?)?;
+    result.target_database = optional_text(native_field(&current, "target_database")?)?;
+    result.target_schema = optional_text(native_field(&current, "target_schema")?)?;
+    result.target_name = optional_text(native_field(&current, "target_name")?)?;
     if comparison == StateComparison::Missing {
         result.message = Some(MISSING_STATE_MESSAGE.to_owned());
     }
     result.age_status = match age_status {
         None => None,
-        Some(status) => Some(status.getattr("value")?.extract()?),
+        Some(status) => Some(native_field(&status, "value")?.extract()?),
     };
     Ok(result)
 }
@@ -166,9 +168,10 @@ fn adapter_observation<'py>(
             )?));
         }
     };
-    let unknown: Bound<'py, PyAny> = batch.getattr("unknown")?.call_method1("get", (name,))?;
+    let unknown: Bound<'py, PyAny> =
+        native_field(batch, "unknown")?.call_method1("get", (name,))?;
     if !unknown.is_none() {
-        let reason: String = unknown.getattr("reason")?.str()?.extract()?;
+        let reason: String = native_field(&unknown, "reason")?.str()?.extract()?;
         let status: FreshnessStatus = if reason == UNAVAILABLE_REASON {
             FreshnessStatus::Unknown
         } else {
@@ -177,7 +180,7 @@ fn adapter_observation<'py>(
         return Ok(Err(target_result(
             source,
             (name, status),
-            optional_text(unknown.getattr("message")?)?,
+            optional_text(native_field(&unknown, "message")?)?,
         )?));
     }
     let observation: Bound<'py, PyAny> = batch
@@ -219,7 +222,7 @@ fn observe_sources(
     let mut positions: HashMap<String, usize> = HashMap::new();
     let mut adapter_sources: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in sources {
-        let name: String = source.getattr("name")?.extract()?;
+        let name: String = native_field(source, "name")?.extract()?;
         let Some(observed_source) = observation_source(&observer.adapter, source)? else {
             results.push(target_result(
                 source,
@@ -267,7 +270,7 @@ pub(crate) fn observe_freshness(
     let mut chosen: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in sources.try_iter()? {
         let source: Bound<'_, PyAny> = source?;
-        let name: String = source.getattr("name")?.extract()?;
+        let name: String = native_field(&source, "name")?.extract()?;
         if (selected.is_empty() || selected.contains(name.as_str()))
             && !excluded.contains(name.as_str())
         {

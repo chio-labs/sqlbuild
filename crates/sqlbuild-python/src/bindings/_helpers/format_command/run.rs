@@ -13,6 +13,7 @@ use crate::bindings::_helpers::discovery::description_inputs::externally_describ
 use crate::bindings::_helpers::format_command::files::{
     FormatChange, file_dictionary, overlaid, persist_changes, sorted_items,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::dsl_headers::{header_violations, rules_config};
@@ -176,7 +177,7 @@ fn lint_final_contents<'py>(
 }
 
 fn code_is(violation: &Bound<'_, PyAny>, code: &str) -> PyResult<bool> {
-    Ok(violation.getattr("code")?.extract::<String>()? == code)
+    Ok(native_field(violation, "code")?.extract::<String>()? == code)
 }
 
 /// Drop `description-present` faults for models described outside their header.
@@ -250,9 +251,10 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     let py: Python<'py> = request.project_dir.py();
     let fixture_inputs: Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)> =
         match (request.discovered, request.adapter) {
-            (Some(discovered), Some(adapter)) => {
-                Some((discovered.clone(), adapter.getattr("sql_lexical_syntax")?))
-            }
+            (Some(discovered), Some(adapter)) => Some((
+                discovered.clone(),
+                native_field(adapter, "sql_lexical_syntax")?,
+            )),
             (Some(_), None) => {
                 return Err(registry::error(py, ErrorId::Lint)?
                     .call1(("fixture-null formatting requires the project adapter",))
@@ -283,7 +285,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     merged.update(fixed.as_mapping())?;
     let declined: BTreeSet<PathBuf> = format_faults
         .iter()
-        .map(|fault| fault.getattr("file_path")?.extract())
+        .map(|fault| native_field(&fault, "file_path")?.extract())
         .collect::<PyResult<_>>()?;
     let updated: Bound<'py, PyDict> = PyDict::new(py);
     for (path, contents) in merged.iter() {
@@ -302,7 +304,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     let violations: Vec<Bound<'py, PyAny>> =
         drop_resolved_description_faults(request.project_dir, violations)?;
     let final_contents: Bound<'py, PyDict> = overlaid(&files, &updated)?;
-    let allow_suppressions: bool = request.config.getattr("allow_suppressions")?.extract()?;
+    let allow_suppressions: bool = native_field(request.config, "allow_suppressions")?.extract()?;
     let violations: Vec<Bound<'py, PyAny>> =
         apply_lint_suppressions(py, violations, final_contents.clone(), allow_suppressions)?;
     Ok(FormatOutcome {

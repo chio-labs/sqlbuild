@@ -1,5 +1,6 @@
 //! Location maps retaining the original compiled Python destination objects.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -8,7 +9,10 @@ fn locations<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let result = PyDict::new(items.py());
     for item in items.try_iter()? {
         let item = item?;
-        result.set_item(item.getattr("name")?, item.getattr("destination")?)?;
+        result.set_item(
+            native_field(&item, "name")?,
+            native_field(&item, "destination")?,
+        )?;
     }
     Ok(result)
 }

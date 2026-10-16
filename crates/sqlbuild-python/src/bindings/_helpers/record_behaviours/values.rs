@@ -1,23 +1,28 @@
 //! Computed attributes of the natively hosted SQL value and fingerprint records.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 /// `SqlLogicalType.display_name`: the kind, with its element type in angle brackets.
 pub(crate) fn logical_type_display_name(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let kind: String = instance.getattr("kind")?.getattr("value")?.extract()?;
-    let element: Bound<'_, PyAny> = instance.getattr("element_type")?;
+    let kind: String = native_field(instance, "kind")?
+        .getattr("value")?
+        .extract()?;
+    let element: Bound<'_, PyAny> = native_field(instance, "element_type")?;
     if element.is_none() {
         return kind.into_py_any(instance.py());
     }
-    let inner: String = element.getattr("display_name")?.extract()?;
+    let inner: String = native_field(&element, "display_name")?.extract()?;
     format!("{kind}<{inner}>").into_py_any(instance.py())
 }
 
 /// `SqlValue.kind`: the outer logical kind.
 pub(crate) fn sql_value_kind(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(instance.getattr("logical_type")?.getattr("kind")?.unbind())
+    Ok(native_field(instance, "logical_type")?
+        .getattr("kind")?
+        .unbind())
 }
 
 /// `FingerprintSet`: index the fingerprints by `(node_type, node_name)` when not given.
@@ -34,8 +39,8 @@ pub(crate) fn finish_fingerprint_set(
         let identity: Bound<'_, PyTuple> = PyTuple::new(
             py,
             [
-                fingerprint.getattr("node_type")?,
-                fingerprint.getattr("node_name")?,
+                native_field(&fingerprint, "node_type")?,
+                native_field(&fingerprint, "node_name")?,
             ],
         )?;
         by_identity.set_item(identity, fingerprint)?;

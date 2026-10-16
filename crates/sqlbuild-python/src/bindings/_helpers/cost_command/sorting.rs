@@ -6,6 +6,7 @@ use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyTuple, Py
 use sqlbuild_core::cost_command::constants::{HISTORY_METRIC_SORT_FIELDS, MISSING_METRIC_STATUSES};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 type SortKey = fn(&Bound<'_, PyAny>, &str) -> PyResult<Py<PyAny>>;
 
@@ -45,13 +46,14 @@ fn history_value(record: &Bound<'_, PyAny>, field: &str) -> PyResult<Py<PyAny>> 
         "credits" => attribute(record, "cost.estimated_compute_credits"),
         "duration" => Ok(record
             .getattr("completed_at")?
-            .sub(record.getattr("started_at")?)?
+            .sub(native_field(record, "started_at")?)?
             .unbind()),
-        "models" => Ok(
-            PyInt::new(py, record.getattr("cost")?.getattr("resources")?.len()?)
-                .into_any()
-                .unbind(),
-        ),
+        "models" => Ok(PyInt::new(
+            py,
+            native_field(record, "cost")?.getattr("resources")?.len()?,
+        )
+        .into_any()
+        .unbind()),
         "status" => attribute(record, "cost.status.value"),
         _ => Err(PyKeyError::new_err(field.to_owned())),
     }

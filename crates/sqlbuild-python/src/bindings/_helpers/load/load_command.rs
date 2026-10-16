@@ -30,6 +30,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -70,7 +71,7 @@ fn write(stream: &Bound<'_, PyAny>, value: &str) -> PyResult<()> {
 }
 
 fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Invocation<'py>> {
-    let project_dir: Bound<'py, PyAny> = match request.getattr("project_dir")? {
+    let project_dir: Bound<'py, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
@@ -78,8 +79,8 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
         &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
-    let select: Bound<'py, PyAny> = request.getattr("select")?;
-    let exclude: Bound<'py, PyAny> = request.getattr("exclude")?;
+    let select: Bound<'py, PyAny> = native_field(request, "select")?;
+    let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;
     call_with(
         &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
@@ -88,7 +89,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
-    let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
+    let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
     let target_config: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::BuildEffectiveTargetConfig)?,
         &[
@@ -101,7 +102,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
         (
             &selected_target,
             &target_config,
-            &request.getattr("cli_vars")?,
+            &native_field(request, "cli_vars")?,
         ),
     )?;
     let project: LoadProject<'py> = LoadProject::new(&discovered, &target_config)?;
@@ -113,8 +114,8 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
         &defaults,
     )?;
     let references: Vec<Bound<'py, PyAny>> = project.reference_entries(&selected, &defaults)?;
-    let machine_output: bool = request.getattr("json_output")?.extract()?;
-    let use_color: bool = !request.getattr("no_color")?.extract::<bool>()?
+    let machine_output: bool = native_field(request, "json_output")?.extract()?;
+    let use_color: bool = !native_field(request, "no_color")?.extract::<bool>()?
         && !machine_output
         && stdout_supports_color(py)?;
     let stream: Bound<'py, PyAny> =
@@ -139,11 +140,11 @@ fn user_error(py: Python<'_>, message: String) -> PyErr {
 }
 
 fn target_name<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let table: Bound<'_, PyAny> = source.getattr("table")?;
+    let table: Bound<'_, PyAny> = native_field(source, "table")?;
     if table.is_truthy()? {
         Ok(table)
     } else {
-        source.getattr("name")
+        native_field(source, "name")
     }
 }
 
@@ -159,7 +160,7 @@ fn check_reference_targets(
     let selected_names: Vec<String> = invocation
         .selected
         .iter()
-        .map(|source| source.getattr("name")?.extract())
+        .map(|source| native_field(source, "name")?.extract())
         .collect::<PyResult<_>>()?;
     let connection: Bound<'_, PyAny> = adapter.call_method1("connect", (connection_config,))?;
     let checked: PyResult<()> = (|| {
@@ -170,8 +171,8 @@ fn check_reference_targets(
                 PyTuple::new(
                     py,
                     [
-                        source.getattr("database")?,
-                        source.getattr("schema")?,
+                        native_field(source, "database")?,
+                        native_field(source, "schema")?,
                         target_name(source)?,
                     ],
                 )
@@ -188,10 +189,10 @@ fn check_reference_targets(
         for source in &invocation.references {
             let target: Bound<'_, PyAny> = target_name(source)?;
             let exists: bool = call_with(
-                &lookup.getattr("exists")?,
+                &native_field(&lookup, "exists")?,
                 &[
-                    ("database", source.getattr("database")?),
-                    ("schema", source.getattr("schema")?),
+                    ("database", native_field(source, "database")?),
+                    ("schema", native_field(source, "schema")?),
                     ("name", target.clone()),
                 ],
             )?
@@ -203,7 +204,7 @@ fn check_reference_targets(
                         "Selected source load requires intermediate loader '{}', but its target \
                          relation '{}' does not exist; use +{} to refresh upstream ingress \
                          dependencies",
-                        source.getattr("name")?.str()?,
+                        native_field(source, "name")?.str()?,
                         target.str()?,
                         selected_names.join(", ")
                     ),
@@ -240,8 +241,8 @@ fn project_relations<'py>(
         .chain(&invocation.references)
         .chain(&invocation.selected)
     {
-        if source.getattr("expression")?.is_none() {
-            sources.set_item(source.getattr("name")?, source)?;
+        if native_field(source, "expression")?.is_none() {
+            sources.set_item(native_field(source, "name")?, source)?;
         }
     }
     let reference_class: Bound<'py, PyAny> = host::entry(py, UserCodeHost::SqlResourceRef)?;
@@ -270,8 +271,11 @@ fn prepare<'py>(
     let adapter_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(discovered, "project_config")?,
+            ),
+            ("local_config", native_field(discovered, "local_config")?),
         ],
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &invocation.project_dir)?;
@@ -280,8 +284,8 @@ fn prepare<'py>(
         &[
             ("discovered_inputs", discovered.clone()),
             ("project_dir", invocation.project_dir.clone()),
-            ("selected_target", request.getattr("selected_target")?),
-            ("cli_vars", request.getattr("cli_vars")?),
+            ("selected_target", native_field(request, "selected_target")?),
+            ("cli_vars", native_field(request, "cli_vars")?),
         ],
     )?;
     check_reference_targets(invocation, (&adapter, &connection_config))?;
@@ -289,12 +293,12 @@ fn prepare<'py>(
         &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
-            ("selected_target", request.getattr("selected_target")?),
-            ("cli_vars", request.getattr("cli_vars")?),
+            ("selected_target", native_field(request, "selected_target")?),
+            ("cli_vars", native_field(request, "cli_vars")?),
         ],
     )?
     .extract()?;
-    let requested: Bound<'py, PyAny> = request.getattr("concurrency")?;
+    let requested: Bound<'py, PyAny> = native_field(request, "concurrency")?;
     let concurrency: i64 = if requested.is_none() {
         call_with(
             &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
@@ -307,7 +311,10 @@ fn prepare<'py>(
     };
     let typed: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::TypeCursorOverrides)?,
-        &[("cursor_overrides", request.getattr("cursor_overrides")?)],
+        &[(
+            "cursor_overrides",
+            native_field(request, "cursor_overrides")?,
+        )],
     )?;
     let cursor_overrides: Bound<'py, PyAny> = if typed.is_truthy()? {
         typed
@@ -316,7 +323,10 @@ fn prepare<'py>(
     };
     let provider_session: Bound<'py, PyAny> = call_with(
         &host::entry(py, UserCodeHost::BuildProviderSession)?,
-        &[("discovered_providers", discovered.getattr("providers")?)],
+        &[(
+            "discovered_providers",
+            native_field(discovered, "providers")?,
+        )],
     )?;
     Ok(Preparation {
         adapter_name: adapter_name.extract()?,
@@ -351,22 +361,22 @@ fn runtime_params<'py>(
             ),
             ("target", target_name.clone()),
             ("vars", effective_vars.clone()),
-            ("is_reload", request.getattr("reload")?),
+            ("is_reload", native_field(request, "reload")?),
             (
                 "start_cursor_ts",
-                cursor_timestamp(&overrides.getattr("start_ts")?)?,
+                cursor_timestamp(&native_field(overrides, "start_ts")?)?,
             ),
             (
                 "end_cursor_ts",
-                cursor_timestamp(&overrides.getattr("end_ts")?)?,
+                cursor_timestamp(&native_field(overrides, "end_ts")?)?,
             ),
             (
                 "start_cursor_int",
-                cursor_integer(&overrides.getattr("start_int")?)?,
+                cursor_integer(&native_field(overrides, "start_int")?)?,
             ),
             (
                 "end_cursor_int",
-                cursor_integer(&overrides.getattr("end_int")?)?,
+                cursor_integer(&native_field(overrides, "end_int")?)?,
             ),
             (
                 "use_color",
@@ -376,7 +386,7 @@ fn runtime_params<'py>(
             ),
             (
                 "providers",
-                preparation.provider_session.getattr("providers")?,
+                native_field(&preparation.provider_session, "providers")?,
             ),
             ("project_relations", preparation.project_relations.clone()),
         ],
@@ -395,7 +405,7 @@ fn execute<'py>(
         registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
     let order: Bound<'py, PyDict> = PyDict::new(py);
     for (index, source) in invocation.selected.iter().enumerate() {
-        order.set_item(source.getattr("name")?, index + 1)?;
+        order.set_item(native_field(source, "name")?, index + 1)?;
     }
     let reporter: Bound<'py, LoadProgressReporter> =
         registry::native(py, NativeAttr::LoadProgressReporter)?
@@ -440,18 +450,24 @@ fn execute<'py>(
         let callbacks: Bound<'py, PyAny> = call_with(
             &host::entry(py, ExecutorHost::LoadCallbacks)?,
             &[
-                ("on_load_start", reporter.getattr("on_start")?),
-                ("on_load_progress", reporter.getattr("on_progress")?),
-                ("on_load_complete", relay.getattr("on_load_complete")?),
+                ("on_load_start", native_field(&reporter, "on_start")?),
+                ("on_load_progress", native_field(&reporter, "on_progress")?),
+                (
+                    "on_load_complete",
+                    native_field(&relay, "on_load_complete")?,
+                ),
                 (
                     "on_connection_start",
-                    connection.getattr("on_connection_start")?,
+                    native_field(&connection, "on_connection_start")?,
                 ),
                 (
                     "on_connection_complete",
-                    relay.getattr("on_connection_complete")?,
+                    native_field(&relay, "on_connection_complete")?,
                 ),
-                ("on_connection_error", relay.getattr("on_connection_error")?),
+                (
+                    "on_connection_error",
+                    native_field(&relay, "on_connection_error")?,
+                ),
             ],
         )?;
         call_with(
@@ -467,7 +483,7 @@ fn execute<'py>(
                 ),
                 (
                     "loader_functions",
-                    invocation.discovered.getattr("loader_functions")?,
+                    native_field(&invocation.discovered, "loader_functions")?,
                 ),
                 ("connection_config", preparation.connection_config.clone()),
                 ("adapter", preparation.adapter.clone()),
@@ -498,8 +514,11 @@ fn write_json(request: &Bound<'_, PyAny>, results: &[Bound<'_, PyAny>]) -> PyRes
         &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
-            ("json_output", request.getattr("json_output")?),
-            ("json_output_path", request.getattr("json_output_path")?),
+            ("json_output", native_field(request, "json_output")?),
+            (
+                "json_output_path",
+                native_field(request, "json_output_path")?,
+            ),
         ],
     )?;
     Ok(())
@@ -534,7 +553,7 @@ fn run_load_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
             .iter()
             .map(|source| {
                 Ok((
-                    source.getattr("name")?.extract()?,
+                    native_field(source, "name")?.extract()?,
                     loader_node_flag(source)?,
                 ))
             })

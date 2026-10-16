@@ -1,5 +1,6 @@
 //! Loaded configuration values as the Python objects `tomllib` builds.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyModule, PyResult, Python};
 use pyo3::types::{IntoPyDict, PyDict, PyDictMethods, PyList, PyListMethods};
@@ -31,11 +32,11 @@ fn time(datetime: &Bound<'_, PyModule>, value: ConfigTime) -> PyResult<PyObject>
 fn date_time(datetime: &Bound<'_, PyModule>, value: ConfigDateTime) -> PyResult<PyObject> {
     let tzinfo: Option<Bound<'_, PyAny>> = match value.utc_offset_seconds {
         Some(seconds) => {
-            let delta = datetime.getattr("timedelta")?.call(
+            let delta = native_field(datetime, "timedelta")?.call(
                 (),
                 Some(&[("seconds", seconds)].into_py_dict(datetime.py())?),
             )?;
-            Some(datetime.getattr("timezone")?.call1((delta,))?)
+            Some(native_field(datetime, "timezone")?.call1((delta,))?)
         }
         None => None,
     };

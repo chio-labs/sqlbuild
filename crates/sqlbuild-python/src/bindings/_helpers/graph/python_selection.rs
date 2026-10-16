@@ -18,6 +18,7 @@ use sqlbuild_analysis::python_selection::models::{
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -63,16 +64,18 @@ fn name_rows(mapping: &Bound<'_, PyAny>) -> PyResult<NameRows> {
 
 fn selection_node(node: &Bound<'_, PyAny>) -> PyResult<PythonSelectionNode> {
     let mut sql_deps: Vec<ObjectKey> = Vec::new();
-    for reference in node.getattr("sql_deps")?.try_iter()? {
+    for reference in native_field(node, "sql_deps")?.try_iter()? {
         let reference: Bound<'_, PyAny> = reference?;
         sql_deps.push((
-            reference.getattr("kind")?.getattr("value")?.extract()?,
-            reference.getattr("name")?.extract()?,
+            native_field(&reference, "kind")?
+                .getattr("value")?
+                .extract()?,
+            native_field(&reference, "name")?.extract()?,
         ));
     }
     Ok(PythonSelectionNode {
-        name: node.getattr("name")?.extract()?,
-        kind: node.getattr("kind")?.getattr("value")?.extract()?,
+        name: native_field(node, "name")?.extract()?,
+        kind: native_field(node, "kind")?.getattr("value")?.extract()?,
         sql_deps,
     })
 }
@@ -85,9 +88,9 @@ fn selection_graph(graph: &Bound<'_, PyAny>) -> PyResult<PythonSelectionGraph> {
             .try_iter()?
             .map(|node| selection_node(&node?))
             .collect::<PyResult<_>>()?,
-        upstream: name_rows(&graph.getattr("upstream_deps")?)?,
-        downstream: name_rows(&graph.getattr("downstream_deps")?)?,
-        tags: name_rows(&graph.getattr("tag_index")?)?,
+        upstream: name_rows(&native_field(graph, "upstream_deps")?)?,
+        downstream: name_rows(&native_field(graph, "downstream_deps")?)?,
+        tags: name_rows(&native_field(graph, "tag_index")?)?,
         paths: graph
             .getattr("path_index")?
             .call_method0("items")?
@@ -106,7 +109,7 @@ fn project_sources(project_graph: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Op
         .map(|source| {
             let source: Bound<'_, PyAny> = source?;
             Ok((
-                source.getattr("name")?.extract()?,
+                native_field(&source, "name")?.extract()?,
                 source
                     .getattr("source_entry")?
                     .getattr("loader")?
@@ -165,7 +168,8 @@ pub(crate) fn resolve_python_sql_run_selection(
     exclude: Vec<String>,
 ) -> PyResult<(Vec<ObjectKey>, Vec<String>)> {
     let py: Python<'_> = project_graph.py();
-    let native: Bound<'_, NativeProjectGraph> = project_graph.getattr("native")?.downcast_into()?;
+    let native: Bound<'_, NativeProjectGraph> =
+        native_field(project_graph, "native")?.downcast_into()?;
     let sources: Vec<(String, Option<String>)> = project_sources(project_graph)?;
     let nodes: PythonSelectionGraph = selection_graph(python_graph)?;
     let selection: RunSelection = compiler_guard(|| {

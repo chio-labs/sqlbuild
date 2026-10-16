@@ -17,6 +17,7 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::{
@@ -76,7 +77,12 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     let mut custom: Vec<(String, Bound<'py, PyAny>)> = run
         .rules
         .iter()
-        .map(|rule| Ok((rule.getattr("code")?.extract::<String>()?, rule.clone())))
+        .map(|rule| {
+            Ok((
+                native_field(rule, "code")?.extract::<String>()?,
+                rule.clone(),
+            ))
+        })
         .collect::<PyResult<_>>()?;
     custom.sort_by(|left, right| left.0.cmp(&right.0));
     if custom.is_empty() {
@@ -125,7 +131,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     let mut cache: CustomRuleCache = CustomRuleCache::new(
         cache_path,
         rows,
-        run.project.getattr("effective_target_name")?.extract()?,
+        native_field(run.project, "effective_target_name")?.extract()?,
         models,
     );
     let pending: Vec<ReadSet> = cache.pending_readsets().to_vec();
@@ -322,11 +328,11 @@ fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 }
 
 fn subject_value(rule: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    let subject: Bound<'_, PyAny> = rule.getattr("subject")?;
+    let subject: Bound<'_, PyAny> = native_field(rule, "subject")?;
     if subject.is_none() {
         return Ok(None);
     }
-    subject.getattr("value")?.extract()
+    native_field(&subject, "value")?.extract()
 }
 
 fn host_subject(rule: &Bound<'_, PyAny>) -> PyResult<HostRuleSubject> {
@@ -375,11 +381,11 @@ fn rule_identity(
                 "runtime_version",
                 pyo3::types::PyString::new(py, CUSTOM_HOST_RUNTIME_VERSION).into_any(),
             ),
-            ("code", rule.getattr("code")?),
-            ("family", rule.getattr("family")?),
-            ("slug", rule.getattr("slug")?),
-            ("message", rule.getattr("message")?),
-            ("remediation", rule.getattr("remediation")?),
+            ("code", native_field(rule, "code")?),
+            ("family", native_field(rule, "family")?),
+            ("slug", native_field(rule, "slug")?),
+            ("message", native_field(rule, "message")?),
+            ("remediation", native_field(rule, "remediation")?),
             ("subject", subject.into_bound_py_any(py)?),
             ("implementation_fingerprint", fingerprint),
             ("config", run.config.clone()),
@@ -397,8 +403,8 @@ fn rule_identity(
 fn cpu_seconds(py: Python<'_>) -> PyResult<f64> {
     let thread: f64 = imported(py, "time", "thread_time")?.call0()?.extract()?;
     let times: Bound<'_, PyAny> = imported(py, "os", "times")?.call0()?;
-    let user: f64 = times.getattr("children_user")?.extract()?;
-    let system: f64 = times.getattr("children_system")?.extract()?;
+    let user: f64 = native_field(&times, "children_user")?.extract()?;
+    let system: f64 = native_field(&times, "children_system")?.extract()?;
     Ok(thread + user + system)
 }
 

@@ -29,6 +29,7 @@ use crate::bindings::_helpers::planner_resolution::cursor_windows::without_desti
 use crate::bindings::_helpers::planner_resolution::future_safety::resolve_future_cursor_safety;
 use crate::bindings::_helpers::planner_resolution::values::string;
 use crate::bindings::_helpers::planner_strategy::model_entries::resolve_microbatch_lookback;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -81,7 +82,7 @@ pub(crate) struct CursorWindowInputs<'py> {
 /// One string-valued model configuration entry.
 pub(crate) fn config_str<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     Ok(
-        authored_config_str(&model.getattr("config")?.getattr("values")?, key)?
+        authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
             .unwrap_or_else(|| model.py().None().into_bound(model.py())),
     )
 }
@@ -93,7 +94,7 @@ pub(crate) fn config_bound<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     object(
         model.py(),
-        config_cursor_bound(&model.getattr("config")?.getattr("values")?, key)?,
+        config_cursor_bound(&native_field(model, "config")?.getattr("values")?, key)?,
     )
 }
 
@@ -145,8 +146,8 @@ fn clamp_cursor_end<'py>(
     if bounds.is_none() || cursor_end.is_none() {
         return Ok(bounds);
     }
-    let start = bounds.getattr("start")?;
-    let end = bounds.getattr("end")?;
+    let start = native_field(&bounds, "start")?;
+    let end = native_field(&bounds, "end")?;
     if start.eq(sentinel(py, "START")?)? || end.eq(sentinel(py, "END")?)? {
         return Ok(bounds);
     }
@@ -202,8 +203,8 @@ fn rolling_window_bounds<'py>(
     } else {
         invocation_time.clone()
     };
-    let moment = if moment.getattr("tzinfo")?.is_none() {
-        call_with(&moment.getattr("replace")?, &[("tzinfo", utc)])?
+    let moment = if native_field(&moment, "tzinfo")?.is_none() {
+        call_with(&native_field(&moment, "replace")?, &[("tzinfo", utc)])?
     } else {
         utc_clock(&moment)?
     };
@@ -214,7 +215,7 @@ fn rolling_window_bounds<'py>(
     let clock = Scalar {
         value: ScalarValue::Timestamp(Timestamp {
             local: local_date_time(&moment)?,
-            fold: moment.getattr("fold")?.extract::<u8>()? != 0,
+            fold: native_field(&moment, "fold")?.extract::<u8>()? != 0,
             offset: ZoneOffset::Fixed(0),
             template: None,
             source_text: None,
@@ -234,7 +235,7 @@ fn rolling_window_bounds<'py>(
     if !cursor_start.is_none()
         && order(
             &session,
-            (&token(py, &bounds.getattr("start")?)?, &cursor_start),
+            (&token(py, &native_field(&bounds, "start")?)?, &cursor_start),
             &timestamp,
         )? == Ordering::Less
     {
@@ -250,7 +251,7 @@ fn apply_future_safety<'py>(
     input_evidence: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = bounds.py();
-    if bounds.is_none() || bounds.getattr("end")?.eq(sentinel(py, "END")?)? {
+    if bounds.is_none() || native_field(&bounds, "end")?.eq(sentinel(py, "END")?)? {
         return Ok(bounds);
     }
     resolve_future_cursor_safety(
@@ -292,8 +293,8 @@ fn bounded_override<'py>(
 }
 
 fn backfill_duration<'py>(backfill: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    if backfill.getattr("action")?.eq(BOUNDED_BACKFILL)? {
-        return backfill.getattr("duration");
+    if native_field(backfill, "action")?.eq(BOUNDED_BACKFILL)? {
+        return native_field(backfill, "duration");
     }
     Ok(backfill.py().None().into_bound(backfill.py()))
 }
@@ -346,7 +347,7 @@ fn snapshot_bounds<'py>(
         bounds,
         (&request.typing.0, &request.typing.1),
         inputs,
-        request.cursor_snapshot.getattr("input_evidence")?,
+        native_field(&request.cursor_snapshot, "input_evidence")?,
     )?;
     clamp_cursor_end(bounds, model)
 }
@@ -386,7 +387,7 @@ pub(crate) fn plan_cursor_bounds<'py>(
     if cursor_snapshot.is_none() {
         return Ok(cursor_snapshot);
     }
-    if inputs.backfill.getattr("action")?.eq(FULL_BACKFILL)? {
+    if native_field(&inputs.backfill, "action")?.eq(FULL_BACKFILL)? {
         cursor_snapshot = without_destination(cursor_snapshot)?;
     }
     snapshot_bounds(
@@ -444,7 +445,7 @@ pub(crate) fn microbatch_range<'py>(
     let cursor_type = config_str(model, "cursor_type")?;
     let mut grains: Vec<Bound<'py, PyAny>> = Vec::new();
     for relation in inputs.cursor_input_relations.try_iter()? {
-        grains.push(relation?.getattr("cursor_grain")?);
+        grains.push(native_field(&relation?, "cursor_grain")?);
     }
     let effective_grain = resolve_effective_timestamp_grain(
         &cursor_type,
@@ -495,8 +496,8 @@ pub(crate) fn empty_cursor_inputs<'py>(
     }
     let decision = cursor_inputs_without_rows(&cursor_snapshot)?;
     Ok((
-        decision.getattr("input_names")?,
-        decision.getattr("waiting_on_empty_inputs")?.is_truthy()?,
+        native_field(&decision, "input_names")?,
+        native_field(&decision, "waiting_on_empty_inputs")?.is_truthy()?,
     ))
 }
 

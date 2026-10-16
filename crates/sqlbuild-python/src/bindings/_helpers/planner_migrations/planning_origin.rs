@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::constants::QUALIFIED_RELATION_MAX_PARTS;
 use crate::bindings::_helpers::planner_migrations::models::ModelMigrationRequest;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::PyErr;
@@ -39,24 +40,25 @@ fn named<'py>(
         .try_iter()?
     {
         let item = item?;
-        if item.getattr("name")?.eq(name)? {
-            return Ok((item.getattr("destination")?, name.clone()));
+        if native_field(&item, "name")?.eq(name)? {
+            return Ok((native_field(&item, "destination")?, name.clone()));
         }
     }
     let fingerprint = call_with(
-        &state.getattr("named_fingerprint")?,
+        &native_field(state, "named_fingerprint")?,
         &[("model_name", name.clone())],
     )?;
-    let fields = if !fingerprint.is_none() && !fingerprint.getattr("target_name")?.is_none() {
+    let fields = if !fingerprint.is_none() && !native_field(&fingerprint, "target_name")?.is_none()
+    {
         [
-            ("database", fingerprint.getattr("target_database")?),
-            ("schema", fingerprint.getattr("target_schema")?),
-            ("name", fingerprint.getattr("target_name")?),
+            ("database", native_field(&fingerprint, "target_database")?),
+            ("schema", native_field(&fingerprint, "target_schema")?),
+            ("name", native_field(&fingerprint, "target_name")?),
         ]
     } else {
         [
-            ("database", destination.getattr("database")?),
-            ("schema", destination.getattr("schema")?),
+            ("database", native_field(destination, "database")?),
+            ("schema", native_field(destination, "schema")?),
             ("name", name.clone()),
         ]
     };
@@ -72,9 +74,9 @@ fn input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
 /// The database migration planning inspects: the first model destination's, else the target's.
 pub(super) fn planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let project = runtime_field(runtime, |runtime| &runtime.project)?;
-    let fallback = project.getattr("effective_target_database")?;
-    for item in project.getattr("models")?.try_iter()? {
-        let database = item?.getattr("destination")?.getattr("database")?;
+    let fallback = native_field(&project, "effective_target_database")?;
+    for item in native_field(&project, "models")?.try_iter()? {
+        let database = native_field(&item?, "destination")?.getattr("database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -89,7 +91,7 @@ pub(super) fn project_schemas<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Boun
         .getattr("models")?
         .try_iter()?
     {
-        let schema = item?.getattr("destination")?.getattr("schema")?;
+        let schema = native_field(&item?, "destination")?.getattr("schema")?;
         if !schema.is_none() {
             schemas.add(schema)?;
         }
@@ -102,11 +104,11 @@ pub(super) fn require_same_database(
     state: &Bound<'_, PyAny>,
     location: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    let database = location.getattr("database")?;
+    let database = native_field(location, "database")?;
     if database.is_none() {
         return Ok(());
     }
-    let inspected = state.getattr("database")?;
+    let inspected = native_field(state, "database")?;
     if inspected.is_none()
         || database
             .call_method0("lower")?
@@ -114,11 +116,11 @@ pub(super) fn require_same_database(
     {
         return Ok(());
     }
-    let qualified = location.getattr("qualified_name")?;
+    let qualified = native_field(location, "qualified_name")?;
     let label = if qualified.is_truthy()? {
         qualified
     } else {
-        location.getattr("name")?
+        native_field(location, "name")?
     };
     Err(input_error(
         state.py(),
@@ -143,7 +145,7 @@ pub(super) fn resolve_origin<'py>(
         _ => super::column_objects::text(py, ""),
     };
     let item = request.model.clone();
-    let destination = item.getattr("destination")?;
+    let destination = native_field(&item, "destination")?;
     let mut parts: Vec<Bound<'py, PyAny>> = Vec::new();
     for part in raw.call_method1("split", (".",))?.try_iter()? {
         parts.push(
@@ -162,7 +164,7 @@ pub(super) fn resolve_origin<'py>(
             py,
             format!(
                 "model '{}': migrate_from '{raw}' is not a model name or a qualified relation",
-                item.getattr("name")?
+                native_field(&item, "name")?
             ),
         )?);
     }
@@ -172,7 +174,7 @@ pub(super) fn resolve_origin<'py>(
     let database = if parts.len() == maximum {
         parts[0].clone()
     } else {
-        destination.getattr("database")?
+        native_field(&destination, "database")?
     };
     let origin = location(
         runtime,

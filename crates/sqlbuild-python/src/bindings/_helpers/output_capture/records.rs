@@ -21,6 +21,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::values::{
     freeze, json_value, object, output_error, plain_int, validation_error,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const ENVELOPE_FIELDS: [&str; 16] = [
     "record_id",
@@ -68,7 +69,7 @@ fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 fn utc_aware(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = value.py();
     if !value.is_instance(&imported(py, "datetime", "datetime")?)?
-        || value.getattr("tzinfo")?.is_none()
+        || native_field(value, "tzinfo")?.is_none()
     {
         return Ok(false);
     }
@@ -117,7 +118,10 @@ pub(crate) fn freeze_command_output_record<'py>(
     let py = record.py();
     validate_output_record(&record_shape(record)?)
         .map_err(|message| validation_error(py, &message))?;
-    let frozen = freeze(&record.getattr("external_context")?, "external_context")?;
+    let frozen = freeze(
+        &native_field(record, "external_context")?,
+        "external_context",
+    )?;
     if !frozen.is_instance(&imported(py, "collections.abc", "Mapping")?)? {
         return Err(validation_error(
             py,
@@ -140,7 +144,7 @@ pub(crate) fn command_output_to_json(record: &Bound<'_, PyAny>) -> PyResult<Stri
     for name in ENVELOPE_FIELDS {
         let value: JsonValue = match name {
             "occurred_at" => JsonValue::String(occurred_at.replace("+00:00", "Z")),
-            "stream" | "priority" => json_value(&field(name)?.getattr("value")?)?,
+            "stream" | "priority" => json_value(&native_field(&field(name)?, "value")?)?,
             _ => json_value(&field(name)?)?,
         };
         entries.push((name.to_owned(), value));
@@ -260,7 +264,7 @@ pub(crate) fn command_output_from_json<'py>(
             validation_error(py, "command output contains invalid field values")
         }
     })?;
-    if !field("record_id")?.eq(record.getattr("record_id")?)? {
+    if !field("record_id")?.eq(native_field(&record, "record_id")?)? {
         return Err(validation_error(
             py,
             "command output record_id does not match its identity",

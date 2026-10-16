@@ -17,6 +17,7 @@ use crate::bindings::_helpers::planner_warehouse::semantic_sources::semantic_sou
 use crate::bindings::_helpers::planner_warehouse::source_columns::gather_source_inspection;
 use crate::bindings::_helpers::planner_warehouse::source_deferral::build_source_read_map;
 use crate::bindings::_helpers::planner_warehouse::source_deferral::with_declared_source_reads;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
@@ -29,10 +30,10 @@ fn selected_audit_relation_keys<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let keys = PySet::empty(py)?;
-    for audit in project.getattr("audits")?.try_iter()? {
+    for audit in native_field(project, "audits")?.try_iter()? {
         let audit = audit?;
         if audit_is_selected(&audit, selected_keys)? {
-            for dependency in audit.getattr("scope_deps")?.try_iter()? {
+            for dependency in native_field(&audit, "scope_deps")?.try_iter()? {
                 keys.add(dependency?)?;
             }
         }
@@ -95,14 +96,17 @@ pub(crate) fn planner_relations_context<'py>(
     } else {
         deferral
     };
-    let selected_keys = scope.getattr("selected_keys")?;
-    let mut model_locations = object(py, build_model_locations(&project.getattr("models")?)?)?;
-    let mut seed_locations = object(py, build_seed_locations(&project.getattr("seeds")?)?)?;
+    let selected_keys = native_field(&scope, "selected_keys")?;
+    let mut model_locations = object(
+        py,
+        build_model_locations(&native_field(&project, "models")?)?,
+    )?;
+    let mut seed_locations = object(py, build_seed_locations(&native_field(&project, "seeds")?)?)?;
     let function_locations = object(
         py,
-        build_function_locations(&project.getattr("functions")?)?,
+        build_function_locations(&native_field(&project, "functions")?)?,
     )?;
-    let deferred_locations = deferral.getattr("deferred_locations")?;
+    let deferred_locations = native_field(&deferral, "deferred_locations")?;
     if !deferred_locations.is_none() {
         let applied = object(
             py,
@@ -127,15 +131,15 @@ pub(crate) fn planner_relations_context<'py>(
         build_source_load_map(
             &project,
             &load_keys,
-            Some(&if scope.getattr("all_keys")?.is_truthy()? {
-                scope.getattr("upstream_deps")?
+            Some(&if native_field(&scope, "all_keys")?.is_truthy()? {
+                native_field(&scope, "upstream_deps")?
             } else {
                 none(py)
             })
             .filter(|value| !value.is_none()),
         )?,
     )?;
-    let deferral_enabled = deferral.getattr("source_deferral_enabled")?.is_truthy()?;
+    let deferral_enabled = native_field(&deferral, "source_deferral_enabled")?.is_truthy()?;
     let read_map = |map: &Bound<'py, PyAny>,
                     names: Option<Bound<'py, PyAny>>|
      -> PyResult<Bound<'py, PyAny>> {
@@ -148,7 +152,10 @@ pub(crate) fn planner_relations_context<'py>(
             ("selected_keys", selected_keys.clone()),
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
-            ("defer_sources_to", deferral.getattr("defer_sources_to")?),
+            (
+                "defer_sources_to",
+                native_field(&deferral, "defer_sources_to")?,
+            ),
         ];
         if let Some(names) = names {
             pairs.push(("read_source_names", names));
@@ -161,7 +168,7 @@ pub(crate) fn planner_relations_context<'py>(
         with_declared_source_reads(
             &project,
             source_map.downcast::<PyDict>()?,
-            &scope.getattr("python_read_source_names")?,
+            &native_field(&scope, "python_read_source_names")?,
         )?,
     )?;
     let python_names = PyFrozenSet::new(

@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -50,20 +51,20 @@ pub(crate) fn cursor_inputs_without_rows<'py>(
     {
         return registry::class(cursor_snapshot.py(), RecordId::EmptyCursorInputDecision)?.call0();
     }
-    let rows = cursor_snapshot.getattr("upstream_maxes")?.is_truthy()?
+    let rows = native_field(cursor_snapshot, "upstream_maxes")?.is_truthy()?
         || cursor_snapshot
             .getattr("upstream_terminal_ends")?
             .is_truthy()?
         || cursor_snapshot
             .getattr("upstream_availability_ends")?
             .is_truthy()?;
-    let start = !cursor_snapshot.getattr("target_max")?.is_none()
-        || cursor_snapshot.getattr("upstream_mins")?.is_truthy()?
+    let start = !native_field(cursor_snapshot, "target_max")?.is_none()
+        || native_field(cursor_snapshot, "upstream_mins")?.is_truthy()?
         || cursor_snapshot
             .getattr("upstream_terminal_starts")?
             .is_truthy()?;
     decide_empty_cursor_inputs(
-        &cursor_snapshot.getattr("empty_input_names")?,
+        &native_field(cursor_snapshot, "empty_input_names")?,
         !cursor_snapshot
             .getattr("cursor_watermark_mode")?
             .eq("any")?,
@@ -95,7 +96,7 @@ pub(crate) fn empty_cursor_window<'py>(
     if cursor_start.is_none() && !kind.eq("integer")? {
         bound = call_with(
             &registry::class(py, RecordId::TimestampValue)?,
-            &[("value", bound.getattr("value")?)],
+            &[("value", native_field(&bound, "value")?)],
         )?;
     }
     call_with(
@@ -249,17 +250,17 @@ pub(crate) fn normalize_cursor_snapshot_grain<'py>(
             .collect::<PyResult<Vec<_>>>()?;
         kwargs.set_item(key, PyTuple::new(py, values)?)?;
     }
-    let physical = cursor_snapshot.getattr("physical_target_max")?;
+    let physical = native_field(cursor_snapshot, "physical_target_max")?;
     kwargs.set_item(
         "physical_target_max",
         if physical.is_truthy()? {
             physical
         } else {
-            cursor_snapshot.getattr("target_max")?
+            native_field(cursor_snapshot, "target_max")?
         },
     )?;
     let mut ends: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
-    for pair in cursor_snapshot.getattr("upstream_end_inputs")?.try_iter()? {
+    for pair in native_field(cursor_snapshot, "upstream_end_inputs")?.try_iter()? {
         let pair = pair?;
         ends.push((normalize(pair.get_item(0)?)?, pair.get_item(1)?));
     }

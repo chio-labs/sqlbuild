@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::freshness::state_io::write_source_freshness_records;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -26,12 +27,12 @@ fn successful_model_names<'py>(result: &Bound<'py, PyAny>) -> PyResult<Vec<Bound
     let success: Bound<'py, PyAny> =
         host::entry(py, ExecutorHost::ExecutionStatus)?.getattr("SUCCESS")?;
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model_result in result.getattr("model_results")?.try_iter()? {
+    for model_result in native_field(result, "model_results")?.try_iter()? {
         let model_result: Bound<'py, PyAny> = model_result?;
-        let status: Bound<'py, PyAny> = model_result.getattr("status")?;
+        let status: Bound<'py, PyAny> = native_field(&model_result, "status")?;
         let value: Bound<'py, PyAny> = status.getattr_opt("value")?.unwrap_or(status);
         if value.eq(&success)? {
-            names.push(model_result.getattr("model_name")?);
+            names.push(native_field(&model_result, "model_name")?);
         }
     }
     Ok(names)
@@ -50,13 +51,13 @@ fn collect_record<'py>(
         let Some(entry) = entries_by_name.get_item(model_name?)? else {
             continue;
         };
-        let destination: Bound<'py, PyAny> = entry.getattr("destination")?;
-        let schema: Bound<'py, PyAny> = destination.getattr("schema")?;
+        let destination: Bound<'py, PyAny> = native_field(&entry, "destination")?;
+        let schema: Bound<'py, PyAny> = native_field(&destination, "schema")?;
         if schema.is_none() {
             continue;
         }
         let location: (Bound<'py, PyAny>, Bound<'py, PyAny>) =
-            (destination.getattr("database")?, schema);
+            (native_field(&destination, "database")?, schema);
         if contains_location(&recorded, &location)? {
             continue;
         }
@@ -104,14 +105,14 @@ fn eligible_records<'py>(
     run_id: &Bound<'py, PyAny>,
 ) -> PyResult<RecordsByLocation<'py>> {
     let py: Python<'py> = plan.py();
-    let freshness: Bound<'py, PyAny> = plan.getattr("source_freshness")?;
-    if freshness.is_none() || freshness.getattr("propagation")?.is_none() {
+    let freshness: Bound<'py, PyAny> = native_field(plan, "source_freshness")?;
+    if freshness.is_none() || native_field(&freshness, "propagation")?.is_none() {
         return Ok(Vec::new());
     }
     let entries_by_name: Bound<'py, PyDict> = PyDict::new(py);
-    for entry in plan.getattr("model_entries")?.try_iter()? {
+    for entry in native_field(plan, "model_entries")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
-        entries_by_name.set_item(entry.getattr("name")?, entry)?;
+        entries_by_name.set_item(native_field(&entry, "name")?, entry)?;
     }
     if entries_by_name.is_empty() {
         return Ok(Vec::new());
@@ -120,9 +121,9 @@ fn eligible_records<'py>(
     let successful: Bound<'py, PyFrozenSet> =
         PyFrozenSet::new(py, successful_model_names(result)?)?;
     let observed: Bound<'py, PyDict> = PyDict::new(py);
-    for record in freshness.getattr("observed_records")?.try_iter()? {
+    for record in native_field(&freshness, "observed_records")?.try_iter()? {
         let record: Bound<'py, PyAny> = record?;
-        observed.set_item(record.getattr("identity")?, record)?;
+        observed.set_item(native_field(&record, "identity")?, record)?;
     }
     let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
@@ -157,23 +158,23 @@ fn renderers<'py>(adapter: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         &[
             (
                 "render_qualified_name",
-                adapter.getattr("render_qualified_name")?,
+                native_field(adapter, "render_qualified_name")?,
             ),
             (
                 "render_framework_type",
-                adapter.getattr("render_framework_type")?,
+                native_field(adapter, "render_framework_type")?,
             ),
             (
                 "render_insert_records_sql",
-                adapter.getattr("render_insert_source_freshness_records_sql")?,
+                native_field(adapter, "render_insert_source_freshness_records_sql")?,
             ),
             (
                 "render_create_table_sql",
-                adapter.getattr("render_create_source_freshness_table_sql")?,
+                native_field(adapter, "render_create_source_freshness_table_sql")?,
             ),
             (
                 "render_create_index_sqls",
-                adapter.getattr("render_create_source_freshness_index_sqls")?,
+                native_field(adapter, "render_create_source_freshness_index_sqls")?,
             ),
         ],
     )
@@ -190,7 +191,7 @@ fn write_records<'py>(
     for ((database, schema), records) in grouped {
         let mut by_source: Vec<(Bound<'py, PyAny>, Vec<Bound<'py, PyAny>>)> = Vec::new();
         for record in records {
-            let source_name: Bound<'py, PyAny> = record.getattr("source_name")?;
+            let source_name: Bound<'py, PyAny> = native_field(record, "source_name")?;
             let mut position: Option<usize> = None;
             for (index, (known, _)) in by_source.iter().enumerate() {
                 if known.eq(&source_name)? {
@@ -205,7 +206,7 @@ fn write_records<'py>(
         }
         for (source_name, source_records) in by_source {
             let scope: Bound<'py, PyAny> = call_with(
-                &cost_context.getattr("resource_scope")?,
+                &native_field(&cost_context, "resource_scope")?,
                 &[
                     ("resource_type", PyString::new(py, "source").into_any()),
                     ("resource_name", source_name),
@@ -222,7 +223,7 @@ fn write_records<'py>(
                         py,
                         &[
                             ("connection", connection.clone()),
-                            ("execute", adapter.getattr("execute")?),
+                            ("execute", native_field(adapter, "execute")?),
                             ("database", database.clone()),
                             ("schema", schema.clone()),
                             ("records", PyTuple::new(py, &source_records)?.into_any()),

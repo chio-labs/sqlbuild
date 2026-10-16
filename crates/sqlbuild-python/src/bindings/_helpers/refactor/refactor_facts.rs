@@ -11,6 +11,7 @@ use sqlbuild_refactor::refactoring::models::{
     SchemaColumnFacts, SqlFileRole,
 };
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
@@ -35,8 +36,8 @@ fn discovered_files(files: &Bound<'_, PyAny>) -> PyResult<Vec<DiscoveredFile>> {
     for item in files.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
         discovered.push(DiscoveredFile {
-            path: posix(&item.getattr("relative_path")?)?,
-            contents: item.getattr("contents")?.extract()?,
+            path: posix(&native_field(&item, "relative_path")?)?,
+            contents: native_field(&item, "contents")?.extract()?,
         });
     }
     Ok(discovered)
@@ -45,7 +46,7 @@ fn discovered_files(files: &Bound<'_, PyAny>) -> PyResult<Vec<DiscoveredFile>> {
 fn column_names(columns: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     columns
         .try_iter()?
-        .map(|column| column?.getattr("name")?.extract())
+        .map(|column| native_field(&column?, "name")?.extract())
         .collect()
 }
 
@@ -57,8 +58,8 @@ fn resource_columns(
     for resource in resources.try_iter()? {
         let resource: Bound<'_, PyAny> = resource?;
         facts.push(ResourceColumnsFacts {
-            name: resource.getattr("name")?.extract()?,
-            columns: column_names(&resource.getattr(entry)?.getattr("columns")?)?,
+            name: native_field(&resource, "name")?.extract()?,
+            columns: column_names(&native_field(&resource.getattr(entry)?, "columns")?)?,
         });
     }
     Ok(facts)
@@ -69,10 +70,10 @@ fn spans(spans: &Bound<'_, PyAny>) -> PyResult<Vec<ExpansionSpan>> {
     for span in spans.try_iter()? {
         let span: Bound<'_, PyAny> = span?;
         read.push(ExpansionSpan {
-            source_start: span.getattr("source_start")?.extract()?,
-            source_end: span.getattr("source_end")?.extract()?,
-            output_start: span.getattr("output_start")?.extract()?,
-            output_end: span.getattr("output_end")?.extract()?,
+            source_start: native_field(&span, "source_start")?.extract()?,
+            source_end: native_field(&span, "source_end")?.extract()?,
+            output_start: native_field(&span, "output_start")?.extract()?,
+            output_end: native_field(&span, "output_end")?.extract()?,
         });
     }
     Ok(read)
@@ -80,7 +81,7 @@ fn spans(spans: &Bound<'_, PyAny>) -> PyResult<Vec<ExpansionSpan>> {
 
 fn expansion_facts(expansion: &Bound<'_, PyAny>) -> PyResult<ExpansionFacts> {
     Ok(ExpansionFacts {
-        expanded_sql: expansion.getattr("expanded_sql")?.extract()?,
+        expanded_sql: native_field(expansion, "expanded_sql")?.extract()?,
         passes: expansion
             .getattr("passes")?
             .try_iter()?
@@ -94,19 +95,19 @@ fn schema_columns(entry: &Bound<'_, PyAny>) -> PyResult<Option<Vec<SchemaColumnF
         return Ok(None);
     }
     let mut columns: Vec<SchemaColumnFacts> = Vec::new();
-    for column in entry.getattr("columns")?.try_iter()? {
+    for column in native_field(entry, "columns")?.try_iter()? {
         let column: Bound<'_, PyAny> = column?;
-        let location: Bound<'_, PyAny> = column.getattr("location")?;
+        let location: Bound<'_, PyAny> = native_field(&column, "location")?;
         columns.push(SchemaColumnFacts {
-            name: column.getattr("name")?.extract()?,
-            migrate_from: !column.getattr("migrate_from")?.is_none(),
+            name: native_field(&column, "name")?.extract()?,
+            migrate_from: !native_field(&column, "migrate_from")?.is_none(),
             location: if location.is_none() {
                 None
             } else {
                 Some(LocationFacts {
-                    path: posix(&location.getattr("path")?)?,
-                    line: location.getattr("line")?.extract()?,
-                    column: location.getattr("column")?.extract()?,
+                    path: posix(&native_field(&location, "path")?)?,
+                    line: native_field(&location, "line")?.extract()?,
+                    column: native_field(&location, "column")?.extract()?,
                 })
             },
         });
@@ -117,7 +118,10 @@ fn schema_columns(entry: &Bound<'_, PyAny>) -> PyResult<Option<Vec<SchemaColumnF
 fn model(model: &Bound<'_, PyAny>, expansion: Option<&Bound<'_, PyAny>>) -> PyResult<ModelFacts> {
     let py: Python<'_> = model.py();
     let values: Bound<'_, PyDict> = PyDict::new(py);
-    values.call_method1("update", (model.getattr("config")?.getattr("values")?,))?;
+    values.call_method1(
+        "update",
+        (native_field(model, "config")?.getattr("values")?,),
+    )?;
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("values", &values)?;
     options.set_item("key", MATERIALIZED_KEY)?;
@@ -126,35 +130,35 @@ fn model(model: &Bound<'_, PyAny>, expansion: Option<&Bound<'_, PyAny>>) -> PyRe
         .extract()?;
     let migrate_from: Option<Bound<'_, PyAny>> = values.get_item(MIGRATE_FROM_KEY)?;
     let mut deps: Vec<DependencyFacts> = Vec::new();
-    for dep in model.getattr("deps")?.try_iter()? {
+    for dep in native_field(model, "deps")?.try_iter()? {
         let dep: Bound<'_, PyAny> = dep?;
         deps.push(DependencyFacts {
-            resource_type: dep.getattr("resource_type")?.str()?.extract()?,
-            name: dep.getattr("name")?.extract()?,
+            resource_type: native_field(&dep, "resource_type")?.str()?.extract()?,
+            name: native_field(&dep, "name")?.extract()?,
         });
     }
-    let destination: Bound<'_, PyAny> = model.getattr("destination")?;
-    let inferred: Bound<'_, PyAny> = model.getattr("inferred_columns")?;
+    let destination: Bound<'_, PyAny> = native_field(model, "destination")?;
+    let inferred: Bound<'_, PyAny> = native_field(model, "inferred_columns")?;
     Ok(ModelFacts {
-        name: model.getattr("name")?.extract()?,
-        path: posix(&model.getattr("relative_path")?)?,
+        name: native_field(model, "name")?.extract()?,
+        path: posix(&native_field(model, "relative_path")?)?,
         deps,
-        query_sql: model.getattr("query_sql")?.extract()?,
-        authored_query_sql: model.getattr("authored_query_sql")?.extract()?,
+        query_sql: native_field(model, "query_sql")?.extract()?,
+        authored_query_sql: native_field(model, "authored_query_sql")?.extract()?,
         materialized,
         declares_migrate_from: migrate_from.is_some(),
         migrate_from_set: migrate_from.is_some_and(|value| !value.is_none()),
         destination: DestinationFacts {
-            database: destination.getattr("database")?.extract()?,
-            schema: destination.getattr("schema")?.extract()?,
-            name: destination.getattr("name")?.extract()?,
+            database: native_field(&destination, "database")?.extract()?,
+            schema: native_field(&destination, "schema")?.extract()?,
+            name: native_field(&destination, "name")?.extract()?,
         },
         inferred_columns: if inferred.is_none() {
             Vec::new()
         } else {
             column_names(&inferred)?
         },
-        schema_columns: schema_columns(&model.getattr("schema_entry")?)?,
+        schema_columns: schema_columns(&native_field(model, "schema_entry")?)?,
         expansion: expansion.map(expansion_facts).transpose()?,
     })
 }
@@ -166,8 +170,8 @@ pub(crate) fn model_facts(
     if refactor_project.is_none() {
         return Ok(None);
     }
-    let project: Bound<'_, PyAny> = refactor_project.getattr("graph")?.getattr("project")?;
-    let project_dir: Bound<'_, PyAny> = refactor_project.getattr("project_dir")?;
+    let project: Bound<'_, PyAny> = native_field(refactor_project, "graph")?.getattr("project")?;
+    let project_dir: Bound<'_, PyAny> = native_field(refactor_project, "project_dir")?;
     let mut expansions: HashMap<String, Bound<'_, PyAny>> = HashMap::new();
     let items: Vec<Bound<'_, PyAny>> = project
         .getattr("sql_expansions")?
@@ -179,10 +183,10 @@ pub(crate) fn model_facts(
         expansions.insert(path.call_method0("resolve")?.str()?.extract()?, expansion);
     }
     let mut facts: Vec<ModelFacts> = Vec::new();
-    for compiled in project.getattr("models")?.try_iter()? {
+    for compiled in native_field(&project, "models")?.try_iter()? {
         let compiled: Bound<'_, PyAny> = compiled?;
         let resolved: String = project_dir
-            .div(compiled.getattr("relative_path")?)?
+            .div(native_field(&compiled, "relative_path")?)?
             .call_method0("resolve")?
             .str()?
             .extract()?;
@@ -194,7 +198,7 @@ pub(crate) fn model_facts(
 fn block_bodies(blocks: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     blocks
         .try_iter()?
-        .map(|block| block?.getattr("sql_body")?.extract())
+        .map(|block| native_field(&block?, "sql_body")?.extract())
         .collect()
 }
 
@@ -223,13 +227,13 @@ fn authored_files(discovered: &Bound<'_, PyAny>) -> PyResult<Vec<AuthoredFile>> 
             let item: Bound<'_, PyAny> = item?;
             let texts: Vec<String> = match (body, blocks) {
                 (Some(body), _) => vec![item.getattr(body)?.extract()?],
-                (None, true) => block_bodies(&item.getattr("blocks")?)?,
+                (None, true) => block_bodies(&native_field(&item, "blocks")?)?,
                 (None, false) => Vec::new(),
             };
             files.push(AuthoredFile {
                 role,
-                path: posix(&item.getattr("relative_path")?)?,
-                contents: item.getattr("contents")?.extract()?,
+                path: posix(&native_field(&item, "relative_path")?)?,
+                contents: native_field(&item, "contents")?.extract()?,
                 texts,
             });
         }
@@ -244,8 +248,8 @@ fn python_locations(
     let py: Python<'_> = project.py();
     let old: &str = &request.model_name;
     let options: Bound<'_, PyDict> = PyDict::new(py);
-    options.set_item("project_dir", project.getattr("project_dir")?)?;
-    options.set_item("discovered", project.getattr("discovered")?)?;
+    options.set_item("project_dir", native_field(project, "project_dir")?)?;
+    options.set_item("discovered", native_field(project, "discovered")?)?;
     if request.operation == RefactorOperation::RenameColumn {
         let column: &str = request.column_name.as_deref().unwrap_or_default();
         options.set_item("names", PyTuple::new(py, [column])?)?;
@@ -268,10 +272,10 @@ fn python_locations(
     {
         let location: Bound<'_, PyAny> = location?;
         locations.push(ManualLocation {
-            path: location.getattr("path")?.extract()?,
-            line: location.getattr("line")?.extract()?,
-            column: location.getattr("column")?.extract()?,
-            reason: location.getattr("reason")?.extract()?,
+            path: native_field(&location, "path")?.extract()?,
+            line: native_field(&location, "line")?.extract()?,
+            column: native_field(&location, "column")?.extract()?,
+            reason: native_field(&location, "reason")?.extract()?,
         });
     }
     Ok(locations)
@@ -282,21 +286,24 @@ pub(crate) fn refactor_facts(
     project: &Bound<'_, PyAny>,
     request: &RefactorRequest,
 ) -> PyResult<RefactorFacts> {
-    let compiled: Bound<'_, PyAny> = project.getattr("graph")?.getattr("project")?;
-    let discovered: Bound<'_, PyAny> = project.getattr("discovered")?;
-    let dialect: Option<String> = compiled.getattr("sql_analysis_dialect")?.extract()?;
+    let compiled: Bound<'_, PyAny> = native_field(project, "graph")?.getattr("project")?;
+    let discovered: Bound<'_, PyAny> = native_field(project, "discovered")?;
+    let dialect: Option<String> = native_field(&compiled, "sql_analysis_dialect")?.extract()?;
     let mut yaml_files: Vec<DiscoveredFile> =
-        discovered_files(&discovered.getattr("source_files")?)?;
-    yaml_files.extend(discovered_files(&discovered.getattr("schema_files")?)?);
+        discovered_files(&native_field(&discovered, "source_files")?)?;
+    yaml_files.extend(discovered_files(&native_field(
+        &discovered,
+        "schema_files",
+    )?)?);
     Ok(RefactorFacts {
-        project_dir: project.getattr("project_dir")?.str()?.extract()?,
+        project_dir: native_field(project, "project_dir")?.str()?.extract()?,
         dialect: dialect
             .filter(|dialect| !dialect.is_empty())
             .unwrap_or_else(|| GENERIC_DIALECT.to_owned()),
         models: model_facts(project)?.unwrap_or_default(),
-        sources: resource_columns(&compiled.getattr("sources")?, "source_entry")?,
-        seeds: resource_columns(&compiled.getattr("seeds")?, "schema_entry")?,
-        model_files: discovered_files(&discovered.getattr("model_files")?)?,
+        sources: resource_columns(&native_field(&compiled, "sources")?, "source_entry")?,
+        seeds: resource_columns(&native_field(&compiled, "seeds")?, "schema_entry")?,
+        model_files: discovered_files(&native_field(&discovered, "model_files")?)?,
         authored_files: authored_files(&discovered)?,
         yaml_files,
         python_locations: python_locations(project, request)?,
@@ -356,8 +363,8 @@ pub(crate) fn declaration_placement(
             {
                 let record: Bound<'_, PyAny> = record?;
                 relocated.push(RelocatedDeclaration {
-                    key: identity_key(&record.getattr("identity")?)?,
-                    path: record.getattr("path")?.extract()?,
+                    key: identity_key(&native_field(&record, "identity")?)?,
+                    path: native_field(&record, "path")?.extract()?,
                 });
             }
             Some(relocated)
@@ -366,24 +373,26 @@ pub(crate) fn declaration_placement(
         }
     };
     let mut declarations: Vec<PlacedDeclaration> = Vec::new();
-    for record in index.getattr("declarations")?.try_iter()? {
+    for record in native_field(&index, "declarations")?.try_iter()? {
         let record: Bound<'_, PyAny> = record?;
-        let identity: Bound<'_, PyAny> = record.getattr("identity")?;
-        let kind: String = identity.getattr("kind")?.getattr("value")?.extract()?;
-        let name: String = identity.getattr("name")?.extract()?;
+        let identity: Bound<'_, PyAny> = native_field(&record, "identity")?;
+        let kind: String = native_field(&identity, "kind")?
+            .getattr("value")?
+            .extract()?;
+        let name: String = native_field(&identity, "name")?.extract()?;
         declarations.push(PlacedDeclaration {
             key: identity_key(&identity)?,
             label: format!("{kind}:{name}"),
-            path: record.getattr("path")?.extract()?,
-            line: record.getattr("line")?.extract()?,
-            column: record.getattr("column")?.extract()?,
+            path: native_field(&record, "path")?.extract()?,
+            line: native_field(&record, "line")?.extract()?,
+            column: native_field(&record, "column")?.extract()?,
         });
     }
     Ok(DeclarationPlacement {
         relocated,
         diagnostics: diagnostics
             .try_iter()?
-            .map(|item| item?.getattr("message")?.extract())
+            .map(|item| native_field(&item?, "message")?.extract())
             .collect::<PyResult<_>>()?,
         declarations,
     })

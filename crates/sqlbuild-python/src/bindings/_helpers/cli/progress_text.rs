@@ -19,6 +19,7 @@ use crate::bindings::_helpers::cli::progress::write_persistent;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const HEADER_OPTIONS: (&[&str], &[&str]) = (
     &["stream", "command", "target", "concurrency", "use_color"],
@@ -63,31 +64,31 @@ fn format_expectation_name(model_name: &str) -> String {
 fn difference_samples(samples: &Bound<'_, PyAny>) -> PyResult<Vec<DifferenceSample>> {
     let mut rows: Vec<DifferenceSample> = Vec::new();
     for sample in samples.try_iter()? {
-        rows.push(sample?.getattr("values")?.extract()?);
+        rows.push(native_field(&sample?, "values")?.extract()?);
     }
     Ok(rows)
 }
 
 pub(crate) fn expectation_step(step: &Bound<'_, PyAny>) -> PyResult<ExpectationStep> {
     let mut column_differences: Vec<(String, String, String)> = Vec::new();
-    for difference in step.getattr("column_differences")?.try_iter()? {
+    for difference in native_field(step, "column_differences")?.try_iter()? {
         let difference: Bound<'_, PyAny> = difference?;
         column_differences.push((
-            difference.getattr("name")?.str()?.to_string(),
-            difference.getattr("actual")?.str()?.to_string(),
-            difference.getattr("expected")?.str()?.to_string(),
+            native_field(&difference, "name")?.str()?.to_string(),
+            native_field(&difference, "actual")?.str()?.to_string(),
+            native_field(&difference, "expected")?.str()?.to_string(),
         ));
     }
     Ok(ExpectationStep {
-        model_name: step.getattr("model_name")?.extract()?,
-        outcome: step.getattr("outcome")?.str()?.to_string(),
-        actual_row_count: step.getattr("actual_row_count")?.extract()?,
-        expected_row_count: step.getattr("expected_row_count")?.extract()?,
-        mismatched_row_count: step.getattr("mismatched_row_count")?.extract()?,
-        unexpected_row_count: step.getattr("unexpected_row_count")?.extract()?,
-        missing_row_count: step.getattr("missing_row_count")?.extract()?,
-        unexpected_samples: difference_samples(&step.getattr("unexpected_samples")?)?,
-        missing_samples: difference_samples(&step.getattr("missing_samples")?)?,
+        model_name: native_field(step, "model_name")?.extract()?,
+        outcome: native_field(step, "outcome")?.str()?.to_string(),
+        actual_row_count: native_field(step, "actual_row_count")?.extract()?,
+        expected_row_count: native_field(step, "expected_row_count")?.extract()?,
+        mismatched_row_count: native_field(step, "mismatched_row_count")?.extract()?,
+        unexpected_row_count: native_field(step, "unexpected_row_count")?.extract()?,
+        missing_row_count: native_field(step, "missing_row_count")?.extract()?,
+        unexpected_samples: difference_samples(&native_field(step, "unexpected_samples")?)?,
+        missing_samples: difference_samples(&native_field(step, "missing_samples")?)?,
         column_differences,
     })
 }
@@ -100,10 +101,10 @@ fn format_expectation_detail(step_result: &Bound<'_, PyAny>) -> PyResult<String>
 
 fn inspection_record(record: &Bound<'_, PyAny>) -> PyResult<InspectionRecord> {
     Ok(InspectionRecord {
-        sql: record.getattr("sql")?.extract()?,
-        elapsed_seconds: record.getattr("elapsed_seconds")?.extract()?,
-        row_count: record.getattr("row_count")?.extract()?,
-        error: record.getattr("error")?.extract()?,
+        sql: native_field(record, "sql")?.extract()?,
+        elapsed_seconds: native_field(record, "elapsed_seconds")?.extract()?,
+        row_count: native_field(record, "row_count")?.extract()?,
+        error: native_field(record, "error")?.extract()?,
     })
 }
 
@@ -177,8 +178,8 @@ pub(crate) fn with_verbose_inspection<'py, T>(
     }
     let writer: Bound<'py, VerboseInspectionWriter> =
         Bound::new(py, VerboseInspectionWriter::new())?;
-    let sink: Bound<'py, PyAny> =
-        host::entry(py, AdapterHost::InspectionQuerySink)?.call1((writer.getattr("write")?,))?;
+    let sink: Bound<'py, PyAny> = host::entry(py, AdapterHost::InspectionQuerySink)?
+        .call1((native_field(&writer, "write")?,))?;
     let value: T = within(&sink, |_| body())?;
     writer.get().write_total(py)?;
     Ok(value)

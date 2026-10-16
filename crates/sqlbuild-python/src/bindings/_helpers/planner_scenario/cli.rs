@@ -12,6 +12,7 @@ use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
 use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::relations::build_scenario_relation_plan;
 use crate::bindings::_helpers::planner_scenario::values::string;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
@@ -51,10 +52,10 @@ pub(crate) fn build_cli_scenario_plan<'py>(
                 py,
                 &[
                     ("project_name", args.value("project_name")?),
-                    ("scenarios", project.getattr("sql_scenarios")?),
+                    ("scenarios", native_field(&project, "sql_scenarios")?),
                     (
                         "run_namespace",
-                        project.getattr("scenario")?.getattr("run_namespace")?,
+                        native_field(&project, "scenario")?.getattr("run_namespace")?,
                     ),
                 ],
             )?),
@@ -86,8 +87,11 @@ pub(crate) fn build_cli_scenario_plan<'py>(
         Some(keywords(
             py,
             &[
-                ("scenario_name", scenario.getattr("name")?),
-                ("hash_prefix", hashes.get_item(scenario.getattr("name")?)?),
+                ("scenario_name", native_field(&scenario, "name")?),
+                (
+                    "hash_prefix",
+                    hashes.get_item(native_field(&scenario, "name")?)?,
+                ),
                 ("artifacts", PyTuple::new(py, identities)?.into_any()),
                 (
                     "identifier_limit",
@@ -101,7 +105,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
         project: project.clone(),
         graph_plan: graph.clone(),
         relation_map: map,
-        render_qualified_name: adapter.getattr("render_qualified_name")?,
+        render_qualified_name: native_field(&adapter, "render_qualified_name")?,
         database,
         schema,
     })?;
@@ -132,7 +136,7 @@ fn namespace<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = project.py();
     let models = PyDict::new(py);
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         models.set_item(model_reads::name_object(&model)?, model)?;
     }
@@ -141,8 +145,8 @@ fn namespace<'py>(
             if let Some(model) = models.get_item(name?)? {
                 let destination = model_reads::destination(&model)?;
                 return Ok((
-                    destination.getattr("database")?,
-                    destination.getattr("schema")?,
+                    native_field(&destination, "database")?,
+                    native_field(&destination, "schema")?,
                 ));
             }
         }
@@ -157,16 +161,16 @@ fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
     let mut code = None;
     for warning in warnings.try_iter()? {
         let warning = warning?;
-        if warning.getattr("severity")?.eq(&severity)? {
+        if native_field(&warning, "severity")?.eq(&severity)? {
             if code.is_none() {
-                let value = warning.getattr("code")?;
+                let value = native_field(&warning, "code")?;
                 code = Some(if value.is_truthy()? {
                     value
                 } else {
                     string(py, SCENARIO_PLAN_GRAPH_VALIDATION)
                 });
             }
-            messages.push(warning.getattr("message")?.extract::<String>()?);
+            messages.push(native_field(&warning, "message")?.extract::<String>()?);
         }
     }
     if let Some(code) = code {

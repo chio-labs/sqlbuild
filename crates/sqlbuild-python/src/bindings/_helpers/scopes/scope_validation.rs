@@ -14,6 +14,7 @@ use sqlbuild_scopes::placement::models::{
 use sqlbuild_scopes::scope_index::models::ResourceIdentity;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::compile_usages::{
@@ -58,8 +59,8 @@ fn tuple_from<'py>(py: Python<'py>, items: Vec<Bound<'py, PyAny>>) -> PyResult<B
 
 fn usage_row(usage: &Bound<'_, PyAny>) -> PyResult<UsageRow> {
     Ok((
-        qualified_row(&usage.getattr("consumer")?)?,
-        qualified_row(&usage.getattr("declaration")?)?,
+        qualified_row(&native_field(usage, "consumer")?)?,
+        qualified_row(&native_field(usage, "declaration")?)?,
         value_of(usage, "kind")?,
         optional_item(usage, "through")?
             .map(|through| qualified_row(&through))
@@ -81,7 +82,10 @@ fn dependency_row(
                 .collect::<PyResult<_>>()?,
         ),
     };
-    Ok((qualified_row(&record.getattr("identity")?)?, dependencies))
+    Ok((
+        qualified_row(&native_field(record, "identity")?)?,
+        dependencies,
+    ))
 }
 
 fn with_dependencies<'py>(
@@ -99,7 +103,7 @@ fn with_dependencies<'py>(
             if is_own {
                 own.get_item(position)
             } else {
-                usages[position].getattr("declaration")
+                native_field(&usages[position], "declaration")
             }
         })
         .collect::<PyResult<_>>()?;
@@ -146,7 +150,7 @@ fn merged_usage_index<'py>(
         .collect::<PyResult<_>>()?;
     let true_value: Bound<'py, PyAny> = true.into_bound_py_any(py)?;
     let completeness: Bound<'py, PyAny> = replace(
-        &index.getattr("completeness")?,
+        &native_field(index, "completeness")?,
         &[
             ("runtime_usage", true_value.clone()),
             ("promotion_impact", true_value),
@@ -176,7 +180,7 @@ fn order_key(diagnostic: &Bound<'_, PyAny>) -> PyResult<DiagnosticOrderKey> {
         path: field(diagnostic, "path")?,
         line: field(diagnostic, "line")?,
         column: field(diagnostic, "column")?,
-        code: enum_text(&diagnostic.getattr("code")?)?,
+        code: enum_text(&native_field(diagnostic, "code")?)?,
         message: field(diagnostic, "message")?,
     })
 }
@@ -188,7 +192,7 @@ fn with_placement<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = index.py();
     let completeness: Bound<'py, PyAny> = replace(
-        &index.getattr("completeness")?,
+        &native_field(index, "completeness")?,
         &[("placement", placement.into_bound_py_any(py)?)],
     )?;
     replace(
@@ -209,7 +213,7 @@ fn placement_validated_index<'py>(
     let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut keys: Vec<DiagnosticOrderKey> = Vec::new();
     for diagnostic in tuple_attribute(index, "diagnostics")?.iter() {
-        if PlacementCode::parse(&enum_text(&diagnostic.getattr("code")?)?).is_none() {
+        if PlacementCode::parse(&enum_text(&native_field(&diagnostic, "code")?)?).is_none() {
             keys.push(order_key(&diagnostic)?);
             kept.push(diagnostic);
         }
@@ -246,10 +250,10 @@ fn placement_validated_index<'py>(
             classes.member(RecordId::ScopeDiagnosticCode, item.code.as_str())?,
             item.message,
             &severity,
-            record.getattr("path")?,
-            record.getattr("line")?,
-            record.getattr("column")?,
-            record.getattr("identity")?,
+            native_field(&record, "path")?,
+            native_field(&record, "line")?,
+            native_field(&record, "column")?,
+            native_field(&record, "identity")?,
         ))?);
     }
     let ordered: Vec<Bound<'py, PyAny>> = diagnostic_order(&keys)
@@ -339,11 +343,11 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
     inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
-    let scope: Bound<'py, PyAny> = inputs.getattr("declaration_scope")?;
+    let scope: Bound<'py, PyAny> = native_field(inputs, "declaration_scope")?;
     let resolver: Bound<'py, PyAny> = if scope.is_none() {
         scope
     } else {
-        scope.getattr("resolver")?
+        native_field(&scope, "resolver")?
     };
     let schema_files: Bound<'py, PyAny> = inputs
         .getattr("discovered_inputs")?
@@ -352,14 +356,14 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
     usages.extend(usage_records(
         model_schema_scope_usages(&schema_files, &resolver)?.as_any(),
     )?);
-    for model in inputs.getattr("model_inputs")?.try_iter()? {
+    for model in native_field(inputs, "model_inputs")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        usages.extend(usage_records(&model.getattr("macro_usages")?)?);
-        usages.extend(usage_records(&model.getattr("declaration_usages")?)?);
+        usages.extend(usage_records(&native_field(&model, "macro_usages")?)?);
+        usages.extend(usage_records(&native_field(&model, "declaration_usages")?)?);
     }
     for group in COMPILE_USAGE_GROUPS {
         for item in inputs.getattr(group)?.try_iter()? {
-            usages.extend(usage_records(&item?.getattr("declaration_usages")?)?);
+            usages.extend(usage_records(&native_field(&item?, "declaration_usages")?)?);
         }
     }
     let enforce_placement: bool = inputs
@@ -368,7 +372,7 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
         .getattr("enforce_placement")?
         .extract()?;
     Ok(scope_placement_validated_index(
-        &inputs.getattr("scope_index")?,
+        &native_field(inputs, "scope_index")?,
         enforce_placement,
         Some(PyTuple::new(py, usages)?),
     )?
@@ -383,9 +387,9 @@ pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr
     let error: Bound<'_, PyAny> =
         registry::class(py, RecordId::ScopeDiagnosticSeverity)?.getattr("ERROR")?;
     let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
-    for item in index.getattr("diagnostics")?.try_iter()? {
+    for item in native_field(index, "diagnostics")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
-        if item.getattr("severity")?.is(&error) {
+        if native_field(&item, "severity")?.is(&error) {
             errors.push(item);
         }
     }
@@ -394,8 +398,8 @@ pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr
     }
     let mut message: String = String::from("Invalid declaration scope index:");
     for item in &errors {
-        let code: String = item.getattr("code")?.getattr("value")?.extract()?;
-        let text: String = item.getattr("message")?.extract()?;
+        let code: String = native_field(item, "code")?.getattr("value")?.extract()?;
+        let text: String = native_field(item, "message")?.extract()?;
         message.push_str(&format!("\n[{code}] {text}"));
     }
     let options: Bound<'_, PyDict> = PyDict::new(py);

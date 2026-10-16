@@ -1,6 +1,7 @@
 //! Project native planning failures into existing located diagnostic exceptions.
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::plan_values::string;
@@ -15,10 +16,10 @@ fn cte_call_location<'py>(
     test: &Bound<'py, PyAny>,
     (cte, call): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
-    let test_file: Bound<'py, PyAny> = test.getattr("test_file")?;
+    let test_file: Bound<'py, PyAny> = native_field(test, "test_file")?;
     let call: Option<String> = call.extract()?;
     let located: CteLocation = sql_test_cte_location(
-        &test_file.getattr("contents")?.extract::<String>()?,
+        &native_field(&test_file, "contents")?.extract::<String>()?,
         &test
             .getattr("test_block")?
             .getattr("sql_body")?
@@ -27,7 +28,7 @@ fn cte_call_location<'py>(
         call.as_deref(),
     );
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
-    arguments.set_item("path", test_file.getattr("relative_path")?)?;
+    arguments.set_item("path", native_field(&test_file, "relative_path")?)?;
     arguments.set_item("line", located.line)?;
     arguments.set_item("column", located.column)?;
     arguments.set_item("end_line", located.end_line)?;
@@ -46,7 +47,7 @@ pub(super) fn planning_error(
         let mut found = None;
         for test in tests.try_iter()? {
             let test = test?;
-            if test.getattr("name")?.eq(payload.get_item("testName")?)?
+            if native_field(&test, "name")?.eq(payload.get_item("testName")?)?
                 && test
                     .getattr("test_file")?
                     .getattr("relative_path")?

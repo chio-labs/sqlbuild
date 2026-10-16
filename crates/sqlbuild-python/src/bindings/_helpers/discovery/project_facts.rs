@@ -1,5 +1,6 @@
 //! The facts cross-file validation reads, taken from Python's `DiscoveredProjectInputs`.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::FromPyObject;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -41,7 +42,7 @@ pub(crate) fn project_facts(
         each(inputs, "enum_files", declarations_fact)?;
     declaration_files.extend(each(inputs, "constant_files", declarations_fact)?);
     let mut model_schemas: Vec<NamedPath> = Vec::new();
-    for schema in inputs.getattr("model_schema_files")?.try_iter()? {
+    for schema in native_field(inputs, "model_schema_files")?.try_iter()? {
         model_schemas.extend(each(&schema?, "declarations", named)?);
     }
     Ok(ProjectFacts {
@@ -95,13 +96,13 @@ fn optional_text(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String
 
 /// `str(Path(...).stem)` of the path attribute `name`.
 pub(crate) fn stem(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    owner.getattr(name)?.getattr("stem")?.extract()
+    native_field(&owner.getattr(name)?, "stem")?.extract()
 }
 
 /// `(resource.name, str(resource.relative_path))`.
 fn named(resource: &Bound<'_, PyAny>) -> PyResult<NamedPath> {
     Ok(NamedPath {
-        name: resource.getattr("name")?.extract()?,
+        name: native_field(resource, "name")?.extract()?,
         path: text(resource, "relative_path")?,
     })
 }
@@ -123,7 +124,7 @@ fn relative_stem_named(file: &Bound<'_, PyAny>) -> PyResult<NamedPath> {
 }
 
 fn enum_value(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    owner.getattr(name)?.getattr("value")?.extract()
+    native_field(&owner.getattr(name)?, "value")?.extract()
 }
 
 fn model_fact(model: &Bound<'_, PyAny>) -> PyResult<ModelFact> {
@@ -143,17 +144,17 @@ fn seed_file_fact(seed: &Bound<'_, PyAny>) -> PyResult<SeedFileFact> {
 }
 
 pub(crate) fn column_name(column: &Bound<'_, PyAny>) -> PyResult<String> {
-    column.getattr("name")?.extract()
+    native_field(column, "name")?.extract()
 }
 
 fn seed_entry_fact(py: Python<'_>, entry: &Bound<'_, PyAny>) -> PyResult<SeedEntryFact> {
-    let settings: Bound<'_, PyAny> = entry.getattr("csv_settings")?;
+    let settings: Bound<'_, PyAny> = native_field(entry, "csv_settings")?;
     let mut csv: CsvSettings = CsvSettings {
         delimiter: optional_text(&settings, "delimiter")?,
         quotechar: optional_text(&settings, "quotechar")?,
         escapechar: optional_text(&settings, "escapechar")?,
-        doublequote: settings.getattr("doublequote")?.extract()?,
-        skipinitialspace: settings.getattr("skipinitialspace")?.extract()?,
+        doublequote: native_field(&settings, "doublequote")?.extract()?,
+        skipinitialspace: native_field(&settings, "skipinitialspace")?.extract()?,
         dialect_error: None,
     };
     csv.dialect_error = csv_dialect_error(py, &csv)?;
@@ -173,17 +174,17 @@ fn schema_fact(py: Python<'_>, schema: &Bound<'_, PyAny>) -> PyResult<SchemaFile
 }
 
 fn source_fact(entry: &Bound<'_, PyAny>) -> PyResult<SourceFact> {
-    let integration: Bound<'_, PyAny> = entry.getattr("integration_loader")?;
+    let integration: Bound<'_, PyAny> = native_field(entry, "integration_loader")?;
     let integration_loader: Option<IntegrationLoaderFact> = if integration.is_none() {
         None
     } else {
         Some(IntegrationLoaderFact {
-            kind: integration.getattr("kind")?.extract()?,
+            kind: native_field(&integration, "kind")?.extract()?,
         })
     };
     Ok(SourceFact {
         name: column_name(entry)?,
-        managed: entry.getattr("managed")?.extract()?,
+        managed: native_field(entry, "managed")?.extract()?,
         loader: optional_text(entry, "loader")?,
         integration_loader,
     })

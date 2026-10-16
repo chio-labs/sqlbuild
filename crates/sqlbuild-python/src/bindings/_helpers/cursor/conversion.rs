@@ -20,6 +20,7 @@ use crate::bindings::_helpers::cursor::values::{
 };
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -78,7 +79,7 @@ impl<'py> CursorSession<'py> {
     }
 
     fn timestamp(&self, inner: &Bound<'py, PyAny>, handle: usize) -> PyResult<Timestamp> {
-        let tzinfo: Bound<'py, PyAny> = inner.getattr("tzinfo")?;
+        let tzinfo: Bound<'py, PyAny> = native_field(inner, "tzinfo")?;
         let offset: ZoneOffset = if tzinfo.is_none() {
             ZoneOffset::Naive
         } else if tzinfo
@@ -93,7 +94,7 @@ impl<'py> CursorSession<'py> {
         };
         Ok(Timestamp {
             local: local_date_time(inner)?,
-            fold: inner.getattr("fold")?.extract::<u8>()? != 0,
+            fold: native_field(inner, "fold")?.extract::<u8>()? != 0,
             offset,
             template: Some(handle),
             source_text: None,
@@ -102,7 +103,7 @@ impl<'py> CursorSession<'py> {
 
     /// A typed cursor value object as a scalar remembering the object.
     pub(crate) fn scalar(&self, value: &Bound<'py, PyAny>) -> PyResult<Scalar> {
-        let inner: Bound<'py, PyAny> = value.getattr("value")?;
+        let inner: Bound<'py, PyAny> = native_field(value, "value")?;
         let handle: usize = self.inputs.borrow().len();
         let typed: ScalarValue = if value.is_instance(&self.integer_class)? {
             ScalarValue::Integer(inner.extract()?)
@@ -110,7 +111,7 @@ impl<'py> CursorSession<'py> {
             ScalarValue::Date(civil_date(&inner)?)
         } else {
             let mut timestamp: Timestamp = self.timestamp(&inner, handle)?;
-            let source_text: Bound<'py, PyAny> = value.getattr("source_text")?;
+            let source_text: Bound<'py, PyAny> = native_field(value, "source_text")?;
             timestamp.source_text = (!source_text.is_none())
                 .then(|| source_text.extract())
                 .transpose()?;
@@ -141,9 +142,9 @@ impl<'py> CursorSession<'py> {
     /// An `AlignedInterval` as an interval.
     pub(crate) fn interval(&self, interval: &Bound<'py, PyAny>) -> PyResult<Interval> {
         Ok(Interval {
-            start: self.scalar(&interval.getattr("start")?)?,
-            end: self.scalar(&interval.getattr("end")?)?,
-            grain: self.grain(&interval.getattr("grain")?)?,
+            start: self.scalar(&native_field(interval, "start")?)?,
+            end: self.scalar(&native_field(interval, "end")?)?,
+            grain: self.grain(&native_field(interval, "grain")?)?,
         })
     }
 

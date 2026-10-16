@@ -9,6 +9,7 @@ use sqlbuild_rules::fix_verification::main::compare::compare;
 use sqlbuild_rules::fix_verification::models::{DiagnosticComparison, ModelComparison};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -21,8 +22,8 @@ pub(crate) fn fix_verdict<'py>(
     after: &Bound<'py, PyAny>,
     edited: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let before_models = before.getattr("models")?.cast_into::<PyDict>()?;
-    let after_models = after.getattr("models")?.cast_into::<PyDict>()?;
+    let before_models = native_field(before, "models")?.cast_into::<PyDict>()?;
+    let after_models = native_field(after, "models")?.cast_into::<PyDict>()?;
     let same_models = before_models
         .call_method0("keys")?
         .eq(after_models.call_method0("keys")?)?;
@@ -31,26 +32,27 @@ pub(crate) fn fix_verdict<'py>(
     let mut models: Vec<ModelComparison> = Vec::new();
     let mut diagnostics: Vec<DiagnosticComparison> = Vec::new();
     if same_models {
-        let paths = before.getattr("model_paths")?;
+        let paths = native_field(before, "model_paths")?;
         for (key, model) in before_models.iter() {
             let other = after_models
                 .get_item(&key)?
                 .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("model key"))?;
             let path = paths.get_item(&key)?;
             let owner = owner_index((&owners, &indices), &path)?;
-            let columns = model.getattr("inferred_columns")?;
-            let other_columns = other.getattr("inferred_columns")?;
+            let columns = native_field(&model, "inferred_columns")?;
+            let other_columns = native_field(&other, "inferred_columns")?;
             models.push(ModelComparison {
                 owner,
                 edited: edited.contains(&path)?,
                 columns_known: !columns.is_none() && !other_columns.is_none(),
                 columns_equal: columns.eq(&other_columns)?,
-                dependencies_equal: model.getattr("deps")?.eq(other.getattr("deps")?)?,
+                dependencies_equal: native_field(&model, "deps")?
+                    .eq(native_field(&other, "deps")?)?,
                 lineage_equal: lineage(&model)?.eq(lineage(&other)?)?,
             });
         }
-        let previous = before.getattr("diagnostics")?.cast_into::<PyDict>()?;
-        let current = after.getattr("diagnostics")?.cast_into::<PyDict>()?;
+        let previous = native_field(before, "diagnostics")?.cast_into::<PyDict>()?;
+        let current = native_field(after, "diagnostics")?.cast_into::<PyDict>()?;
         let diagnostic_owners = PyDict::new(py);
         for (owner, _) in previous.iter().chain(current.iter()) {
             diagnostic_owners.set_item(owner, py.None())?;
@@ -96,7 +98,7 @@ fn owner_index(
 }
 
 fn lineage<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let value = model.getattr("fast_lineage_columns")?;
+    let value = native_field(model, "fast_lineage_columns")?;
     if value.is_none() {
         Ok(value)
     } else {

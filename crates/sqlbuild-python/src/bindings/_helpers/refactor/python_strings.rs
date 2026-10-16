@@ -9,6 +9,7 @@ use sqlbuild_pysource::string_literals::main::string_literal_locations::string_l
 use sqlbuild_pysource::string_literals::models::StringQuery;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -31,8 +32,8 @@ fn python_paths<'py>(
     let mut paths: Vec<(Vec<String>, Bound<'py, PyAny>)> = Vec::new();
     for declarations in PYTHON_DECLARATIONS {
         for item in discovered.getattr(declarations)?.try_iter()? {
-            let path: Bound<'py, PyAny> = item?.getattr("relative_path")?;
-            let parts: Vec<String> = path.getattr("parts")?.extract()?;
+            let path: Bound<'py, PyAny> = native_field(&item?, "relative_path")?;
+            let parts: Vec<String> = native_field(&path, "parts")?.extract()?;
             if !paths.iter().any(|(known, _)| *known == parts) {
                 paths.push((parts, path));
             }

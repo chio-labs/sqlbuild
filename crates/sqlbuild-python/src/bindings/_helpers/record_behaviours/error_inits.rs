@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const HELP_FIELD: &str = "help";
 const LOCATION_FIELD: &str = "location";
@@ -27,7 +28,7 @@ fn initialized(
     let py: Python<'_> = error.py();
     error.setattr("args", PyTuple::new(py, [message])?)?;
     error.setattr("message", message)?;
-    if let Ok(code) = error.get_type().getattr("code") {
+    if let Ok(code) = native_field(&error.get_type(), "code") {
         error.setattr("code", code)?;
     }
     error.setattr("help", help)
@@ -62,7 +63,10 @@ pub(crate) fn macro_argument_error_init(
         let position: Bound<'_, PyAny> = field("relative_position")?;
         (position.get_item(0)?, position.get_item(1)?)
     } else {
-        (location.getattr("line")?, location.getattr("column")?)
+        (
+            native_field(&location, "line")?,
+            native_field(&location, "column")?,
+        )
     };
     let (scope, suffix): (String, String) = if location.is_none() {
         (
@@ -102,7 +106,7 @@ fn macro_argument_copy<'py>(
         }
         keywords.set_item(name, error.getattr(name)?)?;
     }
-    let help: Bound<'py, PyAny> = error.getattr("help")?;
+    let help: Bound<'py, PyAny> = native_field(error, "help")?;
     if !help.is_truthy()? {
         keywords.set_item("help", "")?;
     }
@@ -119,7 +123,7 @@ pub(crate) fn macro_argument_error_shifted(
     kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
     let by: Bound<'_, PyAny> = call_argument((args, kwargs), "by", 0)?;
-    let offset: Bound<'_, PyAny> = error.getattr("offset")?.add(by)?;
+    let offset: Bound<'_, PyAny> = native_field(error, "offset")?.add(by)?;
     Ok(macro_argument_copy(error, &[("offset", offset)])?.unbind())
 }
 
@@ -142,12 +146,12 @@ pub(crate) fn sql_test_reference_error_init(
     let py: Python<'_> = error.py();
     let message: Bound<'_, PyAny> = call_argument((args, kwargs), "message", 0)?;
     let location: Bound<'_, PyAny> = keyword(py, kwargs, "location")?;
-    let path: Bound<'_, PyAny> = location.getattr("path")?.call_method0("as_posix")?;
+    let path: Bound<'_, PyAny> = native_field(&location, "path")?.call_method0("as_posix")?;
     let text: String = format!(
         "{}:{}:{}: {}",
         path.str()?,
-        location.getattr("line")?.str()?,
-        location.getattr("column")?.str()?,
+        native_field(&location, "line")?.str()?,
+        native_field(&location, "column")?.str()?,
         message.str()?
     );
     initialized(

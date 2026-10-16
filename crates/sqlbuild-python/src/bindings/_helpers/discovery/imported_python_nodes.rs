@@ -16,6 +16,7 @@ use crate::bindings::_helpers::discovery::imported_providers;
 use crate::bindings::_helpers::discovery::python_hook_files::discover_python_hook_files;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
@@ -123,7 +124,7 @@ impl<'py> Buckets<'py> {
             let mut pairs: Vec<(&str, Bound<'py, PyAny>)> = vec![
                 ("file_path", file_path.clone()),
                 ("relative_path", project.relative(file_path)?),
-                ("name", read.getattr("name")?),
+                ("name", native_field(&read, "name")?),
                 ("function", function.clone()),
             ];
             for field in kind.fields {
@@ -147,7 +148,7 @@ impl<'py> Buckets<'py> {
             let Some(read) = definition(&function, READ_AUDIT_FACTORY)? else {
                 continue;
             };
-            let name: String = read.getattr("name")?.extract()?;
+            let name: String = native_field(&read, "name")?.extract()?;
             let relative: Bound<'py, PyAny> = project.relative(&imported_module.file_path)?;
             let relative_text: String = relative.str()?.extract()?;
             let kinds: Vec<&str> = node_definition_names(&function)?;
@@ -181,7 +182,7 @@ impl<'py> Buckets<'py> {
                 py,
                 RecordId::DiscoveredAuditFactory,
                 &[
-                    ("name", read.getattr("name")?),
+                    ("name", native_field(&read, "name")?),
                     ("function", function.clone()),
                     ("file_path", imported_module.file_path.clone()),
                     ("relative_path", relative),
@@ -206,7 +207,7 @@ impl<'py> Buckets<'py> {
             let Some(read) = definition(&function, READ_FACTORY)? else {
                 continue;
             };
-            let name: String = read.getattr("name")?.extract()?;
+            let name: String = native_field(&read, "name")?.extract()?;
             let result: Bound<'py, PyAny> = call_factory(&function, ("Factory", &name, &location))?;
             for (index, generated) in factory_functions(&result, (&name, &location))?
                 .into_iter()
@@ -356,7 +357,7 @@ fn factory_functions<'py>(
         || result.is_instance_of::<PyDict>();
     let collection: bool = result.is_instance_of::<PyList>()
         || result.is_instance_of::<PyTuple>()
-        || result.is_instance(&builtins.getattr("set")?)?;
+        || result.is_instance(&native_field(&builtins, "set")?)?;
     if excluded || !collection {
         return Err(discovery_error(
             py,
@@ -464,7 +465,7 @@ pub(crate) fn discover_hook_functions<'py>(
             let Some(read) = definition(&function, READ_HOOK)? else {
                 continue;
             };
-            let name: String = read.getattr("name")?.extract()?;
+            let name: String = native_field(&read, "name")?.extract()?;
             if let Some((_, existing)) = seen.iter().find(|(listed, _)| *listed == name) {
                 return Err(discovery_error(
                     py,
@@ -479,10 +480,10 @@ pub(crate) fn discover_hook_functions<'py>(
             seen.push((name, file_path.clone()));
             let arguments: Bound<'py, PyDict> = hook_file.copy()?;
             for (field, value) in [
-                ("name", read.getattr("name")?),
+                ("name", native_field(&read, "name")?),
                 ("function", function.clone()),
-                ("description", read.getattr("description")?),
-                ("reads", read.getattr("reads")?),
+                ("description", native_field(&read, "description")?),
+                ("reads", native_field(&read, "reads")?),
                 ("provider_usages", provider_usages(&function, &providers)?),
             ] {
                 arguments.set_item(field, value)?;
@@ -531,7 +532,7 @@ pub(crate) fn discover_materialization_files<'py>(
             &[
                 ("file_path", file_path.clone()),
                 ("relative_path", project.relative(&file_path)?),
-                ("name", file_path.getattr("stem")?),
+                ("name", native_field(&file_path, "stem")?),
                 ("provider_usages", usages),
             ],
         )?);

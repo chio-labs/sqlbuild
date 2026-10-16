@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -35,14 +36,14 @@ pub(crate) fn connection_config<'py>(
     environment: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = environment.py();
-    let discovered = environment.getattr("discovered_inputs")?;
+    let discovered = native_field(environment, "discovered_inputs")?;
     let raw = call_with(
         &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
         &[("discovered_inputs", discovered.clone())],
     )?;
     let raw: Bound<'_, PyDict> = raw.cast_into()?;
-    let project_dir = environment.getattr("project_dir")?;
-    let adapter_name = environment.getattr("adapter_name")?;
+    let project_dir = native_field(environment, "project_dir")?;
+    let adapter_name = native_field(environment, "adapter_name")?;
     let config: Bound<'_, PyDict> = with_dbt_profile(
         &raw,
         raw.copy()?,
@@ -58,9 +59,9 @@ pub(crate) fn connection_config<'py>(
         &registry::native(py, NativeAttr::ApplyCommandWarehouse)?,
         &[
             ("config", config),
-            ("adapter_name", environment.getattr("adapter_name")?),
+            ("adapter_name", native_field(environment, "adapter_name")?),
             ("discovered_inputs", discovered),
-            ("project_dir", environment.getattr("project_dir")?),
+            ("project_dir", native_field(environment, "project_dir")?),
             ("selected_target", none(py)),
         ],
     )
@@ -87,7 +88,7 @@ pub(crate) fn connection_hooks<'py>(
     if !reporter.is_none() {
         pairs.push((
             "on_connection_start",
-            reporter.getattr("on_connection_start")?,
+            native_field(reporter, "on_connection_start")?,
         ));
         for name in ["on_connection_complete", "on_connection_error"] {
             pairs.push((
@@ -109,7 +110,10 @@ fn open_connection<'py>(
     hooks: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = environment.py();
-    let mut pairs = vec![("on_connection_start", hooks.getattr("on_connection_start")?)];
+    let mut pairs = vec![(
+        "on_connection_start",
+        native_field(hooks, "on_connection_start")?,
+    )];
     for name in ["on_connection_complete", "on_connection_error"] {
         let callback = hooks.getattr(name)?;
         pairs.push((
@@ -122,7 +126,7 @@ fn open_connection<'py>(
         ));
     }
     let relayed = call_with(&host::entry(py, ExecutorHost::ConnectionHooks)?, &pairs)?;
-    connection_with_hooks(&environment.getattr("adapter")?, &config, &relayed)
+    connection_with_hooks(&native_field(environment, "adapter")?, &config, &relayed)
 }
 
 /// Build the SQLBuild plan from current warehouse facts, closing the custom adapter connection.
@@ -135,7 +139,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
     let arguments =
         KeywordArguments::read(py, "build_sqlbuild_plan_output", options, BUILD_OPTIONS)?;
     let request = arguments.value("request")?;
-    let selected = request.getattr("selected_model_names")?;
+    let selected = native_field(&request, "selected_model_names")?;
     if !selected.is_truthy()? {
         return Ok(none(py));
     }
@@ -143,16 +147,16 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
     let hooks = arguments.value("hooks")?;
     let connection = open_connection(&environment, connection_config(&environment)?, &hooks)?;
     let planned = (|| {
-        let args = request.getattr("sqlbuild_args")?;
+        let args = native_field(&request, "sqlbuild_args")?;
         let deferral = call_with(
             &registry::native(py, NativeAttr::ResolveModelDeferralInputs)?,
             &[
-                ("project", environment.getattr("project")?),
+                ("project", native_field(&environment, "project")?),
                 (
                     "discovered_inputs",
-                    environment.getattr("discovered_inputs")?,
+                    native_field(&environment, "discovered_inputs")?,
                 ),
-                ("adapter", environment.getattr("adapter")?),
+                ("adapter", native_field(&environment, "adapter")?),
                 ("connection", connection.clone()),
                 ("defer_to", flag_value(&args, "--defer-to")?),
             ],
@@ -178,16 +182,16 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                 ("full_refresh", full_refresh.clone()),
                 (
                     "external_blocked_model_names",
-                    request.getattr("external_blocked_model_names")?,
+                    native_field(&request, "external_blocked_model_names")?,
                 ),
             ],
         )?;
-        let discovered = environment.getattr("discovered_inputs")?;
+        let discovered = native_field(&environment, "discovered_inputs")?;
         let result = call_with(
             &registry::native(py, NativeAttr::BuildExecutionPlan)?,
             &[
-                ("project", environment.getattr("project")?),
-                ("adapter", environment.getattr("adapter")?),
+                ("project", native_field(&environment, "project")?),
+                ("adapter", native_field(&environment, "adapter")?),
                 ("connection", connection.clone()),
                 ("selection", selection),
                 ("overrides", overrides),
@@ -196,9 +200,12 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                     "policies",
                     registry::class(py, RecordId::PlannerPolicies)?.call0()?,
                 ),
-                ("on_progress", hooks.getattr("on_progress")?),
-                ("project_config", discovered.getattr("project_config")?),
-                ("local_config", discovered.getattr("local_config")?),
+                ("on_progress", native_field(&hooks, "on_progress")?),
+                (
+                    "project_config",
+                    native_field(&discovered, "project_config")?,
+                ),
+                ("local_config", native_field(&discovered, "local_config")?),
             ],
         );
         match result {
@@ -206,7 +213,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                 call_with(
                     &registry::native(py, NativeAttr::BuildDisplayOnlySqlbuildPlan)?,
                     &[
-                        ("project", environment.getattr("project")?),
+                        ("project", native_field(&environment, "project")?),
                         ("selected_model_names", selected),
                         ("full_refresh", full_refresh),
                     ],
@@ -236,9 +243,9 @@ fn attach_sqlbuild_plan_output<'py>(
         &[
             ("project_dir", args.value("project_dir")?),
             ("discovered_inputs", args.value("discovered_inputs")?),
-            ("project", compiled.getattr("project")?),
-            ("adapter", compiled.getattr("adapter")?),
-            ("adapter_name", compiled.getattr("adapter_name")?),
+            ("project", native_field(&compiled, "project")?),
+            ("adapter", native_field(&compiled, "adapter")?),
+            ("adapter_name", native_field(&compiled, "adapter_name")?),
         ],
     )?;
     let request = call_with(
@@ -246,7 +253,7 @@ fn attach_sqlbuild_plan_output<'py>(
         &[
             (
                 "selected_model_names",
-                plan.getattr("selection")?.getattr("sqlbuild_model_names")?,
+                native_field(&plan, "selection")?.getattr("sqlbuild_model_names")?,
             ),
             ("sqlbuild_args", args.value("sqlbuild_args")?),
         ],
@@ -280,11 +287,11 @@ fn attach_sqlbuild_plan_output<'py>(
 /// Prefer stderr for dbt subprocess failure details, retaining Python whitespace semantics.
 #[pyfunction]
 fn dbt_failure_detail<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let stderr = result.getattr("stderr")?;
+    let stderr = native_field(result, "stderr")?;
     let detail = if stderr.is_truthy()? {
         stderr
     } else {
-        result.getattr("stdout")?
+        native_field(result, "stdout")?
     }
     .call_method0("strip")?;
     if detail.is_truthy()? {

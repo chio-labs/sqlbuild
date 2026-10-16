@@ -22,6 +22,7 @@ use sqlbuild_config::dbt_manifest::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -361,7 +362,7 @@ fn decoded<'py>(contents: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     match imported(py, "json", "loads")?.call1((contents,)) {
         Ok(value) => Ok(value),
         Err(error) if error.is_instance(py, &imported(py, "json", "JSONDecodeError")?) => {
-            let detail: String = error.value(py).getattr("msg")?.extract()?;
+            let detail: String = native_field(error.value(py), "msg")?.extract()?;
             Err(raised(
                 py,
                 ManifestError::invalid(&format!(" JSON: {detail}")),
@@ -438,7 +439,7 @@ fn resolved_model<'py>(
         _ => {
             let packages: Vec<String> = matches
                 .iter()
-                .map(|model| model.getattr("package_name")?.extract())
+                .map(|model| native_field(model, "package_name")?.extract())
                 .collect::<PyResult<_>>()?;
             Err(raised(py, ManifestError::ambiguous_model(name, packages)))
         }
@@ -467,7 +468,7 @@ fn validate_compile_dbt_model_names(
     if dbt_manifest.is_none() {
         return Ok(());
     }
-    let dbt_names: Bound<'_, PyAny> = dbt_manifest.getattr("models_by_name")?;
+    let dbt_names: Bound<'_, PyAny> = native_field(&dbt_manifest, "models_by_name")?;
     let mut shared: Vec<String> = Vec::new();
     for name in known_model_names.try_iter()? {
         let name: Bound<'_, PyAny> = name?;
@@ -501,15 +502,15 @@ fn validate_compile_dbt_model_reference(
     model_relative_path: Bound<'_, PyAny>,
     dbt_manifest: Bound<'_, PyAny>,
 ) -> Result<(), PyErr> {
-    if !dbt_ref_kind(&reference.getattr("ref_kind")?)? {
+    if !dbt_ref_kind(&native_field(&reference, "ref_kind")?)? {
         return Ok(());
     }
-    let name: String = reference.getattr("ref_name")?.extract()?;
+    let name: String = native_field(&reference, "ref_name")?.extract()?;
     if dbt_manifest.is_none() {
         let path: String = model_relative_path.str()?.extract()?;
         return Err(raised(py, ManifestError::missing_manifest(&path, &name)));
     }
-    let package: Option<String> = optional_text(&reference.getattr("ref_package")?)?;
+    let package: Option<String> = optional_text(&native_field(&reference, "ref_package")?)?;
     resolved_model(&dbt_manifest, &name, package.as_deref())?;
     Ok(())
 }
@@ -535,21 +536,21 @@ pub(crate) fn resolve_sqlbuild_model_dbt_refs<'py>(
         .map(|names| name_set(&names))
         .transpose()?;
     let mut refs: Vec<Bound<'py, PyTuple>> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(&project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         if let Some(selected) = &selected_model_names {
-            let name: String = model.getattr("name")?.extract()?;
+            let name: String = native_field(&model, "name")?.extract()?;
             if !selected.contains(&name) {
                 continue;
             }
         }
-        for reference in model.getattr("references")?.try_iter()? {
+        for reference in native_field(&model, "references")?.try_iter()? {
             let reference: Bound<'py, PyAny> = reference?;
-            if !dbt_ref_kind(&reference.getattr("ref_kind")?)? {
+            if !dbt_ref_kind(&native_field(&reference, "ref_kind")?)? {
                 continue;
             }
-            let name: String = reference.getattr("ref_name")?.extract()?;
-            let package: Option<String> = optional_text(&reference.getattr("ref_package")?)?;
+            let name: String = native_field(&reference, "ref_name")?.extract()?;
+            let package: Option<String> = optional_text(&native_field(&reference, "ref_package")?)?;
             let resolved: Bound<'py, PyAny> = resolved_model(&manifest, &name, package.as_deref())?;
             refs.push(PyTuple::new(py, [model.clone(), resolved])?);
         }
@@ -576,7 +577,10 @@ fn resolve_dbt_reference_relation<'py>(
     }
     let name: String = arguments.value("ref_name")?.extract()?;
     let package: Option<String> = optional_text(&arguments.value("ref_package")?)?;
-    resolved_model(&manifest, &name, package.as_deref())?.getattr("relation_name")
+    native_field(
+        &resolved_model(&manifest, &name, package.as_deref())?,
+        "relation_name",
+    )
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

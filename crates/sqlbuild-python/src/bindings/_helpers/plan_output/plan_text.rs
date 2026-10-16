@@ -27,6 +27,7 @@ use crate::bindings::_helpers::plan_output::python_identity::{
     definition_source_text, dependency_source_text,
 };
 use crate::bindings::_helpers::plan_output::values::{items, optional_text, text, texts};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -68,16 +69,19 @@ fn token<'py>(bound: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// `start → inclusive end` of resolved bounds, in the model's cursor display.
 fn cursor_range(entry: &Bound<'_, PyAny>, bounds: &Bound<'_, PyAny>) -> PyResult<String> {
     let (cursor_type, cursor_grain) = (
-        entry.getattr("cursor_type")?,
-        entry.getattr("cursor_grain")?,
+        native_field(entry, "cursor_type")?,
+        native_field(entry, "cursor_grain")?,
     );
     let start: String = cursor_bound_display(
-        &token(bounds.getattr("start")?)?,
+        &token(native_field(bounds, "start")?)?,
         &cursor_type,
         &cursor_grain,
     )?;
-    let end: String =
-        inclusive_cursor_end(&token(bounds.getattr("end")?)?, &cursor_type, &cursor_grain)?;
+    let end: String = inclusive_cursor_end(
+        &token(native_field(bounds, "end")?)?,
+        &cursor_type,
+        &cursor_grain,
+    )?;
     Ok(format!("{start} \u{2192} {end}"))
 }
 
@@ -97,9 +101,9 @@ fn cursor_text(entry: &Bound<'_, PyAny>, details: CursorDetails<'_>) -> PyResult
         .map(|bounds| cursor_range(entry, bounds))
         .transpose()?;
     Ok(CursorPlanText {
-        column: optional_text(&entry.getattr("cursor_column")?)?.unwrap_or_default(),
-        cursor_type: optional_text(&entry.getattr("cursor_type")?)?,
-        microbatch: entry.getattr("incremental_mode")?.eq(MICROBATCH_MODE)?,
+        column: optional_text(&native_field(entry, "cursor_column")?)?.unwrap_or_default(),
+        cursor_type: optional_text(&native_field(entry, "cursor_type")?)?,
+        microbatch: native_field(entry, "incremental_mode")?.eq(MICROBATCH_MODE)?,
         requested_start: details.requested_start,
         requested_end: details.requested_end,
         empty_inputs_window,
@@ -114,10 +118,11 @@ fn cursor_text(entry: &Bound<'_, PyAny>, details: CursorDetails<'_>) -> PyResult
         resolved: details.resolution_status == RESOLVED,
         deferred: details.resolution_status == DEFERRED,
         runtime_inputs_clause: runtime_inputs_clause(entry)?,
-        batch_concurrency: text(&entry.getattr("batch_concurrency")?)?,
-        unaccounted_partition_policy: optional_text(
-            &entry.getattr("unaccounted_partition_policy")?,
-        )?,
+        batch_concurrency: text(&native_field(entry, "batch_concurrency")?)?,
+        unaccounted_partition_policy: optional_text(&native_field(
+            entry,
+            "unaccounted_partition_policy",
+        )?)?,
     })
 }
 
@@ -127,7 +132,7 @@ fn config_json<'py>(metadata_json: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Py
     let json: Bound<'_, PyModule> = py.import("json")?;
     let payload: Bound<'_, PyAny> = match json.call_method1("loads", (metadata_json,)) {
         Ok(payload) => payload,
-        Err(error) if error.is_instance(py, &json.getattr("JSONDecodeError")?) => {
+        Err(error) if error.is_instance(py, &native_field(&json, "JSONDecodeError")?) => {
             return Ok(metadata_json.clone());
         }
         Err(error) => return Err(error),
@@ -142,16 +147,16 @@ fn config_json<'py>(metadata_json: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Py
     keywords.set_item("sort_keys", true)?;
     keywords.set_item("indent", 2)?;
     keywords.set_item("default", py.import("builtins")?.getattr("str")?)?;
-    json.getattr("dumps")?.call((config,), Some(&keywords))
+    native_field(&json, "dumps")?.call((config,), Some(&keywords))
 }
 
 fn config_diff(entry: &Bound<'_, PyAny>, reason: &str) -> PyResult<Option<Vec<String>>> {
-    if !entry.getattr("config_changed")?.is_truthy()? && reason != CONFIG_CHANGED {
+    if !native_field(entry, "config_changed")?.is_truthy()? && reason != CONFIG_CHANGED {
         return Ok(None);
     }
     let (previous, current) = (
-        entry.getattr("previous_metadata_json")?,
-        entry.getattr("fingerprint_metadata_json")?,
+        native_field(entry, "previous_metadata_json")?,
+        native_field(entry, "fingerprint_metadata_json")?,
     );
     if previous.is_none() || current.is_none() {
         return Ok(None);
@@ -164,9 +169,9 @@ fn config_diff(entry: &Bound<'_, PyAny>, reason: &str) -> PyResult<Option<Vec<St
 }
 
 fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
-    let action: String = text(&entry.getattr("action")?.getattr("value")?)?;
-    let reason: String = text(&entry.getattr("reason")?.getattr("value")?)?;
-    let name: String = text(&entry.getattr("name")?)?;
+    let action: String = text(&native_field(entry, "action")?.getattr("value")?)?;
+    let reason: String = text(&native_field(entry, "reason")?.getattr("value")?)?;
+    let name: String = text(&native_field(entry, "name")?)?;
     if action == SKIP_ACTION {
         return Ok(ModelPlanText {
             name,
@@ -175,43 +180,46 @@ fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
             ..ModelPlanText::default()
         });
     }
-    let backfill: Bound<'_, PyAny> = entry.getattr("backfill")?;
+    let backfill: Bound<'_, PyAny> = native_field(entry, "backfill")?;
     let mut schema_findings: Vec<SchemaFindingText> = Vec::new();
-    for finding in items(&entry.getattr("schema_findings")?)? {
+    for finding in items(&native_field(entry, "schema_findings")?)? {
         schema_findings.push(SchemaFindingText {
-            kind: text(&finding.getattr("kind")?.getattr("value")?)?,
-            column_name: text(&finding.getattr("column_name")?)?,
-            expected_type: optional_text(&finding.getattr("expected_type")?)?,
-            actual_type: optional_text(&finding.getattr("actual_type")?)?,
+            kind: text(&native_field(&finding, "kind")?.getattr("value")?)?,
+            column_name: text(&native_field(&finding, "column_name")?)?,
+            expected_type: optional_text(&native_field(&finding, "expected_type")?)?,
+            actual_type: optional_text(&native_field(&finding, "actual_type")?)?,
         });
     }
     let mut rename_hints: Vec<RenameHintText> = Vec::new();
-    for hint in items(&entry.getattr("column_rename_hints")?)? {
+    for hint in items(&native_field(entry, "column_rename_hints")?)? {
         rename_hints.push(RenameHintText {
-            added_column: text(&hint.getattr("added_column")?)?,
-            message: text(&hint.getattr("message")?)?,
+            added_column: text(&native_field(&hint, "added_column")?)?,
+            message: text(&native_field(&hint, "message")?)?,
         });
     }
-    let previous_query: Bound<'_, PyAny> = entry.getattr("previous_query_sql")?;
+    let previous_query: Bound<'_, PyAny> = native_field(entry, "previous_query_sql")?;
     let query_diff_lines: Option<Vec<String>> = if previous_query.is_none()
-        || (!entry.getattr("query_changed")?.is_truthy()? && reason != QUERY_CHANGED)
+        || (!native_field(entry, "query_changed")?.is_truthy()? && reason != QUERY_CHANGED)
     {
         None
     } else {
         Some(query_diff(
             &previous_query,
-            &entry.getattr("fingerprint_query_sql")?,
+            &native_field(entry, "fingerprint_query_sql")?,
         )?)
     };
     Ok(ModelPlanText {
         materialization_label: model_materialization_label(entry)?,
-        custom_materialization_name: optional_text(&entry.getattr("custom_materialization_name")?)?,
-        backfill_action: text(&backfill.getattr("action")?.getattr("value")?)?,
-        backfill_duration: optional_text(&backfill.getattr("duration")?)?,
+        custom_materialization_name: optional_text(&native_field(
+            entry,
+            "custom_materialization_name",
+        )?)?,
+        backfill_action: text(&native_field(&backfill, "action")?.getattr("value")?)?,
+        backfill_duration: optional_text(&native_field(&backfill, "duration")?)?,
         cursor: cursor_details(entry)?
             .map(|details| cursor_text(entry, details))
             .transpose()?,
-        changed_functions: texts(&entry.getattr("changed_functions")?)?,
+        changed_functions: texts(&native_field(entry, "changed_functions")?)?,
         schema_findings,
         rename_hints,
         config_diff: config_diff(entry, &reason)?,
@@ -223,24 +231,24 @@ fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
 }
 
 fn function_text(entry: &Bound<'_, PyAny>) -> PyResult<FunctionPlanText> {
-    let reason: String = text(&entry.getattr("reason")?.getattr("value")?)?;
-    let previous: Bound<'_, PyAny> = entry.getattr("previous_query_sql")?;
+    let reason: String = text(&native_field(entry, "reason")?.getattr("value")?)?;
+    let previous: Bound<'_, PyAny> = native_field(entry, "previous_query_sql")?;
     let query_diff_lines: Option<Vec<String>> = if reason == QUERY_CHANGED && !previous.is_none() {
         Some(query_diff(
             &previous,
-            &entry.getattr("fingerprint_query_sql")?,
+            &native_field(entry, "fingerprint_query_sql")?,
         )?)
     } else {
         None
     };
     Ok(FunctionPlanText {
-        name: text(&entry.getattr("name")?)?,
-        kind: if entry.getattr("return_columns")?.is_truthy()? {
+        name: text(&native_field(entry, "name")?)?,
+        kind: if native_field(entry, "return_columns")?.is_truthy()? {
             "table function".to_owned()
         } else {
             format!(
                 "{} udf",
-                text(&entry.getattr("language")?.getattr("value")?)?
+                text(&native_field(entry, "language")?.getattr("value")?)?
             )
         },
         reason,
@@ -249,35 +257,35 @@ fn function_text(entry: &Bound<'_, PyAny>) -> PyResult<FunctionPlanText> {
 }
 
 fn source_load_text(entry: &Bound<'_, PyAny>) -> PyResult<SourceLoadPlanText> {
-    let strategy: Bound<'_, PyAny> = entry.getattr("write_strategy")?;
+    let strategy: Bound<'_, PyAny> = native_field(entry, "write_strategy")?;
     Ok(SourceLoadPlanText {
-        name: text(&entry.getattr("name")?)?,
-        resource_kind: text(&entry.getattr("resource_kind")?.getattr("value")?)?,
-        is_reload: entry.getattr("is_reload")?.is_truthy()?,
-        integration_kind: optional_text(&entry.getattr("integration_kind")?)?,
+        name: text(&native_field(entry, "name")?)?,
+        resource_kind: text(&native_field(entry, "resource_kind")?.getattr("value")?)?,
+        is_reload: native_field(entry, "is_reload")?.is_truthy()?,
+        integration_kind: optional_text(&native_field(entry, "integration_kind")?)?,
         write_strategy: if strategy.is_none() {
             None
         } else {
-            Some(text(&strategy.getattr("value")?)?)
+            Some(text(&native_field(&strategy, "value")?)?)
         },
-        cursor_column: optional_text(&entry.getattr("cursor_column")?)?,
-        unique_key: texts(&entry.getattr("unique_key")?)?,
+        cursor_column: optional_text(&native_field(entry, "cursor_column")?)?,
+        unique_key: texts(&native_field(entry, "unique_key")?)?,
     })
 }
 
 /// Both identity diffs of a changed Python entry, each as `format_query_diff` lines.
 fn python_text(entry: &Bound<'_, PyAny>) -> PyResult<PythonPlanText> {
-    let identity_status: String = text(&entry.getattr("identity_status")?.getattr("value")?)?;
+    let identity_status: String = text(&native_field(entry, "identity_status")?.getattr("value")?)?;
     let mut diffs: [Vec<String>; 2] = [Vec::new(), Vec::new()];
     if identity_status == CHANGED_IDENTITY {
         let sources = [
             (
-                definition_source_text(&entry.getattr("previous_definition_json")?)?,
-                definition_source_text(&entry.getattr("current_definition_json")?)?,
+                definition_source_text(&native_field(entry, "previous_definition_json")?)?,
+                definition_source_text(&native_field(entry, "current_definition_json")?)?,
             ),
             (
-                dependency_source_text(&entry.getattr("previous_metadata_json")?)?,
-                dependency_source_text(&entry.getattr("current_metadata_json")?)?,
+                dependency_source_text(&native_field(entry, "previous_metadata_json")?)?,
+                dependency_source_text(&native_field(entry, "current_metadata_json")?)?,
             ),
         ];
         for (diff, sources) in diffs.iter_mut().zip(sources) {
@@ -294,9 +302,9 @@ fn python_text(entry: &Bound<'_, PyAny>) -> PyResult<PythonPlanText> {
     }
     let [source_diff, dependency_diff] = diffs;
     Ok(PythonPlanText {
-        name: text(&entry.getattr("name")?)?,
-        kind: text(&entry.getattr("kind")?.getattr("value")?)?,
-        phase: text(&entry.getattr("phase")?.getattr("value")?)?,
+        name: text(&native_field(entry, "name")?)?,
+        kind: text(&native_field(entry, "kind")?.getattr("value")?)?,
+        phase: text(&native_field(entry, "phase")?.getattr("value")?)?,
         identity_status,
         source_diff,
         dependency_diff,
@@ -308,27 +316,30 @@ fn provider_usages(
     python_entries: &[Bound<'_, PyAny>],
 ) -> PyResult<Vec<ProviderUsageText>> {
     let mut usages: Vec<ProviderUsageText> = Vec::new();
-    for usage in items(&plan.getattr("provider_usages")?)? {
+    for usage in items(&native_field(plan, "provider_usages")?)? {
         usages.push(ProviderUsageText {
-            provider_name: text(&usage.getattr("provider_name")?)?,
-            consumer_kind: text(&usage.getattr("consumer_kind")?)?,
-            consumer_name: text(&usage.getattr("consumer_name")?)?,
-            parameter_name: text(&usage.getattr("parameter_name")?)?,
-            annotation_class_name: optional_text(&usage.getattr("annotation_class_name")?)?,
+            provider_name: text(&native_field(&usage, "provider_name")?)?,
+            consumer_kind: text(&native_field(&usage, "consumer_kind")?)?,
+            consumer_name: text(&native_field(&usage, "consumer_name")?)?,
+            parameter_name: text(&native_field(&usage, "parameter_name")?)?,
+            annotation_class_name: optional_text(&native_field(&usage, "annotation_class_name")?)?,
         });
     }
     for entry in python_entries {
         let (kind, name) = (
-            text(&entry.getattr("kind")?.getattr("value")?)?,
-            text(&entry.getattr("name")?)?,
+            text(&native_field(entry, "kind")?.getattr("value")?)?,
+            text(&native_field(entry, "name")?)?,
         );
-        for usage in items(&entry.getattr("provider_usages")?)? {
+        for usage in items(&native_field(entry, "provider_usages")?)? {
             usages.push(ProviderUsageText {
-                provider_name: text(&usage.getattr("provider_name")?)?,
+                provider_name: text(&native_field(&usage, "provider_name")?)?,
                 consumer_kind: kind.clone(),
                 consumer_name: name.clone(),
-                parameter_name: text(&usage.getattr("parameter_name")?)?,
-                annotation_class_name: optional_text(&usage.getattr("annotation_class_name")?)?,
+                parameter_name: text(&native_field(&usage, "parameter_name")?)?,
+                annotation_class_name: optional_text(&native_field(
+                    &usage,
+                    "annotation_class_name",
+                )?)?,
             });
         }
     }
@@ -394,8 +405,8 @@ fn pruned_models(metadata: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 
 pub(crate) fn display_limit(options: &Bound<'_, PyAny>) -> PyResult<DisplayLimit> {
     Ok(DisplayLimit {
-        max_entries: options.getattr("max_entries_per_section")?.extract()?,
-        overflow_flag: text(&options.getattr("overflow_flag")?)?,
+        max_entries: native_field(options, "max_entries_per_section")?.extract()?,
+        overflow_flag: text(&native_field(options, "overflow_flag")?)?,
     })
 }
 
@@ -422,20 +433,20 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
             Ok(default)
         }
     };
-    let metadata: Bound<'_, PyAny> = plan.getattr("metadata")?;
+    let metadata: Bound<'_, PyAny> = native_field(&plan, "metadata")?;
     let mut warnings: Vec<PlanWarningText> = Vec::new();
-    for warning in items(&plan.getattr("warnings")?)? {
+    for warning in items(&native_field(&plan, "warnings")?)? {
         warnings.push(PlanWarningText {
-            severity: text(&warning.getattr("severity")?.getattr("value")?)?,
-            message: text(&warning.getattr("message")?)?,
-            model_name: optional_text(&warning.getattr("model_name")?)?,
+            severity: text(&native_field(&warning, "severity")?.getattr("value")?)?,
+            message: text(&native_field(&warning, "message")?)?,
+            model_name: optional_text(&native_field(&warning, "model_name")?)?,
         });
     }
     let mut seeds: Vec<SeedPlanText> = Vec::new();
-    for seed in items(&plan.getattr("seed_entries")?)? {
+    for seed in items(&native_field(&plan, "seed_entries")?)? {
         seeds.push(SeedPlanText {
-            name: text(&seed.getattr("name")?)?,
-            reason: text(&seed.getattr("reason")?)?,
+            name: text(&native_field(&seed, "name")?)?,
+            reason: text(&native_field(&seed, "reason")?)?,
         });
     }
     let pre_build: Vec<String> = pre_build_lines(Vec::new(), &plan, &display_options)?;
@@ -446,16 +457,16 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
         display: display_limit(&display_options)?,
         include_freshness_diagnostics: flag_or("include_direct_freshness_diagnostics", true)?,
         selection_diagnostics: selection_diagnostics(&metadata)?,
-        models: items(&plan.getattr("model_entries")?)?
+        models: items(&native_field(&plan, "model_entries")?)?
             .iter()
             .map(model_text)
             .collect::<PyResult<_>>()?,
-        functions: items(&plan.getattr("function_entries")?)?
+        functions: items(&native_field(&plan, "function_entries")?)?
             .iter()
             .map(function_text)
             .collect::<PyResult<_>>()?,
         seeds,
-        source_loads: items(&plan.getattr("source_load_entries")?)?
+        source_loads: items(&native_field(&plan, "source_load_entries")?)?
             .iter()
             .map(source_load_text)
             .collect::<PyResult<_>>()?,

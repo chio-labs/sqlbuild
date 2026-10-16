@@ -27,6 +27,7 @@ use crate::bindings::_helpers::discovery::configuration::discover_project_config
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -89,9 +90,9 @@ fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 pub(crate) fn command_scope(py: Python<'_>) -> PyResult<CommandScope<'_>> {
     let scope: Bound<'_, PyAny> = current_command_warehouse_scope(py)?;
     Ok(CommandScope {
-        group: scope.getattr("group")?,
-        cli_warehouse: optional_text(&scope.getattr("cli_warehouse")?)?,
-        cli_vars: scope.getattr("cli_vars")?,
+        group: native_field(&scope, "group")?,
+        cli_warehouse: optional_text(&native_field(&scope, "cli_warehouse")?)?,
+        cli_vars: native_field(&scope, "cli_vars")?,
     })
 }
 
@@ -125,7 +126,7 @@ fn group_value(target: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<
     } else {
         QUERY_GROUP
     };
-    optional_text(&target.getattr("warehouses")?.getattr(attribute)?)
+    optional_text(&native_field(target, "warehouses")?.getattr(attribute)?)
 }
 
 /// The active target's authored, unexpanded warehouse for one command group.
@@ -134,8 +135,9 @@ pub(crate) fn find_authored<'py>(
     group: &Bound<'py, PyAny>,
 ) -> PyResult<Option<FoundWarehouse<'py>>> {
     let py: Python<'py> = group.py();
-    let project_config: Bound<'py, PyAny> = inputs.discovered_inputs.getattr("project_config")?;
-    let local_config: Bound<'py, PyAny> = inputs.discovered_inputs.getattr("local_config")?;
+    let project_config: Bound<'py, PyAny> =
+        native_field(inputs.discovered_inputs, "project_config")?;
+    let local_config: Bound<'py, PyAny> = native_field(inputs.discovered_inputs, "local_config")?;
     let target_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
@@ -154,7 +156,7 @@ pub(crate) fn find_authored<'py>(
         .getattr("targets")?
         .call_method1("get", (&target_name,))?;
     let target_name: String = target_name.extract()?;
-    let group_name: String = group.getattr("value")?.extract()?;
+    let group_name: String = native_field(group, "value")?.extract()?;
     Ok(authored_warehouse(
         (&target_name, &group_name),
         group_value(&local_target, group)?,
@@ -287,8 +289,11 @@ fn validate_cli_warehouse(
     let adapter_name: Bound<'_, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
+            ("local_config", native_field(&discovered, "local_config")?),
         ],
     )?;
     if !session_warehouse_support(py, &adapter_name, &project_dir)? {

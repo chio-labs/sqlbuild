@@ -9,6 +9,7 @@ use sqlbuild_analysis::janitor_planning::models::ArchiveTimestamp;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DATETIME_MODULE: &str = "datetime";
 
@@ -29,9 +30,9 @@ impl Key {
     /// The key of an object with `database`, `schema` and `name` attributes.
     pub(crate) fn of(item: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self {
-            database: item.getattr("database")?.extract()?,
-            schema: item.getattr("schema")?.extract()?,
-            name: item.getattr("name")?.extract()?,
+            database: native_field(item, "database")?.extract()?,
+            schema: native_field(item, "schema")?.extract()?,
+            name: native_field(item, "name")?.extract()?,
         })
     }
 
@@ -166,8 +167,8 @@ pub(crate) fn days<'py>(py: Python<'py>, days: i64) -> PyResult<Bound<'py, PyAny
 /// The value as an aware UTC datetime; naive values are taken as UTC.
 pub(crate) fn aware_utc<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    if value.getattr("tzinfo")?.is_none() {
-        return call_with(&value.getattr("replace")?, &[("tzinfo", utc(py)?)]);
+    if native_field(value, "tzinfo")?.is_none() {
+        return call_with(&native_field(value, "replace")?, &[("tzinfo", utc(py)?)]);
     }
     value.call_method1("astimezone", (utc(py)?,))
 }
@@ -195,7 +196,7 @@ pub(crate) fn relation_age_timestamp<'py>(
 pub(crate) fn archive_timestamp<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     call_with(
-        &aware_utc(value)?.getattr("replace")?,
+        &native_field(&aware_utc(value)?, "replace")?,
         &[("microsecond", 0_i64.into_pyobject(py)?.into_any())],
     )
 }
@@ -203,12 +204,12 @@ pub(crate) fn archive_timestamp<'py>(value: &Bound<'py, PyAny>) -> PyResult<Boun
 /// The calendar fields of a datetime.
 pub(crate) fn timestamp_fields(value: &Bound<'_, PyAny>) -> PyResult<ArchiveTimestamp> {
     Ok(ArchiveTimestamp {
-        year: value.getattr("year")?.extract()?,
-        month: value.getattr("month")?.extract()?,
-        day: value.getattr("day")?.extract()?,
-        hour: value.getattr("hour")?.extract()?,
-        minute: value.getattr("minute")?.extract()?,
-        second: value.getattr("second")?.extract()?,
+        year: native_field(value, "year")?.extract()?,
+        month: native_field(value, "month")?.extract()?,
+        day: native_field(value, "day")?.extract()?,
+        hour: native_field(value, "hour")?.extract()?,
+        minute: native_field(value, "minute")?.extract()?,
+        second: native_field(value, "second")?.extract()?,
     })
 }
 

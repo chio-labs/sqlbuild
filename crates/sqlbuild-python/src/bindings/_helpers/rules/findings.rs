@@ -1,5 +1,6 @@
 //! Rule findings converted between the Python `Finding` model and native rows and payloads.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -80,16 +81,16 @@ impl<'py> FindingClasses<'py> {
 /// The native fault row of one Python `Finding`.
 pub(crate) fn finding_fault(finding: &Bound<'_, PyAny>) -> PyResult<Fault> {
     Ok(Fault {
-        unevaluated: finding.getattr("unevaluated")?.extract()?,
-        code: finding.getattr("code")?.extract()?,
+        unevaluated: native_field(finding, "unevaluated")?.extract()?,
+        code: native_field(finding, "code")?.extract()?,
         path: finding
             .getattr("path")?
             .call_method0("as_posix")?
             .extract()?,
-        line: finding.getattr("line")?.extract()?,
-        column: finding.getattr("column")?.extract()?,
-        message: finding.getattr("message")?.extract()?,
-        remediation: finding.getattr("remediation")?.extract()?,
+        line: native_field(finding, "line")?.extract()?,
+        column: native_field(finding, "column")?.extract()?,
+        message: native_field(finding, "message")?.extract()?,
+        remediation: native_field(finding, "remediation")?.extract()?,
     })
 }
 

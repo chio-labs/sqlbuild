@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_phases::objects::{planner_error, tuple};
 use crate::bindings::_helpers::planner_warehouse::constants::{
     MISSING_SOURCE_TABLE_CODE, RUN_BOUNDED, WILDCARD_TABLE_CHARACTER,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -22,21 +23,21 @@ use std::collections::HashMap;
 
 fn selected_source_readers(scope: &Bound<'_, PyAny>) -> PyResult<HashMap<String, Vec<String>>> {
     let mut readers: HashMap<String, Vec<String>> = HashMap::new();
-    let deps = scope.getattr("upstream_deps")?;
-    for key in scope.getattr("selected_keys")?.try_iter()? {
+    let deps = native_field(scope, "upstream_deps")?;
+    for key in native_field(scope, "selected_keys")?.try_iter()? {
         let key = key?;
-        if key.getattr("resource_type")?.eq("source")? {
+        if native_field(&key, "resource_type")?.eq("source")? {
             continue;
         }
-        let reader: String = key.getattr("name")?.extract()?;
+        let reader: String = native_field(&key, "name")?.extract()?;
         for dep in deps
             .call_method1("get", (&key, PyTuple::empty(key.py())))?
             .try_iter()?
         {
             let dep = dep?;
-            if dep.getattr("resource_type")?.eq("source")? {
+            if native_field(&dep, "resource_type")?.eq("source")? {
                 readers
-                    .entry(dep.getattr("name")?.extract()?)
+                    .entry(native_field(&dep, "name")?.extract()?)
                     .or_default()
                     .push(reader.clone());
             }
@@ -46,20 +47,20 @@ fn selected_source_readers(scope: &Bound<'_, PyAny>) -> PyResult<HashMap<String,
 }
 
 fn table_name(entry: &Bound<'_, PyAny>) -> PyResult<String> {
-    let table = entry.getattr("table")?;
+    let table = native_field(entry, "table")?;
     if table.is_none() {
-        entry.getattr("name")?.extract()
+        native_field(entry, "name")?.extract()
     } else {
         table.extract()
     }
 }
 
 fn external_table(entry: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(!entry.getattr("managed")?.is_truthy()?
-        && entry.getattr("loader")?.is_none()
-        && entry.getattr("integration_loader")?.is_none()
-        && entry.getattr("expression")?.is_none()
-        && !entry.getattr("schema")?.is_none()
+    Ok(!native_field(entry, "managed")?.is_truthy()?
+        && native_field(entry, "loader")?.is_none()
+        && native_field(entry, "integration_loader")?.is_none()
+        && native_field(entry, "expression")?.is_none()
+        && !native_field(entry, "schema")?.is_none()
         && !table_name(entry)?.contains(WILDCARD_TABLE_CHARACTER))
 }
 
@@ -71,14 +72,14 @@ fn read_relation<'py>(
 }
 
 fn declaration_location(source: &Bound<'_, PyAny>) -> PyResult<String> {
-    let file = source.getattr("source_file")?;
+    let file = native_field(source, "source_file")?;
     let path: String = file
         .getattr("relative_path")?
         .call_method0("as_posix")?
         .extract()?;
     let line = yaml_entry_line(
-        &file.getattr("contents")?.extract::<String>()?,
-        &source.getattr("name")?.extract::<String>()?,
+        &native_field(&file, "contents")?.extract::<String>()?,
+        &native_field(source, "name")?.extract::<String>()?,
     );
     Ok(match line {
         None => path,
@@ -95,16 +96,16 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
 ) -> PyResult<()> {
     let py = project.py();
     let readers = selected_source_readers(scope)?;
-    let read_map = relations.getattr("source_read_map")?;
-    let listed = relations.getattr("listed_source_names")?;
+    let read_map = native_field(relations, "source_read_map")?;
+    let listed = native_field(relations, "listed_source_names")?;
     let mut unlisted: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>, Vec<String>)> = Vec::new();
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        let name: String = source.getattr("name")?.extract()?;
+        let name: String = native_field(&source, "name")?.extract()?;
         let Some(source_readers) = readers.get(&name).filter(|readers| !readers.is_empty()) else {
             continue;
         };
-        let declared = source.getattr("source_entry")?;
+        let declared = native_field(&source, "source_entry")?;
         let entry = read_map.call_method1("get", (&name, &declared))?;
         if !external_table(&declared)? || !external_table(&entry)? {
             continue;
@@ -119,7 +120,7 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
     if unlisted.is_empty() {
         return Ok(());
     }
-    let probe = adapter.getattr("probe_relation_read")?;
+    let probe = native_field(adapter, "probe_relation_read")?;
     let mut tasks: Vec<_> = Vec::new();
     for (_, entry, _) in &unlisted {
         let fields = keywords(
@@ -132,7 +133,7 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
         tasks.push(imported(py, "functools", "partial")?.call((&probe,), Some(&fields))?);
     }
     let concurrency: i64 = imported(py, "builtins", "int")?
-        .call1((adapter.getattr("metadata_inspection_concurrency")?,))?
+        .call1((native_field(adapter, "metadata_inspection_concurrency")?,))?
         .extract()?;
     let probes = call_with(
         &host::entry(py, RUN_BOUNDED)?,
@@ -148,13 +149,13 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
     let mut entries: Vec<_> = Vec::new();
     for ((source, entry, read_by), probe) in unlisted.into_iter().zip(probes.try_iter()?) {
         let probe = probe?;
-        let status = probe.getattr("status")?;
+        let status = native_field(&probe, "status")?;
         if status.eq("readable")? {
             continue;
         }
-        let role = probe.getattr("role")?;
+        let role = native_field(&probe, "role")?;
         missing.push(MissingSourceTable {
-            source_name: source.getattr("name")?.extract()?,
+            source_name: native_field(&source, "name")?.extract()?,
             relation: String::new(),
             read_by,
             unreadable: status.eq("missing_or_unreadable")?,
@@ -175,9 +176,9 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
     }
     let message = missing_source_tables_message(&missing);
     let sources = PyDict::new(py);
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        sources.set_item(source.getattr("name")?, source)?;
+        sources.set_item(native_field(&source, "name")?, source)?;
     }
     for item in missing.iter_mut().take(10) {
         if let Some(source) = sources.get_item(&item.source_name)? {

@@ -6,6 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::records::fields::field as record_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::fact_replay::project_attribute;
@@ -21,15 +22,15 @@ pub(crate) fn compile_facts<'py>(
     let models = PyDict::new(py);
     let model_paths = PyDict::new(py);
     let paths_by_name = PyDict::new(py);
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
-        let key = model.getattr("key")?;
+        let key = native_field(&model, "key")?;
         let path = project_dir
-            .call_method1("__truediv__", (model.getattr("relative_path")?,))?
+            .call_method1("__truediv__", (native_field(&model, "relative_path")?,))?
             .call_method0("resolve")?;
         models.set_item(&key, &model)?;
         model_paths.set_item(&key, &path)?;
-        paths_by_name.set_item(model.getattr("name")?, &path)?;
+        paths_by_name.set_item(native_field(&model, "name")?, &path)?;
     }
     let diagnostics = PyDict::new(py);
     let counter = py.import("collections")?.getattr("Counter")?;

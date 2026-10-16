@@ -12,6 +12,7 @@ use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -44,7 +45,7 @@ impl<'py> BuildContext<'py> {
     /// The requested concurrency, or the project setting.
     pub(crate) fn concurrency(&self, project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         or_none(self.request.getattr("concurrency")?, || {
-            project.getattr("settings")?.getattr("concurrency")
+            native_field(project, "settings")?.getattr("concurrency")
         })
     }
 }
@@ -57,8 +58,11 @@ fn target_config<'py>(
     call_with(
         &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(discovered, "project_config")?,
+            ),
+            ("local_config", native_field(discovered, "local_config")?),
             ("target_name", target_name.clone()),
         ],
     )
@@ -73,17 +77,17 @@ fn execution_limits<'py>(
     let limits: Bound<'py, PyAny> = if target_name.is_none() {
         registry::class(py, RecordId::ExecutionLimitsConfig)?.call0()?
     } else {
-        target_config(discovered, target_name)?.getattr("execution_limits")?
+        native_field(&target_config(discovered, target_name)?, "execution_limits")?
     };
     let limit: DurationLimit = DurationLimit {
         target_name: target_name.extract()?,
         adapter_name: adapter_name.to_owned(),
-        configures_max_duration: !limits.getattr("max_duration")?.is_none(),
-        max_duration_seconds: limits.getattr("max_duration_seconds")?.extract()?,
+        configures_max_duration: !native_field(&limits, "max_duration")?.is_none(),
+        max_duration_seconds: native_field(&limits, "max_duration_seconds")?.extract()?,
         adapter_limit_seconds: adapter
             .getattr("execution_duration_limit_seconds")?
             .extract()?,
-        remediation: limits.getattr("remediation")?.extract()?,
+        remediation: native_field(&limits, "remediation")?.extract()?,
     };
     if let Some(error) = duration_limit_error(&limit) {
         return Err(build_command_error(py, error));
@@ -98,7 +102,7 @@ pub(crate) fn resolve_build_context<'py>(
     started: Instant,
 ) -> PyResult<BuildContext<'py>> {
     let py: Python<'py> = request.py();
-    let project_dir: Bound<'py, PyAny> = or_none(request.getattr("project_dir")?, || {
+    let project_dir: Bound<'py, PyAny> = or_none(native_field(request, "project_dir")?, || {
         imported(py, "pathlib", "Path")?.call_method0("cwd")
     })?;
     let discovered: Bound<'py, PyAny> = call_with(
@@ -108,23 +112,29 @@ pub(crate) fn resolve_build_context<'py>(
             ("extract_output_column_locations", boolean(py, false)),
         ],
     )?;
-    let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
+    let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
     let target_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
+            ("local_config", native_field(&discovered, "local_config")?),
             ("selected_target", selected_target.clone()),
         ],
     )?;
     let defer_clone_from: Bound<'py, PyAny> =
-        or_none(request.getattr("defer_clone_from")?, || {
+        or_none(native_field(request, "defer_clone_from")?, || {
             if target_name.is_none() {
                 return Ok(target_name.clone());
             }
-            target_config(&discovered, &target_name)?.getattr("defer_clone_from")
+            native_field(
+                &target_config(&discovered, &target_name)?,
+                "defer_clone_from",
+            )
         })?;
-    if !request.getattr("defer_to")?.is_none() && !defer_clone_from.is_none() {
+    if !native_field(request, "defer_to")?.is_none() && !defer_clone_from.is_none() {
         return Err(build_command_error(
             py,
             BuildCommandError::new(
@@ -137,8 +147,11 @@ pub(crate) fn resolve_build_context<'py>(
     let adapter_name: String = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
+            ("local_config", native_field(&discovered, "local_config")?),
         ],
     )?
     .extract()?;
@@ -151,13 +164,14 @@ pub(crate) fn resolve_build_context<'py>(
             ("discovered_inputs", discovered.clone()),
             ("project_dir", project_dir.clone()),
             ("selected_target", selected_target),
-            ("cli_vars", request.getattr("cli_vars")?),
+            ("cli_vars", native_field(request, "cli_vars")?),
         ],
     )?;
-    let machine_output: bool = request.getattr("json_output")?.is_truthy()?;
-    let debug: bool = request.getattr("debug")?.is_truthy()?;
-    let use_color: bool =
-        !request.getattr("no_color")?.is_truthy()? && !machine_output && stdout_supports_color(py)?;
+    let machine_output: bool = native_field(request, "json_output")?.is_truthy()?;
+    let debug: bool = native_field(request, "debug")?.is_truthy()?;
+    let use_color: bool = !native_field(request, "no_color")?.is_truthy()?
+        && !machine_output
+        && stdout_supports_color(py)?;
     let stream: Bound<'py, PyAny> = py.import("sys")?.getattr(if debug || machine_output {
         "stderr"
     } else {
@@ -178,8 +192,8 @@ pub(crate) fn resolve_build_context<'py>(
             ("use_color", boolean(py, use_color)),
         ],
     )?;
-    let load_sources: Bound<'py, PyAny> = request.getattr("load_sources")?;
-    let should_load_sources: bool = request.getattr("reload_sources")?.is_truthy()?
+    let load_sources: Bound<'py, PyAny> = native_field(request, "load_sources")?;
+    let should_load_sources: bool = native_field(request, "reload_sources")?.is_truthy()?
         || if load_sources.is_none() {
             call_with(
                 &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
@@ -213,7 +227,7 @@ pub(crate) fn resolve_build_context<'py>(
         invocation,
         stream,
         use_color,
-        verbose: request.getattr("verbose")?.is_truthy()? || debug,
+        verbose: native_field(request, "verbose")?.is_truthy()? || debug,
         started,
         tracker: tracker.clone(),
     })

@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExp
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_expansion::{
@@ -309,11 +310,11 @@ fn input_declarations<'py>(
             ("constants", merged("constants")?),
             (
                 "inaccessible_enums",
-                declarations.getattr("inaccessible_enums")?,
+                native_field(&declarations, "inaccessible_enums")?,
             ),
             (
                 "inaccessible_constants",
-                declarations.getattr("inaccessible_constants")?,
+                native_field(&declarations, "inaccessible_constants")?,
             ),
         ],
     )

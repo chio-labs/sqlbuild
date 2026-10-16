@@ -19,6 +19,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -58,9 +59,9 @@ fn log_dispatch_failure(failure: &Bound<'_, PyAny>) -> PyResult<()> {
         failure.py(),
         "Lifecycle event subscriber failed",
         &[
-            ("error_type", failure.getattr("error_type")?),
-            ("channel", failure.getattr("channel")?),
-            ("subscriber", failure.getattr("subscriber")?),
+            ("error_type", native_field(failure, "error_type")?),
+            ("channel", native_field(failure, "channel")?),
+            ("subscriber", native_field(failure, "subscriber")?),
         ],
     )
 }
@@ -72,10 +73,10 @@ fn log_exporter_failure(failure: &Bound<'_, PyAny>) -> PyResult<()> {
         failure.py(),
         "Event exporter delivery failed",
         &[
-            ("exporter_name", failure.getattr("exporter_name")?),
-            ("error_type", failure.getattr("error_type")?),
-            ("event_kind", failure.getattr("event_kind")?),
-            ("event_severity", failure.getattr("event_severity")?),
+            ("exporter_name", native_field(failure, "exporter_name")?),
+            ("error_type", native_field(failure, "error_type")?),
+            ("event_kind", native_field(failure, "event_kind")?),
+            ("event_severity", native_field(failure, "event_severity")?),
         ],
     )
 }
@@ -99,11 +100,11 @@ fn log_exporter_summary(summary: &Bound<'_, PyAny>) -> PyResult<()> {
         fields.push((name, summary.getattr(name)?));
     }
     log_debug(py, "Event exporter delivery summary", &fields)?;
-    for exporter in summary.getattr("per_exporter")?.try_iter()? {
+    for exporter in native_field(summary, "per_exporter")?.try_iter()? {
         let exporter: Bound<'_, PyAny> = exporter?;
-        let counts: Bound<'_, PyAny> = exporter.getattr("counts")?;
+        let counts: Bound<'_, PyAny> = native_field(&exporter, "counts")?;
         let mut fields: Vec<(&str, Bound<'_, PyAny>)> =
-            vec![("exporter_name", exporter.getattr("exporter_name")?)];
+            vec![("exporter_name", native_field(&exporter, "exporter_name")?)];
         for name in COUNT_FIELDS {
             fields.push((name, counts.getattr(name)?));
         }
@@ -124,7 +125,7 @@ pub(crate) struct InvocationOutcome {
 #[pymethods]
 impl InvocationOutcome {
     fn consume(&self, event: &Bound<'_, PyAny>) -> PyResult<()> {
-        let event_type: String = event.getattr("event_type")?.extract()?;
+        let event_type: String = native_field(event, "event_type")?.extract()?;
         if event_type == INVOCATION_COMPLETED || event_type == INVOCATION_FAILED {
             self.succeeded
                 .store(event_type == INVOCATION_COMPLETED, Ordering::SeqCst);
@@ -172,19 +173,19 @@ fn run_cleanup<T>(py: Python<'_>, result: PyResult<T>, phase: &str) {
 /// Native export accounting of a Python `EventExportSummary`.
 fn export_summary(summary: &Bound<'_, PyAny>) -> PyResult<ExportSummary> {
     let mut per_exporter: Vec<ExporterLoss> = Vec::new();
-    for exporter in summary.getattr("per_exporter")?.try_iter()? {
+    for exporter in native_field(summary, "per_exporter")?.try_iter()? {
         let exporter: Bound<'_, PyAny> = exporter?;
-        let counts: Bound<'_, PyAny> = exporter.getattr("counts")?;
+        let counts: Bound<'_, PyAny> = native_field(&exporter, "counts")?;
         per_exporter.push(ExporterLoss {
-            exporter_name: exporter.getattr("exporter_name")?.extract()?,
-            dropped: counts.getattr("dropped")?.extract()?,
-            failed: counts.getattr("failed")?.extract()?,
+            exporter_name: native_field(&exporter, "exporter_name")?.extract()?,
+            dropped: native_field(&counts, "dropped")?.extract()?,
+            failed: native_field(&counts, "failed")?.extract()?,
         });
     }
     Ok(ExportSummary {
-        accepted: summary.getattr("accepted")?.extract()?,
-        dropped: summary.getattr("dropped")?.extract()?,
-        failed: summary.getattr("failed")?.extract()?,
+        accepted: native_field(summary, "accepted")?.extract()?,
+        dropped: native_field(summary, "dropped")?.extract()?,
+        failed: native_field(summary, "failed")?.extract()?,
         per_exporter,
     })
 }
@@ -321,18 +322,18 @@ impl Observed {
         terminal_index: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let mut command_output_sinks: bool = false;
-        if args.getattr("command")?.ne(LINEAGE_COMMAND)? {
+        if native_field(args, "command")?.ne(LINEAGE_COMMAND)? {
             let extensions: Bound<'_, PyAny> = call_with(
                 &host::entry(py, UserCodeHost::DiscoverRuntimeExtensions)?,
                 &[("project_dir", project_dir.clone())],
             )?;
-            let event_exporters: Bound<'_, PyAny> = extensions.getattr("event_exporters")?;
-            let sinks: Bound<'_, PyAny> = extensions.getattr("command_output_sinks")?;
+            let event_exporters: Bound<'_, PyAny> = native_field(&extensions, "event_exporters")?;
+            let sinks: Bound<'_, PyAny> = native_field(&extensions, "command_output_sinks")?;
             command_output_sinks = sinks.is_truthy()?;
             if event_exporters.is_truthy()? || command_output_sinks {
                 withhold_launch_record(py)?;
                 let timeout: Bound<'_, PyAny> =
-                    extensions.getattr("lifecycle_shutdown_timeout_seconds")?;
+                    native_field(&extensions, "lifecycle_shutdown_timeout_seconds")?;
                 let timeout: f64 = if timeout.is_none() {
                     DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOUT_SECONDS
                 } else {
@@ -359,18 +360,19 @@ impl Observed {
                 )?;
                 self.exporter_scope = Some(scope.clone().unbind());
                 call_with(
-                    &scope.getattr("configure_extensions")?,
+                    &native_field(&scope, "configure_extensions")?,
                     &[
                         ("project_dir", project_dir.clone()),
-                        ("providers", extensions.getattr("providers")?),
+                        ("providers", native_field(&extensions, "providers")?),
                         ("event_exporters", event_exporters),
                         ("command_output_sinks", sinks),
                     ],
                 )?;
                 self.unsubscribe_exporters =
-                    Some(self.subscribe(py, delivery.getattr("enqueue")?)?);
+                    Some(self.subscribe(py, native_field(&delivery, "enqueue")?)?);
                 let outcome: Bound<'_, PyAny> = self.outcome.bind(py).clone().into_any();
-                self.unsubscribe_outcome = Some(self.subscribe(py, outcome.getattr("consume")?)?);
+                self.unsubscribe_outcome =
+                    Some(self.subscribe(py, native_field(&outcome, "consume")?)?);
             }
         }
         self.enter(
@@ -441,7 +443,7 @@ impl CliObservabilityScope {
             registry::native(py, NativeAttr::TerminalEventIndex)?.call0()?;
         let subscribe = |subscriber: Bound<'_, PyAny>| -> PyResult<Py<PyAny>> {
             Ok(call_with(
-                &dispatcher.getattr("subscribe_lifecycle")?,
+                &native_field(&dispatcher, "subscribe_lifecycle")?,
                 &[
                     ("subscriber", subscriber),
                     (
@@ -452,15 +454,17 @@ impl CliObservabilityScope {
             )?
             .unbind())
         };
-        let unsubscribe_terminal_index: Py<PyAny> = subscribe(terminal_index.getattr("consume")?)?;
+        let unsubscribe_terminal_index: Py<PyAny> =
+            subscribe(native_field(&terminal_index, "consume")?)?;
         let machine_output: bool = registry::native(py, NativeAttr::MachineOutputMode)?
             .call1((args,))?
             .is_truthy()?;
-        let debug: Bound<'_, PyAny> = args.getattr("debug")?;
-        let progress_on_stderr: bool =
-            machine_output || debug.is_truthy()? || args.getattr("command")?.eq(DEBUG_COMMAND)?;
+        let debug: Bound<'_, PyAny> = native_field(args, "debug")?;
+        let progress_on_stderr: bool = machine_output
+            || debug.is_truthy()?
+            || native_field(args, "command")?.eq(DEBUG_COMMAND)?;
         let use_color: bool = !machine_output
-            && !args.getattr("no_color")?.is_truthy()?
+            && !native_field(args, "no_color")?.is_truthy()?
             && stdout_supports_color(py)?;
         let projector: Bound<'_, PyAny> = call_with(
             &registry::native(py, NativeAttr::NativeProgressProjector)?,
@@ -480,7 +484,7 @@ impl CliObservabilityScope {
                 ("debug", debug),
             ],
         )?;
-        let unsubscribe_progress: Py<PyAny> = subscribe(projector.getattr("consume")?)?;
+        let unsubscribe_progress: Py<PyAny> = subscribe(native_field(&projector, "consume")?)?;
         let projector_token: Bound<'_, PyAny> = projector.call_method0("install")?;
         let mut observed: Observed = Observed {
             dispatcher: dispatcher.clone().unbind(),

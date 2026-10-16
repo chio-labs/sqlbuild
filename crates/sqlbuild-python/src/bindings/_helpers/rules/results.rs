@@ -14,6 +14,7 @@ use sqlbuild_rules::rule_results::main::format_skipped_rules::format_skipped_rul
 use sqlbuild_rules::rule_results::models::{ResultCounts, RuleFinding};
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::{field, path_posix, replaced};
 
 const UTF8: &str = "utf-8";
@@ -102,7 +103,7 @@ fn file_lines(project_dir: &Bound<'_, PyAny>, path: &str) -> PyResult<Vec<String
     }
     let file: Bound<'_, PyAny> = project_dir.div(path)?;
     let read: PyResult<Bound<'_, PyAny>> = call_with(
-        &file.getattr("read_text")?,
+        &native_field(&file, "read_text")?,
         &[("encoding", PyString::new(py, UTF8).into_any())],
     );
     match read {

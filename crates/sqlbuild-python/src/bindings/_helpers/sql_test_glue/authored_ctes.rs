@@ -12,6 +12,7 @@ use sqlbuild_analysis::compiler::models::{SqlTestExtractionFailure, SqlTestReque
 use sqlbuild_analysis::sql_test_attachment::main::authored_test_offset::authored_test_offset;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
@@ -26,9 +27,9 @@ pub(crate) fn prefixed_ctes<'py>(
     let result = PyDict::new(ctes.py());
     for cte in ctes.try_iter()? {
         let cte = cte?;
-        let name: String = cte.getattr("name")?.extract()?;
+        let name: String = native_field(&cte, "name")?.extract()?;
         if let Some(name) = name.strip_prefix(prefix) {
-            result.set_item(name, cte.getattr("sql_body")?)?;
+            result.set_item(name, native_field(&cte, "sql_body")?)?;
         }
     }
     Ok(result)
@@ -52,13 +53,13 @@ impl AuthoredBody {
     ) -> PyResult<Self> {
         Ok(Self {
             sql: sql.extract()?,
-            contents: file.getattr("contents")?.extract()?,
+            contents: native_field(file, "contents")?.extract()?,
             relative_path: file
                 .getattr("relative_path")?
                 .call_method0("as_posix")?
                 .extract()?,
-            file_label: file.getattr("relative_path")?.str()?.extract()?,
-            span: owner.getattr("sql_body_span")?.extract()?,
+            file_label: native_field(file, "relative_path")?.str()?.extract()?,
+            span: native_field(owner, "sql_body_span")?.extract()?,
         })
     }
 }
@@ -127,11 +128,11 @@ fn validate_authored_sql_test_ctes(
     let mut blocks: Vec<AuthoredBody> = Vec::new();
     for test_file in test_files.try_iter()? {
         let test_file: Bound<'_, PyAny> = test_file?;
-        for block in test_file.getattr("blocks")?.try_iter()? {
+        for block in native_field(&test_file, "blocks")?.try_iter()? {
             let block: Bound<'_, PyAny> = block?;
             blocks.push(AuthoredBody::read(
                 &block,
-                &block.getattr("sql_body")?,
+                &native_field(&block, "sql_body")?,
                 &test_file,
             )?);
         }
@@ -142,7 +143,7 @@ fn validate_authored_sql_test_ctes(
         let scenario_file: Bound<'_, PyAny> = scenario_file?;
         scenarios.push(AuthoredBody::read(
             &scenario_file,
-            &scenario_file.getattr("sql_body")?,
+            &native_field(&scenario_file, "sql_body")?,
             &scenario_file,
         )?);
     }

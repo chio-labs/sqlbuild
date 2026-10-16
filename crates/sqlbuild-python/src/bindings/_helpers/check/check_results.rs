@@ -16,6 +16,7 @@ use sqlbuild_core::json::models::JsonValue;
 
 use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
 use crate::bindings::_helpers::result_output::terminal_index::current_terminal_event_index;
 
@@ -44,15 +45,17 @@ fn metadata_json(metadata: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
 /// One executor `PythonCheckExecutionResult` as the JSON output renders it, metadata included.
 fn check_result_json_text(result: &Bound<'_, PyAny>) -> PyResult<CheckResultText> {
     Ok(CheckResultText {
-        metadata: metadata_json(&result.getattr("metadata")?)?,
+        metadata: metadata_json(&native_field(result, "metadata")?)?,
         ..check_result_text(result)?
     })
 }
 
 /// One executor `PythonCheckExecutionResult` as the rows and summary render it, without metadata.
 pub(crate) fn check_result_text(result: &Bound<'_, PyAny>) -> PyResult<CheckResultText> {
-    let severity: String = result.getattr("severity")?.getattr("value")?.extract()?;
-    let status: CheckStatus = if result.getattr("passed")?.is_truthy()? {
+    let severity: String = native_field(result, "severity")?
+        .getattr("value")?
+        .extract()?;
+    let status: CheckStatus = if native_field(result, "passed")?.is_truthy()? {
         CheckStatus::Pass
     } else if severity == WARN_SEVERITY {
         CheckStatus::Warn
@@ -60,13 +63,13 @@ pub(crate) fn check_result_text(result: &Bound<'_, PyAny>) -> PyResult<CheckResu
         CheckStatus::Fail
     };
     Ok(CheckResultText {
-        name: result.getattr("node_name")?.extract()?,
+        name: native_field(result, "node_name")?.extract()?,
         status,
         severity,
-        message: optional_text(result.getattr("message")?)?,
-        error_message: optional_text(result.getattr("error_message")?)?,
+        message: optional_text(native_field(result, "message")?)?,
+        error_message: optional_text(native_field(result, "error_message")?)?,
         metadata: JsonValue::Null,
-        warning_messages: result.getattr("warning_messages")?.extract()?,
+        warning_messages: native_field(result, "warning_messages")?.extract()?,
     })
 }
 
@@ -81,7 +84,7 @@ fn grouping(
     python_graph: &Bound<'_, PyAny>,
 ) -> PyResult<CheckGrouping> {
     let group: Option<String> = match checks.get(name) {
-        Some(check) => optional_text(check.getattr("group")?)?,
+        Some(check) => optional_text(native_field(check, "group")?)?,
         None => None,
     };
     if python_graph.is_none() {
@@ -101,8 +104,8 @@ fn grouping(
         .getattr("nodes_by_name")?
         .call_method1("get", (name,))?;
     if !node.is_none() {
-        for reference in node.getattr("sql_deps")?.try_iter()? {
-            dependencies.push(reference?.getattr("name")?.extract()?);
+        for reference in native_field(&node, "sql_deps")?.try_iter()? {
+            dependencies.push(native_field(&reference?, "name")?.extract()?);
         }
     }
     Ok(CheckGrouping {
@@ -122,7 +125,7 @@ pub(crate) fn write_results(
     let mut checks: HashMap<String, Bound<'_, PyAny>> = HashMap::new();
     for check in check_functions.try_iter()? {
         let check: Bound<'_, PyAny> = check?;
-        checks.insert(check.getattr("name")?.extract()?, check);
+        checks.insert(native_field(&check, "name")?.extract()?, check);
     }
     let projector: Bound<'_, PyAny> = current_native_progress_projector(py)?;
     let mut groups: Vec<(String, Vec<CheckResultText>)> = Vec::new();
@@ -171,7 +174,7 @@ pub(crate) fn results_json(results: &[Bound<'_, PyAny>]) -> PyResult<String> {
     let index: Bound<'_, PyAny> = current_terminal_event_index(py)?;
     let mut texts: Vec<CheckResultText> = Vec::new();
     for result in results {
-        let name: Bound<'_, PyAny> = result.getattr("node_name")?;
+        let name: Bound<'_, PyAny> = native_field(result, "node_name")?;
         if !index.is_none() {
             let options: Bound<'_, PyDict> = PyDict::new(py);
             options.set_item("resource_name", &name)?;

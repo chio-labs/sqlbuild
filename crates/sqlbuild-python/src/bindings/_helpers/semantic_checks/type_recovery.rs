@@ -16,6 +16,7 @@ use crate::bindings::_helpers::analysis::model_reads::{inferred_names, lineage_i
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::semantic_checks::failures::{internal_error, semantic_error};
 use crate::bindings::_helpers::semantic_checks::inputs::revalidation_request;
 use crate::bindings::_helpers::semantic_checks::session_facts::{
@@ -44,7 +45,7 @@ pub(crate) fn recovered_types<'py>(
     shared: &StageShared<'_>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
-    let models: Vec<Bound<'py, PyAny>> = items(&project.getattr("models")?)?;
+    let models: Vec<Bound<'py, PyAny>> = items(&native_field(project, "models")?)?;
     if !blocking_binding_found(&models)? {
         return Ok(project.clone());
     }
@@ -58,14 +59,14 @@ pub(crate) fn recovered_types<'py>(
             }
         }
     }
-    let diagnostics: Vec<Bound<'py, PyAny>> = items(&project.getattr("diagnostics")?)?;
+    let diagnostics: Vec<Bound<'py, PyAny>> = items(&native_field(project, "diagnostics")?)?;
     let mut owners: Vec<DiagnosticOwner> = Vec::with_capacity(diagnostics.len());
     for item in &diagnostics {
         owners.push(DiagnosticOwner {
             id: id_of(&ids, item)?,
-            code: item.getattr("code")?.extract()?,
-            is_model: item.getattr("resource_type")?.eq(&classes.model_resource)?,
-            resource_name: item.getattr("resource_name")?.extract()?,
+            code: native_field(item, "code")?.extract()?,
+            is_model: native_field(item, "resource_type")?.eq(&classes.model_resource)?,
+            resource_name: native_field(item, "resource_name")?.extract()?,
         });
     }
     let mut recovery_models: Vec<RecoveryModel> = Vec::with_capacity(models.len());
@@ -78,7 +79,7 @@ pub(crate) fn recovered_types<'py>(
         )?);
     }
     let request = TypeRecoveryRequest {
-        dialect: project.getattr("sql_analysis_dialect")?.extract()?,
+        dialect: native_field(project, "sql_analysis_dialect")?.extract()?,
         models: recovery_models,
         diagnostics: owners,
     };
@@ -100,7 +101,7 @@ pub(crate) fn recovered_types<'py>(
     let mut kept: Vec<Bound<'py, PyAny>> = Vec::with_capacity(outcome.kept.len());
     for (index, note) in outcome.kept {
         let original: &Bound<'py, PyAny> = &diagnostics[index];
-        let mut notes: Vec<Bound<'py, PyAny>> = items(&original.getattr("notes")?)?;
+        let mut notes: Vec<Bound<'py, PyAny>> = items(&native_field(original, "notes")?)?;
         if let Some(note) = note {
             notes.push(PyString::new(py, &note).into_any());
         }
@@ -142,14 +143,14 @@ pub(crate) fn diagnostic_ids<'py>(
     models: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyDict>> {
     let ids: Bound<'py, PyDict> = PyDict::new(project.py());
-    for item in project.getattr("diagnostics")?.try_iter()? {
+    for item in native_field(project, "diagnostics")?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         if !ids.contains(&item)? {
             ids.set_item(&item, ids.len())?;
         }
     }
     for model in models {
-        for item in model.getattr("binding_diagnostics")?.try_iter()? {
+        for item in native_field(model, "binding_diagnostics")?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             if !ids.contains(&item)? {
                 ids.set_item(&item, ids.len())?;
@@ -175,8 +176,8 @@ pub(crate) fn lineage_outputs(lineage: Vec<LineageInput>) -> Vec<LineageOutput> 
 
 fn blocking_binding_found(models: &[Bound<'_, PyAny>]) -> PyResult<bool> {
     for model in models {
-        for item in model.getattr("binding_diagnostics")?.try_iter()? {
-            if item?.getattr("is_error")?.is_truthy()? {
+        for item in native_field(model, "binding_diagnostics")?.try_iter()? {
+            if native_field(&item?, "is_error")?.is_truthy()? {
                 return Ok(true);
             }
         }
@@ -190,16 +191,16 @@ fn recovery_model(
     (ids, raw_ids): (&Bound<'_, PyDict>, &Bound<'_, PyDict>),
     shared: &StageShared<'_>,
 ) -> PyResult<RecoveryModel> {
-    let name: String = model.getattr("name")?.extract()?;
+    let name: String = native_field(model, "name")?.extract()?;
     let from_session: bool = shared.session_models.contains(&name);
-    let bindings: Vec<Bound<'_, PyAny>> = items(&model.getattr("binding_diagnostics")?)?;
+    let bindings: Vec<Bound<'_, PyAny>> = items(&native_field(model, "binding_diagnostics")?)?;
     let mut model_bindings: Vec<ModelBinding> = Vec::with_capacity(bindings.len());
     for item in &bindings {
         model_bindings.push(ModelBinding {
             id: id_of(ids, item)?,
-            code: item.getattr("code")?.extract()?,
-            message: item.getattr("message")?.extract()?,
-            is_error: item.getattr("is_error")?.extract()?,
+            code: native_field(item, "code")?.extract()?,
+            message: native_field(item, "message")?.extract()?,
+            is_error: native_field(item, "is_error")?.extract()?,
         });
     }
     let mut raw_bindings: Vec<RawBinding> = Vec::new();
@@ -224,12 +225,12 @@ fn recovery_model(
         (inferred_names(model)?, lineage_inputs(model)?)
     };
     let mut references: Vec<String> = Vec::new();
-    for reference in model.getattr("references")?.try_iter()? {
-        references.push(reference?.getattr("ref_name")?.extract()?);
+    for reference in native_field(model, "references")?.try_iter()? {
+        references.push(native_field(&reference?, "ref_name")?.extract()?);
     }
     Ok(RecoveryModel {
         name,
-        query_sql: model.getattr("query_sql")?.extract()?,
+        query_sql: native_field(model, "query_sql")?.extract()?,
         inferred_columns,
         references,
         lineage: lineage_outputs(lineage),
@@ -264,7 +265,7 @@ fn revalidated<'py>(
             columns.set_item(column, UNKNOWN_RECOVERED_TYPE)?;
         }
     }
-    let project_models: Bound<'py, PyAny> = project.getattr("models")?;
+    let project_models: Bound<'py, PyAny> = native_field(project, "models")?;
     let mut revised: Vec<Vec<RevisedBinding>> = Vec::with_capacity(models.len());
     for index in models {
         let request: Bound<'py, PyAny> =
@@ -276,12 +277,12 @@ fn revalidated<'py>(
             )?
             .get_item(0)?;
         let mut rows: Vec<RevisedBinding> = Vec::new();
-        for item in result.getattr("diagnostics")?.try_iter()? {
+        for item in native_field(&result, "diagnostics")?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             rows.push((
-                item.getattr("code")?.extract()?,
-                item.getattr("start")?.extract()?,
-                item.getattr("end")?.extract()?,
+                native_field(&item, "code")?.extract()?,
+                native_field(&item, "start")?.extract()?,
+                native_field(&item, "end")?.extract()?,
             ));
         }
         revised.push(rows);

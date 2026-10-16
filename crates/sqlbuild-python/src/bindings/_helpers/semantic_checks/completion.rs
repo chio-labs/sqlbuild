@@ -11,6 +11,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::analysis::model_reads::{inferred_names, lineage_inputs};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::metadata::{ShapeRows, shape_rows};
 use crate::bindings::_helpers::semantic_checks::session_facts::{
@@ -32,12 +33,12 @@ pub(crate) fn completed_diagnostics<'py>(
     shared: &StageShared<'_>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
-    let models: Vec<Bound<'py, PyAny>> = items(&project.getattr("models")?)?;
+    let models: Vec<Bound<'py, PyAny>> = items(&native_field(project, "models")?)?;
     let ids: Bound<'py, PyDict> = diagnostic_ids(project, &models)?;
-    let diagnostics: Vec<Bound<'py, PyAny>> = items(&project.getattr("diagnostics")?)?;
+    let diagnostics: Vec<Bound<'py, PyAny>> = items(&native_field(project, "diagnostics")?)?;
     let mut recovers: bool = false;
     for item in &diagnostics {
-        if item.getattr("code")?.eq(RECOVERED_CODE)? {
+        if native_field(item, "code")?.eq(RECOVERED_CODE)? {
             recovers = true;
             break;
         }
@@ -56,7 +57,7 @@ pub(crate) fn completed_diagnostics<'py>(
         completion_models.push(completion_model(model, recovers, shared)?);
     }
     let request = CompletionRequest {
-        dialect: project.getattr("sql_analysis_dialect")?.extract()?,
+        dialect: native_field(project, "sql_analysis_dialect")?.extract()?,
         diagnostics: semantic,
         models: completion_models,
         shapes,
@@ -72,7 +73,7 @@ pub(crate) fn completed_diagnostics<'py>(
         rebuilt.push(completed_diagnostic(classes, original, row)?);
     }
     let models_value: Bound<'py, PyAny> = match model_bindings {
-        None => project.getattr("models")?,
+        None => native_field(project, "models")?,
         Some(model_bindings) => {
             let mut updated: Vec<Bound<'py, PyAny>> = Vec::with_capacity(models.len());
             for (model, positions) in models.iter().zip(model_bindings) {
@@ -107,8 +108,11 @@ pub(crate) fn completed_diagnostics<'py>(
                     ("code", &classes.opt_out_code),
                     ("message", &PyString::new(py, &opt_out.message).into_any()),
                     ("resource_type", &classes.model_resource),
-                    ("resource_name", &model.getattr("name")?),
-                    ("location", &model.getattr("rejected_sql_analysis_opt_out")?),
+                    ("resource_name", &native_field(model, "name")?),
+                    (
+                        "location",
+                        &native_field(model, "rejected_sql_analysis_opt_out")?,
+                    ),
                     ("notes", &notes),
                     ("help", &PyString::new(py, &opt_out.help).into_any()),
                 ],
@@ -129,10 +133,10 @@ fn optional_location(location: &Bound<'_, PyAny>) -> PyResult<Option<SemanticLoc
         return Ok(None);
     }
     Ok(Some(SemanticLocation {
-        line: location.getattr("line")?.extract()?,
-        column: location.getattr("column")?.extract()?,
-        end_line: location.getattr("end_line")?.extract()?,
-        end_column: location.getattr("end_column")?.extract()?,
+        line: native_field(location, "line")?.extract()?,
+        column: native_field(location, "column")?.extract()?,
+        end_line: native_field(location, "end_line")?.extract()?,
+        end_column: native_field(location, "end_column")?.extract()?,
     }))
 }
 
@@ -140,22 +144,22 @@ fn semantic_diagnostic(
     item: &Bound<'_, PyAny>,
     ids: &Bound<'_, PyDict>,
 ) -> PyResult<SemanticDiagnostic> {
-    let resource_type: Bound<'_, PyAny> = item.getattr("resource_type")?;
+    let resource_type: Bound<'_, PyAny> = native_field(item, "resource_type")?;
     Ok(SemanticDiagnostic {
         id: id_of(ids, item)?,
-        code: item.getattr("code")?.extract()?,
-        message: item.getattr("message")?.extract()?,
+        code: native_field(item, "code")?.extract()?,
+        message: native_field(item, "message")?.extract()?,
         resource_type: if resource_type.is_none() {
             None
         } else {
             Some(resource_type.str()?.extract()?)
         },
-        resource_name: item.getattr("resource_name")?.extract()?,
-        line: item.getattr("line")?.extract()?,
-        column: item.getattr("column")?.extract()?,
-        location: optional_location(&item.getattr("location")?)?,
-        help: item.getattr("help")?.extract()?,
-        notes: items(&item.getattr("notes")?)?
+        resource_name: native_field(item, "resource_name")?.extract()?,
+        line: native_field(item, "line")?.extract()?,
+        column: native_field(item, "column")?.extract()?,
+        location: optional_location(&native_field(item, "location")?)?,
+        help: native_field(item, "help")?.extract()?,
+        notes: items(&native_field(item, "notes")?)?
             .iter()
             .map(PyAnyMethods::extract)
             .collect::<PyResult<_>>()?,
@@ -167,7 +171,7 @@ fn completion_model(
     recovers: bool,
     shared: &StageShared<'_>,
 ) -> PyResult<CompletionModel> {
-    let name: String = model.getattr("name")?.extract()?;
+    let name: String = native_field(model, "name")?.extract()?;
     let from_session: bool = shared.session_models.contains(&name);
     let inferred_columns: Vec<String> = if from_session {
         column_names(session_model_facts(shared.session, &name).map_err(compiler_error)?)
@@ -185,22 +189,22 @@ fn completion_model(
     } else {
         lineage_inputs(model)?
     };
-    let opt_out: Bound<'_, PyAny> = model.getattr("rejected_sql_analysis_opt_out")?;
+    let opt_out: Bound<'_, PyAny> = native_field(model, "rejected_sql_analysis_opt_out")?;
     let mut binding_codes: Vec<String> = Vec::new();
-    for item in model.getattr("binding_diagnostics")?.try_iter()? {
-        binding_codes.push(item?.getattr("code")?.extract()?);
+    for item in native_field(model, "binding_diagnostics")?.try_iter()? {
+        binding_codes.push(native_field(&item?, "code")?.extract()?);
     }
     Ok(CompletionModel {
         name,
-        query_sql: model.getattr("query_sql")?.extract()?,
-        authored_sql: model.getattr("authored_sql")?.extract()?,
+        query_sql: native_field(model, "query_sql")?.extract()?,
+        authored_sql: native_field(model, "authored_sql")?.extract()?,
         inferred_columns,
         lineage: lineage_outputs(lineage),
         binding_codes,
         rejected_opt_out_file: if opt_out.is_none() {
             None
         } else {
-            Some(opt_out.getattr("path")?.getattr("name")?.extract()?)
+            Some(native_field(&opt_out, "path")?.getattr("name")?.extract()?)
         },
     })
 }
@@ -214,7 +218,7 @@ fn completed_diagnostic<'py>(
         return Ok(original);
     }
     let py: Python<'py> = classes.py();
-    let mut current: Bound<'py, PyAny> = original.getattr("location")?;
+    let mut current: Bound<'py, PyAny> = native_field(&original, "location")?;
     if let (Some(existing), Some(location)) = (optional_location(&current)?, row.location.as_ref())
         && (
             existing.line,

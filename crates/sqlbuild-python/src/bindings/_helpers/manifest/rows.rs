@@ -13,6 +13,7 @@ use sqlbuild_analysis::manifest::models::{
 use sqlbuild_analysis::python_values::models::PythonValue;
 
 use crate::bindings::_helpers::python_values::values::python_value;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -42,7 +43,7 @@ fn enum_value(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> 
     if member.is_none() {
         return Ok(None);
     }
-    member.getattr("value")?.extract().map(Some)
+    native_field(&member, "value")?.extract().map(Some)
 }
 
 fn items<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {

@@ -28,6 +28,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within}
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -94,7 +95,7 @@ fn lifecycle<'py>(py: Python<'py>, (kind, name): (&str, &str)) -> PyResult<Bound
 fn target_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     for config in ["project_config", "local_config"] {
-        for name in discovered.getattr(config)?.getattr("targets")?.try_iter()? {
+        for name in native_field(&discovered.getattr(config)?, "targets")?.try_iter()? {
             names.insert(name?.extract()?);
         }
     }
@@ -106,8 +107,11 @@ fn clone_policy(discovered: &Bound<'_, PyAny>, (target, flag): (&str, &str)) -> 
     call_with(
         &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(discovered, "project_config")?,
+            ),
+            ("local_config", native_field(discovered, "local_config")?),
             ("target_name", text(py, target)),
         ],
     )?
@@ -118,12 +122,12 @@ fn clone_policy(discovered: &Bound<'_, PyAny>, (target, flag): (&str, &str)) -> 
 
 /// Discover the project, resolve and validate the targets, and resolve the adapter.
 fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Invocation<'py>> {
-    let project_dir: Bound<'py, PyAny> = match request.getattr("project_dir")? {
+    let project_dir: Bound<'py, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
     let use_color: bool =
-        !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
+        !native_field(request, "no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
     let style: CliStyle = CliStyle { use_color };
     let stream: Bound<'py, PyAny> = py.import("sys")?.getattr("stdout")?;
     let progress: Bound<'py, PyAny> = progress_reporter(&stream, style)?;
@@ -136,18 +140,21 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     call_with(
         &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
-            ("select", request.getattr("select")?),
-            ("exclude", request.getattr("exclude")?),
+            ("select", native_field(request, "select")?),
+            ("exclude", native_field(request, "exclude")?),
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
-    let mut destination: Bound<'py, PyAny> = request.getattr("destination_target_name")?;
+    let mut destination: Bound<'py, PyAny> = native_field(request, "destination_target_name")?;
     if destination.is_none() {
         destination = call_with(
             &registry::native(py, NativeAttr::ResolveTargetName)?,
             &[
-                ("project_config", discovered.getattr("project_config")?),
-                ("local_config", discovered.getattr("local_config")?),
+                (
+                    "project_config",
+                    native_field(&discovered, "project_config")?,
+                ),
+                ("local_config", native_field(&discovered, "local_config")?),
                 ("selected_target", py.None().into_bound(py)),
             ],
         )?;
@@ -156,7 +163,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
         return Err(user_error(py, NO_DESTINATION));
     }
     let destination: String = destination.extract()?;
-    let origin: String = request.getattr("origin_target_name")?.extract()?;
+    let origin: String = native_field(request, "origin_target_name")?.extract()?;
     let targets: (&str, &str) = (&origin, &destination);
     validate_clone_target_names(targets, &target_names(&discovered)?)
         .map_err(|error| target_error(py, error))?;
@@ -168,8 +175,11 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     let adapter_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
+            ("local_config", native_field(&discovered, "local_config")?),
         ],
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
@@ -196,7 +206,7 @@ fn connect<'py>(
             ("discovered_inputs", invocation.discovered.clone()),
             ("project_dir", invocation.project_dir.clone()),
             ("target_name", text(py, &invocation.destination)),
-            ("cli_vars", request.getattr("cli_vars")?),
+            ("cli_vars", native_field(request, "cli_vars")?),
         ],
     )?;
     let progress: Bound<'py, PyAny> = progress_reporter(&invocation.stream, invocation.style)?;
@@ -251,10 +261,13 @@ fn prepare<'py>(
             let options: Bound<'py, PyAny> = call_with(
                 &registry::class(py, RecordId::ClonePipelineOptions)?,
                 &[
-                    ("no_sql_validation", request.getattr("no_sql_validation")?),
-                    ("select", request.getattr("select")?),
-                    ("exclude", request.getattr("exclude")?),
-                    ("cli_vars", request.getattr("cli_vars")?),
+                    (
+                        "no_sql_validation",
+                        native_field(request, "no_sql_validation")?,
+                    ),
+                    ("select", native_field(request, "select")?),
+                    ("exclude", native_field(request, "exclude")?),
+                    ("cli_vars", native_field(request, "cli_vars")?),
                 ],
             )?;
             let pipeline: Bound<'py, PyAny> = prepared_clone_pipeline(
@@ -266,7 +279,7 @@ fn prepare<'py>(
                     resolver,
                 },
                 (
-                    &request.getattr("origin_target_name")?,
+                    &native_field(request, "origin_target_name")?,
                     &text(py, &invocation.destination),
                 ),
             )?;
@@ -292,7 +305,7 @@ fn clone<'py>(
     (config, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>, f64)> {
     let pipeline: Bound<'py, PyAny> = prepare(request, invocation, (config, connection))?;
-    let origin: String = request.getattr("origin_target_name")?.extract()?;
+    let origin: String = native_field(request, "origin_target_name")?.extract()?;
     write_line(
         &invocation.stream,
         &render_clone_header(
@@ -344,7 +357,10 @@ fn run_clone_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32
         &[
             ("payload", payload),
             ("json_output", PyBool::new(py, false).to_owned().into_any()),
-            ("json_output_path", request.getattr("json_output_path")?),
+            (
+                "json_output_path",
+                native_field(request, "json_output_path")?,
+            ),
         ],
     )?;
     Ok(clone_exit_code(&items))

@@ -12,6 +12,7 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
 use crate::bindings::_helpers::rules::relation_keys::{RelationKeyRow, relation_key_row};
 
@@ -378,7 +379,7 @@ pub(crate) fn model_relation_key_row(
     record: &ModelInputRecord,
     py: Python<'_>,
 ) -> PyResult<RelationKeyRow> {
-    let values: Bound<'_, PyAny> = record.config.bind(py).getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(record.config.bind(py), "values")?;
     let declared = match (&record.schema, owner.input_schema_fact(record)) {
         (Some(schema), Some(fact)) => {
             Some((fact.columns.as_slice(), schema.audits.bind(py).as_any()))
@@ -470,14 +471,14 @@ pub(crate) fn attached_schema<'py>(
             }))
         });
     }
-    let entry: Bound<'py, PyAny> = model_input.getattr("schema_entry")?;
+    let entry: Bound<'py, PyAny> = native_field(model_input, "schema_entry")?;
     if entry.is_none() {
         return Ok(None);
     }
     Ok(Some(AttachedSchema {
-        name: entry.getattr("name")?.extract()?,
-        dynamic_columns: entry.getattr("dynamic_columns")?,
-        type_enforcement: entry.getattr("type_enforcement")?.is_truthy()?,
+        name: native_field(&entry, "name")?.extract()?,
+        dynamic_columns: native_field(&entry, "dynamic_columns")?,
+        type_enforcement: native_field(&entry, "type_enforcement")?.is_truthy()?,
     }))
 }
 
@@ -492,11 +493,11 @@ pub(crate) fn attached_columns(model_input: &Bound<'_, PyAny>) -> PyResult<Vec<S
                 .unwrap_or_default())
         });
     }
-    let entry: Bound<'_, PyAny> = model_input.getattr("schema_entry")?;
+    let entry: Bound<'_, PyAny> = native_field(model_input, "schema_entry")?;
     if entry.is_none() {
         return Ok(Vec::new());
     }
-    python_column_facts(&entry.getattr("columns")?, None)
+    python_column_facts(&native_field(&entry, "columns")?, None)
 }
 
 /// The name of `model_input`, its file stem; a native input answers from its record.
@@ -531,9 +532,9 @@ pub(crate) fn input_reference_rows(model_input: &Bound<'_, PyAny>) -> PyResult<V
 /// One `CompileSqlReference` record as its row.
 fn reference_row_of(reference: &Bound<'_, PyAny>) -> PyResult<ReferenceRow> {
     Ok((
-        reference.getattr("ref_kind")?.str()?.extract()?,
-        reference.getattr("ref_name")?.extract()?,
-        reference.getattr("ref_package")?.extract()?,
-        reference.getattr("call_argument_count")?.extract()?,
+        native_field(reference, "ref_kind")?.str()?.extract()?,
+        native_field(reference, "ref_name")?.extract()?,
+        native_field(reference, "ref_package")?.extract()?,
+        native_field(reference, "call_argument_count")?.extract()?,
     ))
 }

@@ -51,6 +51,7 @@ use crate::bindings::_helpers::execution_history::statements::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const PSYCOPG_MODULE: &str = "psycopg";
 const PSYCOPG_ROWS_MODULE: &str = "psycopg.rows";
@@ -167,7 +168,7 @@ impl PostgresExecutionHistory {
         failure_message: &str,
     ) -> PyResult<T> {
         let py: Python<'py> = slf.py();
-        let connection: Bound<'py, PyAny> = slf.getattr("_connection")?;
+        let connection: Bound<'py, PyAny> = native_field(slf, "_connection")?;
         let timeout: String = self
             .statement_timeout_ms
             .get()
@@ -198,7 +199,7 @@ impl PostgresExecutionHistory {
             if history_error_of_kind(py, &error, STORAGE_ERROR)? || !driver_failure(py, &error)? {
                 return Err(error);
             }
-            let sqlstate: Option<String> = text_of(&error.value(py).getattr("sqlstate")?)?;
+            let sqlstate: Option<String> = text_of(&native_field(error.value(py), "sqlstate")?)?;
             if retries_transaction(sqlstate.as_deref(), attempts, max_retries) {
                 attempts += 1;
                 continue;
@@ -210,7 +211,7 @@ impl PostgresExecutionHistory {
     /// `query` through a fresh cursor, with driver failures reported as read failures.
     fn read_rows<'py>(slf: &Bound<'py, Self>, query: &Query) -> PyResult<Vec<Bound<'py, PyAny>>> {
         let py: Python<'py> = slf.py();
-        let connection: Bound<'py, PyAny> = slf.getattr("_connection")?;
+        let connection: Bound<'py, PyAny> = native_field(slf, "_connection")?;
         let rows = within(&connection.call_method0("cursor")?, |cursor| {
             execute_query(cursor, query)?;
             fetch_all(cursor)
@@ -229,7 +230,7 @@ impl PostgresExecutionHistory {
         if let Some(cursor) = cursor {
             return body(cursor);
         }
-        let owned: Bound<'py, PyAny> = slf.getattr("_connection")?.call_method0("cursor")?;
+        let owned: Bound<'py, PyAny> = native_field(slf, "_connection")?.call_method0("cursor")?;
         let result: PyResult<T> = body(&owned);
         let closed = owned.call_method0("close");
         let value: T = result?;
@@ -346,7 +347,7 @@ impl PostgresExecutionHistory {
         events: &Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let py: Python<'py> = slf.py();
-        slf.getattr("_append_events")?.call(
+        native_field(slf, "_append_events")?.call(
             (),
             Some(&keywords(
                 py,
@@ -361,7 +362,7 @@ impl PostgresExecutionHistory {
         projected: &Bound<'py, PyAny>,
     ) -> PyResult<()> {
         let py: Python<'py> = slf.py();
-        slf.getattr("_replace_projection")?.call(
+        native_field(slf, "_replace_projection")?.call(
             (),
             Some(&keywords(
                 py,
@@ -528,7 +529,7 @@ impl PostgresExecutionHistory {
         this.closed.store(false, Ordering::SeqCst);
         let mut connection: Option<Bound<'_, PyAny>> = None;
         let opened: PyResult<()> = (|| {
-            let opened: Bound<'_, PyAny> = psycopg.getattr("connect")?.call(
+            let opened: Bound<'_, PyAny> = native_field(&psycopg, "connect")?.call(
                 (dsn,),
                 Some(&keywords(
                     py,
@@ -665,7 +666,7 @@ impl PostgresExecutionHistory {
         let page: Vec<Bound<'py, PyAny>> = rows.into_iter().take(limit as usize).collect();
         let records: Vec<Bound<'py, PyAny>> = Self::stored_events(slf, &page)?;
         let next_cursor: Bound<'py, PyAny> = match records.last() {
-            Some(record) => record.getattr("cursor")?,
+            Some(record) => native_field(record, "cursor")?,
             None => py.None().into_bound(py),
         };
         call_with(
@@ -850,7 +851,7 @@ impl PostgresExecutionHistory {
         let py: Python<'_> = slf.py();
         slf.get().ensure_open(py)?;
         let healthy = (|| -> PyResult<bool> {
-            let connection: Bound<'_, PyAny> = slf.getattr("_connection")?;
+            let connection: Bound<'_, PyAny> = native_field(slf, "_connection")?;
             let row = within(&connection.call_method0("cursor")?, |cursor| {
                 execute_plain(cursor, POSTGRES_PING)?;
                 fetch_one(cursor)
@@ -886,7 +887,7 @@ impl PostgresExecutionHistory {
         if this.closed.load(Ordering::SeqCst) {
             return Ok(());
         }
-        slf.getattr("_connection")?.call_method0("close")?;
+        native_field(slf, "_connection")?.call_method0("close")?;
         this.closed.store(true, Ordering::SeqCst);
         Ok(())
     }

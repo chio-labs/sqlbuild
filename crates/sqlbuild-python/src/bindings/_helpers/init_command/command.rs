@@ -16,6 +16,7 @@ use sqlbuild_core::init_command::main::render_init_summary::render_init_summary;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::init_command::scaffold::scaffold_blank_project;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
 
@@ -48,7 +49,8 @@ fn run_init_command(py: Python<'_>, project_dir: Option<Bound<'_, PyAny>>) -> Py
     {
         return Err(exists_error(py));
     }
-    let project_name: String = init_project_name(&base_dir.getattr("name")?.extract::<String>()?);
+    let project_name: String =
+        init_project_name(&native_field(&base_dir, "name")?.extract::<String>()?);
     let base_path: PathBuf = base_dir.extract()?;
     scaffold_blank_project(py, &base_path, &init_project_toml(&project_name))?;
     call_with(

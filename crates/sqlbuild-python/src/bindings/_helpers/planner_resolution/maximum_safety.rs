@@ -13,6 +13,7 @@ use crate::bindings::_helpers::planner_resolution::cursor_safety::{
     horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
 };
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
@@ -93,17 +94,17 @@ pub(crate) fn apply_maximum_start_policy<'py>(
     )?;
     let bounds = args.value("bounds")?;
     let snapshot = args.value("snapshot")?;
-    let physical = snapshot.getattr("physical_target_max")?;
+    let physical = native_field(&snapshot, "physical_target_max")?;
     let physical = if physical.is_truthy()? {
         physical
     } else {
-        snapshot.getattr("target_max")?
+        native_field(&snapshot, "target_max")?
     };
     let policy = args.value("policy")?;
-    let config = policy.getattr("config")?;
-    let clock = policy.getattr("invocation_time")?;
+    let config = native_field(&policy, "config")?;
+    let clock = native_field(&policy, "invocation_time")?;
     if config.is_none()
-        || config.getattr("max_ahead")?.is_none()
+        || native_field(&config, "max_ahead")?.is_none()
         || !args.value("cursor_type")?.eq("timestamp")?
         || clock.is_none()
         || args.flag("has_start_override")?
@@ -111,10 +112,12 @@ pub(crate) fn apply_maximum_start_policy<'py>(
     {
         return Ok(bounds);
     }
-    if !timestamp_bound(&bounds.getattr("start")?)? || !timestamp_bound(&bounds.getattr("end")?)? {
+    if !timestamp_bound(&native_field(&bounds, "start")?)?
+        || !timestamp_bound(&native_field(&bounds, "end")?)?
+    {
         return Ok(bounds);
     }
-    let duration = safety_duration(&config.getattr("max_ahead")?, false)?;
+    let duration = safety_duration(&native_field(&config, "max_ahead")?, false)?;
     if !timestamp_bound(&physical)? {
         return Err(safety_error(
             py,
@@ -133,7 +136,7 @@ pub(crate) fn apply_maximum_start_policy<'py>(
     if session.checked(compare(&physical_typed, &horizon, &session))? != Ordering::Greater {
         return Ok(bounds);
     }
-    let target = optional_scalar(&session, &snapshot.getattr("target_eligible_max")?)?;
+    let target = optional_scalar(&session, &native_field(&snapshot, "target_eligible_max")?)?;
     let upstream = if target.is_none() {
         scalars(&session, &snapshot, "upstream_mins")?
     } else {
@@ -161,7 +164,7 @@ pub(crate) fn apply_maximum_start_policy<'py>(
     let effective = if let Some(eligible) = &eligible {
         let mut replay = vec![
             ("start", session.python_scalar(eligible)?),
-            ("end", bounds.getattr("end")?),
+            ("end", native_field(&bounds, "end")?),
             (
                 "has_start_override",
                 false.into_pyobject(py)?.to_owned().into_any(),
@@ -177,15 +180,15 @@ pub(crate) fn apply_maximum_start_policy<'py>(
         }
         apply_typed_cursor_replay_policy(py, Some(keywords(py, &replay)?))?
     } else {
-        bounds.getattr("start")?
+        native_field(&bounds, "start")?
     };
-    let relation = snapshot.getattr("target_relation")?;
-    let column = snapshot.getattr("destination_cursor_column")?;
+    let relation = native_field(&snapshot, "target_relation")?;
+    let column = native_field(&snapshot, "destination_cursor_column")?;
     let evidence = call_with(
         &registry::class(py, RecordId::MaximumStartSafetyEvidence)?,
         &[
-            ("action", config.getattr("action")?),
-            ("max_ahead", config.getattr("max_ahead")?),
+            ("action", native_field(&config, "action")?),
+            ("max_ahead", native_field(&config, "max_ahead")?),
             (
                 "invocation_time",
                 call_with(
@@ -196,7 +199,7 @@ pub(crate) fn apply_maximum_start_policy<'py>(
             ("physical_target_max", physical),
             (
                 "highest_eligible_target_max",
-                snapshot.getattr("target_eligible_max")?,
+                native_field(&snapshot, "target_eligible_max")?,
             ),
             ("effective_start", effective.clone()),
             ("maximum_allowed_start", session.python_scalar(&horizon)?),
@@ -230,14 +233,14 @@ pub(crate) fn apply_maximum_start_policy<'py>(
             ],
         )?))
     };
-    if config.getattr("action")?.eq("error")?
+    if native_field(&config, "action")?.eq("error")?
         || eligible.is_none()
         || session.checked(compare(&session.scalar(&effective)?, &horizon, &session))?
             == Ordering::Greater
     {
         return error(false);
     }
-    let strategy = policy.getattr("incremental_strategy")?;
+    let strategy = native_field(&policy, "incremental_strategy")?;
     if !strategy.eq("delete_insert")? && !strategy.eq("merge")? {
         return error(true);
     }
@@ -258,7 +261,7 @@ fn exceeded_message(evidence: &Bound<'_, PyAny>, non_idempotent: bool) -> PyResu
     } else {
         ""
     };
-    let highest = evidence.getattr("highest_eligible_target_max")?;
+    let highest = native_field(evidence, "highest_eligible_target_max")?;
     let highest: String = if highest.is_none() {
         "None".to_owned()
     } else {
@@ -268,12 +271,12 @@ fn exceeded_message(evidence: &Bound<'_, PyAny>, non_idempotent: bool) -> PyResu
     };
     Ok(format!(
         "maximum automatic start policy exceeded{detail}: physical target MAX='{}', highest eligible MAX={highest}, effective post-lookback start='{}', horizon='{}', action={}, input={}.{}",
-        rendered(&evidence.getattr("physical_target_max")?)?,
-        rendered(&evidence.getattr("effective_start")?)?,
-        rendered(&evidence.getattr("maximum_allowed_start")?)?,
-        evidence.getattr("action")?.getattr("value")?.str()?,
-        evidence.getattr("target_relation")?.str()?,
-        evidence.getattr("cursor_column")?.str()?,
+        rendered(&native_field(evidence, "physical_target_max")?)?,
+        rendered(&native_field(evidence, "effective_start")?)?,
+        rendered(&native_field(evidence, "maximum_allowed_start")?)?,
+        native_field(evidence, "action")?.getattr("value")?.str()?,
+        native_field(evidence, "target_relation")?.str()?,
+        native_field(evidence, "cursor_column")?.str()?,
     ))
 }
 

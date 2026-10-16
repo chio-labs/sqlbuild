@@ -17,6 +17,7 @@ use crate::bindings::_helpers::plan_output::safety::{future_cursor_safety, maxim
 use crate::bindings::_helpers::plan_output::values::{
     any, dict, enum_value, iso, items, list, mapped, optional_enum_value, relation_name, text,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MICROBATCH_MODE: &str = "microbatch";
 const RENAMED_REASON: &str = "renamed";
@@ -32,8 +33,8 @@ fn token_bounds<'py>(bounds: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
     Ok(dict(
         bounds.py(),
         vec![
-            ("start", token(bounds.getattr("start")?)?),
-            ("end", token(bounds.getattr("end")?)?),
+            ("start", token(native_field(bounds, "start")?)?),
+            ("end", token(native_field(bounds, "end")?)?),
         ],
     )?
     .into_any())
@@ -84,8 +85,8 @@ fn cursor_json<'py>(py: Python<'py>, details: &CursorDetails<'py>) -> PyResult<B
 }
 
 fn identity_status(entry: &Bound<'_, PyAny>) -> PyResult<&'static str> {
-    let expected: Bound<'_, PyAny> = entry.getattr("fingerprint_version_hash")?;
-    let built: Bound<'_, PyAny> = entry.getattr("previous_version_hash")?;
+    let expected: Bound<'_, PyAny> = native_field(entry, "fingerprint_version_hash")?;
+    let built: Bound<'_, PyAny> = native_field(entry, "previous_version_hash")?;
     Ok(if expected.is_none() {
         "unknown"
     } else if built.is_none() {
@@ -99,14 +100,14 @@ fn identity_status(entry: &Bound<'_, PyAny>) -> PyResult<&'static str> {
 
 /// The safety evidence of the microbatch range when it has some, else of the cursor bounds.
 fn evidence<'py>(entry: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    let microbatch_range: Bound<'py, PyAny> = entry.getattr("microbatch_range")?;
+    let microbatch_range: Bound<'py, PyAny> = native_field(entry, "microbatch_range")?;
     if !microbatch_range.is_none() {
         let found: Bound<'py, PyAny> = microbatch_range.getattr(field)?;
         if !found.is_none() {
             return Ok(found);
         }
     }
-    let bounds: Bound<'py, PyAny> = entry.getattr("cursor_bounds")?;
+    let bounds: Bound<'py, PyAny> = native_field(entry, "cursor_bounds")?;
     if bounds.is_none() {
         return Ok(bounds);
     }
@@ -119,23 +120,26 @@ fn microbatch_state<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
         py,
         vec![
             ("completion_tracking", any(py, "universal")?),
-            ("batch_concurrency", entry.getattr("batch_concurrency")?),
+            (
+                "batch_concurrency",
+                native_field(entry, "batch_concurrency")?,
+            ),
             (
                 "unaccounted_partition_policy",
-                entry.getattr("unaccounted_partition_policy")?,
+                native_field(entry, "unaccounted_partition_policy")?,
             ),
             ("reconciliation", any(py, "runtime")?),
         ],
     )?;
-    let limit: Bound<'py, PyAny> = entry.getattr("microbatch_limit")?;
+    let limit: Bound<'py, PyAny> = native_field(entry, "microbatch_limit")?;
     if !limit.is_none() {
         state.set_item("limit", limit)?;
-        state.set_item("count", entry.getattr("microbatch_limit_count")?)?;
+        state.set_item("count", native_field(entry, "microbatch_limit_count")?)?;
         state.set_item(
             "action",
-            optional_enum_value(&entry.getattr("microbatch_limit_action")?)?,
+            optional_enum_value(&native_field(entry, "microbatch_limit_action")?)?,
         )?;
-        state.set_item("warning", entry.getattr("microbatch_limit_warning")?)?;
+        state.set_item("warning", native_field(entry, "microbatch_limit_warning")?)?;
     }
     Ok(state.into_any())
 }
@@ -145,10 +149,10 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let model: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("name", entry.getattr("name")?),
+            ("name", native_field(entry, "name")?),
             (
                 "relative_path",
-                entry.getattr("relative_path")?.str()?.into_any(),
+                native_field(entry, "relative_path")?.str()?.into_any(),
             ),
             (
                 "materialization_type",
@@ -158,15 +162,15 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             ("reason", enum_value(entry, "reason")?),
             (
                 "expected_version_hash",
-                entry.getattr("fingerprint_version_hash")?,
+                native_field(entry, "fingerprint_version_hash")?,
             ),
             (
                 "built_version_hash",
-                entry.getattr("previous_version_hash")?,
+                native_field(entry, "previous_version_hash")?,
             ),
             (
                 "built_version_present",
-                any(py, !entry.getattr("previous_version_hash")?.is_none())?,
+                any(py, !native_field(entry, "previous_version_hash")?.is_none())?,
             ),
             ("identity_status", any(py, identity_status(entry)?)?),
         ],
@@ -177,7 +181,7 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             model.set_item(key, value)?;
         }
     }
-    if entry.getattr("incremental_mode")?.eq(MICROBATCH_MODE)? {
+    if native_field(entry, "incremental_mode")?.eq(MICROBATCH_MODE)? {
         model.set_item("microbatch_state", microbatch_state(entry)?)?;
     }
     for key in ["cursor_column", "cursor_type"] {
@@ -186,7 +190,7 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             model.set_item(key, value)?;
         }
     }
-    let bounds: Bound<'py, PyAny> = entry.getattr("cursor_bounds")?;
+    let bounds: Bound<'py, PyAny> = native_field(entry, "cursor_bounds")?;
     if !bounds.is_none() {
         model.set_item("cursor_bounds", token_bounds(&bounds)?)?;
     }
@@ -202,31 +206,32 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     if let Some(details) = cursor_details(entry)? {
         model.set_item("cursor", cursor_json(py, &details)?)?;
     }
-    let backfill: Bound<'py, PyAny> = entry.getattr("backfill")?;
+    let backfill: Bound<'py, PyAny> = native_field(entry, "backfill")?;
     model.set_item(
         "backfill",
         dict(
             py,
             vec![
                 ("action", enum_value(&backfill, "action")?),
-                ("duration", backfill.getattr("duration")?),
+                ("duration", native_field(&backfill, "duration")?),
             ],
         )?,
     )?;
-    if entry.getattr("reason")?.eq(RENAMED_REASON)?
-        && entry.getattr("query_changed")?.is_truthy()?
+    if native_field(entry, "reason")?.eq(RENAMED_REASON)?
+        && native_field(entry, "query_changed")?.is_truthy()?
     {
         model.set_item("query_changed", true)?;
     }
-    let changed_functions: Bound<'py, PyAny> = entry.getattr("changed_functions")?;
+    let changed_functions: Bound<'py, PyAny> = native_field(entry, "changed_functions")?;
     if changed_functions.is_truthy()? {
         model.set_item("changed_functions", list(&changed_functions)?)?;
     }
-    let qualified: Bound<'py, PyAny> = entry.getattr("destination")?.getattr("qualified_name")?;
+    let qualified: Bound<'py, PyAny> =
+        native_field(entry, "destination")?.getattr("qualified_name")?;
     if !qualified.is_none() {
         model.set_item("qualified_name", qualified)?;
     }
-    let hints: Bound<'py, PyAny> = entry.getattr("column_rename_hints")?;
+    let hints: Bound<'py, PyAny> = native_field(entry, "column_rename_hints")?;
     if hints.is_truthy()? {
         model.set_item(
             "column_rename_hints",
@@ -234,10 +239,13 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
                 Ok(dict(
                     py,
                     vec![
-                        ("column", hint.getattr("added_column")?),
-                        ("candidates", list(&hint.getattr("candidate_columns")?)?),
-                        ("identical", hint.getattr("identical")?),
-                        ("hint", hint.getattr("message")?),
+                        ("column", native_field(hint, "added_column")?),
+                        (
+                            "candidates",
+                            list(&native_field(hint, "candidate_columns")?)?,
+                        ),
+                        ("identical", native_field(hint, "identical")?),
+                        ("hint", native_field(hint, "message")?),
                     ],
                 )?
                 .into_any())
@@ -251,7 +259,8 @@ fn with_qualified_name<'py>(
     item: Bound<'py, PyDict>,
     entry: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let qualified: Bound<'py, PyAny> = entry.getattr("destination")?.getattr("qualified_name")?;
+    let qualified: Bound<'py, PyAny> =
+        native_field(entry, "destination")?.getattr("qualified_name")?;
     if !qualified.is_none() {
         item.set_item("qualified_name", qualified)?;
     }
@@ -264,7 +273,7 @@ fn seed_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         dict(
             py,
             vec![
-                ("name", entry.getattr("name")?),
+                ("name", native_field(entry, "name")?),
                 ("reason", enum_value(entry, "reason")?),
             ],
         )?,
@@ -277,22 +286,22 @@ fn source_load_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
     let load: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("name", entry.getattr("name")?),
-            ("loader", entry.getattr("loader")?),
+            ("name", native_field(entry, "name")?),
+            ("loader", native_field(entry, "loader")?),
             ("kind", enum_value(entry, "resource_kind")?),
-            ("target", entry.getattr("destination")?),
-            ("is_reload", entry.getattr("is_reload")?),
+            ("target", native_field(entry, "destination")?),
+            ("is_reload", native_field(entry, "is_reload")?),
         ],
     )?;
-    let strategy: Bound<'py, PyAny> = entry.getattr("write_strategy")?;
+    let strategy: Bound<'py, PyAny> = native_field(entry, "write_strategy")?;
     if !strategy.is_none() {
-        load.set_item("write_strategy", strategy.getattr("value")?)?;
+        load.set_item("write_strategy", native_field(&strategy, "value")?)?;
     }
-    let cursor: Bound<'py, PyAny> = entry.getattr("cursor_column")?;
+    let cursor: Bound<'py, PyAny> = native_field(entry, "cursor_column")?;
     if !cursor.is_none() {
         load.set_item("cursor_column", cursor)?;
     }
-    let unique_key: Bound<'py, PyAny> = entry.getattr("unique_key")?;
+    let unique_key: Bound<'py, PyAny> = native_field(entry, "unique_key")?;
     if unique_key.is_truthy()? {
         load.set_item("unique_key", unique_key)?;
     }
@@ -301,15 +310,15 @@ fn source_load_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
 
 fn function_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = entry.py();
-    let columns: Bound<'py, PyAny> = entry.getattr("return_columns")?;
+    let columns: Bound<'py, PyAny> = native_field(entry, "return_columns")?;
     with_qualified_name(
         dict(
             py,
             vec![
-                ("name", entry.getattr("name")?),
+                ("name", native_field(entry, "name")?),
                 (
                     "relative_path",
-                    entry.getattr("relative_path")?.str()?.into_any(),
+                    native_field(entry, "relative_path")?.str()?.into_any(),
                 ),
                 ("language", enum_value(entry, "language")?),
                 (
@@ -323,15 +332,15 @@ fn function_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
                         },
                     )?,
                 ),
-                ("returns", entry.getattr("returns")?),
+                ("returns", native_field(entry, "returns")?),
                 (
                     "return_columns",
                     mapped(&columns, |column| {
                         Ok(dict(
                             py,
                             vec![
-                                ("name", column.getattr("name")?),
-                                ("type", column.getattr("type")?),
+                                ("name", native_field(column, "name")?),
+                                ("type", native_field(column, "type")?),
                             ],
                         )?
                         .into_any())
@@ -349,7 +358,7 @@ fn warning_json<'py>(warning: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
         py,
         vec![
             ("severity", enum_value(warning, "severity")?),
-            ("message", warning.getattr("message")?),
+            ("message", native_field(warning, "message")?),
         ],
     )?;
     for key in ["model_name", "code"] {
@@ -388,19 +397,19 @@ pub(crate) fn unified_diff<'py>(
 fn identity_diff<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = entry.py();
     let result: Bound<'py, PyDict> = PyDict::new(py);
-    if !entry.getattr("identity_status")?.eq(CHANGED_IDENTITY)? {
+    if !native_field(entry, "identity_status")?.eq(CHANGED_IDENTITY)? {
         return Ok(result);
     }
     let pairs = [
         (
             "source_diff",
-            definition_source_text(&entry.getattr("previous_definition_json")?)?,
-            definition_source_text(&entry.getattr("current_definition_json")?)?,
+            definition_source_text(&native_field(entry, "previous_definition_json")?)?,
+            definition_source_text(&native_field(entry, "current_definition_json")?)?,
         ),
         (
             "dependency_diff",
-            dependency_source_text(&entry.getattr("previous_metadata_json")?)?,
-            dependency_source_text(&entry.getattr("current_metadata_json")?)?,
+            dependency_source_text(&native_field(entry, "previous_metadata_json")?)?,
+            dependency_source_text(&native_field(entry, "current_metadata_json")?)?,
         ),
     ];
     for (key, previous, current) in pairs {
@@ -421,7 +430,7 @@ fn python_entry_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
     let item: Bound<'py, PyDict> = dict(
         py,
         vec![
-            ("name", entry.getattr("name")?),
+            ("name", native_field(entry, "name")?),
             ("kind", enum_value(entry, "kind")?),
             ("phase", enum_value(entry, "phase")?),
             ("identity_status", enum_value(entry, "identity_status")?),
@@ -448,31 +457,31 @@ fn providers_json<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
     let mut usages: Vec<Usage<'py>> = Vec::new();
-    for usage in items(&plan.getattr("provider_usages")?)? {
+    for usage in items(&native_field(plan, "provider_usages")?)? {
         usages.push((
-            text(&usage.getattr("provider_name")?)?,
+            text(&native_field(&usage, "provider_name")?)?,
             (
-                text(&usage.getattr("consumer_kind")?)?,
-                text(&usage.getattr("consumer_name")?)?,
-                text(&usage.getattr("parameter_name")?)?,
+                text(&native_field(&usage, "consumer_kind")?)?,
+                text(&native_field(&usage, "consumer_name")?)?,
+                text(&native_field(&usage, "parameter_name")?)?,
             ),
-            usage.getattr("annotation_class_name")?,
-            usage.getattr("annotation_module")?,
+            native_field(&usage, "annotation_class_name")?,
+            native_field(&usage, "annotation_module")?,
         ));
     }
     for entry in python_entries {
         let kind: String = text(&enum_value(entry, "kind")?)?;
-        let name: String = text(&entry.getattr("name")?)?;
-        for usage in items(&entry.getattr("provider_usages")?)? {
+        let name: String = text(&native_field(entry, "name")?)?;
+        for usage in items(&native_field(entry, "provider_usages")?)? {
             usages.push((
-                text(&usage.getattr("provider_name")?)?,
+                text(&native_field(&usage, "provider_name")?)?,
                 (
                     kind.clone(),
                     name.clone(),
-                    text(&usage.getattr("parameter_name")?)?,
+                    text(&native_field(&usage, "parameter_name")?)?,
                 ),
-                usage.getattr("annotation_class_name")?,
-                usage.getattr("annotation_module")?,
+                native_field(&usage, "annotation_class_name")?,
+                native_field(&usage, "annotation_module")?,
             ));
         }
     }
@@ -517,19 +526,22 @@ fn old_name_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
     Ok(dict(
         py,
         vec![
-            ("model", entry.getattr("model_name")?),
+            ("model", native_field(entry, "model_name")?),
             ("action", enum_value(entry, "action")?),
-            ("view", relation_name(&entry.getattr("origin")?)?),
-            ("reads", relation_name(&entry.getattr("destination")?)?),
-            ("expires_at", iso(&entry.getattr("expires_at")?)?),
+            ("view", relation_name(&native_field(entry, "origin")?)?),
+            (
+                "reads",
+                relation_name(&native_field(entry, "destination")?)?,
+            ),
+            ("expires_at", iso(&native_field(entry, "expires_at")?)?),
             (
                 "column_aliases",
                 py.import("builtins")?
                     .getattr("dict")?
-                    .call1((entry.getattr("column_aliases")?,))?,
+                    .call1((native_field(entry, "column_aliases")?,))?,
             ),
-            ("grants_copied", entry.getattr("grants_copied")?),
-            ("reason", entry.getattr("reason")?),
+            ("grants_copied", native_field(entry, "grants_copied")?),
+            ("reason", native_field(entry, "reason")?),
         ],
     )?
     .into_any())
@@ -538,23 +550,24 @@ fn old_name_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
 fn migrations_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
     let old_names: Bound<'py, PyDict> = PyDict::new(py);
-    for entry in items(&plan.getattr("old_name_view_entries")?)? {
-        old_names.set_item(entry.getattr("model_name")?, entry)?;
+    for entry in items(&native_field(plan, "old_name_view_entries")?)? {
+        old_names.set_item(native_field(&entry, "model_name")?, entry)?;
     }
     let materializations: Bound<'py, PyDict> = PyDict::new(py);
-    for entry in items(&plan.getattr("model_entries")?)? {
+    for entry in items(&native_field(plan, "model_entries")?)? {
         materializations.set_item(
-            entry.getattr("name")?,
-            entry.getattr("materialization_type")?.str()?,
+            native_field(&entry, "name")?,
+            native_field(&entry, "materialization_type")?.str()?,
         )?;
     }
-    mapped(&plan.getattr("migration_entries")?, |entry| {
-        let model: Bound<'py, PyAny> = entry.getattr("model_name")?;
-        let transfer: Bound<'py, PyAny> = entry.getattr("transfer")?;
-        let completed_at: Bound<'py, PyAny> = entry.getattr("completed_at")?;
+    mapped(&native_field(plan, "migration_entries")?, |entry| {
+        let model: Bound<'py, PyAny> = native_field(entry, "model_name")?;
+        let transfer: Bound<'py, PyAny> = native_field(entry, "transfer")?;
+        let completed_at: Bound<'py, PyAny> = native_field(entry, "completed_at")?;
         let transfer_value: Bound<'py, PyAny> = if !transfer.is_none() {
-            transfer.getattr("value")?
-        } else if !entry.getattr("decision")?.eq(RENAMED_DECISION)? || !completed_at.is_none() {
+            native_field(&transfer, "value")?
+        } else if !native_field(entry, "decision")?.eq(RENAMED_DECISION)? || !completed_at.is_none()
+        {
             py.None().into_bound(py)
         } else {
             let view: bool = materializations
@@ -576,25 +589,31 @@ fn migrations_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
                 ("compatibility", enum_value(entry, "compatibility")?),
                 (
                     "compatibility_findings",
-                    list(&entry.getattr("compatibility_findings")?)?,
+                    list(&native_field(entry, "compatibility_findings")?)?,
                 ),
-                ("origin_model", entry.getattr("origin_model")?),
-                ("origin", relation_name(&entry.getattr("origin")?)?),
+                ("origin_model", native_field(entry, "origin_model")?),
+                ("origin", relation_name(&native_field(entry, "origin")?)?),
                 (
                     "destination",
-                    relation_name(&entry.getattr("destination")?)?,
+                    relation_name(&native_field(entry, "destination")?)?,
                 ),
-                ("target", entry.getattr("target_name")?),
-                ("origin_version_hash", entry.getattr("origin_version_hash")?),
+                ("target", native_field(entry, "target_name")?),
+                (
+                    "origin_version_hash",
+                    native_field(entry, "origin_version_hash")?,
+                ),
                 ("transfer", transfer_value),
                 (
                     "transfer_fallback",
-                    optional_enum_value(&entry.getattr("transfer_fallback")?)?,
+                    optional_enum_value(&native_field(entry, "transfer_fallback")?)?,
                 ),
-                ("storage_transition", entry.getattr("storage_transition")?),
+                (
+                    "storage_transition",
+                    native_field(entry, "storage_transition")?,
+                ),
                 (
                     "promotion",
-                    optional_enum_value(&entry.getattr("promotion")?)?,
+                    optional_enum_value(&native_field(entry, "promotion")?)?,
                 ),
                 ("completed_at", iso(&completed_at)?),
                 ("old_name", old_name),
@@ -606,19 +625,25 @@ fn migrations_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 
 fn column_migrations_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
-    mapped(&plan.getattr("column_migration_entries")?, |entry| {
+    mapped(&native_field(plan, "column_migration_entries")?, |entry| {
         Ok(dict(
             py,
             vec![
                 ("kind", any(py, "column_migration")?),
-                ("model", entry.getattr("model_name")?),
-                ("relation", relation_name(&entry.getattr("destination")?)?),
-                ("origin_column", entry.getattr("origin_column")?),
-                ("destination_column", entry.getattr("destination_column")?),
+                ("model", native_field(entry, "model_name")?),
+                (
+                    "relation",
+                    relation_name(&native_field(entry, "destination")?)?,
+                ),
+                ("origin_column", native_field(entry, "origin_column")?),
+                (
+                    "destination_column",
+                    native_field(entry, "destination_column")?,
+                ),
                 ("discovery", enum_value(entry, "discovery")?),
                 ("decision", enum_value(entry, "decision")?),
-                ("target", entry.getattr("target_name")?),
-                ("completed_at", iso(&entry.getattr("completed_at")?)?),
+                ("target", native_field(entry, "target_name")?),
+                ("completed_at", iso(&native_field(entry, "completed_at")?)?),
             ],
         )?
         .into_any())
@@ -627,28 +652,28 @@ fn column_migrations_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
 
 fn retention_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
-    mapped(&plan.getattr("retention_entries")?, |entry| {
-        let request: Bound<'py, PyAny> = entry.getattr("request")?;
+    mapped(&native_field(plan, "retention_entries")?, |entry| {
+        let request: Bound<'py, PyAny> = native_field(entry, "request")?;
         Ok(dict(
             py,
             vec![
                 ("scope", enum_value(&request, "scope")?),
-                ("database", request.getattr("database")?),
-                ("schema", request.getattr("schema")?),
-                ("name", request.getattr("name")?),
-                ("models", entry.getattr("model_names")?),
-                ("desired_days", request.getattr("desired_days")?),
-                ("actual_days", entry.getattr("actual_days")?),
-                ("effective_days", entry.getattr("effective_days")?),
-                ("source", entry.getattr("source")?),
+                ("database", native_field(&request, "database")?),
+                ("schema", native_field(&request, "schema")?),
+                ("name", native_field(&request, "name")?),
+                ("models", native_field(entry, "model_names")?),
+                ("desired_days", native_field(&request, "desired_days")?),
+                ("actual_days", native_field(entry, "actual_days")?),
+                ("effective_days", native_field(entry, "effective_days")?),
+                ("source", native_field(entry, "source")?),
                 ("direction", enum_value(entry, "direction")?),
                 ("phase", enum_value(entry, "phase")?),
-                ("statements", entry.getattr("statements")?),
+                ("statements", native_field(entry, "statements")?),
                 (
                     "irreversible_warning",
-                    entry.getattr("irreversible_warning")?,
+                    native_field(entry, "irreversible_warning")?,
                 ),
-                ("decrease_policy", entry.getattr("decrease_policy")?),
+                ("decrease_policy", native_field(entry, "decrease_policy")?),
             ],
         )?
         .into_any())
@@ -657,20 +682,20 @@ fn retention_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
 
 fn table_type_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = plan.py();
-    mapped(&plan.getattr("table_type_entries")?, |entry| {
+    mapped(&native_field(plan, "table_type_entries")?, |entry| {
         Ok(dict(
             py,
             vec![
                 ("kind", any(py, "table_type_conversion")?),
-                ("model", entry.getattr("model_name")?),
-                ("desired_type", entry.getattr("desired_type")?),
-                ("actual_type", entry.getattr("actual_type")?),
-                ("source", entry.getattr("source")?),
-                ("downgrade", entry.getattr("downgrade")?),
-                ("downgrade_policy", entry.getattr("downgrade_policy")?),
+                ("model", native_field(entry, "model_name")?),
+                ("desired_type", native_field(entry, "desired_type")?),
+                ("actual_type", native_field(entry, "actual_type")?),
+                ("source", native_field(entry, "source")?),
+                ("downgrade", native_field(entry, "downgrade")?),
+                ("downgrade_policy", native_field(entry, "downgrade_policy")?),
                 (
                     "irreversible_warning",
-                    entry.getattr("irreversible_warning")?,
+                    native_field(entry, "irreversible_warning")?,
                 ),
             ],
         )?
@@ -718,22 +743,28 @@ fn format_plan_json(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRes
             ("python_node_count", any(py, python_nodes.len())?),
             (
                 "models",
-                mapped(&plan.getattr("model_entries")?, model_json)?,
+                mapped(&native_field(&plan, "model_entries")?, model_json)?,
             ),
-            ("seeds", mapped(&plan.getattr("seed_entries")?, seed_json)?),
+            (
+                "seeds",
+                mapped(&native_field(&plan, "seed_entries")?, seed_json)?,
+            ),
             (
                 "source_loads",
-                mapped(&plan.getattr("source_load_entries")?, source_load_json)?,
+                mapped(
+                    &native_field(&plan, "source_load_entries")?,
+                    source_load_json,
+                )?,
             ),
             (
                 "functions",
-                mapped(&plan.getattr("function_entries")?, function_json)?,
+                mapped(&native_field(&plan, "function_entries")?, function_json)?,
             ),
             ("python_nodes", PyList::new(py, python_nodes)?.into_any()),
             ("providers", providers_json(&plan, &python_entries)?),
             (
                 "warnings",
-                mapped(&plan.getattr("warnings")?, warning_json)?,
+                mapped(&native_field(&plan, "warnings")?, warning_json)?,
             ),
             ("retention", retention_json(&plan)?),
             ("table_type_conversions", table_type_json(&plan)?),
@@ -741,11 +772,14 @@ fn format_plan_json(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRes
             ("column_migrations", column_migrations_json(&plan)?),
             (
                 "old_names",
-                mapped(&plan.getattr("old_name_view_entries")?, old_name_json)?,
+                mapped(
+                    &native_field(&plan, "old_name_view_entries")?,
+                    old_name_json,
+                )?,
             ),
         ],
     )?;
-    let metadata: Bound<'_, PyAny> = plan.getattr("metadata")?;
+    let metadata: Bound<'_, PyAny> = native_field(&plan, "metadata")?;
     if metadata.is_truthy()? {
         result.set_item("metadata", metadata)?;
     }

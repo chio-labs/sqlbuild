@@ -11,6 +11,7 @@ use sqlbuild_analysis::semantic_validation::types::{BindingRequest, DiagnosticRo
 
 use crate::bindings::_helpers::analysis::conversions;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::{CatalogInput, ProjectCatalog};
@@ -88,7 +89,7 @@ impl BindingCatalog {
         let schemas: &Bound<'_, PyDict> = self.schemas.bind(py);
         let additions: Bound<'_, PyDict> = PyDict::new(py);
         for request in requests {
-            let schema: Bound<'_, PyAny> = request.getattr("schema")?;
+            let schema: Bound<'_, PyAny> = native_field(request, "schema")?;
             for item in schema.call_method0("items")?.try_iter()? {
                 let (name, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
                 if columns.is_truthy()? && !schemas.contains(&name)? {
@@ -103,7 +104,7 @@ impl BindingCatalog {
         }
         let mut prepared: Vec<BindingRequest> = Vec::with_capacity(requests.len());
         for request in requests {
-            let schema: Bound<'_, PyAny> = request.getattr("schema")?;
+            let schema: Bound<'_, PyAny> = native_field(request, "schema")?;
             let mut names: Vec<String> = Vec::new();
             for name in schema.try_iter()? {
                 names.push(name?.extract()?);
@@ -123,7 +124,7 @@ impl BindingCatalog {
                 }
                 closed.push((name, truthy));
             }
-            let sql: String = request.getattr("sql")?.extract()?;
+            let sql: String = native_field(request, "sql")?.extract()?;
             prepared.push((sql, closed, conversions::relations(overrides.as_any())?));
         }
         Ok(prepared)
@@ -293,14 +294,14 @@ pub(crate) fn schema_validations<'py>(
     let mut groups: Vec<(Py<BindingCatalog>, bool, Vec<usize>)> = Vec::new();
     for (index, request) in requests.iter().enumerate() {
         let key: CatalogKey = (
-            native_dialect(&request.getattr("dialect")?)?,
+            native_dialect(&native_field(request, "dialect")?)?,
             request
                 .getattr("quoted_identifiers_ignore_case")?
                 .extract()?,
-            request.getattr("known_functions")?.extract()?,
-            request.getattr("known_types")?.extract()?,
+            native_field(request, "known_functions")?.extract()?,
+            native_field(request, "known_types")?.extract()?,
         );
-        let explicit: Bound<'py, PyAny> = request.getattr("catalog")?;
+        let explicit: Bound<'py, PyAny> = native_field(request, "catalog")?;
         let own: bool = !explicit.is_none();
         let catalog: Py<BindingCatalog> = if own {
             explicit.extract()?
@@ -309,7 +310,7 @@ pub(crate) fn schema_validations<'py>(
         } else {
             let catalog: Py<BindingCatalog> = Py::new(
                 py,
-                BindingCatalog::create(py, key.clone(), &request.getattr("schema")?)?,
+                BindingCatalog::create(py, key.clone(), &native_field(request, "schema")?)?,
             )?;
             created.push((key, catalog.clone_ref(py)));
             catalog

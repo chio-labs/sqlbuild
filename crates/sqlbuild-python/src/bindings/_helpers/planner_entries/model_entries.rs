@@ -42,6 +42,7 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
     materialization_of, resolve_model_plan_action,
 };
 use crate::bindings::_helpers::planner_strategy::values::text;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::source_bindings::source_binding_diagnostics;
@@ -116,7 +117,7 @@ fn plan_model_from_change<'py>(
             )],
         )?
     } else {
-        request.change_result.getattr("backfill")?
+        native_field(&request.change_result, "backfill")?
     };
     let cursor_column = config_str(model, "cursor")?;
     reject_unexposed_cursor_input_columns(model, &cursor_column, &reads.lookups)?;
@@ -159,7 +160,7 @@ fn plan_model_from_change<'py>(
         build_cursor_input_relations((model, adapter), &cursor_column, &reads.lookups)?.into_any();
     let mut any_runtime_owned = false;
     for relation in cursor_input_relations.try_iter()? {
-        if relation?.getattr("is_runtime_owned")?.is_truthy()? {
+        if native_field(&relation?, "is_runtime_owned")?.is_truthy()? {
             any_runtime_owned = true;
             break;
         }
@@ -226,10 +227,10 @@ fn check_binding_diagnostics<'py>(
     let py = project.py();
     let sql_test = imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SQL_TEST")?;
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
-    for diagnostic in project.getattr("diagnostics")?.try_iter()? {
+    for diagnostic in native_field(project, "diagnostics")?.try_iter()? {
         let diagnostic = diagnostic?;
-        if diagnostic.getattr("is_error")?.is_truthy()?
-            && diagnostic.getattr("resource_type")?.ne(&sql_test)?
+        if native_field(&diagnostic, "is_error")?.is_truthy()?
+            && native_field(&diagnostic, "resource_type")?.ne(&sql_test)?
         {
             errors.push(diagnostic);
         }
@@ -256,7 +257,7 @@ fn check_binding_diagnostics<'py>(
     )?;
     for diagnostic in bound.try_iter()? {
         let diagnostic = diagnostic?;
-        if diagnostic.getattr("is_error")?.is_truthy()? {
+        if native_field(&diagnostic, "is_error")?.is_truthy()? {
             errors.push(diagnostic);
         }
     }
@@ -275,9 +276,9 @@ fn check_binding_diagnostics<'py>(
         };
         lines.push(format!(
             "error[{}]: {}\n  --> {}:{}:{}",
-            diagnostic.getattr("code")?.str()?,
-            diagnostic.getattr("message")?.str()?,
-            diagnostic.getattr("path")?.str()?,
+            native_field(diagnostic, "code")?.str()?,
+            native_field(diagnostic, "message")?.str()?,
+            native_field(diagnostic, "path")?.str()?,
             position("line")?,
             position("column")?,
         ));
@@ -286,14 +287,14 @@ fn check_binding_diagnostics<'py>(
         py,
         ErrorId::PlannerInput,
         &lines.join("\n"),
-        &[("code", first.getattr("code")?)],
+        &[("code", native_field(first, "code")?)],
     ))
 }
 
 fn names_of(entries: &[Bound<'_, PyAny>]) -> PyResult<String> {
     Ok(entries
         .iter()
-        .map(|entry| Ok(entry.getattr("name")?.str()?.to_string()))
+        .map(|entry| Ok(native_field(entry, "name")?.str()?.to_string()))
         .collect::<PyResult<Vec<String>>>()?
         .join(", "))
 }
@@ -309,12 +310,14 @@ fn check_microbatch_concurrency<'py>(
     let create = planner_type(py, RecordId::PlanAction, "CREATE_TABLE")?;
     let mut configured: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in entries {
-        if entry.getattr("batch_concurrency")?.gt(1)? && entry.getattr("action")?.ne(&skip)? {
+        if native_field(entry, "batch_concurrency")?.gt(1)?
+            && native_field(entry, "action")?.ne(&skip)?
+        {
             configured.push(entry.clone());
         }
     }
-    let settings = project.getattr("settings")?;
-    if !configured.is_empty() && !settings.getattr("microbatch_concurrency")?.is_truthy()? {
+    let settings = native_field(project, "settings")?;
+    if !configured.is_empty() && !native_field(&settings, "microbatch_concurrency")?.is_truthy()? {
         let guidance = object(py, microbatch_guidance())?;
         let prefix: &str = MICROBATCH_CONCURRENCY_MESSAGE;
         return Err(error_of(
@@ -339,18 +342,18 @@ fn check_microbatch_concurrency<'py>(
             &format!(
                 "adapter '{}' does not support concurrent microbatch delete/insert DML; set \
                  batch_concurrency = 1",
-                adapter.getattr("adapter_name")?.str()?
+                native_field(adapter, "adapter_name")?.str()?
             ),
             &[],
         ));
     }
     let mut concurrent: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in configured {
-        if entry.getattr("action")?.ne(&create)? {
+        if native_field(&entry, "action")?.ne(&create)? {
             concurrent.push(entry);
         }
     }
-    if concurrent.is_empty() || !settings.getattr("concurrency")?.gt(1)? {
+    if concurrent.is_empty() || !native_field(&settings, "concurrency")?.gt(1)? {
         return Ok(None);
     }
     let count = concurrent.len();
@@ -410,7 +413,7 @@ pub(crate) fn plan_entries<'py>(
     };
     let build = inputs.cast::<PlanEntryBuildInputs>()?.get();
     let relations_context = relations.cast::<PlannerRelationsContext>()?.get();
-    let selected_keys = scope.getattr("selected_keys")?;
+    let selected_keys = native_field(&scope, "selected_keys")?;
     check_binding_diagnostics(&project, &adapter, &relations, &selected_keys)?;
     let freshness_blocked = build.source_freshness_blocked_model_names.bind(py).clone();
     let external_blocked = build.external_blocked_model_names.bind(py).clone();
@@ -421,12 +424,12 @@ pub(crate) fn plan_entries<'py>(
         runtime_cursor_producer_names(&scope, &relations_context.source_map.bind(py).clone())?,
     )?;
     let functions_by_name = PyDict::new(py);
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(&project, "functions")?.try_iter()? {
         let function = function?;
-        functions_by_name.set_item(function.getattr("name")?, function)?;
+        functions_by_name.set_item(native_field(&function, "name")?, function)?;
     }
-    let settings = project.getattr("settings")?;
-    let models_by_name = scope.getattr("models_by_name")?;
+    let settings = native_field(&project, "settings")?;
+    let models_by_name = native_field(&scope, "models_by_name")?;
     let context = Bound::new(
         py,
         ModelPlanContext {
@@ -448,16 +451,16 @@ pub(crate) fn plan_entries<'py>(
     let reads = ContextReads::of(
         context,
         adapter.clone(),
-        project.getattr("external_sql_reference_resolver")?,
+        native_field(&project, "external_sql_reference_resolver")?,
     )?;
-    let sql_analysis_enabled = settings.getattr("sql_analysis")?.is_truthy()?;
+    let sql_analysis_enabled = native_field(&settings, "sql_analysis")?.is_truthy()?;
     let skip = planner_type(py, RecordId::PlanAction, "SKIP")?;
     let microbatch = registry::class(py, RecordId::IncrementalMode)?.getattr("MICROBATCH")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
-    for key in scope.getattr("execution_order")?.try_iter()? {
+    for key in native_field(&scope, "execution_order")?.try_iter()? {
         let key = key?;
-        let name = key.getattr("name")?;
+        let name = native_field(&key, "name")?;
         if !selected_keys.contains(&key)? || !models.contains(&name)? {
             continue;
         }
@@ -479,11 +482,11 @@ pub(crate) fn plan_entries<'py>(
             sql_analysis_enabled,
             full_refresh: effective_full_refresh,
             overrides,
-            change_result: resolved.getattr("change")?,
+            change_result: native_field(&resolved, "change")?,
             protect_full_refresh: !freshness_blocked.contains(&name)?
                 && !external_blocked.contains(&name)?,
         })?;
-        let entry_name = entry.getattr("name")?;
+        let entry_name = native_field(&entry, "name")?;
         if freshness_blocked.contains(&entry_name)? {
             entry = replaced(
                 &entry,
@@ -508,15 +511,15 @@ pub(crate) fn plan_entries<'py>(
                 ],
             )?;
         }
-        if entry.getattr("incremental_mode")?.eq(&microbatch)? {
-            let policy = entry.getattr("unaccounted_partition_policy")?;
+        if native_field(&entry, "incremental_mode")?.eq(&microbatch)? {
+            let policy = native_field(&entry, "unaccounted_partition_policy")?;
             let policy = if policy.is_truthy()? {
                 policy
             } else {
-                settings.getattr("microbatch_unaccounted_partition_policy")?
+                native_field(&settings, "microbatch_unaccounted_partition_policy")?
             };
             entry = replaced(&entry, &[("unaccounted_partition_policy", policy)])?;
-            if entry.getattr("action")?.ne(&skip)? {
+            if native_field(&entry, "action")?.ne(&skip)? {
                 let limited = apply_configured_microbatch_limits(&entry, &inputs)?;
                 entry = limited.get_item(0)?;
                 for warning in limited.get_item(1)?.try_iter()? {
@@ -590,8 +593,8 @@ pub(crate) fn plan_model<'py>(
         sql_analysis_enabled: args.flag("sql_analysis_enabled")?,
         full_refresh: args.flag("full_refresh")?,
         overrides: (
-            overrides.getattr("start_cursor_override")?,
-            overrides.getattr("end_cursor_override")?,
+            native_field(&overrides, "start_cursor_override")?,
+            native_field(&overrides, "end_cursor_override")?,
         ),
         change_result,
         protect_full_refresh: true,
@@ -608,8 +611,8 @@ fn build_model_materializations<'py>(
     for entry in model_entries.try_iter()? {
         let entry = entry?;
         lookup.set_item(
-            entry.getattr("name")?,
-            entry.getattr("materialization_type")?,
+            native_field(&entry, "name")?,
+            native_field(&entry, "materialization_type")?,
         )?;
     }
     Ok(lookup)

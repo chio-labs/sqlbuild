@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, model};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::old_name_retention;
@@ -18,9 +19,9 @@ pub(super) fn location<'py>(
     relation: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let mut fields = vec![
-        ("database", relation.getattr("database")?),
-        ("schema", relation.getattr("schema")?),
-        ("name", relation.getattr("name")?),
+        ("database", native_field(relation, "database")?),
+        ("schema", native_field(relation, "schema")?),
+        ("name", native_field(relation, "name")?),
     ];
     let qualified = call_with(
         &runtime
@@ -44,7 +45,7 @@ pub(super) fn retention<'py>(
     item: &Bound<'py, PyAny>,
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    old_name_retention(&item.getattr("config")?.getattr("values")?, project)
+    old_name_retention(&native_field(item, "config")?.getattr("values")?, project)
 }
 
 pub(super) fn expires<'py>(
@@ -66,15 +67,15 @@ pub(super) fn recorded_view<'py>(
     models: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = runtime.py();
-    let movement = history.getattr("move")?;
-    let created = history.getattr("created")?;
+    let movement = native_field(history, "move")?;
+    let created = native_field(history, "created")?;
     let mut reused = py.None().into_bound(py);
     for item in models {
-        if relation(&item.getattr("destination")?)?
-            .call_method1("matches", (history.getattr("old")?,))?
+        if relation(&native_field(item, "destination")?)?
+            .call_method1("matches", (native_field(history, "old")?,))?
             .is_truthy()?
         {
-            reused = item.getattr("name")?;
+            reused = native_field(item, "name")?;
             break;
         }
     }
@@ -82,15 +83,18 @@ pub(super) fn recorded_view<'py>(
         py,
         RecordId::OldNameView,
         &[
-            ("destination_model", movement.getattr("destination_model")?),
-            ("old", location(runtime, &history.getattr("old")?)?),
-            ("new", location(runtime, &history.getattr("new")?)?),
+            (
+                "destination_model",
+                native_field(&movement, "destination_model")?,
+            ),
+            ("old", location(runtime, &native_field(history, "old")?)?),
+            ("new", location(runtime, &native_field(history, "new")?)?),
             (
                 "expires_at",
                 if created.is_none() {
                     py.None().into_bound(py)
                 } else {
-                    created.getattr("expires_at")?
+                    native_field(&created, "expires_at")?
                 },
             ),
             (
@@ -98,11 +102,11 @@ pub(super) fn recorded_view<'py>(
                 if created.is_none() {
                     pyo3::types::PyTuple::empty(py).into_any()
                 } else {
-                    created.getattr("column_aliases")?
+                    native_field(&created, "column_aliases")?
                 },
             ),
-            ("migration_event_id", movement.getattr("event_id")?),
-            ("target_name", movement.getattr("target_name")?),
+            ("migration_event_id", native_field(&movement, "event_id")?),
+            ("target_name", native_field(&movement, "target_name")?),
             ("name_reused_by", reused),
         ],
     )

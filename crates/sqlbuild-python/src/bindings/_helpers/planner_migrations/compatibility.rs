@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationCompatibilityResult,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyValueError;
@@ -36,7 +37,7 @@ fn blocking<'py>(
     let policy = if let Some(snapshots_config) = snapshots_config {
         config(model, "snapshot_schema_change")?
             .filter(|value| !value.is_empty())
-            .unwrap_or(snapshots_config.getattr("schema_change")?.extract()?)
+            .unwrap_or(native_field(snapshots_config, "schema_change")?.extract()?)
     } else {
         config(model, "on_schema_change")?
             .filter(|value| !value.is_empty())
@@ -55,10 +56,10 @@ fn blocking<'py>(
     for finding in findings_in.try_iter()? {
         let finding = finding?;
         findings.push(CompatibilityFinding {
-            kind: finding.getattr("kind")?.extract()?,
-            column_name: finding.getattr("column_name")?.extract()?,
-            expected_type: finding.getattr("expected_type")?.extract()?,
-            actual_type: finding.getattr("actual_type")?.extract()?,
+            kind: native_field(&finding, "kind")?.extract()?,
+            column_name: native_field(&finding, "column_name")?.extract()?,
+            expected_type: native_field(&finding, "expected_type")?.extract()?,
+            actual_type: native_field(&finding, "actual_type")?.extract()?,
         });
     }
     let dialect: Option<String> = dialect.extract()?;
@@ -118,7 +119,7 @@ pub(super) fn check_migration_compatibility<'py>(
     let py = check.model.py();
     let model = check.model.clone();
     let relation = check.origin_relation.clone();
-    let relation_type: String = relation.getattr("relation_type")?.extract()?;
+    let relation_type: String = native_field(&relation, "relation_type")?.extract()?;
     if relation_type.to_uppercase().contains("VIEW") {
         return result(
             py,
@@ -163,11 +164,11 @@ pub(super) fn check_migration_compatibility<'py>(
             ],
         )?),
     )?;
-    let schema = model.getattr("schema_entry")?;
+    let schema = native_field(&model, "schema_entry")?;
     let mut has_columns = inferred_rows(&model)?.is_some_and(|rows| !rows.is_empty());
     if !schema.is_none() {
-        for column in schema.getattr("columns")?.try_iter()? {
-            has_columns |= !column?.getattr("type")?.is_none();
+        for column in native_field(&schema, "columns")?.try_iter()? {
+            has_columns |= !native_field(&column?, "type")?.is_none();
         }
     }
     if !has_columns {
@@ -176,7 +177,7 @@ pub(super) fn check_migration_compatibility<'py>(
     let snapshot = config(&model, "materialized")?.as_deref() == Some("snapshot");
     let snapshots_config = check.snapshots_config.clone();
     let findings = blocking(
-        (&model, &change.getattr("schema_findings")?),
+        (&model, &native_field(&change, "schema_findings")?),
         &check.column_dialect,
         snapshot.then_some(&snapshots_config),
     )?;

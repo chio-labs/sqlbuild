@@ -19,6 +19,7 @@ use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_strategy::audit_entries::build_selected_audit_entries;
 use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
 use crate::bindings::_helpers::planner_strategy::strategy::materialization_of;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PyString, PyTuple};
@@ -41,12 +42,12 @@ fn base_plan_output<'py>(
     parts: StaticPlanParts<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
-    let selected_keys = scope.getattr("selected_keys")?;
+    let selected_keys = native_field(scope, "selected_keys")?;
     let execution_order = match parts.execution_order {
         Some(order) => order,
         None => {
             let mut order: Vec<Bound<'py, PyAny>> = Vec::new();
-            for key in scope.getattr("execution_order")?.try_iter()? {
+            for key in native_field(scope, "execution_order")?.try_iter()? {
                 let key = key?;
                 if selected_keys.contains(&key)? {
                     order.push(key);
@@ -59,24 +60,30 @@ fn base_plan_output<'py>(
     fields.extend(parts.fields);
     fields.extend([
         ("selected_keys", selected_keys),
-        ("upstream_deps", scope.getattr("upstream_deps")?),
-        ("downstream_deps", scope.getattr("downstream_deps")?),
-        ("model_locations", relations.getattr("model_locations")?),
-        ("seed_locations", relations.getattr("seed_locations")?),
+        ("upstream_deps", native_field(scope, "upstream_deps")?),
+        ("downstream_deps", native_field(scope, "downstream_deps")?),
+        (
+            "model_locations",
+            native_field(relations, "model_locations")?,
+        ),
+        ("seed_locations", native_field(relations, "seed_locations")?),
         (
             "function_locations",
-            relations.getattr("function_locations")?,
+            native_field(relations, "function_locations")?,
         ),
-        ("source_map", relations.getattr("source_map")?),
-        ("source_read_map", relations.getattr("source_read_map")?),
+        ("source_map", native_field(relations, "source_map")?),
+        (
+            "source_read_map",
+            native_field(relations, "source_read_map")?,
+        ),
         (
             "python_source_read_map",
-            relations.getattr("python_source_read_map")?,
+            native_field(relations, "python_source_read_map")?,
         ),
-        ("hook_functions", project.getattr("hook_functions")?),
+        ("hook_functions", native_field(project, "hook_functions")?),
         (
             "enforce_explicit_references",
-            project.getattr("enforce_explicit_references")?,
+            native_field(project, "enforce_explicit_references")?,
         ),
     ]);
     planner_model(py, RecordId::PlanOutput, &fields)
@@ -148,11 +155,11 @@ fn build_audit_command_plan<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = project.py();
     let materializations = PyDict::new(py);
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         materializations.set_item(
             model_reads::name_object(&model)?,
-            materialization_of(&model)?.getattr("value")?,
+            native_field(&materialization_of(&model)?, "value")?,
         )?;
     }
     let audits = object(
@@ -202,8 +209,8 @@ fn build_test_command_plan<'py>(
     let adapter = args.value("adapter")?;
     let scope = args.value("scope")?;
     let relations = args.value("relations")?;
-    let selected_keys = scope.getattr("selected_keys")?;
-    let selection = scope.getattr("sql_test_selection")?;
+    let selected_keys = native_field(&scope, "selected_keys")?;
+    let selection = native_field(&scope, "sql_test_selection")?;
     let selected = selected_test_entries(
         (&project, &adapter),
         &selected_keys,
@@ -212,9 +219,9 @@ fn build_test_command_plan<'py>(
     )?;
     let (entries, warnings) = (selected.entries, selected.warnings);
     let mut case_names: BTreeSet<String> = BTreeSet::new();
-    for test in project.getattr("sql_tests")?.try_iter()? {
+    for test in native_field(&project, "sql_tests")?.try_iter()? {
         let test = test?;
-        let case_name = test.getattr("case_name")?;
+        let case_name = native_field(&test, "case_name")?;
         if !case_name.is_none() && test_selected(&test, &selected_keys, &selection)? {
             case_names.insert(case_name.extract()?);
         }
@@ -222,16 +229,16 @@ fn build_test_command_plan<'py>(
     let mut test_keys: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut function_keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in &entries {
-        test_keys.push(entry.getattr("key")?);
-        for key in entry.getattr("function_deps")?.try_iter()? {
+        test_keys.push(native_field(entry, "key")?);
+        for key in native_field(entry, "function_deps")?.try_iter()? {
             function_keys.push(key?);
         }
     }
     let function_keys = PyFrozenSet::new(py, function_keys)?;
     let mut functions: Vec<Bound<'py, PyAny>> = Vec::new();
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(&project, "functions")?.try_iter()? {
         let function = function?;
-        if !function_keys.contains(function.getattr("key")?)? {
+        if !function_keys.contains(native_field(&function, "key")?)? {
             continue;
         }
         let fingerprint_sql = object(py, build_compiled_function_fingerprint_sql(&function)?)?;
@@ -248,7 +255,7 @@ fn build_test_command_plan<'py>(
     }
     let scoped_keys = selected_keys.call_method1("__or__", (PyFrozenSet::new(py, test_keys)?,))?;
     let mut order: Vec<Bound<'py, PyAny>> = Vec::new();
-    for key in scope.getattr("execution_order")?.try_iter()? {
+    for key in native_field(&scope, "execution_order")?.try_iter()? {
         let key = key?;
         if scoped_keys.contains(&key)? {
             order.push(key);
@@ -287,19 +294,19 @@ fn build_seed_command_plan<'py>(
         Some(fingerprints) if fingerprints.is_truthy()? => fingerprints,
         _ => PyDict::new(py).into_any(),
     };
-    let selected_keys = scope.getattr("selected_keys")?;
+    let selected_keys = native_field(scope, "selected_keys")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for seed in project.getattr("seeds")?.try_iter()? {
+    for seed in native_field(project, "seeds")?.try_iter()? {
         let seed = seed?;
-        if !selected_keys.contains(seed.getattr("key")?)? {
+        if !selected_keys.contains(native_field(&seed, "key")?)? {
             continue;
         }
         let identity = object(py, build_seed_identity(&seed)?)?;
         let (version_hash, metadata_json) = (identity.get_item(0)?, identity.get_item(1)?);
-        let previous = existing.call_method1("get", (seed.getattr("name")?,))?;
+        let previous = existing.call_method1("get", (native_field(&seed, "name")?,))?;
         let reason = if previous.is_none() {
             "FIRST_RUN"
-        } else if previous.getattr("version_hash")?.ne(&version_hash)? {
+        } else if native_field(&previous, "version_hash")?.ne(&version_hash)? {
             "CONFIG_CHANGED"
         } else {
             "NO_CHANGE"
@@ -308,17 +315,17 @@ fn build_seed_command_plan<'py>(
             py,
             RecordId::SeedPlanEntry,
             &[
-                ("key", seed.getattr("key")?),
-                ("name", seed.getattr("name")?),
-                ("destination", seed.getattr("destination")?),
+                ("key", native_field(&seed, "key")?),
+                ("name", native_field(&seed, "name")?),
+                ("destination", native_field(&seed, "destination")?),
                 (
                     "file_path",
-                    seed.getattr("seed_file")?.getattr("file_path")?,
+                    native_field(&seed, "seed_file")?.getattr("file_path")?,
                 ),
                 ("columns", object(py, extract_seed_columns(&seed)?)?),
                 (
                     "csv_settings",
-                    seed.getattr("schema_entry")?.getattr("csv_settings")?,
+                    native_field(&seed, "schema_entry")?.getattr("csv_settings")?,
                 ),
                 ("fingerprint_definition", metadata_json.clone()),
                 ("fingerprint_version_hash", version_hash),
@@ -366,18 +373,18 @@ fn read_selected_seed_fingerprints<'py>(
         BTreeMap::new();
     for seed in seeds.try_iter()? {
         let seed = seed?;
-        let destination = seed.getattr("destination")?;
-        let schema = destination.getattr("schema")?;
+        let destination = native_field(&seed, "destination")?;
+        let schema = native_field(&destination, "schema")?;
         if schema.is_none() {
             continue;
         }
-        let database: Option<String> = destination.getattr("database")?.extract()?;
+        let database: Option<String> = native_field(&destination, "database")?.extract()?;
         let schema: String = schema.extract()?;
         names_by_target
             .entry((database.clone().unwrap_or_default(), schema.clone()))
             .or_insert_with(|| ((database, schema), BTreeSet::new()))
             .1
-            .insert(seed.getattr("name")?.extract()?);
+            .insert(native_field(&seed, "name")?.extract()?);
     }
     let fingerprints = PyDict::new(py);
     let mut relations_by_target: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -389,14 +396,14 @@ fn read_selected_seed_fingerprints<'py>(
         kwargs.set_item("database", database)?;
         kwargs.set_item("schemas", schemas)?;
         kwargs.set_item("names", names)?;
-        relations_by_target.push(adapter.getattr("list_relations")?.call((), Some(&kwargs))?);
+        relations_by_target.push(native_field(adapter, "list_relations")?.call((), Some(&kwargs))?);
     }
     for (((database, schema), names), relations) in
         names_by_target.values().zip(relations_by_target)
     {
         let mut table_exists = false;
         for relation in relations.try_iter()? {
-            let name: String = relation?.getattr("name")?.extract()?;
+            let name: String = native_field(&relation?, "name")?.extract()?;
             if name.to_lowercase() == table_name.to_lowercase() {
                 table_exists = true;
                 break;
@@ -407,7 +414,7 @@ fn read_selected_seed_fingerprints<'py>(
             py,
             &[
                 ("connection", connection.clone()),
-                ("execute", adapter.getattr("execute")?),
+                ("execute", native_field(adapter, "execute")?),
                 ("table_exists", boolean(py, table_exists)?),
                 (
                     "database",
@@ -418,11 +425,11 @@ fn read_selected_seed_fingerprints<'py>(
                 ("schema", PyString::new(py, schema).into_any()),
                 (
                     "render_qualified_name",
-                    adapter.getattr("render_qualified_name")?,
+                    native_field(adapter, "render_qualified_name")?,
                 ),
                 (
                     "render_read_latest_sql",
-                    adapter.getattr("render_read_latest_fingerprints_sql")?,
+                    native_field(adapter, "render_read_latest_fingerprints_sql")?,
                 ),
                 ("node_names", node_names.into_any()),
             ],
@@ -437,7 +444,7 @@ fn read_selected_seed_fingerprints<'py>(
         )?;
         for item in items.iter() {
             let (name, fingerprint) = (item.get_item(0)?, item.get_item(1)?);
-            if fingerprint.getattr("node_type")?.eq(NODE_TYPE_SEED)?
+            if native_field(&fingerprint, "node_type")?.eq(NODE_TYPE_SEED)?
                 && names.contains(&name.extract::<String>()?)
             {
                 fingerprints.set_item(name, fingerprint)?;
