@@ -8,6 +8,13 @@ pub(crate) struct PropagationTestCase {
 }
 
 #[derive(Debug)]
+pub(crate) struct ExpectedTypesTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) columns: &'static [(&'static str, &'static str, &'static str)],
+    pub(crate) expected_types: &'static [(&'static str, &'static str)],
+}
+
+#[derive(Debug)]
 pub(crate) struct SchemaTestCase {
     pub(crate) description: &'static str,
     pub(crate) authoritative: bool,
