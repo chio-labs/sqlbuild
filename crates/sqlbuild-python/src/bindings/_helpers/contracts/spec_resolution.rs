@@ -143,7 +143,7 @@ fn override_or<'py>(local: Bound<'py, PyAny>, project: Bound<'py, PyAny>) -> Bou
 /// Resolve scenario config, allowing local overrides to replace project rules.
 #[pyfunction]
 #[pyo3(signature = (*, project_config, local_config))]
-fn resolve_effective_scenario_config<'py>(
+pub(crate) fn resolve_effective_scenario_config<'py>(
     project_config: &Bound<'py, PyAny>,
     local_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {

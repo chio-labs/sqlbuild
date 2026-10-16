@@ -228,7 +228,7 @@ pub(crate) fn macro_output(request: ExpansionRequest<'_>) -> PyResult<Option<Exp
     expanded(&expansion, request.sql.to_str()?, &bridge).map(Some)
 }
 
-fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.sql.py();
     let sql: Bound<'py, PyString> = request.sql.clone();
     let Some(output) = macro_output(request)? else {

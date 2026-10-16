@@ -11,7 +11,6 @@ import sqlbuild._native as native_module
 from sqlbuild._native import (
     ContractValidationResult,
     NativeSqlTestArtifact,
-    NativeSqlTestAssembly,
     ProjectColumnLineage,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
@@ -30,12 +29,14 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
             description="models_contracts_lineage_and_sql_tests",
             expected_native_returns={
                 "infer_native_expression_source_shapes": [ANY, ANY, ANY, ANY],
-                "assemble_native_sql_tests": [ANY],
                 "complete_semantic_project": [ANY],
                 "evaluate_model_contracts": [ANY],
-                "promotion_conflict_diagnostics": [()],
                 "build_project_column_lineage": [ANY],
                 "plan_compiled_sql_test_artifacts": [ANY],
+            },
+            expected_stage_work={
+                "assemble_native_sql_tests": 1,
+                "promotion_conflict_diagnostics": 1,
             },
         )
     ],
@@ -56,13 +57,13 @@ def test_given_project_when_compiling_then_native_seams_answer(
     assert native_run.returncode == 0, native_run.stderr
     assert native_run.compiled
     assert native_seams == test_case.expected_native_returns
+    stage_work: dict[str, int] = native_module.compile_stage_work_info()
+    assert {
+        stage: stage_work.get(stage, 0) for stage in test_case.expected_stage_work
+    } == test_case.expected_stage_work
     for seams in (native_seams,):
         assert isinstance(seams["build_project_column_lineage"][0], ProjectColumnLineage)
         assert isinstance(seams["infer_native_expression_source_shapes"][0], tuple)
-        assembled_tests: object = seams["assemble_native_sql_tests"][0]
-        assert isinstance(assembled_tests, tuple)
-        assert assembled_tests
-        assert all(isinstance(assembled, NativeSqlTestAssembly) for assembled in assembled_tests)
         planned_artifacts: object = seams["plan_compiled_sql_test_artifacts"][0]
         assert isinstance(planned_artifacts, tuple)
         assert planned_artifacts

@@ -20,10 +20,13 @@ use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, bridg
 
 use crate::bindings::_helpers::compile_driver::assembly::assemble_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::selection_phases::resolve_analysis_model_names;
+use crate::bindings::_helpers::compile_driver::stage_work::{PROMOTION_CONFLICTS, count_stage};
 use crate::bindings::_helpers::compiled_project::records::project_with;
+use crate::bindings::_helpers::contracts::contract_diagnostics::promotion_conflict_diagnostics;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -146,14 +149,8 @@ fn python_compiled_project<'py>(
     }
     let inference_profile: Bound<'py, PyAny> =
         adapter.call_method0("expression_inference_profile")?;
-    let analysis_model_names: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveAnalysisModelNames)?,
-        &[
-            ("compile_inputs", compile_inputs.clone()),
-            ("inference_profile", inference_profile.clone()),
-            ("selection", selection.clone()),
-        ],
-    )?;
+    let analysis_model_names: Bound<'py, PyAny> =
+        resolve_analysis_model_names(&compile_inputs, &inference_profile, selection)?;
     let project: Bound<'py, PyAny> = assemble_project(
         py,
         Some(keywords(
@@ -220,17 +217,14 @@ fn targeted_project<'py>(
     } else {
         pyo3::types::PyString::new(py, PROJECT_CONFIG_FILENAME).into_any()
     };
-    let conflicts: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::PromotionConflictDiagnostics)?,
-        &[
-            ("project", project.clone()),
-            (
-                "adapter_default",
-                adapter.call_method0("default_table_promotion_mode")?,
-            ),
-            ("settings_file", settings_file),
-        ],
-    )?;
+    count_stage(py, PROMOTION_CONFLICTS, 1)?;
+    let conflicts: Bound<'py, PyAny> = promotion_conflict_diagnostics(
+        py,
+        &project,
+        &adapter.call_method0("default_table_promotion_mode")?,
+        settings_file.extract()?,
+    )?
+    .into_any();
     let diagnostics: Bound<'py, PyTuple> = PyTuple::new(
         py,
         project

@@ -293,7 +293,7 @@ fn assembly<'py>(
 /// One assembly per test input, with the error its assembly raises, if any.
 #[pyfunction]
 #[pyo3(signature = (*, inputs))]
-fn assemble_native_sql_tests<'py>(
+pub(crate) fn assemble_native_sql_tests<'py>(
     py: Python<'py>,
     inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {

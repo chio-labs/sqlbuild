@@ -17,11 +17,8 @@ import sqlbuild._native as native_module
 import sqlbuild.compiler.compile._helpers.render.user_macros as macros_module
 from sqlbuild._native import (
     CustomHostObserver,
-    DeclarationScopeBuild,
     DiscoveredMacroFile,
-    DiscoveredProjectInputs,
     LoadedMacro,
-    SqlLexicalSyntax,
     rules_bulk_cache_path,
 )
 from sqlbuild._native import run_cli as main
@@ -803,7 +800,6 @@ def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compil
     test_case: RulesIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["{test_case.expected_code}"]\n',
@@ -824,31 +820,13 @@ def test_given_warm_scoped_macro_sql_test_when_compiling_then_rules_reuse_compil
     )
     macro_finding: str = f"tests/unit/test_macro_orders.sql:{test_case.expected_code}"
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
-    scope_builds: list[Path] = []
-    original_build: Callable[..., DeclarationScopeBuild] = native_module.build_declaration_scope
-
-    def counting_build(
-        *,
-        discovered_inputs: DiscoveredProjectInputs,
-        loaded_macros: dict[str, LoadedMacro],
-        sql_lexical_syntax: SqlLexicalSyntax,
-        compile_cache_dir: Path | None = None,
-    ) -> DeclarationScopeBuild:
-        scope_builds.append(tmp_path)
-        return original_build(
-            discovered_inputs=discovered_inputs,
-            loaded_macros=loaded_macros,
-            sql_lexical_syntax=sql_lexical_syntax,
-            compile_cache_dir=compile_cache_dir,
-        )
-
-    monkeypatch.setattr(native_module, "build_declaration_scope", counting_build)
+    _ = native_module.compile_stage_work_info(reset=True)
 
     warm: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
 
     assert macro_finding in cold
     assert warm == cold
-    assert len(scope_builds) == 1
+    assert native_module.compile_stage_work_info()["build_declaration_scope"] == 1
 
 
 @pytest.mark.parametrize(
@@ -879,38 +857,21 @@ def test_given_cold_scoped_macro_sql_test_when_compiling_then_early_lint_uses_pr
         "SELECT 1\n",
         encoding="utf-8",
     )
-    scope_builds: list[Path] = []
     macro_loads: list[dict[str, LoadedMacro]] = []
-    original_build: Callable[..., DeclarationScopeBuild] = native_module.build_declaration_scope
     original_load: Callable[..., dict[str, LoadedMacro]] = macros_module.load_project_macros
-
-    def counting_build(
-        *,
-        discovered_inputs: DiscoveredProjectInputs,
-        loaded_macros: dict[str, LoadedMacro],
-        sql_lexical_syntax: SqlLexicalSyntax,
-        compile_cache_dir: Path | None = None,
-    ) -> DeclarationScopeBuild:
-        scope_builds.append(tmp_path)
-        return original_build(
-            discovered_inputs=discovered_inputs,
-            loaded_macros=loaded_macros,
-            sql_lexical_syntax=sql_lexical_syntax,
-            compile_cache_dir=compile_cache_dir,
-        )
 
     def recording_load(macro_files: tuple[DiscoveredMacroFile, ...]) -> dict[str, LoadedMacro]:
         loaded: dict[str, LoadedMacro] = original_load(macro_files)
         macro_loads.append(loaded)
         return loaded
 
-    monkeypatch.setattr(native_module, "build_declaration_scope", counting_build)
     monkeypatch.setattr(macros_module, "load_project_macros", recording_load)
+    _ = native_module.compile_stage_work_info(reset=True)
 
     cold: set[str] = compile_finding_keys(project_dir=tmp_path, capsys=capsys)
 
     assert f"tests/unit/test_macro_orders.sql:{test_case.expected_code}" in cold
-    assert len(scope_builds) == 1
+    assert native_module.compile_stage_work_info()["build_declaration_scope"] == 1
     assert len(macro_loads) == 2
     assert macro_loads[0]["row_limit"].function is not macro_loads[1]["row_limit"].function
 

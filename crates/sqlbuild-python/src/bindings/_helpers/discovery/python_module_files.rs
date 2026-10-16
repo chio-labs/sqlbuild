@@ -14,7 +14,7 @@ use crate::bindings::models::NativeProjectTree;
 /// `sorted((project_dir / root).rglob("*.py"))` without `__init__` modules, or `_` parts too.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, root, public_only))]
-fn discover_python_module_files<'py>(
+pub(crate) fn discover_python_module_files<'py>(
     project_dir: &Bound<'py, PyAny>,
     root: &str,
     public_only: bool,

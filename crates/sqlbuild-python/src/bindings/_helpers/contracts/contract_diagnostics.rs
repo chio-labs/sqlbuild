@@ -206,7 +206,7 @@ fn evaluate_model_contracts<'py>(
 /// One K011 error per enforced-contract table model under immediate promotion.
 #[pyfunction]
 #[pyo3(signature = (*, project, adapter_default, settings_file))]
-fn promotion_conflict_diagnostics<'py>(
+pub(crate) fn promotion_conflict_diagnostics<'py>(
     py: Python<'py>,
     project: &Bound<'py, PyAny>,
     adapter_default: &Bound<'py, PyAny>,

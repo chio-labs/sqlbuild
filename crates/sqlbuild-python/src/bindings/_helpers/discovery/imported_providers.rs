@@ -4,18 +4,19 @@ use std::collections::HashSet;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyDict, PyDictMethods, PyString};
+use pyo3::types::{PyDict, PyDictMethods};
 
+use crate::bindings::_helpers::compile_driver::input_reads::record_settings_class_read;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::contracts::resource_identities::validate_resource_identity;
 use crate::bindings::_helpers::discovery::imported_modules::{
     ProjectDir, discovered, discovery_error, discovery_error_from, module_functions,
     provider_by_name, provider_usages, shim, tuple_of,
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const PROVIDER_ERROR: ErrorId = ErrorId::ProviderDiscovery;
 const SINK_ERROR: ErrorId = ErrorId::EventExporterDiscovery;
@@ -31,16 +32,7 @@ fn reject_invalid_identity(
     name: &Bound<'_, PyAny>,
     relative_path: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    let py: Python<'_> = name.py();
-    call_with(
-        &registry::native(py, NativeAttr::ValidateResourceIdentity)?,
-        &[
-            ("name", name.clone()),
-            ("kind", PyString::new(py, "provider").into_any()),
-            ("path", relative_path.clone()),
-        ],
-    )?;
-    Ok(())
+    validate_resource_identity(name.downcast()?, "provider", relative_path, false)
 }
 
 /// The provider's validated name, from its explicit `provider_name` or `name()`.
@@ -49,7 +41,7 @@ fn provider_name<'py>(
     relative_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = provider_class.py();
-    let explicit: Bound<'py, PyAny> = native_field(provider_class, "provider_name")?;
+    let explicit: Bound<'py, PyAny> = native_field(&provider_class, "provider_name")?;
     if !explicit.is_none() {
         reject_invalid_identity(&explicit, relative_path)?;
     }
@@ -139,11 +131,10 @@ pub(crate) fn discover_provider_classes<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
     let project = ProjectDir { path: project_dir };
-    let record_read: Bound<'py, PyAny> = registry::native(py, NativeAttr::RecordSettingsClassRead)?;
     if let Some(cached) = project.cached_extensions()? {
         let providers: Bound<'py, PyAny> = cached.get_item(0)?;
         for provider in providers.try_iter()? {
-            record_read.call1((native_field(&provider?, "provider_class")?,))?;
+            record_settings_class_read(&native_field(&provider?, "provider_class")?)?;
         }
         return Ok(providers);
     }
@@ -178,7 +169,7 @@ pub(crate) fn discover_provider_classes<'py>(
                 ));
             }
             seen.push((name_text, file_path.clone()));
-            record_read.call1((&provider_class,))?;
+            record_settings_class_read(&provider_class)?;
             let settings: Bound<'py, PyAny> =
                 provider_instance(&provider_class, (&name, &relative_path))?;
             providers.push(discovered(
@@ -282,10 +273,10 @@ fn exporter_provider_usages<'py>(
     (project, providers): (&ProjectDir<'py>, &Bound<'py, PyDict>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let function: Bound<'py, PyAny> = native_field(declaration, "function")?;
-    let name: String = native_field(declaration, "name")?.extract()?;
+    let function: Bound<'py, PyAny> = native_field(&declaration, "function")?;
+    let name: String = native_field(&declaration, "name")?.extract()?;
     let relative_path: String = project
-        .relative(&native_field(declaration, "file_path")?)?
+        .relative(&native_field(&declaration, "file_path")?)?
         .str()?
         .extract()?;
     let empty: Bound<'py, PyAny> = imported(py, "inspect", "Parameter")?.getattr("empty")?;

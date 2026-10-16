@@ -4,7 +4,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyCFunction, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::analysis::explicit_references::explicit_reference_report;
 use crate::bindings::_helpers::compile_driver::assembly_project::assembled_project;
+use crate::bindings::_helpers::compile_driver::diagnostic_collector::collect_compile_diagnostics;
 use crate::bindings::_helpers::compile_driver::project::lineage_mode;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
@@ -14,8 +16,6 @@ use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::compiled_project::records::record_model_analyses;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 const OPTIONAL: [&str; 5] = [
     "inference_profile",
@@ -52,8 +52,7 @@ pub(crate) fn assemble_project<'py>(
         analysis_cache_dir: arguments.value("analysis_cache_dir")?.unbind(),
         analysis_model_names: arguments.value("analysis_model_names")?.unbind(),
     };
-    let collector: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::CollectCompileDiagnostics)?.call0()?;
+    let collector: Bound<'py, PyAny> = collect_compile_diagnostics(py)?.into_any();
     let (built, violations): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         within(&collector, |violations| {
             Ok((referenced_project(py, request)?, violations.clone()))
@@ -107,19 +106,15 @@ fn referenced_project(py: Python<'_>, request: AssemblyRequest) -> PyResult<Boun
     };
     let project: Bound<'_, PyAny> =
         with_native_project(&project, &inputs.getattr("native_project")?)?;
-    let references: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ExplicitReferenceReport)?,
-        &[
-            ("project", project.clone()),
-            ("discovered_inputs", inputs.getattr("discovered_inputs")?),
-            (
-                "enforce_explicit",
-                inputs
-                    .getattr("project_config")?
-                    .getattr("references")?
-                    .getattr("enforce_explicit")?,
-            ),
-        ],
+    let references: Bound<'_, PyAny> = explicit_reference_report(
+        py,
+        &project,
+        &inputs.getattr("discovered_inputs")?,
+        inputs
+            .getattr("project_config")?
+            .getattr("references")?
+            .getattr("enforce_explicit")?
+            .extract()?,
     )?;
     let reference_diagnostics: Bound<'_, PyAny> = references.getattr("diagnostics")?;
     let unmatched: Bound<'_, PyAny> = references.getattr("unmatched")?;

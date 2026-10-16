@@ -4807,10 +4807,8 @@ def full_macro_call_runs(
 
 _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_module, "infer_native_expression_source_shapes"),
-    (native_module, "assemble_native_sql_tests"),
     (native_module, "complete_semantic_project"),
     (native_module, "evaluate_model_contracts"),
-    (native_module, "promotion_conflict_diagnostics"),
     (native_module, "build_project_column_lineage"),
     (plan_artifacts_module, "plan_compiled_sql_test_artifacts"),
 )
@@ -4853,6 +4851,7 @@ def seam_recording_compile(
         }.items():
             patch.setenv(name, value)
         seams: dict[str, list[object]] = record_analysis_seams(monkeypatch=patch)
+        _ = native_module.compile_stage_work_info(reset=True)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     return run, seams
 

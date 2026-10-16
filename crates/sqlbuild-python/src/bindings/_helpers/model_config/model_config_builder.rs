@@ -118,7 +118,7 @@ pub(crate) enum ConfigBuild<'py> {
 }
 
 /// `((target name, run id), (database, schema) or None)` of the active target.
-type TargetInputs<'py> = (
+pub(crate) type TargetInputs<'py> = (
     (Bound<'py, PyAny>, Bound<'py, PyAny>),
     Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)>,
 );
@@ -126,7 +126,7 @@ type TargetInputs<'py> = (
 #[pymethods]
 impl NativeModelConfigBuilder {
     #[new]
-    fn new(
+    pub(crate) fn new(
         layers: (Bound<'_, PyAny>, Bound<'_, PyDict>, Bound<'_, PyTuple>),
         sources: (Bound<'_, PyDict>, Bound<'_, PyAny>),
         target: TargetInputs<'_>,

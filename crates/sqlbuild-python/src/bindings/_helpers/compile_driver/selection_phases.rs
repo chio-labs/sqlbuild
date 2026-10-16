@@ -131,7 +131,7 @@ fn resolve_configured_rule_selection<'py>(
 /// Return the models selected for deep analysis, or None to analyse every model.
 #[pyfunction]
 #[pyo3(signature = (*, compile_inputs, inference_profile, selection))]
-fn resolve_analysis_model_names<'py>(
+pub(crate) fn resolve_analysis_model_names<'py>(
     compile_inputs: &Bound<'py, PyAny>,
     inference_profile: &Bound<'py, PyAny>,
     selection: &Bound<'py, PyAny>,

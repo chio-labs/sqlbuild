@@ -11,12 +11,20 @@ use crate::bindings::_helpers::compile_driver::integration_loaders::integration_
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, keywords, within,
 };
+use crate::bindings::_helpers::contracts::project_config::{
+    load_local_config_file, load_project_config_file,
+};
 use crate::bindings::_helpers::discovery::declaration_records::{
     discover_adapter_file, discover_audit_files, discover_constant_files, discover_enum_files,
     discover_macro_files, discover_model_schema_files, discover_seed_files,
     discover_sql_function_files, discover_sql_hook_files, retained_discovery_session,
 };
-use crate::bindings::_helpers::discovery::imported_providers::discover_provider_classes;
+use crate::bindings::_helpers::discovery::imported_providers::{
+    discover_event_exporter_functions, discover_provider_classes,
+};
+use crate::bindings::_helpers::discovery::imported_python_nodes::{
+    discover_hook_functions, discover_materialization_files, discover_python_node_functions,
+};
 use crate::bindings::_helpers::discovery::model_records::{
     ModelFileSelection, discovered_model_files,
 };
@@ -34,7 +42,7 @@ use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, produ
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 
@@ -105,19 +113,19 @@ const FILE_DISCOVERERS: [(&str, FileDiscoverer); 14] = [
 const PYTHON_DISCOVERERS: [(&str, Discoverer); 5] = [
     (
         "python_nodes",
-        Discoverer::Native(NativeAttr::DiscoverPythonNodeFunctions),
+        Discoverer::Native(discover_python_node_functions),
     ),
     (
         "materialization_files",
-        Discoverer::Native(NativeAttr::DiscoverMaterializationFiles),
+        Discoverer::Native(discover_materialization_files),
     ),
     (
         "hook_functions",
-        Discoverer::Native(NativeAttr::DiscoverHookFunctions),
+        Discoverer::Native(discover_hook_functions),
     ),
     (
         "event_exporters",
-        Discoverer::Native(NativeAttr::DiscoverEventExporterFunctions),
+        Discoverer::Native(discover_event_exporter_functions),
     ),
     (
         "command_output_sinks",
@@ -125,18 +133,32 @@ const PYTHON_DISCOVERERS: [(&str, Discoverer); 5] = [
     ),
 ];
 
+/// A native discoverer of project Python that takes `project_dir` and `providers`.
+type PythonDiscoverer =
+    for<'py> fn(Bound<'py, PyAny>, Option<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>>;
+
 /// Where a project-Python discoverer lives.
 #[derive(Clone, Copy)]
 enum Discoverer {
-    Native(NativeAttr),
+    Native(PythonDiscoverer),
     Host(UserCodeHost),
 }
 
 impl Discoverer {
-    fn function<'py>(self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    fn discovered<'py>(
+        self,
+        project_dir: &Bound<'py, PyAny>,
+        providers: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            Self::Native(id) => registry::native(py, id),
-            Self::Host(entry) => host::entry(py, entry),
+            Self::Native(discover) => discover(project_dir.clone(), Some(providers.clone())),
+            Self::Host(entry) => call_with(
+                &host::entry(project_dir.py(), entry)?,
+                &[
+                    ("project_dir", project_dir.clone()),
+                    ("providers", providers.clone()),
+                ],
+            ),
         }
     }
 }
@@ -203,9 +225,8 @@ fn assembled_inputs<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let project_dir: &Bound<'py, PyAny> = request.project_dir.bind(py);
     let project_config: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::LoadProjectConfigFile)?.call1((project_dir,))?;
-    let local_config: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::LoadLocalConfigFile)?.call1((project_dir,))?;
+        load_project_config_file(py, project_dir)?.into_bound(py);
+    let local_config: Bound<'py, PyAny> = load_local_config_file(py, project_dir)?.into_bound(py);
     reject_invalid_project_configuration(&ProjectConfiguration {
         project_dir,
         project_config: &project_config,
@@ -361,16 +382,7 @@ fn imported_python<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
     let python: Bound<'py, PyDict> = PyDict::new(py);
     python.set_item("providers", &providers)?;
     for (field, discoverer) in PYTHON_DISCOVERERS {
-        python.set_item(
-            field,
-            call_with(
-                &discoverer.function(py)?,
-                &[
-                    ("project_dir", project_dir.clone()),
-                    ("providers", providers.clone()),
-                ],
-            )?,
-        )?;
+        python.set_item(field, discoverer.discovered(project_dir, &providers)?)?;
     }
     Ok(python)
 }

@@ -6,10 +6,15 @@ use sqlbuild_config::project::main::unsupported_target_warehouse::unsupported_ta
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 
-use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::contracts::project_config::{
+    resolve_config_file_path, validate_local_sql_analysis,
+};
+use crate::bindings::_helpers::contracts::spec_resolution::{
+    resolve_effective_adapter_name, resolve_target_config,
+};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -65,9 +70,7 @@ fn reject_local_sql_analysis_opt_out(config: &ProjectConfiguration<'_, '_>) -> P
             local_settings.getattr(SQL_ANALYSIS_KEY)?,
         ],
     )?;
-    registry::native(py, NativeAttr::ValidateLocalSqlAnalysis)?
-        .call1((config.project_dir, flags))?;
-    Ok(())
+    validate_local_sql_analysis(py, config.project_dir, flags.extract()?)
 }
 
 /// The first target, by name, that selects a command-group warehouse.
@@ -109,8 +112,7 @@ fn reject_group(
     (target, group, value): (String, String, String),
 ) -> PyErr {
     let raised = (|| -> PyResult<PyErr> {
-        let file_path: String = registry::native(py, NativeAttr::ResolveConfigFilePath)?
-            .call1((project_dir, local))?
+        let file_path: String = resolve_config_file_path(py, project_dir, local)?
             .str()?
             .extract()?;
         let file_name: &str = if local {
@@ -168,16 +170,13 @@ fn reject_invalid_target_connections(config: &ProjectConfiguration<'_, '_>) -> P
     names.extend(target_names(config.local_config)?);
     names.sort();
     names.dedup();
-    let resolve: Bound<'_, PyAny> = registry::native(py, NativeAttr::ResolveTargetConfig)?;
     let spec_error: Bound<'_, PyAny> = registry::error(py, ErrorId::SpecConfig)?;
     for name in names {
-        let resolved: PyResult<Bound<'_, PyAny>> = call_with(
-            &resolve,
-            &[
-                ("project_config", config.project_config.clone()),
-                ("local_config", config.local_config.clone()),
-                ("target_name", PyString::new(py, &name).into_any()),
-            ],
+        let resolved: PyResult<Bound<'_, PyAny>> = resolve_target_config(
+            py,
+            config.project_config,
+            config.local_config,
+            PyString::new(py, &name).as_any(),
         );
         let Err(error) = resolved else {
             continue;

@@ -1,13 +1,16 @@
 //! Every SQL test assembled natively; macro-mocked tests' model queries run the user's macros.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyList, PyTuple};
+use pyo3::types::{PyList, PyTuple, PyTupleMethods};
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_driver::assembly_checks::test_model_query_overrides;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_driver::stage_work::{SQL_TEST_ASSEMBLY, count_stage};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::sql_test_glue::compiled_tests::assemble_native_sql_tests;
 
 const DECIMAL_MODULE: &str = "decimal";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -19,12 +22,9 @@ pub(crate) fn assembled_sql_tests<'py>(
     inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = inputs.py();
-    let assemblies: Vec<Bound<'py, PyAny>> = call_with(
-        &registry::native(py, NativeAttr::AssembleNativeSqlTests)?,
-        &[("inputs", inputs.clone())],
-    )?
-    .try_iter()?
-    .collect::<PyResult<_>>()?;
+    count_stage(py, SQL_TEST_ASSEMBLY, 1)?;
+    let assemblies: Vec<Bound<'py, PyAny>> =
+        assemble_native_sql_tests(py, inputs)?.iter().collect();
     let test_inputs: Vec<Bound<'py, PyAny>> = inputs
         .getattr("test_inputs")?
         .try_iter()?
@@ -34,7 +34,6 @@ pub(crate) fn assembled_sql_tests<'py>(
             "native SQL test assembly returned a different number of tests",
         ));
     }
-    let report: Bound<'py, PyAny> = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
     let mocked_input: Bound<'py, PyAny> =
         registry::class(py, RecordId::CompileModelSqlTestInputPayload)?;
     let mut tests: Vec<Bound<'py, PyAny>> = Vec::with_capacity(assemblies.len());
@@ -51,7 +50,7 @@ pub(crate) fn assembled_sql_tests<'py>(
         }
         for item in assembly.getattr("diagnostics")?.try_iter()? {
             let (key, diagnostic): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
-            call_with(&report, &[("key", key), ("diagnostic", diagnostic)])?;
+            report_compile_diagnostic(&key, &diagnostic)?;
         }
         let payload: Bound<'py, PyAny> = test_input.getattr("payload")?;
         if payload.is_instance(&mocked_input)? && payload.getattr("macro_mocks")?.is_truthy()? {

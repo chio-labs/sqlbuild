@@ -8,9 +8,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
+use crate::bindings::_helpers::render::macro_expansion_result::{
+    ExpansionRequest, expansion_result,
+};
 use pyo3::IntoPyObjectExt;
 
 /// The `CompiledSqlScenario` fields copied from its input, in Python's keyword order.
@@ -69,7 +72,6 @@ pub(crate) fn test_model_query_overrides<'py>(
         &inputs.getattr("scope_index")?,
         (&loaded_macros, &lookup),
     )?;
-    let expand: Bound<'py, PyAny> = registry::native(py, NativeAttr::ExpandSqlMacros)?;
     for model_input in inputs.getattr("model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
         let file_path: Bound<'py, PyAny> =
@@ -81,17 +83,17 @@ pub(crate) fn test_model_query_overrides<'py>(
         } else {
             model_input.getattr("query_sql")?
         };
-        let expanded: Bound<'py, PyAny> = call_with(
-            &expand,
-            &[
-                ("sql", macro_source_sql),
-                ("file_path", file_path),
-                ("loaded_macros", loaded_macros.clone()),
-                ("macro_overrides", macro_mocks.clone()),
-                ("macro_context", macro_context.clone()),
-                ("declaration_resolver", declaration_resolver.clone()),
-            ],
-        )?
+        let expanded: Bound<'py, PyAny> = expansion_result(ExpansionRequest {
+            sql: macro_source_sql.downcast_into()?,
+            file_path,
+            loaded_macros: loaded_macros.downcast()?.clone(),
+            macro_overrides: Some(macro_mocks.downcast()?.clone()),
+            macro_context: macro_context.clone(),
+            declaration_resolver: (!declaration_resolver.is_none())
+                .then(|| declaration_resolver.clone()),
+            declarations: None,
+            consumer: None,
+        })?
         .getattr("sql")?;
         let query: String = validated_model_cursor_sql(
             py,

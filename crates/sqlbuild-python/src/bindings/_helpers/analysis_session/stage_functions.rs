@@ -169,10 +169,20 @@ fn prove_native_dynamic_contracts<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("prove_native_dynamic_contracts", request)?;
-    let py: Python<'py> = request.py();
-    let session: Bound<'py, PyAny> = request.get("session")?;
-    let tables: Bound<'py, PyAny> = request.get("tables")?;
-    let models: Bound<'py, PyAny> = request.get("models")?;
+    dynamic_contract_proofs(
+        &request.get("session")?,
+        &request.get("tables")?,
+        &request.get("models")?,
+    )
+}
+
+/// The proof row per `(sql, families)` model from `session`, or from `tables` without one.
+pub(crate) fn dynamic_contract_proofs<'py>(
+    session: &Bound<'py, PyAny>,
+    tables: &Bound<'py, PyAny>,
+    models: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = models.py();
     if !models.is_truthy()? {
         return Ok(PyTuple::empty(py));
     }

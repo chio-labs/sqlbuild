@@ -47,7 +47,7 @@ from tests.integration.src.sqlbuild.compiler.analysis_session._test_types import
 from tests.integration.src.sqlbuild.compiler.helpers import GoldenEntry, golden_entry
 
 if TYPE_CHECKING:
-    from sqlbuild._native import CompileInputsView, ModelInput, ProofRow
+    from sqlbuild._native import CompileInputsView, ModelInput
 
 LINEAGE_NATIVE: str = "native"
 
@@ -395,31 +395,21 @@ def pivot_project_files() -> dict[str, str]:
     }
 
 
-@dataclass
+@dataclass(frozen=True)
 class NativePivotProofs:
-    """Every native pivot proof assembly took, and how many a finished session proved."""
+    """How many standalone pivot proofs assembly ran, and how many a session proved."""
 
-    proofs: list[DynamicColumnContractProof | None] = field(default_factory=list)
-    session_proofs: int = 0
+    proofs: int
+    session_proofs: int
 
 
-def native_pivot_proofs(*, monkeypatch: pytest.MonkeyPatch) -> NativePivotProofs:
-    """Record every batch of native pivot proofs assembly takes."""
+def native_pivot_proofs() -> NativePivotProofs:
+    """The standalone pivot proofs assembly ran since the counters were last reset."""
 
-    recorded_proofs: NativePivotProofs = NativePivotProofs()
-    native_proofs: Callable[..., tuple[ProofRow | None, ...]] = (
-        native_module.prove_native_dynamic_contracts
+    work: dict[str, int] = native_module.compile_stage_work_info(reset=True)
+    return NativePivotProofs(
+        proofs=work.get("pivot_proofs", 0), session_proofs=work.get("session_pivot_proofs", 0)
     )
-
-    def recorded(**keywords: Any) -> tuple[ProofRow | None, ...]:
-        proofs: tuple[ProofRow | None, ...] = native_proofs(**keywords)
-        recorded_proofs.proofs.extend(map(contract_proof, proofs))
-        proven: int = sum(proof is not None for proof in proofs)
-        recorded_proofs.session_proofs += proven * (keywords["session"] is not None)
-        return proofs
-
-    monkeypatch.setattr(native_module, "prove_native_dynamic_contracts", recorded)
-    return recorded_proofs
 
 
 def generated_analysis_files(*, rng: random.Random, model_count: int) -> dict[str, str]:

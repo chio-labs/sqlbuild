@@ -69,7 +69,7 @@ pub(crate) fn context_read(py: Python<'_>, name: &str) -> PyResult<()> {
 
 /// Note a provider settings class instantiated from the environment and files.
 #[pyfunction]
-fn record_settings_class_read(settings_class: &Bound<'_, PyAny>) -> PyResult<()> {
+pub(crate) fn record_settings_class_read(settings_class: &Bound<'_, PyAny>) -> PyResult<()> {
     for recorder in recorders(settings_class.py())? {
         recorder.get().add_settings_class(settings_class);
     }

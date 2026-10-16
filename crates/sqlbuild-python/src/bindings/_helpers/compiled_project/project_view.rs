@@ -6,6 +6,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{pyclass, pymethods};
 
+use crate::bindings::_helpers::compile_driver::stage_work::{LINEAGE_GRAPH_BUILDS, count_stage};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     NativeCompiledModel, model_graph_row,
 };
@@ -553,6 +554,7 @@ impl NativeProjectView {
                     });
                 }
                 self.owner.bind(py).borrow_mut().record_graph_build();
+                count_stage(py, LINEAGE_GRAPH_BUILDS, 1)?;
                 Py::new(py, project_graph(rows)?)
             })
             .map(|graph| graph.clone_ref(py))

@@ -16,7 +16,10 @@ use crate::bindings::_helpers::compile_driver::assembly_models::{
 };
 use crate::bindings::_helpers::compile_driver::assembly_sql_tests::assembled_sql_tests;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
-use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::contracts::spec_resolution::{
+    resolve_effective_adapter_name, resolve_effective_scenario_config,
+};
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -228,12 +231,9 @@ fn project_fields<'py>(
             ("settings", inputs.getattr("effective_settings")?),
             (
                 "scenario",
-                call_with(
-                    &registry::native(py, NativeAttr::ResolveEffectiveScenarioConfig)?,
-                    &[
-                        ("project_config", project_config.clone()),
-                        ("local_config", inputs.getattr("local_config")?),
-                    ],
+                resolve_effective_scenario_config(
+                    &project_config,
+                    &inputs.getattr("local_config")?,
                 )?,
             ),
             ("models", models.clone().into_any()),
@@ -335,10 +335,9 @@ fn project_view<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
     let owner: Bound<'py, PyAny> = inputs.getattr("native_project")?;
-    let native_model: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeCompiledModel)?;
     let mut all_native: bool = true;
     for model in models.as_any().try_iter()? {
-        if !model?.is_instance(&native_model)? {
+        if !model?.is_instance_of::<NativeCompiledModel>() {
             all_native = false;
             break;
         }

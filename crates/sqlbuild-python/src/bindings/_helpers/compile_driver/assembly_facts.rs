@@ -2,15 +2,19 @@
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple, PyTupleMethods};
 
+use crate::bindings::_helpers::analysis_session::stage_functions::dynamic_contract_proofs;
 use crate::bindings::_helpers::compile_driver::assembly_analysis::AnalysisContext;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    PIVOT_PROOFS, SESSION_PIVOT_PROOFS, count_stage,
+};
 use crate::bindings::_helpers::project_assembly::models::{NativeModelFacts, NativeProjectFacts};
 use crate::bindings::_helpers::project_assembly::native_resources::assemble_native_project_resources;
 use crate::bindings::_helpers::project_assembly::syntax_checks::model_syntax_checks;
 use crate::bindings::_helpers::project_assembly::syntax_checks::standalone_pivot_models;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 
@@ -103,16 +107,18 @@ fn pivot_proofs<'py>(
             ),
         ],
     )?;
-    let proven: Vec<Bound<'py, PyAny>> = call_with(
-        &registry::native(py, NativeAttr::ProveNativeDynamicContracts)?,
-        &[
-            ("session", session.clone()),
-            ("tables", tables),
-            ("models", PyTuple::new(py, pivots.values())?.into_any()),
-        ],
+    let proven: Vec<Bound<'py, PyAny>> = dynamic_contract_proofs(
+        session,
+        &tables,
+        &PyTuple::new(py, pivots.values())?.into_any(),
     )?
-    .try_iter()?
-    .collect::<PyResult<_>>()?;
+    .iter()
+    .collect();
+    count_stage(py, PIVOT_PROOFS, proven.len() as u64)?;
+    if !session.is_none() {
+        let session_proofs: usize = proven.iter().filter(|proof| !proof.is_none()).count();
+        count_stage(py, SESSION_PIVOT_PROOFS, session_proofs as u64)?;
+    }
     if proven.len() != pivots.len() {
         return Err(PyValueError::new_err(
             "native pivot proofs do not match the standalone pivot models",

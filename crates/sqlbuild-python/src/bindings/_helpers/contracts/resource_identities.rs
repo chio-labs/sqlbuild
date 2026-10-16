@@ -15,7 +15,7 @@ const UDF_NODE_TYPE: &str = "udf";
 /// Reject one identity unless it uses canonical lowercase snake_case.
 #[pyfunction]
 #[pyo3(signature = (*, name, kind, path, private_identity = false))]
-fn validate_resource_identity(
+pub(crate) fn validate_resource_identity(
     name: &Bound<'_, PyString>,
     kind: &str,
     path: &Bound<'_, PyAny>,

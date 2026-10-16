@@ -4,19 +4,23 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_attachment::declaration_scope::build_declaration_scope;
 use crate::bindings::_helpers::compile_attachment::effective_config::{
     build_effective_connection, build_effective_settings, build_effective_vars,
 };
+use crate::bindings::_helpers::compile_attachment::model_inputs::build_model_inputs;
+use crate::bindings::_helpers::compile_driver::diagnostic_collector::collect_compile_diagnostics;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::compiled_project::attachment::{attach_checks, attach_resources};
+use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::records::{compile_inputs_view, inputs_with};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::model_config::template_data::run_id;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_indexes::{
     public_declaration_indexes, public_model_schema_index,
@@ -114,8 +118,7 @@ pub(crate) fn attached_inputs<'py>(
     py: Python<'py>,
     request: &InputsRequest,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let collector: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::CollectCompileDiagnostics)?.call0()?;
+    let collector: Bound<'py, PyAny> = collect_compile_diagnostics(py)?.into_any();
     let (built, violations): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         within(&collector, |violations| {
             Ok((compile_inputs(py, request)?, violations.clone()))
@@ -147,14 +150,11 @@ fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bou
     let loaded_macros: Bound<'py, PyAny> = host::entry(py, UserCodeHost::LoadProjectMacros)?
         .call1((discovered.getattr("macro_files")?,))?;
     let syntax: Bound<'py, PyAny> = adapter_context.getattr("sql_lexical_syntax")?;
-    let declaration_scope: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildDeclarationScope)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("loaded_macros", loaded_macros),
-            ("sql_lexical_syntax", syntax.clone()),
-            ("compile_cache_dir", target.compile_cache_dir.clone()),
-        ],
+    let declaration_scope: Bound<'py, PyAny> = build_declaration_scope(
+        &discovered,
+        &loaded_macros,
+        &syntax,
+        Some(target.compile_cache_dir.clone()),
     )?;
     let value_renderer: Bound<'py, PyAny> = adapter_context.getattr("value_renderer")?;
     let model_context: Bound<'py, PyAny> = call_with(
@@ -310,7 +310,7 @@ fn model_build<'py>(
         (enums.into_any(), constants.into_any());
     let schemas: Bound<'py, PyAny> = public_model_schema_index(discovered.clone())?.into_any();
     let native_project: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::NativeCompiledProject)?.call0()?;
+        Bound::new(py, NativeCompiledProject::default())?.into_any();
     let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let model_context: Bound<'py, PyAny> = replace.call(
         (context,),
@@ -323,26 +323,30 @@ fn model_build<'py>(
             ],
         )?),
     )?;
-    let inputs: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildModelInputs)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("context", model_context),
-            (
-                "no_sql_validation",
-                request.no_sql_validation.bind(py).clone(),
-            ),
-            (
-                "defer_model_sql_validation",
-                request.defer_model_sql_validation.bind(py).clone(),
-            ),
-            (
-                "external_sql_reference_resolver",
-                request.external_sql_reference_resolver.bind(py).clone(),
-            ),
-            ("native_project", native_project.clone()),
-        ],
-    )?;
+    let inputs: Bound<'py, PyAny> = build_model_inputs(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("context", model_context),
+                (
+                    "no_sql_validation",
+                    request.no_sql_validation.bind(py).clone(),
+                ),
+                (
+                    "defer_model_sql_validation",
+                    request.defer_model_sql_validation.bind(py).clone(),
+                ),
+                (
+                    "external_sql_reference_resolver",
+                    request.external_sql_reference_resolver.bind(py).clone(),
+                ),
+                ("native_project", native_project.clone()),
+            ],
+        )?),
+    )?
+    .into_any();
     let context: Bound<'py, PyAny> = replace.call(
         (context,),
         Some(&keywords(

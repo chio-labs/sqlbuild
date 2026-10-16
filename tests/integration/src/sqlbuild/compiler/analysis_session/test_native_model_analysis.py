@@ -402,29 +402,28 @@ def test_given_cyclic_project_when_compiling_then_native_output_is_complete_and_
     ids=lambda case: case.description,
 )
 def test_given_unanalysed_pivot_model_when_assembling_then_native_proves_it_without_the_wheel(
-    test_case: StandalonePivotProofTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    test_case: StandalonePivotProofTestCase, tmp_path: Path
 ) -> None:
     inputs: CompileInputsView = compile_inputs(
         project_dir=tmp_path / "project", files=pivot_project_files()
     )
-    recorded: NativePivotProofs = native_pivot_proofs(monkeypatch=monkeypatch)
+    _ = native_pivot_proofs()
 
     project: CompiledProjectView = assemble_project(
         inputs=inputs,
         inference_profile=ExpressionInferenceProfile(sql_analysis_dialect="duckdb"),
         analysis_model_names=test_case.analysed_models,
     )
+    recorded: NativePivotProofs = native_pivot_proofs()
 
     assert (
-        all(proof is not None for proof in recorded.proofs),
-        len(recorded.proofs),
+        recorded.proofs,
         recorded.session_proofs,
         {
             model.name: getattr(model.dynamic_column_contract, "output_proven", None)
             for model in project.models
         },
     ) == (
-        True,
         test_case.expected_native_proofs,
         test_case.expected_session_proofs,
         test_case.expected_proven_by_model,

@@ -77,7 +77,7 @@ impl<'py> PythonSqlOwner<'py> {
 /// Return P005, P007 and P008 errors and unmatched Python-SQL relations; raise P001.
 #[pyfunction]
 #[pyo3(signature = (*, project, discovered_inputs, enforce_explicit))]
-fn explicit_reference_report<'py>(
+pub(crate) fn explicit_reference_report<'py>(
     py: Python<'py>,
     project: &Bound<'py, PyAny>,
     discovered_inputs: &Bound<'py, PyAny>,

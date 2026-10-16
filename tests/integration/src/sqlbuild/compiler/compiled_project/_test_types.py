@@ -14,14 +14,6 @@ class RetainedRulesRowsTestCase:
 
 
 @dataclass(frozen=True)
-class UnretainedRulesRowsTestCase:
-    """A compile whose model facts were not retained, so rules cannot read them."""
-
-    description: str
-    expected_error: str
-
-
-@dataclass(frozen=True)
 class ZeroMaterializationTestCase:
     """An ordinary compile that must not construct the legacy Python project representation."""
 
