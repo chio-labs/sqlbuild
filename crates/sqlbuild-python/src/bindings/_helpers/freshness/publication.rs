@@ -7,16 +7,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
-use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
-
-/// Module of the execution status enum.
-const SCHEDULING_TYPES_MODULE: &str = "sqlbuild.executor.scheduling.types";
-/// Module of the run-scope context manager.
-const RUN_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.run_scope";
-/// Module of the operation lifecycle context manager.
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
-/// Module of the operation attributes record.
-const OBSERVABILITY_MODELS_MODULE: &str = "sqlbuild.runtime.observability.models";
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// Observed records grouped by `(database, schema)` in first-seen order.
 type RecordsByLocation<'py> = Vec<(
@@ -28,7 +22,7 @@ type RecordsByLocation<'py> = Vec<(
 fn successful_model_names<'py>(result: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = result.py();
     let success: Bound<'py, PyAny> =
-        imported(py, SCHEDULING_TYPES_MODULE, "ExecutionStatus")?.getattr("SUCCESS")?;
+        host::entry(py, ExecutorHost::ExecutionStatus)?.getattr("SUCCESS")?;
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
     for model_result in result.getattr("model_results")?.try_iter()? {
         let model_result: Bound<'py, PyAny> = model_result?;
@@ -157,7 +151,7 @@ fn eligible_records<'py>(
 /// `SourceFreshnessRenderers` bound to `adapter`.
 fn renderers<'py>(adapter: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(adapter.py(), NATIVE_MODULE, "SourceFreshnessRenderers")?,
+        &registry::class(adapter.py(), RecordId::SourceFreshnessRenderers)?,
         &[
             (
                 "render_qualified_name",
@@ -190,8 +184,8 @@ fn write_records<'py>(
     grouped: &RecordsByLocation<'py>,
 ) -> PyResult<()> {
     let py: Python<'py> = adapter.py();
-    let cost_context: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "CostContext")?;
-    let write: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "write_source_freshness_records")?;
+    let cost_context: Bound<'py, PyAny> = registry::native(py, NativeAttr::CostContext)?;
+    let write: Bound<'py, PyAny> = registry::native(py, NativeAttr::WriteSourceFreshnessRecords)?;
     for ((database, schema), records) in grouped {
         let mut by_source: Vec<(Bound<'py, PyAny>, Vec<Bound<'py, PyAny>>)> = Vec::new();
         for record in records {
@@ -251,20 +245,19 @@ pub(crate) fn append_freshness_records<'py>(
     if record_count == 0 {
         return Ok(());
     }
-    let run_scope: Bound<'py, PyAny> =
-        imported(py, RUN_SCOPE_MODULE, "run_scope")?.call1((run_id,))?;
+    let run_scope: Bound<'py, PyAny> = host::entry(py, ExecutorHost::RunScope)?.call1((run_id,))?;
     within(&run_scope, |_| {
         let metadata: Bound<'py, PyDict> = PyDict::new(py);
         metadata.set_item("item_count", record_count)?;
         let attributes: Bound<'py, PyAny> = call_with(
-            &imported(py, OBSERVABILITY_MODELS_MODULE, "OperationAttributes")?,
+            &host::entry(py, ExecutorHost::OperationAttributes)?,
             &[
                 ("phase", PyString::new(py, "publish").into_any()),
                 ("target_kind", PyString::new(py, "state_batch").into_any()),
             ],
         )?;
         let lifecycle: Bound<'py, PyAny> = call_with(
-            &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+            &host::entry(py, ExecutorHost::OperationLifecycle)?,
             &[
                 ("operation_kind", PyString::new(py, "freshness").into_any()),
                 (

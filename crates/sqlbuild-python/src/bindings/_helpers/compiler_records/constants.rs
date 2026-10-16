@@ -1,5 +1,7 @@
 //! Layouts of the compiler, lint and config value records hosted natively.
 
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 
 const R_NATIVE_MODEL_ANALYSIS_REQUEST: RecordSpec = RecordSpec {
@@ -132,7 +134,7 @@ const R_HOOK_READ_EDGE: RecordSpec = RecordSpec {
         FieldSpec::required("read"),
         FieldSpec::new(
             "hook_type",
-            FieldDefault::Member("sqlbuild._native", "HookReadType", "PYTHON"),
+            FieldDefault::NativeMember(RecordId::HookReadType, "PYTHON"),
         ),
         FieldSpec::new("hook_path", FieldDefault::None),
     ],
@@ -163,11 +165,11 @@ const R_COLUMN_LINEAGE_EDGE: RecordSpec = RecordSpec {
         FieldSpec::required("target"),
         FieldSpec::new(
             "transform_kind",
-            FieldDefault::Member("sqlbuild._native", "ColumnTransformKind", "UNKNOWN"),
+            FieldDefault::NativeMember(RecordId::ColumnTransformKind, "UNKNOWN"),
         ),
         FieldSpec::new(
             "confidence",
-            FieldDefault::Member("sqlbuild._native", "ColumnLineageConfidence", "UNKNOWN"),
+            FieldDefault::NativeMember(RecordId::ColumnLineageConfidence, "UNKNOWN"),
         ),
     ],
 };
@@ -181,7 +183,7 @@ const R_DIRECT_SEMANTIC_COLUMN_USE: RecordSpec = RecordSpec {
         FieldSpec::required("source"),
         FieldSpec::new(
             "confidence",
-            FieldDefault::Member("sqlbuild._native", "ColumnLineageConfidence", "UNKNOWN"),
+            FieldDefault::NativeMember(RecordId::ColumnLineageConfidence, "UNKNOWN"),
         ),
         FieldSpec::new("line", FieldDefault::None),
         FieldSpec::new("column", FieldDefault::None),
@@ -205,7 +207,7 @@ const R_COLUMN_LINEAGE: RecordSpec = RecordSpec {
         ),
         FieldSpec::new(
             "confidence",
-            FieldDefault::Member("sqlbuild._native", "ColumnLineageConfidence", "UNKNOWN"),
+            FieldDefault::NativeMember(RecordId::ColumnLineageConfidence, "UNKNOWN"),
         ),
     ],
 };
@@ -491,7 +493,7 @@ const R_COMPILE_PIPELINE_OPTIONS: RecordSpec = RecordSpec {
         FieldSpec::new("accepts_unit_test_selectors", FieldDefault::False),
         FieldSpec::new(
             "sql_test_selection",
-            FieldDefault::Call("sqlbuild._native", "SqlTestSelection"),
+            FieldDefault::NativeCall(RecordId::SqlTestSelection),
         ),
     ],
 };
@@ -504,7 +506,7 @@ const R_PYTHON_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::required("phase"),
         FieldSpec::new(
             "identity_status",
-            FieldDefault::Member("sqlbuild._native", "PythonIdentityStatus", "UNKNOWN"),
+            FieldDefault::NativeMember(RecordId::PythonIdentityStatus, "UNKNOWN"),
         ),
         FieldSpec::new("current_definition_json", FieldDefault::None),
         FieldSpec::new("previous_definition_json", FieldDefault::None),
@@ -586,7 +588,7 @@ const R_DISCOVERED_PYTHON_LOADER_METADATA: RecordSpec = RecordSpec {
         FieldSpec::new("contract", FieldDefault::None),
         FieldSpec::new(
             "connection_mode",
-            FieldDefault::Member("sqlbuild._native", "LoaderConnectionMode", "SQLBUILD"),
+            FieldDefault::NativeMember(RecordId::LoaderConnectionMode, "SQLBUILD"),
         ),
     ],
 };
@@ -609,11 +611,7 @@ const R_DISCOVERED_PYTHON_CHECK_METADATA: RecordSpec = RecordSpec {
     doc: "Check-specific metadata carried by an internal Python check node.",
     fields: &[FieldSpec::new(
         "severity",
-        FieldDefault::Member(
-            "sqlbuild.python_nodes.types",
-            "PythonCheckSeverity",
-            "ERROR",
-        ),
+        FieldDefault::HostMember(UserCodeHost::PythonCheckSeverity.id(), "ERROR"),
     )],
 };
 const R_PYTHON_NODE_DEPENDENCY_EDGE: RecordSpec = RecordSpec {
@@ -727,7 +725,7 @@ const R_DBT_INIT_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("skip_dbt_debug", FieldDefault::False),
         FieldSpec::new(
             "progress_callbacks",
-            FieldDefault::Call("sqlbuild._native", "DbtInitProgressCallbacks"),
+            FieldDefault::NativeCall(RecordId::DbtInitProgressCallbacks),
         ),
     ],
 };

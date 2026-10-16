@@ -19,11 +19,9 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
-const COLLECTOR_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const INACCESSIBLE_DECLARATION_CODE: &str = "S006";
 const SCHEMA_USAGE_KINDS: [&str; 2] = ["schema", "enum"];
 
@@ -145,13 +143,11 @@ pub(crate) fn model_schema_scope_usages<'py>(
     let (usages, diagnostics, error) = scope_schema_usages(schemas, record_rows)?;
     if let Some(message) = error {
         return Err(PyErr::from_value(
-            py.import(SCOPE_ERRORS_MODULE)?
-                .getattr("InvalidScopePathError")?
-                .call1((message,))?,
+            registry::error(py, ErrorId::InvalidScopePath)?.call1((message,))?,
         ));
     }
     report_inaccessible(py, diagnostics)?;
-    let usage_record = py.import(SCOPE_MODELS_MODULE)?.getattr("UsageRecord")?;
+    let usage_record = registry::class(py, RecordId::UsageRecord)?;
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(usages.len());
     for (consumer, used) in usages {
         let fields: Bound<'py, PyDict> = PyDict::new(py);
@@ -190,12 +186,8 @@ fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyRes
     if diagnostics.is_empty() {
         return Ok(());
     }
-    let report = py
-        .import(COLLECTOR_MODULE)?
-        .getattr("report_compile_diagnostic")?;
-    let compiler_diagnostic = py
-        .import(COMPILE_MODELS_MODULE)?
-        .getattr("CompilerDiagnostic")?;
+    let report = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
+    let compiler_diagnostic = registry::class(py, RecordId::CompilerDiagnostic)?;
     let path_class = py.import("pathlib")?.getattr("Path")?;
     for (key, message, path, help) in diagnostics {
         let fields: Bound<'_, PyDict> = PyDict::new(py);

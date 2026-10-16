@@ -9,15 +9,13 @@ use sqlbuild_analysis::planner_changes::models::{
     Backfill, BackfillAction, ChangeKind, SchemaChangeKind, SchemaColumnSource, SchemaFindingRow,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-
-pub(crate) const MODELS_MODULE: &str = "sqlbuild._native";
-pub(crate) const TYPES_MODULE: &str = "sqlbuild._native";
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// `PlannerInputError(message)` for an unknown replay policy.
 pub(crate) fn replay_policy_error(py: Python<'_>, error: UnknownReplayPolicy) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, "PlannerInputError")
+    match registry::error(py, ErrorId::PlannerInput)
         .and_then(|class| class.call1((error.message(),)))
     {
         Ok(value) => PyErr::from_value(value),
@@ -28,19 +26,19 @@ pub(crate) fn replay_policy_error(py: Python<'_>, error: UnknownReplayPolicy) ->
 /// `TYPES_MODULE.<enum>(value)`.
 pub(crate) fn planner_enum<'py>(
     py: Python<'py>,
-    name: &str,
+    name: RecordId,
     value: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, TYPES_MODULE, name)?.call1((value,))
+    registry::class(py, name)?.call1((value,))
 }
 
 /// A member of a natively declared planner enumeration, from its value.
 pub(crate) fn native_enum<'py>(
     py: Python<'py>,
-    name: &str,
+    name: RecordId,
     value: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, "sqlbuild._native", name)?.call1((value,))
+    registry::class(py, name)?.call1((value,))
 }
 
 /// `BackfillResult(action=..., duration=...)`.
@@ -54,9 +52,12 @@ pub(crate) fn backfill_result<'py>(
         BackfillAction::ForwardOnly => "forward",
     };
     call_with(
-        &imported(py, "sqlbuild._native", "BackfillResult")?,
+        &registry::class(py, RecordId::BackfillResult)?,
         &[
-            ("action", planner_enum(py, "BackfillAction", action)?),
+            (
+                "action",
+                planner_enum(py, RecordId::BackfillAction, action)?,
+            ),
             (
                 "duration",
                 backfill.duration.clone().into_pyobject(py)?.into_any(),
@@ -74,7 +75,7 @@ pub(crate) fn change_kind<'py>(py: Python<'py>, kind: ChangeKind) -> PyResult<Bo
         ChangeKind::ConfigChanged => "config_changed",
         ChangeKind::NoChange => "no_change",
     };
-    native_enum(py, "ChangeKind", value)
+    native_enum(py, RecordId::ChangeKind, value)
 }
 
 /// A tuple of `SchemaFinding` values.
@@ -82,7 +83,7 @@ pub(crate) fn schema_findings<'py>(
     py: Python<'py>,
     findings: &[SchemaFindingRow],
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "SchemaFinding")?;
+    let class: Bound<'py, PyAny> = registry::class(py, RecordId::SchemaFinding)?;
     let mut items: Vec<Bound<'py, PyAny>> = Vec::with_capacity(findings.len());
     for finding in findings {
         let kind: &str = match finding.kind {
@@ -97,12 +98,15 @@ pub(crate) fn schema_findings<'py>(
         items.push(call_with(
             &class,
             &[
-                ("kind", native_enum(py, "SchemaChangeKind", kind)?),
+                ("kind", native_enum(py, RecordId::SchemaChangeKind, kind)?),
                 (
                     "column_name",
                     finding.column_name.clone().into_pyobject(py)?.into_any(),
                 ),
-                ("source", native_enum(py, "SchemaColumnSource", source)?),
+                (
+                    "source",
+                    native_enum(py, RecordId::SchemaColumnSource, source)?,
+                ),
                 (
                     "expected_type",
                     finding.expected_type.clone().into_pyobject(py)?.into_any(),

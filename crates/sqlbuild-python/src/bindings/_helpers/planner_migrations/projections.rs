@@ -1,9 +1,9 @@
 //! Adapt existing Python query shape models to pure migration proofs.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::errors::ProofError;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
@@ -54,7 +54,7 @@ fn parse_query_shape<'py>(
     let mut projections: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in shape.projections {
         projections.push(call_with(
-            &imported(py, "sqlbuild._native", "QueryProjection")?,
+            &registry::class(py, RecordId::QueryProjection)?,
             &[
                 ("name", item.name.into_pyobject(py)?.into_any()),
                 ("expression", item.expression.into_pyobject(py)?.into_any()),
@@ -74,7 +74,7 @@ fn parse_query_shape<'py>(
         None => py.None().into_bound(py),
     };
     call_with(
-        &imported(py, "sqlbuild._native", "QueryShape")?,
+        &registry::class(py, RecordId::QueryShape)?,
         &[
             ("projections", PyTuple::new(py, projections)?.into_any()),
             ("body", shape.body.into_pyobject(py)?.into_any()),

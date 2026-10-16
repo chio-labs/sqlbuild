@@ -16,9 +16,9 @@ use sqlbuild_core::progress::models::{ExpectationStep, InspectionRecord};
 use sqlbuild_core::progress::types::DifferenceSample;
 
 use crate::bindings::_helpers::cli::progress::write_persistent;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
-
-const INSPECTION_SINK_MODULE: &str = "sqlbuild.adapter.relations.main.inspection_query_sink";
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 
 const HEADER_OPTIONS: (&[&str], &[&str]) = (
     &["stream", "command", "target", "concurrency", "use_color"],
@@ -174,8 +174,8 @@ pub(crate) fn with_verbose_inspection<'py, T>(
     }
     let writer: Bound<'py, VerboseInspectionWriter> =
         Bound::new(py, VerboseInspectionWriter::new())?;
-    let sink: Bound<'py, PyAny> = imported(py, INSPECTION_SINK_MODULE, "inspection_query_sink")?
-        .call1((writer.getattr("write")?,))?;
+    let sink: Bound<'py, PyAny> =
+        host::entry(py, AdapterHost::InspectionQuerySink)?.call1((writer.getattr("write")?,))?;
     let value: T = within(&sink, |_| body())?;
     writer.get().write_total(py)?;
     Ok(value)

@@ -4,13 +4,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
-use crate::bindings::_helpers::planner_resolution::values::{NATIVE_MODULE, string};
+use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
-
-const HOOK_MODULE: &str = "sqlbuild._native";
-const ERROR_MODULE: &str = "sqlbuild._native";
 
 struct Resolution<'py> {
     adapter: Bound<'py, PyAny>,
@@ -35,7 +34,7 @@ impl<'py> Resolution<'py> {
         }
         source.extend_from_slice(cursor);
         let mut resolved = call_with(
-            &imported(py, NATIVE_MODULE, "resolve_source_references")?,
+            &registry::native(py, NativeAttr::ResolveSourceReferences)?,
             &source,
         )?;
         let mut refs = vec![("query_sql", resolved), ("adapter", self.adapter.clone())];
@@ -44,11 +43,11 @@ impl<'py> Resolution<'py> {
         }
         refs.extend_from_slice(cursor);
         resolved = call_with(
-            &imported(py, NATIVE_MODULE, "resolve_ref_references")?,
+            &registry::native(py, NativeAttr::ResolveRefReferences)?,
             &refs,
         )?;
         resolved = call_with(
-            &imported(py, NATIVE_MODULE, "resolve_dbt_ref_references")?,
+            &registry::native(py, NativeAttr::ResolveDbtRefReferences)?,
             &[
                 ("query_sql", resolved),
                 ("external_sql_reference_resolver", self.external.clone()),
@@ -61,11 +60,11 @@ impl<'py> Resolution<'py> {
             PyDict::new(py).into_any()
         };
         for name in [
-            "resolve_udf_references",
-            "resolve_table_function_references",
+            NativeAttr::ResolveUdfReferences,
+            NativeAttr::ResolveTableFunctionReferences,
         ] {
             resolved = call_with(
-                &imported(py, NATIVE_MODULE, name)?,
+                &registry::native(py, name)?,
                 &[
                     ("query_sql", resolved),
                     ("function_locations", locations.clone()),
@@ -78,11 +77,7 @@ impl<'py> Resolution<'py> {
 
     fn assert_resolved(&self, sql: &Bound<'py, PyAny>, label: &str) -> PyResult<()> {
         call_with(
-            &imported(
-                self.adapter.py(),
-                NATIVE_MODULE,
-                "assert_no_unresolved_sql_markers",
-            )?,
+            &registry::native(self.adapter.py(), NativeAttr::AssertNoUnresolvedSqlMarkers)?,
             &[
                 ("sql", sql.clone()),
                 (
@@ -114,7 +109,7 @@ impl<'py> Resolution<'py> {
 
     fn hook(&self, value: Bound<'py, PyAny>, label: &str) -> PyResult<Bound<'py, PyAny>> {
         let py = value.py();
-        if value.is_instance(&imported(py, HOOK_MODULE, "SqlHookEntry")?)? {
+        if value.is_instance(&registry::class(py, RecordId::SqlHookEntry)?)? {
             let kwargs = PyDict::new(py);
             kwargs.set_item(
                 "statement",
@@ -172,7 +167,7 @@ fn resolve_model_sql<'py>(
         external: args.value("external_sql_reference_resolver")?,
     };
     let cursor_type = call_with(
-        &imported(py, NATIVE_MODULE, "get_config_str")?,
+        &registry::native(py, NativeAttr::GetConfigStr)?,
         &[
             ("values", model.getattr("config")?.getattr("values")?),
             ("key", string(py, "cursor_type")),
@@ -180,7 +175,7 @@ fn resolve_model_sql<'py>(
     )?;
     let overrides = args.value("cursor_overrides")?;
     let bounds = call_with(
-        &imported(py, NATIVE_MODULE, "compute_model_cursor_bounds")?,
+        &registry::native(py, NativeAttr::ComputeModelCursorBounds)?,
         &[
             ("model", model.clone()),
             ("snapshot", args.value("snapshot")?),
@@ -208,7 +203,7 @@ fn resolve_model_sql<'py>(
         ],
     )?;
     let roles = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_cursor_input_roles")?,
+        &registry::native(py, NativeAttr::ResolveCursorInputRoles)?,
         &[("model", model.clone())],
     )?;
     let inclusive = append_cursor_inclusive(&model)?;
@@ -222,7 +217,7 @@ fn resolve_model_sql<'py>(
         ],
     )?;
     let intrinsics = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_cursor_intrinsics")?,
+        &registry::native(py, NativeAttr::ResolveCursorIntrinsics)?,
         &[("sql", sql.clone())],
     )?;
     let name: String = model.getattr("name")?.extract()?;
@@ -248,7 +243,7 @@ fn resolve_model_sql<'py>(
 fn append_cursor_inclusive<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
     let strategy = call_with(
-        &imported(py, NATIVE_MODULE, "get_config_str")?,
+        &registry::native(py, NativeAttr::GetConfigStr)?,
         &[
             ("values", model.getattr("config")?.getattr("values")?),
             ("key", string(py, "incremental_strategy")),
@@ -286,7 +281,7 @@ fn intrinsic_bounds<'py>(
     let start_sql = literal("start")?;
     let end_sql = literal("end")?;
     call_with(
-        &imported(py, NATIVE_MODULE, "resolve_cursor_intrinsics")?,
+        &registry::native(py, NativeAttr::ResolveCursorIntrinsics)?,
         &[
             ("sql", sql.clone()),
             ("start_sql", start_sql),
@@ -297,7 +292,7 @@ fn intrinsic_bounds<'py>(
 }
 
 fn unresolved_bounds_error(py: Python<'_>, name: &str, cause: Option<&str>) -> PyResult<PyErr> {
-    let error = imported(py, ERROR_MODULE, "PlannerInputError")?;
+    let error = registry::error(py, ErrorId::PlannerInput)?;
     let kwargs = PyDict::new(py);
     let message = if let Some(cause) = cause {
         kwargs.set_item("help", "rebuild it with an explicit cursor interval (--start-cursor-ts and --end-cursor-ts, or the -int forms), or make it a microbatch model so a full rebuild can run batch by batch")?;
@@ -347,10 +342,7 @@ fn resolve_function_sql<'py>(
     }
     let resolution = Resolution {
         adapter: args.value("adapter")?,
-        context: call_with(
-            &imported(py, "sqlbuild._native", "ModelPlanContext")?,
-            &context,
-        )?,
+        context: call_with(&registry::class(py, RecordId::ModelPlanContext)?, &context)?,
         external: py.None().into_bound(py),
     };
     let function = args.value("function")?;

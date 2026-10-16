@@ -9,7 +9,7 @@ use crate::bindings::_helpers::compile_driver::config_validation::{
 };
 use crate::bindings::_helpers::compile_driver::integration_loaders::integration_loader_functions;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords, within,
+    KeywordArguments, call_with, keywords, within,
 };
 use crate::bindings::_helpers::discovery::declaration_records::{
     discover_adapter_file, discover_audit_files, discover_constant_files, discover_enum_files,
@@ -29,16 +29,13 @@ use crate::bindings::_helpers::discovery::yaml_records::{
     discover_schema_files, discover_source_files,
 };
 use crate::bindings::_helpers::event_exporting::scope::configure_discovered_event_exporters;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const FRONTIER_MODULE: &str = "sqlbuild._native";
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
-const VALIDATION_MODULE: &str = "sqlbuild.compiler.discovery._helpers.validation.discovery";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
-const FILESYSTEM_MODULE: &str = "sqlbuild._native";
-const SINKS_MODULE: &str = "sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 
 /// Declaration file collections counted into the declaration-parse lifecycle, in field order.
 const DECLARATION_COLLECTIONS: [&str; 14] = [
@@ -102,33 +99,44 @@ const FILE_DISCOVERERS: [(&str, FileDiscoverer); 14] = [
 ];
 
 /// Discoverers of imported project Python that take `project_dir` and `providers`.
-const PYTHON_DISCOVERERS: [(&str, &str, &str); 5] = [
+const PYTHON_DISCOVERERS: [(&str, Discoverer); 5] = [
     (
         "python_nodes",
-        FILESYSTEM_MODULE,
-        "discover_python_node_functions",
+        Discoverer::Native(NativeAttr::DiscoverPythonNodeFunctions),
     ),
     (
         "materialization_files",
-        FILESYSTEM_MODULE,
-        "discover_materialization_files",
+        Discoverer::Native(NativeAttr::DiscoverMaterializationFiles),
     ),
     (
         "hook_functions",
-        FILESYSTEM_MODULE,
-        "discover_hook_functions",
+        Discoverer::Native(NativeAttr::DiscoverHookFunctions),
     ),
     (
         "event_exporters",
-        FILESYSTEM_MODULE,
-        "discover_event_exporter_functions",
+        Discoverer::Native(NativeAttr::DiscoverEventExporterFunctions),
     ),
     (
         "command_output_sinks",
-        SINKS_MODULE,
-        "discover_command_output_sink_functions",
+        Discoverer::Host(UserCodeHost::DiscoverCommandOutputSinkFunctions),
     ),
 ];
+
+/// Where a project-Python discoverer lives.
+#[derive(Clone, Copy)]
+enum Discoverer {
+    Native(NativeAttr),
+    Host(UserCodeHost),
+}
+
+impl Discoverer {
+    fn function<'py>(self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Self::Native(id) => registry::native(py, id),
+            Self::Host(entry) => host::entry(py, entry),
+        }
+    }
+}
 
 /// Python node groups whose relative paths count as imported project Python.
 const PYTHON_NODE_GROUPS: [&str; 5] = ["loaders", "tasks", "assets", "checks", "audit_factories"];
@@ -136,7 +144,7 @@ const PYTHON_NODE_GROUPS: [&str; 5] = ["loaders", "tasks", "assets", "checks", "
 /// `OperationLifecycle(operation_kind="project", operation_name=name)`.
 fn lifecycle<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+        &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &[
             ("operation_kind", "project".into_pyobject(py)?.into_any()),
             ("operation_name", name.into_pyobject(py)?.into_any()),
@@ -190,11 +198,11 @@ fn discover_project_inputs<'py>(
             },
         )?;
         call_with(
-            &imported(py, FRONTIER_MODULE, "compile_frontier")?,
+            &registry::native(py, NativeAttr::CompileFrontier)?,
             &[
                 (
                     "until",
-                    imported(py, FRONTIER_TYPES_MODULE, "CompilerStage")?
+                    registry::class(py, RecordId::CompilerStage)?
                         .getattr("DISCOVERED_PROJECT_INPUTS")?,
                 ),
                 ("python_stage", stage.into_any()),
@@ -210,9 +218,9 @@ fn assembled_inputs<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let project_dir: &Bound<'py, PyAny> = request.project_dir.bind(py);
     let project_config: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "load_project_config_file")?.call1((project_dir,))?;
+        registry::native(py, NativeAttr::LoadProjectConfigFile)?.call1((project_dir,))?;
     let local_config: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "load_local_config_file")?.call1((project_dir,))?;
+        registry::native(py, NativeAttr::LoadLocalConfigFile)?.call1((project_dir,))?;
     reject_invalid_project_configuration(&ProjectConfiguration {
         project_dir,
         project_config: &project_config,
@@ -240,7 +248,7 @@ fn assembled_inputs<'py>(
             request.extract_output_column_locations,
         ),
     )?;
-    imported(py, VALIDATION_MODULE, "validate_discovered_inputs")?.call1((&discovered,))?;
+    host::entry(py, UserCodeHost::ValidateDiscoveredInputs)?.call1((&discovered,))?;
     configure_discovered_event_exporters(&discovered)?;
     Ok(discovered)
 }
@@ -364,16 +372,16 @@ fn declaration_files<'py>(
 fn imported_python<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project_dir.py();
     let providers: Bound<'py, PyAny> = call_with(
-        &imported(py, FILESYSTEM_MODULE, "discover_provider_classes")?,
+        &registry::native(py, NativeAttr::DiscoverProviderClasses)?,
         &[("project_dir", project_dir.clone())],
     )?;
     let python: Bound<'py, PyDict> = PyDict::new(py);
     python.set_item("providers", &providers)?;
-    for (field, module, name) in PYTHON_DISCOVERERS {
+    for (field, discoverer) in PYTHON_DISCOVERERS {
         python.set_item(
             field,
             call_with(
-                &imported(py, module, name)?,
+                &discoverer.function(py)?,
                 &[
                     ("project_dir", project_dir.clone()),
                     ("providers", providers.clone()),
@@ -480,7 +488,7 @@ fn project_inputs<'py>(
     fields.push(("adapter_file", declarations.get_item("adapter_file")?));
     fields.push(("native_session", declarations.get_item("native_session")?));
     call_with(
-        &imported(py, DISCOVERY_MODELS_MODULE, "DiscoveredProjectInputs")?,
+        &registry::class(py, RecordId::DiscoveredProjectInputs)?,
         &fields,
     )
 }

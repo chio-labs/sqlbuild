@@ -16,9 +16,10 @@ use sqlbuild_analysis::dag_artifact::models::{
 use sqlbuild_analysis::planner_selection::main::unit_test_selector_rejection::unit_test_selector_rejection;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
 
-const DAGSTER_EXCEPTIONS_MODULE: &str = "sqlbuild.integrations.dagster.exceptions";
 const PATHLIB_MODULE: &str = "pathlib";
 const JSON_MODULE: &str = "json";
 const ABC_MODULE: &str = "collections.abc";
@@ -99,11 +100,9 @@ fn selection_error(py: Python<'_>, error: DagSelectionError, raw: &str) -> PyErr
         DagSelectionError::UnitTest(selector) => {
             carrier.error(unit_test_selector_rejection(&selector))
         }
-        DagSelectionError::Input(message) => {
-            imported(py, DAGSTER_EXCEPTIONS_MODULE, "DagsterDagInputError")
-                .and_then(|class| class.call1((message,)))
-                .map_or_else(|failure| failure, PyErr::from_value)
-        }
+        DagSelectionError::Input(message) => host::entry(py, ThirdPartyHost::DagsterDagInputError)
+            .and_then(|class| class.call1((message,)))
+            .map_or_else(|failure| failure, PyErr::from_value),
     }
 }
 

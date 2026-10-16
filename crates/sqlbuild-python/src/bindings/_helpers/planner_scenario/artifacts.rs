@@ -1,13 +1,13 @@
 //! Scenario artifact dataclasses and adapter identifier callbacks.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_HASH_COLLISION, SCENARIO_PLAN_INVALID_HASH_PREFIX,
     SCENARIO_PLAN_RELATION_COLLISION,
 };
-use crate::bindings::_helpers::planner_scenario::values::{MODELS, TYPES, error, string};
+use crate::bindings::_helpers::planner_scenario::values::{error, string};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::relation_naming::fitting::fitted_logical_name;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -151,7 +151,7 @@ pub(crate) fn build_scenario_artifact_name(
     identifier_limit: i64,
 ) -> PyResult<String> {
     let py = kind.py();
-    let kind: String = imported(py, TYPES, "ScenarioArtifactKind")?
+    let kind: String = registry::class(py, RecordId::ScenarioArtifactKind)?
         .call1((kind,))?
         .getattr("value")?
         .extract()?;
@@ -167,7 +167,7 @@ pub(crate) fn parse_scenario_artifact_physical_name<'py>(
         return Ok(py.None().into_bound(py));
     };
     call_with(
-        &imported(py, "sqlbuild._native", "ParsedScenarioArtifactName")?,
+        &registry::class(py, RecordId::ParsedScenarioArtifactName)?,
         &[
             ("hash_prefix", string(py, hash)),
             ("kind", string(py, kind)),
@@ -221,7 +221,7 @@ pub(crate) fn build_scenario_relation_map<'py>(
             normalize.call1((&physical,))?
         };
         if let Some(existing) = seen.get_item(&normalized)? {
-            let kind = imported(py, TYPES, "ScenarioArtifactKind")?;
+            let kind = registry::class(py, RecordId::ScenarioArtifactKind)?;
             let old_kind: String = kind
                 .call1((existing.getattr("kind")?,))?
                 .getattr("value")?
@@ -243,7 +243,7 @@ pub(crate) fn build_scenario_relation_map<'py>(
         }
         seen.set_item(normalized, &artifact)?;
         artifacts.push(call_with(
-            &imported(py, "sqlbuild._native", "ScenarioArtifactName")?,
+            &registry::class(py, RecordId::ScenarioArtifactName)?,
             &[
                 ("identity", artifact),
                 ("physical_name", string(py, &physical)),
@@ -251,7 +251,7 @@ pub(crate) fn build_scenario_relation_map<'py>(
         )?);
     }
     call_with(
-        &imported(py, MODELS, "ScenarioRelationMap")?,
+        &registry::class(py, RecordId::ScenarioRelationMap)?,
         &[
             ("scenario_name", args.value("scenario_name")?),
             ("hash_prefix", args.value("hash_prefix")?),

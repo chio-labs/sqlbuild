@@ -10,33 +10,30 @@ use sqlbuild_cli::compute_logs::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild.runtime.compute_logs.exceptions";
-pub(crate) const MODELS_MODULE: &str = "sqlbuild.runtime.compute_logs.models";
-pub(crate) const TYPES_MODULE: &str = "sqlbuild.runtime.compute_logs.types";
 const EPOCH_TEXT: &str = "1970-01-01T00:00:00+00:00";
 const UTC_OFFSET: &str = "+00:00";
 const UTC_SUFFIX: &str = "Z";
 const STREAM_VALUES: [&str; 3] = ["stdout", "stderr", "diagnostics"];
 
-fn exception_name(kind: ComputeLogErrorKind) -> &'static str {
+fn exception_class(kind: ComputeLogErrorKind) -> ExecutorHost {
     match kind {
-        ComputeLogErrorKind::InvalidCaptureId => "InvalidCaptureIdError",
-        ComputeLogErrorKind::InvalidCursor => "InvalidComputeLogCursorError",
-        ComputeLogErrorKind::InvalidLimit => "InvalidComputeLogLimitError",
-        ComputeLogErrorKind::AlreadyExists => "CaptureAlreadyExistsError",
-        ComputeLogErrorKind::NotFound => "CaptureNotFoundError",
-        ComputeLogErrorKind::State => "CaptureStateError",
-        ComputeLogErrorKind::Path => "ComputeLogPathError",
-        ComputeLogErrorKind::Metadata => "ComputeLogMetadataError",
+        ComputeLogErrorKind::InvalidCaptureId => ExecutorHost::InvalidCaptureIdError,
+        ComputeLogErrorKind::InvalidCursor => ExecutorHost::InvalidComputeLogCursorError,
+        ComputeLogErrorKind::InvalidLimit => ExecutorHost::InvalidComputeLogLimitError,
+        ComputeLogErrorKind::AlreadyExists => ExecutorHost::CaptureAlreadyExistsError,
+        ComputeLogErrorKind::NotFound => ExecutorHost::CaptureNotFoundError,
+        ComputeLogErrorKind::State => ExecutorHost::CaptureStateError,
+        ComputeLogErrorKind::Path => ExecutorHost::ComputeLogPathError,
+        ComputeLogErrorKind::Metadata => ExecutorHost::ComputeLogMetadataError,
     }
 }
 
 /// The Python exception for a storage rejection of `kind`.
 pub(crate) fn rejection(py: Python<'_>, kind: ComputeLogErrorKind, message: &str) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, exception_name(kind))
-        .and_then(|class| class.call1((message,)))
-    {
+    match host::entry(py, exception_class(kind)).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -70,7 +67,7 @@ pub(crate) fn capture_id(value: &Bound<'_, PyAny>) -> PyResult<String> {
 /// The stream index of a `ComputeLogStream` member: stdout, stderr or diagnostics.
 pub(crate) fn stream_index(stream: &Bound<'_, PyAny>) -> PyResult<usize> {
     let py = stream.py();
-    if stream.is_instance(&imported(py, TYPES_MODULE, "ComputeLogStream")?)? {
+    if stream.is_instance(&host::entry(py, ExecutorHost::ComputeLogStream)?)? {
         let value: String = stream.getattr("value")?.extract()?;
         if let Some(index) = STREAM_VALUES.iter().position(|name| *name == value) {
             return Ok(index);
@@ -129,7 +126,7 @@ pub(crate) fn document(metadata: &Bound<'_, PyAny>) -> PyResult<CaptureDocument>
         i64::from(version.eq(1)?)
     };
     let completion =
-        if metadata.is_instance(&imported(py, MODELS_MODULE, "FinalCaptureMetadata")?)? {
+        if metadata.is_instance(&host::entry(py, ExecutorHost::FinalCaptureMetadata)?)? {
             Some(CaptureCompletion {
                 completed_at: instant(&metadata.getattr("completed_at")?)?,
                 exit_code: count(py, &metadata.getattr("exit_code")?)?,
@@ -197,7 +194,7 @@ pub(crate) fn metadata_model<'py>(
         ("run_id", document.run_id.as_deref().into_bound_py_any(py)?),
     ];
     let Some(completion) = &document.completion else {
-        return call_with(&imported(py, MODELS_MODULE, "CaptureMetadata")?, &fields);
+        return call_with(&host::entry(py, ExecutorHost::CaptureMetadata)?, &fields);
     };
     fields.extend([
         (
@@ -219,7 +216,7 @@ pub(crate) fn metadata_model<'py>(
         ),
     ]);
     call_with(
-        &imported(py, MODELS_MODULE, "FinalCaptureMetadata")?,
+        &host::entry(py, ExecutorHost::FinalCaptureMetadata)?,
         &fields,
     )
 }
@@ -230,7 +227,7 @@ pub(crate) fn inventory_item<'py>(
     entry: &InventoryEntry,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, MODELS_MODULE, "CaptureInventoryItem")?,
+        &host::entry(py, ExecutorHost::CaptureInventoryItem)?,
         &[
             (
                 "invocation_id",

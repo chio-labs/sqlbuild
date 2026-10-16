@@ -10,8 +10,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::plan_output::{connection_config, connection_hooks};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const OPTIONS: (&[&str], &[&str]) = (
     &["request", "invocation"],
     &[
@@ -31,7 +32,7 @@ fn environment<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     let request = args.value("request")?;
     let compiled = args.value("compiled")?;
     call_with(
-        &imported(request.py(), NATIVE_RECORDS, "DbtPlanEnvironment")?,
+        &registry::class(request.py(), RecordId::DbtPlanEnvironment)?,
         &[
             ("project_dir", request.getattr("project_dir")?),
             (
@@ -90,7 +91,7 @@ fn write_dbt_execution_plan_text(
         pyo3::types::PyInt::new(py, super::constants::PLAN_DISPLAY_LIMIT).into_any()
     };
     let rendered = call_with(
-        &imported(py, "sqlbuild._native", "render_dbt_interop_plan")?,
+        &registry::native(py, NativeAttr::RenderDbtInteropPlan)?,
         &[
             ("plan", display),
             ("json_output", boolean(py, false)),
@@ -98,7 +99,7 @@ fn write_dbt_execution_plan_text(
             (
                 "display_options",
                 call_with(
-                    &imported(py, "sqlbuild._native", "DisplayOptions")?,
+                    &registry::class(py, RecordId::DisplayOptions)?,
                     &[("max_entries_per_section", limit)],
                 )?,
             ),
@@ -121,7 +122,7 @@ fn execute_dbt_without_state_tracking<'py>(
     let request = args.value("request")?;
     let invocation = args.value("invocation")?;
     call_with(
-        &imported(py, "sqlbuild._native", "execute_dbt_commands")?,
+        &registry::native(py, NativeAttr::ExecuteDbtCommands)?,
         &[
             ("runner", invocation.getattr("runner")?),
             ("options", invocation.getattr("dbt_options")?),
@@ -144,11 +145,7 @@ fn execute_dbt_without_state_tracking<'py>(
 fn write_dbt_execution_summary(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<()> {
     let args = KeywordArguments::read(py, "write_dbt_execution_summary", options, OPTIONS)?;
     let footer = call_with(
-        &imported(
-            py,
-            "sqlbuild._native",
-            "render_dbt_execution_summary_footer",
-        )?,
+        &registry::native(py, NativeAttr::RenderDbtExecutionSummaryFooter)?,
         &[
             (
                 "node_results",
@@ -191,7 +188,7 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
     let stream = invocation.getattr("output_stream")?;
     emit(&stream, "\n")?;
     let reporter = call_with(
-        &imported(py, "sqlbuild._native", "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             (
                 "adapter_name",
@@ -203,7 +200,7 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
         ],
     )?;
     let request = call_with(
-        &imported(py, NATIVE_RECORDS, "DbtSqlbuildPlanRequest")?,
+        &registry::class(py, RecordId::DbtSqlbuildPlanRequest)?,
         &[
             ("selected_model_names", selected),
             (
@@ -217,7 +214,7 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
         ],
     )?;
     call_with(
-        &imported(py, "sqlbuild._native", "build_sqlbuild_plan_output")?,
+        &registry::native(py, NativeAttr::BuildSqlbuildPlanOutput)?,
         &[
             ("environment", environment(&args)?),
             ("request", request),
@@ -232,10 +229,10 @@ fn execution_limits<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = discovered.py();
     if target.is_none() {
-        return imported(py, "sqlbuild._native", "ExecutionLimitsConfig")?.call0();
+        return registry::class(py, RecordId::ExecutionLimitsConfig)?.call0();
     }
     call_with(
-        &imported(py, "sqlbuild._native", "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -259,7 +256,7 @@ fn run_dbt_sqlbuild_work<'py>(
     let project = compiled.getattr("project")?;
     let discovered = invocation.getattr("discovered_inputs")?;
     let context = call_with(
-        &imported(py, "sqlbuild._native", "DbtSqlbuildWorkContext")?,
+        &registry::class(py, RecordId::DbtSqlbuildWorkContext)?,
         &[
             ("plan_output", args.value("plan_output")?),
             ("connection_config", args.value("connection_config")?),
@@ -278,7 +275,7 @@ fn run_dbt_sqlbuild_work<'py>(
         ],
     )?;
     call_with(
-        &imported(py, "sqlbuild._native", "execute_dbt_sqlbuild_work")?,
+        &registry::native(py, NativeAttr::ExecuteDbtSqlbuildWork)?,
         &[
             ("context", context),
             ("command", request.getattr("command")?),

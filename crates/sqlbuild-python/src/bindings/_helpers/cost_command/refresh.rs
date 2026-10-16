@@ -12,11 +12,10 @@ use sqlbuild_core::cost_command::models::CostCoverage;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EFFECTIVE_TARGET_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const COST_TYPES: &str = "sqlbuild.cost.types";
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
     Ok(CostCoverage {
@@ -40,7 +39,7 @@ fn refresh_record<'py>(
     let py: Python<'py> = project_dir.py();
     let resolve = || {
         call_with(
-            &imported(py, NATIVE_MODULE, "resolve_cost_run")?,
+            &registry::native(py, NativeAttr::ResolveCostRun)?,
             &[
                 ("project_dir", project_dir.clone()),
                 ("selector", selector.clone()),
@@ -51,7 +50,7 @@ fn refresh_record<'py>(
         return resolve();
     }
     let exact: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "read_cost_run")?,
+        &registry::native(py, NativeAttr::ReadCostRun)?,
         &[
             ("project_dir", project_dir.clone()),
             ("run_id", selector.clone()),
@@ -104,18 +103,18 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     let target_name: Bound<'_, PyAny> = record.getattr("target_name")?;
     let discovered: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
     let target_config: Bound<'_, PyAny> = call_with(
-        &imported(py, EFFECTIVE_TARGET_MODULE, "build_effective_target_config")?,
+        &registry::native(py, NativeAttr::BuildEffectiveTargetConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("selected_target", target_name.clone()),
         ],
     )?;
     let adapter_name: Bound<'_, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -126,7 +125,7 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let none_capability: Bound<'_, PyAny> =
-        imported(py, COST_TYPES, "CostCapability")?.getattr("NONE")?;
+        host::entry(py, ExecutorHost::CostCapability)?.getattr("NONE")?;
     if adapter
         .call_method0("cost_capability")?
         .eq(none_capability)?
@@ -134,7 +133,7 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let connection_config: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
         &[
             ("discovered_inputs", discovered),
             ("project_dir", project_dir.clone()),
@@ -171,7 +170,7 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
     let refreshed: Bound<'_, PyAny> =
         imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
     call_with(
-        &imported(py, NATIVE_MODULE, "write_cost_run")?,
+        &registry::native(py, NativeAttr::WriteCostRun)?,
         &[("project_dir", project_dir), ("record", refreshed)],
     )?;
     Ok(())

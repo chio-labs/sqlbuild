@@ -15,13 +15,14 @@ use crate::bindings::_helpers::freshness::observation::{
     Observer, observation_record, observation_source, observe_adapter_batch, observe_configured,
     strategy,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 use sqlbuild_core::freshness_text::main::freshness_status::freshness_status;
 use sqlbuild_core::freshness_text::models::{
     FreshnessSourceResult, FreshnessStatus, StateComparison,
 };
 
-const RUN_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.run_scope";
 const ADAPTER_STRATEGY: &str = "adapter";
 const UNAVAILABLE_REASON: &str = "unavailable";
 const OBSERVATION_RUN_ID: &str = "freshness";
@@ -276,10 +277,7 @@ pub(crate) fn observe_freshness(
     let Some(run_id) = run_id else {
         return observe_sources(observer, &chosen, state);
     };
-    let scope: Bound<'_, PyAny> = py
-        .import(RUN_SCOPE_MODULE)?
-        .getattr("run_scope")?
-        .call1((run_id,))?;
+    let scope: Bound<'_, PyAny> = host::entry(py, ExecutorHost::RunScope)?.call1((run_id,))?;
     scope.call_method0("__enter__")?;
     match observe_sources(observer, &chosen, state) {
         Ok(results) => {

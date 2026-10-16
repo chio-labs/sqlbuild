@@ -5,11 +5,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::assembly_analysis::AnalysisContext;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::project_assembly::models::{NativeModelFacts, NativeProjectFacts};
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// `NativeProjectFacts` of `inputs`: resources, syntax validity, deps and standalone pivot proofs.
 pub(crate) fn native_project_facts<'py>(
@@ -33,7 +32,7 @@ pub(crate) fn native_project_facts<'py>(
         PyDict::new(py).into_any()
     };
     let syntax_checks: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "model_syntax_checks")?,
+        &registry::native(py, NativeAttr::ModelSyntaxChecks)?,
         &[
             ("model_inputs", model_inputs.clone()),
             ("analysis_model_names", names.clone()),
@@ -41,7 +40,7 @@ pub(crate) fn native_project_facts<'py>(
         ],
     )?;
     let resources: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "assemble_native_project_resources")?,
+        &registry::native(py, NativeAttr::AssembleNativeProjectResources)?,
         &[
             ("inputs", inputs.clone()),
             ("dialect", dialect.clone()),
@@ -50,7 +49,7 @@ pub(crate) fn native_project_facts<'py>(
     )?;
     let proofs: Bound<'py, PyDict> = pivot_proofs(
         &call_with(
-            &imported(py, NATIVE_MODULE, "standalone_pivot_models")?,
+            &registry::native(py, NativeAttr::StandalonePivotModels)?,
             &[
                 ("model_inputs", model_inputs.clone()),
                 ("analysed", positions),
@@ -98,7 +97,7 @@ fn pivot_proofs<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = pivots.py();
     let tables: Bound<'py, PyAny> = call_with(
-        &imported(py, ANALYSIS_MODELS_MODULE, "NativePivotTables")?,
+        &registry::class(py, RecordId::NativePivotTables)?,
         &[
             ("dialect", context.profile.getattr("sql_analysis_dialect")?),
             ("column_types_by_table", context.column_types.clone()),
@@ -114,7 +113,7 @@ fn pivot_proofs<'py>(
         ],
     )?;
     let proven: Vec<Bound<'py, PyAny>> = call_with(
-        &imported(py, NATIVE_MODULE, "prove_native_dynamic_contracts")?,
+        &registry::native(py, NativeAttr::ProveNativeDynamicContracts)?,
         &[
             ("session", session.clone()),
             ("tables", tables),

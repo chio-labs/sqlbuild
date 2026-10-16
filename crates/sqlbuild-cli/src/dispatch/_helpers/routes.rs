@@ -2,10 +2,10 @@
 
 use crate::dispatch::models::{CallShape, ClassRef, Field, Route, Source};
 
-const DBT_IMPLEMENTATION: (&str, &str) = ("sqlbuild._native", "run_dbt_command");
+const DBT_IMPLEMENTATION: &str = "run_dbt_command";
 
-pub(crate) const fn class(module: &'static str, name: &'static str) -> ClassRef {
-    ClassRef { module, name }
+pub(crate) const fn class(name: &'static str) -> ClassRef {
+    ClassRef { name }
 }
 
 pub(crate) const fn field(name: &'static str, source: Source) -> Field {
@@ -26,7 +26,7 @@ pub(crate) const fn request(class_ref: ClassRef, fields: &'static [Field]) -> Fi
 
 pub(crate) const fn routed(
     slot: &'static str,
-    implementation: (&'static str, &'static str),
+    implementation: &'static str,
     arguments: &'static [Field],
     shape: CallShape,
 ) -> Route {

@@ -14,14 +14,12 @@ use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 use sqlbuild_rules::lint_text::main::first_header_only::first_header_only;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, keywords,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::lint_expansion::build_lint_expansion_context;
 use crate::bindings::_helpers::rules::lint_stop::check_stop;
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXPANSION_MODULE: &str = "sqlbuild._native";
-const LINT_MODELS_MODULE: &str = "sqlbuild._native";
 
 fn resolved(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
@@ -104,7 +102,7 @@ fn scan_file<'py>(
         file_path.call_method1("relative_to", (&run.project_dir,))?;
     let relative_parts: Vec<String> = relative_path.getattr("parts")?.extract()?;
     let headers: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "scan_headers")?,
+        &registry::native(py, NativeAttr::ScanHeaders)?,
         &[
             ("contents", contents.clone()),
             (
@@ -118,7 +116,7 @@ fn scan_file<'py>(
     let header_violations: Bound<'py, PyAny> =
         if run.config.getattr("header_rules_enabled")?.is_truthy()? {
             call_with(
-                &imported(py, NATIVE_MODULE, "lint_native_headers")?,
+                &registry::native(py, NativeAttr::LintNativeHeaders)?,
                 &[
                     ("contents", contents.clone()),
                     ("file_path", file_path.clone()),
@@ -133,7 +131,7 @@ fn scan_file<'py>(
         return Ok((header_violations, None));
     }
     let expanded: Bound<'py, PyAny> = call_with(
-        &imported(py, EXPANSION_MODULE, "expand_file_bodies")?,
+        &registry::native(py, NativeAttr::ExpandFileBodies)?,
         &[
             ("file_path", file_path.clone()),
             ("contents", contents.clone()),
@@ -230,7 +228,7 @@ fn lint_files<'py>(
     }
     let skip: Bound<'py, PyAny> = PyBool::new(py, run.skip_unexpandable).to_owned().into_any();
     let prepared: Bound<'py, PyAny> = call_with(
-        &imported(py, EXPANSION_MODULE, "prepare_expanded_files")?,
+        &registry::native(py, NativeAttr::PrepareExpandedFiles)?,
         &[
             (
                 "expanded_files",
@@ -247,7 +245,7 @@ fn lint_files<'py>(
     if bodies.is_truthy()? && run.config.getattr("native_enabled")?.is_truthy()? {
         check_stop(py)?;
         let body_list: Vec<Bound<'py, PyAny>> = bodies.extract()?;
-        let found: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "lint_native_sql_bodies")?
+        let found: Bound<'py, PyAny> = registry::native(py, NativeAttr::LintNativeSqlBodies)?
             .call1((body_list, files, &run.config))?;
         for violation in found.try_iter()? {
             violations.push(violation?);
@@ -303,11 +301,11 @@ fn run_lint<'py>(
     let context: Bound<'py, PyAny> = expansion_context(&run, &arguments)?;
     let (violations, unexpandable) = lint_files(&run, &files, &context)?;
     let allow_suppressions: Bound<'py, PyAny> = run.config.getattr("allow_suppressions")?;
-    let retained: Vec<Bound<'py, PyAny>> = imported(py, NATIVE_MODULE, "apply_lint_suppressions")?
+    let retained: Vec<Bound<'py, PyAny>> = registry::native(py, NativeAttr::ApplyLintSuppressions)?
         .call1((violations, &files, allow_suppressions))?
         .extract()?;
     call_with(
-        &imported(py, LINT_MODELS_MODULE, "LintRunResult")?,
+        &registry::class(py, RecordId::LintRunResult)?,
         &[
             ("files_checked", files.len().into_pyobject(py)?.into_any()),
             (

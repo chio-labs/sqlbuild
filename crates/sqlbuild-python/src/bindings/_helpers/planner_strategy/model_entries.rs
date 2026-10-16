@@ -10,21 +10,23 @@ use sqlbuild_analysis::planner_strategy::main::table_type_ddl::table_type_ddl;
 use sqlbuild_analysis::planner_strategy::models::LookbackConfig;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::config_values::{
     config_bool, config_cursor_bound, config_int, config_str, config_string_tuple,
 };
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_strategy::constants::{
-    ADAPTER_MODELS_MODULE, CURSOR_TYPES_MODULE, CUSTOM_MATERIALIZATION, DDL_SEPARATOR,
-    ENFORCED_CONTRACT, MICROBATCH_MODE, NATIVE_MODULE, PLAN_MODELS_MODULE, PLANNER_TYPES_MODULE,
+    CUSTOM_MATERIALIZATION, DDL_SEPARATOR, ENFORCED_CONTRACT, MICROBATCH_MODE,
 };
 use crate::bindings::_helpers::planner_strategy::cursor_inputs::model_values;
 use crate::bindings::_helpers::planner_strategy::microbatch_limits::{replay_grain, unknown_grain};
 use crate::bindings::_helpers::planner_strategy::microbatches::microbatch_limit_config;
-use crate::bindings::_helpers::planner_strategy::values::{
-    PLANNER_EXCEPTIONS_MODULE, input_error, text,
-};
+use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// Model config keys copied to the plan entry as optional strings, with their entry fields.
 const STRING_FIELDS: [(&str, &str); 15] = [
@@ -106,7 +108,7 @@ fn schema_columns<'py>(
     if entry.is_none() {
         return Ok(PyTuple::empty(py));
     }
-    let class: Bound<'py, PyAny> = imported(py, ADAPTER_MODELS_MODULE, "ColumnInfo")?;
+    let class: Bound<'py, PyAny> = host::entry(py, AdapterHost::ColumnInfo)?;
     let mut columns: Vec<Bound<'py, PyAny>> = Vec::new();
     for column in entry.getattr("columns")?.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
@@ -152,7 +154,7 @@ fn on_schema_change<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
         return Ok(raw);
     }
     if raw.is_instance_of::<PyString>() {
-        match imported(py, PLANNER_TYPES_MODULE, "OnSchemaChange")?.call1((&raw,)) {
+        match registry::class(py, RecordId::OnSchemaChange)?.call1((&raw,)) {
             Ok(policy) => return Ok(policy),
             Err(error) if !error.is_instance_of::<PyValueError>(py) => return Err(error),
             Err(_) => {}
@@ -160,7 +162,7 @@ fn on_schema_change<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
     }
     Err(input_error(
         py,
-        (PLANNER_EXCEPTIONS_MODULE, "PlannerInputError"),
+        ErrorId::PlannerInput,
         &format!(
             "model '{}': unknown on_schema_change '{}'",
             text(&model.getattr("name")?)?,
@@ -332,7 +334,7 @@ fn model_warnings<'py>(
     let model: Bound<'py, PyAny> = request.get("model")?;
     let name: Bound<'py, PyAny> = model.getattr("name")?;
     let mut warnings: Vec<Bound<'py, PyAny>> = call_with(
-        &imported(py, NATIVE_MODULE, "build_model_warnings")?,
+        &registry::native(py, NativeAttr::BuildModelWarnings)?,
         &[
             ("model_name", name.clone()),
             ("materialization_type", request.get("materialization_type")?),
@@ -345,7 +347,7 @@ fn model_warnings<'py>(
     .try_iter()?
     .collect::<PyResult<_>>()?;
     let cursor_warning: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "check_cursor_type_consistency")?,
+        &registry::native(py, NativeAttr::CheckCursorTypeConsistency)?,
         &[
             ("model_name", name),
             ("cursor_column", request.get("cursor_column")?),
@@ -371,9 +373,9 @@ fn ddl_cursor_bounds<'py>(request: &Request<'_, 'py>) -> PyResult<Bound<'py, PyA
         if request.get("runtime_owned_cursor_bounds")?.is_truthy()?
             && !request.get("cursor_column")?.is_none()
         {
-            let sentinel: Bound<'py, PyAny> = imported(py, CURSOR_TYPES_MODULE, "BoundSentinel")?;
+            let sentinel: Bound<'py, PyAny> = host::entry(py, ExecutorHost::BoundSentinel)?;
             call_with(
-                &imported(py, PLAN_MODELS_MODULE, "CursorBounds")?,
+                &registry::class(py, RecordId::CursorBounds)?,
                 &[
                     ("start", sentinel.getattr("START")?),
                     ("end", sentinel.getattr("END")?),
@@ -491,7 +493,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     let name: Bound<'py, PyAny> = model.getattr("name")?;
     let policy: Bound<'py, PyAny> = on_schema_change(&model)?;
     let schema_actions: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_schema_actions")?,
+        &registry::native(py, NativeAttr::ResolveSchemaActions)?,
         &[
             ("schema_findings", change.getattr("schema_findings")?),
             ("on_schema_change", policy.clone()),
@@ -560,6 +562,6 @@ pub(crate) fn assemble_model_plan_entry<'py>(
         &entry,
     )?;
     let plan_entry: Bound<'py, PyAny> =
-        imported(py, PLAN_MODELS_MODULE, "ModelPlanEntry")?.call((), Some(&entry))?;
+        registry::class(py, RecordId::ModelPlanEntry)?.call((), Some(&entry))?;
     PyTuple::new(py, [plan_entry, warnings.into_any()])
 }

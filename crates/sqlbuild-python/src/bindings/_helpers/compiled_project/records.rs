@@ -1,6 +1,5 @@
 //! Compiled records and views: projecting native views as records, and recording later stages.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef, PyResult, Python,
 };
@@ -13,10 +12,9 @@ use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const DECIMAL_KIND: &str = "decimal";
@@ -37,9 +35,9 @@ pub(crate) fn replace<'py>(
 }
 
 /// `value` when it already is a `class` record, else `class(**{field: getattr(value, field)})`.
-fn record<'py>(value: &Bound<'py, PyAny>, class: &str) -> PyResult<Bound<'py, PyAny>> {
+fn record<'py>(value: &Bound<'py, PyAny>, class: RecordId) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    let class: Bound<'py, PyAny> = shape_class_at(py, COMPILE_MODELS_MODULE, class)?;
+    let class: Bound<'py, PyAny> = registry::class(py, class)?;
     if value.is_instance(&class)? {
         return Ok(value.clone());
     }
@@ -60,13 +58,13 @@ fn record<'py>(value: &Bound<'py, PyAny>, class: &str) -> PyResult<Bound<'py, Py
 /// The model as a `CompiledModel`, projected from its owner when it is a native view.
 #[pyfunction]
 pub(crate) fn compiled_model_record<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    record(model, "CompiledModel")
+    record(model, RecordId::CompiledModel)
 }
 
 /// The audit as a `CompiledAudit`, projected from its owner when it is a native view.
 #[pyfunction]
 pub(crate) fn compiled_audit_record<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    record(audit, "CompiledAudit")
+    record(audit, RecordId::CompiledAudit)
 }
 
 /// The function as a `CompiledFunction`, projected from its owner when it is a native view.
@@ -74,7 +72,7 @@ pub(crate) fn compiled_audit_record<'py>(audit: &Bound<'py, PyAny>) -> PyResult<
 pub(crate) fn compiled_function_record<'py>(
     function: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    record(function, "CompiledFunction")
+    record(function, RecordId::CompiledFunction)
 }
 
 /// The source as a `CompiledSource`, projected from its owner when it is a native view.
@@ -82,17 +80,17 @@ pub(crate) fn compiled_function_record<'py>(
 pub(crate) fn compiled_source_record<'py>(
     source: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    record(source, "CompiledSource")
+    record(source, RecordId::CompiledSource)
 }
 
 /// The seed as a `CompiledSeed`, projected from its owner when it is a native view.
 #[pyfunction]
 pub(crate) fn compiled_seed_record<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    record(seed, "CompiledSeed")
+    record(seed, RecordId::CompiledSeed)
 }
 
 /// Each item of `fields[name]` as a `class` record.
-fn records_of<'py>(fields: &Bound<'py, PyDict>, (name, class): (&str, &str)) -> PyResult<()> {
+fn records_of<'py>(fields: &Bound<'py, PyDict>, (name, class): (&str, RecordId)) -> PyResult<()> {
     let py: Python<'py> = fields.py();
     let items: Vec<Bound<'py, PyAny>> = fields
         .as_any()
@@ -111,7 +109,7 @@ pub(crate) fn compiled_project_record<'py>(
     include_sql_expansions: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS_MODULE, "CompiledProject")?;
+    let class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledProject)?;
     if project.is_instance(&class)? {
         if include_sql_expansions {
             return Ok(project.clone());
@@ -122,10 +120,10 @@ pub(crate) fn compiled_project_record<'py>(
     let fields: Bound<'py, PyDict> = view.fields(py, include_sql_expansions)?;
     drop(view);
     for pair in [
-        ("seeds", "CompiledSeed"),
-        ("sources", "CompiledSource"),
-        ("functions", "CompiledFunction"),
-        ("audits", "CompiledAudit"),
+        ("seeds", RecordId::CompiledSeed),
+        ("sources", RecordId::CompiledSource),
+        ("functions", RecordId::CompiledFunction),
+        ("audits", RecordId::CompiledAudit),
     ] {
         records_of(&fields, pair)?;
     }
@@ -140,7 +138,7 @@ pub(crate) fn with_binding_diagnostics<'py>(
     diagnostics: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    if model.is_instance(&imported(py, COMPILE_MODELS_MODULE, "CompiledModel")?)? {
+    if model.is_instance(&registry::class(py, RecordId::CompiledModel)?)? {
         return replace(model, &[("binding_diagnostics", diagnostics.clone())]);
     }
     model.call_method1("with_binding_diagnostics", (diagnostics,))
@@ -163,7 +161,7 @@ pub(crate) fn with_type_recovery<'py>(
             unchecked.push(column);
         }
     }
-    if !model.is_instance(&imported(py, COMPILE_MODELS_MODULE, "CompiledModel")?)? {
+    if !model.is_instance(&registry::class(py, RecordId::CompiledModel)?)? {
         return model.call_method1("with_type_recovery", (diagnostics, unchecked));
     }
     let inferred: Bound<'py, PyAny> = model.getattr("inferred_columns")?;
@@ -202,7 +200,7 @@ pub(crate) fn project_with<'py>(
     project: &Bound<'py, PyAny>,
     changes: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    with_changes(project, "CompiledProject", changes)
+    with_changes(project, RecordId::CompiledProject, changes)
 }
 
 /// The compile inputs with `changes`; a native view shares its owner's model inputs.
@@ -212,18 +210,18 @@ pub(crate) fn inputs_with<'py>(
     inputs: &Bound<'py, PyAny>,
     changes: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    with_changes(inputs, "CompileProjectInputs", changes)
+    with_changes(inputs, RecordId::CompileProjectInputs, changes)
 }
 
 /// `replace(value, **changes)` for a record, else the native view's `with_changes(**changes)`.
 fn with_changes<'py>(
     value: &Bound<'py, PyAny>,
-    class: &str,
+    class: RecordId,
     changes: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     let changes: Bound<'py, PyDict> = changes.unwrap_or_else(|| PyDict::new(py));
-    if value.is_instance(&shape_class_at(py, COMPILE_MODELS_MODULE, class)?)? {
+    if value.is_instance(&registry::class(py, class)?)? {
         return imported(py, DATACLASSES_MODULE, "replace")?.call((value,), Some(&changes));
     }
     value.call_method("with_changes", (), Some(&changes))
@@ -253,7 +251,7 @@ pub(crate) fn compile_inputs_view<'py>(
     }
     let keywords: Bound<'py, PyDict> = fields.copy()?;
     keywords.set_item("native_project", native_project)?;
-    imported(py, NATIVE_RECORDS_MODULE, "CompileProjectInputs")?.call((), Some(&keywords))
+    registry::class(py, RecordId::CompileProjectInputs)?.call((), Some(&keywords))
 }
 
 /// A typed SQL value as the plain value native consumers read.

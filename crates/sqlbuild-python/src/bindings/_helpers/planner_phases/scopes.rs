@@ -1,6 +1,7 @@
 //! Resolve the selected, stale-warning and inspection scopes of one plan.
 
 use crate::bindings::_helpers::planner_phases::objects::{native, replace, tuple};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -17,7 +18,7 @@ pub(crate) fn resolve_planner_scopes<'py>(
     let auto_load = policies.getattr("auto_load_sources")?;
     let selected = native(
         py,
-        "build_planner_scope",
+        NativeAttr::BuildPlannerScope,
         &[
             ("project", project.clone()),
             ("select", selection.getattr("select")?),
@@ -37,7 +38,7 @@ pub(crate) fn resolve_planner_scopes<'py>(
     let empty = PyTuple::empty(py).into_any();
     let full = native(
         py,
-        "build_planner_scope",
+        NativeAttr::BuildPlannerScope,
         &[
             ("project", project.clone()),
             ("select", empty.clone()),
@@ -47,7 +48,7 @@ pub(crate) fn resolve_planner_scopes<'py>(
     )?;
     let stale_keys = native(
         py,
-        "transitive_closure_many",
+        NativeAttr::TransitiveClosureMany,
         &[
             ("starts", selected.getattr("selected_keys")?),
             ("edges", full.getattr("upstream_deps")?),
@@ -91,7 +92,7 @@ pub(crate) fn resolve_planner_scopes<'py>(
     )?;
     native(
         py,
-        "PlannerScopeResolution",
+        RecordId::PlannerScopeResolution,
         &[
             ("selected_scope", selected.clone()),
             ("stale_warning_scope", stale_scope),

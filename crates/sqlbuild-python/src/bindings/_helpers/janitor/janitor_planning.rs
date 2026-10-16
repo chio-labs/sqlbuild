@@ -10,7 +10,7 @@ use sqlbuild_analysis::janitor_planning::main::build_archive_name::build_archive
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_name::query_diff_artifact_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_parts::query_diff_artifact_parts;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
 use crate::bindings::_helpers::janitor::janitor_classification::{
     Candidate, Policy, Protection, SchemaClassification, classify_target_schemas, plan_archives,
 };
@@ -25,12 +25,11 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
 use crate::bindings::_helpers::janitor::janitor_old_names::{
     OldNamePlanning, pending_migration_origins, plan_old_name_views,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::relation_naming::fitting::shared_error;
 
-const LIFECYCLE: (&str, &str) = (
-    "sqlbuild.runtime.observability.classes.operation_lifecycle",
-    "OperationLifecycle",
-);
+const LIFECYCLE: ExecutorHost = ExecutorHost::OperationLifecycle;
 
 /// Settings of one janitor plan.
 pub(crate) struct JanitorSettings {
@@ -128,7 +127,7 @@ fn artifact_only_plan<'py>(
     let py: Python<'py> = warehouse.py();
     record(
         py,
-        "JanitorPlan",
+        ExecutorHost::JanitorPlan,
         &[
             ("target_name", project.getattr("effective_target_name")?),
             ("retention_days", integer(py, settings.retention_days)?),
@@ -191,7 +190,7 @@ pub(crate) fn build_plan<'py>(
             &now,
         );
     }
-    let lifecycle: Bound<'py, PyAny> = imported(py, LIFECYCLE.0, LIFECYCLE.1)?;
+    let lifecycle: Bound<'py, PyAny> = host::entry(py, LIFECYCLE)?;
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("operation_kind", "janitor")?;
     options.set_item("operation_name", "janitor_warehouse_inspection")?;
@@ -265,7 +264,7 @@ pub(crate) fn build_plan<'py>(
     );
     record(
         py,
-        "JanitorPlan",
+        ExecutorHost::JanitorPlan,
         &[
             ("target_name", project.getattr("effective_target_name")?),
             ("retention_days", integer(py, settings.retention_days)?),

@@ -5,13 +5,11 @@ use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{Py, PyErr, pymethods};
 use sqlbuild_model_config::errors::{ConfigError, ErrorClass};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::model_config::config_values::config_value_type_error;
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
 const EXPECTED_STRING: &str = "a string";
 
 const COMPILE_INPUT_CLASS: &str = "compile_input";
@@ -82,15 +80,15 @@ impl NativeConfigError {
         }
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
         keywords.set_item("help", &self.help)?;
-        let (module, class) = match self.class_name {
-            RESOURCE_IDENTITY_CLASS => (IDENTITY_ERRORS_MODULE, "ResourceIdentityError"),
-            DISCOVERY_CONFLICT_CLASS => (DISCOVERY_ERRORS_MODULE, "DiscoveryConflictError"),
+        let class: ErrorId = match self.class_name {
+            RESOURCE_IDENTITY_CLASS => ErrorId::ResourceIdentity,
+            DISCOVERY_CONFLICT_CLASS => ErrorId::DiscoveryConflict,
             _ => {
                 keywords.set_item("code", self.code)?;
-                (COMPILE_ERRORS_MODULE, "CompileInputError")
+                ErrorId::CompileInput
             }
         };
-        imported(py, module, class)?.call((&self.message,), Some(&keywords))
+        registry::error(py, class)?.call((&self.message,), Some(&keywords))
     }
 }
 

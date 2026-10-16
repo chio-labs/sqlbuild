@@ -32,6 +32,10 @@ use crate::bindings::_helpers::compile_outputs::artifacts::{
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     compiled_sql_test_path, planned_sql_test_path,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 const COMPILED_DIR: &str = "compiled";
 const MODELS_DIR: &str = "models";
@@ -46,13 +50,6 @@ const SQL_FILE_SUFFIX: &str = ".sql";
 const LANGUAGE_DIR_DEPTH: usize = 2;
 const PUBLISHED_STAGING_CHANGED: &str = "changed";
 const PUBLISHED_TREE: &str = "tree";
-const OUTPUT_MODELS_MODULE: &str = "sqlbuild._native";
-const CLI_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const MODEL_CHAIN_MODULE: &str = "sqlbuild._native";
-const PLAN_ARTIFACTS_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const TARGET_OPTIONS: (&[&str], &[&str]) = (&["target_dir", "adapter", "project"], &["manifest"]);
 const STAGING_CHANGED_HELP: &str =
     "Rerun the compile; avoid deleting target/ while a compile is running.";
@@ -204,7 +201,7 @@ fn written_target<'py>(
     let py: Python<'py> = target_dir.py();
     let [models, seeds, functions, audits, tests] = counts;
     call_with(
-        &imported(py, OUTPUT_MODELS_MODULE, "WrittenTarget")?,
+        &registry::class(py, RecordId::WrittenTarget)?,
         &[
             ("model_count", models.into_bound_py_any(py)?),
             ("seed_count", seeds.into_bound_py_any(py)?),
@@ -349,7 +346,7 @@ fn planned_artifacts<'py>(
         return Ok(Vec::new());
     }
     let lifecycle: Bound<'py, PyAny> = call_with(
-        &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+        &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &[
             ("operation_kind", "project".into_bound_py_any(py)?),
             ("operation_name", "sql_test_planning".into_bound_py_any(py)?),
@@ -357,11 +354,7 @@ fn planned_artifacts<'py>(
     )?;
     within(&lifecycle, |entered| {
         let artifacts: Vec<Py<PyAny>> = call_with(
-            &imported(
-                py,
-                PLAN_ARTIFACTS_MODULE,
-                "plan_compiled_sql_test_artifacts",
-            )?,
+            &registry::native(py, NativeAttr::PlanCompiledSqlTestArtifacts)?,
             &[
                 ("project", project.clone()),
                 ("tests", PyTuple::new(py, tests)?.into_any()),
@@ -402,7 +395,7 @@ fn plan_tests<'py>(
     } else {
         let context: IdentityContext<'py> = identity_context(project, adapter)?;
         let chains: Bound<'py, PyAny> = call_with(
-            &imported(py, MODEL_CHAIN_MODULE, "sql_test_model_chain_names_by_key")?,
+            &registry::native(py, NativeAttr::SqlTestModelChainNamesByKey)?,
             &[("project", project.clone()), ("tests", tests.clone())],
         )?;
         Some((context, chains))
@@ -483,14 +476,13 @@ fn artifact_diagnostics<'py>(
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
     for message in artifact.getattr("error_messages")?.try_iter()? {
         diagnostics.push(call_with(
-            &imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?,
+            &registry::class(py, RecordId::CompilerDiagnostic)?,
             &[
                 ("phase", "test".into_bound_py_any(py)?),
                 ("severity", "error".into_bound_py_any(py)?),
                 (
                     "code",
-                    imported(py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")?
-                        .getattr("code")?,
+                    registry::error(py, ErrorId::PlannerInput)?.getattr("code")?,
                 ),
                 ("message", message?),
                 ("resource_type", "sql_test".into_bound_py_any(py)?),
@@ -693,14 +685,13 @@ pub(crate) fn publish_staged_target<'py>(
 
 /// `StagedArtifactsChangedError(message, help=...)`.
 pub(crate) fn staging_changed(py: Python<'_>, message: &str) -> PyResult<PyErr> {
-    let error: Bound<'_, PyAny> =
-        imported(py, CLI_EXCEPTIONS_MODULE, "StagedArtifactsChangedError")?.call(
-            (message,),
-            Some(&keywords(
-                py,
-                &[("help", STAGING_CHANGED_HELP.into_bound_py_any(py)?)],
-            )?),
-        )?;
+    let error: Bound<'_, PyAny> = registry::error(py, ErrorId::StagedArtifactsChanged)?.call(
+        (message,),
+        Some(&keywords(
+            py,
+            &[("help", STAGING_CHANGED_HELP.into_bound_py_any(py)?)],
+        )?),
+    )?;
     Ok(PyErr::from_value(error))
 }
 

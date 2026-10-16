@@ -9,7 +9,7 @@ use pyo3::types::{
     PyStringMethods, PyTuple,
 };
 
-use sqlbuild_cache::hosted_shapes::constants::HOSTED_SHAPE_TYPES;
+use sqlbuild_cache::hosted_shapes::main::captured_shape_name::captured_shape_name;
 use sqlbuild_cache::stage_capture::constants::{
     CANONICAL_TYPES, DECODED_SEQUENCES, OMITTED_ATTRIBUTES, PROJECTED_ATTRIBUTES, RESERVED_KEYS,
     SHARED_MARKER, SHARED_MIN_CHARS, SKIPPED_SLOTS, UNORDERED_ATTRIBUTES,
@@ -66,7 +66,7 @@ fn lookup<'a, T: Copy>(table: &'a [(&'a str, T)], name: &str) -> Option<T> {
 /// The `module:qualname` a captured class is written as, natively hosted shapes keeping their Python name.
 fn captured_type_name(class: &Bound<'_, PyAny>) -> PyResult<String> {
     let name: String = qualified_name(class)?;
-    Ok(lookup(&HOSTED_SHAPE_TYPES, &name).map_or(name, str::to_owned))
+    Ok(captured_shape_name(&name).map_or(name, str::to_owned))
 }
 
 /// `module:qualname` of a callable or class, as Python's `qualified_name` writes it.

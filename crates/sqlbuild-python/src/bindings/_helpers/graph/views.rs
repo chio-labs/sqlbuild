@@ -12,8 +12,8 @@ use sqlbuild_analysis::graph::models::{GraphIndexes, ProjectGraph};
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
-
-const GRAPH_MODELS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// The native graph's `(resource type, name)` pair for `key`.
 #[pyfunction]
@@ -84,9 +84,7 @@ fn graph_views<'py>(py: Python<'py>, graph: &ProjectGraph) -> PyResult<Bound<'py
     keywords.set_item("tag_index", tags)?;
     keywords.set_item("path_index", paths)?;
     keywords.set_item("all_keys", names)?;
-    py.import(GRAPH_MODELS_MODULE)?
-        .getattr("LineageGraphViews")?
-        .call((), Some(&keywords))
+    registry::class(py, RecordId::LineageGraphViews)?.call((), Some(&keywords))
 }
 
 /// The graph's lineage edges and selector indexes as dicts, in project order.

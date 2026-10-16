@@ -1,7 +1,9 @@
 //! Resolve authored migration origins at the adapter and inspection boundaries.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::constants::QUALIFIED_RELATION_MAX_PARTS;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PySet, PySetMethods, PyTuple};
 use pyo3::{PyErr, pyfunction, wrap_pyfunction};
@@ -19,7 +21,7 @@ pub(super) fn location<'py>(
     let mut fields = fields.to_vec();
     fields.push(("qualified_name", qualified));
     call_with(
-        &imported(runtime.py(), "sqlbuild._native", "CompiledRelationLocation")?,
+        &registry::class(runtime.py(), RecordId::CompiledRelationLocation)?,
         &fields,
     )
 }
@@ -61,7 +63,7 @@ fn named<'py>(
 
 fn input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        imported(py, "sqlbuild._native", "PlannerInputError")?.call1((message,))?,
+        registry::error(py, ErrorId::PlannerInput)?.call1((message,))?,
     ))
 }
 

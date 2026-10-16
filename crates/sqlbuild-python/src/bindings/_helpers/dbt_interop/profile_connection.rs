@@ -7,17 +7,16 @@ use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::cli::resolved_path;
 use crate::bindings::_helpers::dbt_interop::profile_load::{
     default_profiles_dir, load_dbt_project_metadata, load_selected_dbt_profile_output,
 };
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const PROFILE_RENDER_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.render";
-const DBT_ERRORS_MODULE: &str = "sqlbuild.integrations.dbt.exceptions";
 const DBT_PROFILE_SOURCE: &str = "dbt_profile";
 const PROFILE_CONNECTION_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -31,8 +30,7 @@ const PROFILE_CONNECTION_OPTIONS: (&[&str], &[&str]) = (
 const NON_EMPTY_MESSAGE: &str = "dbt_profile connection values must be non-empty strings";
 
 pub(crate) fn profile_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, DBT_ERRORS_MODULE, "DbtProfileError")
-        .and_then(|class| class.call1((message,)))
+    match host::entry(py, ThirdPartyHost::DbtProfileError).and_then(|class| class.call1((message,)))
     {
         Ok(instance) => PyErr::from_value(instance),
         Err(error) => error,
@@ -91,11 +89,7 @@ fn profile_connection<'py>(
     let selected: Bound<'py, PyAny> =
         load_selected_dbt_profile_output(&profiles_dir, &profile_name, target_name.as_deref())?;
     let resolved: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            PROFILE_RENDER_MODULE,
-            "render_selected_dbt_profile_output",
-        )?,
+        &host::entry(py, ThirdPartyHost::RenderSelectedDbtProfileOutput)?,
         &[
             ("selected", selected),
             ("project_dir", dbt_project_dir),
@@ -104,7 +98,7 @@ fn profile_connection<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "normalize_dbt_profile_connection")?,
+        &registry::native(py, NativeAttr::NormalizeDbtProfileConnection)?,
         &[("resolved", resolved)],
     )
 }

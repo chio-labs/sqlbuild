@@ -11,12 +11,11 @@ use sqlbuild_analysis::planner_strategy::models::{AuditAttachmentKind, AuditRunS
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::graph::algorithms::closure;
-use crate::bindings::_helpers::planner_strategy::values::{
-    PLANNER_EXCEPTIONS_MODULE, input_error, optional_string, text,
-};
+use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const MODEL_RESOURCE_TYPE: &str = "model";
 const FINAL_RUN_SCOPE: &str = "final";
@@ -24,7 +23,7 @@ const FINAL_RUN_SCOPE: &str = "final";
 /// `CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)`.
 fn object_key<'py>(py: Python<'py>, kind: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompiledObjectKey")?,
+        &registry::class(py, RecordId::CompiledObjectKey)?,
         &[
             (
                 "resource_type",
@@ -85,7 +84,7 @@ fn resolve_attachment_kind<'py>(
         if name.is_none() {
             return Err(input_error(
                 py,
-                (PLANNER_EXCEPTIONS_MODULE, "PlannerInputError"),
+                ErrorId::PlannerInput,
                 &format!(
                     "audit '{}': attached audit is missing an attached target name",
                     text(&audit.getattr("name")?)?

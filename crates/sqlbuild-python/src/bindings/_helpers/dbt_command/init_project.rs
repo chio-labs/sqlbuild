@@ -20,11 +20,10 @@ use crate::bindings::_helpers::dbt_interop::runner::launch_os_error;
 use crate::bindings::types::CompilerDetach;
 use sqlbuild_config::dbt_profile::models::DbtProjectMetadata;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
-const PROFILE_RENDER_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.render";
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_FILE;
 const DEFAULT_OUTPUT_DIR: &str = "sqlbuild_project";
 const PROFILES_FILE: &str = "profiles.yml";
@@ -82,11 +81,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     progress(&callbacks, "complete", "Inspected dbt project and profile.")?;
     progress(&callbacks, "start", "Rendering dbt profile connection...")?;
     let resolved_output: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            PROFILE_RENDER_MODULE,
-            "render_selected_dbt_profile_output",
-        )?,
+        &host::entry(py, ThirdPartyHost::RenderSelectedDbtProfileOutput)?,
         &[
             ("selected", selected.clone()),
             ("project_dir", paths.dbt_project_dir.clone()),
@@ -94,7 +89,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
         ],
     )?;
     let normalized: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "normalize_dbt_profile_connection")?,
+        &registry::native(py, NativeAttr::NormalizeDbtProfileConnection)?,
         &[("resolved", resolved_output)],
     )?;
     let target_path: Bound<'py, PyAny> = resolved(
@@ -104,7 +99,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     let project_name: String = metadata.project_name.replace('-', "_");
     let target_name: Bound<'py, PyAny> = selected.getattr("target_name")?;
     let toml: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_dbt_init_project_toml")?,
+        &registry::native(py, NativeAttr::BuildDbtInitProjectToml)?,
         &[
             ("project_name", project_name.clone().into_bound_py_any(py)?),
             ("adapter", normalized.getattr("adapter")?),
@@ -148,7 +143,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
         progress(&callbacks, "complete", "Wrote SQLBuild project config.")?;
     }
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DbtInitResult")?,
+        &registry::class(py, RecordId::DbtInitResult)?,
         &[
             ("output_dir", output_dir),
             ("project_file", project_file),
@@ -338,7 +333,7 @@ fn is_value_error(py: Python<'_>, error: &PyErr) -> bool {
 }
 
 fn profile_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, DBT_EXCEPTIONS, "DbtProfileError").and_then(|class| class.call1((message,)))
+    match host::entry(py, ThirdPartyHost::DbtProfileError).and_then(|class| class.call1((message,)))
     {
         Ok(instance) => PyErr::from_value(instance),
         Err(error) => error,

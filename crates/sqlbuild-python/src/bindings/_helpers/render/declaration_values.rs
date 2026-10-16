@@ -7,21 +7,15 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyInt, PyList, PyString, P
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const NO_DECLARATION_KIND: u8 = 255;
 /// Declaration kinds by their native code: enum 0, constant 1, macro 2.
 const DECLARATION_KINDS: [&str; 3] = ["ENUM", "CONSTANT", "MACRO"];
-const SQL_VALUE_ERRORS_MODULE: &str = "sqlbuild.sql_values.exceptions";
 const TYPES_MODULE: &str = "types";
 const SCALAR_KINDS: [&str; 6] = ["string", "integer", "boolean", "float", "decimal", "null"];
 const COLLECTION_KINDS: [&str; 2] = ["list", "set"];
@@ -50,8 +44,8 @@ fn runtime_declarations<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = discovered.py();
     let classes = (
-        imported(py, SCOPE_MODELS_MODULE, "DeclarationIdentity")?,
-        imported(py, SCOPE_TYPES_MODULE, "DeclarationKind")?,
+        registry::class(py, RecordId::DeclarationIdentity)?,
+        registry::class(py, RecordId::DeclarationKind)?,
     );
     let declarations: Bound<'py, PyDict> = PyDict::new(py);
     for (files, kind) in [("enum_files", "ENUM"), ("constant_files", "CONSTANT")] {
@@ -64,10 +58,9 @@ fn runtime_declarations<'py>(
             }
         }
     }
-    let resource_identity: Bound<'py, PyAny> =
-        imported(py, SCOPE_MODELS_MODULE, "ResourceIdentity")?;
+    let resource_identity: Bound<'py, PyAny> = registry::class(py, RecordId::ResourceIdentity)?;
     let model_kind: Bound<'py, PyAny> =
-        imported(py, SCOPE_TYPES_MODULE, "ResourceKind")?.getattr("MODEL")?;
+        registry::class(py, RecordId::ResourceKind)?.getattr("MODEL")?;
     for model_file in discovered.getattr("model_files")?.try_iter()? {
         let model_file: Bound<'py, PyAny> = model_file?;
         let name: Bound<'py, PyAny> = model_file
@@ -110,7 +103,7 @@ fn runtime_declarations<'py>(
 fn resource_specific<'py>(scope_index: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyFrozenSet>> {
     let py: Python<'py> = scope_index.py();
     let private: Bound<'py, PyAny> =
-        imported(py, SCOPE_TYPES_MODULE, "ScopeKind")?.getattr("PRIVATE")?;
+        registry::class(py, RecordId::ScopeKind)?.getattr("PRIVATE")?;
     let mut resources: Vec<Bound<'py, PyAny>> = Vec::new();
     for declaration in scope_index.getattr("declarations")?.try_iter()? {
         let declaration: Bound<'py, PyAny> = declaration?;
@@ -139,7 +132,7 @@ pub(crate) fn declaration_scope_resolver<'py>(
         lookup.clone()
     };
     let projection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DeclarationRuntimeProjection")?,
+        &registry::class(py, RecordId::DeclarationRuntimeProjection)?,
         &[(
             "declarations",
             imported(py, TYPES_MODULE, "MappingProxyType")?.call1((&declarations,))?,
@@ -148,7 +141,7 @@ pub(crate) fn declaration_scope_resolver<'py>(
     let native_contexts: Bound<'py, PyAny> =
         native_declaration_contexts(&lookup, declarations.as_any())?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DeclarationScopeResolver")?,
+        &registry::class(py, RecordId::DeclarationScopeResolver)?,
         &[
             ("project_dir", discovered.getattr("project_dir")?),
             ("lookup", lookup),
@@ -204,15 +197,15 @@ pub(crate) fn native_declaration_contexts<'py>(
     declarations: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = lookup.py();
-    let kind_type: Bound<'py, PyAny> = imported(py, SCOPE_TYPES_MODULE, "DeclarationKind")?;
+    let kind_type: Bound<'py, PyAny> = registry::class(py, RecordId::DeclarationKind)?;
     let kinds: Vec<Bound<'py, PyAny>> = DECLARATION_KINDS
         .iter()
         .map(|kind| kind_type.getattr(*kind))
         .collect::<PyResult<_>>()?;
     let value_classes: Vec<Bound<'py, PyAny>> = vec![
-        imported(py, DISCOVERY_MODELS_MODULE, "EnumDeclaration")?,
-        imported(py, DISCOVERY_MODELS_MODULE, "ConstantDeclaration")?,
-        imported(py, COMPILE_MODELS_MODULE, "LoadedMacro")?,
+        registry::class(py, RecordId::EnumDeclaration)?,
+        registry::class(py, RecordId::ConstantDeclaration)?,
+        registry::class(py, RecordId::LoadedMacro)?,
     ];
     let index: Bound<'py, PyAny> = lookup.getattr("visibility_index")?;
     let lookup_declarations: Bound<'py, PyAny> = lookup.getattr("declarations")?;
@@ -241,18 +234,18 @@ pub(crate) fn native_declaration_contexts<'py>(
         )?);
     }
     let reasons: Bound<'py, PyDict> = PyDict::new(py);
-    for reason in imported(py, SCOPE_TYPES_MODULE, "VisibilityReason")?.try_iter()? {
+    for reason in registry::class(py, RecordId::VisibilityReason)?.try_iter()? {
         let reason: Bound<'py, PyAny> = reason?;
         reasons.set_item(reason.getattr("value")?, reason)?;
     }
     let classes: Bound<'py, PyDict> = PyDict::new(py);
     classes.set_item(
         "visibility_record",
-        imported(py, SCOPE_MODELS_MODULE, "VisibilityRecord")?,
+        registry::class(py, RecordId::VisibilityRecord)?,
     )?;
     classes.set_item(
         "resolution_context",
-        imported(py, COMPILE_MODELS_MODULE, "DeclarationResolutionContext")?,
+        registry::class(py, RecordId::DeclarationResolutionContext)?,
     )?;
     classes.set_item("reasons", reasons)?;
     let keys: Bound<'py, PyDict> = PyDict::new(py);
@@ -268,29 +261,29 @@ pub(crate) fn native_declaration_contexts<'py>(
         lookup.getattr("index")?.getattr("declarations")?,
     )?;
     for (name, class) in [
-        ("resource_record", "ResourceRecord"),
-        ("ownership_root", "OwnershipRoot"),
-        ("resource_identity", "ResourceIdentity"),
-        ("declaration_identity", "DeclarationIdentity"),
+        ("resource_record", RecordId::ResourceRecord),
+        ("ownership_root", RecordId::OwnershipRoot),
+        ("resource_identity", RecordId::ResourceIdentity),
+        ("declaration_identity", RecordId::DeclarationIdentity),
     ] {
-        lookups.set_item(name, imported(py, SCOPE_MODELS_MODULE, class)?)?;
+        lookups.set_item(name, registry::class(py, class)?)?;
     }
     lookups.set_item(
         "resource_kind",
-        imported(py, SCOPE_TYPES_MODULE, "ResourceKind")?,
+        registry::class(py, RecordId::ResourceKind)?,
     )?;
     lookups.set_item("declaration_kind", kind_type)?;
     lookups.set_item(
         "private_scope",
-        imported(py, SCOPE_TYPES_MODULE, "ScopeKind")?.getattr("PRIVATE")?,
+        registry::class(py, RecordId::ScopeKind)?.getattr("PRIVATE")?,
     )?;
     lookups.set_item(
         "identity_error",
-        imported(py, SCOPE_ERRORS_MODULE, "InvalidQualifiedIdentityError")?,
+        registry::error(py, ErrorId::InvalidQualifiedIdentity)?,
     )?;
     lookups.set_item(
         "path_error",
-        imported(py, SCOPE_ERRORS_MODULE, "InvalidScopePathError")?,
+        registry::error(py, ErrorId::InvalidScopePath)?,
     )?;
     let global_positions: Bound<'py, PyList> = PyList::new(
         py,
@@ -299,7 +292,7 @@ pub(crate) fn native_declaration_contexts<'py>(
             .try_iter()?
             .collect::<PyResult<Vec<_>>>()?,
     )?;
-    imported(py, NATIVE_MODULE, "NativeDeclarationContexts")?.call1((
+    registry::native(py, NativeAttr::NativeDeclarationContexts)?.call1((
         PyList::new(py, positions)?,
         (
             global_positions,
@@ -365,7 +358,7 @@ fn rendered_constant<'py>(
             declaration.getattr("name")?.str()?
         );
         return Err(PyErr::from_value(
-            imported(declaration.py(), NATIVE_MODULE, "SqlValueValidationError")?
+            registry::native(declaration.py(), NativeAttr::SqlValueValidationError)?
             .call1((format!(
                 "{context} rendered value is {size} bytes; maximum is {MAX_SQL_VALUE_SIZE} bytes"
             ),))?,
@@ -391,10 +384,9 @@ pub(crate) fn constant_declaration_sql<'py>(
         Ok(rendered) => return Ok(rendered),
         Err(error) => error,
     };
-    let rendering_error: Bound<'py, PyAny> =
-        imported(py, SQL_VALUE_ERRORS_MODULE, "SqlValueRenderingError")?;
+    let rendering_error: Bound<'py, PyAny> = host::entry(py, ExecutorHost::SqlValueRenderingError)?;
     let validation_error: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "SqlValueValidationError")?;
+        registry::native(py, NativeAttr::SqlValueValidationError)?;
     let raised: Bound<'py, PyAny> = error.value(py).clone().into_any();
     if !(raised.is_instance(&rendering_error)? || raised.is_instance(&validation_error)?) {
         return Err(error);
@@ -405,7 +397,7 @@ pub(crate) fn constant_declaration_sql<'py>(
         _ => relative_path.clone(),
     };
     let compile_error: Bound<'py, PyAny> =
-        imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call1((format!(
+        registry::error(py, ErrorId::CompileInput)?.call1((format!(
             "{} constant '{}' could not be rendered in '{}' by adapter '{}' as {}: {}",
             relative_path.str()?,
             declaration.getattr("name")?.str()?,

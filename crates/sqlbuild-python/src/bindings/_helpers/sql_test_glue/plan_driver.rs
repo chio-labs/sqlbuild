@@ -4,6 +4,8 @@ use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timi
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyTuple};
@@ -17,7 +19,7 @@ pub(super) fn chains<'py>(
         return Ok(PyTuple::empty(py).into_any());
     }
     let request = call_with(
-        &imported(py, "sqlbuild._native", "NativeSqlTestChainRequest")?,
+        &registry::class(py, RecordId::NativeSqlTestChainRequest)?,
         &[
             ("models", project.getattr("models")?),
             ("tests", tests.clone()),
@@ -29,8 +31,7 @@ pub(super) fn chains<'py>(
             ),
         ],
     )?;
-    let native =
-        imported(py, "sqlbuild._native", "resolve_compiled_sql_test_chains")?.call1((request,));
+    let native = registry::native(py, NativeAttr::ResolveCompiledSqlTestChains)?.call1((request,));
     let native = match native {
         Ok(value) => value,
         Err(error) if error.is_instance_of::<pyo3::exceptions::PyValueError>(py) => {
@@ -75,7 +76,7 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
     let functions = super::plan_rendering::functions(&project, &adapter)?;
     let overrides = super::plan_rendering::overrides(&project, &tests, &adapter)?;
     let request = call_with(
-        &imported(py, "sqlbuild._native", "NativeSqlTestPlanningRequest")?,
+        &registry::class(py, RecordId::NativeSqlTestPlanningRequest)?,
         &[
             ("models", project.getattr("models")?),
             ("rendered_model_sql", model_sql.into_any()),
@@ -118,7 +119,7 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
             ),
         ],
     )?;
-    let native = imported(py, "sqlbuild._native", "plan_compiled_sql_tests")?.call1((request,));
+    let native = registry::native(py, NativeAttr::PlanCompiledSqlTests)?.call1((request,));
     let native = match native {
         Ok(value) => value,
         Err(error) if error.is_instance_of::<pyo3::exceptions::PyValueError>(py) => {
@@ -151,12 +152,12 @@ fn planned<'py>(args: &KeywordArguments<'py>, artifact: bool) -> PyResult<Bound<
             let sql = plan.getattr("sql")?;
             if sql.is_none() {
                 return Err(PyErr::from_value(
-                    imported(py, "sqlbuild._native", "NativeSqlTestPlanningError")?
+                    registry::error(py, ErrorId::NativeSqlTestPlanning)?
                         .call1(("native SQL-test planning omitted rendered SQL",))?,
                 ));
             }
             plans.push(call_with(
-                &imported(py, "sqlbuild._native", "NativeSqlTestArtifact")?,
+                &registry::class(py, RecordId::NativeSqlTestArtifact)?,
                 &[
                     ("sql", sql),
                     ("model_names", plan.getattr("model_names")?),

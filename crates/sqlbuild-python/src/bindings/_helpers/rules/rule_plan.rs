@@ -6,6 +6,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::catalogue::{
     references_custom_rules, resolved_ignore_selectors, rule_catalogue, select_rules,
     verify_custom_rules,
@@ -13,10 +17,6 @@ use crate::bindings::_helpers::rules::catalogue::{
 use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
 use crate::bindings::_helpers::rules::rule_run::freed_memory_released;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -38,7 +38,7 @@ fn plan_rule_run<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'p
         rule_catalogue(&effective_config, &project_dir, include_custom)?;
     let catalogue_tuple: Bound<'py, PyTuple> = PyTuple::new(py, &catalogue)?;
     let custom_payloads: Bound<'py, PyAny> = call_with(
-        &imported(py, CUSTOM_PAYLOADS_MODULE, "custom_rule_payloads")?,
+        &host::entry(py, UserCodeHost::CustomRulePayloads)?,
         &[
             ("catalogue", catalogue_tuple.clone().into_any()),
             ("project_dir", project_dir.clone()),
@@ -100,7 +100,7 @@ fn plan_rule_run<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'p
         )?),
     )?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "RuleRunPlan")?,
+        &registry::class(py, RecordId::RuleRunPlan)?,
         &[
             ("effective_config", effective_config),
             ("project_dir", project_dir),
@@ -163,7 +163,7 @@ fn selected_models_project<'py>(
         }
     }
     call_with(
-        &imported(py, NATIVE_MODULE, "project_with")?,
+        &registry::native(py, NativeAttr::ProjectWith)?,
         &[
             ("project", project.clone()),
             ("models", PyTuple::new(py, models)?.into_any()),

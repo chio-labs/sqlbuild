@@ -7,8 +7,8 @@ use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyString};
 use pyo3::{pyclass, pymethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
 /// `os.environ`, raising a clear error for a value holding undecodable bytes.
 #[pyclass(module = "sqlbuild._native", frozen, mapping)]
@@ -46,7 +46,7 @@ impl UnicodeEnvironment {
             ),
         )?;
         Err(PyErr::from_value(
-            imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call(
+            registry::error(py, ErrorId::CompileInput)?.call(
                 (format!(
                     "Environment variable '{name}' is not valid UTF-8 text: byte {byte_offset} \
                      starts an invalid UTF-8 sequence"

@@ -7,27 +7,20 @@ use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::bindings::_helpers::analysis::binding_catalog::{
     BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS, NATIVE_DIALECT_ALIASES,
 };
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const GENERIC_DIALECT: &str = "generic";
 const ADAPTER_RULE_ID: &str = "python";
-/// `(module, function, native rule id)` of the nullability rules the native analysis knows.
-const KNOWN_RULES: [(&str, &str, &str); 3] = [
+/// The nullability rules the native analysis knows, with their native rule ids.
+const KNOWN_RULES: [(AdapterHost, &str); 3] = [
+    (AdapterHost::FirstArgNullability, "first_arg"),
     (
-        "sqlbuild.adapter.type_system.main.first_arg_nullability",
-        "first_arg_nullability",
-        "first_arg",
-    ),
-    (
-        "sqlbuild.adapter.type_system.main.conditional_result_nullability",
-        "conditional_result_nullability",
+        AdapterHost::ConditionalResultNullability,
         "conditional_result",
     ),
-    (
-        "sqlbuild.adapter.type_system.main.safe_cast_nullability",
-        "safe_cast_nullability",
-        "safe_cast",
-    ),
+    (AdapterHost::SafeCastNullability, "safe_cast"),
 ];
 
 /// The adapter's own nullability rules and `InferredNullability`, which native analysis calls.
@@ -37,8 +30,8 @@ pub(crate) type AdapterRules = Option<(Py<PyDict>, Py<PyAny>)>;
 pub(crate) fn nullability_rules(profile: &Bound<'_, PyAny>) -> PyResult<(Pairs, AdapterRules)> {
     let py: Python<'_> = profile.py();
     let known: Bound<'_, PyDict> = PyDict::new(py);
-    for (module, function, id) in KNOWN_RULES {
-        known.set_item(py.import(module)?.getattr(function)?, id)?;
+    for (rule, id) in KNOWN_RULES {
+        known.set_item(host::entry(py, rule)?, id)?;
     }
     let adapter: Bound<'_, PyDict> = PyDict::new(py);
     let mut rows: Pairs = Vec::new();

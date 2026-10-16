@@ -9,6 +9,8 @@ use crate::bindings::_helpers::planner_migrations::models::OldNamePlanner;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::{
     expires, location, relation, retention, stores_history,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyBool, PyList, PyTuple};
 
@@ -23,7 +25,7 @@ impl<'py> OldNamePlanner<'py> {
         let py = runtime.py();
         let project_config = runtime.getattr("project_config")?;
         let config = if project_config.is_none() {
-            imported(py, "sqlbuild._native", "MigrationsConfig")?.call0()?
+            registry::class(py, RecordId::MigrationsConfig)?.call0()?
         } else {
             project_config.getattr("migrations")?
         };
@@ -137,7 +139,7 @@ impl<'py> OldNamePlanner<'py> {
     ) -> PyResult<Bound<'py, PyAny>> {
         native(
             self.runtime.py(),
-            "old_name_view_skip_reason",
+            NativeAttr::OldNameViewSkipReason,
             &[
                 ("origin", origin.clone()),
                 ("origin_tracked", tracked),
@@ -154,7 +156,7 @@ impl<'py> OldNamePlanner<'py> {
     fn aliases(&self, item: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let py = self.runtime.py();
         if !stores_history(item)? {
-            return imported(py, "sqlbuild._native", "declared_column_aliases")?.call1((item,));
+            return registry::native(py, NativeAttr::DeclaredColumnAliases)?.call1((item,));
         }
         let mut aliases: Vec<Bound<'py, PyTuple>> = Vec::new();
         for entry in self.columns.try_iter()? {
@@ -229,7 +231,7 @@ impl<'py> OldNamePlanner<'py> {
                 ),
             ]);
         }
-        model(py, "OldNameViewPlanEntry", &fields)
+        model(py, RecordId::OldNameViewPlanEntry, &fields)
     }
 
     fn resume(
@@ -255,7 +257,7 @@ impl<'py> OldNamePlanner<'py> {
             if !reason.is_none() {
                 return model(
                     py,
-                    "OldNameViewPlanEntry",
+                    RecordId::OldNameViewPlanEntry,
                     &[
                         (
                             "model_name",
@@ -282,7 +284,7 @@ impl<'py> OldNamePlanner<'py> {
             }
         }
         let retention = history.getattr("required")?.getattr("view_retention")?;
-        let duration = imported(py, "sqlbuild._native", "Duration")?.call_method1(
+        let duration = registry::class(py, RecordId::Duration)?.call_method1(
             "parse",
             (if retention.is_truthy()? {
                 retention.clone()
@@ -305,7 +307,7 @@ impl<'py> OldNamePlanner<'py> {
         };
         model(
             py,
-            "OldNameViewPlanEntry",
+            RecordId::OldNameViewPlanEntry,
             &[
                 ("model_name", item.getattr("name")?),
                 ("origin", location(&self.runtime, &history.getattr("old")?)?),
@@ -363,5 +365,5 @@ impl<'py> OldNamePlanner<'py> {
 }
 
 fn action<'py>(runtime: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(runtime.py(), "sqlbuild._native", "OldNameViewAction")?.getattr(name)
+    registry::class(runtime.py(), RecordId::OldNameViewAction)?.getattr(name)
 }

@@ -18,8 +18,8 @@ use crate::bindings::_helpers::cost_command::refresh::refresh_pending_cost_run;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
 use crate::bindings::_helpers::cost_command::sorting::{sort_history, sort_resources};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 /// The request fields every cost view reads.
 struct CostRequest<'py> {
@@ -103,7 +103,7 @@ fn refused(py: Python<'_>, result: Result<(), CostCommandError>) -> PyResult<()>
 fn cost_runs<'py>(request: &CostRequest<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = request.request.py();
     call_with(
-        &imported(py, NATIVE_MODULE, "list_cost_runs")?,
+        &registry::native(py, NativeAttr::ListCostRuns)?,
         &[("project_dir", request.project_dir.clone())],
     )?
     .try_iter()?
@@ -178,7 +178,7 @@ fn run_history(request: &CostRequest<'_>) -> PyResult<i32> {
     let records: Bound<'_, PyAny> = PyTuple::new(py, records)?.into_any();
     let count: Bound<'_, PyAny> = PyInt::new(py, matching_count).into_any();
     let payload: String = call_with(
-        &imported(py, NATIVE_MODULE, "format_cost_history_json")?,
+        &registry::native(py, NativeAttr::FormatCostHistoryJson)?,
         &[
             ("records", records.clone()),
             ("matching_count", count.clone()),
@@ -187,7 +187,7 @@ fn run_history(request: &CostRequest<'_>) -> PyResult<i32> {
     .extract()?;
     request.emit(&payload, || {
         call_with(
-            &imported(py, NATIVE_MODULE, "format_cost_history")?,
+            &registry::native(py, NativeAttr::FormatCostHistory)?,
             &[
                 ("records", records),
                 ("matching_count", count),
@@ -208,7 +208,7 @@ fn resolve_run<'py>(request: &CostRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
     let records: Vec<Bound<'py, PyAny>> = cost_runs(request)?;
     if request.selector == LATEST_SELECTOR {
         let latest: Bound<'py, PyAny> = call_with(
-            &imported(py, NATIVE_MODULE, "resolve_cost_run")?,
+            &registry::native(py, NativeAttr::ResolveCostRun)?,
             &[
                 ("project_dir", request.project_dir.clone()),
                 ("selector", PyString::new(py, &request.selector).into_any()),
@@ -279,7 +279,7 @@ fn run_detail(request: &CostRequest<'_>) -> PyResult<i32> {
         }
         None => record.clone(),
     };
-    let payload: String = imported(py, NATIVE_MODULE, "format_cost_json")?
+    let payload: String = registry::native(py, NativeAttr::FormatCostJson)?
         .call1((json_record,))?
         .extract()?;
     request.emit(&payload, || {
@@ -287,7 +287,7 @@ fn run_detail(request: &CostRequest<'_>) -> PyResult<i32> {
         options.set_item("record", &record)?;
         options.set_item("use_color", request.use_color()?)?;
         options.set_item("limit", limit)?;
-        imported(py, NATIVE_MODULE, "format_cost_breakdown")?
+        registry::native(py, NativeAttr::FormatCostBreakdown)?
             .call((), Some(&options))?
             .extract()
     })?;

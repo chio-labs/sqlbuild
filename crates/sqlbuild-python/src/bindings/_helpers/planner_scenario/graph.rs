@@ -1,9 +1,11 @@
 //! Convert project views into pure scenario dependency facts.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::values::string;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::PyTuple;
 use sqlbuild_analysis::planner_scenario::main::graph::graph;
@@ -55,7 +57,7 @@ pub(crate) fn plan_scenario_graph<'py>(
     input.targets.sort();
     input.assertions.sort();
     let plan = call_with(
-        &imported(py, "sqlbuild._native", "ScenarioGraphPlan")?,
+        &registry::class(py, RecordId::ScenarioGraphPlan)?,
         &[
             ("key", scenario.getattr("key")?),
             ("name", scenario.getattr("name")?),
@@ -97,7 +99,7 @@ pub(crate) fn plan_scenario_graph<'py>(
             ("model_name", py.None().into_bound(py)),
             (
                 "severity",
-                imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?,
+                registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?,
             ),
             ("message", string(py, &message)),
         ];
@@ -105,7 +107,7 @@ pub(crate) fn plan_scenario_graph<'py>(
             values.push(("code", string(py, SCENARIO_PLAN_GRAPH_VALIDATION)));
         }
         warnings.push(call_with(
-            &imported(py, "sqlbuild._native", "PlanWarning")?,
+            &registry::class(py, RecordId::PlanWarning)?,
             &values,
         )?);
     }

@@ -7,6 +7,8 @@ use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower, native, replace,
 };
 use crate::bindings::_helpers::planner_migrations::models::ColumnCandidate;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
@@ -66,7 +68,7 @@ pub(super) fn overlay<'py>(
             && !candidate.current.is_none()
             && native(
                 py,
-                "renames_explain_change",
+                NativeAttr::RenamesExplainChange,
                 &[
                     ("previous", candidate.previous.clone()),
                     ("current", candidate.current.clone()),
@@ -99,7 +101,7 @@ pub(super) fn overlay<'py>(
                 "fingerprints",
                 native(
                     py,
-                    "WarehouseFingerprints",
+                    RecordId::WarehouseFingerprints,
                     &[
                         ("models", fingerprints),
                         ("functions", stored.getattr("functions")?),
@@ -160,11 +162,7 @@ pub(super) fn cursors<'py>(
         targets.set_item(name, target)?;
     }
     let redirected = call_with(
-        &imported(
-            py,
-            "sqlbuild._native",
-            "migration_redirected_cursor_snapshots",
-        )?,
+        &registry::native(py, NativeAttr::MigrationRedirectedCursorSnapshots)?,
         &[
             ("runtime", args.value("runtime")?),
             ("scope", scope),

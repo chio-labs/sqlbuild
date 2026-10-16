@@ -50,6 +50,8 @@ use crate::bindings::_helpers::execution_history::conversion::{
 use crate::bindings::_helpers::execution_history::statements::{
     column, execute, execute_plain, execute_query, fetch_one, locked, tuple_of,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
 const SQLITE_MODULE: &str = "sqlite3";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -57,8 +59,8 @@ const THREADING_MODULE: &str = "threading";
 const MILLIS_PER_SECOND: f64 = 1000.0;
 const CLOSED: &str = "SQLite execution history storage is closed";
 const NOT_AWARE: &str = "SQLite history timestamp is not timezone-aware";
-const INTEGRITY_CONFLICT: &str = "IntegrityConflictError";
-const STORAGE_ERROR: &str = "ExecutionHistoryStorageError";
+const INTEGRITY_CONFLICT: ExecutorHost = ExecutorHost::IntegrityConflictError;
+const STORAGE_ERROR: ExecutorHost = ExecutorHost::ExecutionHistoryStorageError;
 
 /// `Path(path).parent.mkdir(mode=0o700, parents=True, exist_ok=True)` for a file-backed history.
 fn prepare_history_directory(path: &str) -> std::io::Result<()> {
@@ -634,11 +636,7 @@ impl SqliteExecutionHistory {
                 None => py.None().into_bound(py),
             };
             crate::bindings::_helpers::compile_driver::python_calls::call_with(
-                &imported(
-                    py,
-                    crate::bindings::_helpers::execution_history::conversion::MODELS_MODULE,
-                    "EventPage",
-                )?,
+                &host::entry(py, ExecutorHost::EventPage)?,
                 &[
                     ("records", tuple_of(py, records)?.into_any()),
                     ("next_cursor", next_cursor),
@@ -707,11 +705,7 @@ impl SqliteExecutionHistory {
                 None => py.None().into_bound(py),
             };
             crate::bindings::_helpers::compile_driver::python_calls::call_with(
-                &imported(
-                    py,
-                    crate::bindings::_helpers::execution_history::conversion::MODELS_MODULE,
-                    "RunPage",
-                )?,
+                &host::entry(py, ExecutorHost::RunPage)?,
                 &[
                     ("records", run_records(py, &runs)?.into_any()),
                     ("next_cursor", next_cursor),

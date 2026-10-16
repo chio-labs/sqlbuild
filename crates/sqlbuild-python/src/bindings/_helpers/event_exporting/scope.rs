@@ -11,12 +11,13 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, context_variable, imported,
+    KeywordArguments, call_with, context_variable,
 };
-use crate::bindings::_helpers::event_exporting::constants::{
-    OUTPUT_MODELS_MODULE, SCOPE_CONTEXT_VARIABLE, SESSION_MODULE,
-};
+use crate::bindings::_helpers::event_exporting::constants::SCOPE_CONTEXT_VARIABLE;
 use crate::bindings::_helpers::event_exporting::models::BoundEventExporter;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 
 static CURRENT_SCOPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
@@ -103,8 +104,7 @@ fn bindings<'py>(
             .into_any(),
         );
     }
-    let sink_class: Bound<'py, PyAny> =
-        imported(py, OUTPUT_MODELS_MODULE, "BoundCommandOutputSink")?;
+    let sink_class: Bound<'py, PyAny> = host::entry(py, ExecutorHost::BoundCommandOutputSink)?;
     let mut sinks: Vec<Bound<'py, PyAny>> = Vec::new();
     for sink in command_output_sinks.try_iter()? {
         let sink: Bound<'py, PyAny> = sink?;
@@ -162,7 +162,7 @@ impl EventExporterCommandScope {
             return self.bind_dispatcher(py, (empty.clone(), empty));
         }
         let session: Bound<'_, PyAny> = call_with(
-            &imported(py, SESSION_MODULE, "build_provider_session")?,
+            &host::entry(py, UserCodeHost::BuildProviderSession)?,
             &[
                 ("discovered_providers", providers),
                 ("allow_shared", PyBool::new(py, false).to_owned().into_any()),

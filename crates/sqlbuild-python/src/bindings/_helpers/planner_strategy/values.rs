@@ -13,10 +13,10 @@ use sqlbuild_analysis::planner_strategy::models::{
     ChangeFacts, MaterializationType, PlanChangeKind, WarningRow, WarningSeverity,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-pub(crate) const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-pub(crate) const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const YML_SOURCE: &str = "yml";
 const FULL_BACKFILL: &str = "full";
 const FORWARD_ONLY_BACKFILL: &str = "forward";
@@ -137,24 +137,27 @@ pub(crate) fn plan_warning<'py>(
         WarningSeverity::Info => "info",
     };
     call_with(
-        &imported(py, "sqlbuild._native", "PlanWarning")?,
+        &registry::class(py, RecordId::PlanWarning)?,
         &[
             ("model_name", model_name.clone()),
-            ("severity", native_enum(py, "WarningSeverity", severity)?),
+            (
+                "severity",
+                native_enum(py, RecordId::WarningSeverity, severity)?,
+            ),
             ("message", PyString::new(py, &row.message).into_any()),
             ("code", row.code.into_pyobject(py)?.into_any()),
         ],
     )
 }
 
-/// `<module>.<class>(message, code=code)` raised as an error.
+/// The native error `class(message, code=code)`.
 pub(crate) fn input_error(
     py: Python<'_>,
-    (module, class): (&str, &str),
+    class: ErrorId,
     message: &str,
     code: Option<&str>,
 ) -> PyErr {
-    let raised: PyResult<Bound<'_, PyAny>> = imported(py, module, class).and_then(|class| {
+    let raised: PyResult<Bound<'_, PyAny>> = registry::error(py, class).and_then(|class| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         if let Some(code) = code {
             options.set_item("code", code)?;

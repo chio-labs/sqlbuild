@@ -7,15 +7,12 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::assembly_project::assembled_project;
 use crate::bindings::_helpers::compile_driver::project::lineage_mode;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, within,
+    KeywordArguments, call_with, within,
 };
-
-const COLLECTOR_MODULE: &str = "sqlbuild._native";
-const PROJECT_WITH_MODULE: &str = "sqlbuild._native";
-const RECORD_ANALYSES_MODULE: &str = "sqlbuild._native";
-const EXPLICIT_REFERENCES_MODULE: &str = "sqlbuild._native";
-const ACTIVE_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.main.active_macro_bridge";
-const RUN_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.classes.macro_bridge";
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 const OPTIONAL: [&str; 5] = [
     "inference_profile",
@@ -53,7 +50,7 @@ fn assemble_project<'py>(
         analysis_model_names: arguments.value("analysis_model_names")?.unbind(),
     };
     let collector: Bound<'py, PyAny> =
-        imported(py, COLLECTOR_MODULE, "collect_compile_diagnostics")?.call0()?;
+        registry::native(py, NativeAttr::CollectCompileDiagnostics)?.call0()?;
     let (built, violations): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         within(&collector, |violations| {
             Ok((referenced_project(py, request)?, violations.clone()))
@@ -64,7 +61,7 @@ fn assemble_project<'py>(
     }
     let diagnostics: Bound<'py, PyTuple> = chained(&built.getattr("diagnostics")?, &collected)?;
     call_with(
-        &imported(py, PROJECT_WITH_MODULE, "project_with")?,
+        &registry::native(py, NativeAttr::ProjectWith)?,
         &[("project", built), ("diagnostics", diagnostics.into_any())],
     )
 }
@@ -86,7 +83,7 @@ pub(crate) fn chained<'py>(
 /// The undecorated `assemble_project`.
 fn referenced_project(py: Python<'_>, request: AssemblyRequest) -> PyResult<Bound<'_, PyAny>> {
     let inputs: Bound<'_, PyAny> = request.inputs.bind(py).clone();
-    let project: Bound<'_, PyAny> = if imported(py, ACTIVE_BRIDGE_MODULE, "active_macro_bridge")?
+    let project: Bound<'_, PyAny> = if host::entry(py, UserCodeHost::ActiveMacroBridge)?
         .call0()?
         .is_none()
     {
@@ -99,7 +96,7 @@ fn referenced_project(py: Python<'_>, request: AssemblyRequest) -> PyResult<Boun
             },
         )?;
         call_with(
-            &imported(py, RUN_BRIDGE_MODULE, "run_with_macro_bridge")?,
+            &host::entry(py, UserCodeHost::RunWithMacroBridge)?,
             &[("stage", stage.into_any())],
         )?
     } else {
@@ -108,7 +105,7 @@ fn referenced_project(py: Python<'_>, request: AssemblyRequest) -> PyResult<Boun
     let project: Bound<'_, PyAny> =
         with_native_project(&project, &inputs.getattr("native_project")?)?;
     let references: Bound<'_, PyAny> = call_with(
-        &imported(py, EXPLICIT_REFERENCES_MODULE, "explicit_reference_report")?,
+        &registry::native(py, NativeAttr::ExplicitReferenceReport)?,
         &[
             ("project", project.clone()),
             ("discovered_inputs", inputs.getattr("discovered_inputs")?),
@@ -129,7 +126,7 @@ fn referenced_project(py: Python<'_>, request: AssemblyRequest) -> PyResult<Boun
     let diagnostics: Bound<'_, PyTuple> =
         chained(&project.getattr("diagnostics")?, &reference_diagnostics)?;
     call_with(
-        &imported(py, PROJECT_WITH_MODULE, "project_with")?,
+        &registry::native(py, NativeAttr::ProjectWith)?,
         &[
             ("project", project),
             ("diagnostics", diagnostics.into_any()),
@@ -148,7 +145,7 @@ fn with_native_project<'py>(
         return Ok(project.clone());
     }
     call_with(
-        &imported(py, RECORD_ANALYSES_MODULE, "record_model_analyses")?,
+        &registry::native(py, NativeAttr::RecordModelAnalyses)?,
         &[
             ("project", native_project.clone()),
             ("models", project.getattr("models")?),
@@ -158,7 +155,7 @@ fn with_native_project<'py>(
         return Ok(project.clone());
     }
     call_with(
-        &imported(py, PROJECT_WITH_MODULE, "project_with")?,
+        &registry::native(py, NativeAttr::ProjectWith)?,
         &[
             ("project", project.clone()),
             ("native_project", native_project.clone()),

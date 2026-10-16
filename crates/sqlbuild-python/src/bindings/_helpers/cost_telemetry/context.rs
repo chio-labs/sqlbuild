@@ -8,7 +8,9 @@ use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
-use crate::bindings::_helpers::cost_telemetry::values::{COST_MODELS, process_object};
+use crate::bindings::_helpers::cost_telemetry::values::process_object;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
 const CONTEXT_VARIABLE_NAME: &str = "sqlbuild_cost_resource_context";
 const DEFAULT_PHASE: &str = "execute";
@@ -110,7 +112,7 @@ impl CostContext {
             }
         };
         let context: Bound<'_, PyAny> = call_with(
-            &imported(py, COST_MODELS, "CostResourceContext")?,
+            &host::entry(py, ExecutorHost::CostResourceContext)?,
             &[
                 ("run_id", arguments.value("run_id")?),
                 ("resource_type", arguments.value("resource_type")?),
@@ -157,7 +159,7 @@ impl CostContext {
             DEFAULT_ATTEMPT.into_bound_py_any(py)?
         };
         let context: Bound<'_, PyAny> = call_with(
-            &imported(py, COST_MODELS, "CostResourceContext")?,
+            &host::entry(py, ExecutorHost::CostResourceContext)?,
             &[
                 ("run_id", current.getattr("run_id")?),
                 ("resource_type", arguments.value("resource_type")?),

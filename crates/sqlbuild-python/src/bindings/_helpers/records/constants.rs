@@ -6,6 +6,7 @@ use crate::bindings::_helpers::compiler_errors::constants::COMPILER_ERRORS;
 use crate::bindings::_helpers::compiler_records::constants::COMPILER_RECORDS;
 use crate::bindings::_helpers::contract_records::constants::CONTRACT_RECORDS;
 use crate::bindings::_helpers::freshness::observation::normalize_observation;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::planner_records::constants::{
     PLANNER_ENUMS, PLANNER_RECORDS, PLANNER_VALUE_RECORDS,
 };
@@ -13,6 +14,7 @@ use crate::bindings::_helpers::record_behaviours::constants::{
     BEHAVIOUR_CACHED_PROPERTIES, BEHAVIOUR_FINISHERS, BEHAVIOUR_METHODS, BEHAVIOUR_ORDERED,
     BEHAVIOUR_PROPERTIES, BEHAVIOUR_SEQUENCES,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{
     ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
 };
@@ -283,7 +285,7 @@ const BUILD_INVOCATION: RecordSpec = RecordSpec {
         FieldSpec::new("effective_target_name", FieldDefault::None),
         FieldSpec::new(
             "execution_limits",
-            FieldDefault::Call("sqlbuild._native", "ExecutionLimitsConfig"),
+            FieldDefault::NativeCall(RecordId::ExecutionLimitsConfig),
         ),
     ],
 };
@@ -582,7 +584,7 @@ const SCENARIO_TEST_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("refresh", FieldDefault::False),
         FieldSpec::new(
             "limit_inputs",
-            FieldDefault::Call("sqlbuild._native", "ScenarioSnapshotLimitInputs"),
+            FieldDefault::NativeCall(RecordId::ScenarioSnapshotLimitInputs),
         ),
         FieldSpec::new("json_output", FieldDefault::False),
         FieldSpec::new("json_output_path", FieldDefault::None),
@@ -601,7 +603,7 @@ const SCENARIO_CAPTURE_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("retain", FieldDefault::False),
         FieldSpec::new(
             "limit_inputs",
-            FieldDefault::Call("sqlbuild._native", "ScenarioSnapshotLimitInputs"),
+            FieldDefault::NativeCall(RecordId::ScenarioSnapshotLimitInputs),
         ),
     ],
 };
@@ -760,7 +762,7 @@ const BUILD_COST_FINALIZATION: RecordSpec = RecordSpec {
         FieldSpec::new("render", FieldDefault::True),
         FieldSpec::new(
             "cost_status",
-            FieldDefault::Member("sqlbuild.cost.types", "CostStatus", "COMPLETE"),
+            FieldDefault::HostMember(ExecutorHost::CostStatus.id(), "COMPLETE"),
         ),
         FieldSpec::new(
             "cost_message",
@@ -799,7 +801,7 @@ const LINEAGE_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("exclude", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "lineage_mode",
-            FieldDefault::Member("sqlbuild._native", "ColumnLineageMode", "RICH"),
+            FieldDefault::NativeMember(RecordId::ColumnLineageMode, "RICH"),
         ),
         FieldSpec::new("include_uses", FieldDefault::False),
         FieldSpec::new("cli_vars", FieldDefault::None),
@@ -869,14 +871,14 @@ const COMPILE_COMMAND_REQUEST: RecordSpec = RecordSpec {
         FieldSpec::new("no_color", FieldDefault::False),
         FieldSpec::new(
             "lineage_mode",
-            FieldDefault::Member("sqlbuild._native", "CompileLineageMode", "FAST"),
+            FieldDefault::NativeMember(RecordId::CompileLineageMode, "FAST"),
         ),
         FieldSpec::new("select", FieldDefault::EmptyTuple),
         FieldSpec::new("exclude", FieldDefault::EmptyTuple),
         FieldSpec::new("cli_vars", FieldDefault::None),
         FieldSpec::new(
             "profile_flags",
-            FieldDefault::Call("sqlbuild._native", "CompileProfileFlags"),
+            FieldDefault::NativeCall(RecordId::CompileProfileFlags),
         ),
         FieldSpec::new("no_cache", FieldDefault::False),
         FieldSpec::new("debug", FieldDefault::False),

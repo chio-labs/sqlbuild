@@ -13,14 +13,15 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::macro_bridge::store_keys::text;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild.runtime.output_capture.exceptions";
 const SURROGATE_PASS: &str = "surrogatepass";
 const UTF8: &str = "utf-8";
 
 /// The exception class `name` of the output capture exceptions module, raised with `message`.
-pub(crate) fn output_error(py: Python<'_>, name: &str, message: &str) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, name).and_then(|class| class.call1((message,))) {
+pub(crate) fn output_error(py: Python<'_>, name: ExecutorHost, message: &str) -> PyErr {
+    match host::entry(py, name).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -28,7 +29,7 @@ pub(crate) fn output_error(py: Python<'_>, name: &str, message: &str) -> PyErr {
 
 /// `CommandOutputValidationError(message)`.
 pub(crate) fn validation_error(py: Python<'_>, message: &str) -> PyErr {
-    output_error(py, "CommandOutputValidationError", message)
+    output_error(py, ExecutorHost::CommandOutputValidationError, message)
 }
 
 /// A Python `str` as `surrogatepass` UTF-8 bytes.

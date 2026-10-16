@@ -23,10 +23,9 @@ use sqlbuild_rules::custom_rule_cache::types::{ReadSet, StoredRules, SubjectResu
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::findings::{FindingClasses, invalid_finding};
-
-const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
-const RULES_ERROR: &str = "RulesError";
 
 /// One custom rule's cache identity from its metadata, source fingerprint and settings.
 #[pyfunction]
@@ -50,7 +49,7 @@ fn custom_rule_identity(request: Option<&Bound<'_, PyDict>>) -> PyResult<String>
 }
 
 fn rules_error(py: Python<'_>, message: String) -> PyResult<pyo3::PyErr> {
-    let class: Bound<'_, PyAny> = py.import(RULES_ERRORS_MODULE)?.getattr(RULES_ERROR)?;
+    let class: Bound<'_, PyAny> = registry::error(py, ErrorId::Rules)?;
     Ok(pyo3::PyErr::from_value(class.call1((message,))?))
 }
 

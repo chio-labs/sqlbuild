@@ -34,10 +34,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
 const DEBUG_OPTIONS: (&[&str], &[&str]) = (
     &[],
     &[
@@ -119,7 +118,7 @@ fn warehouse_checks(
         selected_target: &context.selected_target,
     };
     let mut checks: Vec<WarehouseCheck> = Vec::new();
-    for group in imported(py, CONTRACT_TYPES_MODULE, "WarehouseGroup")?.try_iter()? {
+    for group in registry::class(py, RecordId::WarehouseGroup)?.try_iter()? {
         let group: Bound<'_, PyAny> = group?;
         let group_name: String = group.getattr("value")?.str()?.extract()?;
         if !supports_session_warehouse {
@@ -258,12 +257,12 @@ fn build_report(
     let project_dir_object: Bound<'_, PyAny> =
         imported(py, "pathlib", "Path")?.call1((project_dir,))?;
     let discovered_inputs: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir_object.clone())],
     )?;
     let files: DebugConfigFiles = debug_config_files(project_dir);
     let adapter_name: Bound<'_, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             (
                 "project_config",
@@ -293,7 +292,7 @@ fn build_report(
     let connection_config: Bound<'_, PyDict> =
         effective_connection(&context, (&adapter_name, &base_connection))?.cast_into()?;
     let namespace: Bound<'_, PyTuple> = call_with(
-        &imported(py, NATIVE_MODULE, "build_effective_target_namespace")?,
+        &registry::native(py, NativeAttr::BuildEffectiveTargetNamespace)?,
         &[
             ("discovered_inputs", context.discovered_inputs.clone()),
             ("selected_target", context.selected_target.clone()),

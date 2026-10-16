@@ -14,7 +14,7 @@ use sqlbuild_core::dbt_plan::main::dbt_required_selector_terms::dbt_required_sel
 use sqlbuild_core::dbt_plan::models::{DbtPlanArgvRequest, DbtPlanArgvs, DbtReferencedModel};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, keywords,
 };
 use crate::bindings::_helpers::dbt_interop::cli::{option_values, raised};
 use crate::bindings::_helpers::dbt_interop::graph::{
@@ -22,8 +22,9 @@ use crate::bindings::_helpers::dbt_interop::graph::{
 };
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
 use crate::bindings::_helpers::dbt_interop::plan::build_dbt_interop_plan;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const DBT_TYPES: &str = "sqlbuild._native";
 const PLAN_OPTIONS: (&[&str], &[&str]) = (
     &[
         "command",
@@ -64,7 +65,7 @@ fn listed<'py>(
         || py.None().into_bound(py),
         |detail| PyString::new(py, &detail).into_any(),
     );
-    let error: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "DbtInteropRuntimeError")?
+    let error: Bound<'py, PyAny> = registry::error(py, ErrorId::DbtInteropRuntime)?
         .call(("dbt ls failed",), Some(&keywords(py, &[("help", help)])?))?;
     Err(PyErr::from_value(error))
 }
@@ -86,7 +87,7 @@ fn command_kind(command: &Bound<'_, PyAny>) -> PyResult<DbtInteropCommandKind> {
         "debug" => Ok(DbtInteropCommandKind::Debug),
         _ => Err(raised(
             command.py(),
-            "DbtInteropArgumentError",
+            ErrorId::DbtInteropArgument,
             DbtCliError {
                 message: format!("Unsupported sqb dbt command: {value}"),
                 ..DbtCliError::default()
@@ -141,7 +142,7 @@ fn plan_dbt_interop_command<'py>(
     let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "plan_dbt_interop_command", options, PLAN_OPTIONS)?;
     let command: Bound<'py, PyAny> =
-        imported(py, DBT_TYPES, "DbtInteropCommand")?.call1((arguments.value("command")?,))?;
+        registry::class(py, RecordId::DbtInteropCommand)?.call1((arguments.value("command")?,))?;
     let command_args: Bound<'py, PyAny> = arguments.value("command_args")?;
     let (select, exclude) = (
         command_args.getattr("select")?,

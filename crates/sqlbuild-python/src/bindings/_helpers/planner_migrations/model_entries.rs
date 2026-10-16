@@ -1,29 +1,23 @@
 //! Assemble model migration decisions from inspected warehouse facts.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     lower, model, native, replace, text,
 };
-use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_TYPES;
 use crate::bindings::_helpers::planner_migrations::model_handover::{
     applies, empty_version, handover,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyBool, PyTuple};
 use sqlbuild_analysis::planner_migrations::main::model_decision::model_decision;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
 pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    imported(
-        location.py(),
-        "sqlbuild.executor.migrations._helpers.relation_for_location",
-        "migration_relation_for_location",
-    )?
-    .call1((location,))
+    host::entry(location.py(), ExecutorHost::MigrationRelationForLocation)?.call1((location,))
 }
 
 fn key(location: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
@@ -43,7 +37,7 @@ pub(super) fn decision<'py>(entry: &Bound<'py, PyAny>, name: &str) -> PyResult<B
         entry,
         &[(
             "decision",
-            imported(entry.py(), MIGRATION_TYPES, "MigrationDecision")?.call1((name,))?,
+            registry::class(entry.py(), RecordId::MigrationDecision)?.call1((name,))?,
         )],
     )
 }
@@ -77,7 +71,7 @@ pub(super) fn decide<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, P
     if key(&origin)? == key(&destination)? {
         let name: String = item.getattr("name")?.extract()?;
         return Err(pyo3::PyErr::from_value(
-            imported(py, "sqlbuild._native", "PlannerInputError")?.call1((format!(
+            registry::error(py, ErrorId::PlannerInput)?.call1((format!(
                 "model '{name}': migrate_from names the model's own relation"
             ),))?,
         ));
@@ -93,18 +87,17 @@ pub(super) fn decide<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, P
     )?;
     let base = model(
         py,
-        "ModelMigrationPlanEntry",
+        RecordId::ModelMigrationPlanEntry,
         &[
             ("model_name", item.getattr("name")?),
             ("discovery", request.getattr("discovery")?),
             (
                 "decision",
-                imported(py, MIGRATION_TYPES, "MigrationDecision")?.getattr("MIGRATE")?,
+                registry::class(py, RecordId::MigrationDecision)?.getattr("MIGRATE")?,
             ),
             (
                 "compatibility",
-                imported(py, NATIVE_RECORDS_MODULE, "MigrationCompatibility")?
-                    .getattr("NOT_CHECKED")?,
+                registry::class(py, RecordId::MigrationCompatibility)?.getattr("NOT_CHECKED")?,
             ),
             ("origin_model", args.value("origin_model")?),
             ("origin", origin.clone()),
@@ -218,7 +211,7 @@ pub(super) fn decide<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, P
     }
     let compatibility = native(
         py,
-        "check_migration_compatibility",
+        NativeAttr::CheckMigrationCompatibility,
         &[
             ("model", item.clone()),
             ("origin_relation", origin_relation),
@@ -273,7 +266,7 @@ pub(super) fn decide<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, P
     let inherited = handover(&item, &fingerprint, &entry.getattr("origin_version_hash")?)?;
     result(
         call_with(
-            &imported(py, "sqlbuild._native", "migration_with_execution")?,
+            &registry::native(py, NativeAttr::MigrationWithExecution)?,
             &[("runtime", runtime), ("model", item), ("entry", entry)],
         )?,
         inherited,

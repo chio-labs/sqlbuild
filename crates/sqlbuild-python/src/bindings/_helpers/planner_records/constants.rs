@@ -1,7 +1,9 @@
 //! Layouts of the planner, migration, cursor and fingerprint value records hosted natively.
 
 use crate::bindings::_helpers::build_command::support::utc_now;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::record_behaviours::planner::forward_only_backfill;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::models::{EnumSpec, FieldDefault, FieldSpec, RecordSpec};
 
 const R_PARSED_SELECTOR: RecordSpec = RecordSpec {
@@ -47,7 +49,7 @@ const R_PLANNER_SCOPE: RecordSpec = RecordSpec {
         FieldSpec::new("python_read_source_names", FieldDefault::EmptyFrozenset),
         FieldSpec::new(
             "sql_test_selection",
-            FieldDefault::Call("sqlbuild._native", "SqlTestSelection"),
+            FieldDefault::NativeCall(RecordId::SqlTestSelection),
         ),
     ],
 };
@@ -86,7 +88,7 @@ const R_PLANNER_SELECTION: RecordSpec = RecordSpec {
         FieldSpec::new("python_read_source_names", FieldDefault::EmptyFrozenset),
         FieldSpec::new(
             "sql_test_selection",
-            FieldDefault::Call("sqlbuild._native", "SqlTestSelection"),
+            FieldDefault::NativeCall(RecordId::SqlTestSelection),
         ),
     ],
 };
@@ -359,7 +361,7 @@ const R_MODEL_CURSOR_SNAPSHOT: RecordSpec = RecordSpec {
         FieldSpec::new("unavailable_watermark_tags", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "cursor_watermark_mode",
-            FieldDefault::Member("sqlbuild._native", "CursorWatermarkMode", "ALL"),
+            FieldDefault::NativeMember(RecordId::CursorWatermarkMode, "ALL"),
         ),
         FieldSpec::new("upstream_terminal_starts", FieldDefault::EmptyTuple),
         FieldSpec::new("upstream_terminal_ends", FieldDefault::EmptyTuple),
@@ -525,7 +527,7 @@ const R_MODEL_MIGRATION_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("origin_tracked", FieldDefault::False),
         FieldSpec::new(
             "missing_origin_policy",
-            FieldDefault::Member("sqlbuild._native", "MissingMigrationOriginPolicy", "ALLOW"),
+            FieldDefault::NativeMember(RecordId::MissingMigrationOriginPolicy, "ALLOW"),
         ),
     ],
 };
@@ -579,7 +581,7 @@ const R_COLUMN_MIGRATION_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("message", FieldDefault::None),
         FieldSpec::new(
             "missing_origin_policy",
-            FieldDefault::Member("sqlbuild._native", "MissingMigrationOriginPolicy", "ALLOW"),
+            FieldDefault::NativeMember(RecordId::MissingMigrationOriginPolicy, "ALLOW"),
         ),
     ],
 };
@@ -691,11 +693,11 @@ const R_SEED_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("fingerprint_metadata_json", FieldDefault::Text("{}")),
         FieldSpec::new(
             "action",
-            FieldDefault::Member("sqlbuild._native", "PlanAction", "LOAD_SEED"),
+            FieldDefault::NativeMember(RecordId::PlanAction, "LOAD_SEED"),
         ),
         FieldSpec::new(
             "reason",
-            FieldDefault::Member("sqlbuild._native", "PlanReason", "FIRST_RUN"),
+            FieldDefault::NativeMember(RecordId::PlanReason, "FIRST_RUN"),
         ),
     ],
 };
@@ -709,11 +711,7 @@ const R_SOURCE_LOAD_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::required("destination"),
         FieldSpec::new(
             "resource_kind",
-            FieldDefault::Member(
-                "sqlbuild.runtime.contracts.types",
-                "ExecutionResourceKind",
-                "SOURCE",
-            ),
+            FieldDefault::HostMember(ExecutorHost::ExecutionResourceKind.id(), "SOURCE"),
         ),
         FieldSpec::new("write_strategy", FieldDefault::None),
         FieldSpec::new("cursor_column", FieldDefault::None),
@@ -747,7 +745,7 @@ const R_FUNCTION_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("previous_query_sql", FieldDefault::None),
         FieldSpec::new(
             "reason",
-            FieldDefault::Member("sqlbuild._native", "PlanReason", "NO_CHANGE"),
+            FieldDefault::NativeMember(RecordId::PlanReason, "NO_CHANGE"),
         ),
     ],
 };
@@ -1042,7 +1040,7 @@ const R_RELATION_FIXTURE_PLANNING_CONTEXT: RecordSpec = RecordSpec {
         FieldSpec::required("expected_types"),
         FieldSpec::uncompared_shown(
             "fixture_inferences",
-            FieldDefault::Call("sqlbuild._native", "FixtureColumnInferences"),
+            FieldDefault::NativeClassCall(NativeAttr::FixtureColumnInferences),
         ),
     ],
 };
@@ -1112,7 +1110,7 @@ const R_WAREHOUSE_SNAPSHOT: RecordSpec = RecordSpec {
         FieldSpec::new("existing_columns", FieldDefault::EmptyDict),
         FieldSpec::new(
             "fingerprints",
-            FieldDefault::Call("sqlbuild._native", "WarehouseFingerprints"),
+            FieldDefault::NativeCall(RecordId::WarehouseFingerprints),
         ),
         FieldSpec::new("cursor_snapshots", FieldDefault::EmptyDict),
         FieldSpec::new(
@@ -1239,7 +1237,7 @@ const R_PLAN_ENTRY_BUILD_INPUTS: RecordSpec = RecordSpec {
         FieldSpec::new("max_microbatches_is_override", FieldDefault::False),
         FieldSpec::new(
             "microbatch_limit_action",
-            FieldDefault::Member("sqlbuild._native", "MicrobatchLimitAction", "ERROR"),
+            FieldDefault::NativeMember(RecordId::MicrobatchLimitAction, "ERROR"),
         ),
     ],
 };
@@ -1250,7 +1248,7 @@ const R_FUNCTION_CHANGE_RESULT: RecordSpec = RecordSpec {
         FieldSpec::required("fingerprint_sql"),
         FieldSpec::new(
             "reason",
-            FieldDefault::Member("sqlbuild._native", "PlanReason", "NO_CHANGE"),
+            FieldDefault::NativeMember(RecordId::PlanReason, "NO_CHANGE"),
         ),
     ],
 };
@@ -1364,7 +1362,7 @@ const R_PLANNED_SQL_TESTS: RecordSpec = RecordSpec {
         FieldSpec::required("selected_keys"),
         FieldSpec::new(
             "sql_test_selection",
-            FieldDefault::Call("sqlbuild._native", "SqlTestSelection"),
+            FieldDefault::NativeCall(RecordId::SqlTestSelection),
         ),
         FieldSpec::new("entries", FieldDefault::EmptyTuple),
         FieldSpec::new("warnings", FieldDefault::EmptyTuple),
@@ -1472,7 +1470,7 @@ const R_PLANNER_WAREHOUSE_STATE: RecordSpec = RecordSpec {
         FieldSpec::new("old_name_views", FieldDefault::EmptyTuple),
         FieldSpec::new(
             "migration_fingerprints",
-            FieldDefault::Call("sqlbuild._native", "MigrationFingerprintCache"),
+            FieldDefault::NativeClassCall(NativeAttr::MigrationFingerprintCache),
         ),
     ],
 };

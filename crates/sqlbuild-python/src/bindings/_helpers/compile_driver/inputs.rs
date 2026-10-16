@@ -8,19 +8,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::model_config::template_data::run_id;
-
-const CALL_STORE_MODULE: &str = "sqlbuild.compiler.compile._helpers.macro_bridge.call_store";
-const ATTACHMENT_MODULE: &str = "sqlbuild._native";
-const DECLARATION_SCOPE_MODULE: &str = "sqlbuild._native";
-const COLLECTOR_MODULE: &str = "sqlbuild._native";
-const MACROS_MODULE: &str = "sqlbuild.compiler.compile._helpers.render.user_macros";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const ATTACH_CHECKS_MODULE: &str = "sqlbuild._native";
-const ATTACH_RESOURCES_MODULE: &str = "sqlbuild._native";
-const INPUTS_VIEW_MODULE: &str = "sqlbuild._native";
-const INPUTS_WITH_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const NATIVE_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 const REQUIRED: [&str; 2] = ["discovered_inputs", "adapter_context"];
 const OPTIONAL: [&str; 8] = [
@@ -71,7 +62,7 @@ fn build_compile_inputs<'py>(
     let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "build_compile_inputs", options, (&REQUIRED, &OPTIONAL))?;
     let collector: Bound<'py, PyAny> =
-        imported(py, COLLECTOR_MODULE, "collect_compile_diagnostics")?.call0()?;
+        registry::native(py, NativeAttr::CollectCompileDiagnostics)?.call0()?;
     let (built, violations): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         within(&collector, |violations| {
             Ok((compile_inputs(py, &arguments)?, violations.clone()))
@@ -89,7 +80,7 @@ fn build_compile_inputs<'py>(
             .collect::<PyResult<Vec<_>>>()?,
     )?;
     call_with(
-        &imported(py, INPUTS_WITH_MODULE, "inputs_with")?,
+        &registry::native(py, NativeAttr::InputsWith)?,
         &[("inputs", built), ("diagnostics", diagnostics.into_any())],
     )
 }
@@ -103,11 +94,11 @@ fn compile_inputs<'py>(
     let adapter_context: Bound<'py, PyAny> = arguments.value("adapter_context")?;
     let target: TargetContext<'py> = target_context(arguments, &discovered, &adapter_context)?;
     let run_id: Bound<'py, PyAny> = run_id(&arguments.value("run_id")?)?;
-    let loaded_macros: Bound<'py, PyAny> = imported(py, MACROS_MODULE, "load_project_macros")?
+    let loaded_macros: Bound<'py, PyAny> = host::entry(py, UserCodeHost::LoadProjectMacros)?
         .call1((discovered.getattr("macro_files")?,))?;
     let syntax: Bound<'py, PyAny> = adapter_context.getattr("sql_lexical_syntax")?;
     let declaration_scope: Bound<'py, PyAny> = call_with(
-        &imported(py, DECLARATION_SCOPE_MODULE, "build_declaration_scope")?,
+        &registry::native(py, NativeAttr::BuildDeclarationScope)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("loaded_macros", loaded_macros),
@@ -117,7 +108,7 @@ fn compile_inputs<'py>(
     )?;
     let value_renderer: Bound<'py, PyAny> = adapter_context.getattr("value_renderer")?;
     let model_context: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "ModelInputBuildContext")?,
+        &registry::class(py, RecordId::ModelInputBuildContext)?,
         &[
             ("effective_vars", target.vars.clone()),
             ("effective_settings", target.settings.clone()),
@@ -187,7 +178,7 @@ fn compile_inputs<'py>(
         ],
     )?;
     call_with(
-        &imported(py, INPUTS_VIEW_MODULE, "compile_inputs_view")?,
+        &registry::native(py, NativeAttr::CompileInputsView)?,
         &[
             ("fields", fields.into_any()),
             ("native_project", models.native_project),
@@ -203,11 +194,7 @@ fn target_context<'py>(
 ) -> PyResult<TargetContext<'py>> {
     let py: Python<'py> = discovered.py();
     let selected: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            CALL_STORE_MODULE,
-            "target_context_with_macro_call_store",
-        )?,
+        &host::entry(py, UserCodeHost::TargetContextWithMacroCallStore)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("selected_target", arguments.value("selected_target")?),
@@ -225,7 +212,7 @@ fn target_context<'py>(
         cli_vars
     };
     let vars: Bound<'py, PyAny> = call_with(
-        &imported(py, ATTACHMENT_MODULE, "build_effective_vars")?,
+        &registry::native(py, NativeAttr::BuildEffectiveVars)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
@@ -234,21 +221,21 @@ fn target_context<'py>(
         ],
     )?;
     let settings: Bound<'py, PyAny> = call_with(
-        &imported(py, ATTACHMENT_MODULE, "build_effective_settings")?,
+        &registry::native(py, NativeAttr::BuildEffectiveSettings)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
         ],
     )?;
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config),
         ],
     )?;
     let macro_context: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "MacroContext")?,
+        &registry::class(py, RecordId::MacroContext)?,
         &[
             ("adapter_name", adapter_name),
             ("sql_analysis_enabled", settings.getattr("sql_analysis")?),
@@ -287,16 +274,14 @@ fn model_build<'py>(
     context: &Bound<'py, PyAny>,
 ) -> PyResult<ModelBuild<'py>> {
     let py: Python<'py> = discovered.py();
-    let native: Bound<'py, PyModule> = py.import(NATIVE_MODULE)?;
-    let declarations: Bound<'py, PyAny> = native
-        .getattr("public_declaration_indexes")?
-        .call1((discovered,))?;
+    let declarations: Bound<'py, PyAny> =
+        registry::native(py, NativeAttr::PublicDeclarationIndexes)?.call1((discovered,))?;
     let enums: Bound<'py, PyAny> = declarations.get_item(0)?;
     let constants: Bound<'py, PyAny> = declarations.get_item(1)?;
-    let schemas: Bound<'py, PyAny> = native
-        .getattr("public_model_schema_index")?
-        .call1((discovered,))?;
-    let native_project: Bound<'py, PyAny> = native.getattr("NativeCompiledProject")?.call0()?;
+    let schemas: Bound<'py, PyAny> =
+        registry::native(py, NativeAttr::PublicModelSchemaIndex)?.call1((discovered,))?;
+    let native_project: Bound<'py, PyAny> =
+        registry::native(py, NativeAttr::NativeCompiledProject)?.call0()?;
     let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let model_context: Bound<'py, PyAny> = replace.call(
         (context,),
@@ -310,7 +295,7 @@ fn model_build<'py>(
         )?),
     )?;
     let inputs: Bound<'py, PyAny> = call_with(
-        &imported(py, ATTACHMENT_MODULE, "build_model_inputs")?,
+        &registry::native(py, NativeAttr::BuildModelInputs)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("context", model_context),
@@ -359,7 +344,7 @@ fn attached_resources<'py>(
     let context: &Bound<'py, PyAny> = &models.context;
     let settings: Bound<'py, PyAny> = context.getattr("effective_settings")?;
     let resources: Bound<'py, PyAny> = call_with(
-        &imported(py, ATTACH_RESOURCES_MODULE, "attach_resources")?,
+        &registry::native(py, NativeAttr::AttachResources)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("native_project", models.native_project.clone()),
@@ -387,7 +372,7 @@ fn attached_resources<'py>(
     )?;
     let sources: Bound<'py, PyAny> = resources.get_item(2)?;
     let checks: Bound<'py, PyAny> = call_with(
-        &imported(py, ATTACH_CHECKS_MODULE, "attach_checks")?,
+        &registry::native(py, NativeAttr::AttachChecks)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("native_project", models.native_project.clone()),
@@ -426,11 +411,7 @@ fn effective_connection<'py>(
         return Ok(resolved);
     }
     call_with(
-        &imported(
-            discovered.py(),
-            ATTACHMENT_MODULE,
-            "build_effective_connection",
-        )?,
+        &registry::native(discovered.py(), NativeAttr::BuildEffectiveConnection)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),

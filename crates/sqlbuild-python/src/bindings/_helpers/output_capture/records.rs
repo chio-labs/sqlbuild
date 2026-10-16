@@ -16,12 +16,12 @@ use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, JsonValue, StdlibJsonOptions};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::values::{
     freeze, json_value, object, output_error, plain_int, validation_error,
 };
 
-pub(crate) const MODELS_MODULE: &str = "sqlbuild.runtime.output_capture.models";
-pub(crate) const TYPES_MODULE: &str = "sqlbuild.runtime.output_capture.types";
 const ENVELOPE_FIELDS: [&str; 16] = [
     "record_id",
     "record_type",
@@ -96,20 +96,14 @@ fn record_shape(record: &Bound<'_, PyAny>) -> PyResult<RecordShape> {
         },
         sequence: plain_int(&field("sequence")?),
         occurred_at_is_utc: utc_aware(&field("occurred_at")?)?,
-        stream_is_known: field("stream")?.is_instance(&imported(
-            py,
-            TYPES_MODULE,
-            "CommandOutputStream",
-        )?)?,
+        stream_is_known: field("stream")?
+            .is_instance(&host::entry(py, ExecutorHost::CommandOutputStream)?)?,
         message_is_text: field("message")?.is_instance_of::<PyString>(),
         chunk_index: plain_int(&field("chunk_index")?),
         chunk_count: plain_int(&field("chunk_count")?),
         dropped_records: plain_int(&field("dropped_records")?),
-        priority_is_known: field("priority")?.is_instance(&imported(
-            py,
-            TYPES_MODULE,
-            "OutputRecordPriority",
-        )?)?,
+        priority_is_known: field("priority")?
+            .is_instance(&host::entry(py, ExecutorHost::OutputRecordPriority)?)?,
         record_type: optional_text(&field("record_type")?)?,
         schema_version: plain_int(&field("schema_version")?),
     })
@@ -186,17 +180,17 @@ fn record_from_fields<'py>(data: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyA
         let converted = match name {
             "occurred_at" => occurred_at(&value(name)?)?,
             "stream" => {
-                imported(py, TYPES_MODULE, "CommandOutputStream")?.call1((value(name)?,))?
+                host::entry(py, ExecutorHost::CommandOutputStream)?.call1((value(name)?,))?
             }
             "priority" => {
-                imported(py, TYPES_MODULE, "OutputRecordPriority")?.call1((value(name)?,))?
+                host::entry(py, ExecutorHost::OutputRecordPriority)?.call1((value(name)?,))?
             }
             _ => value(name)?,
         };
         fields.push((name, converted));
     }
     call_with(
-        &imported(py, MODELS_MODULE, "CommandOutputRecord")?,
+        &host::entry(py, ExecutorHost::CommandOutputRecord)?,
         &fields,
     )
 }
@@ -256,11 +250,7 @@ pub(crate) fn command_output_from_json<'py>(
             "command output external_context must be an object",
         ));
     }
-    let validation_class = imported(
-        py,
-        crate::bindings::_helpers::output_capture::values::EXCEPTIONS_MODULE,
-        "CommandOutputValidationError",
-    )?;
+    let validation_class = host::entry(py, ExecutorHost::CommandOutputValidationError)?;
     let record = record_from_fields(data).map_err(|error| {
         let typed =
             error.is_instance_of::<PyTypeError>(py) || error.is_instance_of::<PyValueError>(py);
@@ -283,7 +273,7 @@ fn validate_depth(value: &Bound<'_, PyAny>, depth: usize) -> Result<(), PyErr> {
     if depth > MAX_INVOCATION_CONTEXT_DEPTH {
         return Err(output_error(
             value.py(),
-            "OutputCaptureInputError",
+            ExecutorHost::OutputCaptureInputError,
             &format!(
                 "{INVOCATION_CONTEXT_ENV} must not exceed {MAX_INVOCATION_CONTEXT_DEPTH} levels"
             ),
@@ -302,7 +292,7 @@ fn validate_depth(value: &Bound<'_, PyAny>, depth: usize) -> Result<(), PyErr> {
 }
 
 fn input_error(py: Python<'_>, message: &str) -> PyErr {
-    output_error(py, "OutputCaptureInputError", message)
+    output_error(py, ExecutorHost::OutputCaptureInputError, message)
 }
 
 /// Validated opaque invocation metadata supplied by an integration through the environment.

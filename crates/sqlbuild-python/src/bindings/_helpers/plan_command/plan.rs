@@ -10,14 +10,12 @@ use crate::bindings::_helpers::build_command::support::keyword_relay;
 use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
-const PRESENTATION_MODELS: &str = "sqlbuild._native";
 const COMMAND_NAME: &str = "plan";
 const DEFAULT_SECTION_ENTRIES: i64 = 50;
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
@@ -66,7 +64,7 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
         requested_dir
     };
     let discovered: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[
             ("project_dir", project_dir.clone()),
             ("extract_output_column_locations", flag(py, false)),
@@ -76,7 +74,7 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
     preview.set_item("discovered_inputs", &discovered)?;
     preview.set_item("as_target", request.getattr("as_target")?)?;
     preview.set_item("command_name", COMMAND_NAME)?;
-    imported(py, NATIVE_MODULE, "validate_preview_target")?.call((), Some(&preview))?;
+    registry::native(py, NativeAttr::ValidatePreviewTarget)?.call((), Some(&preview))?;
     let context: Bound<'py, PyAny> = resolve_adapter_connection_context(
         &discovered,
         &project_dir,
@@ -93,7 +91,7 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
         py.import("sys")?
             .getattr(if json_output { "stderr" } else { "stdout" })?;
     let connection_progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", context.getattr("adapter_name")?),
             ("stream", stream.clone()),
@@ -101,7 +99,7 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
         ],
     )?;
     let planning_progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "PlanningProgressReporter")?,
+        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
         &[
             ("stream", stream.clone()),
             ("use_color", flag(py, use_color)),
@@ -110,7 +108,7 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
     let requested_load: Bound<'py, PyAny> = request.getattr("load_sources")?;
     let load_sources: Bound<'py, PyAny> = if requested_load.is_none() {
         call_with(
-            &imported(py, NATIVE_MODULE, "build_effective_settings_config")?,
+            &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
             &[("discovered_inputs", discovered.clone())],
         )?
         .getattr("auto_load_sources")?
@@ -134,7 +132,7 @@ fn connection_hooks<'py>(invocation: &PlanInvocation<'py>) -> PyResult<Bound<'py
     let py: Python<'py> = invocation.stream.py();
     let connection: &Bound<'py, PyAny> = &invocation.connection_progress;
     call_with(
-        &imported(py, CONTRACT_MODELS, "ConnectionHooks")?,
+        &host::entry(py, ExecutorHost::ConnectionHooks)?,
         &[
             (
                 "on_progress",
@@ -168,11 +166,7 @@ fn compile_pipeline<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let resolver: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            EXTERNAL_REFS_MODULE,
-            "resolve_external_sql_reference_resolver",
-        )?,
+        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
             ("project_dir", invocation.project_dir.clone()),
             ("discovered_inputs", invocation.discovered.clone()),
@@ -213,9 +207,9 @@ fn compile_pipeline<'py>(
     )?;
     options.set_item("record_migration_fingerprints", false)?;
     let pipeline_options: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?.call((), Some(&options))?;
+        registry::class(py, RecordId::CompilePipelineOptions)?.call((), Some(&options))?;
     call_with(
-        &imported(py, NATIVE_MODULE, "run_compile_pipeline")?,
+        &registry::native(py, NativeAttr::RunCompilePipeline)?,
         &[
             ("discovered_inputs", invocation.discovered.clone()),
             ("adapter", invocation.context.getattr("adapter")?),
@@ -235,7 +229,7 @@ fn write_output(
     let python_entries: Bound<'_, PyAny> = pipeline.getattr("python_plan_entries")?;
     if request.getattr("json_output")?.is_truthy()? {
         let text: Bound<'_, PyAny> = call_with(
-            &imported(py, NATIVE_MODULE, "format_plan_json")?,
+            &registry::native(py, NativeAttr::FormatPlanJson)?,
             &[("plan", plan), ("python_plan_entries", python_entries)],
         )?;
         imported(py, "builtins", "print")?.call1((text,))?;
@@ -251,14 +245,14 @@ fn write_output(
         },
     )?;
     let text: String = call_with(
-        &imported(py, NATIVE_MODULE, "format_plan")?,
+        &registry::native(py, NativeAttr::FormatPlan)?,
         &[
             ("plan", plan),
             ("full_refresh", request.getattr("full_refresh")?),
             ("use_color", flag(py, invocation.use_color)),
             (
                 "display_options",
-                imported(py, PRESENTATION_MODELS, "DisplayOptions")?.call((), Some(&display))?,
+                registry::class(py, RecordId::DisplayOptions)?.call((), Some(&display))?,
             ),
             ("python_plan_entries", python_entries),
             ("include_direct_freshness_diagnostics", flag(py, false)),

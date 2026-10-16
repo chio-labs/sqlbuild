@@ -6,18 +6,14 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::dbt_command::main::dbt_output_options::dbt_output_options;
 use sqlbuild_core::dbt_command::models::DbtOutputOptions;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_command::auto_init::{args_tuple, ensure_twin_project};
 use crate::bindings::_helpers::dbt_command::debug::run_dbt_debug;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, effective_dir, flag, stream};
 use crate::bindings::_helpers::dbt_interop::runtime_config::validate_dbt_execution_args;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const PLAN_MODULE: &str = "sqlbuild._native";
-const EXECUTE_MODULE: &str = "sqlbuild._native";
-const PRESENTATION_MODELS: &str = "sqlbuild._native";
 const PLAN_COMMAND: &str = "plan";
 const DEBUG_COMMAND: &str = "debug";
 const BOUNDED_SECTION_ENTRIES: i64 = 10;
@@ -41,7 +37,7 @@ impl<'py> Progress<'py> {
             },
         )?;
         let reporter: Bound<'py, PyAny> = call_with(
-            &imported(py, NATIVE_MODULE, "PlanningProgressReporter")?,
+            &registry::native(py, NativeAttr::PlanningProgressReporter)?,
             &[
                 ("stream", stream.clone()),
                 ("use_color", flag(py, use_color)),
@@ -70,7 +66,7 @@ fn run_plan(project_dir: &Bound<'_, PyAny>, args: &[String], no_color: bool) -> 
         progress.blank_line()?;
     }
     let plan: Bound<'_, PyAny> = call_with(
-        &imported(py, PLAN_MODULE, "plan_dbt_interop_from_project")?,
+        &registry::native(py, NativeAttr::PlanDbtInteropFromProject)?,
         &[
             ("project_dir", project_dir.clone()),
             ("args", args_tuple(py, &options.routed_args)?),
@@ -80,7 +76,7 @@ fn run_plan(project_dir: &Bound<'_, PyAny>, args: &[String], no_color: bool) -> 
         ],
     )?;
     let display: Bound<'_, PyAny> = call_with(
-        &imported(py, PRESENTATION_MODELS, "DisplayOptions")?,
+        &registry::class(py, RecordId::DisplayOptions)?,
         &[(
             "max_entries_per_section",
             if options.verbose {
@@ -91,7 +87,7 @@ fn run_plan(project_dir: &Bound<'_, PyAny>, args: &[String], no_color: bool) -> 
         )],
     )?;
     let rendered: String = call_with(
-        &imported(py, NATIVE_MODULE, "render_dbt_interop_plan")?,
+        &registry::native(py, NativeAttr::RenderDbtInteropPlan)?,
         &[
             ("plan", plan),
             ("json_output", flag(py, options.json_output)),
@@ -116,7 +112,7 @@ fn run_execution(
     let progress: Progress<'_> = Progress::new(py, &options, no_color)?;
     progress.blank_line()?;
     let request: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "DbtInteropExecutionRequest")?,
+        &registry::class(py, RecordId::DbtInteropExecutionRequest)?,
         &[
             ("command", command.clone()),
             ("project_dir", project_dir.clone()),
@@ -129,7 +125,7 @@ fn run_execution(
             ("json_output", flag(py, options.json_output)),
         ],
     )?;
-    imported(py, EXECUTE_MODULE, "execute_dbt_interop_from_project")?
+    registry::native(py, NativeAttr::ExecuteDbtInteropFromProject)?
         .call1((request,))?
         .extract()
 }

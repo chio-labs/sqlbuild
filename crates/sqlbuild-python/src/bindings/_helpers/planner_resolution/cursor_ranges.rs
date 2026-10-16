@@ -6,12 +6,16 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, sentinel_to_token};
 use crate::bindings::_helpers::cursor::values::{local_date_time, replaced};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::duration;
 use crate::bindings::_helpers::planner_resolution::cursor_policies::{
     future_cursor_config, start_cursor_config,
 };
 use crate::bindings::_helpers::planner_resolution::cursor_safety::{replace, utc_clock};
-use crate::bindings::_helpers::planner_resolution::values::{NATIVE_MODULE, string};
+use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyString, PyTuple};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
@@ -22,10 +26,6 @@ use sqlbuild_cursor::planner::main::rolling_window::rolling_window;
 use sqlbuild_cursor::planner::models::CursorEndClamp;
 use std::cmp::Ordering;
 
-const MODELS: &str = "sqlbuild._native";
-const CURSOR_TYPES: &str = "sqlbuild.cursor_algebra.types";
-const CURSOR_MODELS: &str = "sqlbuild._native";
-const COMPILE_EXCEPTIONS: &str = "sqlbuild._native";
 const INCREMENTAL: &str = "incremental";
 const MICROBATCH: &str = "microbatch";
 const ROLLING_WINDOW: &str = "rolling_window";
@@ -65,17 +65,17 @@ pub(crate) struct CursorWindowInputs<'py> {
 
 fn native<'py>(
     py: Python<'py>,
-    name: &str,
+    name: NativeAttr,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, NATIVE_MODULE, name)?, pairs)
+    call_with(&registry::native(py, name)?, pairs)
 }
 
 /// One string-valued model configuration entry.
 pub(crate) fn config_str<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     native(
         model.py(),
-        "get_config_str",
+        NativeAttr::GetConfigStr,
         &[
             ("values", model.getattr("config")?.getattr("values")?),
             ("key", string(model.py(), key)),
@@ -90,7 +90,7 @@ pub(crate) fn config_bound<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     native(
         model.py(),
-        "get_config_cursor_bound",
+        NativeAttr::GetConfigCursorBound,
         &[
             ("values", model.getattr("config")?.getattr("values")?),
             ("key", string(model.py(), key)),
@@ -132,7 +132,7 @@ fn token<'py>(py: Python<'py>, bound: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 }
 
 fn sentinel<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, CURSOR_TYPES, "BoundSentinel")?.getattr(name)
+    host::entry(py, ExecutorHost::BoundSentinel)?.getattr(name)
 }
 
 /// `bounds` clamped so a concrete window never reaches the exclusive configured `cursor_end`.
@@ -172,7 +172,7 @@ fn timestamp_value<'py>(clock: &Bound<'py, PyAny>, scalar: &Scalar) -> PyResult<
         return Ok(clock.py().None().into_bound(clock.py()));
     };
     call_with(
-        &imported(clock.py(), CURSOR_MODELS, "TimestampValue")?,
+        &registry::class(clock.py(), RecordId::TimestampValue)?,
         &[("value", replaced(clock, &timestamp.local, timestamp.fold)?)],
     )
 }
@@ -186,7 +186,7 @@ fn rolling_window_bounds<'py>(
     let grain = config_str(model, "cursor_grain")?;
     let lookback = native(
         py,
-        "resolve_microbatch_lookback",
+        NativeAttr::ResolveMicrobatchLookback,
         &[("model", model.clone()), ("effective_grain", grain.clone())],
     )?;
     let lookback = if lookback.is_truthy()? {
@@ -225,7 +225,7 @@ fn rolling_window_bounds<'py>(
     };
     let (start, end) = session.checked(rolling_window(&clock, &span, grain))?;
     let mut bounds = call_with(
-        &imported(py, MODELS, "CursorBounds")?,
+        &registry::class(py, RecordId::CursorBounds)?,
         &[
             ("start", timestamp_value(&moment, &start)?),
             ("end", timestamp_value(&moment, &end)?),
@@ -257,7 +257,7 @@ fn apply_future_safety<'py>(
     }
     native(
         py,
-        "resolve_future_cursor_safety",
+        NativeAttr::ResolveFutureCursorSafety,
         &[
             ("bounds", bounds),
             ("cursor_type", typing.0.clone()),
@@ -282,7 +282,7 @@ fn bounded_override<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     native(
         model.py(),
-        "resolve_bounded_cursor_override",
+        NativeAttr::ResolveBoundedCursorOverride,
         &[
             ("start_cursor_override", inputs.overrides.0.clone()),
             ("end_cursor_override", inputs.overrides.1.clone()),
@@ -314,7 +314,7 @@ fn snapshot_bounds<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
     let policy = call_with(
-        &imported(py, MODELS, "MaximumStartPolicyInputs")?,
+        &registry::class(py, RecordId::MaximumStartPolicyInputs)?,
         &[
             ("config", inputs.policies.1.clone()),
             ("invocation_time", inputs.invocation_time.clone()),
@@ -327,7 +327,7 @@ fn snapshot_bounds<'py>(
     )?;
     let bounds = native(
         py,
-        "compute_cursor_bounds",
+        NativeAttr::ComputeCursorBounds,
         &[
             ("cursor_snapshot", request.cursor_snapshot.clone()),
             ("cursor_type", request.typing.0.clone()),
@@ -362,7 +362,7 @@ fn model_cursor_snapshot<'py>(
 fn without_destination<'py>(cursor_snapshot: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     native(
         cursor_snapshot.py(),
-        "without_destination_cursor",
+        NativeAttr::WithoutDestinationCursor,
         &[("cursor_snapshot", cursor_snapshot)],
     )
 }
@@ -451,7 +451,7 @@ pub(crate) fn microbatch_range<'py>(
     }
     let effective_grain = native(
         py,
-        "resolve_effective_timestamp_grain",
+        NativeAttr::ResolveEffectiveTimestampGrain,
         &[
             ("cursor_type", cursor_type.clone()),
             ("downstream_grain", config_str(model, "cursor_grain")?),
@@ -462,7 +462,7 @@ pub(crate) fn microbatch_range<'py>(
     if cursor_type.eq(TIMESTAMP)? && !effective_grain.is_none() {
         cursor_snapshot = native(
             py,
-            "normalize_cursor_snapshot_grain",
+            NativeAttr::NormalizeCursorSnapshotGrain,
             &[
                 ("cursor_snapshot", cursor_snapshot),
                 ("cursor_type", cursor_type.clone()),
@@ -472,7 +472,7 @@ pub(crate) fn microbatch_range<'py>(
     }
     let lookback = native(
         py,
-        "resolve_microbatch_lookback",
+        NativeAttr::ResolveMicrobatchLookback,
         &[
             ("model", model.clone()),
             ("effective_grain", effective_grain.clone()),
@@ -513,7 +513,7 @@ pub(crate) fn empty_cursor_inputs<'py>(
     }
     let decision = native(
         py,
-        "cursor_inputs_without_rows",
+        NativeAttr::CursorInputsWithoutRows,
         &[("cursor_snapshot", cursor_snapshot)],
     )?;
     Ok((
@@ -534,9 +534,7 @@ pub(crate) fn cursor_safety_configs<'py>(
 }
 
 fn compile_input_error(py: Python<'_>, message: String) -> PyErr {
-    match imported(py, COMPILE_EXCEPTIONS, "CompileInputError")
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::CompileInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

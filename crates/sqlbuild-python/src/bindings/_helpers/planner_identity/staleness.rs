@@ -16,11 +16,11 @@ use sqlbuild_analysis::planner_identity::models::{
     GraphKey, StaleWarning, StalenessGraph, StalenessNames,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_changes::detect::{ModelPass, model_change};
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// Change kinds that mean the model's own identity changed.
 const OWN_CHANGE_KINDS: [&str; 5] = [
@@ -143,8 +143,8 @@ fn plan_warnings<'py>(
     py: Python<'py>,
     warnings: Vec<StaleWarning>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let warning_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "PlanWarning")?;
-    let severity: Bound<'py, PyAny> = native_enum(py, "WarningSeverity", "warning")?;
+    let warning_class: Bound<'py, PyAny> = registry::class(py, RecordId::PlanWarning)?;
+    let severity: Bound<'py, PyAny> = native_enum(py, RecordId::WarningSeverity, "warning")?;
     let mut rendered: Vec<Bound<'py, PyAny>> = Vec::with_capacity(warnings.len());
     for warning in warnings {
         let message: String = stale_upstream_warning_message(
@@ -258,7 +258,7 @@ fn classify_selection_staleness_warnings<'py>(
         },
     };
     let warning_class: Bound<'py, PyAny> =
-        imported(py, "sqlbuild._native", "SelectionStalenessWarning")?;
+        registry::class(py, RecordId::SelectionStalenessWarning)?;
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for warning in classify_selection_staleness(&staleness) {
         warnings.push(call_with(

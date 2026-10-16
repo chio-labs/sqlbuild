@@ -19,10 +19,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
 use crate::bindings::_helpers::cost_telemetry::health::mark_ledger_failure;
-use crate::bindings::_helpers::cost_telemetry::values::{COST_EXCEPTIONS, process_object};
+use crate::bindings::_helpers::cost_telemetry::values::process_object;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
-
-const NATIVE_RECORDS: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 static LEDGER_LOCK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
@@ -195,7 +195,7 @@ fn ledger_entry<'py>(line: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         ("completed_at", parsed("completed_at")?),
     ];
     call_with(
-        &imported(py, NATIVE_RECORDS, "StatementLedgerEntry")?,
+        &registry::class(py, RecordId::StatementLedgerEntry)?,
         &entry_fields,
     )
 }
@@ -235,7 +235,7 @@ pub(crate) fn read_ledger<'py>(
                     error.get_type(py).name()?
                 );
                 let artifact_error: Bound<'py, PyAny> =
-                    imported(py, COST_EXCEPTIONS, "CostArtifactError")?.call1((message,))?;
+                    registry::native(py, NativeAttr::CostArtifactError)?.call1((message,))?;
                 mark_failure(run_id, &artifact_error)?;
             }
             Err(error) => return Err(error),

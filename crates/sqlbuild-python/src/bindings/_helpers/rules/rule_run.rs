@@ -12,12 +12,11 @@ use sqlbuild_rules::rule_results::models::RuleFinding;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::rule_finding;
 use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const MODELS_MODULE: &str = "sqlbuild._native";
 const PATHLIB_MODULE: &str = "pathlib";
 const CTYPES_MODULE: &str = "ctypes";
 
@@ -27,7 +26,7 @@ fn integer(object: &Bound<'_, PyAny>, field: &str) -> PyResult<i64> {
 
 fn python_finding<'py>(py: Python<'py>, finding: RuleFinding) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, MODELS_MODULE, "Finding")?,
+        &registry::class(py, RecordId::Finding)?,
         &[
             ("code", finding.code.into_bound_py_any(py)?),
             (
@@ -96,7 +95,7 @@ fn finish_rule_run<'py>(
         (integer(result, field)? + integer(sql_result, field)?).into_bound_py_any(py)
     };
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "RulesRunResult")?,
+        &registry::class(py, RecordId::RulesRunResult)?,
         &[
             ("findings", PyTuple::new(py, findings)?.into_any()),
             (

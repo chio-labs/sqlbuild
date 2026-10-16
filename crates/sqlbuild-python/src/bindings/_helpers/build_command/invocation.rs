@@ -12,13 +12,9 @@ use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const SETTINGS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const TARGET_NAME_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS: &str = "sqlbuild._native";
 const DEFER_CONFLICT_CODE: &str = "C408";
 
 /// One build's request, resolved invocation and output settings.
@@ -59,7 +55,7 @@ fn target_config<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     call_with(
-        &imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -75,7 +71,7 @@ fn execution_limits<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let limits: Bound<'py, PyAny> = if target_name.is_none() {
-        imported(py, CONTRACT_MODELS, "ExecutionLimitsConfig")?.call0()?
+        registry::class(py, RecordId::ExecutionLimitsConfig)?.call0()?
     } else {
         target_config(discovered, target_name)?.getattr("execution_limits")?
     };
@@ -106,7 +102,7 @@ pub(crate) fn resolve_build_context<'py>(
         imported(py, "pathlib", "Path")?.call_method0("cwd")
     })?;
     let discovered: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[
             ("project_dir", project_dir.clone()),
             ("extract_output_column_locations", boolean(py, false)),
@@ -114,7 +110,7 @@ pub(crate) fn resolve_build_context<'py>(
     )?;
     let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
     let target_name: Bound<'py, PyAny> = call_with(
-        &imported(py, TARGET_NAME_MODULE, "resolve_target_name")?,
+        &registry::native(py, NativeAttr::ResolveTargetName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -139,7 +135,7 @@ pub(crate) fn resolve_build_context<'py>(
         ));
     }
     let adapter_name: String = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -150,7 +146,7 @@ pub(crate) fn resolve_build_context<'py>(
     let limits: Bound<'py, PyAny> =
         execution_limits(&discovered, &target_name, (&adapter_name, &adapter))?;
     let connection_config: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_project_connection_config")?,
+        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("project_dir", project_dir.clone()),
@@ -168,7 +164,7 @@ pub(crate) fn resolve_build_context<'py>(
         "stdout"
     })?;
     let connection_progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", text(py, &adapter_name)),
             ("stream", stream.clone()),
@@ -176,7 +172,7 @@ pub(crate) fn resolve_build_context<'py>(
         ],
     )?;
     let planning_progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "PlanningProgressReporter")?,
+        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
         &[
             ("stream", stream.clone()),
             ("use_color", boolean(py, use_color)),
@@ -186,7 +182,7 @@ pub(crate) fn resolve_build_context<'py>(
     let should_load_sources: bool = request.getattr("reload_sources")?.is_truthy()?
         || if load_sources.is_none() {
             call_with(
-                &imported(py, SETTINGS_MODULE, "build_effective_settings_config")?,
+                &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
                 &[("discovered_inputs", discovered.clone())],
             )?
             .getattr("auto_load_sources")?
@@ -195,7 +191,7 @@ pub(crate) fn resolve_build_context<'py>(
             load_sources.is_truthy()?
         };
     let invocation: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "BuildInvocation")?,
+        &registry::class(py, RecordId::BuildInvocation)?,
         &[
             ("effective_project_dir", project_dir),
             ("discovered_inputs", discovered),

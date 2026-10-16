@@ -15,6 +15,7 @@ use crate::bindings::_helpers::dagster_invocation::access::{
     constant_contains, get, items, merged, node_with_id, nodes_by_id, path_set, string_list,
     text_of, value_or,
 };
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
 const CHECK_KIND_FALLBACK: &str = "check";
 const CHECK_NAME_JOIN: &str = "__";
@@ -47,7 +48,7 @@ pub(crate) fn sorted_nodes<'py>(dag: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'
 /// The translated Dagster check name, or one built from the check's kind, name and target.
 pub(crate) fn dagster_check_name(check: &Bound<'_, PyAny>) -> PyResult<String> {
     let py: Python<'_> = check.py();
-    let field: Bound<'_, PyAny> = constant(py, "DAGSTER_CHECK_NAME_FIELD")?;
+    let field: Bound<'_, PyAny> = constant(py, ThirdPartyHost::DagsterCheckNameField)?;
     let translated: Bound<'_, PyAny> = check.call_method1("get", (field,))?;
     if !translated.is_none() {
         return translated.str()?.extract();
@@ -110,7 +111,7 @@ fn metadata_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 /// A record's non-null metadata, without check internals.
 fn metadata_from_mapping<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = value.py();
-    let excluded: Bound<'py, PyAny> = constant(py, "CHECK_METADATA_EXCLUDED_KEYS")?;
+    let excluded: Bound<'py, PyAny> = constant(py, ThirdPartyHost::CheckMetadataExcludedKeys)?;
     let metadata: Bound<'py, PyDict> = PyDict::new(py);
     for pair in value.call_method0("items")?.try_iter()? {
         let (key, item): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
@@ -164,7 +165,7 @@ fn loader_result<'py>(
 ) -> PyResult<Option<(String, Bound<'py, PyDict>)>> {
     let py: Python<'py> = dag.py();
     let nodes = nodes_by_id(dag)?;
-    let loader_kind: String = constant(py, "LOADER_NODE_KIND")?.extract()?;
+    let loader_kind: String = constant(py, ThirdPartyHost::LoaderNodeKind)?.extract()?;
     let source_id: String = text_of(source_node, "id")?;
     for edge in items(dag, "edges")? {
         if text_of(&edge, "to_id")? != source_id {
@@ -218,8 +219,8 @@ struct CheckFilter<'a> {
 
 fn warn_severity(check: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = check.py();
-    let warning: String = constant(py, "WARNING_CHECK_SEVERITY")?.extract()?;
-    let insufficient: String = constant(py, "INSUFFICIENT_CHECK_STATUS")?.extract()?;
+    let warning: String = constant(py, ThirdPartyHost::WarningCheckSeverity)?.extract()?;
+    let insufficient: String = constant(py, ThirdPartyHost::InsufficientCheckStatus)?.extract()?;
     let status: String = text_of(check, "status")?;
     Ok(status == insufficient || status == warning || text_of(check, "severity")? == warning)
 }
@@ -345,7 +346,7 @@ fn keep_checks_only<'py>(
 }
 
 fn completed(py: Python<'_>, status: &str) -> PyResult<bool> {
-    constant_contains(py, ("COMPLETED_EXECUTION_STATUSES", status))
+    constant_contains(py, (ThirdPartyHost::CompletedExecutionStatuses, status))
 }
 
 /// Dagster events for an execution JSON document.
@@ -375,9 +376,9 @@ pub(crate) fn dagster_payload_results<'py>(
     let payload: Bound<'py, PyAny> = arguments.value("payload")?;
     let command: Vec<String> = arguments.value("command")?.extract()?;
     let selection = SelectionFacts::from_arguments(&arguments)?;
-    let clone_command: String = constant(py, "CLONE_COMMAND")?.extract()?;
-    let success: String = constant(py, "SUCCESS_EXECUTION_STATUS")?.extract()?;
-    let source_kind: String = constant(py, "SOURCE_NODE_KIND")?.extract()?;
+    let clone_command: String = constant(py, ThirdPartyHost::CloneCommand)?.extract()?;
+    let success: String = constant(py, ThirdPartyHost::SuccessExecutionStatus)?.extract()?;
+    let source_kind: String = constant(py, ThirdPartyHost::SourceNodeKind)?.extract()?;
     let is_clone: bool = text_of(&payload, "command")? == clone_command;
     let selected_paths: HashSet<AssetPath> = if is_clone {
         HashSet::new()
@@ -502,8 +503,8 @@ pub(crate) fn dagster_integration_results<'py>(
     let emitted_asset_paths: Bound<'py, PyAny> = arguments.value("emitted_asset_paths")?;
     let selection = SelectionFacts::from_arguments(&arguments)?;
     let nodes = nodes_by_id(&dag)?;
-    let source_kind: String = constant(py, "SOURCE_NODE_KIND")?.extract()?;
-    let clone_command: String = constant(py, "CLONE_COMMAND")?.extract()?;
+    let source_kind: String = constant(py, ThirdPartyHost::SourceNodeKind)?.extract()?;
+    let clone_command: String = constant(py, ThirdPartyHost::CloneCommand)?.extract()?;
     let envelope_command: String = envelope.getattr("command")?.str()?.extract()?;
     let mut plans: Vec<Bound<'py, PyAny>> = Vec::new();
     let asset: Bound<'py, PyAny> = envelope.getattr("asset")?;
@@ -576,7 +577,10 @@ pub(crate) fn dagster_integration_results<'py>(
             )?);
         }
     }
-    let standalone: bool = constant_contains(py, ("STANDALONE_CHECK_COMMANDS", &envelope_command))?;
+    let standalone: bool = constant_contains(
+        py,
+        (ThirdPartyHost::StandaloneCheckCommands, &envelope_command),
+    )?;
     let emitted: HashSet<AssetPath> = path_set(&emitted_asset_paths)?;
     let filter = CheckFilter {
         selection: &selection,
@@ -617,7 +621,7 @@ pub(crate) fn dagster_selected_asset_results<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = dag.py();
     let selected: HashSet<AssetPath> = path_set(&selected_asset_paths)?;
-    let materializable: Bound<'py, PyAny> = constant(py, "MATERIALIZABLE_NODE_KINDS")?;
+    let materializable: Bound<'py, PyAny> = constant(py, ThirdPartyHost::MaterializableNodeKinds)?;
     let mut plans: Vec<Bound<'py, PyAny>> = Vec::new();
     for node in sorted_nodes(&dag)? {
         if !selected.is_empty() && !selected.contains(&asset_path(&node)?) {

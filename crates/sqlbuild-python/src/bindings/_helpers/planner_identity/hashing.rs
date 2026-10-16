@@ -13,10 +13,10 @@ use sqlbuild_analysis::sql_tokens::main::definition_fingerprint::definition_fing
 use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
-
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 
 /// The query fingerprint of a model, or the planner input error naming the model.
 pub(crate) fn model_query_hash(
@@ -43,8 +43,8 @@ fn fingerprint_error(py: Python<'_>, subject: &str, message: String) -> PyErr {
         return compiler_error(message);
     }
     let text = |value: &str| PyString::new(py, value).into_any();
-    let raised: PyResult<Bound<'_, PyAny>> = imported(py, EXCEPTIONS_MODULE, "PlannerInputError")
-        .and_then(|class| {
+    let raised: PyResult<Bound<'_, PyAny>> =
+        registry::error(py, ErrorId::PlannerInput).and_then(|class| {
             class.call(
                 (format!(
                     "{subject} cannot be fingerprinted for change detection: {message}"

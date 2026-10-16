@@ -2,15 +2,16 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::conversion::GRAIN_NAMES;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::display::{
     aligned_timestamp_bounds, resolve_effective_microbatch_batch_size,
 };
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const BOUND_TYPES_MODULE: &str = "sqlbuild.cursor_algebra.types";
-const CURSOR_MODELS_MODULE: &str = "sqlbuild._native";
 const MICROBATCH_MODE: &str = "microbatch";
 const TIMESTAMP_CURSOR: &str = "timestamp";
 const INTEGER_CURSOR: &str = "integer";
@@ -84,14 +85,14 @@ fn count_batches(
     let (start, end) = (bounds.getattr("start")?, bounds.getattr("end")?);
     if cursor_type == TIMESTAMP_CURSOR {
         let duration: Bound<'_, PyAny> =
-            imported(py, CURSOR_MODELS_MODULE, "Duration")?.call_method1("parse", (batch_size,))?;
+            registry::class(py, RecordId::Duration)?.call_method1("parse", (batch_size,))?;
         if duration.is_none() {
             return Ok(None);
         }
         let temporal = |value: &Bound<'_, PyAny>| -> PyResult<bool> {
             Ok(
-                value.is_instance(&imported(py, CURSOR_MODELS_MODULE, "DateValue")?)?
-                    || value.is_instance(&imported(py, CURSOR_MODELS_MODULE, "TimestampValue")?)?,
+                value.is_instance(&registry::class(py, RecordId::DateValue)?)?
+                    || value.is_instance(&registry::class(py, RecordId::TimestampValue)?)?,
             )
         };
         if !temporal(&start)? || !temporal(&end)? {
@@ -110,7 +111,7 @@ fn count_batches(
     if cursor_type != INTEGER_CURSOR {
         return Ok(None);
     }
-    let integer: Bound<'_, PyAny> = imported(py, CURSOR_MODELS_MODULE, "IntegerValue")?;
+    let integer: Bound<'_, PyAny> = registry::class(py, RecordId::IntegerValue)?;
     if !start.is_instance(&integer)? || !end.is_instance(&integer)? {
         return Ok(None);
     }
@@ -152,7 +153,7 @@ pub(crate) fn cursor_details<'py>(
         let bounds: Bound<'py, PyAny> = entry.getattr("cursor_bounds")?;
         (!bounds.is_none()).then_some(bounds)
     };
-    let sentinel: Bound<'py, PyAny> = imported(py, BOUND_TYPES_MODULE, "BoundSentinel")?;
+    let sentinel: Bound<'py, PyAny> = host::entry(py, ExecutorHost::BoundSentinel)?;
     if let Some(bounds) = &resolved_bounds
         && (bounds.getattr("start")?.is_instance(&sentinel)?
             || bounds.getattr("end")?.is_instance(&sentinel)?)

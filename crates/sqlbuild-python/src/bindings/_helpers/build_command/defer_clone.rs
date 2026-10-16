@@ -14,19 +14,11 @@ use sqlbuild_core::build_command::errors::BuildCommandError;
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
-const CLONE_TYPES: &str = "sqlbuild.executor.clone.types";
-const SPEC_TYPES: &str = "sqlbuild._native";
-const TRANSIENT_MODELS_MODULE: &str =
-    "sqlbuild.executor.clone.main._build_destination_transient_models";
-const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main._build_retention_requests";
-const EXECUTE_CLONE_MODULE: &str = "sqlbuild.executor.clone.main.execute";
-const FINGERPRINTING_MODULE: &str = "sqlbuild.executor.clone.main._fingerprinting";
-const CLONE_STREAM_MODULE: &str = "sqlbuild.executor.clone.main._run_prephase_clone_stream";
 const VIEW_MATERIALIZATION: &str = "view";
 const RECREATED_TYPES: [&str; 2] = ["udf", "table_fn"];
 const CLONABLE_TYPES: [&str; 4] = ["model", "seed", "udf", "table_fn"];
@@ -107,12 +99,12 @@ fn membership<'py>(
 
 fn traversed_names<'py>(
     scope: &Bound<'py, PyAny>,
-    (module, function): (&str, &str),
+    function: NativeAttr,
     (is_clonable, is_view): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Vec<String>> {
     let py: Python<'py> = scope.py();
     let keys: Bound<'py, PyAny> = call_with(
-        &imported(py, module, function)?,
+        &registry::native(py, function)?,
         &[
             ("selected", scope.getattr("selected_keys")?),
             ("upstream", scope.getattr("upstream_deps")?),
@@ -162,12 +154,8 @@ fn defer_clone_selection(scope: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, Vec
     let is_view: Bound<'_, PyAny> = membership(py, &keys, |key| recreated_over_clones(scope, key))?;
     let callbacks: (&Bound<'_, PyAny>, &Bound<'_, PyAny>) = (&is_clonable, &is_view);
     Ok((
-        traversed_names(scope, (NATIVE_MODULE, "resolve_clone_boundary"), callbacks)?,
-        traversed_names(
-            scope,
-            (NATIVE_MODULE, "resolve_skipped_view_chain"),
-            callbacks,
-        )?,
+        traversed_names(scope, NativeAttr::ResolveCloneBoundary, callbacks)?,
+        traversed_names(scope, NativeAttr::ResolveSkippedViewChain, callbacks)?,
         selected_executable_model_count(scope)?,
     ))
 }
@@ -183,10 +171,10 @@ fn resolve_defer_clone_selection(
 
 fn native<'py>(
     py: Python<'py>,
-    name: &str,
+    name: NativeAttr,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, NATIVE_MODULE, name)?, fields)
+    call_with(&registry::native(py, name)?, fields)
 }
 
 fn external_resolver<'py>(
@@ -195,7 +183,7 @@ fn external_resolver<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     native(
         project_dir.py(),
-        "resolve_external_sql_reference_resolver",
+        NativeAttr::ResolveExternalSqlReferenceResolver,
         &[
             ("project_dir", project_dir.clone()),
             ("discovered_inputs", discovered.clone()),
@@ -232,7 +220,7 @@ fn clone_input<'py>(
     let destination_models: Bound<'py, PyAny> = pipeline.getattr("destination_model_entries")?;
     let target: Bound<'py, PyAny> = native(
         py,
-        "resolve_target_config",
+        NativeAttr::ResolveTargetConfig,
         &[
             (
                 "project_config",
@@ -247,11 +235,7 @@ fn clone_input<'py>(
         selected.push(entry?.getattr("name")?);
     }
     let retention: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            RETENTION_REQUESTS_MODULE,
-            "build_destination_retention_requests",
-        )?,
+        &host::entry(py, ExecutorHost::BuildDestinationRetentionRequests)?,
         &[
             ("project", project.clone()),
             ("adapter_name", prephase.adapter.getattr("adapter_name")?),
@@ -267,9 +251,9 @@ fn clone_input<'py>(
     )?;
     let allow_decrease: bool = target
         .getattr("time_travel_retention_decrease")?
-        .eq(imported(py, SPEC_TYPES, "RetentionDecreasePolicy")?.getattr("ALLOW")?)?;
+        .eq(registry::class(py, RecordId::RetentionDecreasePolicy)?.getattr("ALLOW")?)?;
     let sources: Bound<'py, PyAny> = call_with(
-        &imported(py, CLONE_MODELS, "CloneSourceEntries")?,
+        &host::entry(py, ExecutorHost::CloneSourceEntries)?,
         &[
             ("origin", pipeline.getattr("origin_source_entries")?),
             (
@@ -279,7 +263,7 @@ fn clone_input<'py>(
         ],
     )?;
     call_with(
-        &imported(py, CLONE_MODELS, "CloneExecutionInput")?,
+        &host::entry(py, ExecutorHost::CloneExecutionInput)?,
         &[
             ("source_entries", sources),
             (
@@ -316,11 +300,7 @@ fn clone_input<'py>(
             (
                 "destination_transient_models",
                 call_with(
-                    &imported(
-                        py,
-                        TRANSIENT_MODELS_MODULE,
-                        "build_destination_transient_models",
-                    )?,
+                    &host::entry(py, ExecutorHost::BuildDestinationTransientModels)?,
                     &[("project", project.clone())],
                 )?,
             ),
@@ -342,7 +322,7 @@ fn executed_clone<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
     let progress_stream: Bound<'py, PyAny> = context.invocation.getattr("progress_stream")?;
-    let execute: Bound<'py, PyAny> = imported(py, EXECUTE_CLONE_MODULE, "execute_clone")?;
+    let execute: Bound<'py, PyAny> = host::entry(py, ExecutorHost::ExecuteClone)?;
     if progress_stream.is_none() {
         let inputs: Bound<'py, PyAny> = clone_input(
             context,
@@ -382,7 +362,7 @@ fn executed_clone<'py>(
         },
     )?;
     call_with(
-        &imported(py, CLONE_STREAM_MODULE, "run_prephase_clone_stream")?,
+        &host::entry(py, ExecutorHost::RunPrephaseCloneStream)?,
         &[
             ("stream", progress_stream),
             ("title", text(py, "defer clone")),
@@ -395,7 +375,7 @@ fn executed_clone<'py>(
 
 fn failed_items(result: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let py: Python<'_> = result.py();
-    let status: Bound<'_, PyAny> = imported(py, CLONE_TYPES, "CloneStatus")?;
+    let status: Bound<'_, PyAny> = host::entry(py, ExecutorHost::CloneStatus)?;
     let (failed, warning) = (status.getattr("FAILED")?, status.getattr("WARNING")?);
     let mut items: Vec<String> = Vec::new();
     for item in result.getattr("item_results")?.try_iter()? {
@@ -434,7 +414,7 @@ fn clone_boundaries<'py>(
     let request: &Bound<'py, PyAny> = &context.request;
     let pipeline: Bound<'py, PyAny> = native(
         py,
-        "run_clone_pipeline_with_options",
+        NativeAttr::RunClonePipelineWithOptions,
         &[
             ("discovered_inputs", prephase.discovered.clone()),
             ("adapter", prephase.adapter.clone()),
@@ -443,7 +423,7 @@ fn clone_boundaries<'py>(
             (
                 "destination_connection",
                 call_with(
-                    &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineConnection")?,
+                    &registry::class(py, RecordId::ClonePipelineConnection)?,
                     &[
                         ("config", context.invocation.getattr("connection_config")?),
                         ("handle", connection.clone()),
@@ -453,7 +433,7 @@ fn clone_boundaries<'py>(
             (
                 "options",
                 call_with(
-                    &imported(py, NATIVE_RECORDS_MODULE, "ClonePipelineOptions")?,
+                    &registry::class(py, RecordId::ClonePipelineOptions)?,
                     &[
                         ("no_sql_validation", request.getattr("no_sql_validation")?),
                         ("no_cache", request.getattr("no_cache")?),
@@ -489,7 +469,7 @@ fn clone_boundaries<'py>(
     }
     let project: Bound<'py, PyAny> = pipeline.getattr("destination_project")?;
     call_with(
-        &imported(py, FINGERPRINTING_MODULE, "copy_clone_fingerprints")?,
+        &host::entry(py, ExecutorHost::CopyCloneFingerprints)?,
         &[
             ("result", result),
             (
@@ -571,7 +551,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
     let discovered: Bound<'_, PyAny> = invocation.getattr("discovered_inputs")?;
     let split: Bound<'_, PyAny> = native(
         py,
-        "split_unit_test_selectors",
+        NativeAttr::SplitUnitTestSelectors,
         &[
             ("select", request.getattr("select")?),
             ("exclude", request.getattr("exclude")?),
@@ -589,7 +569,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
     let project_dir: Bound<'_, PyAny> = invocation.getattr("effective_project_dir")?;
     let project: Bound<'_, PyAny> = native(
         py,
-        "build_compiled_project",
+        NativeAttr::BuildCompiledProject,
         &[
             ("discovered_inputs", discovered.clone()),
             ("adapter", adapter.clone()),
@@ -598,7 +578,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
             (
                 "analysis_selection",
                 call_with(
-                    &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
+                    &registry::class(py, RecordId::CompileAnalysisSelection)?,
                     &[("no_cache", request.getattr("no_cache")?)],
                 )?,
             ),
@@ -611,7 +591,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
     )?;
     let scope: Bound<'_, PyAny> = native(
         py,
-        "build_planner_scope",
+        NativeAttr::BuildPlannerScope,
         &[
             ("project", project.clone()),
             ("select", split.getattr("select")?),
@@ -626,7 +606,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
         defer_clone_selection(&scope)?;
     native(
         py,
-        "enforce_model_execution_limit",
+        NativeAttr::EnforceModelExecutionLimit,
         &[
             ("model_count", model_count.into_pyobject(py)?.into_any()),
             ("target_name", invocation.getattr("effective_target_name")?),

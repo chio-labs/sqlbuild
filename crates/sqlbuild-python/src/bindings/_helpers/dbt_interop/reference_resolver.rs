@@ -10,11 +10,11 @@ use std::collections::HashSet;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const VALIDATE_OPTIONS: (&[&str], &[&str]) = (
     &[
         "ref_kind",
@@ -31,14 +31,13 @@ const SEED_CONFLICT_CODE: &str = "C217";
 
 fn compile_input_error(py: Python<'_>, message: String, code: &str) -> PyErr {
     let created = || -> PyResult<PyErr> {
-        let error: Bound<'_, PyAny> = imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?
-            .call(
-                (message,),
-                Some(&keywords(
-                    py,
-                    &[("code", PyString::new(py, code).into_any())],
-                )?),
-            )?;
+        let error: Bound<'_, PyAny> = registry::error(py, ErrorId::CompileInput)?.call(
+            (message,),
+            Some(&keywords(
+                py,
+                &[("code", PyString::new(py, code).into_any())],
+            )?),
+        )?;
         Ok(PyErr::from_value(error))
     };
     created().unwrap_or_else(|failure| failure)
@@ -107,7 +106,7 @@ impl DbtCompileReferenceResolver {
         known_model_names: Bound<'_, PyAny>,
     ) -> Result<(), PyErr> {
         call_with(
-            &imported(py, NATIVE_MODULE, "validate_compile_dbt_model_names")?,
+            &registry::native(py, NativeAttr::ValidateCompileDbtModelNames)?,
             &[
                 ("known_model_names", known_model_names),
                 ("dbt_manifest", self.manifest_or_none(py)),
@@ -258,7 +257,7 @@ impl DbtCompileReferenceResolver {
         let arguments: KeywordArguments<'_> =
             KeywordArguments::read(py, "validate_reference", options, VALIDATE_OPTIONS)?;
         let reference: Bound<'_, PyAny> = call_with(
-            &imported(py, COMPILE_MODELS_MODULE, "CompileSqlReference")?,
+            &registry::class(py, RecordId::CompileSqlReference)?,
             &[
                 ("ref_kind", arguments.value("ref_kind")?),
                 ("ref_name", arguments.value("ref_name")?),
@@ -266,7 +265,7 @@ impl DbtCompileReferenceResolver {
             ],
         )?;
         call_with(
-            &imported(py, NATIVE_MODULE, "validate_compile_dbt_model_reference")?,
+            &registry::native(py, NativeAttr::ValidateCompileDbtModelReference)?,
             &[
                 ("reference", reference),
                 (
@@ -288,7 +287,7 @@ impl DbtCompileReferenceResolver {
         ref_package: Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
         call_with(
-            &imported(py, NATIVE_MODULE, "resolve_dbt_reference_relation")?,
+            &registry::native(py, NativeAttr::ResolveDbtReferenceRelation)?,
             &[
                 ("manifest", self.manifest_or_none(py)),
                 ("ref_kind", ref_kind),
@@ -310,7 +309,7 @@ pub(crate) fn build_compile_reference_resolver<'py>(
         return Ok(py.None().into_bound(py));
     }
     let manifest: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_compile_dbt_manifest_index")?,
+        &registry::native(py, NativeAttr::BuildCompileDbtManifestIndex)?,
         &[("manifest_contents", manifest_contents)],
     )?;
     Ok(Bound::new(
@@ -358,7 +357,7 @@ pub(crate) fn resolve_external_sql_reference_resolver<'py>(
         py.None().into_bound(py)
     } else {
         let lifecycle: Bound<'py, PyAny> = call_with(
-            &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+            &host::entry(py, ExecutorHost::OperationLifecycle)?,
             &[
                 ("operation_kind", PyString::new(py, "project").into_any()),
                 (

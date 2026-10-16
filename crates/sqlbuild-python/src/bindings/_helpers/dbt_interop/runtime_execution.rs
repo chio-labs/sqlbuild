@@ -1,9 +1,9 @@
 //! Execute dbt through the subprocess boundary and finalize results in artifact order.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::runtime_results::{append_missing, result_ids};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyInt, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -39,14 +39,14 @@ fn expected_total<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = argv.py();
     let ls = call_with(
-        &imported(py, "sqlbuild._native", "dbt_execution_ls_argv")?,
+        &registry::native(py, NativeAttr::DbtExecutionLsArgv)?,
         &[("argv", argv.clone())],
     )?;
     if ls.is_none() {
         return Ok(py.None().into_bound(py));
     }
     let status = call_with(
-        &imported(py, "sqlbuild._native", "TransientStatusReporter")?,
+        &registry::native(py, NativeAttr::TransientStatusReporter)?,
         &[
             ("stream", arguments.value("progress_stream")?),
             ("use_color", arguments.value("use_color")?),
@@ -83,7 +83,7 @@ fn expected_total<'py>(
         return Ok(py.None().into_bound(py));
     }
     let nodes = call_with(
-        &imported(py, "sqlbuild._native", "parse_dbt_ls_json_lines")?,
+        &registry::native(py, NativeAttr::ParseDbtLsJsonLines)?,
         &[("stdout", result.getattr("stdout")?)],
     )?;
     Ok(PyInt::new(py, nodes.len()?).into_any())
@@ -108,10 +108,10 @@ fn execute_dbt_commands<'py>(
     let argv = arguments.value("merged_argv")?;
     let output = arguments.value("progress_stream")?;
     let style = call_with(
-        &imported(py, "sqlbuild._native", "CliStyle")?,
+        &registry::native(py, NativeAttr::CliStyle)?,
         &[("use_color", arguments.value("use_color")?)],
     )?;
-    let result_type = imported(py, "sqlbuild._native", "DbtCommandExecutionResult")?;
+    let result_type = registry::class(py, RecordId::DbtCommandExecutionResult)?;
     if argv.is_none() {
         let message = arguments.value("skip_message")?;
         let message = if message.is_none() {
@@ -174,7 +174,7 @@ fn execute_dbt_commands<'py>(
         target = project_dir.call_method1("__truediv__", ("target",))?;
     }
     let (returncode, streamed): (Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &imported(py, "sqlbuild._native", "execute_dbt_json_event_stream")?,
+        &registry::native(py, NativeAttr::ExecuteDbtJsonEventStream)?,
         &[
             ("argv", argv),
             ("cwd", project_dir),
@@ -211,7 +211,7 @@ fn execute_dbt_commands<'py>(
     let count = results.len()? - appended.len();
     for (offset, result) in appended.into_iter().enumerate() {
         let rendered = call_with(
-            &imported(py, "sqlbuild._native", "render_dbt_node_result")?,
+            &registry::native(py, NativeAttr::RenderDbtNodeResult)?,
             &[
                 ("result", result.clone()),
                 ("use_color", style.getattr("use_color")?),

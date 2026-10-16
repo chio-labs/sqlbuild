@@ -8,8 +8,9 @@ use sqlbuild_attachments::reference_markers::main::unresolved_reference_marker::
 use sqlbuild_attachments::sql_lexing::main::unclosed_message::unclosed_message;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
 /// The reference function and diagnostic code of each marker kind, in the scanner's order.
 const MARKER_KINDS: [(&str, &str); 5] = [
     ("__ref", "R001"),
@@ -45,9 +46,7 @@ fn assert_no_unresolved_sql_markers(
     })?;
     match outcome {
         (_, Some(unclosed)) => Err(PyErr::from_value(
-            py.import(COMPILE_ERRORS_MODULE)?
-                .getattr("CompileInputError")?
-                .call1((unclosed,))?,
+            registry::error(py, ErrorId::CompileInput)?.call1((unclosed,))?,
         )),
         (Some(marker), None) => {
             let (function, code) = MARKER_KINDS.get(marker).copied().ok_or_else(|| {

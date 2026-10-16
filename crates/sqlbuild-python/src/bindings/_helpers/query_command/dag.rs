@@ -6,14 +6,11 @@ use pyo3::types::{PyBool, PyDict};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::query_command::main::render_dag_summary::render_dag_summary;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 fn array_length(document: &serde_json::Value, key: &str) -> PyResult<usize> {
     document
@@ -46,18 +43,14 @@ fn run_dag_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) ->
         adapter,
     } = project_adapter(py, project_dir)?;
     let resolver: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            EXTERNAL_REFS_MODULE,
-            "resolve_external_sql_reference_resolver",
-        )?,
+        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
             ("project_dir", project_dir),
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
     let graph: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_project_graph")?,
+        &registry::native(py, NativeAttr::BuildProjectGraph)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("adapter", adapter),
@@ -71,7 +64,7 @@ fn run_dag_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) ->
     )?;
     let python_graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let dag_json: String = call_with(
-        &imported(py, NATIVE_MODULE, "build_dag_json")?,
+        &registry::native(py, NativeAttr::BuildDagJson)?,
         &[
             ("graph", graph),
             (

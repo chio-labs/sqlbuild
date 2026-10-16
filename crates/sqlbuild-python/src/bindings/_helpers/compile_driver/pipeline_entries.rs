@@ -4,15 +4,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyFloat};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const PIPELINE_MODELS_MODULE: &str = "sqlbuild._native";
-const PLANNER_MODELS_MODULE: &str = "sqlbuild._native";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 /// Discovered Python node functions whose selectors need the Python graph.
 const PYTHON_NODE_FUNCTIONS: [&str; 4] = [
     "loader_functions",
@@ -62,8 +57,7 @@ pub(crate) fn compile_analysis_selection<'py>(
             break;
         }
     }
-    let selection: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?;
+    let selection: Bound<'py, PyAny> = registry::class(py, RecordId::CompileAnalysisSelection)?;
     let no_cache: Bound<'py, PyAny> = options.getattr("no_cache")?;
     if (options
         .getattr("resolve_python_run_selectors")?
@@ -106,7 +100,7 @@ fn build_project_graph_from_compiled_project<'py>(
 /// The project's natively held graph; dict views are built only when a boundary reads them.
 pub(crate) fn project_graph<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(project.py(), PIPELINE_MODELS_MODULE, "ProjectGraph")?,
+        &registry::class(project.py(), RecordId::ProjectGraph)?,
         &[
             ("project", project.clone()),
             ("native", project.getattr("lineage_graph")?),
@@ -154,7 +148,7 @@ fn build_static_pipeline_result<'py>(
     )?;
     let context: Bound<'py, PyAny> = arguments.value("context")?;
     call_with(
-        &imported(py, PIPELINE_MODELS_MODULE, "CompilePipelineResult")?,
+        &registry::class(py, RecordId::CompilePipelineResult)?,
         &[
             ("project", context.getattr("project")?),
             ("plan_output", arguments.value("plan_output")?),
@@ -181,7 +175,7 @@ fn run_compile_only_pipeline<'py>(
         ),
     )?;
     let compiled: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "compile_project_phase")?,
+        &registry::native(py, NativeAttr::CompileProjectPhase)?,
         &[
             ("discovered_inputs", arguments.value("discovered_inputs")?),
             ("adapter", arguments.value("adapter")?),
@@ -190,12 +184,12 @@ fn run_compile_only_pipeline<'py>(
         ],
     )?;
     call_with(
-        &imported(py, PIPELINE_MODELS_MODULE, "CompilePipelineResult")?,
+        &registry::class(py, RecordId::CompilePipelineResult)?,
         &[
             ("project", compiled.getattr("project")?),
             (
                 "plan_output",
-                imported(py, PLANNER_MODELS_MODULE, "PlanOutput")?.call0()?,
+                registry::class(py, RecordId::PlanOutput)?.call0()?,
             ),
             ("compile_seconds", compiled.getattr("compile_seconds")?),
             ("planning_seconds", PyFloat::new(py, 0.0).into_any()),

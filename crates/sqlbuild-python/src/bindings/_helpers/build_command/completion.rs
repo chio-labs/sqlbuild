@@ -17,18 +17,18 @@ use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, none, text, utc_now,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     write_python_check_runtime_target, write_runtime_target,
 };
 use crate::bindings::_helpers::cost_report::degradation::{
     finalize_build_cost as finalize_cost, render_build_cost,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COST_TYPES: &str = "sqlbuild.cost.types";
-const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
-const BUILD_TYPES: &str = "sqlbuild.executor.build.types";
 const SUCCESS_STATUS: &str = "success";
 const PENDING_MESSAGE: &str = "Build cost collection has not completed.";
 const INTERRUPTED_MESSAGE: &str = "Build was interrupted before cost collection completed.";
@@ -75,14 +75,14 @@ pub(crate) fn finalize_build_cost<'py>(
     ];
     fields.extend(cost.overrides);
     let finalization: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "BuildCostFinalization")?,
+        &registry::class(py, RecordId::BuildCostFinalization)?,
         &fields,
     )?;
     finalize_cost(&finalization)
 }
 
 fn cost_status<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, COST_TYPES, "CostStatus")?.getattr(name)
+    host::entry(py, ExecutorHost::CostStatus)?.getattr(name)
 }
 
 /// Record a pending cost state before execution starts.
@@ -154,7 +154,7 @@ fn cost_payload<'py>(py: Python<'py>, record: &Bound<'py, PyAny>) -> PyResult<Bo
         return Ok(none(py));
     }
     call_with(
-        &imported(py, NATIVE_MODULE, "cost_output_payload")?,
+        &registry::native(py, NativeAttr::CostOutputPayload)?,
         &[("record", record.clone())],
     )
 }
@@ -171,7 +171,7 @@ fn run_id_for<'py>(
 
 fn write_json(context: &BuildContext<'_>, payload: Bound<'_, PyAny>) -> PyResult<()> {
     call_with(
-        &imported(context.py(), NATIVE_MODULE, "write_execution_json_output")?,
+        &registry::native(context.py(), NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
             ("json_output", context.request.getattr("json_output")?),
@@ -189,7 +189,7 @@ fn finalize_no_work(context: &BuildContext<'_>, pipeline: &Bound<'_, PyAny>) -> 
     let py: Python<'_> = context.py();
     let plan: Bound<'_, PyAny> = pipeline.getattr("plan_output")?;
     if call_with(
-        &imported(py, NATIVE_MODULE, "plan_has_executable_work")?,
+        &registry::native(py, NativeAttr::PlanHasExecutableWork)?,
         &[
             ("plan", plan.clone()),
             (
@@ -220,14 +220,14 @@ fn finalize_no_work(context: &BuildContext<'_>, pipeline: &Bound<'_, PyAny>) -> 
         },
     )?;
     let result: Bound<'_, PyAny> = call_with(
-        &imported(py, BUILD_MODELS, "BuildExecutionResult")?,
+        &host::entry(py, ExecutorHost::BuildExecutionResult)?,
         &[(
             "status",
-            imported(py, BUILD_TYPES, "BuildStatus")?.getattr("SUCCESS")?,
+            host::entry(py, ExecutorHost::BuildStatus)?.getattr("SUCCESS")?,
         )],
     )?;
     let payload: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_build_execution_json")?,
+        &registry::native(py, NativeAttr::FormatBuildExecutionJson)?,
         &[
             ("result", result),
             ("plan", plan),
@@ -347,7 +347,7 @@ pub(crate) fn complete_direct_build<'py>(
     let cost_seconds: f64 = finish_cost_timing(context, cost_started);
     let record: Bound<'py, PyAny> = record?;
     let footer: String = call_with(
-        &imported(py, NATIVE_MODULE, "format_build_footer")?,
+        &registry::native(py, NativeAttr::FormatBuildFooter)?,
         &[
             ("result", result.clone()),
             ("elapsed", preparation.callbacks.getattr("elapsed")?),
@@ -358,7 +358,7 @@ pub(crate) fn complete_direct_build<'py>(
     .extract()?;
     emit(&context.stream, &format!("\n{footer}\n"))?;
     let payload: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_degradable_build_execution_json")?,
+        &registry::native(py, NativeAttr::FormatDegradableBuildExecutionJson)?,
         &[
             ("result", result.clone()),
             ("plan", plan),

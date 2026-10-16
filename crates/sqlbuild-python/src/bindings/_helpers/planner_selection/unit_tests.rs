@@ -10,10 +10,10 @@ use sqlbuild_analysis::planner_selection::models::{
     SelectorGroups, UnitTestSelectorNames, UnitTestSelectorSplit,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 const RESOURCE_ENTRY_FILES: [(&str, &str); 3] = [
     ("schema_files", "model_entries"),
@@ -111,7 +111,7 @@ fn split_python<'py>(
     )
     .map_err(|error| carrier.error(error))?;
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "SqlTestSelection")?,
+        &registry::class(py, RecordId::SqlTestSelection)?,
         &[
             ("names", PyFrozenSet::new(py, &split.test_names)?.into_any()),
             (
@@ -129,7 +129,7 @@ fn split_python<'py>(
         ],
     )?;
     call_with(
-        &imported(py, "sqlbuild._native", "UnitTestSelectorSplit")?,
+        &registry::class(py, RecordId::UnitTestSelectorSplit)?,
         &[
             ("select", restored(&carrier, &split.select)?.into_any()),
             ("exclude", restored(&carrier, &split.exclude)?.into_any()),

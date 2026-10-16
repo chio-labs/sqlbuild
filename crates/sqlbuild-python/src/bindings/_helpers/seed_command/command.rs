@@ -16,17 +16,12 @@ use sqlbuild_core::seed_command::models::SeedRow;
 
 use crate::bindings::_helpers::command_runtime::invocation::resolve_command_invocation;
 use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hooks;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EXTERNAL_REFS_MODULE: &str = "sqlbuild._native";
-const STATIC_COMMAND_MODULE: &str = "sqlbuild._native";
-const SEED_PLAN_MODULE: &str = "sqlbuild._native";
-const SEED_STATE_MODULE: &str = "sqlbuild._native";
-const RUNTIME_CONTRACT_MODELS: &str = "sqlbuild.runtime.contracts.models";
-const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const SUCCESS_STATUS: &str = "success";
 const FAILED_STATUS: &str = "failed";
 const EXECUTION_COMMAND: &str = "sqb seed";
@@ -181,7 +176,7 @@ fn compile_seeds<'py>(
     let connection_config: Bound<'py, PyAny> = invocation.getattr("connection_config")?;
     let discovered: Bound<'py, PyAny> = invocation.getattr("discovered_inputs")?;
     let connection_progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", invocation.getattr("adapter_name")?),
             ("stream", stream.clone()),
@@ -191,18 +186,14 @@ fn compile_seeds<'py>(
     stream.call_method1("write", ("\n",))?;
     stream.call_method0("flush")?;
     let resolver: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            EXTERNAL_REFS_MODULE,
-            "resolve_external_sql_reference_resolver",
-        )?,
+        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
             ("project_dir", invocation.getattr("effective_project_dir")?),
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
     let options: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?,
+        &registry::class(py, RecordId::CompilePipelineOptions)?,
         &[
             ("selected_target", request.getattr("selected_target")?),
             ("select", request.getattr("select")?),
@@ -213,7 +204,7 @@ fn compile_seeds<'py>(
         ],
     )?;
     let context: Bound<'py, PyAny> = call_with(
-        &imported(py, STATIC_COMMAND_MODULE, "compile_static_command_context")?,
+        &registry::native(py, NativeAttr::CompileStaticCommandContext)?,
         &[
             ("discovered_inputs", discovered),
             ("adapter", adapter.clone()),
@@ -235,7 +226,7 @@ fn compile_seeds<'py>(
     } else {
         let relay: Bound<'py, SeedConnectionRelay> = connection_relay(&connection_progress)?;
         let hooks: Bound<'py, PyAny> = call_with(
-            &imported(py, RUNTIME_CONTRACT_MODELS, "ConnectionHooks")?,
+            &host::entry(py, ExecutorHost::ConnectionHooks)?,
             &[
                 (
                     "on_connection_start",
@@ -251,7 +242,7 @@ fn compile_seeds<'py>(
         let connection: Bound<'py, PyAny> =
             connection_with_hooks(&adapter, &connection_config, &hooks)?;
         let read: PyResult<Bound<'py, PyAny>> = call_with(
-            &imported(py, SEED_STATE_MODULE, "read_selected_seed_fingerprints")?,
+            &registry::native(py, NativeAttr::ReadSelectedSeedFingerprints)?,
             &[
                 ("adapter", adapter.clone()),
                 ("connection", connection.clone()),
@@ -264,7 +255,7 @@ fn compile_seeds<'py>(
         read
     };
     let plan_output: Bound<'py, PyAny> = call_with(
-        &imported(py, SEED_PLAN_MODULE, "build_seed_command_plan")?,
+        &registry::native(py, NativeAttr::BuildSeedCommandPlan)?,
         &[
             ("project", project),
             ("scope", scope),
@@ -273,7 +264,7 @@ fn compile_seeds<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "build_static_pipeline_result")?,
+        &registry::native(py, NativeAttr::BuildStaticPipelineResult)?,
         &[("context", context), ("plan_output", plan_output)],
     )
 }
@@ -306,7 +297,7 @@ fn write_header(
     header.set_item("target", py.None())?;
     header.set_item("concurrency", concurrency)?;
     header.set_item("use_color", use_color)?;
-    imported(py, NATIVE_MODULE, "write_execution_header")?.call((), Some(&header))?;
+    registry::native(py, NativeAttr::WriteExecutionHeader)?.call((), Some(&header))?;
     Ok(())
 }
 
@@ -328,9 +319,9 @@ fn load_seeds<'py>(
         .map(|(index, name)| (name.clone(), index + 1))
         .collect();
     let event_writer: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "ExecutionEventWriter")?.call0()?;
+        registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
     let projector: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "current_native_progress_projector")?.call0()?;
+        registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
     let projector: Option<Py<PyAny>> = if projector.is_none() {
         None
     } else {
@@ -360,7 +351,7 @@ fn load_seeds<'py>(
         },
     )?;
     let connection_progress: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", invocation.getattr("adapter_name")?),
             ("stream", stream),
@@ -374,7 +365,7 @@ fn load_seeds<'py>(
     let relay: Bound<'py, SeedConnectionRelay> = connection_relay(&connection_progress)?;
     let loaded: PyResult<Vec<Bound<'py, PyAny>>> = (|| {
         call_with(
-            &imported(py, EXECUTOR_RUN_MODULE, "run_seed_pipeline")?,
+            &host::entry(py, ExecutorHost::RunSeedPipeline)?,
             &[
                 ("plan", plan),
                 (
@@ -416,7 +407,7 @@ fn load_seeds<'py>(
 #[pyo3(signature = (*, request))]
 fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> =
-        resolve_command_invocation(request, &imported(py, NATIVE_MODULE, "SeedInvocation")?)?;
+        resolve_command_invocation(request, &registry::class(py, RecordId::SeedInvocation)?)?;
     let pipeline: Bound<'_, PyAny> = compile_seeds(request, &invocation)?;
     let requested: Bound<'_, PyAny> = request.getattr("concurrency")?;
     let concurrency: i64 = if requested.is_none() {
@@ -456,14 +447,14 @@ fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
     )?;
     stream.call_method0("flush")?;
     let payload: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_seed_execution_json")?,
+        &registry::native(py, NativeAttr::FormatSeedExecutionJson)?,
         &[
             ("results", PyTuple::new(py, &results)?.into_any()),
             ("plan", pipeline.getattr("plan_output")?),
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "write_execution_json_output")?,
+        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
             ("json_output", request.getattr("json_output")?),

@@ -4,6 +4,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_phases::objects::{native, optional_text, text};
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyFloat, PyList, PyListMethods, PyTuple};
@@ -274,17 +276,16 @@ impl MigrationFingerprintCache {
         let metadata_json: String = args.value("metadata_json")?.extract()?;
         let ref_identities = &args.value("ref_identities")?;
         let dialect: Option<String> = args.value("dialect")?.extract()?;
-        let metadata_json: String =
-            imported(py, "sqlbuild._native", "without_declared_columns_hash")?
-                .call1((metadata_json,))?
-                .extract()?;
+        let metadata_json: String = registry::native(py, NativeAttr::WithoutDeclaredColumnsHash)?
+            .call1((metadata_json,))?
+            .extract()?;
         let definition = (query_sql.clone(), metadata_json.clone());
         let names = match self.ref_names.get(&definition) {
             Some(names) => names.clone(),
             None => {
                 let found = native(
                     py,
-                    "migration_fingerprint_ref_names",
+                    NativeAttr::MigrationFingerprintRefNames,
                     &[
                         ("query_sql", text(py, &query_sql)),
                         ("metadata_json", text(py, &metadata_json)),
@@ -320,7 +321,7 @@ impl MigrationFingerprintCache {
                 }
                 let computed: Option<String> = native(
                     py,
-                    "build_migration_fingerprint",
+                    NativeAttr::BuildMigrationFingerprint,
                     &[
                         ("query_sql", text(py, &key.0)),
                         ("metadata_json", text(py, &key.1)),

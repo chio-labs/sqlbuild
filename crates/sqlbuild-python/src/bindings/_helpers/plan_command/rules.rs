@@ -8,11 +8,9 @@ use pyo3::wrap_pyfunction;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULE_MODELS: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
 const LIST_ACTION: &str = "list";
 const SHOW_ACTION: &str = "show";
 const SKILLS_ACTION: &str = "skills";
@@ -52,7 +50,7 @@ fn run_skills(
     let py: Python<'_> = request.py();
     let check: bool = request.getattr("skills_check")?.is_truthy()?;
     let fresh: bool = call_with(
-        &imported(py, NATIVE_MODULE, "install_rules_skills")?,
+        &registry::native(py, NativeAttr::InstallRulesSkills)?,
         &[
             ("config", config.clone()),
             ("project_dir", project_dir.clone()),
@@ -130,7 +128,7 @@ fn show_rule(
         let rule: Bound<'_, PyAny> = rule?;
         if rule.getattr("code")?.extract::<String>()? == selector {
             let text: String = call_with(
-                &imported(py, NATIVE_MODULE, "format_rule")?,
+                &registry::native(py, NativeAttr::FormatRule)?,
                 &[("rule", rule), ("config", config.clone())],
             )?
             .extract()?;
@@ -156,13 +154,13 @@ fn rule_inputs<'py>(
 ) -> PyResult<RuleInputs<'py>> {
     let py: Python<'py> = request.py();
     let discovered: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
     let select: Bound<'py, PyAny> = request.getattr("select")?;
     let exclude: Bound<'py, PyAny> = request.getattr("exclude")?;
     call_with(
-        &imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
             ("select", select.clone()),
             ("exclude", exclude.clone()),
@@ -170,7 +168,7 @@ fn rule_inputs<'py>(
         ],
     )?;
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", discovered.getattr("project_config")?),
             ("local_config", discovered.getattr("local_config")?),
@@ -178,14 +176,14 @@ fn rule_inputs<'py>(
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
     let graph: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_project_graph")?,
+        &registry::native(py, NativeAttr::BuildProjectGraph)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("adapter", adapter.clone()),
         ],
     )?;
     let selected: Bound<'py, PyAny> = call_with(
-        &imported(py, GRAPH_SELECTION_MODULE, "select_project_graph")?,
+        &registry::native(py, NativeAttr::SelectProjectGraph)?,
         &[
             ("graph", graph.clone()),
             ("select", select),
@@ -232,7 +230,7 @@ fn run_rule_selection(
     replaced.set_item("ignore", PyTuple::empty(py))?;
     let dialect: Bound<'_, PyAny> = adapter.call_method0("sql_analysis_dialect")?;
     let result: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "run_rules")?,
+        &registry::native(py, NativeAttr::RunRules)?,
         &[
             ("graph", graph),
             ("discovered_inputs", discovered),
@@ -260,7 +258,7 @@ fn run_rule_selection(
         ],
     )?;
     let note: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_skipped_type_proof_rules")?,
+        &registry::native(py, NativeAttr::FormatSkippedTypeProofRules)?,
         &[("codes", result.getattr("skipped_type_proof_rules")?)],
     )?;
     if !note.is_none() {
@@ -271,11 +269,11 @@ fn run_rule_selection(
         fields.set_item(field, result.getattr(field)?)?;
     }
     let text: String = call_with(
-        &imported(py, NATIVE_MODULE, "format_rules_result")?,
+        &registry::native(py, NativeAttr::FormatRulesResult)?,
         &[
             (
                 "result",
-                imported(py, RULE_MODELS, "RulesResult")?.call((), Some(&fields))?,
+                registry::class(py, RecordId::RulesResult)?.call((), Some(&fields))?,
             ),
             ("json_output", request.getattr("json_output")?),
         ],
@@ -308,7 +306,7 @@ fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
     }
     .call_method0("resolve")?;
     let config: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "load_rules_config")?,
+        &registry::native(py, NativeAttr::LoadRulesConfig)?,
         &[("project_dir", project_dir.clone())],
     )?;
     let action: String = request.getattr("action")?.extract()?;
@@ -316,7 +314,7 @@ fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
         return run_skills(request, &config, &project_dir);
     }
     let catalogue: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_rule_catalogue")?,
+        &registry::native(py, NativeAttr::BuildRuleCatalogue)?,
         &[
             ("config", config.clone()),
             ("project_dir", project_dir.clone()),

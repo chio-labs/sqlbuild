@@ -9,14 +9,15 @@ use sqlbuild_core::cost_allocation::models::{
     AllocationStatus, CostQuery, PyDecimal, ResourceAllocation, RunAllocation, WarehouseKey,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cost_telemetry::values::{
-    COST_MODELS, COST_TYPES, instant_micros, native_decimal, python_decimal,
+    instant_micros, native_decimal, python_decimal,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const PENDING_MESSAGE: &str = "Snowflake query history is not complete yet.";
 
 /// One `QueryCostObservation` as a native query, in the run when its run ID matches.
@@ -63,7 +64,7 @@ fn resource_cost<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let decimal = |value: &PyDecimal| python_decimal(py, value);
     call_with(
-        &imported(py, NATIVE_RECORDS, "ResourceCost")?,
+        &registry::class(py, RecordId::ResourceCost)?,
         &[
             (
                 "resource_type",
@@ -115,7 +116,7 @@ pub(crate) fn summary_object<'py>(
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
         (
             "status",
-            imported(py, COST_TYPES, "CostStatus")?.getattr(state.status)?,
+            host::entry(py, ExecutorHost::CostStatus)?.getattr(state.status)?,
         ),
         ("usd_per_credit", usd_per_credit.clone()),
         ("rate_source", rate_source.clone()),
@@ -156,7 +157,7 @@ pub(crate) fn summary_object<'py>(
             ),
         ]);
     }
-    call_with(&imported(py, COST_MODELS, "RunCostSummary")?, &fields)
+    call_with(&host::entry(py, ExecutorHost::RunCostSummary)?, &fields)
 }
 
 /// The allocation that prices queries, or `None` while the run's history is pending.

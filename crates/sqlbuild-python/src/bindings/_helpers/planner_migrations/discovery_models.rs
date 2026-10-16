@@ -1,7 +1,11 @@
 //! Model ordering, selection and metadata at the migration discovery boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods};
 use sqlbuild_analysis::planner_migrations::main::discovery_order::discovery_order;
@@ -75,18 +79,14 @@ pub(super) fn metadata<'py>(
     let project = runtime.getattr("project")?;
     let functions = native(
         py,
-        "build_function_local_hashes",
+        NativeAttr::BuildFunctionLocalHashes,
         &[
             ("functions", project.getattr("functions")?),
             ("dialect", project.getattr("sql_analysis_dialect")?),
         ],
     )?;
-    let identities = imported(
-        py,
-        "sqlbuild.compiler.python_nodes.main._hook_identities",
-        "build_hook_identities",
-    )?
-    .call1((project.getattr("hook_functions")?,))?;
+    let identities = host::entry(py, UserCodeHost::BuildHookIdentities)?
+        .call1((project.getattr("hook_functions")?,))?;
     let hooks = PyDict::new(py);
     for pair in identities.call_method0("items")?.try_iter()? {
         let pair = pair?;
@@ -100,11 +100,7 @@ pub(super) fn metadata<'py>(
         result.set_item(
             item.getattr("name")?,
             call_with(
-                &imported(
-                    py,
-                    "sqlbuild._native",
-                    "build_model_version_identity_metadata_json",
-                )?,
+                &registry::native(py, NativeAttr::BuildModelVersionIdentityMetadataJson)?,
                 &[
                     ("model", item.clone()),
                     ("function_local_hashes", functions.clone()),

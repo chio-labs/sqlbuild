@@ -15,16 +15,13 @@ use sqlbuild_core::event_export::constants::DEFAULT_EVENT_EXPORT_SHUTDOWN_TIMEOU
 
 use crate::bindings::_helpers::cli::launch_state::withhold_launch_record;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const EVENT_DISPATCHER_MODULE: &str = "sqlbuild.runtime.observability.classes.event_dispatcher";
-const DISPATCHER_SCOPE_MODULE: &str = "sqlbuild.runtime.observability.main.dispatcher_scope";
-const IDENTITY_MODULE: &str = "sqlbuild.runtime.observability.main.current_execution_identity";
-const EXTENSIONS_MODULE: &str = "sqlbuild.compiler.discovery.main.runtime_extensions";
-const OUTPUT_CAPTURE_MODULE: &str =
-    "sqlbuild.runtime.output_capture.main.configured_output_capture_scope";
-const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const OBSERVABILITY_LOGGER: &str = "sqlbuild.cli.observability";
 const DEBUG_COMMAND: &str = "debug";
 const LINEAGE_COMMAND: &str = "lineage";
@@ -46,10 +43,7 @@ fn log_debug<'py>(
         ("message", PyString::new(py, message).into_any()),
     ];
     pairs.extend(fields.iter().cloned());
-    call_with(
-        &imported(py, DEBUG_EVENT_MODULE, "log_debug_event")?,
-        &pairs,
-    )?;
+    call_with(&host::entry(py, ExecutorHost::LogDebugEvent)?, &pairs)?;
     Ok(())
 }
 
@@ -329,7 +323,7 @@ impl Observed {
         let mut command_output_sinks: bool = false;
         if args.getattr("command")?.ne(LINEAGE_COMMAND)? {
             let extensions: Bound<'_, PyAny> = call_with(
-                &imported(py, EXTENSIONS_MODULE, "discover_runtime_extensions")?,
+                &host::entry(py, UserCodeHost::DiscoverRuntimeExtensions)?,
                 &[("project_dir", project_dir.clone())],
             )?;
             let event_exporters: Bound<'_, PyAny> = extensions.getattr("event_exporters")?;
@@ -346,7 +340,7 @@ impl Observed {
                 };
                 let timeout: Bound<'_, PyAny> = timeout.into_bound_py_any(py)?;
                 let delivery: Bound<'_, PyAny> = call_with(
-                    &imported(py, NATIVE_MODULE, "EventExporterDispatcher")?,
+                    &registry::native(py, NativeAttr::EventExporterDispatcher)?,
                     &[
                         ("shutdown_timeout_seconds", timeout),
                         (
@@ -360,7 +354,7 @@ impl Observed {
                     ],
                 )?;
                 let scope: Bound<'_, PyAny> = call_with(
-                    &imported(py, NATIVE_MODULE, "EventExporterCommandScope")?,
+                    &registry::native(py, NativeAttr::EventExporterCommandScope)?,
                     &[("dispatcher", delivery.clone())],
                 )?;
                 self.exporter_scope = Some(scope.clone().unbind());
@@ -380,11 +374,11 @@ impl Observed {
             }
         }
         self.enter(
-            imported(py, DISPATCHER_SCOPE_MODULE, "dispatcher_scope")?
-                .call1((self.dispatcher.bind(py),))?,
+            host::entry(py, ExecutorHost::DispatcherScope)?.call1((self.dispatcher.bind(py),))?,
         )?;
         self.enter(
-            imported(py, NATIVE_MODULE, "terminal_event_index_scope")?.call1((terminal_index,))?,
+            registry::native(py, NativeAttr::TerminalEventIndexScopeFunction)?
+                .call1((terminal_index,))?,
         )?;
         let Some(scope) = self
             .exporter_scope
@@ -393,12 +387,15 @@ impl Observed {
         else {
             return Ok(());
         };
-        self.enter(imported(py, NATIVE_MODULE, "event_exporter_command_scope")?.call1((&scope,))?)?;
+        self.enter(
+            registry::native(py, NativeAttr::EventExporterCommandScopeFunction)?
+                .call1((&scope,))?,
+        )?;
         let identity: Bound<'_, PyAny> =
-            imported(py, IDENTITY_MODULE, "current_execution_identity")?.call0()?;
+            host::entry(py, ExecutorHost::CurrentExecutionIdentity)?.call0()?;
         if !identity.is_none() && command_output_sinks {
             self.enter(call_with(
-                &imported(py, OUTPUT_CAPTURE_MODULE, "configured_output_capture_scope")?,
+                &host::entry(py, ExecutorHost::ConfiguredOutputCaptureScope)?,
                 &[
                     ("exporter_scope", scope),
                     ("identity", identity),
@@ -434,14 +431,14 @@ impl CliObservabilityScope {
     fn __enter__(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let args: &Bound<'_, PyAny> = self.args.bind(py);
         let dispatcher: Bound<'_, PyAny> = call_with(
-            &imported(py, EVENT_DISPATCHER_MODULE, "EventDispatcher")?,
+            &host::entry(py, ExecutorHost::EventDispatcher)?,
             &[(
                 "health_callback",
                 wrap_pyfunction!(log_dispatch_failure, py)?.into_any(),
             )],
         )?;
         let terminal_index: Bound<'_, PyAny> =
-            imported(py, NATIVE_MODULE, "TerminalEventIndex")?.call0()?;
+            registry::native(py, NativeAttr::TerminalEventIndex)?.call0()?;
         let subscribe = |subscriber: Bound<'_, PyAny>| -> PyResult<Py<PyAny>> {
             Ok(call_with(
                 &dispatcher.getattr("subscribe_lifecycle")?,
@@ -456,7 +453,7 @@ impl CliObservabilityScope {
             .unbind())
         };
         let unsubscribe_terminal_index: Py<PyAny> = subscribe(terminal_index.getattr("consume")?)?;
-        let machine_output: bool = imported(py, NATIVE_MODULE, "machine_output_mode")?
+        let machine_output: bool = registry::native(py, NativeAttr::MachineOutputMode)?
             .call1((args,))?
             .is_truthy()?;
         let debug: Bound<'_, PyAny> = args.getattr("debug")?;
@@ -466,7 +463,7 @@ impl CliObservabilityScope {
             && !args.getattr("no_color")?.is_truthy()?
             && stdout_supports_color(py)?;
         let projector: Bound<'_, PyAny> = call_with(
-            &imported(py, NATIVE_MODULE, "NativeProgressProjector")?,
+            &registry::native(py, NativeAttr::NativeProgressProjector)?,
             &[
                 (
                     "stream",

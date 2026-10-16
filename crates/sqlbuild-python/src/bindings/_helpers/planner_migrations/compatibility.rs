@@ -1,16 +1,14 @@
 //! Convert existing planner contracts for origin compatibility checks.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_migrations::main::compatibility_findings::compatibility_findings;
 use sqlbuild_analysis::planner_migrations::models::CompatibilityFinding;
-
-const TYPES_MODULE: &str = "sqlbuild._native";
 
 fn config(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
     model
@@ -40,13 +38,12 @@ fn blocking<'py>(
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "append_new_columns".to_owned())
     };
-    imported(
+    registry::class(
         py,
-        TYPES_MODULE,
         if snapshot {
-            "SnapshotSchemaChangePolicy"
+            RecordId::SnapshotSchemaChangePolicy
         } else {
-            "OnSchemaChange"
+            RecordId::OnSchemaChange
         },
     )?
     .call1((&policy,))?;
@@ -142,7 +139,7 @@ fn check_migration_compatibility<'py>(
     let columns = PyDict::new(py);
     columns.set_item(model.getattr("name")?, arguments.value("origin_columns")?)?;
     let snapshot = call_with(
-        &imported(py, "sqlbuild._native", "WarehouseSnapshot")?,
+        &registry::class(py, RecordId::WarehouseSnapshot)?,
         &[
             ("existing_relations", relations.into_any()),
             ("existing_columns", columns.into_any()),
@@ -150,7 +147,7 @@ fn check_migration_compatibility<'py>(
         ],
     )?;
     let change = call_with(
-        &imported(py, "sqlbuild._native", "detect_model_changes")?,
+        &registry::native(py, NativeAttr::DetectModelChanges)?,
         &[
             ("model", model.clone()),
             ("snapshot", snapshot),
@@ -205,9 +202,9 @@ fn result<'py>(
     status: &str,
     findings: Bound<'py, PyTuple>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let status = imported(py, "sqlbuild._native", "MigrationCompatibility")?.call1((status,))?;
+    let status = registry::class(py, RecordId::MigrationCompatibility)?.call1((status,))?;
     call_with(
-        &imported(py, "sqlbuild._native", "MigrationCompatibilityResult")?,
+        &registry::class(py, RecordId::MigrationCompatibilityResult)?,
         &[("status", status), ("findings", findings.into_any())],
     )
 }

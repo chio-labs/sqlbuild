@@ -6,35 +6,29 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::discovery::imported_modules::{
-    MODELS_MODULE, NATIVE_MODULE, ProjectDir, definition, discovered, discovery_error,
-    discovery_error_from, is_exception, module_functions, provider_by_name, provider_usages, shim,
-    tuple_of,
+    ProjectDir, definition, discovered, discovery_error, discovery_error_from, is_exception,
+    module_functions, provider_by_name, provider_usages, shim, tuple_of,
 };
 use crate::bindings::_helpers::discovery::imported_providers;
 
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PYTHON_NODE_ROOT;
-const NODE_ERROR: &str = "PythonNodeDiscoveryError";
-const AUDIT_CASE: (&str, &str) = ("sqlbuild.python_nodes.models", "AuditCase");
-const READ_FACTORY: (&str, &str) = (
-    "sqlbuild.python_nodes.main.read_factory_definition",
-    "read_factory_definition",
-);
-const READ_AUDIT_FACTORY: (&str, &str) = (
-    "sqlbuild.python_nodes.main.read_audit_factory_definition",
-    "read_audit_factory_definition",
-);
-const READ_HOOK: (&str, &str) = (
-    "sqlbuild.python_nodes.main.read_hook_definition",
-    "read_hook_definition",
-);
+const NODE_ERROR: ErrorId = ErrorId::PythonNodeDiscovery;
+const AUDIT_CASE: UserCodeHost = UserCodeHost::AuditCase;
+const READ_FACTORY: UserCodeHost = UserCodeHost::ReadFactoryDefinition;
+const READ_AUDIT_FACTORY: UserCodeHost = UserCodeHost::ReadAuditFactoryDefinition;
+const READ_HOOK: UserCodeHost = UserCodeHost::ReadHookDefinition;
 const NOT_A_NODE: &str = "that is not a SQLBuild task, asset, loader, or check";
 
 /// One Python-node kind: its reader, record class, bucket and copied definition fields.
 struct NodeKind {
-    reader: (&'static str, &'static str),
-    record: &'static str,
+    reader: UserCodeHost,
+    record: RecordId,
     bucket: usize,
     fields: &'static [&'static str],
 }
@@ -42,11 +36,8 @@ struct NodeKind {
 /// Readers in precedence order; the first matching definition decides the kind.
 const NODE_KINDS: [NodeKind; 4] = [
     NodeKind {
-        reader: (
-            "sqlbuild.python_nodes.main.read_loader_definition",
-            "read_loader_definition",
-        ),
-        record: "DiscoveredLoaderFunction",
+        reader: UserCodeHost::ReadLoaderDefinition,
+        record: RecordId::DiscoveredLoaderFunction,
         bucket: 0,
         fields: &[
             "depends_on",
@@ -60,11 +51,8 @@ const NODE_KINDS: [NodeKind; 4] = [
         ],
     },
     NodeKind {
-        reader: (
-            "sqlbuild.python_nodes.main.read_task_definition",
-            "read_task_definition",
-        ),
-        record: "DiscoveredTaskFunction",
+        reader: UserCodeHost::ReadTaskDefinition,
+        record: RecordId::DiscoveredTaskFunction,
         bucket: 1,
         fields: &[
             "depends_on",
@@ -76,11 +64,8 @@ const NODE_KINDS: [NodeKind; 4] = [
         ],
     },
     NodeKind {
-        reader: (
-            "sqlbuild.python_nodes.main.read_asset_definition",
-            "read_asset_definition",
-        ),
-        record: "DiscoveredAssetFunction",
+        reader: UserCodeHost::ReadAssetDefinition,
+        record: RecordId::DiscoveredAssetFunction,
         bucket: 2,
         fields: &[
             "depends_on",
@@ -94,11 +79,8 @@ const NODE_KINDS: [NodeKind; 4] = [
         ],
     },
     NodeKind {
-        reader: (
-            "sqlbuild.python_nodes.main.read_check_definition",
-            "read_check_definition",
-        ),
-        record: "DiscoveredCheckFunction",
+        reader: UserCodeHost::ReadCheckDefinition,
+        record: RecordId::DiscoveredCheckFunction,
         bucket: 3,
         fields: &[
             "depends_on",
@@ -191,10 +173,11 @@ impl<'py> Buckets<'py> {
                 ));
             }
             let cases: Vec<Bound<'py, PyAny>> = audit_cases(&function, (&name, &relative_text))?;
-            let line: Bound<'py, PyAny> = shim(py, "source_line")?.call1((&function,))?;
+            let line: Bound<'py, PyAny> =
+                shim(py, UserCodeHost::SourceLine)?.call1((&function,))?;
             let record: Bound<'py, PyAny> = discovered(
                 py,
-                "DiscoveredAuditFactory",
+                RecordId::DiscoveredAuditFactory,
                 &[
                     ("name", read.getattr("name")?),
                     ("function", function.clone()),
@@ -259,7 +242,7 @@ impl<'py> Buckets<'py> {
         let mut modules: Vec<ImportedModule<'py>> = Vec::new();
         for file_path in project.module_files(PYTHON_NODE_ROOT, false)? {
             let module: Bound<'py, PyAny> =
-                project.load("import_python_root_module", &file_path)?;
+                project.load(UserCodeHost::ImportPythonRootModule, &file_path)?;
             modules.push(ImportedModule { file_path, module });
         }
         let mut direct: HashMap<usize, Bound<'py, PyAny>> = HashMap::new();
@@ -293,7 +276,7 @@ fn node_definition_names(function: &Bound<'_, PyAny>) -> PyResult<Vec<&'static s
 }
 
 fn requires_arguments(function: &Bound<'_, PyAny>) -> PyResult<bool> {
-    shim(function.py(), "requires_arguments")?
+    shim(function.py(), UserCodeHost::RequiresArguments)?
         .call1((function,))?
         .is_truthy()
 }
@@ -338,7 +321,7 @@ fn audit_cases<'py>(
             ),
         ));
     }
-    let audit_case: Bound<'py, PyAny> = imported(py, AUDIT_CASE.0, AUDIT_CASE.1)?;
+    let audit_case: Bound<'py, PyAny> = host::entry(py, AUDIT_CASE)?;
     let mut cases: Vec<Bound<'py, PyAny>> = Vec::new();
     for (index, item) in result.try_iter()?.enumerate() {
         let item: Bound<'py, PyAny> = item?;
@@ -416,7 +399,7 @@ pub(crate) fn discover_python_node_functions<'py>(
     let node_root: Bound<'py, PyAny> = project.child(PYTHON_NODE_ROOT)?;
     if node_root.call_method0("is_dir")?.is_truthy()? {
         let saved: Bound<'py, PyAny> = call_with(
-            &shim(py, "install_python_root_package")?,
+            &shim(py, UserCodeHost::InstallPythonRootPackage)?,
             &[
                 ("node_root", node_root),
                 ("project_dir", project.path.clone()),
@@ -424,7 +407,7 @@ pub(crate) fn discover_python_node_functions<'py>(
         )?;
         let discovered_nodes: PyResult<()> = buckets.discover_nodes(&project, &providers);
         call_with(
-            &shim(py, "restore_python_root_modules")?,
+            &shim(py, UserCodeHost::RestorePythonRootModules)?,
             &[("saved_modules", saved)],
         )?;
         discovered_nodes?;
@@ -432,7 +415,7 @@ pub(crate) fn discover_python_node_functions<'py>(
     let [loaders, tasks, assets, checks] = buckets.nodes;
     discovered(
         py,
-        "DiscoveredPythonNodeFunctions",
+        RecordId::DiscoveredPythonNodeFunctions,
         &[
             ("loaders", tuple_of(py, loaders)?),
             ("tasks", tuple_of(py, tasks)?),
@@ -467,7 +450,7 @@ pub(crate) fn discover_hook_functions<'py>(
         None => PyDict::new(py),
     };
     let hook_files: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_python_hook_files")?,
+        &registry::native(py, NativeAttr::DiscoverPythonHookFiles)?,
         &[("project_dir", project.path.clone())],
     )?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -475,7 +458,8 @@ pub(crate) fn discover_hook_functions<'py>(
     for hook_file in hook_files.try_iter()? {
         let hook_file: Bound<'py, PyDict> = hook_file?.cast_into()?;
         let file_path: Bound<'py, PyAny> = hook_file.as_any().get_item("file_path")?;
-        let module: Bound<'py, PyAny> = project.load("load_python_node_module", &file_path)?;
+        let module: Bound<'py, PyAny> =
+            project.load(UserCodeHost::LoadPythonNodeModule, &file_path)?;
         for function in module_functions(&module)? {
             let Some(read) = definition(&function, READ_HOOK)? else {
                 continue;
@@ -504,7 +488,7 @@ pub(crate) fn discover_hook_functions<'py>(
                 arguments.set_item(field, value)?;
             }
             hooks.push(
-                imported(py, MODELS_MODULE, "DiscoveredHookFunction")?
+                registry::class(py, RecordId::DiscoveredHookFunction)?
                     .call((), Some(&arguments))?,
             );
         }
@@ -535,7 +519,7 @@ pub(crate) fn discover_materialization_files<'py>(
     let mut files: Vec<Bound<'py, PyAny>> = Vec::new();
     for file_path in project.module_files("materializations", false)? {
         let materialize: Bound<'py, PyAny> =
-            project.load("load_materialize_function", &file_path)?;
+            project.load(UserCodeHost::LoadMaterializeFunction, &file_path)?;
         let usages: Bound<'py, PyAny> = if materialize.is_none() {
             tuple_of(py, Vec::new())?
         } else {
@@ -543,7 +527,7 @@ pub(crate) fn discover_materialization_files<'py>(
         };
         files.push(discovered(
             py,
-            "DiscoveredMaterializationFile",
+            RecordId::DiscoveredMaterializationFile,
             &[
                 ("file_path", file_path.clone()),
                 ("relative_path", project.relative(&file_path)?),

@@ -4,13 +4,12 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::frontier::stage_capture::write_stage_capture;
-
-const FRONTIER_TYPES_MODULE: &str = "sqlbuild._native";
-const RUN_BRIDGE_MODULE: &str = "sqlbuild.compiler.macro_bridge.classes.macro_bridge";
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// Produce the frontier object for `until`, capturing it on request.
 #[pyfunction]
@@ -46,10 +45,10 @@ fn native_frontier<'py>(
         return native_stage.call0();
     }
     let inputs_stage: Bound<'py, PyAny> =
-        imported(py, FRONTIER_TYPES_MODULE, "CompilerStage")?.getattr("COMPILE_PROJECT_INPUTS")?;
+        registry::class(py, RecordId::CompilerStage)?.getattr("COMPILE_PROJECT_INPUTS")?;
     if until.is(&inputs_stage) {
         return call_with(
-            &imported(py, RUN_BRIDGE_MODULE, "run_with_macro_bridge")?,
+            &host::entry(py, UserCodeHost::RunWithMacroBridge)?,
             &[("stage", python_stage.clone())],
         );
     }

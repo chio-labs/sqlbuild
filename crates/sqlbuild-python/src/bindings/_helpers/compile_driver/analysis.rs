@@ -10,35 +10,26 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::RULE_FIX_AVAILABLE_NOTE;
 use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
 use crate::bindings::_helpers::rules::results::rules_progress;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const DISCOVER_MODULE: &str = "sqlbuild._native";
-const REJECT_SELECTORS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
-const SELECTED_GRAPH_MODULE: &str = "sqlbuild._native";
 const RICH_LINEAGE: &str = "rich";
 const FAST_LINEAGE: &str = "fast";
 const RICH_COLUMN_LINEAGE: &str = "RICH";
 const FAST_COLUMN_LINEAGE: &str = "FAST";
 
-const CONTRACTS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const SELECTION_MODULE: &str = "sqlbuild._native";
-const RULE_THREADS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
-const CLI_COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const TARGET_DIRECTORY: &str = "target";
 
 /// `ColumnLineageMode.<member>`.
 fn column_lineage_mode<'py>(py: Python<'py>, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, NATIVE_RECORDS_MODULE, "ColumnLineageMode")?.getattr(member)
+    registry::class(py, RecordId::ColumnLineageMode)?.getattr(member)
 }
 
 /// Column lineage in the compile's mode; `none` skips the analyzer.
@@ -55,7 +46,7 @@ fn compile_lineage<'py>(
     } else {
         return Ok(py.None().into_bound(py));
     };
-    imported(py, "sqlbuild._native", "build_project_column_lineage")?.call1((
+    registry::native(py, NativeAttr::BuildProjectColumnLineage)?.call1((
         graph.getattr("project")?,
         dialect,
         column_lineage_mode(py, member)?,
@@ -194,7 +185,7 @@ fn analyzed<'py>(
     let (lineage, lineage_ms): (Bound<'py, PyAny>, u64) = driver.lineage(&graph, &dialect)?;
     let contracts: ContractPhase<'py> = driver.contracts(&project, &dialect)?;
     let selected_keys: Bound<'py, PyAny> = call_with(
-        &imported(py, SELECTION_MODULE, "select_project_graph")?,
+        &registry::native(py, NativeAttr::SelectProjectGraph)?,
         &[
             ("graph", graph.clone()),
             ("select", driver.select.clone()),
@@ -223,7 +214,7 @@ fn analyzed<'py>(
     let diagnostics: Bound<'py, PyTuple> =
         with_rule_diagnostics(py, &core_diagnostics, &rules_result)?;
     call_with(
-        &imported(py, CLI_COMPILE_MODELS_MODULE, "CompileAnalysis")?,
+        &registry::class(py, RecordId::CompileAnalysis)?,
         &[
             ("discovered_inputs", discovered),
             ("adapter", adapter),
@@ -263,7 +254,7 @@ fn analyzed<'py>(
 fn empty_rules_result(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     let zero: Bound<'_, PyAny> = 0_i64.into_pyobject(py)?.into_any();
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "RulesRunResult")?,
+        &registry::class(py, RecordId::RulesRunResult)?,
         &[
             ("findings", PyTuple::empty(py).into_any()),
             ("evaluated_models", zero.clone()),
@@ -291,7 +282,7 @@ impl<'py> Driver<'_, 'py> {
             py.None().into_bound(py)
         };
         let discovered: Bound<'py, PyAny> = call_with(
-            &imported(py, DISCOVER_MODULE, "discover_project_inputs")?,
+            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
             &[
                 ("project_dir", self.options.project_dir.clone()),
                 ("extract_output_column_locations", false_value),
@@ -299,7 +290,7 @@ impl<'py> Driver<'_, 'py> {
             ],
         )?;
         call_with(
-            &imported(py, REJECT_SELECTORS_MODULE, "reject_unit_test_selectors")?,
+            &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
             &[
                 ("select", self.select.clone()),
                 ("exclude", self.exclude.clone()),
@@ -315,11 +306,7 @@ impl<'py> Driver<'_, 'py> {
     /// The adapter the project and local configuration select.
     fn adapter(&self, discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let adapter_name: Bound<'py, PyAny> = call_with(
-            &imported(
-                self.py,
-                ADAPTER_NAME_MODULE,
-                "resolve_effective_adapter_name",
-            )?,
+            &registry::native(self.py, NativeAttr::ResolveEffectiveAdapterName)?,
             &[
                 ("project_config", discovered.getattr("project_config")?),
                 ("local_config", discovered.getattr("local_config")?),
@@ -339,7 +326,7 @@ impl<'py> Driver<'_, 'py> {
         let started: Instant = Instant::now();
         self.status.start("Compiling project graph...")?;
         let lifecycle: Bound<'py, PyAny> = call_with(
-            &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+            &host::entry(py, ExecutorHost::OperationLifecycle)?,
             &[
                 ("operation_kind", PyString::new(py, "project").into_any()),
                 (
@@ -366,11 +353,7 @@ impl<'py> Driver<'_, 'py> {
         )?;
         let graph: Bound<'py, PyAny> = within(&lifecycle, |_| {
             call_with(
-                &imported(
-                    py,
-                    SELECTED_GRAPH_MODULE,
-                    "build_project_graph_with_analysis_selection",
-                )?,
+                &registry::native(py, NativeAttr::BuildProjectGraphWithAnalysisSelection)?,
                 &[
                     ("discovered_inputs", discovered.clone()),
                     ("adapter", adapter.clone()),
@@ -427,13 +410,13 @@ impl<'py> Driver<'_, 'py> {
             .is_truthy()?;
         let result: Bound<'py, PyAny> = if skip {
             call_with(
-                &imported(py, CONTRACT_MODELS_MODULE, "ContractValidationResult")?,
+                &registry::class(py, RecordId::ContractValidationResult)?,
                 &[("diagnostics", PyTuple::empty(py).into_any())],
             )?
         } else {
             self.status.start("Validating model contracts...")?;
             call_with(
-                &imported(py, CONTRACTS_MODULE, "evaluate_model_contracts")?,
+                &registry::native(py, NativeAttr::EvaluateModelContracts)?,
                 &[("project", project.clone()), ("dialect", dialect.clone())],
             )?
         };
@@ -492,7 +475,7 @@ impl<'py> Driver<'_, 'py> {
             py.None().into_bound(py)
         };
         let result: Bound<'py, PyAny> = call_with(
-            &imported(py, RULE_THREADS_MODULE, "evaluate_rules")?,
+            &registry::native(py, NativeAttr::EvaluateRules)?,
             &[
                 ("graph", graph.clone()),
                 ("discovered_inputs", discovered.clone()),
@@ -521,12 +504,11 @@ fn with_rule_diagnostics<'py>(
     core: &Bound<'py, PyTuple>,
     rules_result: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let diagnostic_class: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?;
+    let diagnostic_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let phase: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "DiagnosticPhase")?.getattr("RULE")?;
+        registry::class(py, RecordId::DiagnosticPhase)?.getattr("RULE")?;
     let severity: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "DiagnosticSeverity")?.getattr("ERROR")?;
+        registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?;
     let fix_note: Bound<'py, PyAny> = PyString::new(py, RULE_FIX_AVAILABLE_NOTE).into_any();
     let mut diagnostics: Vec<Bound<'py, PyAny>> = core.iter().collect();
     for fault in rules_result.getattr("findings")?.try_iter()? {

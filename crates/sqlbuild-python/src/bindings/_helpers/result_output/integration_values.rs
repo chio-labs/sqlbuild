@@ -9,17 +9,15 @@ use sqlbuild_core::integration_results::errors::IntegrationRecordError;
 use sqlbuild_core::integration_results::main::encode_integration_value::encode_integration_value;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const OBSERVABILITY_ERRORS: &str = "sqlbuild.runtime.observability.exceptions";
-const VALIDATION_ERROR: &str = "ObservabilityValidationError";
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
 /// A contract failure, or a Python failure while reading the values.
 pub(crate) type Checked<T> = PyResult<Result<T, IntegrationRecordError>>;
 
 /// The `ObservabilityValidationError` Python raised for the same contract failure.
 pub(crate) fn validation_error(py: Python<'_>, error: &IntegrationRecordError) -> PyErr {
-    match imported(py, OBSERVABILITY_ERRORS, VALIDATION_ERROR)
+    match host::entry(py, ExecutorHost::ObservabilityValidationError)
         .and_then(|class| class.call1((error.message.as_str(),)))
     {
         Ok(instance) => PyErr::from_value(instance),

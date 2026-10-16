@@ -1,15 +1,15 @@
 //! Existing source and load plan models materialised at the Python boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::graph::algorithms::closure;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_scope::loaders::intermediate_map;
-use crate::bindings::_helpers::planner_scope::values::MODELS;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyTuple};
 use pyo3::types::{PyDictMethods, PySetMethods};
 use sqlbuild_analysis::planner_scope::constants::SOURCE;
-
-const EXECUTION_TYPES: &str = "sqlbuild.runtime.contracts.types";
 
 #[pyfunction]
 #[pyo3(signature = (*, project, selected_keys, upstream_deps = None))]
@@ -55,8 +55,8 @@ pub(crate) fn build_source_load_entries<'py>(
     is_reload: bool,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py = execution_order.py();
-    let class = imported(py, MODELS, "SourceLoadPlanEntry")?;
-    let kinds = imported(py, EXECUTION_TYPES, "ExecutionResourceKind")?;
+    let class = registry::class(py, RecordId::SourceLoadPlanEntry)?;
+    let kinds = host::entry(py, ExecutorHost::ExecutionResourceKind)?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in execution_order.try_iter()? {
         let key = key?;

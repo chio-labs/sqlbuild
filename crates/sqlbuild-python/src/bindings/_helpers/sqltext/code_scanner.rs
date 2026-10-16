@@ -10,10 +10,9 @@ use sqlbuild_sqltext::code_scanner::main::scanner_non_code_end::scanner_non_code
 use sqlbuild_sqltext::code_scanner::models::CodeScanner;
 use sqlbuild_sqltext::sql_scan::models::Unclosed;
 
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
-
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_INPUT_ERROR: &str = "CompileInputError";
 
 /// One SQL text scanned under an adapter's lexical rules, or the generic compiler rules.
 #[pyclass(module = "sqlbuild._native", frozen)]
@@ -54,10 +53,8 @@ impl SqlCodeScanner {
         };
         let message: String = format!("{} contains an unclosed {construct}", self.context);
         let raised = || -> PyResult<PyErr> {
-            let error: Bound<'_, PyAny> = py
-                .import(COMPILE_ERRORS_MODULE)?
-                .getattr(COMPILE_INPUT_ERROR)?
-                .call1((message,))?;
+            let error: Bound<'_, PyAny> =
+                registry::error(py, ErrorId::CompileInput)?.call1((message,))?;
             Ok(PyErr::from_value(error))
         };
         raised().unwrap_or_else(|error| error)

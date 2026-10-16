@@ -1,18 +1,20 @@
 //! Materialize column decisions from native proofs and live evidence.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_candidates::declared_names;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     lower, model, native, replace,
 };
-use crate::bindings::_helpers::planner_migrations::constants::{AUTOMATIC, DONE, MIGRATION_TYPES};
+use crate::bindings::_helpers::planner_migrations::constants::{AUTOMATIC, DONE};
 use crate::bindings::_helpers::planner_migrations::models::{CheckedColumns, ColumnCandidate};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_column;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
 use sqlbuild_analysis::planner_migrations::main::column_decision::column_decision;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 pub(super) fn decide<'py>(
     runtime: &Bound<'py, PyAny>,
@@ -30,7 +32,7 @@ pub(super) fn decide<'py>(
     if !candidate.previous.is_none() && !candidate.current.is_none() {
         let detected = native(
             py,
-            "identical_renames",
+            NativeAttr::IdenticalRenames,
             &[
                 ("previous", candidate.previous.clone()),
                 ("current", candidate.current.clone()),
@@ -57,12 +59,8 @@ pub(super) fn decide<'py>(
             }
         }
     }
-    let relation = imported(
-        py,
-        "sqlbuild.executor.migrations._helpers.relation_for_location",
-        "migration_relation_for_location",
-    )?
-    .call1((candidate.model.getattr("destination")?,))?;
+    let relation = host::entry(py, ExecutorHost::MigrationRelationForLocation)?
+        .call1((candidate.model.getattr("destination")?,))?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for (origin_name, destination, discovery) in pairs {
         let origin_key = lower(&origin_name)?;
@@ -91,14 +89,14 @@ pub(super) fn decide<'py>(
             outputs.contains(&origin_key),
         );
         let decision =
-            imported(py, MIGRATION_TYPES, "ColumnMigrationDecision")?.call1((decision_name,))?;
+            registry::class(py, RecordId::ColumnMigrationDecision)?.call1((decision_name,))?;
         if discovery == AUTOMATIC && decision.getattr("blocks_build")?.is_truthy()? {
             continue;
         }
         let done = decision_name == DONE && !newest.is_none();
         entries.push(model(
             py,
-            "ColumnMigrationPlanEntry",
+            RecordId::ColumnMigrationPlanEntry,
             &[
                 ("model_name", candidate.model.getattr("name")?),
                 ("destination", candidate.model.getattr("destination")?),
@@ -113,8 +111,7 @@ pub(super) fn decide<'py>(
                 ("destination_column", destination),
                 (
                     "discovery",
-                    imported(py, NATIVE_RECORDS_MODULE, "MigrationDiscovery")?
-                        .call1((discovery,))?,
+                    registry::class(py, RecordId::MigrationDiscovery)?.call1((discovery,))?,
                 ),
                 ("decision", decision),
                 (
@@ -193,7 +190,7 @@ pub(super) fn checked<'py>(
                 &[
                     (
                         "decision",
-                        imported(py, MIGRATION_TYPES, "ColumnMigrationDecision")?
+                        registry::class(py, RecordId::ColumnMigrationDecision)?
                             .getattr("UNSUPPORTED")?,
                     ),
                     ("message", reason.clone()),
@@ -228,7 +225,7 @@ pub(super) fn hints<'py>(
     }
     native(
         py,
-        "rename_hints",
+        NativeAttr::RenameHints,
         &[
             ("model_name", candidate.model.getattr("name")?),
             ("previous", candidate.previous.clone()),

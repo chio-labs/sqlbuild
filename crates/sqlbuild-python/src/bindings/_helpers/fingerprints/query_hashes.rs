@@ -9,19 +9,16 @@ use sqlbuild_analysis::sql_tokens::main::normalized_query_text::normalized_query
 use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 /// `QueryFingerprintError(message)`, or the compiler error a native panic becomes.
 fn query_fingerprint_error(py: Python<'_>, message: String) -> PyErr {
     if is_compiler_panic(&message) {
         return compiler_error(message);
     }
-    match py
-        .import(EXCEPTIONS_MODULE)
-        .and_then(|module| module.getattr("QueryFingerprintError"))
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::QueryFingerprint).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

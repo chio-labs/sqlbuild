@@ -11,16 +11,17 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cost_report::main::format_cost_breakdown::format_cost_breakdown;
 use sqlbuild_core::cost_report::models::BreakdownOptions;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cost_report::records::cost_run;
 use crate::bindings::_helpers::cost_report::store;
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const LOGGER_NAME: &str = "sqlbuild.cli.commands._helpers.cost.collection";
 const COLLECTION_LOGGER_NAME: &str = "sqlbuild.cost";
-const COST_TYPES: &str = "sqlbuild.cost.types";
-const COST_MODELS: &str = "sqlbuild.cost.models";
 const DEFAULT_RATE_SOURCE: &str = "default";
 const CONFIGURED_RATE_SOURCE: &str = "configured";
 const STATEMENT_LEDGER_PATH: [&str; 4] = ["target", "executions", "", "statements.jsonl"];
@@ -162,7 +163,7 @@ fn cost_record<'py>(
         "had_executable_work",
         finalization.getattr("had_executable_work")?,
     ));
-    call_with(&imported(py, NATIVE_RECORDS, "CostRunRecord")?, &fields)
+    call_with(&registry::class(py, RecordId::CostRunRecord)?, &fields)
 }
 
 fn summary<'py>(
@@ -172,7 +173,7 @@ fn summary<'py>(
     message: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, COST_MODELS, "RunCostSummary")?,
+        &host::entry(py, ExecutorHost::RunCostSummary)?,
         &[
             ("status", status),
             ("usd_per_credit", config.getattr("usd_per_credit")?),
@@ -216,7 +217,7 @@ fn collection_failure<'py>(
         COLLECTION_LOGGER_NAME,
     )?;
     let status: Bound<'py, PyAny> =
-        imported(py, COST_TYPES, "CostStatus")?.getattr("COLLECTION_FAILED")?;
+        host::entry(py, ExecutorHost::CostStatus)?.getattr("COLLECTION_FAILED")?;
     let message: Bound<'py, PyAny> = PyString::new(
         py,
         &format!("Cost telemetry failed during {stage} ({error_type})."),
@@ -286,7 +287,7 @@ pub(crate) fn finalize_build_cost<'py>(
             return collection_failure(finalization, rate, "capability detection", &error);
         }
     };
-    if capability.eq(imported(py, COST_TYPES, "CostCapability")?.getattr("NONE")?)? {
+    if capability.eq(host::entry(py, ExecutorHost::CostCapability)?.getattr("NONE")?)? {
         return Ok(py.None().into_bound(py));
     }
     let cost: Bound<'py, PyAny> = if finalization.getattr("collect")?.is_truthy()? {

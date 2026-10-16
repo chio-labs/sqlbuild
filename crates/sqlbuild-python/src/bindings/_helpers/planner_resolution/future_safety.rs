@@ -1,12 +1,12 @@
 //! Future cursor safety evidence and exception boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::planner_resolution::cursor_safety::{
-    MODELS, horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
+    horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -96,7 +96,7 @@ fn resolve_future_cursor_safety<'py>(
     if config.getattr("action")?.eq("error")? {
         return Err(safety_error(
             py,
-            "FutureCursorSafetyError",
+            ErrorId::FutureCursorSafety,
             &format!(
                 "future cursor safety limit exceeded: effective bounds ['{}', '{}') exceed maximum allowed bounds ['{}', '{}') (cursors.future.max_distance={})",
                 session.checked(render(&typed_start, &session))?,
@@ -120,14 +120,14 @@ fn resolve_future_cursor_safety<'py>(
         }
     };
     let safety = call_with(
-        &imported(py, MODELS, "FutureCursorSafetyEvidence")?,
+        &registry::class(py, RecordId::FutureCursorSafetyEvidence)?,
         &[
             ("action", config.getattr("action")?),
             ("max_distance", distance),
             (
                 "invocation_time",
                 call_with(
-                    &imported(py, "sqlbuild._native", "TimestampValue")?,
+                    &registry::class(py, RecordId::TimestampValue)?,
                     &[("value", utc_clock(&clock)?)],
                 )?,
             ),

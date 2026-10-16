@@ -13,23 +13,23 @@ use sqlbuild_core::scenario_command::models::{
     ScenarioNamespace, ScenarioTestFlags, SqlAnalysisCommand,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
 use crate::bindings::_helpers::scenario_command::presentation::{
     CompletionKind, SectionStatus, activity, begin_section, connection_hooks, progress_relay,
     write_completion,
 };
 use crate::bindings::_helpers::scenario_command::setup::{
-    CompileInputs, NATIVE_MODULE, ScenarioProject, boolean, cli_user_error, compile,
-    discover_project, flush, int, optional_text, project_adapter_name, project_connection_config,
-    require_capture_dialect, require_sql_analysis, resolve_adapter, selected_scenarios, style,
-    text, write, write_headers,
+    CompileInputs, ScenarioProject, boolean, cli_user_error, compile, discover_project, flush, int,
+    optional_text, project_adapter_name, project_connection_config, require_capture_dialect,
+    require_sql_analysis, resolve_adapter, selected_scenarios, style, text, write, write_headers,
 };
 use crate::bindings::_helpers::scenario_command::snapshot_sync::{LocalSync, sync_local_snapshots};
 
-const EFFECTIVE_SETTINGS_MODULE: &str = "sqlbuild._native";
-const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
-const SCENARIO_MODELS: &str = "sqlbuild.executor.scenario.models";
 const LOCAL_ADAPTER: &str = "duckdb";
 const LOCAL_STATUSES: [&str; 4] = ["PASS", "FAIL", "ERROR", "SKIP"];
 const TARGET_DIR: &str = "target";
@@ -96,11 +96,7 @@ fn prepare<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<TestRu
     let requested: Bound<'py, PyAny> = request.getattr("concurrency")?;
     let concurrency: i64 = if requested.is_none() {
         call_with(
-            &imported(
-                py,
-                EFFECTIVE_SETTINGS_MODULE,
-                "build_effective_settings_config",
-            )?,
+            &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
             &[("discovered_inputs", project.discovered.clone())],
         )?
         .getattr("concurrency")?
@@ -150,7 +146,7 @@ fn finish(
     write_completion(&run.stream, (&run.project.namespace, succeeded))?;
     let namespace: &ScenarioNamespace = &run.project.namespace;
     let payload: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "format_scenario_execution_json")?,
+        &registry::native(py, NativeAttr::FormatScenarioExecutionJson)?,
         &[
             ("results", results.clone().into_any()),
             ("local", boolean(py, run.local)),
@@ -166,7 +162,7 @@ fn finish(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "write_execution_json_output")?,
+        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
             ("json_output", request.getattr("json_output")?),
@@ -231,9 +227,9 @@ fn run_scenarios(
             relay.getattr("on_scenario_complete")?,
         ),
     ];
-    let runner: &str = if run.local {
+    let runner: ExecutorHost = if run.local {
         let replay_source: Bound<'_, PyAny> = call_with(
-            &imported(py, SCENARIO_MODELS, "ScenarioLocalReplaySource")?,
+            &host::entry(py, ExecutorHost::ScenarioLocalReplaySource)?,
             &[
                 (
                     "lexical_syntax",
@@ -248,7 +244,7 @@ fn run_scenarios(
             ("strict", request.getattr("strict")?),
             ("replay_source", replay_source),
         ]);
-        "run_scenario_local_test_pipeline"
+        ExecutorHost::RunScenarioLocalTestPipeline
     } else {
         arguments.extend([
             ("connection_config", run.connection_config.clone()),
@@ -259,11 +255,11 @@ fn run_scenarios(
                 connection_hooks(&run.stream, (&run.adapter_name, run.style))?,
             ),
         ]);
-        "run_scenario_test_pipeline"
+        ExecutorHost::RunScenarioTestPipeline
     };
     let results: Bound<'_, PyTuple> = PyTuple::new(
         py,
-        call_with(&imported(py, EXECUTOR_RUN_MODULE, runner)?, &arguments)?
+        call_with(&host::entry(py, runner)?, &arguments)?
             .try_iter()?
             .collect::<PyResult<Vec<_>>>()?,
     )?;

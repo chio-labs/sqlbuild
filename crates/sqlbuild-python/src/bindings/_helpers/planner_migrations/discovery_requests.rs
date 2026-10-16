@@ -1,11 +1,13 @@
 //! Live candidate inspection and automatic request materialization.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::column_objects::config;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::discovery_events::{
     identity, key, newest, relation,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PySet, PySetMethods, PyString,
@@ -140,13 +142,12 @@ pub(super) fn automatic<'py>(
         if let Some((location, origin_model)) = origin {
             requests.push(native(
                 py,
-                "ModelMigrationRequest",
+                RecordId::ModelMigrationRequest,
                 &[
                     ("model", item.clone()),
                     (
                         "discovery",
-                        imported(py, "sqlbuild._native", "MigrationDiscovery")?
-                            .getattr("AUTOMATIC")?,
+                        registry::class(py, RecordId::MigrationDiscovery)?.getattr("AUTOMATIC")?,
                     ),
                     ("origin_location", location),
                     ("origin_model", origin_model),
@@ -180,9 +181,9 @@ pub(super) fn warnings<'py>(
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for (name, detail) in ambiguous {
         if selected.contains(&name)? {
-            warnings.push(native(py, "PlanWarning", &[
+            warnings.push(native(py, RecordId::PlanWarning, &[
                 ("model_name", PyString::new(py, &name).into_any()),
-                ("severity", imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?),
+                ("severity", registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?),
                 ("message", PyString::new(py, &format!("'{name}' matches {detail}; no automatic migration was inferred. Add migrate_from to choose one.")).into_any()),
                 ("code", PyString::new(py, "M107").into_any()),
             ])?);

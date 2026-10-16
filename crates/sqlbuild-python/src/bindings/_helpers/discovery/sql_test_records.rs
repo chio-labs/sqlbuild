@@ -27,10 +27,11 @@ use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::discovery::sql_test_blocks::{
     sql_test_block_records, validate_block_names,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::NativeProjectTree;
 
-const MODELS_MODULE: &str = "sqlbuild._native";
 const SQL_TESTS_OWNERSHIP_ROOT: &str = "tests/unit";
 const SQL_SCENARIOS_OWNERSHIP_ROOT: &str = "tests/scenarios";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -127,7 +128,7 @@ fn test_file<'py>(
     let (file_path, relative_path) = paths;
     let py: Python<'py> = file_path.py();
     call_with(
-        &imported(py, MODELS_MODULE, "DiscoveredSqlTestFile")?,
+        &registry::class(py, RecordId::DiscoveredSqlTestFile)?,
         &[
             ("file_path", file_path.clone()),
             ("relative_path", relative_path.clone()),
@@ -180,7 +181,7 @@ fn scenario_file<'py>(
         ));
     }
     call_with(
-        &imported(py, MODELS_MODULE, "DiscoveredSqlScenarioFile")?,
+        &registry::class(py, RecordId::DiscoveredSqlScenarioFile)?,
         &[
             ("file_path", file_path.clone()),
             ("relative_path", relative_path.clone()),

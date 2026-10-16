@@ -1,17 +1,16 @@
 //! Old-name planner object conversions and existing native helper calls.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, model};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::old_name_retention;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 
 pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    imported(
-        location.py(),
-        "sqlbuild.executor.migrations._helpers.relation_for_location",
-        "migration_relation_for_location",
-    )?
-    .call1((location,))
+    host::entry(location.py(), ExecutorHost::MigrationRelationForLocation)?.call1((location,))
 }
 
 pub(super) fn location<'py>(
@@ -31,7 +30,7 @@ pub(super) fn location<'py>(
     )?;
     fields.push(("qualified_name", qualified));
     call_with(
-        &imported(runtime.py(), "sqlbuild._native", "CompiledRelationLocation")?,
+        &registry::class(runtime.py(), RecordId::CompiledRelationLocation)?,
         &fields,
     )
 }
@@ -53,7 +52,7 @@ pub(super) fn expires<'py>(
     now: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let duration =
-        imported(now.py(), "sqlbuild._native", "Duration")?.call_method1("parse", (retention,))?;
+        registry::class(now.py(), RecordId::Duration)?.call_method1("parse", (retention,))?;
     if duration.is_none() {
         Ok(now.py().None().into_bound(now.py()))
     } else {
@@ -81,7 +80,7 @@ pub(super) fn recorded_view<'py>(
     }
     model(
         py,
-        "OldNameView",
+        RecordId::OldNameView,
         &[
             ("destination_model", movement.getattr("destination_model")?),
             ("old", location(runtime, &history.getattr("old")?)?),

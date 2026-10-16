@@ -24,6 +24,7 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, archive_timestamp, days, folded_schema, optional, record,
     relation_age_timestamp, sorted_schemas, text, timestamp_fields, tuple, utc_datetime,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::planner_scenario::artifacts::is_scenario_artifact_physical_name;
 use crate::bindings::_helpers::relation_naming::fitting::shared_error;
 
@@ -53,7 +54,7 @@ impl<'py> Candidate<'py> {
         let py: Python<'py> = self.relation.py();
         record(
             py,
-            "JanitorDeleteCandidate",
+            ExecutorHost::JanitorDeleteCandidate,
             &[
                 ("key", self.key.to_python(py)?),
                 ("relation", self.relation.clone()),
@@ -292,7 +293,7 @@ pub(crate) fn classify_target_schemas<'py>(
             }
             result.skipped_schemas.push(record(
                 py,
-                "JanitorSkippedSchema",
+                ExecutorHost::JanitorSkippedSchema,
                 &[
                     ("database", optional(py, schema_key.0.as_deref())?),
                     ("schema", optional(py, schema_key.1.as_deref())?),
@@ -344,7 +345,7 @@ fn archived_relation<'py>(
     if let Some(original_key) = original_key {
         pairs.push(("original_key", original_key.to_python(py)?));
     }
-    record(py, "JanitorArchivedRelation", &pairs)
+    record(py, ExecutorHost::JanitorArchivedRelation, &pairs)
 }
 
 fn blocked_record<'py>(
@@ -368,7 +369,7 @@ fn blocked_record<'py>(
         .unwrap_or_default();
     record(
         py,
-        "JanitorBlockedSchema",
+        ExecutorHost::JanitorBlockedSchema,
         &[
             ("database", optional(py, schema.schema.0.as_deref())?),
             ("schema", optional(py, schema.schema.1.as_deref())?),
@@ -408,7 +409,7 @@ fn archive_candidate<'py>(
     };
     let record = record(
         py,
-        "JanitorArchiveCandidate",
+        ExecutorHost::JanitorArchiveCandidate,
         &[
             ("key", candidate.key.to_python(py)?),
             ("relation", candidate.relation.clone()),

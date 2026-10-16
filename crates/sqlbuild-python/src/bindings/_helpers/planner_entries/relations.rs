@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_entries::values::{native, none, planner_model};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -17,7 +18,7 @@ fn selected_audit_relation_keys<'py>(
         let audit = audit?;
         if native(
             py,
-            "audit_is_selected",
+            NativeAttr::AuditIsSelected,
             &[
                 ("audit", audit.clone()),
                 ("selected_keys", selected_keys.clone()),
@@ -60,7 +61,7 @@ fn source_warehouse_columns<'py>(
     )?;
     let gathered = native(
         py,
-        "gather_source_inspection",
+        NativeAttr::GatherSourceInspection,
         &[
             ("project", project.clone()),
             ("adapter", adapter.clone()),
@@ -82,7 +83,7 @@ pub(crate) fn planner_relations_context<'py>(
     let scope = args.value("scope")?;
     let deferral = args.value("deferral")?;
     let deferral = if deferral.is_none() {
-        planner_model(py, "DeferralInputs", &[])?
+        planner_model(py, RecordId::DeferralInputs, &[])?
     } else {
         deferral
     };
@@ -91,24 +92,24 @@ pub(crate) fn planner_relations_context<'py>(
     let selected_keys = scope.getattr("selected_keys")?;
     let mut model_locations = native(
         py,
-        "build_model_locations",
+        NativeAttr::BuildModelLocations,
         &[("models", project.getattr("models")?)],
     )?;
     let mut seed_locations = native(
         py,
-        "build_seed_locations",
+        NativeAttr::BuildSeedLocations,
         &[("seeds", project.getattr("seeds")?)],
     )?;
     let function_locations = native(
         py,
-        "build_function_locations",
+        NativeAttr::BuildFunctionLocations,
         &[("functions", project.getattr("functions")?)],
     )?;
     let deferred_locations = deferral.getattr("deferred_locations")?;
     if !deferred_locations.is_none() {
         let applied = native(
             py,
-            "apply_deferred_locations",
+            NativeAttr::ApplyDeferredLocations,
             &[
                 ("model_locations", model_locations),
                 ("seed_locations", seed_locations),
@@ -128,7 +129,7 @@ pub(crate) fn planner_relations_context<'py>(
     };
     let source_map = native(
         py,
-        "build_source_load_map",
+        NativeAttr::BuildSourceLoadMap,
         &[
             ("project", project.clone()),
             ("selected_keys", load_keys),
@@ -158,12 +159,12 @@ pub(crate) fn planner_relations_context<'py>(
         if let Some(names) = names {
             pairs.push(("read_source_names", names));
         }
-        native(py, "build_source_read_map", &pairs)
+        native(py, NativeAttr::BuildSourceReadMap, &pairs)
     };
     let source_read_map = read_map(&source_map, None)?;
     let python_source_map = native(
         py,
-        "with_declared_source_reads",
+        NativeAttr::WithDeclaredSourceReads,
         &[
             ("project", project.clone()),
             ("source_map", source_map.clone()),
@@ -185,7 +186,7 @@ pub(crate) fn planner_relations_context<'py>(
     )?;
     let semantic_columns = native(
         py,
-        "get_semantic_source_columns",
+        NativeAttr::GetSemanticSourceColumns,
         &[
             ("project", project.clone()),
             ("adapter", adapter.clone()),
@@ -197,7 +198,7 @@ pub(crate) fn planner_relations_context<'py>(
     )?;
     planner_model(
         py,
-        "PlannerRelationsContext",
+        RecordId::PlannerRelationsContext,
         &[
             ("model_locations", model_locations),
             ("seed_locations", seed_locations),

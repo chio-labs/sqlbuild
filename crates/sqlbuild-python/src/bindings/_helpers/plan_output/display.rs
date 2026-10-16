@@ -23,10 +23,9 @@ use crate::bindings::_helpers::cursor::scalars::{
     render_value, to_exclusive, to_inclusive, try_parse,
 };
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const PLANNER_TYPES: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild._native";
-const CURSOR_MODELS: &str = "sqlbuild._native";
 const DATETIME_MODULE: &str = "datetime";
 
 fn label_facts(entry: &Bound<'_, PyAny>) -> PyResult<ModelLabelFacts> {
@@ -70,7 +69,7 @@ fn cursor_typing<'py>(
     } else {
         PyString::new(py, DEFAULT_CURSOR_GRAIN).into_any()
     };
-    let grain: Bound<'py, PyAny> = imported(py, PLANNER_TYPES, "CursorGrain")?.call1((grain,))?;
+    let grain: Bound<'py, PyAny> = registry::class(py, RecordId::CursorGrain)?.call1((grain,))?;
     Ok((effective, grain))
 }
 
@@ -110,7 +109,7 @@ fn resolve_bounded_cursor_override<'py>(
         return Ok(None);
     };
     call_with(
-        &imported(py, PLANNER_MODELS, "CursorBounds")?,
+        &registry::class(py, RecordId::CursorBounds)?,
         &[("start", start), ("end", to_exclusive(&end, &grain)?)],
     )
     .map(Some)
@@ -216,7 +215,7 @@ pub(crate) fn resolve_effective_microbatch_batch_size(
     effective_grain: &str,
 ) -> Result<String, PyErr> {
     effective_microbatch_batch_size(batch_size, effective_grain).map_err(|error| {
-        imported(py, PLANNER_TYPES, "CursorGrain")
+        registry::class(py, RecordId::CursorGrain)
             .and_then(|grain| grain.call1((error.0,)))
             .err()
             .unwrap_or_else(|| PyValueError::new_err("unknown cursor grain"))
@@ -226,7 +225,7 @@ pub(crate) fn resolve_effective_microbatch_batch_size(
 fn as_datetime<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     let inner: Bound<'py, PyAny> = value.getattr("value")?;
-    if value.is_instance(&imported(py, CURSOR_MODELS, "TimestampValue")?)? {
+    if value.is_instance(&registry::class(py, RecordId::TimestampValue)?)? {
         return Ok(inner);
     }
     let datetime: Bound<'py, PyAny> = imported(py, DATETIME_MODULE, "datetime")?;

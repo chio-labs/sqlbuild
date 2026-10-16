@@ -12,17 +12,19 @@ use sqlbuild_analysis::planner_strategy::models::{CursorType, CursorTypeCheck};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_changes::results::planner_enum;
 use crate::bindings::_helpers::planner_strategy::values::{optional_string, plan_warning, text};
+use crate::bindings::_helpers::records::ids::RecordId;
 
-const DEBUG_EVENT_MODULE: &str = "sqlbuild.diagnostics.main.log_debug_event";
 const PLANNER_LOGGER: &str = "sqlbuild.planner";
 
 /// Log the Polyglot parse error that left a warehouse type unclassified.
 fn log_parse_failure(py: Python<'_>, failure: &TypeParseFailure) -> PyResult<()> {
     let text = |value: &str| PyString::new(py, value).into_any();
     call_with(
-        &imported(py, DEBUG_EVENT_MODULE, "log_debug_event")?,
+        &host::entry(py, ExecutorHost::LogDebugEvent)?,
         &[
             (
                 "logger",
@@ -59,7 +61,7 @@ fn classify_cursor_sql_type<'py>(
                 CursorType::Timestamp => "timestamp",
                 CursorType::Integer => "integer",
             };
-            planner_enum(py, "CursorType", value)
+            planner_enum(py, RecordId::CursorType, value)
         })
         .transpose()
 }

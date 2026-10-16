@@ -13,12 +13,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const PYTHON_NODE_TYPES_MODULE: &str = "sqlbuild.compiler.python_nodes.types";
-const REF_TYPES_MODULE: &str = "sqlbuild.python_nodes.types";
 const SKIPPED_UPSTREAM_CODE: &str = "P501";
 
 /// The Python node kinds and plan phases entries are built from.
@@ -29,7 +28,7 @@ struct NodeKinds<'py> {
 
 impl<'py> NodeKinds<'py> {
     fn load(py: Python<'py>) -> PyResult<Self> {
-        let kinds: Bound<'py, PyAny> = imported(py, PYTHON_NODE_TYPES_MODULE, "PythonNodeKind")?;
+        let kinds: Bound<'py, PyAny> = host::entry(py, UserCodeHost::PythonNodeKind)?;
         Ok(Self {
             task: kinds.getattr("TASK")?,
             asset: kinds.getattr("ASSET")?,
@@ -86,7 +85,7 @@ fn python_read_source_names_for<'py>(
     }
     let graph: Bound<'py, PyAny> = node_graph(&arguments.value("discovered_inputs")?)?;
     let source: Bound<'py, PyAny> =
-        imported(py, REF_TYPES_MODULE, "SqlResourceRefKind")?.getattr("SOURCE")?;
+        host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
     for reference in call_with(
         &graph.getattr("selected_sql_refs")?,
@@ -123,7 +122,7 @@ fn build_python_run_plan_outputs<'py>(
             &[],
         ),
     )?;
-    let outputs: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PythonRunPlanOutputs")?;
+    let outputs: Bound<'py, PyAny> = registry::class(py, RecordId::PythonRunPlanOutputs)?;
     let plan_output: Bound<'py, PyAny> = arguments.value("plan_output")?;
     let run_selection: Bound<'py, PyAny> = arguments.value("run_selection")?;
     let selected: Bound<'py, PyAny> = arguments.value("selected_python_node_names")?;
@@ -156,14 +155,14 @@ fn build_python_run_plan_outputs<'py>(
         )?),
     )?;
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "PythonSqlRunSelection")?,
+        &registry::class(py, RecordId::PythonSqlRunSelection)?,
         &[
             ("sql_keys", plan_output.getattr("selected_keys")?),
             ("python_node_names", selected.clone()),
         ],
     )?;
     let lifecycle: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_python_sql_run_lifecycle")?,
+        &registry::native(py, NativeAttr::BuildPythonSqlRunLifecycle)?,
         &[("selection", selection), ("python_graph", graph.clone())],
     )?;
     let entries: Bound<'py, PyTuple> = plan_entries(
@@ -217,8 +216,8 @@ fn plan_entries<'py>(
     previous_identities: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = lifecycle.py();
-    let phases: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PythonRunPhase")?;
-    let entry_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PythonPlanEntry")?;
+    let phases: Bound<'py, PyAny> = registry::class(py, RecordId::PythonRunPhase)?;
+    let entry_class: Bound<'py, PyAny> = registry::class(py, RecordId::PythonPlanEntry)?;
     let upstream: HashMap<String, Vec<String>> = upstream_names(graph)?;
     let nodes: Bound<'py, PyAny> = graph.getattr("nodes_by_name")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -304,7 +303,7 @@ fn identity_status<'py>(
     previous_identities: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let statuses: Bound<'py, PyAny> =
-        imported(identity.py(), NATIVE_RECORDS_MODULE, "PythonIdentityStatus")?;
+        registry::class(identity.py(), RecordId::PythonIdentityStatus)?;
     if identity.is_none() {
         return statuses.getattr("UNKNOWN");
     }
@@ -339,9 +338,9 @@ fn skipped_ingress_warnings<'py>(
     let nodes: Bound<'py, PyAny> = graph.getattr("nodes_by_name")?;
     let selected: Bound<'py, PyAny> = run_selection.getattr("python_node_names")?;
     let upstream: HashMap<String, Vec<String>> = upstream_names(graph)?;
-    let warning_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "PlanWarning")?;
+    let warning_class: Bound<'py, PyAny> = registry::class(py, RecordId::PlanWarning)?;
     let severity: Bound<'py, PyAny> =
-        imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?;
+        registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?;
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for loader in loaders {
         if !nodes.contains(loader.as_str())? {

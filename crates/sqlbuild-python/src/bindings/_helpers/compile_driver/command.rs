@@ -25,12 +25,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
 const BYPASS_OUTCOME: &str = "bypass";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 
 /// What one full compile reports for reuse recording.
 struct CommandOutcome<'py> {
@@ -152,11 +151,11 @@ fn recorded_compile<'py>(
     let compiled: PyResult<(CommandOutcome<'py>, Bound<'py, PyAny>, Bound<'py, PyAny>)> =
         collect_compile_timings(|detailed_timings| {
             within(
-                &imported(py, NATIVE_MODULE, "record_compile_input_reads")?.call0()?,
+                &registry::native(py, NativeAttr::RecordCompileInputReads)?.call0()?,
                 |input_reads| {
                     let artifact_writes: Py<CompileArtifactWrites> = new_artifact_recorder(py)?;
                     let manager: Bound<'py, PyAny> = call_with(
-                        &imported(py, NATIVE_MODULE, "PreparedCompileArtifacts")?,
+                        &registry::native(py, NativeAttr::PreparedCompileArtifacts)?,
                         &[
                             (
                                 "enabled",
@@ -194,7 +193,7 @@ fn recorded_compile<'py>(
     close_status(status)?;
     let (outcome, input_reads, artifact_writes) = compiled?;
     let stored: PyResult<Bound<'py, PyAny>> = call_with(
-        &imported(py, NATIVE_MODULE, "write_reusable_compile")?,
+        &registry::native(py, NativeAttr::WriteReusableCompile)?,
         &[
             ("attempt", attempt.clone()),
             ("output", output.clone()),
@@ -331,7 +330,7 @@ fn analysis_options<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = request.py();
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
+        &registry::class(py, RecordId::CompileAnalysisSelection)?,
         &[
             ("select", request.getattr("select")?),
             ("exclude", request.getattr("exclude")?),
@@ -358,7 +357,7 @@ fn analysis_options<'py>(
 fn rules_failed(analysis: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = analysis.py();
     let rule_phase: Bound<'_, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "DiagnosticPhase")?.getattr("RULE")?;
+        registry::class(py, RecordId::DiagnosticPhase)?.getattr("RULE")?;
     for diagnostic in analysis.getattr("diagnostics")?.try_iter()? {
         let diagnostic: Bound<'_, PyAny> = diagnostic?;
         if diagnostic.getattr("is_error")?.is_truthy()?

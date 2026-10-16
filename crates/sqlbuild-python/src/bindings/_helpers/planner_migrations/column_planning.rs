@@ -1,11 +1,11 @@
 //! Host column migration planning while Python owns warehouse inspection.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::replace;
 use crate::bindings::_helpers::planner_migrations::known_input_columns::KnownInputColumns;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -43,14 +43,18 @@ fn plan_column_migrations<'py>(
         &adapter.call_method0("sql_analysis_dialect")?,
     )?;
     if candidates.is_empty() {
-        return native(py, "ColumnMigrationPlanning", &[("snapshot", snapshot)]);
+        return native(
+            py,
+            RecordId::ColumnMigrationPlanning,
+            &[("snapshot", snapshot)],
+        );
     }
     let database = call_with(
-        &imported(py, "sqlbuild._native", "migration_planning_database")?,
+        &registry::native(py, NativeAttr::MigrationPlanningDatabase)?,
         &[("runtime", runtime.clone())],
     )?;
     let state = call_with(
-        &imported(py, "sqlbuild._native", "MigrationStateInspection")?,
+        &registry::native(py, NativeAttr::MigrationStateInspection)?,
         &[
             ("adapter", adapter),
             ("connection", runtime.getattr("connection")?),
@@ -97,7 +101,7 @@ fn plan_column_migrations<'py>(
         warnings.extend(checked.warnings);
     }
     let policy = call_with(
-        &imported(py, "sqlbuild._native", "migration_missing_origin_policy")?,
+        &registry::native(py, NativeAttr::MigrationMissingOriginPolicy)?,
         &[("runtime", runtime)],
     )?;
     for entry in &mut entries {
@@ -110,7 +114,7 @@ fn plan_column_migrations<'py>(
     let snapshot = super::column_overlay::cursors(&args, overlaid, &entries)?;
     native(
         py,
-        "ColumnMigrationPlanning",
+        RecordId::ColumnMigrationPlanning,
         &[
             ("snapshot", snapshot),
             ("entries", PyTuple::new(py, entries)?.into_any()),

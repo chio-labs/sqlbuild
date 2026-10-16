@@ -2,14 +2,16 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_entries::values::{
-    COMPILE_EXCEPTIONS, COMPILE_TYPES, MICROBATCH_CONCURRENCY_MESSAGE, PLANNER_EXCEPTIONS,
-    PLANNER_TYPES, boolean, error_of, native, none, planner_type, replaced, string,
+    COMPILE_TYPES, MICROBATCH_CONCURRENCY_MESSAGE, boolean, error_of, native, none, planner_type,
+    replaced, string,
 };
 use crate::bindings::_helpers::planner_resolution::cursor_ranges::{
     CursorWindowInputs, config_str, cursor_safety_configs, empty_cursor_inputs, microbatch_range,
     model_cursor_overrides, plan_cursor_bounds,
 };
 use crate::bindings::_helpers::planner_resolution::cursor_warnings::with_cursor_safety_warnings;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -41,8 +43,11 @@ fn plan_model_from_change<'py>(
     let backfill = if request.full_refresh {
         native(
             py,
-            "BackfillResult",
-            &[("action", planner_type(py, "BackfillAction", "FULL")?)],
+            RecordId::BackfillResult,
+            &[(
+                "action",
+                planner_type(py, RecordId::BackfillAction, "FULL")?,
+            )],
         )?
     } else {
         request.change_result.getattr("backfill")?
@@ -50,7 +55,7 @@ fn plan_model_from_change<'py>(
     let cursor_column = config_str(model, "cursor")?;
     native(
         py,
-        "validate_source_cursor_input_columns",
+        NativeAttr::ValidateSourceCursorInputColumns,
         &[
             ("model", model.clone()),
             ("cursor_column", cursor_column.clone()),
@@ -65,7 +70,7 @@ fn plan_model_from_change<'py>(
     )?;
     let resolved = native(
         py,
-        "resolve_model_plan_action",
+        NativeAttr::ResolveModelPlanAction,
         &[
             ("model", model.clone()),
             ("change_result", request.change_result.clone()),
@@ -73,10 +78,14 @@ fn plan_model_from_change<'py>(
         ],
     )?;
     let (action, reason) = (resolved.get_item(0)?, resolved.get_item(1)?);
-    let materialization_type = native(py, "get_materialization_type", &[("model", model.clone())])?;
+    let materialization_type = native(
+        py,
+        NativeAttr::GetMaterializationType,
+        &[("model", model.clone())],
+    )?;
     let replaces_relation = native(
         py,
-        "replaces_incremental_relation",
+        NativeAttr::ReplacesIncrementalRelation,
         &[
             ("materialization_type", materialization_type.clone()),
             ("action", action.clone()),
@@ -86,7 +95,7 @@ fn plan_model_from_change<'py>(
     let full_rebuild_cause = if replaces_relation {
         native(
             py,
-            "describe_full_rebuild_cause",
+            NativeAttr::DescribeFullRebuildCause,
             &[
                 ("change_result", request.change_result.clone()),
                 ("full_refresh", full_refresh.clone()),
@@ -98,7 +107,7 @@ fn plan_model_from_change<'py>(
     if !full_rebuild_cause.is_none() && request.protect_full_refresh && !request.full_refresh {
         native(
             py,
-            "check_full_rebuild_allowed",
+            NativeAttr::CheckFullRebuildAllowed,
             &[
                 ("model", model.clone()),
                 ("change_result", request.change_result.clone()),
@@ -108,7 +117,7 @@ fn plan_model_from_change<'py>(
     }
     let pair = native(
         py,
-        "CursorOverridePair",
+        RecordId::CursorOverridePair,
         &[
             ("start_cursor_override", request.overrides.0.clone()),
             ("end_cursor_override", request.overrides.1.clone()),
@@ -116,7 +125,7 @@ fn plan_model_from_change<'py>(
     )?;
     let resolved_sql = native(
         py,
-        "resolve_model_sql",
+        NativeAttr::ResolveModelSql,
         &[
             ("adapter", request.adapter.clone()),
             ("model", model.clone()),
@@ -135,7 +144,7 @@ fn plan_model_from_change<'py>(
     )?;
     let hooks = native(
         py,
-        "resolve_model_hook_entries",
+        NativeAttr::ResolveModelHookEntries,
         &[
             ("model", model.clone()),
             ("adapter", request.adapter.clone()),
@@ -149,7 +158,7 @@ fn plan_model_from_change<'py>(
     let (future_config, start_config) = cursor_safety_configs(model, context)?;
     native(
         py,
-        "validate_capped_watermark_inputs",
+        NativeAttr::ValidateCappedWatermarkInputs,
         &[
             ("model", model.clone()),
             ("models_by_name", context.getattr("models_by_name")?),
@@ -158,7 +167,7 @@ fn plan_model_from_change<'py>(
     )?;
     let cursor_input_relations = native(
         py,
-        "build_cursor_input_relations",
+        NativeAttr::BuildCursorInputRelations,
         &[
             ("model", model.clone()),
             ("adapter", request.adapter.clone()),
@@ -199,7 +208,7 @@ fn plan_model_from_change<'py>(
     let range = microbatch_range(model, &window)?;
     let assembled = native(
         py,
-        "assemble_model_plan_entry",
+        NativeAttr::AssembleModelPlanEntry,
         &[
             ("model", model.clone()),
             ("adapter", request.adapter.clone()),
@@ -260,7 +269,7 @@ fn check_binding_diagnostics<'py>(
     }
     let bound = native(
         py,
-        "source_binding_diagnostics",
+        NativeAttr::SourceBindingDiagnostics,
         &[
             ("project", project.clone()),
             ("columns", relations.getattr("source_warehouse_columns")?),
@@ -301,7 +310,7 @@ fn check_binding_diagnostics<'py>(
     }
     Err(error_of(
         py,
-        (PLANNER_EXCEPTIONS, "PlannerInputError"),
+        ErrorId::PlannerInput,
         &lines.join("\n"),
         &[("code", first.getattr("code")?)],
     ))
@@ -322,8 +331,8 @@ fn check_microbatch_concurrency<'py>(
     entries: &[Bound<'py, PyAny>],
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = project.py();
-    let skip = planner_type(py, "PlanAction", "SKIP")?;
-    let create = planner_type(py, "PlanAction", "CREATE_TABLE")?;
+    let skip = planner_type(py, RecordId::PlanAction, "SKIP")?;
+    let create = planner_type(py, RecordId::PlanAction, "CREATE_TABLE")?;
     let mut configured: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in entries {
         if entry.getattr("batch_concurrency")?.gt(1)? && entry.getattr("action")?.ne(&skip)? {
@@ -332,11 +341,11 @@ fn check_microbatch_concurrency<'py>(
     }
     let settings = project.getattr("settings")?;
     if !configured.is_empty() && !settings.getattr("microbatch_concurrency")?.is_truthy()? {
-        let guidance = native(py, "microbatch_guidance", &[])?;
+        let guidance = native(py, NativeAttr::MicrobatchGuidance, &[])?;
         let prefix: &str = MICROBATCH_CONCURRENCY_MESSAGE;
         return Err(error_of(
             py,
-            (COMPILE_EXCEPTIONS, "CompileInputError"),
+            ErrorId::CompileInput,
             &format!(
                 "{prefix}{}; {}",
                 names_of(&configured)?,
@@ -352,7 +361,7 @@ fn check_microbatch_concurrency<'py>(
     {
         return Err(error_of(
             py,
-            (COMPILE_EXCEPTIONS, "CompileInputError"),
+            ErrorId::CompileInput,
             &format!(
                 "adapter '{}' does not support concurrent microbatch delete/insert DML; set \
                  batch_concurrency = 1",
@@ -373,12 +382,12 @@ fn check_microbatch_concurrency<'py>(
     let count = concurrent.len();
     native(
         py,
-        "PlanWarning",
+        RecordId::PlanWarning,
         &[
             ("model_name", none(py)),
             (
                 "severity",
-                imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("WARNING")?,
+                registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?,
             ),
             ("code", string(py, MICROBATCH_COMPLEXITY_CODE)),
             (
@@ -417,7 +426,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
     let full_refresh = args.value("full_refresh")?;
     let inputs = args.value("build_inputs")?;
     let inputs = if inputs.is_none() {
-        native(py, "PlanEntryBuildInputs", &[])?
+        native(py, RecordId::PlanEntryBuildInputs, &[])?
     } else {
         inputs
     };
@@ -429,7 +438,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
     let end_override = inputs.getattr("end_cursor_override")?;
     let producers = native(
         py,
-        "runtime_cursor_producer_names",
+        NativeAttr::RuntimeCursorProducerNames,
         &[
             ("scope", scope.clone()),
             ("source_map", relations.getattr("source_map")?),
@@ -444,7 +453,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
     let models_by_name = scope.getattr("models_by_name")?;
     let context = native(
         py,
-        "ModelPlanContext",
+        RecordId::ModelPlanContext,
         &[
             ("model_locations", relations.getattr("model_locations")?),
             ("models_by_name", models_by_name.clone()),
@@ -475,8 +484,8 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
             ("invocation_time", inputs.getattr("invocation_time")?),
         ],
     )?;
-    let skip = planner_type(py, "PlanAction", "SKIP")?;
-    let microbatch = imported(py, PLANNER_TYPES, "IncrementalMode")?.getattr("MICROBATCH")?;
+    let skip = planner_type(py, RecordId::PlanAction, "SKIP")?;
+    let microbatch = registry::class(py, RecordId::IncrementalMode)?.getattr("MICROBATCH")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in scope.getattr("execution_order")?.try_iter()? {
@@ -497,7 +506,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
         )?;
         let effective_full_refresh = native(
             py,
-            "resolve_model_full_refresh",
+            NativeAttr::ResolveModelFullRefresh,
             &[
                 ("model", model.clone()),
                 ("cli_full_refresh", full_refresh.clone()),
@@ -525,7 +534,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
                     ("action", skip.clone()),
                     (
                         "reason",
-                        planner_type(py, "PlanReason", "SOURCE_FRESHNESS_ERROR")?,
+                        planner_type(py, RecordId::PlanReason, "SOURCE_FRESHNESS_ERROR")?,
                     ),
                 ],
             )?;
@@ -537,7 +546,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
                     ("action", skip.clone()),
                     (
                         "reason",
-                        planner_type(py, "PlanReason", "EXTERNAL_UPSTREAM_FAILED")?,
+                        planner_type(py, RecordId::PlanReason, "EXTERNAL_UPSTREAM_FAILED")?,
                     ),
                 ],
             )?;
@@ -553,7 +562,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
             if entry.getattr("action")?.ne(&skip)? {
                 let limited = native(
                     py,
-                    "apply_configured_microbatch_limits",
+                    NativeAttr::ApplyConfiguredMicrobatchLimits,
                     &[("entry", entry), ("inputs", inputs.clone())],
                 )?;
                 entry = limited.get_item(0)?;
@@ -572,7 +581,7 @@ fn plan_entries<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>
     }
     native(
         py,
-        "PlannerModelEntryResults",
+        RecordId::PlannerModelEntryResults,
         &[
             ("entries", PyTuple::new(py, entries)?.into_any()),
             ("warnings", PyTuple::new(py, warnings)?.into_any()),
@@ -637,7 +646,7 @@ fn plan_model<'py>(
     let snapshot = args.value("snapshot")?;
     let change_result = native(
         py,
-        "detect_model_changes",
+        NativeAttr::DetectModelChanges,
         &[
             ("model", model.clone()),
             ("snapshot", snapshot.clone()),

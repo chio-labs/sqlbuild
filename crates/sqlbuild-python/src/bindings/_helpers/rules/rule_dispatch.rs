@@ -16,8 +16,12 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, within,
+    KeywordArguments, call_with, within,
 };
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
 use crate::bindings::_helpers::rules::custom_evaluation::{
     CustomRun, evaluate_custom_rules_cached, outcome,
@@ -25,11 +29,6 @@ use crate::bindings::_helpers::rules::custom_evaluation::{
 use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
 use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_MODELS_MODULE: &str = "sqlbuild._native";
-const CUSTOM_PAYLOADS_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.custom_payloads";
 const CUSTOM_THREAD: &str = "sqlbuild-custom-rules";
 const GENERIC_DIALECT: &str = "generic";
 const PROJECT_RULES_OPTIONS: (&[&str], &[&str]) = (
@@ -141,11 +140,11 @@ fn evaluate_project_rules<'py>(
     let dialect: String = dialect_argument(&arguments)?;
     let verify_determinism: bool = arguments.flag("verify_determinism")?;
     let effective: Bound<'py, PyAny> = call_with(
-        &native(py, "resolve_rule_ignore_selectors")?,
+        &native(py, NativeAttr::ResolveRuleIgnoreSelectors)?,
         &[("config", config), ("project", project.clone())],
     )?;
     let catalogue: Bound<'py, PyAny> = call_with(
-        &native(py, "build_rule_catalogue")?,
+        &native(py, NativeAttr::BuildRuleCatalogue)?,
         &[
             ("config", effective.clone()),
             ("project_dir", project_dir.clone()),
@@ -157,7 +156,7 @@ fn evaluate_project_rules<'py>(
     }
     if custom {
         let rules: Bound<'py, PyAny> = call_with(
-            &native(py, "select_catalogue_rules")?,
+            &native(py, NativeAttr::SelectCatalogueRules)?,
             &[
                 ("catalogue", catalogue.clone()),
                 ("config", effective.clone()),
@@ -252,7 +251,7 @@ pub(crate) fn evaluate_rules<'py>(
     let graph: Bound<'py, PyAny> = arguments.value("graph")?;
     let dialect: Bound<'py, PyAny> = arguments.value("dialect")?;
     let plan: Bound<'py, PyAny> = call_with(
-        &native(py, "plan_rule_run")?,
+        &native(py, NativeAttr::PlanRuleRun)?,
         &[
             ("graph", graph.clone()),
             ("config", arguments.value("config")?),
@@ -307,7 +306,7 @@ pub(crate) fn evaluate_rules<'py>(
         })
     })?;
     let sql_result: PyResult<Bound<'py, PyAny>> = call_with(
-        &native(py, "run_planned_sql_rules")?,
+        &native(py, NativeAttr::RunPlannedSqlRules)?,
         &[
             ("plan", plan.clone()),
             ("graph", graph),
@@ -322,7 +321,7 @@ pub(crate) fn evaluate_rules<'py>(
     let sql_result: Bound<'py, PyAny> = sql_result?;
     let result: Bound<'py, PyAny> = result?;
     call_with(
-        &native(py, "finish_rule_run")?,
+        &native(py, NativeAttr::FinishRuleRun)?,
         &[
             ("plan", plan),
             ("sql_result", sql_result),
@@ -342,7 +341,7 @@ pub(crate) fn prepare_sql_rules<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
     let preparation: Bound<'py, PyAny> = call_with(
-        &native(py, "sql_lint_preparation")?,
+        &native(py, NativeAttr::SqlLintPreparation)?,
         &[("inputs", inputs.clone()), ("dialect", dialect.clone())],
     )?;
     if preparation.is_none() {
@@ -351,7 +350,7 @@ pub(crate) fn prepare_sql_rules<'py>(
     let (project_dir, codes, config): (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>) =
         preparation.extract()?;
     let expansions: Bound<'py, PyAny> =
-        native(py, "early_lint_expansions")?.call1((inputs.getattr("model_inputs")?,))?;
+        native(py, NativeAttr::EarlyLintExpansions)?.call1((inputs.getattr("model_inputs")?,))?;
     let work: Bound<'py, PyDict> = PyDict::new(py);
     work.set_item("project_dir", &project_dir)?;
     work.set_item("config", config)?;
@@ -368,7 +367,7 @@ pub(crate) fn prepare_sql_rules<'py>(
         Some(&work),
     )?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "PreparedSqlLint")?,
+        &registry::class(py, RecordId::PreparedSqlLint)?,
         &[
             ("codes", codes),
             ("project_dir", project_dir),
@@ -389,10 +388,10 @@ fn prepare_early_sql_lint<'py>(
     let project_dir: Bound<'py, PyAny> = arguments.value("project_dir")?;
     let discovered_inputs: Bound<'py, PyAny> = arguments.value("discovered_inputs")?;
     let scope: Bound<'py, PyAny> =
-        native(py, "lint_stop_scope")?.call1((arguments.value("stop")?,))?;
+        native(py, NativeAttr::LintStopScopeFunction)?.call1((arguments.value("stop")?,))?;
     within(&scope, |_| {
         let context: Bound<'py, PyAny> = call_with(
-            &native(py, "build_lint_expansion_context")?,
+            &native(py, NativeAttr::BuildLintExpansionContext)?,
             &[
                 ("project_dir", project_dir.clone()),
                 ("discovered_inputs", discovered_inputs.clone()),
@@ -403,7 +402,7 @@ fn prepare_early_sql_lint<'py>(
             ],
         )?;
         let result: Bound<'py, PyAny> = call_with(
-            &native(py, "run_lint")?,
+            &native(py, NativeAttr::RunLint)?,
             &[
                 ("project_dir", project_dir.clone()),
                 ("config", arguments.value("config")?),
@@ -416,7 +415,7 @@ fn prepare_early_sql_lint<'py>(
             ],
         )?;
         call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "PreparedSqlLintResult")?,
+            &registry::class(py, RecordId::PreparedSqlLintResult)?,
             &[("result", result), ("context", context)],
         )
     })
@@ -443,8 +442,8 @@ fn evaluate_native<'py>(
         (CustomSource::Deferred, Err(_)) => None,
     };
     let (_, request): (Bound<'py, PyAny>, Bound<'py, PyAny>) = prepared?;
-    let evaluated: PyResult<Bound<'py, PyAny>> =
-        native(py, "evaluate_rules_request").and_then(|evaluate| evaluate.call1((request,)));
+    let evaluated: PyResult<Bound<'py, PyAny>> = native(py, NativeAttr::EvaluateRulesRequest)
+        .and_then(|evaluate| evaluate.call1((request,)));
     cancel_on_interrupt(py, &evaluated, &run.cancel);
     let custom: PyResult<Bound<'py, PyAny>> = match custom {
         Some(handle) => joined(py, handle, &run.cancel),
@@ -463,7 +462,7 @@ fn evaluate_native<'py>(
     .into_any();
     if !defer_suppressions {
         findings = call_with(
-            &native(py, "finalize_rule_findings_rows")?,
+            &native(py, NativeAttr::FinalizeRuleFindingsRows)?,
             &[
                 ("config", run.config.clone()),
                 ("project_dir", run.project_dir.clone()),
@@ -478,7 +477,7 @@ fn evaluate_native<'py>(
     let custom_hits: i64 = custom.getattr("cache_hits")?.extract()?;
     let custom_misses: i64 = custom.getattr("cache_misses")?.extract()?;
     call_with(
-        &imported(py, RULES_MODELS_MODULE, "RulesResult")?,
+        &registry::class(py, RecordId::RulesResult)?,
         &[
             ("findings", findings),
             (
@@ -521,7 +520,7 @@ fn native_request<'py>(
     let payloads: Bound<'py, PyAny> = match custom_payloads {
         Some(payloads) => payloads,
         None => call_with(
-            &imported(py, CUSTOM_PAYLOADS_MODULE, "custom_rule_payloads")?,
+            &host::entry(py, UserCodeHost::CustomRulePayloads)?,
             &[
                 ("catalogue", run.catalogue.clone()),
                 ("project_dir", run.project_dir.clone()),
@@ -532,7 +531,7 @@ fn native_request<'py>(
     for code in TYPE_PROOF_RULE_CODES {
         include_type_proof = include_type_proof
             || call_with(
-                &native(py, "rule_selected")?,
+                &native(py, NativeAttr::RuleSelected)?,
                 &[
                     ("config", run.config.clone()),
                     ("code", pyo3::types::PyString::new(py, code).into_any()),
@@ -541,7 +540,7 @@ fn native_request<'py>(
             .is_truthy()?;
     }
     let request: Bound<'py, PyAny> = call_with(
-        &native(py, "build_rules_request")?,
+        &native(py, NativeAttr::BuildRulesRequest)?,
         &[
             ("project", run.project.clone()),
             ("config", run.config.clone()),
@@ -575,7 +574,7 @@ fn start_custom_rules(
     let selected: Bound<'_, PyFrozenSet> = PyFrozenSet::new(
         py,
         call_with(
-            &native(py, "selected_rule_codes")?,
+            &native(py, NativeAttr::SelectedRuleCodes)?,
             &[
                 ("config", run.config.clone()),
                 ("custom_payloads", payloads.clone()),
@@ -683,8 +682,8 @@ fn cancel_on_interrupt(py: Python<'_>, result: &PyResult<Bound<'_, PyAny>>, canc
     }
 }
 
-fn native<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, NATIVE_MODULE, name)
+fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
+    registry::native(py, name)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

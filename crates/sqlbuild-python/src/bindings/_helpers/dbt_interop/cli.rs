@@ -1,6 +1,5 @@
 //! dbt argv building, executable choice, `dbt ls` output, `sqb dbt` argument routing and config.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -22,10 +21,9 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
-const DBT_TYPES: &str = "sqlbuild._native";
-const DBT_EXCEPTIONS: &str = "sqlbuild.integrations.dbt.exceptions";
 const DBT_EXECUTABLE_ENV_VAR: &str = "DBT_EXECUTABLE";
 const COMMAND_ARGV_OPTIONS: (&[&str], &[&str]) =
     (&["dbt_executable", "command", "options"], &["args"]);
@@ -225,7 +223,7 @@ fn parse_dbt_ls_json_lines<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound
 
 /// The `DbtLsNode`s of `dbt ls --output json` lines.
 pub(crate) fn ls_nodes<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound<'py, PyTuple>> {
-    let node_class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS, "DbtLsNode")?;
+    let node_class: Bound<'py, PyAny> = registry::class(py, RecordId::DbtLsNode)?;
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
     for line in python_splitlines(stdout) {
         let stripped: &str = python_strip(line);
@@ -242,7 +240,7 @@ pub(crate) fn ls_nodes<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound<'py
     PyTuple::new(py, nodes)
 }
 
-pub(crate) fn raised(py: Python<'_>, class_name: &str, error: DbtCliError) -> PyErr {
+pub(crate) fn raised(py: Python<'_>, class_name: ErrorId, error: DbtCliError) -> PyErr {
     let created = || -> PyResult<PyErr> {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         if let Some(code) = error.code {
@@ -251,8 +249,8 @@ pub(crate) fn raised(py: Python<'_>, class_name: &str, error: DbtCliError) -> Py
         if let Some(help) = error.help {
             keywords.set_item("help", help)?;
         }
-        let instance: Bound<'_, PyAny> = shape_class_at(py, DBT_EXCEPTIONS, class_name)?
-            .call((error.message,), Some(&keywords))?;
+        let instance: Bound<'_, PyAny> =
+            registry::error(py, class_name)?.call((error.message,), Some(&keywords))?;
         Ok(PyErr::from_value(instance))
     };
     created().unwrap_or_else(|failure| failure)
@@ -299,11 +297,11 @@ fn route_dbt_interop_args<'py>(
     let command: String = command.str()?.extract()?;
     let flags: DbtParsedFlags = parsed_flags(parsed)?;
     let (kind, routed): (DbtInteropCommandKind, DbtRoutedArgs) =
-        route(&command, &flags).map_err(|error| raised(py, "DbtInteropArgumentError", error))?;
+        route(&command, &flags).map_err(|error| raised(py, ErrorId::DbtInteropArgument, error))?;
     let command: Bound<'py, PyAny> =
-        imported(py, DBT_TYPES, "DbtInteropCommand")?.call1((kind.name(),))?;
+        registry::class(py, RecordId::DbtInteropCommand)?.call1((kind.name(),))?;
     call_with(
-        &imported(py, NATIVE_RECORDS, "DbtInteropRoutedArgs")?,
+        &registry::class(py, RecordId::DbtInteropRoutedArgs)?,
         &[
             ("command", command),
             ("select", PyTuple::new(py, flags.select)?.into_any()),
@@ -378,13 +376,13 @@ fn resolve_dbt_config<'py>(
     )?;
     let choice: DbtConfigChoice =
         choose_dbt_config(sources, arguments.flag("require_project_dir")?)
-            .map_err(|error| raised(py, "DbtInteropConfigError", error))?;
+            .map_err(|error| raised(py, ErrorId::DbtInteropConfig, error))?;
     let target: Bound<'py, PyAny> = choice.target.map_or_else(
         || py.None().into_bound(py),
         |target| PyString::new(py, &target).into_any(),
     );
     call_with(
-        &imported(py, NATIVE_RECORDS, "ResolvedDbtConfig")?,
+        &registry::class(py, RecordId::ResolvedDbtConfig)?,
         &[
             (
                 "project_dir",

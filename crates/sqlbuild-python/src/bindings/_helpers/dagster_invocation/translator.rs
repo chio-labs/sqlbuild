@@ -11,7 +11,9 @@ use sqlbuild_core::dagster_invocation::main::fallback_asset_description::fallbac
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::dagster_invocation::access::{CONSTANTS_MODULE, get, value_or};
+use crate::bindings::_helpers::dagster_invocation::access::{get, value_or};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
 const ABC_MODULE: &str = "collections.abc";
 const BUILTINS_MODULE: &str = "builtins";
@@ -55,8 +57,7 @@ fn abc_instance(value: &Bound<'_, PyAny>, class: &str) -> PyResult<bool> {
 
 /// A source node's non-empty, non-text `meta.dagster.asset_key` sequence.
 fn authored_asset_key<'py>(node: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let source_kind: String =
-        imported(node.py(), CONSTANTS_MODULE, "SOURCE_NODE_KIND")?.extract()?;
+    let source_kind: String = host::entry(node.py(), ThirdPartyHost::SourceNodeKind)?.extract()?;
     if text(&get(node, "kind")?)? != source_kind {
         return Ok(None);
     }

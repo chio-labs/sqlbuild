@@ -6,11 +6,12 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const REGISTRY_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
-const ADAPTER_ERRORS_MODULE: &str = "sqlbuild.adapter.contract.exceptions";
-const CLI_ERRORS_MODULE: &str = "sqlbuild._native";
 const ADAPTER_CONFIGURATION_CODE: &str = "C601";
 
 /// `CliUserError(error.message, code="C601", help=error.help)` raised from `error`.
@@ -20,7 +21,7 @@ fn cli_adapter_error(py: Python<'_>, error: &PyErr) -> PyResult<PyErr> {
     keywords.set_item("code", ADAPTER_CONFIGURATION_CODE)?;
     keywords.set_item("help", value.getattr("help")?)?;
     let raised: PyErr = PyErr::from_value(
-        imported(py, CLI_ERRORS_MODULE, "CliUserError")?
+        registry::error(py, ErrorId::CliUser)?
             .call((value.getattr("message")?,), Some(&keywords))?,
     );
     raised.set_cause(py, Some(error.clone_ref(py)));
@@ -34,19 +35,14 @@ pub(crate) fn resolve_cli_adapter<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = adapter_name.py();
     let resolved: PyResult<Bound<'py, PyAny>> = call_with(
-        &imported(py, REGISTRY_MODULE, "resolve_adapter")?,
+        &host::entry(py, AdapterHost::ResolveAdapter)?,
         &[
             ("adapter_name", adapter_name.clone()),
             ("project_dir", project_dir.clone()),
         ],
     );
     match resolved {
-        Err(error)
-            if error.is_instance(
-                py,
-                &imported(py, ADAPTER_ERRORS_MODULE, "AdapterUserError")?,
-            ) =>
-        {
+        Err(error) if error.is_instance(py, &host::entry(py, AdapterHost::AdapterUserError)?) => {
             Err(cli_adapter_error(py, &error)?)
         }
         resolved => resolved,

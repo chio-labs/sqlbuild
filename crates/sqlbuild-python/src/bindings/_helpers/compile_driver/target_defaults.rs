@@ -4,9 +4,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// The adapter defaults every compiled location falls back to.
 pub(crate) struct TargetDefaults<'py> {
@@ -41,8 +40,8 @@ pub(crate) fn apply_target_defaults<'py>(
     defaults: &TargetDefaults<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let compiled_model: Bound<'py, PyAny> = imported(py, COMPILE_MODELS_MODULE, "CompiledModel")?;
-    let native_seed: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "NativeCompiledSeed")?;
+    let compiled_model: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledModel)?;
+    let native_seed: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeCompiledSeed)?;
     let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in project.getattr("models")?.try_iter()? {
@@ -98,7 +97,7 @@ pub(crate) fn apply_target_defaults<'py>(
         )?);
     }
     call_with(
-        &imported(py, NATIVE_MODULE, "project_with")?,
+        &registry::native(py, NativeAttr::ProjectWith)?,
         &[
             ("project", project.clone()),
             (
@@ -156,7 +155,7 @@ fn resolved_target<'py>(
         return Ok(target.clone());
     }
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompiledRelationLocation")?,
+        &registry::class(py, RecordId::CompiledRelationLocation)?,
         &[
             ("database", database),
             ("schema", schema),

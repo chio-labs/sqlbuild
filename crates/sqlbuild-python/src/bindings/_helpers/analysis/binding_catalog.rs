@@ -11,10 +11,10 @@ use sqlbuild_analysis::semantic_validation::types::{BindingRequest, DiagnosticRo
 
 use crate::bindings::_helpers::analysis::conversions;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::{CatalogInput, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 /// Dialects whose quoted identifiers bind case-sensitively unless the session says otherwise.
 pub(crate) const CASE_SENSITIVE_BINDING_DIALECTS: [&str; 2] = ["snowflake", "postgresql"];
@@ -322,12 +322,8 @@ pub(crate) fn schema_validations<'py>(
             None => groups.push((catalog, own, vec![index])),
         }
     }
-    let result_type: Bound<'py, PyAny> = py
-        .import(NATIVE_RECORDS_MODULE)?
-        .getattr("SqlBindingResult")?;
-    let diagnostic_type: Bound<'py, PyAny> = py
-        .import(NATIVE_RECORDS_MODULE)?
-        .getattr("SqlBindingDiagnostic")?;
+    let result_type: Bound<'py, PyAny> = registry::class(py, RecordId::SqlBindingResult)?;
+    let diagnostic_type: Bound<'py, PyAny> = registry::class(py, RecordId::SqlBindingDiagnostic)?;
     let empty: Bound<'py, PyAny> = result_type.call0()?;
     let mut results: Vec<Bound<'py, PyAny>> = vec![empty; requests.len()];
     for (catalog, any_explicit, members) in groups {

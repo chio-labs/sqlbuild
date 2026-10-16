@@ -19,16 +19,11 @@ use sqlbuild_core::dbt_graph::models::{
 };
 use sqlbuild_core::dbt_graph::types::DbtSelectorResolver;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_RECORDS: &str = "sqlbuild._native";
-const SELECTOR_EXPANSION_MODULE: &str = "sqlbuild._native";
-const MODEL_SELECTORS_MODULE: &str = "sqlbuild._native";
 const MODEL_RESOURCE_TYPE: &str = "model";
 const SELECTION_OPTIONS: (&[&str], &[&str]) = (
     &["project", "graph", "select"],
@@ -189,12 +184,8 @@ pub(crate) struct PlannerResolver<'py> {
 pub(crate) fn planner_resolver(project: Bound<'_, PyAny>) -> PyResult<PlannerResolver<'_>> {
     let py: Python<'_> = project.py();
     Ok(PlannerResolver {
-        split: imported(py, SELECTOR_EXPANSION_MODULE, "split_selector_expansion")?,
-        resolve: imported(
-            py,
-            MODEL_SELECTORS_MODULE,
-            "resolve_sqlbuild_model_selector_names",
-        )?,
+        split: registry::native(py, NativeAttr::SplitSelectorExpansion)?,
+        resolve: registry::native(py, NativeAttr::ResolveSqlbuildModelSelectorNames)?,
         project,
     })
 }
@@ -232,9 +223,8 @@ fn selection_error(py: Python<'_>, error: DbtSelectionError<PyErr>) -> PyErr {
             let raised = || -> PyResult<PyErr> {
                 let keywords: Bound<'_, PyDict> = PyDict::new(py);
                 keywords.set_item("code", PATH_SELECTOR_ERROR_CODE)?;
-                let error: Bound<'_, PyAny> =
-                    imported(py, NATIVE_RECORDS_MODULE, "DbtInteropArgumentError")?
-                        .call((message,), Some(&keywords))?;
+                let error: Bound<'_, PyAny> = registry::error(py, ErrorId::DbtInteropArgument)?
+                    .call((message,), Some(&keywords))?;
                 Ok(PyErr::from_value(error))
             };
             raised().unwrap_or_else(|failure| failure)
@@ -277,7 +267,7 @@ fn selection_result<'py>(py: Python<'py>, selection: DbtSelection) -> PyResult<B
         .map(|(term, translated)| PyTuple::new(py, [term, translated]))
         .collect::<PyResult<_>>()?;
     call_with(
-        &imported(py, NATIVE_RECORDS, "DbtInteropSelectionResult")?,
+        &registry::class(py, RecordId::DbtInteropSelectionResult)?,
         &[
             (
                 "sqlbuild_model_names",

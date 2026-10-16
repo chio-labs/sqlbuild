@@ -13,34 +13,24 @@ use sqlbuild_rules::configuration::main::load_rules_config::load_rules_config as
 use sqlbuild_rules::models::RulesConfig;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-
-const MODELS_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const NATIVE_MODULE: &str = "sqlbuild._native";
-/// The rules configuration models that stay Python for the custom-rule API.
-const PYTHON_CLASSES: &[&str] = &["RulesConfig", "LayoutConfig"];
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 struct Models<'py> {
-    module: Bound<'py, PyModule>,
-    native: Bound<'py, PyModule>,
+    py: Python<'py>,
 }
 
 impl<'py> Models<'py> {
     fn build(
         &self,
-        class: &str,
+        class: RecordId,
         fields: &[(&str, Bound<'py, PyAny>)],
     ) -> PyResult<Bound<'py, PyAny>> {
-        let arguments: Bound<'py, PyDict> = PyDict::new(self.module.py());
+        let arguments: Bound<'py, PyDict> = PyDict::new(self.py);
         for (name, value) in fields {
             arguments.set_item(name, value)?;
         }
-        let module: &Bound<'py, PyModule> = if PYTHON_CLASSES.contains(&class) {
-            &self.module
-        } else {
-            &self.native
-        };
-        module.getattr(class)?.call((), Some(&arguments))
+        registry::class(self.py, class)?.call((), Some(&arguments))
     }
 }
 
@@ -128,13 +118,10 @@ fn tables<'py, T>(
 }
 
 fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'py, PyAny>> {
-    let models = Models {
-        module: py.import(MODELS_MODULE)?,
-        native: py.import(NATIVE_MODULE)?,
-    };
+    let models = Models { py };
     let threshold_overrides = tables(py, &config.threshold_overrides, |item| {
         models.build(
-            "ThresholdOverride",
+            RecordId::ThresholdOverride,
             &[
                 ("paths", strings(py, &item.paths)?),
                 ("thresholds", integers(py, &item.thresholds)?),
@@ -144,7 +131,7 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
     })?;
     let rule_exceptions = tables(py, &config.rule_exceptions, |item| {
         models.build(
-            "RuleExemption",
+            RecordId::RuleExemption,
             &[
                 ("rule", text(py, &item.rule)?),
                 ("path", text(py, &item.path)?),
@@ -154,7 +141,7 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
     })?;
     let graph_edge_exceptions = tables(py, &config.graph_edge_exceptions, |item| {
         models.build(
-            "GraphEdgeExclusion",
+            RecordId::GraphEdgeExclusion,
             &[
                 ("consumer", text(py, &item.consumer)?),
                 ("dependency", text(py, &item.dependency)?),
@@ -164,7 +151,7 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
     })?;
     let rule_ignores = tables(py, &config.rule_ignores, |item| {
         models.build(
-            "RuleIgnore",
+            RecordId::RuleIgnore,
             &[
                 ("rules", strings(py, &item.rules)?),
                 ("paths", strings(py, &item.paths)?),
@@ -175,7 +162,7 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
     })?;
     let select_star_allow = tables(py, &config.select_star_allow, |item| {
         models.build(
-            "SelectStarAllow",
+            RecordId::SelectStarAllow,
             &[
                 ("paths", strings(py, &item.paths)?),
                 ("reason", text(py, &item.reason)?),
@@ -188,7 +175,7 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
         layout.push(("levels", strings(py, &config.layout.levels)?));
     }
     models.build(
-        "RulesConfig",
+        RecordId::RulesConfig,
         &[
             ("select", strings(py, &config.select)?),
             ("ignore", strings(py, &config.ignore)?),
@@ -215,18 +202,18 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
             (
                 "sql_tests",
                 models.build(
-                    "SqlTestRulesConfig",
+                    RecordId::SqlTestRulesConfig,
                     &[(
                         "pipeline_directory",
                         text(py, &config.sql_tests.pipeline_directory)?,
                     )],
                 )?,
             ),
-            ("layout", models.build("LayoutConfig", &layout)?),
+            ("layout", models.build(RecordId::LayoutConfig, &layout)?),
             (
                 "cache",
                 models.build(
-                    "RulesCacheConfig",
+                    RecordId::RulesCacheConfig,
                     &[("enabled", config.cache.enabled.into_bound_py_any(py)?)],
                 )?,
             ),
@@ -234,9 +221,9 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
     )
 }
 
-fn rules_error(py: Python<'_>, class: &str, message: String, help: Option<String>) -> PyErr {
+fn rules_error(py: Python<'_>, class: ErrorId, message: String, help: Option<String>) -> PyErr {
     let raised = || -> PyResult<PyErr> {
-        let error_class: Bound<'_, PyAny> = py.import(ERRORS_MODULE)?.getattr(class)?;
+        let error_class: Bound<'_, PyAny> = registry::error(py, class)?;
         let error: Bound<'_, PyAny> = match help {
             Some(help) => {
                 let arguments: Bound<'_, PyDict> = PyDict::new(py);
@@ -258,11 +245,11 @@ pub(crate) fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResul
         .canonicalize()
         .or_else(|_| std::path::absolute(&project_dir))?;
     let config: RulesConfig = compiler_guard(|| Ok(load_config(&project_dir)))?
-        .map_err(|message| rules_error(py, "RulesError", message, None))?;
+        .map_err(|message| rules_error(py, ErrorId::Rules, message, None))?;
     if let Some(error) = forbidden_exceptions(&config) {
         return Err(rules_error(
             py,
-            "RulesConfigError",
+            ErrorId::RulesConfig,
             error.message,
             Some(error.help),
         ));
@@ -276,9 +263,7 @@ pub(crate) fn load_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResul
 fn valid_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Option<Py<PyAny>>> {
     match load_rules_config(py, project_dir) {
         Ok(config) => Ok(Some(config)),
-        Err(error) if error.is_instance(py, &py.import(ERRORS_MODULE)?.getattr("RulesError")?) => {
-            Ok(None)
-        }
+        Err(error) if error.is_instance(py, &registry::error(py, ErrorId::Rules)?) => Ok(None),
         Err(error) => Err(error),
     }
 }

@@ -17,12 +17,15 @@ use sqlbuild_analysis::planner_identity::models::{GraphKey, IdentityGraph, Ident
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_identity::hashing::{graph_key, model_query_hash};
 use crate::bindings::_helpers::planner_identity::metadata::{
     function_local_hashes, model_version_identity_metadata_json, seed_identity,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
 const DATACLASSES_MODULE: &str = "dataclasses";
 
 fn key_of(kind: &str, name: &str) -> GraphKey {
@@ -49,7 +52,7 @@ fn hook_version_hashes<'py>(hook_functions: &Bound<'py, PyAny>) -> PyResult<Boun
     let py: Python<'py> = hook_functions.py();
     let hashes: Bound<'py, PyDict> = PyDict::new(py);
     let identities: Bound<'py, PyAny> =
-        imported(py, HOOK_IDENTITIES_MODULE, "build_hook_identities")?.call1((hook_functions,))?;
+        host::entry(py, UserCodeHost::BuildHookIdentities)?.call1((hook_functions,))?;
     for item in identities.call_method0("items")?.try_iter()? {
         let (name, identity): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         hashes.set_item(name, identity.getattr("version_hash")?)?;
@@ -182,7 +185,7 @@ fn build_direct_model_version_identities<'py>(
         }
     }
     call_with(
-        &imported(py, "sqlbuild._native", "DirectModelVersionIdentities")?,
+        &registry::class(py, RecordId::DirectModelVersionIdentities)?,
         &[
             ("function_local_hashes", function_hashes.into_any()),
             ("seed_version_hashes", seed_hashes.into_any()),

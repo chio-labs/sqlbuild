@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::planner_phases::constants::MISSING_UPSTREAM_CODE;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, planner_error};
 use crate::bindings::_helpers::planner_warehouse::source_tables::check_selected_source_tables_exist;
+use crate::bindings::_helpers::records::ids::NativeAttr;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 
@@ -26,7 +27,7 @@ pub(crate) fn check_selected_scope_buildability<'py>(
     }
     let missing = native(
         py,
-        "check_buildability",
+        NativeAttr::CheckBuildability,
         &[
             ("selected_keys", selected_scope.getattr("selected_keys")?),
             ("upstream_deps", selected_scope.getattr("upstream_deps")?),
@@ -41,14 +42,14 @@ pub(crate) fn check_selected_scope_buildability<'py>(
     if missing.is_truthy()? {
         let message: String = native(
             py,
-            "missing_upstream_message",
+            NativeAttr::MissingUpstreamMessage,
             &[
                 ("missing", missing),
                 (
                     "edge_origins",
                     native(
                         py,
-                        "build_execution_edge_origins",
+                        NativeAttr::BuildExecutionEdgeOrigins,
                         &[("project", project.clone())],
                     )?,
                 ),

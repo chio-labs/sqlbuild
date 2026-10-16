@@ -1,11 +1,13 @@
 //! Loader dependency mapping and synthetic source boundary construction.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::views::edge_dict;
 use crate::bindings::_helpers::planner_scope::values::{
-    NATIVE, SOURCE_MODELS, dependency_names, edges, keys, loader_graph, loader_names, project_graph,
+    dependency_names, edges, keys, loader_graph, loader_names, project_graph,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::planner_scope::main::{
@@ -40,7 +42,7 @@ pub(crate) fn loader_to_source_entry<'py>(
             .into_any();
     }
     let parts = call_with(
-        &imported(py, NATIVE, "loader_destination_parts")?,
+        &registry::native(py, NativeAttr::LoaderDestinationPartsFunction)?,
         &[
             ("destination", destination),
             (
@@ -71,7 +73,7 @@ pub(crate) fn loader_to_source_entry<'py>(
     let meta = PyDict::new(py);
     meta.set_item("sqlbuild_loader_node", true)?;
     kwargs.set_item("meta", meta)?;
-    imported(py, SOURCE_MODELS, "SourceEntry")?.call((), Some(&kwargs))
+    registry::class(py, RecordId::SourceEntry)?.call((), Some(&kwargs))
 }
 
 pub(crate) fn intermediate_map<'py>(

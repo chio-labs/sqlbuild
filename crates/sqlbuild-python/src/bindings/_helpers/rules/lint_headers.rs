@@ -4,12 +4,9 @@ use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::PyDict;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
-
-const NATIVE: &str = "sqlbuild._native";
-const MODELS: &str = "sqlbuild._native";
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// Classify a lint path, retaining the caller's supplied relative path when available.
 #[pyfunction]
@@ -27,17 +24,17 @@ pub(crate) fn lint_file_role<'py>(
             .call_method1("is_relative_to", (project_dir,))?
             .is_truthy()?
         {
-            return imported(py, MODELS, "LintFileRole")?.call0();
+            return registry::class(py, RecordId::LintFileRole)?.call0();
         }
         file_path.call_method1("relative_to", (project_dir,))?
     };
     call_with(
-        &imported(py, MODELS, "LintFileRole")?,
+        &registry::class(py, RecordId::LintFileRole)?,
         &[
             (
                 "declaration_kind",
                 call_with(
-                    &imported(py, NATIVE, "named_declaration_role_kind")?,
+                    &registry::native(py, NativeAttr::NamedDeclarationRoleKind)?,
                     &[("relative_path", relative.clone())],
                 )?,
             ),
@@ -75,7 +72,7 @@ pub(crate) fn lint_body_ranges<'py>(
         && (kind.eq("audit")? || kind.eq("singular_audit")?)
     {
         let ranges = call_with(
-            &imported(py, NATIVE, "measurement_body_ranges")?,
+            &registry::native(py, NativeAttr::MeasurementBodyRanges)?,
             &[("contents", args.value("contents")?)],
         )?;
         if ranges.is_truthy()? {
@@ -83,7 +80,7 @@ pub(crate) fn lint_body_ranges<'py>(
         }
     }
     call_with(
-        &imported(py, NATIVE, "sql_body_ranges")?,
+        &registry::native(py, NativeAttr::SqlBodyRanges)?,
         &[
             ("contents", args.value("contents")?),
             ("headers", args.value("headers")?),

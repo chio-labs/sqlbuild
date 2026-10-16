@@ -6,9 +6,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
 use sqlbuild_analysis::graph::errors::SelectorError;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const PRIVATE_USE: std::ops::Range<u32> = 0xF0000..0xFFFFE;
 
 /// `str.translate` tables to and from carrier characters; empty when no text holds a surrogate.
@@ -107,7 +107,7 @@ impl<'py> Carrier<'py> {
             .map(|help| self.back(help))
             .transpose()?;
         keywords.set_item("help", help)?;
-        imported(self.py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")?
+        registry::error(self.py, ErrorId::PlannerInput)?
             .call((self.back(&error.message)?,), Some(&keywords))
     }
 

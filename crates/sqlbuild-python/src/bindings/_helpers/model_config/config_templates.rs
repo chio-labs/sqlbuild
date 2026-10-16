@@ -21,13 +21,13 @@ use sqlbuild_model_config::templates::types::TemplateHost;
 
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 const TEMPLATE_OPEN_TOKEN: &str = "${";
 const ENVIRONMENT_READ: &str = "env";
 const CONTEXT_READ: &str = "ctx";
 const EFFECTIVE_VARS_LABEL: &str = "effective vars";
-const PROJECT_VAR_VALUES_MODULE: &str = "sqlbuild._native";
-const RENDER_PROJECT_VAR_TEXT: &str = "render_project_var_text";
 const VALUE_PATH: &str = "its value";
 const BUILTINS_MODULE: &str = "builtins";
 const ASCII_FUNCTION: &str = "ascii";
@@ -241,11 +241,8 @@ impl<'py> TemplateHost for PythonHost<'py> {
         if value.is_exact_instance_of::<PyString>() {
             return self.text_of(value);
         }
-        let rendered = self
-            .py
-            .import(PROJECT_VAR_VALUES_MODULE)
-            .and_then(|module| module.getattr(RENDER_PROJECT_VAR_TEXT))
-            .and_then(|render| {
+        let rendered =
+            registry::native(self.py, NativeAttr::RenderProjectVarText).and_then(|render| {
                 let arguments = PyDict::new(self.py);
                 arguments.set_item("value", value)?;
                 arguments.set_item("label", label)?;

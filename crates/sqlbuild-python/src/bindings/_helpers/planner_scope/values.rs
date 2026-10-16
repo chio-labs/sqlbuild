@@ -7,10 +7,6 @@ use pyo3::types::PyDictMethods;
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
 use sqlbuild_analysis::planner_scope::models::LoaderGraph;
 
-pub(crate) const NATIVE: &str = "sqlbuild._native";
-pub(crate) const MODELS: &str = "sqlbuild._native";
-pub(crate) const SOURCE_MODELS: &str = "sqlbuild._native";
-
 pub(crate) fn keys(values: &Bound<'_, PyAny>) -> PyResult<Vec<ObjectKey>> {
     values
         .try_iter()?

@@ -1,13 +1,11 @@
 //! Authored header values as the Python header objects: scalars, sets, constants and hooks.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{IntoPyObject, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 use sqlbuild_sqltext::compiler::main::header_word_value::header_word_value;
 use sqlbuild_sqltext::compiler::models::HeaderWord;
-
-const SQL_VALUES_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 
 fn word_to_python(py: Python<'_>, word: String) -> PyResult<Py<PyAny>> {
     match header_word_value(&word) {
@@ -28,10 +26,10 @@ fn word_to_python(py: Python<'_>, word: String) -> PyResult<Py<PyAny>> {
 
 fn instance(
     py: Python<'_>,
-    (module, class): (&str, &str),
+    class: RecordId,
     arguments: &pyo3::Bound<'_, PyDict>,
 ) -> PyResult<Py<PyAny>> {
-    Ok(shape_class_at(py, module, class)?
+    Ok(registry::class(py, class)?
         .call((), Some(arguments))?
         .unbind())
 }
@@ -60,7 +58,7 @@ fn constant_call(
         .collect::<PyResult<Vec<_>>>()?;
     let keywords = PyDict::new(py);
     keywords.set_item("arguments", PyTuple::new(py, arguments)?)?;
-    instance(py, (SQL_VALUES_MODULE, "AuthoredSqlValueCall"), &keywords)
+    instance(py, RecordId::AuthoredSqlValueCall, &keywords)
 }
 
 fn authored_value_to_python(
@@ -87,17 +85,21 @@ fn authored_value_to_python(
         AuthoredValue::Set(values) => {
             let keywords = PyDict::new(py);
             keywords.set_item("values", values_tuple(py, values)?)?;
-            instance(py, (SQL_VALUES_MODULE, "AuthoredSqlSet"), &keywords)
+            instance(py, RecordId::AuthoredSqlSet, &keywords)
         }
         AuthoredValue::Tuple(values) => values_tuple(py, values),
         AuthoredValue::TypedConstant(values) => constant_call(py, values),
         AuthoredValue::InlineSqlHook(statement) => {
             let keywords = PyDict::new(py);
             keywords.set_item("statement", statement)?;
-            instance(py, (DISCOVERY_MODELS_MODULE, "SqlHookEntry"), &keywords)
+            instance(py, RecordId::SqlHookEntry, &keywords)
         }
-        AuthoredValue::NamedSqlHook(name, kwargs) => hook(py, "NamedSqlHookEntry", name, kwargs),
-        AuthoredValue::PythonHook(name, kwargs) => hook(py, "PythonHookEntry", name, kwargs),
+        AuthoredValue::NamedSqlHook(name, kwargs) => {
+            hook(py, RecordId::NamedSqlHookEntry, name, kwargs)
+        }
+        AuthoredValue::PythonHook(name, kwargs) => {
+            hook(py, RecordId::PythonHookEntry, name, kwargs)
+        }
     }
 }
 
@@ -114,14 +116,14 @@ pub(crate) fn map_to_python(
 
 fn hook(
     py: Python<'_>,
-    class: &str,
+    class: RecordId,
     name: String,
     kwargs: Vec<(String, sqlbuild_sqltext::compiler::models::AuthoredValue)>,
 ) -> PyResult<Py<PyAny>> {
     let keywords = PyDict::new(py);
     keywords.set_item("name", name)?;
     keywords.set_item("kwargs", map_to_python(py, kwargs)?)?;
-    instance(py, (DISCOVERY_MODELS_MODULE, class), &keywords)
+    instance(py, class, &keywords)
 }
 
 pub(crate) fn optional_authored_value_to_python(

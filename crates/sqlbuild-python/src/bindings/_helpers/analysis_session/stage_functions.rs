@@ -20,6 +20,8 @@ use crate::bindings::_helpers::analysis_session::session::{
     infer_expression_source_shapes, prove_dynamic_column_contracts,
 };
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
 
 const BATCH_MODE: &str = "batch";
@@ -32,8 +34,6 @@ const LINEAGE_RESOURCE_TYPES: [(&str, &str); 4] = [
     ("seed", "seed"),
     ("table_fn", "table_fn"),
 ];
-const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 
 /// Each query's `(succeeded, column rows, has star)`; a native internal failure raises.
@@ -70,12 +70,8 @@ fn infer_native_query_columns<'py>(
         &request.get("profile")?,
         (&types, &nullability),
     )?;
-    let query_columns: Bound<'py, PyAny> = py
-        .import(ANALYSIS_MODELS_MODULE)?
-        .getattr("NativeQueryColumns")?;
-    let column_class: Bound<'py, PyAny> = py
-        .import(COMPILE_MODELS_MODULE)?
-        .getattr("InferredColumn")?;
+    let query_columns: Bound<'py, PyAny> = registry::class(py, RecordId::NativeQueryColumns)?;
+    let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredColumn)?;
     let nullability_class: Bound<'py, PyAny> = py
         .import(LINEAGE_TYPES_MODULE)?
         .getattr("InferredNullability")?;

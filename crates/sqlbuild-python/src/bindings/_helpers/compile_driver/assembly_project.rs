@@ -15,16 +15,15 @@ use crate::bindings::_helpers::compile_driver::assembly_models::{
     binding_rows, compiled_models, project_binding_diagnostics,
 };
 use crate::bindings::_helpers::compile_driver::assembly_sql_tests::assembled_sql_tests;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-pub(crate) const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const ADAPTER_TYPES_MODULE: &str = "sqlbuild.adapter.contract.types";
-const SCENARIO_CONFIG_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const SOURCE_SLOT: &str = "source";
 const SEED_SLOT: &str = "seed";
 const AUDIT_SLOT: &str = "audit";
@@ -96,7 +95,7 @@ pub(crate) fn assembled_project<'py>(
     let project: Bound<'py, PyAny> = project_view(inputs, &fields, &models)?;
     let binding_results: Bound<'py, PyDict> = binding_rows(&context.analyses)?;
     call_with(
-        &imported(py, NATIVE_MODULE, "complete_semantic_project")?,
+        &registry::native(py, NativeAttr::CompleteSemanticProject)?,
         &[
             ("project", project),
             ("profile", context.profile.clone()),
@@ -166,13 +165,13 @@ fn connection_database_fallback<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", inputs.getattr("project_config")?),
             ("local_config", inputs.getattr("local_config")?),
         ],
     )?;
-    if adapter_name.eq(imported(py, ADAPTER_TYPES_MODULE, "BuiltinAdapter")?.getattr("DUCKDB")?)? {
+    if adapter_name.eq(host::entry(py, AdapterHost::BuiltinAdapter)?.getattr("DUCKDB")?)? {
         return Ok(py.None().into_bound(py));
     }
     str_or_none(&connection.call_method1("get", ("database",))?)
@@ -227,11 +226,7 @@ fn project_fields<'py>(
             (
                 "scenario",
                 call_with(
-                    &imported(
-                        py,
-                        SCENARIO_CONFIG_MODULE,
-                        "resolve_effective_scenario_config",
-                    )?,
+                    &registry::native(py, NativeAttr::ResolveEffectiveScenarioConfig)?,
                     &[
                         ("project_config", project_config.clone()),
                         ("local_config", inputs.getattr("local_config")?),
@@ -334,7 +329,7 @@ fn project_view<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
     let owner: Bound<'py, PyAny> = inputs.getattr("native_project")?;
-    let native_model: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "NativeCompiledModel")?;
+    let native_model: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeCompiledModel)?;
     let mut all_native: bool = true;
     for model in models.as_any().try_iter()? {
         if !model?.is_instance(&native_model)? {
@@ -361,5 +356,5 @@ fn project_view<'py>(
     }
     let arguments: Bound<'py, PyDict> = fields.copy()?;
     arguments.set_item("sql_expansions", sql_expansions)?;
-    imported(py, COMPILE_MODELS_MODULE, "CompiledProject")?.call((), Some(&arguments))
+    registry::class(py, RecordId::CompiledProject)?.call((), Some(&arguments))
 }

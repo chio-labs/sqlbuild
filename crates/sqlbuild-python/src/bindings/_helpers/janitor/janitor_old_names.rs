@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::janitor_planning::main::migration_origin_keys::migration_origin_keys;
 use sqlbuild_analysis::janitor_planning::main::old_name_request_matches::old_name_request_matches;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::janitor::janitor_facts::{
     SchemaRelations, Warehouse, model_destinations,
 };
@@ -15,13 +15,13 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, optional, record, sorted_schemas, text, tuple,
 };
 
-const MIGRATION_TYPES: &str = "sqlbuild._native";
-const IS_COMPATIBILITY_VIEW: (&str, &str) = (
-    "sqlbuild.executor.old_name_views._helpers.janitor",
-    "is_compatibility_view",
-);
-const READ_HISTORIES: (&str, &str) = ("sqlbuild._native", "read_old_name_view_histories");
-const STORED_COLUMNS: (&str, &str) = ("sqlbuild._native", "stored_old_name_view_columns");
+const IS_COMPATIBILITY_VIEW: ExecutorHost = ExecutorHost::IsCompatibilityView;
+const READ_HISTORIES: NativeAttr = NativeAttr::ReadOldNameViewHistories;
+const STORED_COLUMNS: NativeAttr = NativeAttr::StoredOldNameViewColumns;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
 use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 const MIGRATE_FROM_CONFIG_KEY: &str = "migrate_from";
@@ -33,7 +33,7 @@ pub(crate) struct OldNamePlanning<'py> {
 }
 
 fn drop_reason<'py>(py: Python<'py>, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, MIGRATION_TYPES, "OldNameViewDropReason")?.getattr(member)
+    registry::class(py, RecordId::OldNameViewDropReason)?.getattr(member)
 }
 
 fn status<'py>(
@@ -44,7 +44,7 @@ fn status<'py>(
 }
 
 fn status_is(py: Python<'_>, value: &Bound<'_, PyAny>, member: &str) -> PyResult<bool> {
-    value.eq(imported(py, MIGRATION_TYPES, "OldNameViewStatus")?.getattr(member)?)
+    value.eq(registry::class(py, RecordId::OldNameViewStatus)?.getattr(member)?)
 }
 
 fn read_histories<'py>(
@@ -74,7 +74,7 @@ fn read_histories<'py>(
             continue;
         }
         let stored_columns: Bound<'py, PyAny> = call_with(
-            &imported(py, STORED_COLUMNS.0, STORED_COLUMNS.1)?,
+            &registry::native(py, STORED_COLUMNS)?,
             &[
                 ("adapter", warehouse.adapter.clone()),
                 ("connection", warehouse.connection.clone()),
@@ -83,7 +83,7 @@ fn read_histories<'py>(
             ],
         )?;
         let read: Bound<'py, PyAny> = call_with(
-            &imported(py, READ_HISTORIES.0, READ_HISTORIES.1)?,
+            &registry::native(py, READ_HISTORIES)?,
             &[
                 ("connection", warehouse.connection.clone()),
                 ("execute", warehouse.adapter.getattr("execute")?),
@@ -220,7 +220,7 @@ fn view<'py>(
         ));
         pairs.push(("claimed_by", optional(py, claimed_by.as_deref())?));
     }
-    record(py, "JanitorOldNameView", &pairs)
+    record(py, ExecutorHost::JanitorOldNameView, &pairs)
 }
 
 /// Each project model's destination mapped to the model's name.
@@ -272,7 +272,7 @@ pub(crate) fn plan_old_name_views<'py>(
     }
     if histories.is_empty() && early_drops.is_empty() {
         return Ok(OldNamePlanning {
-            planning: record(py, "JanitorOldNameViewPlanning", &[])?,
+            planning: record(py, ExecutorHost::JanitorOldNameViewPlanning, &[])?,
             keys: HashSet::new(),
         });
     }
@@ -284,8 +284,7 @@ pub(crate) fn plan_old_name_views<'py>(
             requested.push((name.clone(), false));
         }
     }
-    let is_compatibility_view: Bound<'py, PyAny> =
-        imported(py, IS_COMPATIBILITY_VIEW.0, IS_COMPATIBILITY_VIEW.1)?;
+    let is_compatibility_view: Bound<'py, PyAny> = host::entry(py, IS_COMPATIBILITY_VIEW)?;
     let (mut live, mut drops, mut missing) = (Vec::new(), Vec::new(), Vec::new());
     let mut keys: HashSet<Folded> = HashSet::new();
     for history in &histories {
@@ -334,7 +333,7 @@ pub(crate) fn plan_old_name_views<'py>(
         .collect();
     let planning: Bound<'py, PyAny> = record(
         py,
-        "JanitorOldNameViewPlanning",
+        ExecutorHost::JanitorOldNameViewPlanning,
         &[
             ("live", tuple(py, live)?),
             ("drops", tuple(py, drops)?),

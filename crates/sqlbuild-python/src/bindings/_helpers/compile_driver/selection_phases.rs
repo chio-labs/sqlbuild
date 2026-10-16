@@ -6,14 +6,9 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const SPLIT_SELECTORS_MODULE: &str = "sqlbuild._native";
-const PLANNER_SCOPES_MODULE: &str = "sqlbuild._native";
-const STATIC_SCOPE_MODULE: &str = "sqlbuild._native";
-const STATIC_RELATIONS_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 
 /// Whether a selection names nothing to select or exclude.
@@ -28,7 +23,7 @@ fn unit_test_selectors_applied<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let resolved: Bound<'py, PyAny> = if options.is_none() {
-        imported(py, NATIVE_RECORDS_MODULE, "CompilePipelineOptions")?.call0()?
+        registry::class(py, RecordId::CompilePipelineOptions)?.call0()?
     } else {
         options.clone()
     };
@@ -36,11 +31,7 @@ fn unit_test_selectors_applied<'py>(
         return Ok(resolved);
     }
     let split: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            SPLIT_SELECTORS_MODULE,
-            "split_project_unit_test_selectors",
-        )?,
+        &registry::native(py, NativeAttr::SplitProjectUnitTestSelectors)?,
         &[
             ("select", resolved.getattr("select")?),
             ("exclude", resolved.getattr("exclude")?),
@@ -71,13 +62,13 @@ fn planner_scopes<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
     call_with(
-        &imported(py, PLANNER_SCOPES_MODULE, "resolve_planner_scopes")?,
+        &registry::native(py, NativeAttr::ResolvePlannerScopes)?,
         &[
             ("project", project.clone()),
             (
                 "selection",
                 call_with(
-                    &imported(py, NATIVE_RECORDS_MODULE, "PlannerSelection")?,
+                    &registry::class(py, RecordId::PlannerSelection)?,
                     &[
                         ("select", selection.getattr("select")?),
                         ("exclude", selection.getattr("exclude")?),
@@ -87,7 +78,7 @@ fn planner_scopes<'py>(
             (
                 "policies",
                 call_with(
-                    &imported(py, NATIVE_RECORDS_MODULE, "PlannerPolicies")?,
+                    &registry::class(py, RecordId::PlannerPolicies)?,
                     &[("auto_load_sources", selection.getattr("auto_load_sources")?)],
                 )?,
             ),
@@ -129,7 +120,7 @@ fn resolve_configured_rule_selection<'py>(
         return Ok(PyFrozenSet::empty(py)?.into_any());
     }
     let selection: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_compile_analysis_selection")?,
+        &registry::native(py, NativeAttr::ResolveCompileAnalysisSelection)?,
         &[
             ("options", options.clone()),
             ("discovered_inputs", discovered_inputs.clone()),
@@ -160,7 +151,7 @@ fn resolve_analysis_model_names<'py>(
         return Ok(py.None().into_bound(py));
     }
     let structural_project: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "assemble_project")?,
+        &registry::native(py, NativeAttr::AssembleProject)?,
         &[
             ("inputs", compile_inputs.clone()),
             ("inference_profile", inference_profile.clone()),
@@ -188,7 +179,7 @@ fn deferred_locations<'py>(
         return Ok(py.None().into_bound(py));
     }
     let deferred_target: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_deferred_target_config")?,
+        &registry::native(py, NativeAttr::ResolveDeferredTargetConfig)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("defer_to", defer_to),
@@ -199,7 +190,7 @@ fn deferred_locations<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "build_deferred_locations")?,
+        &registry::native(py, NativeAttr::BuildDeferredLocations)?,
         &[
             ("project", project.clone()),
             ("deferred_target_config", deferred_target),
@@ -241,7 +232,7 @@ fn compile_static_command_context<'py>(
         selected_keys = PyFrozenSet::empty(py)?.into_any();
     }
     let compiled: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "compile_project_phase")?,
+        &registry::native(py, NativeAttr::CompileProjectPhase)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("adapter", adapter.clone()),
@@ -256,13 +247,13 @@ fn compile_static_command_context<'py>(
     let deferred: Bound<'py, PyAny> =
         deferred_locations((&discovered, &adapter), &options, &project)?;
     let scope: Bound<'py, PyAny> = call_with(
-        &imported(py, STATIC_SCOPE_MODULE, "resolve_static_command_scope")?,
+        &registry::native(py, NativeAttr::ResolveStaticCommandScope)?,
         &[
             ("project", project.clone()),
             (
                 "selection",
                 call_with(
-                    &imported(py, NATIVE_RECORDS_MODULE, "PlannerSelection")?,
+                    &registry::class(py, RecordId::PlannerSelection)?,
                     &[
                         ("select", options.getattr("select")?),
                         ("exclude", options.getattr("exclude")?),
@@ -275,11 +266,7 @@ fn compile_static_command_context<'py>(
         ],
     )?;
     let relations: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            STATIC_RELATIONS_MODULE,
-            "resolve_static_relation_context",
-        )?,
+        &registry::native(py, NativeAttr::ResolveStaticRelationContext)?,
         &[
             ("project", project.clone()),
             ("adapter", adapter),
@@ -287,7 +274,7 @@ fn compile_static_command_context<'py>(
             (
                 "deferral",
                 call_with(
-                    &imported(py, NATIVE_RECORDS_MODULE, "DeferralInputs")?,
+                    &registry::class(py, RecordId::DeferralInputs)?,
                     &[
                         ("deferred_locations", deferred),
                         ("defer_sources_to", options.getattr("defer_sources_to")?),
@@ -307,7 +294,7 @@ fn compile_static_command_context<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "StaticCommandContext")?,
+        &registry::class(py, RecordId::StaticCommandContext)?,
         &[
             ("project", project),
             ("scope", scope),

@@ -17,6 +17,7 @@ use crate::bindings::_helpers::planner_strategy::fixture_types::expected_fixture
 use crate::bindings::_helpers::planner_strategy::fixture_values::{
     columns, diagnostic, folded, label, record, strings,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
 
 #[pyfunction]
 #[pyo3(signature = (*, project, adapter, request, planning_context = None))]
@@ -198,7 +199,7 @@ fn complete_prepared<'py>(
     kwargs.set_item("inferred_by_fixture", prepared.inferred)?;
     kwargs.set_item("expected_types", expected)?;
     kwargs.set_item("diagnostics", PyTuple::new(py, prepared.diagnostics)?)?;
-    record(py, "RelationFixtureCompletion", &kwargs)
+    record(py, RecordId::RelationFixtureCompletion, &kwargs)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

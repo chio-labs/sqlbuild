@@ -7,16 +7,14 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::discovery::description_inputs::externally_described_models;
 use crate::bindings::_helpers::format_command::files::{
     FormatChange, file_dictionary, overlaid, persist_changes, sorted_items,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const FIXES_MODULE: &str = "sqlbuild._native";
-const FIXTURE_AUTOFIX_MODULE: &str = "sqlbuild._native";
-const LINT_ERRORS_MODULE: &str = "sqlbuild._native";
 const DESCRIPTION_PRESENT: &str = "description-present";
 
 /// What one format run formats and how.
@@ -42,8 +40,8 @@ pub(crate) struct FormatOutcome<'py> {
     pub(crate) final_contents: Bound<'py, PyDict>,
 }
 
-fn native<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, NATIVE_MODULE, name)
+fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
+    registry::native(py, name)
 }
 
 /// Fixture-null rewrites proven safe by the contracts, when fixture inputs are known.
@@ -57,7 +55,7 @@ fn fixture_autofix<'py>(
         return Ok(PyDict::new(py));
     };
     Ok(call_with(
-        &imported(py, FIXTURE_AUTOFIX_MODULE, "format_redundant_fixture_nulls")?,
+        &registry::native(py, NativeAttr::FormatRedundantFixtureNulls)?,
         &[
             ("files", files.clone().into_any()),
             ("project_dir", request.project_dir.clone()),
@@ -78,7 +76,7 @@ fn format_bodies<'py>(
         .into_iter()
         .map(|(path, contents)| Ok(PyTuple::new(py, [path, contents])?.into_any()))
         .collect::<PyResult<_>>()?;
-    let result: Bound<'py, PyAny> = native(py, "format_lint_sql_bodies")?.call1((
+    let result: Bound<'py, PyAny> = native(py, NativeAttr::FormatLintSqlBodies)?.call1((
         PyList::new(py, items)?,
         request.project_dir,
         request.config,
@@ -103,12 +101,12 @@ fn apply_fixes<'py>(
     }
     let current: Bound<'py, PyDict> = overlaid(files, &updated)?;
     call_with(
-        &native(py, "prepare_native_header_cache")?,
+        &native(py, NativeAttr::PrepareNativeHeaderCache)?,
         &[("files", current.clone().into_any())],
     )?;
     for (path, contents) in sorted_items(&current)? {
         let result: Bound<'py, PyAny> = call_with(
-            &native(py, "format_native_headers")?,
+            &native(py, NativeAttr::FormatNativeHeaders)?,
             &[
                 ("contents", contents.clone()),
                 ("file_path", path.clone()),
@@ -139,7 +137,7 @@ fn apply_fixes<'py>(
         updated.update(final_native.as_mapping())?;
     }
     let result: Bound<'py, PyAny> = call_with(
-        &native(py, "reject_unparseable_header_rewrites")?,
+        &native(py, NativeAttr::RejectUnparseableHeaderRewrites)?,
         &[
             ("updated", updated.into_any()),
             ("config", request.config.clone()),
@@ -163,11 +161,11 @@ fn lint_final_contents<'py>(
     for (path, contents) in sorted_items(files)? {
         let final_contents: Bound<'py, PyAny> = updated.get_item(&path)?.unwrap_or(contents);
         let headers: Bound<'py, PyAny> = call_with(
-            &native(py, "scan_headers")?,
+            &native(py, NativeAttr::ScanHeaders)?,
             &[("contents", final_contents.clone())],
         )?;
         let found: Bound<'py, PyAny> = call_with(
-            &native(py, "lint_native_headers")?,
+            &native(py, NativeAttr::LintNativeHeaders)?,
             &[
                 ("contents", final_contents),
                 ("file_path", path),
@@ -222,7 +220,7 @@ fn plan_rule_fixes<'py>(
 ) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = files.py();
     let result: Bound<'py, PyAny> = call_with(
-        &imported(py, FIXES_MODULE, "plan_rule_fixes")?,
+        &registry::native(py, NativeAttr::PlanRuleFixes)?,
         &[
             ("project_dir", request.project_dir.clone()),
             ("files", files.clone().into_any()),
@@ -261,7 +259,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
                 Some((discovered.clone(), adapter.getattr("sql_lexical_syntax")?))
             }
             (Some(_), None) => {
-                return Err(imported(py, LINT_ERRORS_MODULE, "LintError")?
+                return Err(registry::error(py, ErrorId::Lint)?
                     .call1(("fixture-null formatting requires the project adapter",))
                     .map(pyo3::PyErr::from_value)?);
             }
@@ -273,7 +271,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     let files_checked: usize = collected.len();
     let files: Bound<'py, PyDict> = file_dictionary(py, collected)?;
     let safe: Bound<'py, PyAny> = call_with(
-        &native(py, "safe_format_files")?,
+        &native(py, NativeAttr::SafeFormatFiles)?,
         &[
             ("files", files.clone().into_any()),
             ("config", request.config.clone()),
@@ -310,7 +308,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
         drop_resolved_description_faults(request.project_dir, violations)?;
     let final_contents: Bound<'py, PyDict> = overlaid(&files, &updated)?;
     let allow_suppressions: Bound<'py, PyAny> = request.config.getattr("allow_suppressions")?;
-    let violations: Vec<Bound<'py, PyAny>> = native(py, "apply_lint_suppressions")?
+    let violations: Vec<Bound<'py, PyAny>> = native(py, NativeAttr::ApplyLintSuppressions)?
         .call1((violations, &final_contents, allow_suppressions))?
         .extract()?;
     Ok(FormatOutcome {

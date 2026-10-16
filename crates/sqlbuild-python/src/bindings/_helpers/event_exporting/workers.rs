@@ -13,13 +13,15 @@ use sqlbuild_core::event_export::models::{EventQueue, ExportSnapshot, QueuedEven
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::event_exporting::constants::{
-    INVOCATION_THREAD_PREFIX, INVOKE_LIFECYCLE_MODULE, NO_SECONDS, POLL_SECONDS,
+    INVOCATION_THREAD_PREFIX, NO_SECONDS, POLL_SECONDS,
 };
 use crate::bindings::_helpers::event_exporting::dispatcher::{Exporter, Queued, Shared};
 use crate::bindings::_helpers::event_exporting::models::{
     EventExportSummary, EventExporterFailure,
 };
 use crate::bindings::_helpers::event_exporting::values::error_type_of;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::native_threads::exit_signal::interpreter_exiting;
 
 /// Which long-lived dispatcher thread a worker runs.
@@ -199,7 +201,7 @@ impl DispatcherWorker {
                 &[
                     (
                         "target",
-                        imported(py, INVOKE_LIFECYCLE_MODULE, "invoke_lifecycle_event_sink")?,
+                        host::entry(py, UserCodeHost::InvokeLifecycleEventSink)?,
                     ),
                     ("kwargs", arguments.into_any()),
                     ("name", PyString::new(py, &name).into_any()),

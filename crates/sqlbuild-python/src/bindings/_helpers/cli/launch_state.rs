@@ -3,9 +3,9 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The module attributes holding the offered path's and the withheld flag's `ContextVar`s.
 const OFFERED_ATTRIBUTE: &str = "_launch_record_offered";
 const WITHHELD_ATTRIBUTE: &str = "_launch_record_withheld";
@@ -15,26 +15,26 @@ const WITHHELD_NAME: &str = "sqlbuild_launch_record_withheld";
 /// Remember where `sqb` looks for this invocation's launch record, or that it offered none.
 pub(crate) fn offer_launch_record(py: Python<'_>, path: Option<Bound<'_, PyAny>>) -> PyResult<()> {
     let path: Bound<'_, PyAny> = path.unwrap_or_else(|| py.None().into_bound(py));
-    imported(py, NATIVE_MODULE, OFFERED_ATTRIBUTE)?.call_method1("set", (path,))?;
-    imported(py, NATIVE_MODULE, WITHHELD_ATTRIBUTE)?.call_method1("set", (false,))?;
+    registry::native(py, NativeAttr::LaunchRecordOffered)?.call_method1("set", (path,))?;
+    registry::native(py, NativeAttr::LaunchRecordWithheld)?.call_method1("set", (false,))?;
     Ok(())
 }
 
 /// Withhold the launch record: `sqb` cannot replay what this invocation also depends on.
 pub(crate) fn withhold_launch_record(py: Python<'_>) -> PyResult<()> {
-    imported(py, NATIVE_MODULE, WITHHELD_ATTRIBUTE)?.call_method1("set", (true,))?;
+    registry::native(py, NativeAttr::LaunchRecordWithheld)?.call_method1("set", (true,))?;
     Ok(())
 }
 
 /// The offered launch record path, unless an input outside its key was read.
 pub(crate) fn launch_record_path(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    if imported(py, NATIVE_MODULE, WITHHELD_ATTRIBUTE)?
+    if registry::native(py, NativeAttr::LaunchRecordWithheld)?
         .call_method0("get")?
         .is_truthy()?
     {
         return Ok(py.None().into_bound(py));
     }
-    imported(py, NATIVE_MODULE, OFFERED_ATTRIBUTE)?.call_method0("get")
+    registry::native(py, NativeAttr::LaunchRecordOffered)?.call_method0("get")
 }
 
 fn context_variable<'py>(

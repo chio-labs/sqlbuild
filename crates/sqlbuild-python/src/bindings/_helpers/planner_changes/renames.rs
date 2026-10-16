@@ -15,9 +15,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const FINAL_NEWLINE: &str = "\n";
 
@@ -46,7 +46,7 @@ pub(crate) fn origin_names(
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| GENERIC_DIALECT.to_owned());
     let mut spans = |names: &BTreeSet<String>| ref_name_spans(&query_sql, &dialect_name, names);
-    let compute_hash: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "compute_query_hash")?;
+    let compute_hash: Bound<'_, PyAny> = registry::native(py, NativeAttr::ComputeQueryHash)?;
     let mut query_hash = |text: &str| -> PyResult<String> {
         call_with(
             &compute_hash,
@@ -186,7 +186,7 @@ fn plan_reference_renames<'py>(
     let target_name: Bound<'py, PyAny> = runtime
         .getattr("project")?
         .getattr("effective_target_name")?;
-    let rename_class: Bound<'py, PyAny> = imported(py, "sqlbuild._native", "ReferenceRename")?;
+    let rename_class: Bound<'py, PyAny> = registry::class(py, RecordId::ReferenceRename)?;
     let mut renames: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in planned.call_method0("items")?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
@@ -236,7 +236,7 @@ fn changed_referencing_query(
     }
     let recorded_models: Bound<'_, PyAny> = snapshot.getattr("fingerprints")?.getattr("models")?;
     let ref_kind: Bound<'_, PyAny> =
-        imported(py, REFERENCE_TYPES_MODULE, "SqlReferenceKind")?.getattr("REF")?;
+        registry::class(py, RecordId::SqlReferenceKind)?.getattr("REF")?;
     let dialect: Option<String> = snapshot.getattr("column_dialect")?.extract()?;
     for model in selected {
         let recorded: Bound<'_, PyAny> =

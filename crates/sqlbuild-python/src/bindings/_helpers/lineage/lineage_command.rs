@@ -38,19 +38,9 @@ use crate::bindings::_helpers::lineage::lineage_cache::{
 };
 use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views, lineage_keys};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const ADAPTER_NAME_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
-const SELECTION_MODULE: &str = "sqlbuild._native";
-const SELECTOR_TOKENS_MODULE: &str = "sqlbuild._native";
-const SELECTOR_PARSE_MODULE: &str = "sqlbuild._native";
-const SELECTOR_MATCH_MODULE: &str = "sqlbuild._native";
-const PLANNER_EXCEPTIONS: &str = "sqlbuild._native";
 const UNKNOWN_SELECTOR_ERROR_CODE: &str = "S007";
 const RICH_MODE: &str = "rich";
 const ANALYSIS_HELP: &str = "enable SQL analysis or install SQLBuild with Polyglot support";
@@ -94,17 +84,13 @@ fn keywords<'py>(
     Ok(dict)
 }
 
-fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    py.import(module)?.getattr(name)
-}
-
 /// `CliUserError(message, code=..., help=...)`.
 fn user_error(py: Python<'_>, error: LineageError) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", error.code)?;
         options.set_item("help", error.help)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((error.message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -149,7 +135,7 @@ fn discover<'py>(
     options.set_item("project_dir", project_dir)?;
     options.set_item("sql_analysis_enabled_override", analysis_override)?;
     options.set_item("extract_output_column_locations", false)?;
-    imported(py, NATIVE_MODULE, "discover_project_inputs")?.call((), Some(&options))
+    registry::native(py, NativeAttr::DiscoverProjectInputs)?.call((), Some(&options))
 }
 
 fn reject_unit_tests(
@@ -165,8 +151,7 @@ fn reject_unit_tests(
             ("discovered_inputs", discovered),
         ],
     )?;
-    imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?
-        .call((), Some(&options))?;
+    registry::native(py, NativeAttr::RejectUnitTestSelectors)?.call((), Some(&options))?;
     Ok(())
 }
 
@@ -191,7 +176,7 @@ fn prepare_source<'py>(
         discover(py, project_dir, if compiled { None } else { Some(false) })?;
     reject_unit_tests(py, request, &discovered)?;
     let adapter_name: Bound<'py, PyAny> =
-        imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?.call(
+        registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?.call(
             (),
             Some(&keywords(
                 py,
@@ -214,7 +199,7 @@ fn prepare_source<'py>(
     options.set_item("no_sql_validation", no_validation)?;
     options.set_item("skip_column_inference", !compiled)?;
     let graph: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "build_project_graph")?.call((), Some(&options))?;
+        registry::native(py, NativeAttr::BuildProjectGraph)?.call((), Some(&options))?;
     let index: LineageIndex = graph_index(&graph)?;
     if let Some(fingerprint) = &fingerprint {
         write_lineage_cache(py, &directory, fingerprint, &index)?;
@@ -281,8 +266,7 @@ fn semantic_uses(
             ],
         )?;
         let keys: Vec<LineageKey> = lineage_keys(
-            &imported(py, GRAPH_SELECTION_MODULE, "select_project_graph")?
-                .call((), Some(&options))?,
+            &registry::native(py, NativeAttr::SelectProjectGraph)?.call((), Some(&options))?,
         )?;
         keys.into_iter()
             .filter(|key| key.resource_type == MODEL_RESOURCE_TYPE)
@@ -299,7 +283,7 @@ fn semantic_uses(
             .collect()
     };
     let uses: Bound<'_, PyAny> =
-        imported(py, NATIVE_MODULE, "build_direct_semantic_uses")?.call1((
+        registry::native(py, NativeAttr::BuildDirectSemanticUses)?.call1((
             graph.getattr("project")?,
             adapter.call_method0("sql_analysis_dialect")?,
             PyFrozenSet::new(py, model_names)?,
@@ -389,7 +373,7 @@ fn column_lineage<'py>(
         py,
         (&message, rich && count >= RICH_STATUS_MODEL_THRESHOLD),
         || {
-            imported(py, NATIVE_MODULE, "build_project_column_lineage")?.call1((
+            registry::native(py, NativeAttr::BuildProjectColumnLineage)?.call1((
                 graph.getattr("project")?,
                 py.None(),
                 mode,
@@ -484,9 +468,9 @@ fn selector_anchors(
     select: &[String],
     require_clear_anchors: bool,
 ) -> PyResult<LineageAnchors> {
-    let parse: Bound<'_, PyAny> = imported(py, SELECTOR_PARSE_MODULE, "parse_project_selector")?;
-    let matcher: Bound<'_, PyAny> = imported(py, SELECTOR_MATCH_MODULE, "match_project_selector")?;
-    let path_class: Bound<'_, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "PathSelector")?;
+    let parse: Bound<'_, PyAny> = registry::native(py, NativeAttr::ParseProjectSelector)?;
+    let matcher: Bound<'_, PyAny> = registry::native(py, NativeAttr::MatchProjectSelector)?;
+    let path_class: Bound<'_, PyAny> = registry::class(py, RecordId::PathSelector)?;
     let names: HashMap<&str, &LineageKey> = name_lookup(index);
     let named = |name: String| -> PyResult<LineageKey> {
         names
@@ -564,7 +548,7 @@ fn selector_rendering(
     options.set_item("select", &select)?;
     options.set_item("exclude", &exclude)?;
     let selected: Vec<LineageKey> = lineage_keys(
-        &imported(py, SELECTION_MODULE, "resolve_project_selectors")?.call((), Some(&options))?,
+        &registry::native(py, NativeAttr::ResolveProjectSelectors)?.call((), Some(&options))?,
     )?;
     let index: &LineageIndex = source.index();
     let direction: Option<String> = request.getattr("direction")?.extract()?;
@@ -573,12 +557,8 @@ fn selector_rendering(
         let options: Bound<'_, PyDict> = view_options(&views, &GRAPH_VIEW_NAMES)?;
         options.set_item("selectors", &exclude)?;
         let excluded: Vec<LineageKey> = lineage_keys(
-            &imported(
-                py,
-                SELECTOR_TOKENS_MODULE,
-                "resolve_project_selector_tokens",
-            )?
-            .call((), Some(&options))?,
+            &registry::native(py, NativeAttr::ResolveProjectSelectorTokens)?
+                .call((), Some(&options))?,
         )?;
         select_directional_lineage(index, (&selected, &excluded), (&direction, depth))
     } else {
@@ -597,8 +577,7 @@ fn selector_failure(
     error: PyErr,
 ) -> PyErr {
     let check = || -> PyResult<()> {
-        let planner_error: Bound<'_, PyAny> =
-            imported(py, PLANNER_EXCEPTIONS, "PlannerInputError")?;
+        let planner_error: Bound<'_, PyAny> = registry::error(py, ErrorId::PlannerInput)?;
         if !matches!(source, LineageSource::Cached(_))
             || !error.is_instance(py, &planner_error)
             || error.value(py).getattr("code")?.extract::<String>()? != UNKNOWN_SELECTOR_ERROR_CODE

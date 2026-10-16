@@ -14,6 +14,8 @@ use sqlbuild_scopes::scope_text::main::scope_result_failed::scope_result_failed;
 use sqlbuild_scopes::scope_text::models::ScopeTextRequest;
 
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_objects::ScopeClasses;
 use crate::bindings::_helpers::scopes::scope_report_objects::read_result;
@@ -22,10 +24,6 @@ use crate::bindings::_helpers::scopes::scope_reports::{
     serialize_scope_report,
 };
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const MODELS_MODULE: &str = "sqlbuild._native";
-const TYPES_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
 const TARGET_ERROR_CODE: &str = "C960";
 const BARE_USAGE: &str = "bare names work for models, sources, seeds and functions; write macros, \
 enums, constants, tests and audits with their prefix, for example macro:<name>";
@@ -48,10 +46,8 @@ fn user_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("code", TARGET_ERROR_CODE)?;
     options.set_item("help", BARE_USAGE)?;
-    let error: Bound<'_, PyAny> = py
-        .import(ERRORS_MODULE)?
-        .getattr("CliUserError")?
-        .call((message,), Some(&options))?;
+    let error: Bound<'_, PyAny> =
+        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))?;
     Ok(PyErr::from_value(error))
 }
 
@@ -163,7 +159,7 @@ fn report_filters<'py>(
     py: Python<'py>,
     request: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let kind_class: Bound<'_, PyAny> = py.import(TYPES_MODULE)?.getattr("DeclarationKind")?;
+    let kind_class: Bound<'_, PyAny> = registry::class(py, RecordId::DeclarationKind)?;
     let mut kinds: Vec<Bound<'_, PyAny>> = Vec::new();
     for kind in request.getattr("kinds")?.try_iter()? {
         kinds.push(kind_class.call1((kind?,))?);
@@ -183,9 +179,7 @@ fn report_filters<'py>(
             ("globals", request.getattr("globals")?),
         ],
     )?;
-    py.import(MODELS_MODULE)?
-        .getattr("ScopeReportFilters")?
-        .call((), Some(&options))
+    registry::class(py, RecordId::ScopeReportFilters)?.call((), Some(&options))
 }
 
 /// `dataclasses.replace(report, **changes)`.
@@ -341,14 +335,13 @@ fn run_scope_command(
     load_scope_index: Option<Bound<'_, PyAny>>,
     output_stream: Option<Bound<'_, PyAny>>,
 ) -> PyResult<i32> {
-    let native: Bound<'_, PyModule> = py.import(NATIVE_MODULE)?;
     let project_dir: Bound<'_, PyAny> = match request.getattr("project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
     let loader: Bound<'_, PyAny> = match load_scope_index {
         Some(loader) => loader,
-        None => native.getattr("load_or_build_scope_index")?,
+        None => registry::native(py, NativeAttr::LoadOrBuildScopeIndex)?,
     };
     let options: Bound<'_, PyDict> = keywords(
         py,

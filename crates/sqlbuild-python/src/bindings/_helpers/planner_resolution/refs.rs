@@ -1,19 +1,16 @@
 //! Reference lookup and adapter callbacks for planner SQL.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
-use crate::bindings::_helpers::planner_resolution::values::{
-    NATIVE_MODULE, cursor_wrap, method, string,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_resolution::values::{cursor_wrap, method, string};
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_sqltext::resolution::main::{ref_alias::ref_alias, reference_spans::reference_spans};
-
-const RELATION_MODULE: &str =
-    "sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name";
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -49,11 +46,7 @@ fn resolve_ref_references(py: Python<'_>, kwargs: Option<Bound<'_, PyDict>>) -> 
                 output.push_str(&sql[span.start..span.end]);
             } else {
                 let relation: String = call_with(
-                    &imported(
-                        py,
-                        RELATION_MODULE,
-                        "resolve_relation_location_qualified_name",
-                    )?,
+                    &host::entry(py, AdapterHost::ResolveRelationLocationQualifiedName)?,
                     &[("adapter", args.value("adapter")?), ("location", target)],
                 )?
                 .extract()?;
@@ -124,7 +117,7 @@ fn resolve_function_calls(
     if spans.is_empty() {
         return Ok(query_sql.to_owned());
     }
-    let scanner_type = imported(py, NATIVE_MODULE, "SqlCodeScanner")?;
+    let scanner_type = registry::native(py, NativeAttr::SqlCodeScanner)?;
     let scan = scanner_type.call1((query_sql, py.None(), "SQL reference resolution"))?;
     let mut output = String::new();
     let mut last = 0;

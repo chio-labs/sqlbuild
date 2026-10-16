@@ -1,51 +1,28 @@
 //! Python modules and fixed names of warehouse inspection for planning.
 
-pub(crate) const RELATIONS_MAIN_LIST: (&str, &str) = (
-    "sqlbuild.adapter.relations.main._list_relations_for_inspection",
-    "list_relations_for_inspection",
-);
-pub(crate) const RELATIONS_MAIN_COLUMNS: (&str, &str) = (
-    "sqlbuild.adapter.relations.main._get_columns_for_inspection",
-    "get_columns_for_inspection",
-);
-pub(crate) const ACTIVE_CATALOG: (&str, &str) = (
-    "sqlbuild.adapter.relations.main.active_inspection_catalog",
-    "active_inspection_catalog",
-);
-pub(crate) const RUN_BOUNDED: (&str, &str) = (
-    "sqlbuild.adapter.relations.main.run_bounded_inspections",
-    "run_bounded_inspections",
-);
-pub(crate) const RECORD_QUERY: (&str, &str) = (
-    "sqlbuild.adapter.relations.main.record_inspection_query",
-    "record_inspection_query",
-);
-pub(crate) const RUN_RECORDED_QUERY: (&str, &str) = (
-    "sqlbuild.adapter.relations.main.run_recorded_inspection_query",
-    "run_recorded_inspection_query",
-);
-pub(crate) const QUERY_RECORD: (&str, &str) =
-    ("sqlbuild.adapter.relations.models", "InspectionQueryRecord");
-pub(crate) const COLUMN_INFO: (&str, &str) = ("sqlbuild.adapter.contract.models", "ColumnInfo");
-pub(crate) const RELATION_LOOKUP: (&str, &str) =
-    ("sqlbuild.adapter.contract.models", "RelationLookup");
-pub(crate) const LOG_DEBUG_EVENT: (&str, &str) = (
-    "sqlbuild.diagnostics.main.log_debug_event",
-    "log_debug_event",
-);
-pub(crate) const CURSOR_RESOLVE_MODULE: &str = "sqlbuild._native";
-pub(crate) const CURSOR_POLICIES: (&str, &str) =
-    ("sqlbuild._native", "resolve_start_cursor_config");
-pub(crate) const MAXIMUM_START: (&str, &str) = ("sqlbuild._native", "maximum_allowed_start");
-pub(crate) const RENDER_SOURCE_READ: (&str, &str) =
-    ("sqlbuild._native", "render_source_read_relation");
-pub(crate) const YAML_ENTRY_LINE: (&str, &str) = ("sqlbuild._native", "yaml_entry_line");
-pub(crate) const RUN_SCOPE: (&str, &str) =
-    ("sqlbuild.runtime.observability.main.run_scope", "run_scope");
-pub(crate) const SQL_HOOK_ENTRY: (&str, &str) = ("sqlbuild._native", "SqlHookEntry");
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+
+pub(crate) const RELATIONS_MAIN_LIST: AdapterHost = AdapterHost::ListRelationsForInspection;
+pub(crate) const RELATIONS_MAIN_COLUMNS: AdapterHost = AdapterHost::GetColumnsForInspection;
+pub(crate) const ACTIVE_CATALOG: AdapterHost = AdapterHost::ActiveInspectionCatalog;
+pub(crate) const RUN_BOUNDED: AdapterHost = AdapterHost::RunBoundedInspections;
+pub(crate) const RECORD_QUERY: AdapterHost = AdapterHost::RecordInspectionQuery;
+pub(crate) const RUN_RECORDED_QUERY: AdapterHost = AdapterHost::RunRecordedInspectionQuery;
+pub(crate) const QUERY_RECORD: AdapterHost = AdapterHost::InspectionQueryRecord;
+pub(crate) const COLUMN_INFO: AdapterHost = AdapterHost::ColumnInfo;
+pub(crate) const RELATION_LOOKUP: AdapterHost = AdapterHost::RelationLookup;
+pub(crate) const LOG_DEBUG_EVENT: ExecutorHost = ExecutorHost::LogDebugEvent;
+pub(crate) const CURSOR_POLICIES: NativeAttr = NativeAttr::ResolveStartCursorConfig;
+pub(crate) const MAXIMUM_START: NativeAttr = NativeAttr::MaximumAllowedStart;
+pub(crate) const RENDER_SOURCE_READ: NativeAttr = NativeAttr::RenderSourceReadRelation;
+pub(crate) const YAML_ENTRY_LINE: NativeAttr = NativeAttr::YamlEntryLine;
+pub(crate) const RUN_SCOPE: ExecutorHost = ExecutorHost::RunScope;
+pub(crate) const SQL_HOOK_ENTRY: RecordId = RecordId::SqlHookEntry;
 pub(crate) const CURSOR_ALGEBRA_ERROR: (&str, &str) =
     ("sqlbuild.cursor_algebra.exceptions", "CursorAlgebraError");
-pub(crate) const DATE_VALUE: (&str, &str) = ("sqlbuild._native", "DateValue");
+pub(crate) const DATE_VALUE: RecordId = RecordId::DateValue;
 pub(crate) const PLANNER_LOGGER: &str = "sqlbuild.planner";
 pub(crate) const METADATA_NAME_FILTER_LIMIT: usize = 250;
 pub(crate) const FUNCTION_NODE_TYPES: [&str; 2] = ["udf", "table_fn"];

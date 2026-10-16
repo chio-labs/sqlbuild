@@ -8,18 +8,14 @@ use sqlbuild_cursor::algebra::main::cursor_sort_key::cursor_sort_key;
 use sqlbuild_cursor::algebra::models::{Scalar, SortKey};
 use sqlbuild_state::microbatches::models::{BoundInterval, CursorBound};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::as_scalar;
-
-pub(crate) const MODELS_MODULE: &str = "sqlbuild.microbatches.models";
-pub(crate) const TYPES_MODULE: &str = "sqlbuild.microbatches.types";
-pub(crate) const CONSTANTS_MODULE: &str = "sqlbuild.microbatches.constants";
-const EXCEPTIONS_MODULE: &str = "sqlbuild.microbatches.exceptions";
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
 /// `MicrobatchStateError(message)`.
 pub(crate) fn state_error(py: Python<'_>, message: &str) -> PyErr {
-    match imported(py, EXCEPTIONS_MODULE, "MicrobatchStateError")
+    match host::entry(py, ExecutorHost::MicrobatchStateError)
         .and_then(|class| class.call1((message,)))
     {
         Ok(error) => PyErr::from_value(error),

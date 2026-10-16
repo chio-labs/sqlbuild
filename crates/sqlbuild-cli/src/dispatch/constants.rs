@@ -11,10 +11,6 @@ pub(crate) const DBT_COMMAND_NAME: &str = "dbt";
 pub(crate) const DBT_INIT_SUBCOMMAND: &str = "init";
 pub(crate) const DIFF_COMMAND_NAME: &str = "diff";
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
-const ENTRY_MODELS: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild._native";
-
 const PROJECT_DIR: Field = field("project_dir", Source::ProjectDir);
 const SELECT: Field = field("select", Source::Select);
 const EXCLUDE: Field = field("exclude", Source::TupleOf("exclude"));
@@ -35,7 +31,7 @@ const CURSOR_FIELDS: [Field; 6] = [
 ];
 const CURSOR_OVERRIDES: Field = field(
     "cursor_overrides",
-    Source::Nested(class(PLANNER_MODELS, "CursorOverrides"), &CURSOR_FIELDS),
+    Source::Nested(class("CursorOverrides"), &CURSOR_FIELDS),
 );
 
 const SNAPSHOT_LIMIT_FIELDS: [Field; 5] = [
@@ -53,10 +49,7 @@ const SNAPSHOT_LIMIT_FIELDS: [Field; 5] = [
 ];
 const SNAPSHOT_LIMITS: Field = field(
     "limit_inputs",
-    Source::Nested(
-        class(NATIVE_RECORDS, "ScenarioSnapshotLimitInputs"),
-        &SNAPSHOT_LIMIT_FIELDS,
-    ),
+    Source::Nested(class("ScenarioSnapshotLimitInputs"), &SNAPSHOT_LIMIT_FIELDS),
 );
 
 /// A handler receiving one request positionally.
@@ -94,13 +87,10 @@ const SCOPE_FIELDS: [Field; 22] = [
     same("verbose"),
     NO_COLOR,
 ];
-const SCOPE_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "ScopeCommandRequest"),
-    &SCOPE_FIELDS,
-)];
+const SCOPE_ARGUMENTS: [Field; 1] = [request(class("ScopeCommandRequest"), &SCOPE_FIELDS)];
 pub(crate) const SCOPE_ROUTE: Route = routed(
     "run_scope",
-    ("sqlbuild._native", "run_scope_command"),
+    "run_scope_command",
     &SCOPE_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -108,7 +98,7 @@ pub(crate) const SCOPE_ROUTE: Route = routed(
 const DAG_ARGUMENTS: [Field; 4] = [PROJECT_DIR, NO_SQL_VALIDATION, JSON_OUTPUT, CLI_VARS];
 pub(crate) const DAG_ROUTE: Route = routed(
     "run_dag",
-    ("sqlbuild._native", "run_dag_command"),
+    "run_dag_command",
     &DAG_ARGUMENTS,
     CallShape {
         slot_positional: 0,
@@ -137,13 +127,10 @@ const PLAN_FIELDS: [Field; 19] = [
     same("max_microbatches"),
     same("selection_diagnostics"),
 ];
-const PLAN_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "PlanCommandRequest"),
-    &PLAN_FIELDS,
-)];
+const PLAN_ARGUMENTS: [Field; 1] = [request(class("PlanCommandRequest"), &PLAN_FIELDS)];
 pub(crate) const PLAN_ROUTE: Route = routed(
     "run_plan",
-    ("sqlbuild._native", "run_plan_command"),
+    "run_plan_command",
     &PLAN_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -184,13 +171,10 @@ const BUILD_FIELDS: [Field; 34] = [
     same("max_microbatches"),
     same("selection_diagnostics"),
 ];
-const BUILD_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "BuildCommandRequest"),
-    &BUILD_FIELDS,
-)];
+const BUILD_ARGUMENTS: [Field; 1] = [request(class("BuildCommandRequest"), &BUILD_FIELDS)];
 pub(crate) const BUILD_ROUTE: Route = routed(
     "run_build",
-    ("sqlbuild._native", "run_build_command"),
+    "run_build_command",
     &BUILD_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -209,13 +193,11 @@ const FRESHNESS_FIELDS: [Field; 12] = [
     attr("compare_state", "state"),
     same("fail_on_stale"),
 ];
-const FRESHNESS_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "FreshnessCommandRequest"),
-    &FRESHNESS_FIELDS,
-)];
+const FRESHNESS_ARGUMENTS: [Field; 1] =
+    [request(class("FreshnessCommandRequest"), &FRESHNESS_FIELDS)];
 pub(crate) const FRESHNESS_ROUTE: Route = routed(
     "run_freshness",
-    ("sqlbuild._native", "run_freshness_command"),
+    "run_freshness_command",
     &FRESHNESS_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -234,13 +216,10 @@ const TEST_FIELDS: [Field; 12] = [
     attr("case_name", "case"),
     same("inspect"),
 ];
-const TEST_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "TestCommandRequest"),
-    &TEST_FIELDS,
-)];
+const TEST_ARGUMENTS: [Field; 1] = [request(class("TestCommandRequest"), &TEST_FIELDS)];
 pub(crate) const TEST_ROUTE: Route = routed(
     "run_test",
-    ("sqlbuild._native", "run_test_command"),
+    "run_test_command",
     &TEST_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -256,13 +235,10 @@ const CHECK_FIELDS: [Field; 9] = [
     JSON_OUTPUT,
     JSON_OUTPUT_PATH,
 ];
-const CHECK_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "CheckCommandRequest"),
-    &CHECK_FIELDS,
-)];
+const CHECK_ARGUMENTS: [Field; 1] = [request(class("CheckCommandRequest"), &CHECK_FIELDS)];
 pub(crate) const CHECK_ROUTE: Route = routed(
     "run_check",
-    ("sqlbuild._native", "run_check_command"),
+    "run_check_command",
     &CHECK_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -280,13 +256,10 @@ const AUDIT_FIELDS: [Field; 11] = [
     JSON_OUTPUT,
     JSON_OUTPUT_PATH,
 ];
-const AUDIT_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "AuditCommandRequest"),
-    &AUDIT_FIELDS,
-)];
+const AUDIT_ARGUMENTS: [Field; 1] = [request(class("AuditCommandRequest"), &AUDIT_FIELDS)];
 pub(crate) const AUDIT_ROUTE: Route = routed(
     "run_audit",
-    ("sqlbuild._native", "run_audit_command"),
+    "run_audit_command",
     &AUDIT_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -304,13 +277,10 @@ const LOAD_FIELDS: [Field; 11] = [
     JSON_OUTPUT,
     JSON_OUTPUT_PATH,
 ];
-const LOAD_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "LoadCommandRequest"),
-    &LOAD_FIELDS,
-)];
+const LOAD_ARGUMENTS: [Field; 1] = [request(class("LoadCommandRequest"), &LOAD_FIELDS)];
 pub(crate) const LOAD_ROUTE: Route = routed(
     "run_load",
-    ("sqlbuild._native", "run_load_command"),
+    "run_load_command",
     &LOAD_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -326,13 +296,10 @@ const SEED_FIELDS: [Field; 9] = [
     JSON_OUTPUT,
     JSON_OUTPUT_PATH,
 ];
-const SEED_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "SeedCommandRequest"),
-    &SEED_FIELDS,
-)];
+const SEED_ARGUMENTS: [Field; 1] = [request(class("SeedCommandRequest"), &SEED_FIELDS)];
 pub(crate) const SEED_ROUTE: Route = routed(
     "run_seed",
-    ("sqlbuild._native", "run_seed_command"),
+    "run_seed_command",
     &SEED_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -348,21 +315,15 @@ const LINEAGE_FIELDS: [Field; 11] = [
     EXCLUDE,
     field(
         "lineage_mode",
-        Source::Member(
-            class("sqlbuild._native", "ColumnLineageMode"),
-            "lineage_mode",
-        ),
+        Source::Member(class("ColumnLineageMode"), "lineage_mode"),
     ),
     attr("include_uses", "lineage_include_uses"),
     CLI_VARS,
 ];
-const LINEAGE_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "LineageCommandRequest"),
-    &LINEAGE_FIELDS,
-)];
+const LINEAGE_ARGUMENTS: [Field; 1] = [request(class("LineageCommandRequest"), &LINEAGE_FIELDS)];
 pub(crate) const LINEAGE_ROUTE: Route = routed(
     "run_lineage",
-    ("sqlbuild._native", "run_lineage_command"),
+    "run_lineage_command",
     &LINEAGE_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -381,13 +342,10 @@ const CLONE_FIELDS: [Field; 12] = [
     JSON_OUTPUT_PATH,
     attr("event_output_path", "event_output"),
 ];
-const CLONE_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "CloneCommandRequest"),
-    &CLONE_FIELDS,
-)];
+const CLONE_ARGUMENTS: [Field; 1] = [request(class("CloneCommandRequest"), &CLONE_FIELDS)];
 pub(crate) const CLONE_ROUTE: Route = routed(
     "run_clone",
-    ("sqlbuild._native", "run_clone_command"),
+    "run_clone_command",
     &CLONE_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -432,13 +390,10 @@ const DIFF_FIELDS: [Field; 35] = [
     attr("suppress_example_values", "no_example_values"),
     same("full_example_values"),
 ];
-const DIFF_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "DiffCommandRequest"),
-    &DIFF_FIELDS,
-)];
+const DIFF_ARGUMENTS: [Field; 1] = [request(class("DiffCommandRequest"), &DIFF_FIELDS)];
 pub(crate) const DIFF_ROUTE: Route = routed(
     "run_diff",
-    ("sqlbuild._native", "run_diff_command"),
+    "run_diff_command",
     &DIFF_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -453,7 +408,7 @@ const QUERY_ARGUMENTS: [Field; 6] = [
 ];
 pub(crate) const QUERY_ROUTE: Route = routed(
     "run_query",
-    ("sqlbuild._native", "run_query_command"),
+    "run_query_command",
     &QUERY_ARGUMENTS,
     CallShape {
         slot_positional: 0,
@@ -474,13 +429,10 @@ const COST_FIELDS: [Field; 11] = [
     JSON_OUTPUT,
     JSON_OUTPUT_PATH,
 ];
-const COST_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "CostCommandRequest"),
-    &COST_FIELDS,
-)];
+const COST_ARGUMENTS: [Field; 1] = [request(class("CostCommandRequest"), &COST_FIELDS)];
 pub(crate) const COST_ROUTE: Route = routed(
     "run_cost",
-    ("sqlbuild._native", "run_cost_command"),
+    "run_cost_command",
     &COST_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -494,7 +446,7 @@ const DEBUG_ARGUMENTS: [Field; 5] = [
 ];
 pub(crate) const DEBUG_ROUTE: Route = routed(
     "run_debug",
-    ("sqlbuild._native", "run_debug_command"),
+    "run_debug_command",
     &DEBUG_ARGUMENTS,
     CallShape {
         slot_positional: 0,
@@ -515,13 +467,10 @@ const JANITOR_FIELDS: [Field; 8] = [
     SELECTED_TARGET,
     same("as_target"),
 ];
-const JANITOR_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "JanitorCommandRequest"),
-    &JANITOR_FIELDS,
-)];
+const JANITOR_ARGUMENTS: [Field; 1] = [request(class("JanitorCommandRequest"), &JANITOR_FIELDS)];
 pub(crate) const JANITOR_ROUTE: Route = routed(
     "run_janitor",
-    ("sqlbuild._native", "run_janitor_command"),
+    "run_janitor_command",
     &JANITOR_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -537,15 +486,12 @@ const REFACTOR_FIELDS: [Field; 9] = [
     JSON_OUTPUT,
     NO_COLOR,
 ];
-const REFACTOR_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "RefactorCommandRequest"),
-    &REFACTOR_FIELDS,
-)];
+const REFACTOR_ARGUMENTS: [Field; 1] = [request(class("RefactorCommandRequest"), &REFACTOR_FIELDS)];
 pub(crate) const REFACTOR_ROUTE: Route = Route {
     unavailable_code: Some("C950"),
     ..routed(
         "run_refactor",
-        ("sqlbuild._native", "run_refactor_command"),
+        "run_refactor_command",
         &REFACTOR_ARGUMENTS,
         REQUEST_KEYWORD_SHAPE,
     )
@@ -563,15 +509,12 @@ const CONTRACT_FIELDS: [Field; 10] = [
     NO_COLOR,
     CLI_VARS,
 ];
-const CONTRACT_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "ContractCommandRequest"),
-    &CONTRACT_FIELDS,
-)];
+const CONTRACT_ARGUMENTS: [Field; 1] = [request(class("ContractCommandRequest"), &CONTRACT_FIELDS)];
 pub(crate) const CONTRACT_ROUTE: Route = Route {
     unavailable_code: Some("C470"),
     ..routed(
         "run_contract",
-        ("sqlbuild._native", "run_contract_command"),
+        "run_contract_command",
         &CONTRACT_ARGUMENTS,
         REQUEST_KEYWORD_SHAPE,
     )
@@ -598,27 +541,21 @@ const COMPILE_FIELDS: [Field; 15] = [
     NO_COLOR,
     field(
         "lineage_mode",
-        Source::Member(
-            class("sqlbuild._native", "CompileLineageMode"),
-            "compile_lineage_mode",
-        ),
+        Source::Member(class("CompileLineageMode"), "compile_lineage_mode"),
     ),
     SELECT,
     EXCLUDE,
     CLI_VARS,
     field(
         "profile_flags",
-        Source::Nested(class(ENTRY_MODELS, "CompileProfileFlags"), &PROFILE_FIELDS),
+        Source::Nested(class("CompileProfileFlags"), &PROFILE_FIELDS),
     ),
     same("debug"),
 ];
-const COMPILE_ARGUMENTS: [Field; 1] = [request(
-    class(ENTRY_MODELS, "CompileCommandRequest"),
-    &COMPILE_FIELDS,
-)];
+const COMPILE_ARGUMENTS: [Field; 1] = [request(class("CompileCommandRequest"), &COMPILE_FIELDS)];
 pub(crate) const COMPILE_ROUTE: Route = routed(
     "run_compile",
-    ("sqlbuild._native", "run_compile"),
+    "run_compile",
     &COMPILE_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -626,7 +563,7 @@ pub(crate) const COMPILE_ROUTE: Route = routed(
 const INIT_ARGUMENTS: [Field; 1] = [PROJECT_DIR];
 pub(crate) const INIT_ROUTE: Route = routed(
     "run_init",
-    ("sqlbuild._native", "run_init_command"),
+    "run_init_command",
     &INIT_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -637,12 +574,12 @@ const PLAYGROUND_FIELDS: [Field; 3] = [
     attr("template", "playground_template"),
 ];
 const PLAYGROUND_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "PlaygroundCommandRequest"),
+    class("PlaygroundCommandRequest"),
     &PLAYGROUND_FIELDS,
 )];
 pub(crate) const PLAYGROUND_ROUTE: Route = routed(
     "run_playground",
-    ("sqlbuild._native", "run_playground_command"),
+    "run_playground_command",
     &PLAYGROUND_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -655,7 +592,7 @@ const SKILLS_ARGUMENTS: [Field; 4] = [
 ];
 pub(crate) const SKILLS_ROUTE: Route = routed(
     "run_skills_update",
-    ("sqlbuild._native", "run_skills_command"),
+    "run_skills_command",
     &SKILLS_ARGUMENTS,
     CallShape {
         slot_positional: 0,
@@ -676,7 +613,7 @@ const FORMAT_ARGUMENTS: [Field; 9] = [
 ];
 pub(crate) const FORMAT_ROUTE: Route = routed(
     "run_format",
-    ("sqlbuild._native", "run_format_command"),
+    "run_format_command",
     &FORMAT_ARGUMENTS,
     CallShape {
         slot_positional: 1,
@@ -693,13 +630,10 @@ const RULES_FIELDS: [Field; 7] = [
     field("select", Source::TupleOf("select")),
     EXCLUDE,
 ];
-const RULES_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "RulesCommandRequest"),
-    &RULES_FIELDS,
-)];
+const RULES_ARGUMENTS: [Field; 1] = [request(class("RulesCommandRequest"), &RULES_FIELDS)];
 pub(crate) const RULES_ROUTE: Route = routed(
     "run_rules",
-    ("sqlbuild._native", "run_rules_command"),
+    "run_rules_command",
     &RULES_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -715,13 +649,10 @@ const DBT_INIT_FIELDS: [Field; 9] = [
     same("overwrite"),
     same("skip_dbt_debug"),
 ];
-const DBT_INIT_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "DbtInitCommandRequest"),
-    &DBT_INIT_FIELDS,
-)];
+const DBT_INIT_ARGUMENTS: [Field; 1] = [request(class("DbtInitCommandRequest"), &DBT_INIT_FIELDS)];
 pub(crate) const DBT_INIT_ROUTE: Route = routed(
     "run_dbt_init",
-    ("sqlbuild._native", "run_dbt_init_command"),
+    "run_dbt_init_command",
     &DBT_INIT_ARGUMENTS,
     REQUEST_SHAPE,
 );
@@ -731,7 +662,7 @@ const DBT_ARGUMENTS: [Field; 3] = [
     field("args", Source::TupleOf("dbt_args")),
     NO_COLOR,
 ];
-const DBT_COMMAND: ClassRef = class("sqlbuild._native", "DbtInteropCommand");
+const DBT_COMMAND: ClassRef = class("DbtInteropCommand");
 
 pub(crate) const DBT_PLAN_ROUTE: Route =
     dbt_route("run_dbt_plan", "plan", &DBT_ARGUMENTS, DBT_COMMAND);
@@ -769,12 +700,12 @@ const SCENARIO_TEST_FIELDS: [Field; 15] = [
     JSON_OUTPUT_PATH,
 ];
 const SCENARIO_TEST_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "ScenarioTestCommandRequest"),
+    class("ScenarioTestCommandRequest"),
     &SCENARIO_TEST_FIELDS,
 )];
 pub(crate) const SCENARIO_TEST_ROUTE: Route = routed(
     "run_scenario",
-    ("sqlbuild._native", "run_scenario_test_command"),
+    "run_scenario_test_command",
     &SCENARIO_TEST_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );
@@ -790,12 +721,12 @@ const SCENARIO_CAPTURE_FIELDS: [Field; 8] = [
     SNAPSHOT_LIMITS,
 ];
 const SCENARIO_CAPTURE_ARGUMENTS: [Field; 1] = [request(
-    class(NATIVE_RECORDS, "ScenarioCaptureCommandRequest"),
+    class("ScenarioCaptureCommandRequest"),
     &SCENARIO_CAPTURE_FIELDS,
 )];
 pub(crate) const SCENARIO_CAPTURE_ROUTE: Route = routed(
     "run_scenario_capture",
-    ("sqlbuild._native", "run_scenario_capture_command"),
+    "run_scenario_capture_command",
     &SCENARIO_CAPTURE_ARGUMENTS,
     REQUEST_KEYWORD_SHAPE,
 );

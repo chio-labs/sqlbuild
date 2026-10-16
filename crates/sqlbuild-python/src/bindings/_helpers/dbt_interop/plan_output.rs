@@ -12,12 +12,11 @@ use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hook
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_RECORDS: &str = "sqlbuild._native";
-const PLANNER_MODELS: &str = "sqlbuild._native";
-const HOOKS: &str = "sqlbuild.runtime.contracts.models";
 const BUILD_OPTIONS: (&[&str], &[&str]) = (&["environment", "request", "hooks"], &[]);
 const ATTACH_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -38,7 +37,7 @@ pub(crate) fn connection_config<'py>(
     let py = environment.py();
     let discovered = environment.getattr("discovered_inputs")?;
     let raw = call_with(
-        &imported(py, "sqlbuild._native", "build_effective_connection_config")?,
+        &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
         &[("discovered_inputs", discovered.clone())],
     )?;
     let raw: Bound<'_, PyDict> = raw.cast_into()?;
@@ -56,7 +55,7 @@ pub(crate) fn connection_config<'py>(
     )?;
     let config = config.into_any();
     call_with(
-        &imported(py, "sqlbuild._native", "apply_command_warehouse")?,
+        &registry::native(py, NativeAttr::ApplyCommandWarehouse)?,
         &[
             ("config", config),
             ("adapter_name", environment.getattr("adapter_name")?),
@@ -100,7 +99,7 @@ pub(crate) fn connection_hooks<'py>(
             ));
         }
     }
-    call_with(&imported(py, HOOKS, "ConnectionHooks")?, &pairs)
+    call_with(&host::entry(py, ExecutorHost::ConnectionHooks)?, &pairs)
 }
 
 /// Open through the shared adapter boundary while retaining keyword-only timing callbacks.
@@ -122,7 +121,7 @@ fn open_connection<'py>(
             },
         ));
     }
-    let relayed = call_with(&imported(py, HOOKS, "ConnectionHooks")?, &pairs)?;
+    let relayed = call_with(&host::entry(py, ExecutorHost::ConnectionHooks)?, &pairs)?;
     connection_with_hooks(&environment.getattr("adapter")?, &config, &relayed)
 }
 
@@ -146,7 +145,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
     let planned = (|| {
         let args = request.getattr("sqlbuild_args")?;
         let deferral = call_with(
-            &imported(py, "sqlbuild._native", "resolve_model_deferral_inputs")?,
+            &registry::native(py, NativeAttr::ResolveModelDeferralInputs)?,
             &[
                 ("project", environment.getattr("project")?),
                 (
@@ -159,7 +158,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
             ],
         )?;
         let cursor = call_with(
-            &imported(py, PLANNER_MODELS, "CursorOverrides")?,
+            &registry::class(py, RecordId::CursorOverrides)?,
             &[
                 ("start_ts", flag_value(&args, "--start-cursor-ts")?),
                 ("end_ts", flag_value(&args, "--end-cursor-ts")?),
@@ -169,11 +168,11 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
         )?;
         let full_refresh = boolean(py, args.contains("--full-refresh")?);
         let selection = call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "PlannerSelection")?,
+            &registry::class(py, RecordId::PlannerSelection)?,
             &[("select", selected.clone())],
         )?;
         let overrides = call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "PlannerOverrides")?,
+            &registry::class(py, RecordId::PlannerOverrides)?,
             &[
                 ("cursor_overrides", cursor),
                 ("full_refresh", full_refresh.clone()),
@@ -185,7 +184,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
         )?;
         let discovered = environment.getattr("discovered_inputs")?;
         let result = call_with(
-            &imported(py, "sqlbuild._native", "build_execution_plan")?,
+            &registry::native(py, NativeAttr::BuildExecutionPlan)?,
             &[
                 ("project", environment.getattr("project")?),
                 ("adapter", environment.getattr("adapter")?),
@@ -195,7 +194,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                 ("deferral", deferral),
                 (
                     "policies",
-                    imported(py, NATIVE_RECORDS_MODULE, "PlannerPolicies")?.call0()?,
+                    registry::class(py, RecordId::PlannerPolicies)?.call0()?,
                 ),
                 ("on_progress", hooks.getattr("on_progress")?),
                 ("project_config", discovered.getattr("project_config")?),
@@ -203,12 +202,9 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
             ],
         );
         match result {
-            Err(error)
-                if error
-                    .is_instance(py, &imported(py, "sqlbuild._native", "PlannerInputError")?) =>
-            {
+            Err(error) if error.is_instance(py, &registry::error(py, ErrorId::PlannerInput)?) => {
                 call_with(
-                    &imported(py, "sqlbuild._native", "build_display_only_sqlbuild_plan")?,
+                    &registry::native(py, NativeAttr::BuildDisplayOnlySqlbuildPlan)?,
                     &[
                         ("project", environment.getattr("project")?),
                         ("selected_model_names", selected),
@@ -236,7 +232,7 @@ fn attach_sqlbuild_plan_output<'py>(
     let compiled = args.value("compiled")?;
     let plan = args.value("plan")?;
     let environment = call_with(
-        &imported(py, NATIVE_RECORDS, "DbtPlanEnvironment")?,
+        &registry::class(py, RecordId::DbtPlanEnvironment)?,
         &[
             ("project_dir", args.value("project_dir")?),
             ("discovered_inputs", args.value("discovered_inputs")?),
@@ -246,7 +242,7 @@ fn attach_sqlbuild_plan_output<'py>(
         ],
     )?;
     let request = call_with(
-        &imported(py, NATIVE_RECORDS, "DbtSqlbuildPlanRequest")?,
+        &registry::class(py, RecordId::DbtSqlbuildPlanRequest)?,
         &[
             (
                 "selected_model_names",

@@ -7,10 +7,10 @@ use sqlbuild_core::build_aggregate::main::aggregate_build_counts::aggregate_buil
 use sqlbuild_core::build_aggregate::models::{BuildCounts, BuildResultFacts, ModelResultFacts};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-const BUILD_MODELS_MODULE: &str = "sqlbuild.executor.build.models";
-const BUILD_TYPES_MODULE: &str = "sqlbuild.executor.build.types";
 const RESULT_FIELDS: [&str; 7] = [
     "model_results",
     "seed_results",
@@ -68,7 +68,7 @@ pub(crate) fn aggregated_build_result<'py>(
     sections: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let counts: BuildCounts = aggregate_build_counts(&facts(sections)?);
-    let status: Bound<'py, PyAny> = imported(py, BUILD_TYPES_MODULE, "BuildStatus")?
+    let status: Bound<'py, PyAny> = host::entry(py, ExecutorHost::BuildStatus)?
         .getattr(if counts.failed { "FAILED" } else { "SUCCESS" })?;
     let mut keywords: Vec<(&str, Bound<'py, PyAny>)> = vec![("status", status)];
     keywords.extend(RESULT_FIELDS.iter().copied().zip(sections.iter().cloned()));
@@ -83,7 +83,7 @@ pub(crate) fn aggregated_build_result<'py>(
         ),
     ]);
     call_with(
-        &imported(py, BUILD_MODELS_MODULE, "BuildExecutionResult")?,
+        &host::entry(py, ExecutorHost::BuildExecutionResult)?,
         &keywords,
     )
 }

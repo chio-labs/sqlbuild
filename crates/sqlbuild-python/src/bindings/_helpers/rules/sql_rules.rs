@@ -12,14 +12,11 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::early_sql_lint::{sql_lint_config, sql_rule_cache_path};
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_MODELS_MODULE: &str = "sqlbuild._native";
-const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const JSON_MODULE: &str = "json";
 const BUILTINS_MODULE: &str = "builtins";
@@ -28,8 +25,8 @@ const SQL_RULE_SUPPRESSION_CODE: &str = "SQBRSQL000";
 const DEFAULT_REMEDIATION: &str = "Update the authored SQL to satisfy this rule.";
 
 /// `native.name`, looked up at call time.
-fn native<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, NATIVE_MODULE, name)
+fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
+    registry::native(py, name)
 }
 
 /// The SQL rule codes among `rules`, in order.
@@ -79,7 +76,7 @@ fn run_planned_sql_rules<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<
         &codes,
         &effective_config.getattr("thresholds")?,
         (
-            native(py, "compiled_relation_keys")?.call1((graph.getattr("project")?,))?,
+            native(py, NativeAttr::CompiledRelationKeys)?.call1((graph.getattr("project")?,))?,
             effective_config.getattr("allow_exceptions")?,
         ),
     )?;
@@ -112,7 +109,7 @@ fn run_planned_sql_rules<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<
         evaluated_sql_rules(&run, (&lint_key, identities), project_files)?;
     let sql_ms: i64 = (started.elapsed().as_secs_f64() * 1000.0).round_ties_even() as i64;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "SqlRulesEvaluation")?,
+        &registry::class(py, RecordId::SqlRulesEvaluation)?,
         &[
             ("findings", findings),
             ("cache_hits", hits.into_bound_py_any(py)?),
@@ -124,7 +121,7 @@ fn run_planned_sql_rules<'py>(options: Option<&Bound<'py, PyDict>>) -> PyResult<
 
 fn lint_key(lint_config: &Bound<'_, PyAny>) -> PyResult<String> {
     call_with(
-        &native(lint_config.py(), "sql_rule_lint_key")?,
+        &native(lint_config.py(), NativeAttr::SqlRuleLintKey)?,
         &[("config", lint_config.clone())],
     )?
     .extract()
@@ -133,7 +130,7 @@ fn lint_key(lint_config: &Bound<'_, PyAny>) -> PyResult<String> {
 fn collected_project_files<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
     call_with(
-        &native(py, "collect_lint_project_files")?,
+        &native(py, NativeAttr::CollectLintProjectFiles)?,
         &[
             ("project_dir", project_dir.clone()),
             ("selected_paths", py.None().into_bound(py)),
@@ -195,7 +192,7 @@ fn model_rule_identities(run: &SqlRun<'_, '_>, lint_key: &str) -> PyResult<Vec<(
         paths.push(path);
     }
     let keys: Bound<'_, PyAny> = call_with(
-        &native(py, "sql_model_rule_keys")?,
+        &native(py, NativeAttr::SqlModelRuleKeys)?,
         &[
             ("lint_key", PyString::new(py, lint_key).into_any()),
             ("codes", PyList::new(py, run.codes)?.into_any()),
@@ -238,7 +235,7 @@ fn cached_findings<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = bucket.py();
     Ok(call_with(
-        &native(py, "lookup_sql_rule_cache")?,
+        &native(py, NativeAttr::LookupSqlRuleCache)?,
         &[
             ("entries", bucket.clone()),
             ("keys", keys.into_bound_py_any(py)?),
@@ -296,7 +293,7 @@ fn evaluated_sql_rules<'py>(
     let cache_path: Bound<'py, PyAny> = sql_rule_cache_path(project_dir)?;
     let bucket: Bound<'py, PyAny> = if run.cache_enabled {
         call_with(
-            &native(py, "load_sql_rule_cache")?,
+            &native(py, NativeAttr::LoadSqlRuleCache)?,
             &[("path", cache_path.clone())],
         )?
     } else {
@@ -345,7 +342,7 @@ fn evaluated_sql_rules<'py>(
                 .call_method0("as_posix")?
                 .extract()?;
             let key: Option<String> = call_with(
-                &native(py, "sql_file_rule_key")?,
+                &native(py, NativeAttr::SqlFileRuleKey)?,
                 &[
                     ("lint_key", PyString::new(py, lint_key).into_any()),
                     ("codes", PyList::new(py, run.codes)?.into_any()),
@@ -418,7 +415,7 @@ fn evaluated_sql_rules<'py>(
         write_cache(&bucket, (&cache_path, written), &evaluated)?;
     }
     let hinted: Bound<'py, PyAny> = call_with(
-        &native(py, "with_duplicate_literal_hints")?,
+        &native(py, NativeAttr::WithDuplicateLiteralHints)?,
         &[
             ("findings", PyTuple::new(py, findings.iter())?.into_any()),
             ("project_dir", project_dir.clone()),
@@ -434,7 +431,7 @@ fn write_cache<'py>(
     evaluated: &[Bound<'py, PyAny>],
 ) -> PyResult<()> {
     let py: Python<'py> = bucket.py();
-    let encode: Bound<'py, PyAny> = native(py, "encode_sql_rule_findings")?;
+    let encode: Bound<'py, PyAny> = native(py, NativeAttr::EncodeSqlRuleFindings)?;
     let mut by_path: HashMap<String, Vec<Bound<'py, PyAny>>> = HashMap::new();
     for finding in evaluated {
         let path: String = finding
@@ -450,7 +447,7 @@ fn write_cache<'py>(
         bucket.set_item(path, (identity, encoded))?;
     }
     let _ = call_with(
-        &native(py, "write_sql_rule_cache")?,
+        &native(py, NativeAttr::WriteSqlRuleCache)?,
         &[("path", cache_path.clone()), ("entries", bucket.clone())],
     )?;
     Ok(())
@@ -464,7 +461,7 @@ fn prepared_lint_violations<'py>(
     source_files: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = run.project_dir.py();
-    let run_lint: Bound<'py, PyAny> = native(py, "run_lint")?;
+    let run_lint: Bound<'py, PyAny> = native(py, NativeAttr::RunLint)?;
     let compiled_expansions: Bound<'py, PyAny> = run.project.getattr("sql_expansions")?;
     let enabled_codes: Bound<'py, PyAny> = run.lint_config.getattr("enabled_native_rules")?;
     let enabled: Vec<String> = if enabled_codes.is_none() {
@@ -551,7 +548,7 @@ fn lint_expansion_context<'py>(run: &SqlRun<'_, 'py>) -> PyResult<Bound<'py, PyA
         py.None().into_bound(py)
     };
     call_with(
-        &native(py, "build_lint_expansion_context")?,
+        &native(py, NativeAttr::BuildLintExpansionContext)?,
         &[
             ("project_dir", run.project_dir.clone()),
             ("discovered_inputs", run.discovered_inputs.clone()),
@@ -567,7 +564,7 @@ fn violation_findings<'py>(
     model_paths: &BTreeSet<String>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = run.project_dir.py();
-    let engine_error: String = imported(py, LINT_EXCEPTIONS_MODULE, "NativeLintError")?
+    let engine_error: String = registry::error(py, ErrorId::NativeLint)?
         .getattr("code")?
         .extract()?;
     let safe_fixes: Bound<'py, PyAny> = PyFrozenSet::new(py, SAFE_RULE_FIX_CODES)?.into_any();
@@ -637,7 +634,7 @@ fn lint_finding<'py>(
         && safe_fixes.contains(&code)?
         && fixable_paths.contains(&path.call_method0("as_posix")?.extract::<String>()?);
     call_with(
-        &imported(py, RULES_MODELS_MODULE, "Finding")?,
+        &registry::class(py, RecordId::Finding)?,
         &[
             ("code", code),
             ("path", path),

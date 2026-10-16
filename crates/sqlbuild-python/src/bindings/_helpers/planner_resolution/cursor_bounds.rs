@@ -1,11 +1,13 @@
 //! Snapshot conversion and cursor window policy boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::conversion::{CursorSession, algebra_error};
 use crate::bindings::_helpers::cursor::scalars::try_parse;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -14,9 +16,6 @@ use sqlbuild_cursor::algebra::models::{DurationSpan, Grain, Scalar};
 use sqlbuild_cursor::planner::main::raw_bounds::raw_bounds;
 use sqlbuild_cursor::planner::main::replay_start::replay_start;
 use sqlbuild_cursor::planner::models::{CursorKind, CursorSnapshot, ReplayPolicy};
-
-const MODELS: &str = "sqlbuild._native";
-const MAXIMUM_START: &str = "sqlbuild._native";
 
 pub(super) fn optional_scalar<'py>(
     session: &CursorSession<'py>,
@@ -69,7 +68,7 @@ pub(super) fn duration(value: &Bound<'_, PyAny>) -> PyResult<Option<DurationSpan
     if value.is_none() {
         return Ok(None);
     }
-    let class = imported(value.py(), MODELS, "Duration")?;
+    let class = registry::class(value.py(), RecordId::Duration)?;
     let parsed = if value.is_instance(&class)? {
         value.clone()
     } else {
@@ -191,9 +190,9 @@ fn compute_cursor_bounds<'py>(
             &["cursor_grain", "maximum_start_policy"],
         ),
     )?;
-    let bounds_class = imported(py, MODELS, "CursorBounds")?;
+    let bounds_class = registry::class(py, RecordId::CursorBounds)?;
     if args.flag("is_microbatch")? {
-        let sentinel = imported(py, "sqlbuild.cursor_algebra.types", "BoundSentinel")?;
+        let sentinel = host::entry(py, ExecutorHost::BoundSentinel)?;
         return call_with(
             &bounds_class,
             &[
@@ -259,7 +258,7 @@ fn compute_cursor_bounds<'py>(
         ),
     ]);
     let replayed = call_with(
-        &imported(py, "sqlbuild._native", "apply_typed_cursor_replay_policy")?,
+        &registry::native(py, NativeAttr::ApplyTypedCursorReplayPolicy)?,
         &replay_args,
     )?;
     let bounds = call_with(
@@ -270,7 +269,7 @@ fn compute_cursor_bounds<'py>(
     let policy = if policy.is_truthy()? {
         policy
     } else {
-        imported(py, MODELS, "MaximumStartPolicyInputs")?.call0()?
+        registry::class(py, RecordId::MaximumStartPolicyInputs)?.call0()?
     };
     let mut policy_args = vec![
         ("bounds", bounds),
@@ -294,7 +293,7 @@ fn compute_cursor_bounds<'py>(
         policy_args.push((key, args.value(key)?));
     }
     call_with(
-        &imported(py, MAXIMUM_START, "apply_maximum_start_policy")?,
+        &registry::native(py, NativeAttr::ApplyMaximumStartPolicy)?,
         &policy_args,
     )
 }

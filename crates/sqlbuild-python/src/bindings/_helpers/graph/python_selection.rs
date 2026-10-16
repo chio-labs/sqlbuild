@@ -17,10 +17,9 @@ use sqlbuild_analysis::python_selection::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
-
-const PLANNER_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
 type NameRows = Vec<(String, Vec<String>)>;
 /// `(name, tags, POSIX relative path, upstream node names)` of one discovered node.
@@ -40,8 +39,7 @@ fn planner_error(py: Python<'_>, error: SelectorError) -> PyErr {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", error.code)?;
         keywords.set_item("help", error.help)?;
-        imported(py, PLANNER_EXCEPTIONS_MODULE, "PlannerInputError")?
-            .call((error.message,), Some(&keywords))
+        registry::error(py, ErrorId::PlannerInput)?.call((error.message,), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),

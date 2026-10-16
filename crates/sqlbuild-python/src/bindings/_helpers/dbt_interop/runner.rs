@@ -20,11 +20,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::dbt_interop::cli::{
     argv, ls_nodes, resolve_dbt_executable, sequence,
 };
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const LAUNCH_FAILURE: &str = "failed to execute dbt";
 const POISONED_CACHE: &str = "dbt ls cache is poisoned";
 
@@ -123,7 +124,7 @@ impl DbtRunner {
         let result: Bound<'py, PyAny> = self.run(command, &options.getattr("project_dir")?)?;
         let stdout: String = result.getattr("stdout")?.extract()?;
         let listing: Bound<'py, PyAny> = call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "DbtLsResult")?,
+            &registry::class(py, RecordId::DbtLsResult)?,
             &[
                 ("nodes", ls_nodes(py, &stdout)?.into_any()),
                 ("command", result),
@@ -191,7 +192,7 @@ impl DbtRunner {
         });
         let output: DbtProcessOutput = output.map_err(|error| launch_failure(py, error))?;
         call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "DbtCommandResult")?,
+            &registry::class(py, RecordId::DbtCommandResult)?,
             &[
                 ("argv", command.into_any()),
                 ("returncode", output.returncode.into_pyobject_any(py)?),
@@ -219,7 +220,7 @@ pub(crate) fn dbt_command_lifecycle(py: Python<'_>) -> PyResult<Bound<'_, PyAny>
     options.set_item("operation_kind", "subprocess")?;
     options.set_item("operation_name", "dbt_command")?;
     options.set_item("auto_fail_base_exceptions", false)?;
-    imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?.call((), Some(&options))
+    host::entry(py, ExecutorHost::OperationLifecycle)?.call((), Some(&options))
 }
 
 /// Complete a zero exit, or fail with the exit code and any signal number.
@@ -282,9 +283,8 @@ pub(crate) fn launch_failure(py: Python<'_>, error: PyErr) -> PyErr {
     let created = || -> PyResult<PyErr> {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("help", error.value(py).str()?)?;
-        let instance: Bound<'_, PyAny> =
-            imported(py, NATIVE_RECORDS_MODULE, "DbtInteropRuntimeError")?
-                .call((LAUNCH_FAILURE,), Some(&options))?;
+        let instance: Bound<'_, PyAny> = registry::error(py, ErrorId::DbtInteropRuntime)?
+            .call((LAUNCH_FAILURE,), Some(&options))?;
         let raised: PyErr = PyErr::from_value(instance);
         raised.set_cause(py, Some(error.clone_ref(py)));
         Ok(raised)

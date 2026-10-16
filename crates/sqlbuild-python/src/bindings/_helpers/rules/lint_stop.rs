@@ -9,9 +9,10 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::PyTuple;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::context_variable;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const STOP_VARIABLE: &str = "active_lint_stop";
 
 static ACTIVE_STOP: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -26,7 +27,7 @@ pub(crate) fn check_stop(py: Python<'_>) -> PyResult<()> {
     let stop: Bound<'_, PyAny> = active_stop_variable(py)?.call_method0("get")?;
     if !stop.is_none() && stop.call_method0("is_set")?.is_truthy()? {
         return Err(PyErr::from_value(
-            imported(py, LINT_EXCEPTIONS_MODULE, "LintStoppedError")?.call0()?,
+            registry::error(py, ErrorId::LintStopped)?.call0()?,
         ));
     }
     Ok(())

@@ -1,10 +1,12 @@
 //! Old-name planning orchestration over existing live state inspection.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -39,13 +41,9 @@ fn schemas<'py>(
                 .getattr("existing_relations")?
                 .call_method1("get", (item.getattr("name")?,))?;
             if !existing.is_none()
-                && imported(
-                    py,
-                    "sqlbuild.adapter.type_system.main.normalize_relation_type",
-                    "normalize_relation_type",
-                )?
-                .call1((existing.getattr("relation_type")?,))?
-                .eq("view")?
+                && host::entry(py, AdapterHost::NormalizeRelationType)?
+                    .call1((existing.getattr("relation_type")?,))?
+                    .eq("view")?
             {
                 include_project = true;
                 break;
@@ -53,14 +51,18 @@ fn schemas<'py>(
         }
     }
     if include_project {
-        let project = native(py, "migration_project_schemas", &[("runtime", runtime)])?;
+        let project = native(
+            py,
+            NativeAttr::MigrationProjectSchemas,
+            &[("runtime", runtime)],
+        )?;
         for schema in project.try_iter()? {
             needed.add(schema?)?;
         }
     }
     native(
         py,
-        "old_name_schemas_to_read",
+        NativeAttr::OldNameSchemasToRead,
         &[("snapshot", snapshot), ("needed", needed.into_any())],
     )
 }
@@ -108,7 +110,7 @@ fn plan_old_name_views<'py>(
         }
     }
     let state = call_with(
-        &imported(py, "sqlbuild._native", "MigrationStateInspection")?,
+        &registry::native(py, NativeAttr::MigrationStateInspection)?,
         &[
             ("adapter", runtime.getattr("adapter")?),
             ("connection", runtime.getattr("connection")?),
@@ -116,7 +118,7 @@ fn plan_old_name_views<'py>(
                 "database",
                 native(
                     py,
-                    "migration_planning_database",
+                    NativeAttr::MigrationPlanningDatabase,
                     &[("runtime", runtime.clone())],
                 )?,
             ),
@@ -167,7 +169,7 @@ fn plan_old_name_views<'py>(
     let entries = PyTuple::new(py, entries)?.into_any();
     let claims = native(
         py,
-        "old_name_claim_errors",
+        NativeAttr::OldNameClaimErrors,
         &[
             ("selected", PyTuple::new(py, selected)?.into_any()),
             ("snapshot", args.value("snapshot")?),
@@ -181,7 +183,7 @@ fn plan_old_name_views<'py>(
     )?);
     native(
         py,
-        "OldNameViewPlanning",
+        RecordId::OldNameViewPlanning,
         &[
             ("entries", entries),
             ("views", views),

@@ -5,6 +5,8 @@ from __future__ import annotations
 from scripts.native_module_paths.constants import (
     DOTTED_PATH,
     DYNAMIC_MODULE_PATHS,
+    HOST_ENTRY,
+    HOST_MODULE,
     IMPORT_GETATTR_CHAIN,
     IMPORT_HELPER_CALL,
     LITERAL_MODULE_ATTRIBUTE_PAIR,
@@ -16,7 +18,7 @@ from scripts.native_module_paths.models import ModulePathReference, NativeModule
 
 
 def scan_native_source(*, source: str, label: str) -> NativeModulePathScan:
-    """Return the module paths, module attributes and dynamic module paths in one Rust file."""
+    """Return the module paths, attributes, host entries and dynamic module paths in one file."""
     constants: dict[str, str] = {
         match.group(1): match.group(2) for match in STRING_CONSTANT.finditer(source)
     }
@@ -51,6 +53,14 @@ def scan_native_source(*, source: str, label: str) -> NativeModulePathScan:
                 attribute=match.group(2),
             )
         )
+    references.extend(
+        ModulePathReference(
+            location=_location(source=source, label=label, offset=match.start()),
+            path=HOST_MODULE,
+            attribute=match.group(1),
+        )
+        for match in HOST_ENTRY.finditer(source)
+    )
     for pattern in DYNAMIC_MODULE_PATHS:
         violations.extend(
             f"{_location(source=source, label=label, offset=match.start())}: module path is "

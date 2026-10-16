@@ -18,14 +18,13 @@ use sqlbuild_analysis::planner_strategy::types::Timeline;
 use sqlbuild_cursor::algebra::main::parse_duration::parse_duration;
 use sqlbuild_cursor::algebra::models::{DurationDigits, DurationSpan};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::durations::shifted_moment;
 use crate::bindings::_helpers::plan_output::display::aligned_timestamp_bounds;
-use crate::bindings::_helpers::planner_changes::results::MODELS_MODULE;
 use crate::bindings::_helpers::planner_strategy::values::text;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const CURSOR_MODELS_MODULE: &str = "sqlbuild._native";
-pub(crate) const CONTRACT_TYPES_MODULE: &str = "sqlbuild._native";
 const INTEGER_CURSOR: &str = "integer";
 const TIMESTAMP_CURSOR: &str = "timestamp";
 const MONTHS_PER_YEAR: i64 = 12;
@@ -80,14 +79,14 @@ fn duration_span(batch_size: &str) -> Option<DurationSpan> {
 /// The bounds of a `CursorBounds` when each is an instance of one of the cursor value `classes`.
 fn typed_bounds<'py>(
     bounds: &Bound<'py, PyAny>,
-    classes: &[&str],
+    classes: &[RecordId],
 ) -> PyResult<Option<BoundPair<'py>>> {
     let py: Python<'py> = bounds.py();
     let (start, end) = (bounds.getattr("start")?, bounds.getattr("end")?);
     for value in [&start, &end] {
         let mut typed: bool = false;
         for class in classes {
-            typed = typed || value.is_instance(&imported(py, CURSOR_MODELS_MODULE, class)?)?;
+            typed = typed || value.is_instance(&registry::class(py, *class)?)?;
         }
         if !typed {
             return Ok(None);
@@ -98,7 +97,7 @@ fn typed_bounds<'py>(
 
 /// The integer values of integer bounds.
 fn integer_bounds(bounds: &Bound<'_, PyAny>) -> PyResult<Option<(i128, i128)>> {
-    let Some((start, end)) = typed_bounds(bounds, &["IntegerValue"])? else {
+    let Some((start, end)) = typed_bounds(bounds, &[RecordId::IntegerValue])? else {
         return Ok(None);
     };
     Ok(Some((
@@ -115,7 +114,9 @@ fn timeline_bounds<'py>(
     let Some(span) = duration_span(batch_size) else {
         return Ok(None);
     };
-    let Some((start, end)) = typed_bounds(bounds, &["DateValue", "TimestampValue"])? else {
+    let Some((start, end)) =
+        typed_bounds(bounds, &[RecordId::DateValue, RecordId::TimestampValue])?
+    else {
         return Ok(None);
     };
     let aligned: Bound<'py, PyTuple> = aligned_timestamp_bounds(&start, &end)?;
@@ -156,7 +157,7 @@ fn cursor_bounds<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = start.py();
     call_with(
-        &imported(py, MODELS_MODULE, "CursorBounds")?,
+        &registry::class(py, RecordId::CursorBounds)?,
         &[("start", start), ("end", end)],
     )
 }
@@ -164,13 +165,10 @@ fn cursor_bounds<'py>(
 /// `<class>(value=value)` of the cursor values module.
 fn cursor_value<'py>(
     py: Python<'py>,
-    class: &str,
+    class: RecordId,
     value: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &imported(py, CURSOR_MODELS_MODULE, class)?,
-        &[("value", value)],
-    )
+    call_with(&registry::class(py, class)?, &[("value", value)])
 }
 
 /// One concrete range capped to `max_batches` batch windows from the end the action keeps.
@@ -197,12 +195,12 @@ pub(crate) fn capped_microbatch_bounds<'py>(
         match capped {
             CappedBound::End(value) => CappedBound::End(cursor_value(
                 py,
-                "IntegerValue",
+                RecordId::IntegerValue,
                 value.into_pyobject(py)?.into_any(),
             )?),
             CappedBound::Start(value) => CappedBound::Start(cursor_value(
                 py,
-                "IntegerValue",
+                RecordId::IntegerValue,
                 value.into_pyobject(py)?.into_any(),
             )?),
         }
@@ -214,9 +212,11 @@ pub(crate) fn capped_microbatch_bounds<'py>(
             return Ok(bounds);
         };
         match cap_timeline_bounds(&timeline, range, max_batches, direction)? {
-            CappedBound::End(value) => CappedBound::End(cursor_value(py, "TimestampValue", value)?),
+            CappedBound::End(value) => {
+                CappedBound::End(cursor_value(py, RecordId::TimestampValue, value)?)
+            }
             CappedBound::Start(value) => {
-                CappedBound::Start(cursor_value(py, "TimestampValue", value)?)
+                CappedBound::Start(cursor_value(py, RecordId::TimestampValue, value)?)
             }
         }
     };
@@ -269,7 +269,7 @@ pub(crate) fn microbatch_limit_config<'py>(
             .filter(|action| action.is_instance_of::<PyString>());
         if let (Some(max_batches), Some(action)) = (max_batches, action) {
             let action: Bound<'py, PyAny> =
-                imported(py, CONTRACT_TYPES_MODULE, "MicrobatchLimitAction")?.call1((action,))?;
+                registry::class(py, RecordId::MicrobatchLimitAction)?.call1((action,))?;
             return Ok((Some(max_batches), Some(action)));
         }
     }

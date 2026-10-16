@@ -19,6 +19,10 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULES_CACHE_FILE,
 };
@@ -27,13 +31,6 @@ use crate::bindings::_helpers::rules::custom_hosts::{
 };
 use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULES_ERRORS_MODULE: &str = "sqlbuild._native";
-const RULE_CONTEXT_MODULE: &str = "sqlbuild.rule_engine.classes.rule_context";
-const FACT_REPLAY_MODULE: &str = "sqlbuild.rule_engine._helpers.engine.fact_replay";
-const SCOPE_MODELS_MODULE: &str = "sqlbuild._native";
 const PROJECT_SUBJECT: &str = "project";
 const MODEL_SUBJECT: &str = "model";
 /// Project fields no rule fact reads, cleared before digests and host payloads use the project.
@@ -109,7 +106,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     let cache_path: Option<PathBuf> = if enabled {
         Some(
             call_with(
-                &imported(py, NATIVE_MODULE, "rules_bulk_cache_path")?,
+                &registry::native(py, NativeAttr::RulesBulkCachePath)?,
                 &[
                     ("project_dir", run.project_dir.clone()),
                     (
@@ -182,7 +179,7 @@ pub(crate) fn outcome<'py>(
     (custom_ms, custom_cpu_ms): (i64, i64),
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CustomRulesOutcome")?,
+        &registry::class(py, RecordId::CustomRulesOutcome)?,
         &[
             ("findings", PyTuple::new(py, findings)?.into_any()),
             ("cache_hits", hits.into_bound_py_any(py)?),
@@ -265,7 +262,7 @@ impl<'py> FactDigests<'py> {
             project_dir: project_dir.clone(),
             dialect: dialect.to_owned(),
             views: None,
-            shared: imported(project.py(), FACT_REPLAY_MODULE, "shared_fact_encoder")?.call0()?,
+            shared: host::entry(project.py(), UserCodeHost::SharedFactEncoder)?.call0()?,
             digests: HashMap::new(),
         })
     }
@@ -276,7 +273,7 @@ impl<'py> FactDigests<'py> {
         }
         let py: Python<'py> = self.project.py();
         let views: Bound<'py, PyAny> = call_with(
-            &imported(py, RULE_CONTEXT_MODULE, "build_rule_fact_views")?,
+            &host::entry(py, UserCodeHost::BuildRuleFactViews)?,
             &[
                 ("project", self.project.clone()),
                 ("project_dir", self.project_dir.clone()),
@@ -295,7 +292,7 @@ impl<'py> FactDigests<'py> {
         let py: Python<'py> = self.project.py();
         let views: Bound<'py, PyAny> = self.views()?;
         let digest: String = call_with(
-            &imported(py, FACT_REPLAY_MODULE, "fact_outcome_digest")?,
+            &host::entry(py, UserCodeHost::FactOutcomeDigest)?,
             &[
                 ("views", views),
                 ("key", PyTuple::new(py, key)?.into_any()),
@@ -326,7 +323,7 @@ impl<'py> FactDigests<'py> {
         observed: &BTreeMap<FactKey, Option<String>>,
     ) -> PyResult<Option<String>> {
         let py: Python<'py> = self.project.py();
-        let is_tree_fact: Bound<'py, PyAny> = imported(py, FACT_REPLAY_MODULE, "is_tree_fact")?;
+        let is_tree_fact: Bound<'py, PyAny> = host::entry(py, UserCodeHost::IsTreeFact)?;
         for key in readset {
             if is_tree_fact.call1((PyTuple::new(py, key)?,))?.is_truthy()?
                 && let Some(seen) = observed.get(key)
@@ -341,7 +338,7 @@ impl<'py> FactDigests<'py> {
     /// Keys covering every fact a custom rule can observe through its context.
     fn full_fact_keys(&mut self) -> PyResult<Vec<FactKey>> {
         let py: Python<'py> = self.project.py();
-        imported(py, FACT_REPLAY_MODULE, "full_fact_keys")?
+        host::entry(py, UserCodeHost::FullFactKeys)?
             .call1((self.views()?,))?
             .extract()
     }
@@ -361,7 +358,7 @@ impl<'py> FactDigests<'py> {
 }
 
 fn fact_digest_error(py: Python<'_>, error: &PyErr) -> PyResult<bool> {
-    let class: Bound<'_, PyAny> = imported(py, RULES_ERRORS_MODULE, "FactDigestError")?;
+    let class: Bound<'_, PyAny> = registry::error(py, ErrorId::FactDigest)?;
     error.value(py).is_instance(&class)
 }
 
@@ -380,8 +377,8 @@ fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     let py: Python<'py> = project.py();
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("include_sql_expansions", false)?;
-    let record: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "compiled_project_record")?.call((project,), Some(&options))?;
+    let record: Bound<'py, PyAny> = registry::native(py, NativeAttr::CompiledProjectRecord)?
+        .call((project,), Some(&options))?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
     for (name, cleared) in HOST_PROJECT_CLEARED {
         match cleared {
@@ -392,7 +389,7 @@ fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     }
     changes.set_item(
         "scope_index",
-        imported(py, SCOPE_MODELS_MODULE, "ScopeIndex")?.call0()?,
+        registry::class(py, RecordId::ScopeIndex)?.call0()?,
     )?;
     imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))
 }
@@ -448,14 +445,14 @@ fn rule_identity(
         Some(fingerprint) => fingerprint.into_bound_py_any(py)?,
         None => {
             let closure: Bound<'_, PyAny> = call_with(
-                &imported(py, NATIVE_MODULE, "custom_rule_import_closure")?,
+                &registry::native(py, NativeAttr::CustomRuleImportClosure)?,
                 &[
                     ("rule", rule.clone()),
                     ("project_dir", run.project_dir.clone()),
                 ],
             )?;
             call_with(
-                &imported(py, NATIVE_MODULE, "custom_rule_implementation_fingerprint")?,
+                &registry::native(py, NativeAttr::CustomRuleImplementationFingerprint)?,
                 &[
                     ("rule", rule.clone()),
                     ("project_dir", run.project_dir.clone()),
@@ -466,7 +463,7 @@ fn rule_identity(
     };
     let subject: Option<String> = subject_value(rule)?;
     call_with(
-        &imported(py, NATIVE_MODULE, "custom_rule_identity")?,
+        &registry::native(py, NativeAttr::CustomRuleIdentity)?,
         &[
             (
                 "code_identity",

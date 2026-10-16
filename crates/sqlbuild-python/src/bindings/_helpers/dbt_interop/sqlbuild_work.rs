@@ -11,9 +11,11 @@ use sqlbuild_core::build_command::constants::{
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none, text, tuple,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 const WORK_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -26,14 +28,12 @@ const WORK_OPTIONS: (&[&str], &[&str]) = (
     ],
     &[],
 );
-const BUILD_MODELS: &str = "sqlbuild.executor.build.models";
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 
 /// Interop has no allow flags; destructive work uses the ordinary interactive safety gates.
 #[pyfunction]
 fn dbt_interop_plan_safety_gates(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     call_with(
-        &imported(py, NATIVE_RECORDS, "PlanSafetyGates")?,
+        &registry::class(py, RecordId::PlanSafetyGates)?,
         &[
             ("allow_missing_migration_origin", boolean(py, false)),
             ("allow_snapshot_full_refresh", boolean(py, false)),
@@ -77,7 +77,7 @@ fn execute_dbt_sqlbuild_work<'py>(
     let output = context.getattr("output_stream")?;
     let color = context.getattr("use_color")?;
     call_with(
-        &imported(py, "sqlbuild._native", "enforce_plan_safety_policies")?,
+        &registry::native(py, NativeAttr::EnforcePlanSafetyPolicies)?,
         &[
             ("plan", plan.clone()),
             ("gates", dbt_interop_plan_safety_gates(py)?),
@@ -91,7 +91,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let callbacks = call_with(
-        &imported(py, "sqlbuild._native", "BuildProgressCallbacks")?,
+        &registry::native(py, NativeAttr::BuildProgressCallbacks)?,
         &[
             ("plan", plan.clone()),
             ("use_color", color.clone()),
@@ -100,7 +100,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let command = args.value("command")?;
-    let kinds = imported(py, "sqlbuild._native", "DbtInteropCommand")?;
+    let kinds = registry::class(py, RecordId::DbtInteropCommand)?;
     let display = if command.eq(kinds.getattr("RUN")?)? {
         "sqb build --no-tests --no-audits".to_owned()
     } else {
@@ -108,7 +108,7 @@ fn execute_dbt_sqlbuild_work<'py>(
     };
     let concurrency = project.getattr("settings")?.getattr("concurrency")?;
     let header = call_with(
-        &imported(py, "sqlbuild._native", "format_execution_header")?,
+        &registry::native(py, NativeAttr::FormatExecutionHeader)?,
         &[
             ("command", text(py, &display)),
             ("target", none(py)),
@@ -116,7 +116,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let style = call_with(
-        &imported(py, "sqlbuild._native", "CliStyle")?,
+        &registry::native(py, NativeAttr::CliStyle)?,
         &[("use_color", color.clone())],
     )?;
     emit(
@@ -132,7 +132,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ),
     )?;
     let connection = call_with(
-        &imported(py, "sqlbuild._native", "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", context.getattr("adapter_name")?),
             ("stream", output.clone()),
@@ -142,7 +142,7 @@ fn execute_dbt_sqlbuild_work<'py>(
     )?;
     let build = command.eq(kinds.getattr("BUILD")?)?;
     let runtime = call_with(
-        &imported(py, BUILD_MODELS, "BuildRuntimeParams")?,
+        &host::entry(py, ExecutorHost::BuildRuntimeParams)?,
         &[
             ("run_id", project.getattr("run_id")?),
             ("run_tests", boolean(py, build)),
@@ -153,7 +153,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let hooks = call_with(
-        &imported(py, BUILD_MODELS, "BuildCallbacks")?,
+        &host::entry(py, ExecutorHost::BuildCallbacks)?,
         &[
             (
                 "on_node_start",
@@ -185,11 +185,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let result = call_with(
-        &imported(
-            py,
-            "sqlbuild.executor.pipeline.main.run",
-            "run_build_pipeline",
-        )?,
+        &host::entry(py, ExecutorHost::RunBuildPipeline)?,
         &[
             ("plan", plan.clone()),
             ("connection_config", context.getattr("connection_config")?),
@@ -200,7 +196,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     call_with(
-        &imported(py, "sqlbuild._native", "write_runtime_target")?,
+        &registry::native(py, NativeAttr::WriteRuntimeTarget)?,
         &[
             (
                 "target_dir",
@@ -211,7 +207,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let footer = call_with(
-        &imported(py, "sqlbuild._native", "format_build_footer")?,
+        &registry::native(py, NativeAttr::FormatBuildFooter)?,
         &[
             ("result", result.clone()),
             ("elapsed", callbacks.getattr("elapsed")?),
@@ -220,7 +216,7 @@ fn execute_dbt_sqlbuild_work<'py>(
     )?;
     emit(&output, &format!("\n{}\n", footer.extract::<String>()?))?;
     Ok(i64::from(!result.getattr("status")?.eq(
-        imported(py, "sqlbuild.executor.build.types", "BuildStatus")?.getattr("SUCCESS")?,
+        host::entry(py, ExecutorHost::BuildStatus)?.getattr("SUCCESS")?,
     )?))
 }
 

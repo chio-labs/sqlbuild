@@ -12,7 +12,7 @@ use sqlbuild_core::cli_text::models::{
 };
 use sqlbuild_core::plan_display::main::format_query_diff::format_query_diff;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::plan_output::cursor_details::{
     CursorDetails, DEFERRED, RESOLVED, cursor_details, runtime_inputs_clause,
@@ -27,8 +27,9 @@ use crate::bindings::_helpers::plan_output::python_identity::{
     definition_source_text, dependency_source_text,
 };
 use crate::bindings::_helpers::plan_output::values::{items, optional_text, text, texts};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const DISPLAY_MODELS_MODULE: &str = "sqlbuild._native";
 const SKIP_ACTION: &str = "skip";
 const QUERY_CHANGED: &str = "query_changed";
 const CONFIG_CHANGED: &str = "config_changed";
@@ -404,7 +405,7 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
     let display_options: Bound<'_, PyAny> = {
         let given: Bound<'_, PyAny> = arguments.value("display_options")?;
         if given.is_none() {
-            imported(py, DISPLAY_MODELS_MODULE, "DisplayOptions")?.call0()?
+            registry::class(py, RecordId::DisplayOptions)?.call0()?
         } else {
             given
         }

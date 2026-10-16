@@ -13,10 +13,9 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 use crate::bindings::_helpers::model_config::template_data::{
     expanded_effective_vars, expanded_template_data, run_id,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
 const CONNECTION_LABEL: &str = "effective connection";
 
 /// Merge base project connection with the selected environment overrides.
@@ -30,12 +29,12 @@ pub(crate) fn build_effective_connection<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_config.py();
     let (connection, error): (Bound<'py, PyAny>, Option<String>) =
-        imported(py, NATIVE_MODULE, "effective_config_connection")?
+        registry::native(py, NativeAttr::EffectiveConfigConnection)?
             .call1((project_config, local_config, target_config))?
             .extract()?;
     if connection.is_none() {
-        let raised: Bound<'py, PyAny> = imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?
-            .call1((error.unwrap_or_default(),))?;
+        let raised: Bound<'py, PyAny> =
+            registry::error(py, ErrorId::CompileInput)?.call1((error.unwrap_or_default(),))?;
         return Err(PyErr::from_value(raised));
     }
     expanded_template_data(
@@ -60,13 +59,13 @@ pub(crate) fn build_effective_settings<'py>(
     local_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_config.py();
-    let settings_class: Bound<'py, PyAny> = imported(py, CONTRACT_MODELS_MODULE, "SettingsConfig")?;
+    let settings_class: Bound<'py, PyAny> = registry::class(py, RecordId::SettingsConfig)?;
     let names: Vec<Bound<'py, PyAny>> = imported(py, "dataclasses", "fields")?
         .call1((&settings_class,))?
         .try_iter()?
         .map(|field| field?.getattr("name"))
         .collect::<PyResult<_>>()?;
-    let values: Bound<'py, PyDict> = imported(py, NATIVE_MODULE, "effective_config_settings")?
+    let values: Bound<'py, PyDict> = registry::native(py, NativeAttr::EffectiveConfigSettings)?
         .call1((
             (
                 project_config.getattr("settings")?,
@@ -89,7 +88,7 @@ pub(crate) fn build_effective_vars<'py>(
     cli_vars: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_config.py();
-    let merged: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "effective_config_vars")?
+    let merged: Bound<'py, PyAny> = registry::native(py, NativeAttr::EffectiveConfigVars)?
         .call1(((project_config, local_config), target_config, cli_vars))?;
     expanded_effective_vars(merged.downcast()?)
 }

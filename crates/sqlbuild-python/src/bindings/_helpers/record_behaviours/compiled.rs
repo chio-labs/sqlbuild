@@ -5,7 +5,8 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::relation_keys::entry_relation_key_row;
 
 /// Module of the compiled resource type enum.
@@ -41,6 +42,13 @@ fn coerce(py: Python<'_>, value: &Py<PyAny>, (module, class): (&str, &str)) -> P
         .unbind())
 }
 
+/// The native string enum `class(value)`.
+fn coerce_native(py: Python<'_>, value: &Py<PyAny>, class: RecordId) -> PyResult<Py<PyAny>> {
+    Ok(registry::class(py, class)?
+        .call1((value.bind(py),))?
+        .unbind())
+}
+
 /// `value` coerced to `CompiledResourceType` unless it is `None`.
 fn coerce_resource_type(py: Python<'_>, value: &Py<PyAny>) -> PyResult<Py<PyAny>> {
     if value.is_none(py) {
@@ -54,15 +62,15 @@ pub(crate) fn finish_compiler_diagnostic(
     py: Python<'_>,
     mut values: Vec<Py<PyAny>>,
 ) -> PyResult<Vec<Py<PyAny>>> {
-    values[DIAGNOSTIC_PHASE_FIELD] = coerce(
+    values[DIAGNOSTIC_PHASE_FIELD] = coerce_native(
         py,
         &values[DIAGNOSTIC_PHASE_FIELD],
-        (NATIVE_MODULE, "DiagnosticPhase"),
+        RecordId::DiagnosticPhase,
     )?;
-    values[DIAGNOSTIC_SEVERITY_FIELD] = coerce(
+    values[DIAGNOSTIC_SEVERITY_FIELD] = coerce_native(
         py,
         &values[DIAGNOSTIC_SEVERITY_FIELD],
-        (NATIVE_MODULE, "DiagnosticSeverity"),
+        RecordId::DiagnosticSeverity,
     )?;
     values[DIAGNOSTIC_RESOURCE_TYPE_FIELD] =
         coerce_resource_type(py, &values[DIAGNOSTIC_RESOURCE_TYPE_FIELD])?;
@@ -79,7 +87,7 @@ pub(crate) fn finish_compiler_diagnostic(
         keywords.set_item("line", values[DIAGNOSTIC_LINE_FIELD].bind(py))?;
         keywords.set_item("column", values[DIAGNOSTIC_COLUMN_FIELD].bind(py))?;
         let location: Bound<'_, PyAny> =
-            imported(py, NATIVE_MODULE, "SourceLocation")?.call((), Some(&keywords))?;
+            registry::class(py, RecordId::SourceLocation)?.call((), Some(&keywords))?;
         values[DIAGNOSTIC_LOCATION_FIELD] = location.unbind();
     }
     let location: Bound<'_, PyAny> = values[DIAGNOSTIC_LOCATION_FIELD].bind(py).clone();
@@ -95,7 +103,7 @@ pub(crate) fn finish_compiler_diagnostic(
 pub(crate) fn diagnostic_is_error(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = instance.py();
     let error: Bound<'_, PyAny> =
-        imported(py, NATIVE_MODULE, "DiagnosticSeverity")?.getattr("ERROR")?;
+        registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?;
     instance.getattr("severity")?.eq(error)?.into_py_any(py)
 }
 
@@ -104,7 +112,7 @@ pub(crate) fn finish_sql_reference(
     py: Python<'_>,
     mut values: Vec<Py<PyAny>>,
 ) -> PyResult<Vec<Py<PyAny>>> {
-    values[0] = coerce(py, &values[0], (NATIVE_MODULE, "SqlReferenceKind"))?;
+    values[0] = coerce_native(py, &values[0], RecordId::SqlReferenceKind)?;
     Ok(values)
 }
 
@@ -362,7 +370,7 @@ pub(crate) fn build_context_declaration_expansion(
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item(
         "declarations",
-        imported(py, NATIVE_MODULE, "DeclarationResolutionContext")?
+        registry::class(py, RecordId::DeclarationResolutionContext)?
             .call((), Some(&declarations))?,
     )?;
     keywords.set_item("value_renderer", instance.getattr("value_renderer")?)?;
@@ -371,7 +379,7 @@ pub(crate) fn build_context_declaration_expansion(
         instance.getattr("collection_rendering")?,
     )?;
     keywords.set_item("resolver", instance.getattr("declaration_resolver")?)?;
-    Ok(imported(py, NATIVE_MODULE, "DeclarationExpansionContext")?
+    Ok(registry::class(py, RecordId::DeclarationExpansionContext)?
         .call((), Some(&keywords))?
         .unbind())
 }
@@ -379,6 +387,6 @@ pub(crate) fn build_context_declaration_expansion(
 /// A `CompileInputError` carrying `message`.
 pub(crate) fn compile_input_error(py: Python<'_>, message: &str) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        imported(py, NATIVE_MODULE, "CompileInputError")?.call1((message,))?,
+        registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
     ))
 }

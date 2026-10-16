@@ -4,18 +4,17 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyString;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 pub(super) fn string<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
     PyString::new(py, value).into_any()
 }
 
 pub(super) fn model_payload(test: &Bound<'_, PyAny>) -> PyResult<bool> {
-    test.getattr("payload")?.is_instance(&imported(
+    test.getattr("payload")?.is_instance(&registry::class(
         test.py(),
-        NATIVE_RECORDS_MODULE,
-        "CompiledModelSqlTestPayload",
+        RecordId::CompiledModelSqlTestPayload,
     )?)
 }
 

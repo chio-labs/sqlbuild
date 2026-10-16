@@ -2,6 +2,8 @@
 
 use std::ffi::CString;
 
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::{PyUnicodeDecodeError, PyValueError};
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -14,8 +16,6 @@ use sqlbuild_analysis::fingerprint_storage::main::latest_index::latest_index;
 use sqlbuild_analysis::fingerprint_storage::main::selected_positions::selected_positions;
 use sqlbuild_analysis::fingerprint_storage::models::{FingerprintIdentity, LatestIndex};
 
-const MODELS_MODULE: &str = "sqlbuild._native";
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DATETIME_MODULE: &str = "datetime";
 const BINASCII_MODULE: &str = "binascii";
 const BASE64_MODULE: &str = "base64";
@@ -23,11 +23,7 @@ const TIMESTAMP_COLUMN: usize = 11;
 
 /// `FingerprintInputError(message)`.
 pub(crate) fn fingerprint_input_error(py: Python<'_>, message: &str) -> PyErr {
-    match py
-        .import(EXCEPTIONS_MODULE)
-        .and_then(|module| module.getattr("FingerprintInputError"))
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::FingerprintInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -40,8 +36,7 @@ pub(crate) fn fingerprint_set_from_rows<'py>(
     qualified_name: &str,
     rows: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let models: Bound<'py, PyModule> = py.import(MODELS_MODULE)?;
-    let fingerprint_class: Bound<'py, PyAny> = models.getattr("Fingerprint")?;
+    let fingerprint_class: Bound<'py, PyAny> = registry::class(py, RecordId::Fingerprint)?;
     let from_iso: Bound<'py, PyAny> = py
         .import(DATETIME_MODULE)?
         .getattr("datetime")?
@@ -55,7 +50,7 @@ pub(crate) fn fingerprint_set_from_rows<'py>(
             qualified_name,
         )?);
     }
-    indexed_set(&models, schema, &fingerprints)
+    indexed_set(py, schema, &fingerprints)
 }
 
 /// `select_latest_fingerprints`: an unfiltered latest read narrowed as a filtered read would be.
@@ -67,10 +62,9 @@ fn select_latest_fingerprints<'py>(
     node_names: Vec<String>,
     filtered_node_types: Vec<String>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let models: Bound<'py, PyModule> = py.import(MODELS_MODULE)?;
     let schema: String = fingerprint_set.getattr("schema")?.extract()?;
     if node_names.is_empty() && filtered_node_types.is_empty() {
-        return indexed_set(&models, &schema, &[]);
+        return indexed_set(py, &schema, &[]);
     }
     let by_identity: Bound<'py, PyAny> = fingerprint_set.getattr("fingerprints_by_identity")?;
     let latest: Vec<Bound<'py, PyAny>> = if by_identity.is_truthy()? {
@@ -89,15 +83,14 @@ fn select_latest_fingerprints<'py>(
         .into_iter()
         .map(|position| latest[position].clone())
         .collect();
-    indexed_set(&models, &schema, &selected)
+    indexed_set(py, &schema, &selected)
 }
 
 fn indexed_set<'py>(
-    models: &Bound<'py, PyModule>,
+    py: Python<'py>,
     schema: &str,
     fingerprints: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = models.py();
     let identities: Vec<(String, String)> = fingerprints
         .iter()
         .map(identity_of)
@@ -115,7 +108,7 @@ fn indexed_set<'py>(
     kwargs.set_item("schema", schema)?;
     kwargs.set_item("fingerprints", by_name)?;
     kwargs.set_item("fingerprints_by_identity", by_identity)?;
-    models.getattr("FingerprintSet")?.call((), Some(&kwargs))
+    registry::class(py, RecordId::FingerprintSet)?.call((), Some(&kwargs))
 }
 
 fn identity_of(fingerprint: &Bound<'_, PyAny>) -> PyResult<(String, String)> {

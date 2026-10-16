@@ -1,13 +1,16 @@
 //! Source read deferral for managed source loaders.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_phases::objects::{
     native, optional_text, planner_error, replace, text,
 };
 use crate::bindings::_helpers::planner_warehouse::constants::{
     MODEL_HOOK_CONFIG_KEYS, SQL_HOOK_ENTRY,
 };
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
@@ -43,9 +46,8 @@ fn hook_source_reads(
 ) -> PyResult<Vec<String>> {
     let mut names: Vec<String> = Vec::new();
     let py = model.py();
-    let hook_entry = imported(py, SQL_HOOK_ENTRY.0, SQL_HOOK_ENTRY.1)?;
-    let source_kind =
-        imported(py, "sqlbuild.python_nodes.types", "SqlResourceRefKind")?.getattr("SOURCE")?;
+    let hook_entry = registry::class(py, SQL_HOOK_ENTRY)?;
+    let source_kind = host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
     let values = model.getattr("config")?.getattr("values")?;
     for key in MODEL_HOOK_CONFIG_KEYS {
         let value = values.call_method1("get", (key,))?;
@@ -127,7 +129,7 @@ fn resolve_target<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     native(
         project_config.py(),
-        "resolve_target_config",
+        NativeAttr::ResolveTargetConfig,
         &[
             ("project_config", project_config.clone()),
             ("local_config", local_config.clone()),
@@ -191,7 +193,7 @@ fn target_field<'py>(
             Ok(Some(
                 native(
                     py,
-                    "render_project_var_text",
+                    NativeAttr::RenderProjectVarText,
                     &[
                         ("value", effective_vars.get_item(name)?),
                         (

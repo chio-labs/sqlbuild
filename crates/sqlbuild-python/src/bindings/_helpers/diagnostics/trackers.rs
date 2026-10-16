@@ -8,10 +8,11 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyType};
 use pyo3::{pyclass, pymethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const DIAGNOSTICS_MODELS_MODULE: &str = "sqlbuild.diagnostics.models";
-const PROCESS_RESOURCES_MODULE: &str = "sqlbuild.diagnostics._helpers.process_resources";
 const TRACKER_VARIABLE: &str = "sqlbuild_build_phase_timing_tracker";
 const PHASES: [&str; 6] = [
     "compile_seconds",
@@ -101,7 +102,7 @@ impl BuildPhaseTimingTracker {
             keywords.set_item(phase, value)?;
         }
         keywords.set_item("total_seconds", non_negative(now, self.started_at))?;
-        imported(py, NATIVE_MODULE, "PartialBuildPhaseTimings")?.call((), Some(&keywords))
+        registry::class(py, RecordId::PartialBuildPhaseTimings)?.call((), Some(&keywords))
     }
 
     /// Return the active build timing tracker.
@@ -171,7 +172,7 @@ impl ProcessResourceTracker {
         let monotonic: Bound<'_, PyAny> = clock(py, monotonic)?;
         let resource_reader: Bound<'_, PyAny> = match resource_reader {
             Some(reader) => reader,
-            None => imported(py, PROCESS_RESOURCES_MODULE, "read_process_resources")?,
+            None => host::entry(py, ExecutorHost::ReadProcessResources)?,
         };
         let started_at: f64 = monotonic.call0()?.extract()?;
         let (started_user, started_system, _): (f64, f64, Bound<'_, PyAny>) =
@@ -201,7 +202,7 @@ impl ProcessResourceTracker {
             non_negative(system_cpu, self.started_system),
         )?;
         keywords.set_item("max_rss_bytes", max_rss_bytes)?;
-        imported(py, DIAGNOSTICS_MODELS_MODULE, "ProcessResourceUsage")?.call((), Some(&keywords))
+        host::entry(py, ExecutorHost::ProcessResourceUsage)?.call((), Some(&keywords))
     }
 }
 

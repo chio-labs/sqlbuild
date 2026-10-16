@@ -12,11 +12,12 @@ use sqlbuild_core::load_command::main::render_load_spinner_line::render_load_spi
 use sqlbuild_core::load_command::models::{LoadResultText, LoadSpinnerRow, LoadStatus};
 
 use crate::bindings::_helpers::build_progress::terminal::start_spinner;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const LINES_MODULE: &str = "sqlbuild._native";
-const LIFECYCLE_TYPES: &str = "sqlbuild.adapter.contract.types";
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
 const SPINNER_TICK_SECONDS: f64 = 0.1;
 const SPINNER_JOIN_SECONDS: f64 = 0.2;
@@ -35,7 +36,7 @@ fn optional_text(value: Bound<'_, PyAny>) -> PyResult<Option<String>> {
 pub(crate) fn load_result_text(result: &Bound<'_, PyAny>) -> PyResult<LoadResultText> {
     let py: Python<'_> = result.py();
     let log_kind: Bound<'_, PyAny> =
-        imported(py, LIFECYCLE_TYPES, "LifeCycleEventKind")?.getattr("LOG")?;
+        host::entry(py, AdapterHost::LifeCycleEventKind)?.getattr("LOG")?;
     let mut log_messages: Vec<String> = Vec::new();
     for event in result.getattr("lifecycle_events")?.try_iter()? {
         let event: Bound<'_, PyAny> = event?;
@@ -199,9 +200,9 @@ impl LoadProgressReporter {
         let source_order: HashMap<String, i64> = arguments.value("source_order")?.extract()?;
         let total_count: i64 = arguments.value("total_count")?.extract()?;
         let lines: Bound<'_, PyAny> =
-            imported(py, LINES_MODULE, "shared_transient_line_coordinator")?.call0()?;
+            registry::native(py, NativeAttr::SharedTransientLineCoordinator)?.call0()?;
         let projector: Bound<'_, PyAny> =
-            imported(py, NATIVE_MODULE, "current_native_progress_projector")?.call0()?;
+            registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
         if !projector.is_none() {
             let options: Bound<'_, PyDict> = PyDict::new(py);
             options.set_item("ordinals", source_order.clone())?;

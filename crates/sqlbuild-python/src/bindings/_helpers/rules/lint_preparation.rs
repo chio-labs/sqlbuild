@@ -7,17 +7,12 @@ use sqlbuild_rules::lint_text::main::dependency_sites::dependency_sites;
 use sqlbuild_rules::lint_text::models::InterpolationSite;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, keywords,
 };
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::lint_headers::{lint_body_ranges, lint_file_role};
 use crate::bindings::_helpers::rules::lint_stop::check_stop;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE: &str = "sqlbuild._native";
-const MODELS: &str = "sqlbuild._native";
-const COMPILE_ERRORS: &str = "sqlbuild._native";
-const LINT_ERRORS: &str = "sqlbuild._native";
 
 /// Expand a single body and finish its native SQL preparation.
 #[pyfunction]
@@ -28,7 +23,7 @@ pub(crate) fn prepare_lint_body<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let pending = expand_lint_body(py, options)?;
     let prepared =
-        imported(py, NATIVE, "prepare_lint_sql")?.call1((pending.getattr("request")?,))?;
+        registry::native(py, NativeAttr::PrepareLintSql)?.call1((pending.getattr("request")?,))?;
     finish_body(&pending, &prepared)
 }
 
@@ -73,16 +68,16 @@ pub(crate) fn expand_lint_body<'py>(
     let kind = role.getattr("declaration_kind")?;
     let in_project = role.getattr("in_project")?.is_truthy()?;
     let neutralizer = if in_project && kind.eq("audit")? {
-        Some("neutralize_lint_audit_parameters")
+        Some(NativeAttr::NeutralizeLintAuditParameters)
     } else if role.getattr("in_hook_directory")?.is_truthy()?
         || (in_project && kind.eq("sql_hook")?)
     {
-        Some("neutralize_lint_context_interpolation")
+        Some(NativeAttr::NeutralizeLintContextInterpolation)
     } else {
         None
     };
     if let Some(neutralizer) = neutralizer {
-        let neutralized = imported(py, NATIVE, neutralizer)?.call1((&body,))?;
+        let neutralized = registry::native(py, neutralizer)?.call1((&body,))?;
         input = neutralized.get_item(0)?;
         sites = site_objects(&neutralized.get_item(1)?)?;
     }
@@ -106,7 +101,7 @@ pub(crate) fn expand_lint_body<'py>(
         passes = PyTuple::empty(py).into_any();
     } else {
         let value = call_with(
-            &imported(py, NATIVE, "expand_sql_with_spans")?,
+            &registry::native(py, NativeAttr::ExpandSqlWithSpans)?,
             &[
                 ("sql", input.clone()),
                 ("file_path", args.value("file_path")?),
@@ -136,7 +131,7 @@ pub(crate) fn expand_lint_body<'py>(
         PyTuple::empty(py).into_any()
     };
     call_with(
-        &imported(py, MODELS, "PendingLintBody")?,
+        &registry::class(py, RecordId::PendingLintBody)?,
         &[
             ("file_path", args.value("file_path")?),
             ("body_start", start.into_pyobject(py)?.into_any()),
@@ -167,7 +162,7 @@ fn expansion_error(py: Python<'_>, args: &KeywordArguments<'_>, error: PyErr) ->
     let wrapped = (|| -> PyResult<Option<PyErr>> {
         if !error
             .value(py)
-            .is_instance(&imported(py, COMPILE_ERRORS, "CompileInputError")?)?
+            .is_instance(&registry::error(py, ErrorId::CompileInput)?)?
         {
             return Ok(None);
         }
@@ -177,7 +172,7 @@ fn expansion_error(py: Python<'_>, args: &KeywordArguments<'_>, error: PyErr) ->
             error.value(py).str()?
         );
         Ok(Some(PyErr::from_value(
-            imported(py, LINT_ERRORS, "ProjectCompileError")?.call1((message,))?,
+            registry::error(py, ErrorId::ProjectCompile)?.call1((message,))?,
         )))
     })();
     match wrapped {
@@ -191,7 +186,7 @@ fn expansion_error(py: Python<'_>, args: &KeywordArguments<'_>, error: PyErr) ->
 }
 
 fn site_objects<'py>(sites: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let class = imported(sites.py(), MODELS, "InterpolationSite")?;
+    let class = registry::class(sites.py(), RecordId::InterpolationSite)?;
     let values: Vec<Bound<'py, PyAny>> = sites
         .try_iter()?
         .map(|site| class.call1(site?.cast_into::<PyTuple>()?))
@@ -205,7 +200,7 @@ fn sentinel_spans<'py>(sites: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     for site in sites.try_iter()? {
         let site = site?;
         spans.push(call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "ExpansionSpan")?,
+            &registry::class(py, RecordId::ExpansionSpan)?,
             &[
                 ("source_start", site.getattr("original_start")?),
                 ("source_end", site.getattr("original_end")?),
@@ -224,7 +219,7 @@ fn finish_body<'py>(
     let py = pending.py();
     if prepared.is_none() {
         return Err(PyErr::from_value(
-            imported(py, LINT_ERRORS, "NativeLintError")?.call1((format!(
+            registry::error(py, ErrorId::NativeLint)?.call1((format!(
                 "{} could not be prepared for native SQL lint",
                 pending.getattr("file_path")?.str()?
             ),))?,
@@ -286,7 +281,7 @@ fn finish_body<'py>(
     ] {
         values.set_item(name, pending.getattr(name)?)?;
     }
-    imported(py, MODELS, "LintBody")?.call((), Some(&values))
+    registry::class(py, RecordId::LintBody)?.call((), Some(&values))
 }
 
 fn prepare_batch<'py>(
@@ -300,15 +295,15 @@ fn prepare_batch<'py>(
         .iter()
         .map(|body| body.getattr("request"))
         .collect::<PyResult<_>>()?;
-    let results =
-        imported(py, NATIVE, "prepare_lint_sql_batch")?.call1((PyList::new(py, requests)?,))?;
+    let results = registry::native(py, NativeAttr::PrepareLintSqlBatch)?
+        .call1((PyList::new(py, requests)?,))?;
     let mut prepared: Vec<Bound<'py, PyAny>> = Vec::new();
     for (body, result) in pending.iter().zip(results.try_iter()?) {
         let result = result?;
         prepared.push(if result.get_item(0)?.is_truthy()? {
             result.get_item(1)?
         } else {
-            imported(py, NATIVE, "prepare_lint_sql")?.call1((body.getattr("request")?,))?
+            registry::native(py, NativeAttr::PrepareLintSql)?.call1((body.getattr("request")?,))?
         });
     }
     if prepared.len() != pending.len() || results.len()? != pending.len() {
@@ -361,7 +356,7 @@ pub(crate) fn expand_file_bodies<'py>(
         py.None().into_bound(py)
     };
     let external = call_with(
-        &imported(py, NATIVE, "external_identifiers_for_headers")?,
+        &registry::native(py, NativeAttr::ExternalIdentifiersForHeaders)?,
         &[
             ("contents", args.value("contents")?),
             ("headers", args.value("headers")?),
@@ -434,14 +429,14 @@ pub(crate) fn expand_file_bodies<'py>(
     if let Err(error) = expansion {
         if !error
             .value(py)
-            .is_instance(&imported(py, LINT_ERRORS, "ProjectCompileError")?)?
+            .is_instance(&registry::error(py, ErrorId::ProjectCompile)?)?
         {
             return Err(error);
         }
         failure = error.value(py).clone().into_any();
     }
     call_with(
-        &imported(py, MODELS, "ExpandedLintFile")?,
+        &registry::class(py, RecordId::ExpandedLintFile)?,
         &[
             ("file_path", path),
             ("bodies", PyTuple::new(py, bodies)?.into_any()),
@@ -493,7 +488,7 @@ pub(crate) fn prepare_expanded_files<'py>(
         }
     }
     call_with(
-        &imported(py, MODELS, "PreparedLintFiles")?,
+        &registry::class(py, RecordId::PreparedLintFiles)?,
         &[
             ("bodies", PyTuple::new(py, bodies)?.into_any()),
             ("unexpandable", unexpandable.into_any()),

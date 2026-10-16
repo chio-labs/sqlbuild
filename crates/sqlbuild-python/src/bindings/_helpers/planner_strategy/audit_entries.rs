@@ -10,9 +10,10 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 
 use crate::bindings::_helpers::planner_strategy::constants::{
-    AUDIT_TYPES_MODULE, COMPILE_MODELS_MODULE, COMPILE_TYPES_MODULE, MODEL_ATTACHMENT,
-    NATIVE_MODULE, PLAN_MODELS_MODULE, SOURCE_ATTACHMENT,
+    AUDIT_TYPES_MODULE, COMPILE_TYPES_MODULE, MODEL_ATTACHMENT, SOURCE_ATTACHMENT,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
 /// Render and validate one audit query with the supplied adapter callbacks.
 fn render_query<'py>(
@@ -22,7 +23,7 @@ fn render_query<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = request.py();
     let resolved = call_with(
-        &imported(py, NATIVE_MODULE, "render_audit_sql")?,
+        &registry::native(py, NativeAttr::RenderAuditSql)?,
         &[
             ("unresolved_sql", sql),
             ("model_locations", request.get("model_locations")?),
@@ -32,7 +33,7 @@ fn render_query<'py>(
         ],
     )?;
     call_with(
-        &imported(py, NATIVE_MODULE, "assert_no_unresolved_sql_markers")?,
+        &registry::native(py, NativeAttr::AssertNoUnresolvedSqlMarkers)?,
         &[
             ("sql", resolved.clone()),
             ("context", PyString::new(py, context).into_any()),
@@ -81,7 +82,7 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
         )?
     };
     let attachment = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_attachment_kind")?,
+        &registry::native(py, NativeAttr::ResolveAttachmentKind)?,
         &[
             ("audit", audit.clone()),
             ("downstream_deps", request.get("lineage_downstream_deps")?),
@@ -101,7 +102,7 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
     let requested = audit_enum(&audit, "run_scope", "AuditRunScope", "final")?;
     let severity = audit_enum(&audit, "severity", "AuditSeverity", "warn")?;
     let effective = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_effective_run_scope")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveRunScope)?,
         &[
             ("requested_run_scope", requested.clone()),
             ("attached_model_materialization", materialization),
@@ -153,7 +154,7 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
         (
             "reads_outside_target_lineage",
             call_with(
-                &imported(py, NATIVE_MODULE, "reads_outside_target_lineage")?,
+                &registry::native(py, NativeAttr::ReadsOutsideTargetLineage)?,
                 &[
                     ("audit", audit),
                     ("upstream_deps", request.get("lineage_upstream_deps")?),
@@ -163,7 +164,7 @@ pub(crate) fn plan_audit<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<
     ] {
         values.set_item(field, value)?;
     }
-    imported(py, PLAN_MODELS_MODULE, "AuditPlanEntry")?.call((), Some(&values))
+    registry::class(py, RecordId::AuditPlanEntry)?.call((), Some(&values))
 }
 
 /// Select attached audits by their logical target and singular audits by dependency overlap.
@@ -183,7 +184,7 @@ pub(crate) fn audit_is_selected(
         let resource_type =
             imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.call1((target_value,))?;
         let key = call_with(
-            &imported(py, COMPILE_MODELS_MODULE, "CompiledObjectKey")?,
+            &registry::class(py, RecordId::CompiledObjectKey)?,
             &[("resource_type", resource_type), ("name", name)],
         )?;
         return selected_keys.contains(key);
@@ -217,7 +218,7 @@ pub(crate) fn build_selected_audit_entries<'py>(
     if selected.is_empty() {
         return Ok(entries);
     }
-    let lineage = imported(py, NATIVE_MODULE, "project_lineage_views")?.call1((project,))?;
+    let lineage = registry::native(py, NativeAttr::ProjectLineageViews)?.call1((project,))?;
     let relations = request.get("relations")?;
     let arguments = PyDict::new(py);
     for field in ["model_locations", "seed_locations"] {

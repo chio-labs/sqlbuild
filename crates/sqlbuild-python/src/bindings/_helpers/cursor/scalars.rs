@@ -25,11 +25,14 @@ use sqlbuild_cursor::algebra::main::render::render;
 use sqlbuild_cursor::algebra::models::{Extreme, Grain, Scalar, ScalarValue, SortKey, ZoneOffset};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::cursor::conversion::{CursorSession, MODELS_MODULE, algebra_error};
+use crate::bindings::_helpers::cursor::conversion::{CursorSession, algebra_error};
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, naive_date_time};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 const DECIMAL_MODULE: &str = "decimal";
-const TYPES_MODULE: &str = "sqlbuild.cursor_algebra.types";
 const INTEGER_CURSOR: &str = "integer";
 const UTC_OFFSET: i64 = 0;
 const TIMESTAMP_CURSOR: &str = "timestamp";
@@ -45,7 +48,7 @@ fn chained(py: Python<'_>, message: String, cause: PyErr) -> PyErr {
 fn parse_integer<'py>(raw: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     let text: String = raw.str()?.to_str()?.to_owned();
-    let class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "IntegerValue")?;
+    let class: Bound<'py, PyAny> = registry::class(py, RecordId::IntegerValue)?;
     if let Some(value) = parse_integer_text(&text) {
         return call_with(&class, &[("value", value.into_pyobject(py)?.into_any())]);
     }
@@ -105,7 +108,7 @@ fn parse_timestamp_text<'py>(raw: &Bound<'py, PyAny>, text: &str) -> PyResult<Bo
     match as_date {
         Ok(date) => {
             return call_with(
-                &imported(py, MODELS_MODULE, "DateValue")?,
+                &registry::class(py, RecordId::DateValue)?,
                 &[("value", date)],
             );
         }
@@ -117,7 +120,7 @@ fn parse_timestamp_text<'py>(raw: &Bound<'py, PyAny>, text: &str) -> PyResult<Bo
         .and_then(|value| utc_normalized(&value));
     match parsed {
         Ok(value) => call_with(
-            &imported(py, MODELS_MODULE, "TimestampValue")?,
+            &registry::class(py, RecordId::TimestampValue)?,
             &[
                 ("value", value),
                 ("source_text", PyString::new(py, &normalized).into_any()),
@@ -150,13 +153,13 @@ pub(crate) fn parse_value<'py>(
     if raw.is_instance(&imported(py, DATETIME_MODULE, "datetime")?)? {
         let value: Bound<'py, PyAny> = utc_normalized(raw)?;
         return call_with(
-            &imported(py, MODELS_MODULE, "TimestampValue")?,
+            &registry::class(py, RecordId::TimestampValue)?,
             &[("value", value)],
         );
     }
     if raw.is_instance(&imported(py, DATETIME_MODULE, "date")?)? {
         return call_with(
-            &imported(py, MODELS_MODULE, "DateValue")?,
+            &registry::class(py, RecordId::DateValue)?,
             &[("value", raw.clone())],
         );
     }
@@ -224,7 +227,7 @@ pub(crate) fn render_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
 #[pyfunction(name = "cursor_sentinel_to_token")]
 #[pyo3(signature = (*, sentinel))]
 pub(crate) fn sentinel_to_token(sentinel: &Bound<'_, PyAny>) -> PyResult<String> {
-    if sentinel.is_instance(&imported(sentinel.py(), TYPES_MODULE, "BoundSentinel")?)? {
+    if sentinel.is_instance(&host::entry(sentinel.py(), ExecutorHost::BoundSentinel)?)? {
         return sentinel.getattr("value")?.extract();
     }
     render_value(sentinel)
@@ -235,7 +238,7 @@ pub(crate) fn sentinel_to_token(sentinel: &Bound<'_, PyAny>) -> PyResult<String>
 #[pyo3(signature = (*, token))]
 fn sentinel_from_token<'py>(token: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py: Python<'py> = token.py();
-    match imported(py, TYPES_MODULE, "BoundSentinel")?.call1((token,)) {
+    match host::entry(py, ExecutorHost::BoundSentinel)?.call1((token,)) {
         Ok(sentinel) => Ok(Some(sentinel)),
         Err(error) if error.is_instance_of::<PyValueError>(py) => Ok(None),
         Err(error) => Err(error),

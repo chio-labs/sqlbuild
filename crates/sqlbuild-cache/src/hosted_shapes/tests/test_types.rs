@@ -4,8 +4,8 @@ pub(crate) struct HostedKeyTestCase {
     pub(crate) expected_duplicates: Vec<&'static str>,
 }
 
-pub(crate) struct NativeNameTestCase {
+pub(crate) struct CapturedNameTestCase {
     pub(crate) description: &'static str,
-    pub(crate) shape: (&'static str, &'static str),
-    pub(crate) expected_native: Option<&'static str>,
+    pub(crate) native: &'static str,
+    pub(crate) expected_python: Option<&'static str>,
 }

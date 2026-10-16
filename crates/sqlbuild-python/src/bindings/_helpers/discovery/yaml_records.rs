@@ -29,11 +29,10 @@ use crate::bindings::_helpers::discovery::snapshot::{
 use crate::bindings::_helpers::discovery::yaml_entries::{
     parse_schema_document, parse_sources_document,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::{NativeProjectTree, YamlDiscoveryRequest};
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const MODELS_MODULE: &str = "sqlbuild._native";
 /// The most YAML bytes one native load reads before its files are built and released.
 const YAML_BATCH_BYTES: u64 = 4 * 1024 * 1024;
 const PATHLIB_MODULE: &str = "pathlib";
@@ -224,7 +223,7 @@ pub(crate) fn discover_source_files<'py>(
             project_dir: project_dir.clone(),
             on_fault,
         };
-        let class: Bound<'py, PyAny> = imported(py, MODELS_MODULE, "DiscoveredSourceFile")?;
+        let class: Bound<'py, PyAny> = registry::class(py, RecordId::DiscoveredSourceFile)?;
         let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
         load_files(
             project_dir,
@@ -284,7 +283,7 @@ pub(crate) fn discover_schema_files<'py>(
         if paths.is_empty() {
             return record_tuple(py, Vec::new());
         }
-        let class: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "DiscoveredSchemaFile")?;
+        let class: Bound<'py, PyAny> = registry::class(py, RecordId::DiscoveredSchemaFile)?;
         let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
         load_files(
             project_dir,

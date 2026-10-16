@@ -13,13 +13,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::freshness::support::{
-    FRESHNESS_MODELS, INPUT_ERROR, exception_text, freshness_error, optional_str,
-    presumed_utc_datetime, text,
+    INPUT_ERROR, exception_text, freshness_error, optional_str, presumed_utc_datetime, text,
 };
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::state_tables::state_table_create_sql;
 use crate::bindings::_helpers::state_rows::timestamps::date_time_typed;
 
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 const MISSING_SCHEMA_MESSAGE: &str = "source freshness table requires a target schema";
 
 /// The qualified state table name the adapter renders for one target schema.
@@ -110,7 +110,7 @@ pub(crate) struct StateRead<'py> {
 fn empty_set<'py>(schema: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = schema.py();
     call_with(
-        &imported(py, NATIVE_RECORDS, "SourceFreshnessSet")?,
+        &registry::class(py, RecordId::SourceFreshnessSet)?,
         &[
             ("schema", schema.clone()),
             ("records", PyDict::new(py).into_any()),
@@ -174,7 +174,7 @@ freshness table to regenerate source freshness state."
         records.set_item(record.getattr("identity")?, record)?;
     }
     call_with(
-        &imported(py, NATIVE_RECORDS, "SourceFreshnessSet")?,
+        &registry::class(py, RecordId::SourceFreshnessSet)?,
         &[("schema", schema.clone()), ("records", records.into_any())],
     )
 }
@@ -195,7 +195,7 @@ fn row_record<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let optional =
         |index: usize| -> PyResult<Bound<'py, PyAny>> { optional_str(&row.get_item(index)?) };
     call_with(
-        &imported(py, FRESHNESS_MODELS, "SourceFreshnessRecord")?,
+        &registry::class(py, RecordId::SourceFreshnessRecord)?,
         &[
             ("source_name", field(0)?),
             ("target_database", optional(1)?),

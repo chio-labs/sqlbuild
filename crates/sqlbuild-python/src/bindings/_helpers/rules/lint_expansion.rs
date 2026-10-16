@@ -8,15 +8,13 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::build_sql_expansion_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, keywords,
 };
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RESOLVE_ADAPTER_MODULE: &str = "sqlbuild.adapter.discovery.main.resolve_adapter";
-const ADAPTER_EXCEPTIONS_MODULE: &str = "sqlbuild.adapter.contract.exceptions";
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const LINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const COMPILE_FIRST_MESSAGE: &str = "compiler-integrated Rules check the SQL your project \
     actually produces, so the project must compile first";
 
@@ -53,7 +51,7 @@ fn expansion_context<'py>(
     if discovered.is_none() {
         let no: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
         discovered = call_with(
-            &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
             &[
                 ("project_dir", project_dir.clone()),
                 ("sql_analysis_enabled_override", no.clone()),
@@ -64,14 +62,14 @@ fn expansion_context<'py>(
     let mut renderer: Bound<'py, PyAny> = arguments.value("value_renderer")?;
     if !renderer.is_truthy()? {
         let adapter_name: Bound<'py, PyAny> = call_with(
-            &imported(py, NATIVE_MODULE, "resolve_effective_adapter_name")?,
+            &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
             &[
                 ("project_config", discovered.getattr("project_config")?),
                 ("local_config", discovered.getattr("local_config")?),
             ],
         )?;
         renderer = call_with(
-            &imported(py, RESOLVE_ADAPTER_MODULE, "resolve_adapter")?,
+            &host::entry(py, AdapterHost::ResolveAdapter)?,
             &[
                 ("adapter_name", adapter_name),
                 ("project_dir", project_dir.clone()),
@@ -99,26 +97,15 @@ fn expansion_context<'py>(
 /// Adapter, compile and discovery errors as `ProjectCompileError`; any other error unchanged.
 fn compile_first_error(py: Python<'_>, error: PyErr) -> PyResult<PyErr> {
     let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
-    let reported: bool = value.is_instance(&imported(
-        py,
-        ADAPTER_EXCEPTIONS_MODULE,
-        "AdapterUserError",
-    )?)? || value.is_instance(&imported(
-        py,
-        COMPILE_EXCEPTIONS_MODULE,
-        "CompileInputError",
-    )?)? || value.is_instance(&imported(
-        py,
-        DISCOVERY_EXCEPTIONS_MODULE,
-        "DiscoveryError",
-    )?)?;
+    let reported: bool = value.is_instance(&host::entry(py, AdapterHost::AdapterUserError)?)?
+        || value.is_instance(&registry::error(py, ErrorId::CompileInput)?)?
+        || value.is_instance(&registry::error(py, ErrorId::Discovery)?)?;
     if !reported {
         return Ok(error);
     }
     let message: String = format!("{COMPILE_FIRST_MESSAGE}: {}", value.str()?);
-    let raised: PyErr = PyErr::from_value(
-        imported(py, LINT_EXCEPTIONS_MODULE, "ProjectCompileError")?.call1((message,))?,
-    );
+    let raised: PyErr =
+        PyErr::from_value(registry::error(py, ErrorId::ProjectCompile)?.call1((message,))?);
     raised.set_cause(py, Some(error));
     Ok(raised)
 }

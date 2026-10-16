@@ -8,16 +8,13 @@ use sqlbuild_analysis::auditing::main::evaluate_measurement::evaluate_measuremen
 use sqlbuild_analysis::auditing::models::{MeasurementOutcome, Thresholds};
 
 use crate::bindings::_helpers::auditing::identity::thresholds as read_thresholds;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
-const AUDITING_ERRORS_MODULE: &str = "sqlbuild._native";
 
 fn measurement_error(py: Python<'_>, message: &str) -> PyErr {
-    match py
-        .import(AUDITING_ERRORS_MODULE)
-        .and_then(|module| module.getattr("MeasurementAuditError"))
-        .and_then(|class| class.call1((message,)))
-    {
+    match registry::error(py, ErrorId::MeasurementAudit).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

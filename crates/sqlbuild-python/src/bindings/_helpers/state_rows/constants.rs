@@ -1,9 +1,5 @@
 //! Python modules, names and messages of migration state rows.
 
-pub(crate) const MIGRATION_MODELS: &str = "sqlbuild._native";
-pub(crate) const MIGRATION_TYPES: &str = "sqlbuild._native";
-pub(crate) const MIGRATION_EXCEPTIONS: &str = "sqlbuild._native";
-pub(crate) const SQL_VALUE_TYPES: &str = "sqlbuild._native";
 pub(crate) const OLD_NAME_VIEW_CONFIG_KEY: &str = "old_name_view";
 pub(crate) const MODEL_KIND: &str = "model";
 pub(crate) const COLUMN_KIND: &str = "column";

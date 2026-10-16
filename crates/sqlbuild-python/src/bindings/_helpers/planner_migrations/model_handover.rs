@@ -3,6 +3,8 @@
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, replace, text};
 use crate::bindings::_helpers::planner_migrations::constants::MIGRATION_MODEL_NAME_METADATA_KEY;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::timestamps::presumed_utc;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -79,8 +81,7 @@ pub(super) fn equivalent<'py>(
     let py = model.py();
     if handover.is_none()
         || !destinations.contains(
-            imported(py, "sqlbuild._native", "stored_migration_fingerprint")?
-                .call1((&handover,))?,
+            registry::native(py, NativeAttr::StoredMigrationFingerprint)?.call1((&handover,))?,
         )?
     {
         return Ok(handover);
@@ -93,7 +94,7 @@ pub(super) fn equivalent<'py>(
                 "definition_hash",
                 native(
                     py,
-                    "compute_query_hash",
+                    NativeAttr::ComputeQueryHash,
                     &[
                         ("query_sql", model.getattr("query_sql")?),
                         ("dialect", dialect.clone()),

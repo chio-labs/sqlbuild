@@ -10,13 +10,13 @@ use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls a
 use sqlbuild_render::macro_calls::models::{MacroCallScan, MacroScanFailure};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::macro_call_memo::MacroCallMemo;
 use crate::bindings::_helpers::render::macro_call_rows::{SiteRow, SpanRow, site_row, span_row};
 use crate::bindings::_helpers::render::macro_expansion::raised;
 use crate::bindings::types::CompilerDetach;
 
-const COMPILE_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const DECLARATION_CALLS: [&str; 2] = ["enum", "const"];
 
 /// `(call start or None, call name or None, message)` of the error Python's scan raises.
@@ -60,7 +60,7 @@ pub(crate) fn top_level_macro_call_names<'py>(
                 .collect::<Vec<String>>(),
         ),
         Err(error) => Err(raised(
-            &imported(py, COMPILE_EXCEPTIONS_MODULE, "CompileInputError")?,
+            &registry::error(py, ErrorId::CompileInput)?,
             error.message(),
         )),
     }

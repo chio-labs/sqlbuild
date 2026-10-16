@@ -23,14 +23,9 @@ use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_conn
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
-const REJECT_UNIT_TESTS_MODULE: &str = "sqlbuild._native";
-const GRAPH_SELECTION_MODULE: &str = "sqlbuild._native";
-const ADOPTION_MODELS: &str = "sqlbuild._native";
 const GENERATE_ACTION: &str = "generate";
 
 /// A `CliUserError` with its code.
@@ -38,7 +33,7 @@ fn user_error(py: Python<'_>, message: &str, code: &str) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((message,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -81,11 +76,11 @@ fn select_resources<'py>(
 ) -> PyResult<Selection<'py>> {
     let py: Python<'py> = request.py();
     let analysis: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "CompileAnalysisSelection")?,
+        &registry::class(py, RecordId::CompileAnalysisSelection)?,
         &[("no_cache", PyBool::new(py, true).to_owned().into_any())],
     )?;
     let project: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "build_compiled_project")?,
+        &registry::native(py, NativeAttr::BuildCompiledProject)?,
         &[
             ("discovered_inputs", discovered.clone()),
             ("adapter", context.getattr("adapter")?),
@@ -96,15 +91,11 @@ fn select_resources<'py>(
         ],
     )?;
     let graph: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            NATIVE_MODULE,
-            "build_project_graph_from_compiled_project",
-        )?,
+        &registry::native(py, NativeAttr::BuildProjectGraphFromCompiledProject)?,
         &[("project", project)],
     )?;
     let selected: Bound<'py, PyAny> = call_with(
-        &imported(py, GRAPH_SELECTION_MODULE, "select_project_graph")?,
+        &registry::native(py, NativeAttr::SelectProjectGraph)?,
         &[
             ("graph", graph.clone()),
             ("select", request.getattr("select")?),
@@ -169,7 +160,7 @@ fn compare<'py>(
     let py: Python<'py> = request.py();
     let adapter: Bound<'py, PyAny> = context.getattr("adapter")?;
     let reporter: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ConnectionProgressReporter")?,
+        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
             ("adapter_name", context.getattr("adapter_name")?),
             ("stream", progress.stream.clone()),
@@ -207,7 +198,7 @@ fn compare<'py>(
             ),),
         )?;
         let evidence: Bound<'py, PyAny> = match call_with(
-            &imported(py, NATIVE_MODULE, "compare_contracts")?,
+            &registry::native(py, NativeAttr::CompareContracts)?,
             &[
                 ("adapter", adapter.clone()),
                 ("connection", connection.clone()),
@@ -371,11 +362,11 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
         imported(py, "pathlib", "Path")?.call_method0("cwd")?
     };
     let discovered: Bound<'_, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "discover_project_inputs")?,
+        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
     call_with(
-        &imported(py, REJECT_UNIT_TESTS_MODULE, "reject_unit_test_selectors")?,
+        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
             ("select", request.getattr("select")?),
             ("exclude", request.getattr("exclude")?),
@@ -404,7 +395,7 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     let progress: Progress<'_> = progress_for(request)?;
     let evidence: Bound<'_, PyAny> = compare(request, &context, &selection, &progress)?;
     let mut result: Bound<'_, PyAny> = call_with(
-        &imported(py, ADOPTION_MODELS, "ContractAdoptionResult")?,
+        &registry::class(py, RecordId::ContractAdoptionResult)?,
         &[("from_target", from_target), ("evidence", evidence)],
     )?;
     if generate_write {

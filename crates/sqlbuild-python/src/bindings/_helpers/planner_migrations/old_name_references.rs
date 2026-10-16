@@ -1,7 +1,11 @@
 //! Diagnose literal references to compatibility-only old names.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, text};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
 
@@ -11,12 +15,11 @@ fn old_relation<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = old.py();
     let reference = call_with(
-        &imported(py, "sqlbuild.python_nodes.models", "SqlResourceRef")?,
+        &host::entry(py, UserCodeHost::SqlResourceRef)?,
         &[
             (
                 "kind",
-                imported(py, "sqlbuild.python_nodes.types", "SqlResourceRefKind")?
-                    .getattr("MODEL")?,
+                host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("MODEL")?,
             ),
             ("name", name.clone()),
         ],
@@ -82,7 +85,7 @@ pub(super) fn errors<'py>(
         let relation = literal.getattr("relation")?;
         let matched = native(
             py,
-            "match_project_relation",
+            NativeAttr::MatchProjectRelation,
             &[("index", index.clone()), ("relation", relation.clone())],
         )?;
         if matched.is_none() || matched.getattr("compatibility_for")?.is_none() {
@@ -97,7 +100,7 @@ pub(super) fn errors<'py>(
         }
         let message: String = native(
             py,
-            "old_name_reference_message",
+            NativeAttr::OldNameReferenceMessage,
             &[
                 ("owner_label", literal.getattr("owner_label")?),
                 ("written", text(py, &parts.join("."))),
@@ -108,7 +111,7 @@ pub(super) fn errors<'py>(
         .extract()?;
         let remedy: String = native(
             py,
-            "hard_coded_relation_remedy",
+            NativeAttr::HardCodedRelationRemedy,
             &[
                 ("owner_kind", literal.getattr("owner_kind")?),
                 ("ref", matched.getattr("ref")?),
@@ -123,12 +126,12 @@ pub(super) fn errors<'py>(
         let line = literal.getattr("line")?.str()?.to_str()?.to_owned();
         errors.push(native(
             py,
-            "PlanWarning",
+            RecordId::PlanWarning,
             &[
                 ("model_name", py.None().into_bound(py)),
                 (
                     "severity",
-                    imported(py, "sqlbuild._native", "WarningSeverity")?.getattr("ERROR")?,
+                    registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?,
                 ),
                 (
                     "message",

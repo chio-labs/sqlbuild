@@ -16,21 +16,13 @@ use sqlbuild_core::loader_connection::models::LoaderConnection;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
-const INGESTR_ERROR: (&str, &str) = (
-    "sqlbuild.integrations.ingestr.exceptions",
-    "IngestrIntegrationError",
-);
-const INGESTR_SOURCE_CONFIG: (&str, &str) = (
-    "sqlbuild.integrations.ingestr.models",
-    "IngestrSourceConfig",
-);
-const INGESTR_KIND: (&str, &str) = (
-    "sqlbuild.integrations.ingestr.constants",
-    "INGESTR_INTEGRATION_KIND",
-);
+const INGESTR_ERROR: ThirdPartyHost = ThirdPartyHost::IngestrIntegrationError;
+const INGESTR_SOURCE_CONFIG: ThirdPartyHost = ThirdPartyHost::IngestrSourceConfig;
+const INGESTR_KIND: ThirdPartyHost = ThirdPartyHost::IngestrIntegrationKind;
 const TEMPLATE_LABEL: &str = "ingestr source config";
 const TEMPLATE_FIELDS: [&str; 7] = [
     "source_uri",
@@ -45,7 +37,7 @@ const LIST_FIELDS: [&str; 2] = ["primary_key", "extra_args"];
 
 /// An `IngestrIntegrationError`, or the failure to construct one.
 fn ingestr_error(py: Python<'_>, message: String) -> PyErr {
-    imported(py, INGESTR_ERROR.0, INGESTR_ERROR.1)
+    host::entry(py, INGESTR_ERROR)
         .and_then(|class| class.call1((message,)))
         .map_or_else(|error| error, PyErr::from_value)
 }
@@ -55,22 +47,14 @@ fn ingestr_config<'py>(source_entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
     let py: Python<'py> = source_entry.py();
     let name: String = source_entry.getattr("name")?.str()?.extract()?;
     let loader: Bound<'py, PyAny> = source_entry.getattr("integration_loader")?;
-    if loader.is_none()
-        || !loader
-            .getattr("kind")?
-            .eq(imported(py, INGESTR_KIND.0, INGESTR_KIND.1)?)?
-    {
+    if loader.is_none() || !loader.getattr("kind")?.eq(host::entry(py, INGESTR_KIND)?)? {
         return Err(ingestr_error(
             py,
             format!("Source '{name}' does not define ingestr config"),
         ));
     }
     let config: Bound<'py, PyAny> = loader.getattr("config")?;
-    if !config.is_instance(&imported(
-        py,
-        INGESTR_SOURCE_CONFIG.0,
-        INGESTR_SOURCE_CONFIG.1,
-    )?)? {
+    if !config.is_instance(&host::entry(py, INGESTR_SOURCE_CONFIG)?)? {
         return Err(ingestr_error(
             py,
             format!("Source '{name}' defines invalid ingestr config"),

@@ -12,14 +12,12 @@ use crate::bindings::_helpers::compile_driver::compile_timings::{
     record_compile_cpu_timing, record_compile_timing,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ADAPTER_MODELS_MODULE: &str = "sqlbuild.adapter.contract.models";
-pub(crate) const ANALYSIS_MODELS_MODULE: &str = "sqlbuild._native";
 const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
-const PLANNER_TYPES_MODULE: &str = "sqlbuild._native";
 const GENERIC_DIALECT: &str = "generic";
 const UDF_PREFIX: &str = "__sqlbuild_udf_";
 
@@ -78,7 +76,7 @@ pub(crate) fn analysis_context<'py>(
         request.skip_column_inference.bind(py),
     )?;
     let relations: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "declared_relations")?.call1((inputs,))?;
+        registry::native(py, NativeAttr::DeclaredRelations)?.call1((inputs,))?;
     let column_types: Bound<'py, PyAny> = relations.get_item(0)?;
     let nullability: Bound<'py, PyAny> = relations.get_item(1)?;
     let complete_schemas: Bound<'py, PyAny> = relations.get_item(2)?;
@@ -112,7 +110,7 @@ pub(crate) fn analysis_context<'py>(
 fn dynamic_families_by_table<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = inputs.py();
     let enforced: Bound<'py, PyAny> =
-        imported(py, PLANNER_TYPES_MODULE, "ContractPolicy")?.getattr("ENFORCED")?;
+        registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
     let families: Bound<'py, PyDict> = PyDict::new(py);
     for model_input in inputs.getattr("model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
@@ -143,9 +141,9 @@ pub(crate) fn declared_names<'py>(
     let py: Python<'py> = inputs.py();
     let functions: Bound<'py, PyAny> = inputs.getattr("sql_function_inputs")?;
     let names: Bound<'py, PyAny> =
-        imported(py, NATIVE_MODULE, "known_function_names")?.call1((functions.clone(),))?;
+        registry::native(py, NativeAttr::KnownFunctionNames)?.call1((functions.clone(),))?;
     let types: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "known_declared_types")?,
+        &registry::native(py, NativeAttr::KnownDeclaredTypes)?,
         &[
             ("functions", functions),
             ("column_types", column_types.clone()),
@@ -165,7 +163,7 @@ fn profile_with_catalog<'py>(
     let profile: Bound<'py, PyAny> = if inference_profile.is_truthy()? {
         inference_profile.clone()
     } else {
-        imported(py, ADAPTER_MODELS_MODULE, "ExpressionInferenceProfile")?.call0()?
+        host::entry(py, AdapterHost::ExpressionInferenceProfile)?.call0()?
     };
     let (known_functions, known_types): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         declared_names(inputs, column_types)?;
@@ -273,7 +271,7 @@ fn record_expression_shapes<'py>(
         }
     }
     let shapes: Vec<Bound<'py, PyAny>> = call_with(
-        &imported(py, NATIVE_MODULE, "infer_native_expression_source_shapes")?,
+        &registry::native(py, NativeAttr::InferNativeExpressionSourceShapes)?,
         &[
             ("expressions", PyTuple::new(py, expressions)?.into_any()),
             ("profile", context.profile.clone()),
@@ -336,7 +334,7 @@ fn model_analyses<'py>(
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let names: &Bound<'py, PyAny> = request.analysis_model_names.bind(py);
     let mode: &Bound<'py, PyAny> = request.column_lineage_mode.bind(py);
-    let lineage_mode: Bound<'py, PyAny> = imported(py, NATIVE_RECORDS_MODULE, "ColumnLineageMode")?;
+    let lineage_mode: Bound<'py, PyAny> = registry::class(py, RecordId::ColumnLineageMode)?;
     let rich: bool = mode.eq(lineage_mode.getattr("RICH")?)?;
     let allow_compact: bool = mode.eq(lineage_mode.getattr("FAST")?)? || rich;
     let flags: (Bound<'py, PyAny>, Bound<'py, PyAny>) = (
@@ -362,7 +360,7 @@ fn model_analyses<'py>(
                 }
             }
             let analysis_request: Bound<'py, PyAny> = call_with(
-                &imported(py, ANALYSIS_MODELS_MODULE, "NativeModelAnalysisRequest")?,
+                &registry::class(py, RecordId::NativeModelAnalysisRequest)?,
                 &[
                     ("known_functions", known_functions),
                     ("known_types", known_types),
@@ -381,7 +379,7 @@ fn model_analyses<'py>(
                 ],
             )?;
             call_with(
-                &imported(py, NATIVE_MODULE, "analyze_native_model_sql")?,
+                &registry::native(py, NativeAttr::AnalyzeNativeModelSql)?,
                 &[("request", analysis_request)],
             )
         })

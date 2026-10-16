@@ -14,6 +14,7 @@ use sqlbuild_scopes::scope_report::models::{
     ScopeFolder, ScopeReport, ScopeResult, ScopeSection, SourceLocation,
 };
 
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, diagnostic_facts, field, optional_item, read_declaration_identity,
     read_diagnostic, read_qualified,
@@ -35,8 +36,8 @@ pub(crate) fn read_target(
     classes: &ScopeClasses<'_>,
     target: &Bound<'_, PyAny>,
 ) -> PyResult<QueryTarget> {
-    if target.is_instance(&classes.model("ResourceIdentity")?)?
-        || target.is_instance(&classes.model("DeclarationIdentity")?)?
+    if target.is_instance(&classes.model(RecordId::ResourceIdentity)?)?
+        || target.is_instance(&classes.model(RecordId::DeclarationIdentity)?)?
     {
         return Ok(QueryTarget::Identity(read_qualified(target)?));
     }
@@ -65,7 +66,7 @@ pub(crate) fn read_declaration_target(
     classes: &ScopeClasses<'_>,
     declaration: &Bound<'_, PyAny>,
 ) -> PyResult<DeclarationTarget> {
-    if declaration.is_instance(&classes.model("DeclarationIdentity")?)? {
+    if declaration.is_instance(&classes.model(RecordId::DeclarationIdentity)?)? {
         return Ok(DeclarationTarget::Identity(read_declaration_identity(
             declaration,
         )?));
@@ -215,7 +216,7 @@ fn declaration_object<'py>(
         .visibility
         .map(|provenance| {
             classes
-                .model("VisibilityProvenance")?
+                .model(RecordId::VisibilityProvenance)?
                 .call1((provenance.reason, provenance.through))
         })
         .transpose()?;
@@ -224,7 +225,7 @@ fn declaration_object<'py>(
         report.kind.into_bound_py_any(py)?,
         report.name.into_bound_py_any(py)?,
         report.owner.into_bound_py_any(py)?,
-        classes.model("ScopeSourceLocation")?.call1((
+        classes.model(RecordId::ScopeSourceLocation)?.call1((
             report.definition.path,
             report.definition.line,
             report.definition.column,
@@ -247,7 +248,7 @@ fn declaration_object<'py>(
     ];
     let arguments: Vec<Bound<'py, PyAny>> = head.into_iter().chain(standing).chain(links).collect();
     classes
-        .model("DeclarationReport")?
+        .model(RecordId::DeclarationReport)?
         .call1(PyTuple::new(py, arguments)?)
 }
 
@@ -264,7 +265,7 @@ fn section_object<'py>(
     classes: &ScopeClasses<'py>,
     section: ScopeSection,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("ScopeSection")?.call1((
+    classes.model(RecordId::ScopeSection)?.call1((
         section.name,
         section.total,
         section.returned,
@@ -290,9 +291,9 @@ pub(crate) fn diagnostics_object<'py>(
         ReportDiagnostic::Raised(facts) => {
             let keywords: Bound<'py, PyDict> = PyDict::new(py);
             keywords.set_item("path", facts.path)?;
-            classes.model("ScopeDiagnostic")?.call(
+            classes.model(RecordId::ScopeDiagnostic)?.call(
                 (
-                    classes.member("ScopeDiagnosticCode", &facts.code)?,
+                    classes.member(RecordId::ScopeDiagnosticCode, &facts.code)?,
                     facts.message,
                 ),
                 Some(&keywords),
@@ -311,7 +312,7 @@ pub(crate) fn explanation_object<'py>(
         .map(|report| declaration_object(classes, report))
         .transpose()?;
     classes
-        .model("DeclarationExplanation")?
+        .model(RecordId::DeclarationExplanation)?
         .call1((declaration, explanation.complete))
 }
 
@@ -320,7 +321,7 @@ pub(crate) fn move_object<'py>(
     classes: &ScopeClasses<'py>,
     preview: MovePreview,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("MovePreview")?.call1((
+    classes.model(RecordId::MovePreview)?.call1((
         preview.resource,
         preview.destination,
         preview.new_ownership_root,
@@ -343,7 +344,7 @@ pub(crate) fn report_object<'py>(
     let (filters, index_diagnostics) = context;
     let py: Python<'py> = classes.py();
     let resource: ResourceReport = report.resource;
-    let chain_class: Bound<'py, PyAny> = classes.model("ScopeChainEntry")?;
+    let chain_class: Bound<'py, PyAny> = classes.model(RecordId::ScopeChainEntry)?;
     let explanation: Option<Bound<'py, PyAny>> = report
         .explanation
         .map(|explanation| explanation_object(classes, explanation))
@@ -352,8 +353,8 @@ pub(crate) fn report_object<'py>(
         .move_preview
         .map(|preview| move_object(classes, preview))
         .transpose()?;
-    classes.model("ScopeReport")?.call1((
-        classes.model("ScopeResourceReport")?.call1((
+    classes.model(RecordId::ScopeReport)?.call1((
+        classes.model(RecordId::ScopeResourceReport)?.call1((
             resource.target,
             resource.identity,
             resource.path,
@@ -386,8 +387,8 @@ pub(crate) fn browse_object<'py>(
     index_diagnostics: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
-    let folder_class: Bound<'py, PyAny> = classes.model("ScopeFolder")?;
-    classes.model("ScopeBrowseResult")?.call1((
+    let folder_class: Bound<'py, PyAny> = classes.model(RecordId::ScopeFolder)?;
+    classes.model(RecordId::ScopeBrowseResult)?.call1((
         result.folder,
         tuple_of(py, result.folders, |folder| {
             folder_class.call1((
@@ -410,7 +411,7 @@ pub(crate) fn list_object<'py>(
     result: ListResult,
     index_diagnostics: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    classes.model("ScopeListResult")?.call1((
+    classes.model(RecordId::ScopeListResult)?.call1((
         result.folder,
         declarations_object(classes, result.declarations)?,
         section_object(classes, result.section)?,
@@ -588,10 +589,10 @@ pub(crate) fn read_result(
     classes: &ScopeClasses<'_>,
     result: &Bound<'_, PyAny>,
 ) -> PyResult<ScopeResult> {
-    if result.is_instance(&classes.model("ScopeReport")?)? {
+    if result.is_instance(&classes.model(RecordId::ScopeReport)?)? {
         return Ok(ScopeResult::Report(Box::new(read_report(result)?)));
     }
-    if result.is_instance(&classes.model("ScopeBrowseResult")?)? {
+    if result.is_instance(&classes.model(RecordId::ScopeBrowseResult)?)? {
         return Ok(ScopeResult::Browse(BrowseResult {
             folder: field(result, "folder")?,
             folders: result

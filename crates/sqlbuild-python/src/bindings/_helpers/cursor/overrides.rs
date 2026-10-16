@@ -6,15 +6,17 @@ use pyo3::types::{PyInt, PyString, PyStringMethods};
 use sqlbuild_cursor::algebra::main::parse_integer_text::parse_integer_text;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::cursor::conversion::{MODELS_MODULE, algebra_error};
+use crate::bindings::_helpers::cursor::conversion::algebra_error;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 const DECIMAL_MODULE: &str = "decimal";
 const INTEGER_AS_TIMESTAMP: &str = "an integer cursor cannot be used as a timestamp";
 const TIMESTAMP_AS_INTEGER: &str = "a timestamp cursor cannot be used as an integer";
 
-fn instance_of(value: &Bound<'_, PyAny>, class: &str) -> PyResult<bool> {
-    value.is_instance(&imported(value.py(), MODELS_MODULE, class)?)
+fn instance_of(value: &Bound<'_, PyAny>, class: RecordId) -> PyResult<bool> {
+    value.is_instance(&registry::class(value.py(), class)?)
 }
 
 /// A timestamp override as a `datetime`; dates start at midnight and text is ISO 8601.
@@ -23,15 +25,15 @@ pub(crate) fn cursor_timestamp<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound
     if value.is_none() {
         return Ok(value.clone());
     }
-    if instance_of(value, "TimestampValue")? {
+    if instance_of(value, RecordId::TimestampValue)? {
         return value.getattr("value");
     }
     let datetime: Bound<'py, PyAny> = imported(py, DATETIME_MODULE, "datetime")?;
-    if instance_of(value, "DateValue")? {
+    if instance_of(value, RecordId::DateValue)? {
         let midnight: Bound<'py, PyAny> = datetime.getattr("min")?.call_method0("time")?;
         return datetime.call_method1("combine", (value.getattr("value")?, midnight));
     }
-    if instance_of(value, "IntegerValue")? {
+    if instance_of(value, RecordId::IntegerValue)? {
         return Err(algebra_error(py, INTEGER_AS_TIMESTAMP));
     }
     datetime.call_method1("fromisoformat", (value,))
@@ -43,10 +45,10 @@ pub(crate) fn cursor_integer<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'
     if value.is_none() {
         return Ok(value.clone());
     }
-    if instance_of(value, "IntegerValue")? {
+    if instance_of(value, RecordId::IntegerValue)? {
         return value.getattr("value");
     }
-    if instance_of(value, "DateValue")? || instance_of(value, "TimestampValue")? {
+    if instance_of(value, RecordId::DateValue)? || instance_of(value, RecordId::TimestampValue)? {
         return Err(algebra_error(py, TIMESTAMP_AS_INTEGER));
     }
     if let Ok(text) = value.downcast::<PyString>()

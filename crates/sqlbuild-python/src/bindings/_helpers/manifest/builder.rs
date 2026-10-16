@@ -19,9 +19,11 @@ use crate::bindings::_helpers::graph::views::native_graph_from_edges;
 use crate::bindings::_helpers::manifest::rows::{
     ProjectRows, plan_input, project_rows, python_hooks,
 };
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const FINGERPRINT_EXCEPTIONS_MODULE: &str = "sqlbuild._native";
-const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
 const DATETIME_MODULE: &str = "datetime";
 
 /// A built manifest: its `manifest.json` bytes, or the error `json.dumps` raised encoding it.
@@ -51,9 +53,7 @@ impl NativeManifest {
 
 fn python_error(error: ManifestError, py: Python<'_>) -> PyErr {
     match error {
-        ManifestError::QueryFingerprint(message) => py
-            .import(FINGERPRINT_EXCEPTIONS_MODULE)
-            .and_then(|module| module.getattr("QueryFingerprintError"))
+        ManifestError::QueryFingerprint(message) => registry::error(py, ErrorId::QueryFingerprint)
             .and_then(|class| class.call1((message,)))
             .map_or_else(|error| error, PyErr::from_value),
         ManifestError::MissingParameterType(name) => PyKeyError::new_err(name),
@@ -89,9 +89,7 @@ pub(crate) fn build_manifest(options: Option<&Bound<'_, PyDict>>) -> PyResult<Py
         .call_method1("now", (utc,))?
         .call_method0("isoformat")?
         .extract()?;
-    let hook_identities: Bound<'_, PyAny> = py
-        .import(HOOK_IDENTITIES_MODULE)?
-        .getattr("build_hook_identities")?
+    let hook_identities: Bound<'_, PyAny> = host::entry(py, UserCodeHost::BuildHookIdentities)?
         .call1((project.getattr("hook_functions")?,))?;
     compiler_guard(|| {
         let python_hooks = python_hooks(&project, &hook_identities)?;

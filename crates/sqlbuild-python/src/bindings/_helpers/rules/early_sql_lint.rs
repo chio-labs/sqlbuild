@@ -11,12 +11,9 @@ use pyo3::{IntoPyObject, IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_p
 use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_path;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const RULE_THREADS_MODULE: &str = "sqlbuild._native";
-const LINT_MODELS_MODULE: &str = "sqlbuild._native";
 /// The lint thresholds used when the project leaves them unset.
 const DEFAULT_MAX_LITERAL_LENGTH: i64 = 100;
 const DEFAULT_MAX_RANKING_ORDER_BY: i64 = 5;
@@ -47,7 +44,7 @@ pub(crate) fn sql_lint_config<'py>(
         thresholds.call_method1("get", (key, default))
     };
     call_with(
-        &imported(py, LINT_MODELS_MODULE, "LintConfig")?,
+        &registry::class(py, RecordId::LintConfig)?,
         &[
             ("dialect", dialect.clone()),
             ("enabled_native_rules", PyTuple::new(py, codes)?.into_any()),
@@ -74,7 +71,7 @@ fn sql_lint_preparation<'py>(
     dialect: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyTuple>>> {
     let py: Python<'py> = inputs.py();
-    let native = |name: &str| imported(py, NATIVE_MODULE, name);
+    let native = |name: NativeAttr| registry::native(py, name);
     let project_dir: Bound<'py, PyAny> = inputs
         .getattr("discovered_inputs")?
         .getattr("project_dir")?;
@@ -87,7 +84,7 @@ fn sql_lint_preparation<'py>(
         }
     }
     let config: Bound<'py, PyAny> = call_with(
-        &native("valid_rules_config")?,
+        &native(NativeAttr::ValidRulesConfig)?,
         &[("project_dir", project_dir.clone())],
     )?;
     if config.is_none() || !config.getattr("select")?.is_truthy()? {
@@ -95,7 +92,7 @@ fn sql_lint_preparation<'py>(
     }
     if config.getattr("cache")?.getattr("enabled")?.is_truthy()?
         && call_with(
-            &native("load_sql_rule_cache")?,
+            &native(NativeAttr::LoadSqlRuleCache)?,
             &[("path", sql_rule_cache_path(&project_dir)?)],
         )?
         .is_truthy()?
@@ -103,7 +100,7 @@ fn sql_lint_preparation<'py>(
         return Ok(None);
     }
     let codes: Vec<String> = call_with(
-        &native("selected_sql_rule_codes")?,
+        &native(NativeAttr::SelectedSqlRuleCodes)?,
         &[
             (
                 "select",
@@ -146,7 +143,7 @@ fn sql_lint_preparation<'py>(
         sources.push(source?.getattr("source_entry")?);
     }
     let relation_keys: Bound<'py, PyAny> = call_with(
-        &native("declared_relation_keys")?,
+        &native(NativeAttr::DeclaredRelationKeys)?,
         &[
             ("model_rows", PyList::new(py, model_rows)?.into_any()),
             ("seeds", PyList::new(py, seeds)?.into_any()),
@@ -255,7 +252,7 @@ impl EarlySqlLint {
         }
         let py: Python<'_> = inputs.py();
         let preparation: Bound<'_, PyAny> = call_with(
-            &imported(py, RULE_THREADS_MODULE, "prepare_sql_rules")?,
+            &registry::native(py, NativeAttr::PrepareSqlRules)?,
             &[
                 ("inputs", inputs.clone()),
                 ("executor", slf.executor.bind(py).clone()),
@@ -268,7 +265,7 @@ impl EarlySqlLint {
             declaration_scope
         } else {
             call_with(
-                &imported(py, NATIVE_RECORDS_MODULE, "SqlExpansionReuse")?,
+                &registry::class(py, RecordId::SqlExpansionReuse)?,
                 &[
                     ("discovered_inputs", inputs.getattr("discovered_inputs")?),
                     ("declaration_scope", declaration_scope),

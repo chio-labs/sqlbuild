@@ -34,12 +34,14 @@ use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const REUSE_REQUEST: (&str, &str) = ("sqlbuild.cli.compile_reuse.models", "CompileReuseRequest");
-const STARTUP_INPUTS_MODULE: &str = "sqlbuild.cli.compile_reuse._helpers.startup_inputs";
-const COMPUTE_LOG_TEE_MODULE: &str = "sqlbuild.runtime.compute_logs.classes.text_tee";
+const REUSE_REQUEST: FacadeHost = FacadeHost::CompileReuseRequest;
 const HIT: &str = "hit";
 const CHECKED_HIT: &str = "hit";
 const CHECKED_BYPASS: &str = "bypass";
@@ -60,10 +62,9 @@ pub(crate) fn reuse_rules(py: Python<'_>, with_output_files: bool) -> PyResult<B
     rules.set_item("excluded", PyList::new(py, EXCLUDED_DIRECTORIES)?)?;
     rules.set_item(
         "excluded_root",
-        imported(py, "builtins", "sorted")?.call1((imported(
+        imported(py, "builtins", "sorted")?.call1((registry::native(
             py,
-            NATIVE_MODULE,
-            EXCLUDED_ROOT_ATTRIBUTE,
+            NativeAttr::CompileReuseExcludedRootDirectories,
         )?,))?,
     )?;
     rules.set_item(
@@ -112,7 +113,7 @@ pub(crate) fn reuse_rules(py: Python<'_>, with_output_files: bool) -> PyResult<B
     }
     rules.set_item(
         "racy_window_ns",
-        imported(py, NATIVE_MODULE, RACY_WINDOW_ATTRIBUTE)?,
+        registry::native(py, NativeAttr::CompileReuseRacyWindowNs)?,
     )?;
     rules.set_item("missing_environment_value", MISSING_ENVIRONMENT_VALUE)?;
     rules.set_item("missing_file_digest", MISSING_FILE_DIGEST)?;
@@ -147,7 +148,7 @@ fn launch_payload<'py>(
     let capture: Bound<'py, PyAny> = if py
         .import("sys")?
         .getattr("stdout")?
-        .is_instance(&imported(py, COMPUTE_LOG_TEE_MODULE, "TextComputeLogTee")?)?
+        .is_instance(&host::entry(py, ExecutorHost::TextComputeLogTee)?)?
     {
         let logs: Bound<'py, PyAny> = resolved
             .call_method1("__truediv__", (COMPUTE_LOG_DIRECTORY_NAME,))?
@@ -181,7 +182,7 @@ fn launch_payload<'py>(
     payload.set_item("search_path", search_path)?;
     payload.set_item(
         "startup_inputs",
-        imported(py, STARTUP_INPUTS_MODULE, "startup_inputs")?.call0()?,
+        host::entry(py, FacadeHost::StartupInputs)?.call0()?,
     )?;
     payload.set_item("json_output", attempt.getattr("json_output")?)?;
     payload.set_item("rules", reuse_rules(py, false)?)?;
@@ -380,7 +381,7 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         } else {
             requested
         },))?;
-    let native: Bound<'py, PyAny> = imported(py, NATIVE_MODULE, "check_compile_reuse")?
+    let native: Bound<'py, PyAny> = registry::native(py, NativeAttr::CheckCompileReuse)?
         .call1((reuse_check(request, &project_dir)?,))?;
     let checked: String = native.call_method0("outcome")?.extract()?;
     let json_output: Bound<'py, PyAny> = request.getattr("json_output")?;
@@ -467,7 +468,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
         fields.push((name, request.getattr(name)?));
     }
     fields.push(("profiling", profiling.into_bound_py_any(py)?));
-    call_with(&imported(py, REUSE_REQUEST.0, REUSE_REQUEST.1)?, &fields)
+    call_with(&host::entry(py, REUSE_REQUEST)?, &fields)
 }
 
 /// Run one compile command request, replaying the previous compile when nothing changed.
@@ -479,7 +480,7 @@ fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> 
     if attempt.getattr("outcome")?.eq(outcome(py, HIT)?)? && !exit_code.is_none() {
         return Ok(exit_code);
     }
-    imported(py, NATIVE_MODULE, "run_compile_command")?.call1((request, attempt))
+    registry::native(py, NativeAttr::RunCompileCommand)?.call1((request, attempt))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

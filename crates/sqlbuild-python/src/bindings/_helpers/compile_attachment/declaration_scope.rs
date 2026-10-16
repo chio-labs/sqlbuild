@@ -5,22 +5,17 @@ use pyo3::pyfunction;
 use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_validation::validate_scope_index;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const SCAN_CACHE_MODULE: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
-
 fn compile_error(py: Python<'_>, message: Bound<'_, PyAny>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call1((message,))?,
+        registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
     ))
 }
 
@@ -34,7 +29,7 @@ fn scope_build<'py>(
     let resolver: Bound<'py, PyAny> =
         declaration_scope_resolver(discovered, &index, (loaded_macros, &lookup))?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DeclarationScopeBuild")?,
+        &registry::class(py, RecordId::DeclarationScopeBuild)?,
         &[
             ("loaded_macros", loaded_macros.clone()),
             ("index", index),
@@ -55,7 +50,7 @@ pub(crate) fn build_declaration_scope<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered_inputs.py();
     let scan_cache: Bound<'py, PyAny> = call_with(
-        &imported(py, SCAN_CACHE_MODULE, "SqlTestScanCache")?,
+        &registry::native(py, NativeAttr::SqlTestScanCache)?,
         &[(
             "cache_dir",
             compile_cache_dir.unwrap_or_else(|| py.None().into_bound(py)),
@@ -63,7 +58,7 @@ pub(crate) fn build_declaration_scope<'py>(
     )?;
     let test_files: Bound<'py, PyAny> = discovered_inputs.getattr("test_files")?;
     let scenario_files: Bound<'py, PyAny> = discovered_inputs.getattr("scenario_files")?;
-    imported(py, NATIVE_MODULE, "validate_authored_sql_test_ctes")?.call1((
+    registry::native(py, NativeAttr::ValidateAuthoredSqlTestCtes)?.call1((
         &test_files,
         &scenario_files,
         sql_lexical_syntax.getattr("native_mapping")?,
@@ -75,10 +70,7 @@ pub(crate) fn build_declaration_scope<'py>(
     .into_any();
     let validated: Result<(), PyErr> = validate_scope_index(&native.getattr("index")?);
     if let Err(error) = validated {
-        if !error.is_instance(
-            py,
-            &imported(py, SCOPE_ERRORS_MODULE, "ScopeValidationError")?,
-        ) {
+        if !error.is_instance(py, &registry::error(py, ErrorId::ScopeValidation)?) {
             return Err(error);
         }
         let raised: PyErr = compile_error(py, error.value(py).str()?.into_any())?;

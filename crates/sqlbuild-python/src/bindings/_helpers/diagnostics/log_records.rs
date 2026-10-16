@@ -24,11 +24,10 @@ use sqlbuild_core::redaction::main::redact_text::redact_text;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::diagnostics::redaction::redacted_value;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
-const PRIVATE_SQL_MARKER: (&str, &str) = (
-    "sqlbuild.diagnostics.constants",
-    "SQL_PRIVATE_RECORD_MARKER",
-);
+const PRIVATE_SQL_MARKER: ExecutorHost = ExecutorHost::SqlPrivateRecordMarker;
 
 /// `context | fields | identity`, with later mappings overriding earlier keys in place.
 fn merged<'py>(
@@ -315,7 +314,7 @@ fn compute_diagnostic_log_fields<'py>(
         return Ok(None);
     }
     let trusted_private_sql: bool = match values.get_item(SQL_PRIVATE_RECORD_FIELD)? {
-        Some(marker) => marker.is(&imported(py, PRIVATE_SQL_MARKER.0, PRIVATE_SQL_MARKER.1)?),
+        Some(marker) => marker.is(&host::entry(py, PRIVATE_SQL_MARKER)?),
         None => false,
     };
     let mut identities: Vec<(&str, Option<String>)> = Vec::new();

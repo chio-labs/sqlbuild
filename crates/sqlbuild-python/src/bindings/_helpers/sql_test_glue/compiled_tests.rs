@@ -1,19 +1,17 @@
 //! Compiled SQL tests, their keyed P013 diagnostics and assembly failures, built natively.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::assembly::{
     AssemblyRequest, AssemblyRow, DiagnosticRow, FactsRow, assemble_compiled_sql_tests,
 };
 
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const GLUE_MODELS_MODULE: &str = "sqlbuild._native";
-const SPEC_MODELS_MODULE: &str = "sqlbuild._native";
 /// Fields a direct-logic compiled payload copies from its input payload, in order.
 const DIRECT_PAYLOAD_FIELDS: [&str; 5] = [
     "mode",
@@ -50,7 +48,6 @@ type Fields<'py> = Vec<(&'static str, Bound<'py, PyAny>)>;
 
 /// The Python classes a compiled test is built from.
 struct Classes<'py> {
-    models: Bound<'py, PyModule>,
     resource_type: Bound<'py, PyAny>,
     direct_input: Bound<'py, PyAny>,
     assembly: Bound<'py, PyAny>,
@@ -63,33 +60,30 @@ struct Classes<'py> {
 
 impl<'py> Classes<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
-        let models: Bound<'py, PyModule> = py.import(COMPILE_MODELS_MODULE)?;
         let types: Bound<'py, PyModule> = py.import(COMPILE_TYPES_MODULE)?;
-        let glue: Bound<'py, PyModule> = py.import(GLUE_MODELS_MODULE)?;
         Ok(Self {
-            direct_input: shape_class(&models, "CompileDirectLogicSqlTestInputPayload")?,
+            direct_input: registry::class(py, RecordId::CompileDirectLogicSqlTestInputPayload)?,
             resource_type: types.getattr("CompiledResourceType")?,
-            phase: shape_class(&types, "DiagnosticPhase")?.getattr("COMPILE")?,
-            severity: shape_class(&types, "DiagnosticSeverity")?.getattr("ERROR")?,
-            assembly: glue.getattr("NativeSqlTestAssembly")?,
-            failure: glue.getattr("NativeSqlTestFailure")?,
-            location: py.import(SPEC_MODELS_MODULE)?.getattr("SourceLocation")?,
+            phase: registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?,
+            severity: registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
+            assembly: registry::class(py, RecordId::NativeSqlTestAssembly)?,
+            failure: registry::class(py, RecordId::NativeSqlTestFailure)?,
+            location: registry::class(py, RecordId::SourceLocation)?,
             code: PyString::new(py, super::constants::SQL_TEST_HELPER_REFERENCE_CODE).into_any(),
-            models,
         })
     }
 
     fn py(&self) -> Python<'py> {
-        self.models.py()
+        self.resource_type.py()
     }
 
-    fn model(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
-        shape_class(&self.models, name)
+    fn model(&self, name: RecordId) -> PyResult<Bound<'py, PyAny>> {
+        registry::class(self.py(), name)
     }
 
     fn object_key(&self, resource_type: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
         keyword_call(
-            &self.model("CompiledObjectKey")?,
+            &self.model(RecordId::CompiledObjectKey)?,
             vec![
                 ("resource_type", self.resource_type.call1((resource_type,))?),
                 ("name", text(self.py(), name)),
@@ -131,10 +125,10 @@ fn compiled_payload<'py>(
     let py: Python<'py> = classes.py();
     if payload.is_instance(&classes.direct_input)? {
         let compiled: Bound<'py, PyAny> = keyword_call(
-            &classes.model("CompiledDirectLogicSqlTestPayload")?,
+            &classes.model(RecordId::CompiledDirectLogicSqlTestPayload)?,
             copied(payload, &DIRECT_PAYLOAD_FIELDS)?,
         )?;
-        let resource_type: Bound<'py, PyAny> = classes.model("CompiledSqlTestResource")?;
+        let resource_type: Bound<'py, PyAny> = classes.model(RecordId::CompiledSqlTestResource)?;
         let mode: Bound<'py, PyAny> = payload.getattr("mode")?;
         let mut resources: Vec<Bound<'py, PyAny>> = Vec::new();
         for name in payload.getattr("tested_resource_names")?.try_iter()? {
@@ -154,7 +148,7 @@ fn compiled_payload<'py>(
         copied(payload, &MODEL_PAYLOAD_FIELDS)?;
     payload_fields.push(("model_query_overrides", PyDict::new(py).into_any()));
     let compiled: Bound<'py, PyAny> = keyword_call(
-        &classes.model("CompiledModelSqlTestPayload")?,
+        &classes.model(RecordId::CompiledModelSqlTestPayload)?,
         payload_fields,
     )?;
     let mut fields: Vec<(&'static str, Bound<'py, PyAny>)> = copied(payload, &MODEL_TEST_FIELDS)?;
@@ -190,7 +184,7 @@ fn keyed_diagnostic<'py>(
         ],
     )?;
     let diagnostic: Bound<'py, PyAny> = keyword_call(
-        &classes.model("CompilerDiagnostic")?,
+        &classes.model(RecordId::CompilerDiagnostic)?,
         vec![
             ("phase", classes.phase.clone()),
             ("severity", classes.severity.clone()),
@@ -249,7 +243,7 @@ fn compiled_test<'py>(
         ),
     ];
     fields.extend(payload_fields);
-    let test: Bound<'py, PyAny> = keyword_call(&classes.model("CompiledSqlTest")?, fields)?;
+    let test: Bound<'py, PyAny> = keyword_call(&classes.model(RecordId::CompiledSqlTest)?, fields)?;
     let keyed: Vec<Bound<'py, PyTuple>> = diagnostics
         .into_iter()
         .map(|row| keyed_diagnostic(classes, (test_input, &resource_name), row))

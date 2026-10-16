@@ -1,6 +1,5 @@
 //! Compile's explicit-reference checks over plain project facts, run natively.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -27,17 +26,14 @@ use sqlbuild_pysource::literal_sql::models::FunctionSource;
 use crate::bindings::_helpers::analysis::reference_facts::{ProjectFacts, project_facts};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const EXPLICIT_REFERENCES_CONTEXT: &str = "native explicit-reference checks";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COMPILE_INPUT_ERROR: &str = "CompileInputError";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const REFERENCE_MODELS_MODULE: &str = "sqlbuild.compiler.references.models";
-const CONTRACT_MODELS_MODULE: &str = "sqlbuild._native";
-const REFERENCE_TYPES_MODULE: &str = "sqlbuild._native";
-const LOADER_DEFINITION_MODULE: &str = "sqlbuild.python_nodes.main.read_loader_definition";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const BUILTINS_MODULE: &str = "builtins";
 const VALUE_PLACEHOLDER: &str = "__sqlbuild_python_value_";
 const HARD_CODED_ALLOWED: &str = "hard-coded relation names";
@@ -142,9 +138,7 @@ fn explicit_reference_report<'py>(
     {
         Ok(report) => python_report(py, &report, &owners),
         Err(ReferenceFailure::CompileInput(message)) => Err(PyErr::from_value(
-            py.import(COMPILE_ERRORS_MODULE)?
-                .getattr(COMPILE_INPUT_ERROR)?
-                .call1((message,))?,
+            registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
         )),
         Err(ReferenceFailure::UnknownDialect(message)) => Err(compiler_error(message)),
         Err(ReferenceFailure::Internal(reason)) => Err(compiler_error(native_failure(
@@ -173,7 +167,7 @@ fn python_sql_owners<'py>(
         }
     }
     owners.extend(loader_owners(project, discovered_inputs)?);
-    let hook_names = imported(py, NATIVE_MODULE, "model_python_hook_names")?;
+    let hook_names = registry::native(py, NativeAttr::ModelPythonHookNames)?;
     let mut attached: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for model in project.getattr("models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
@@ -222,7 +216,7 @@ fn loader_owners<'py>(
                 .insert(source.getattr("name")?.extract()?);
         }
     }
-    let read_definition = imported(py, LOADER_DEFINITION_MODULE, "read_loader_definition")?;
+    let read_definition = host::entry(py, UserCodeHost::ReadLoaderDefinition)?;
     let mut owners: Vec<PythonSqlOwner<'py>> = Vec::new();
     for loader in discovered_inputs.getattr("loader_functions")?.try_iter()? {
         let loader: Bound<'py, PyAny> = loader?;
@@ -314,15 +308,11 @@ fn python_report<'py>(
     report: &ReferenceReport,
     owners: &[PythonSqlOwner<'py>],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let owner_kind: Bound<'py, PyAny> =
-        imported(py, REFERENCE_TYPES_MODULE, "HardCodedRelationOwnerKind")?;
-    let compile_models = py.import(COMPILE_MODELS_MODULE)?;
+    let owner_kind: Bound<'py, PyAny> = registry::class(py, RecordId::HardCodedRelationOwnerKind)?;
     let reference_models = py.import(REFERENCE_MODELS_MODULE)?;
-    let source_location: Bound<'py, PyAny> = py
-        .import(CONTRACT_MODELS_MODULE)?
-        .getattr("SourceLocation")?;
+    let source_location: Bound<'py, PyAny> = registry::class(py, RecordId::SourceLocation)?;
     let path_class: Bound<'py, PyAny> = py.import("pathlib")?.getattr("Path")?;
-    let compiler_diagnostic: Bound<'py, PyAny> = compile_models.getattr("CompilerDiagnostic")?;
+    let compiler_diagnostic: Bound<'py, PyAny> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::with_capacity(report.diagnostics.len());
     for row in &report.diagnostics {
         let fields: Bound<'py, PyDict> = PyDict::new(py);
@@ -350,7 +340,7 @@ fn python_report<'py>(
         diagnostics.push(compiler_diagnostic.call((), Some(&fields))?);
     }
     let literal_relation: Bound<'py, PyAny> =
-        shape_class(reference_models.as_any(), "LiteralSqlRelation")?;
+        registry::class(reference_models.py(), RecordId::LiteralSqlRelation)?;
     let relation_name: Bound<'py, PyAny> = reference_models.getattr("RelationName")?;
     let mut unmatched: Vec<Bound<'py, PyAny>> = Vec::with_capacity(report.unmatched.len());
     for row in &report.unmatched {
@@ -371,7 +361,7 @@ fn python_report<'py>(
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item("diagnostics", PyTuple::new(py, diagnostics)?)?;
     fields.set_item("unmatched", PyTuple::new(py, unmatched)?)?;
-    shape_class(compile_models.as_any(), "PythonSqlReferenceReport")?.call((), Some(&fields))
+    registry::class(py, RecordId::PythonSqlReferenceReport)?.call((), Some(&fields))
 }
 
 /// `(method, sql, line)` for each literal SQL call to the context in a dedented function source.

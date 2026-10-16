@@ -5,9 +5,9 @@ use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PySlice, PyTuple, PyTupleMethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
-use crate::bindings::_helpers::records::constants::NATIVE_MODULE;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// `ColumnTransformKind` members by native transform code.
 const TRANSFORM_KINDS: [&str; 6] = [
@@ -23,26 +23,24 @@ const CONFIDENCES: [&str; 3] = ["UNKNOWN", "HIGH", "MEDIUM"];
 
 /// The `ColumnTransformKind` member of a native transform code.
 pub(crate) fn transform_kind_member(py: Python<'_>, code: usize) -> PyResult<Py<PyAny>> {
-    coded_member(py, ("ColumnTransformKind", &TRANSFORM_KINDS), code)
+    coded_member(py, (RecordId::ColumnTransformKind, &TRANSFORM_KINDS), code)
 }
 
 /// The `ColumnLineageConfidence` member of a native confidence code.
 pub(crate) fn confidence_member(py: Python<'_>, code: usize) -> PyResult<Py<PyAny>> {
-    coded_member(py, ("ColumnLineageConfidence", &CONFIDENCES), code)
+    coded_member(py, (RecordId::ColumnLineageConfidence, &CONFIDENCES), code)
 }
 
 /// The enum member at `code` of `members`.
 fn coded_member(
     py: Python<'_>,
-    (class, members): (&str, &[&str]),
+    (class, members): (RecordId, &[&str]),
     code: usize,
 ) -> PyResult<Py<PyAny>> {
     let Some(member) = members.get(code) else {
         return Err(PyIndexError::new_err("tuple index out of range"));
     };
-    Ok(imported(py, NATIVE_MODULE, class)?
-        .getattr(*member)?
-        .unbind())
+    Ok(registry::member(py, class, member)?.unbind())
 }
 
 /// `CompactLineageFacts.resource_name(index)`: the model's name for a native relation index.
@@ -81,7 +79,7 @@ fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<
         usize,
         Bound<'_, PyAny>,
     ) = row.extract()?;
-    let source_class: Bound<'_, PyAny> = imported(py, NATIVE_MODULE, "CompiledLineageSourceFact")?;
+    let source_class: Bound<'_, PyAny> = registry::class(py, RecordId::CompiledLineageSourceFact)?;
     let mut upstream: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in sources.try_iter()? {
         let source: Bound<'_, PyTuple> = source?.cast_into::<PyTuple>()?;
@@ -98,7 +96,7 @@ fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<
         "transform_kind",
         coded_member(
             py,
-            ("ColumnTransformKind", &TRANSFORM_KINDS),
+            (RecordId::ColumnTransformKind, &TRANSFORM_KINDS),
             transform_code,
         )?,
     )?;
@@ -106,11 +104,11 @@ fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<
         "confidence",
         coded_member(
             py,
-            ("ColumnLineageConfidence", &CONFIDENCES),
+            (RecordId::ColumnLineageConfidence, &CONFIDENCES),
             confidence_code,
         )?,
     )?;
-    Ok(imported(py, NATIVE_MODULE, "CompiledLineageColumnFact")?
+    Ok(registry::class(py, RecordId::CompiledLineageColumnFact)?
         .call((), Some(&keywords))?
         .unbind())
 }

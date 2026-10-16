@@ -1,7 +1,8 @@
 //! Gather a frozen point-in-time warehouse snapshot for planning.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
 use crate::bindings::_helpers::planner_phases::objects::{
     by_name, frozenset, model_key, native, text, tuple,
@@ -11,6 +12,8 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
     RELATIONS_MAIN_COLUMNS, RELATIONS_MAIN_LIST,
 };
 use crate::bindings::_helpers::planner_warehouse::cursors::{CursorInputs, cursor_snapshots};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
@@ -80,11 +83,10 @@ fn relevant_state_keys<'py>(
     if selected.is_none() {
         return Ok(selected.clone());
     }
-    let deps =
-        imported(py, "sqlbuild._native", "build_execution_upstream_deps")?.call1((project,))?;
+    let deps = registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((project,))?;
     native(
         py,
-        "transitive_closure_many",
+        NativeAttr::TransitiveClosureMany,
         &[
             ("starts", selected.clone()),
             ("edges", deps),
@@ -205,7 +207,7 @@ fn metadata_name_filter(
         }
         let intermediate = native(
             py,
-            "build_upstream_intermediate_source_map",
+            NativeAttr::BuildUpstreamIntermediateSourceMap,
             &[
                 ("project", project.clone()),
                 ("selected_keys", selected.clone()),
@@ -234,7 +236,7 @@ fn active_catalog<'py>(
     connection: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(adapter.py(), ACTIVE_CATALOG.0, ACTIVE_CATALOG.1)?,
+        &host::entry(adapter.py(), ACTIVE_CATALOG)?,
         &[
             ("adapter", adapter.clone()),
             ("connection", connection.clone()),
@@ -300,7 +302,7 @@ pub(crate) fn list_relations<'py>(
     names: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(adapter.py(), RELATIONS_MAIN_LIST.0, RELATIONS_MAIN_LIST.1)?,
+        &host::entry(adapter.py(), RELATIONS_MAIN_LIST)?,
         &[
             ("adapter", adapter.clone()),
             ("connection", connection.clone()),
@@ -317,11 +319,7 @@ pub(crate) fn columns_for<'py>(
     relations: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(
-            adapter.py(),
-            RELATIONS_MAIN_COLUMNS.0,
-            RELATIONS_MAIN_COLUMNS.1,
-        )?,
+        &host::entry(adapter.py(), RELATIONS_MAIN_COLUMNS)?,
         &[
             ("adapter", adapter.clone()),
             ("connection", connection.clone()),
@@ -486,7 +484,7 @@ fn gather_fingerprints<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = request.project.py();
     let Some(schemas) = schemas else {
-        return native(py, "WarehouseFingerprints", &[]);
+        return native(py, RecordId::WarehouseFingerprints, &[]);
     };
     let node_names: Option<BTreeSet<String>> = if relevant.is_none() {
         None
@@ -521,7 +519,7 @@ fn gather_fingerprints<'py>(
         let schema_lower = lower(&text(py, schema))?;
         let mut set = native(
             py,
-            "read_latest_fingerprints",
+            NativeAttr::ReadLatestFingerprints,
             &[
                 ("connection", request.connection.clone()),
                 ("execute", request.execute.clone()),
@@ -570,7 +568,7 @@ fn gather_fingerprints<'py>(
             if node_names.is_some() {
                 set = native(
                     py,
-                    "select_latest_fingerprints",
+                    NativeAttr::SelectLatestFingerprints,
                     &[
                         ("fingerprint_set", set),
                         ("node_names", node_names_value.clone()),
@@ -605,7 +603,7 @@ fn gather_fingerprints<'py>(
     }
     native(
         py,
-        "WarehouseFingerprints",
+        RecordId::WarehouseFingerprints,
         &[
             ("models", models.into_any()),
             ("functions", functions.into_any()),
@@ -636,7 +634,7 @@ pub(crate) fn warehouse_snapshot<'py>(
     let schemas = target_schemas(project, &relevant)?;
     let metadata_names = metadata_name_filter(project, &relevant)?;
     if schemas.is_empty() && metadata_names.is_none() {
-        return native(py, "WarehouseSnapshot", &[]);
+        return native(py, RecordId::WarehouseSnapshot, &[]);
     }
     let query_schemas = (!schemas.is_empty()).then_some(&schemas);
     prefetch_schemas(request, &database, &schemas, &relevant)?;
@@ -692,7 +690,7 @@ pub(crate) fn warehouse_snapshot<'py>(
     };
     native(
         py,
-        "WarehouseSnapshot",
+        RecordId::WarehouseSnapshot,
         &[
             ("existing_relations", relations.into_any()),
             ("existing_columns", columns.into_any()),

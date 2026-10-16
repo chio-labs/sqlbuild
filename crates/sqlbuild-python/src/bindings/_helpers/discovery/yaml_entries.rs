@@ -16,14 +16,13 @@ use sqlbuild_model_config::errors::{ConfigError, ErrorClass};
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::contract_classes::yaml_entry_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, audit_tuple};
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
-const IDENTITY_ERRORS_MODULE: &str = "sqlbuild._native";
-const IDENTITY_ERROR: &str = "ResourceIdentityError";
 /// The directory whose schema YAML files may declare seeds.
 const SEEDS_DIRECTORY: &str = "seeds";
-const SCHEMA_PARSE_ERROR: &str = "SchemaParseError";
-const SOURCE_PARSE_ERROR: &str = "SourceParseError";
+const SCHEMA_PARSE_ERROR: ErrorId = ErrorId::SchemaParse;
+const SOURCE_PARSE_ERROR: ErrorId = ErrorId::SourceParse;
 
 /// The Python classes parsed YAML entries become.
 #[derive(FromPyObject)]
@@ -46,12 +45,10 @@ pub(crate) struct YamlClasses<'py> {
 }
 
 /// The Python error `error` raises: a resource identity error, else the file kind's parse error.
-fn parse_error(py: Python<'_>, error: ConfigError, parse_class: &str) -> PyResult<PyErr> {
+fn parse_error(py: Python<'_>, error: ConfigError, parse_class: ErrorId) -> PyResult<PyErr> {
     let class: Bound<'_, PyAny> = match error.class {
-        ErrorClass::ResourceIdentity => {
-            py.import(IDENTITY_ERRORS_MODULE)?.getattr(IDENTITY_ERROR)?
-        }
-        _ => py.import(DISCOVERY_ERRORS_MODULE)?.getattr(parse_class)?,
+        ErrorClass::ResourceIdentity => registry::error(py, ErrorId::ResourceIdentity)?,
+        _ => registry::error(py, parse_class)?,
     };
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     if let Some(help) = error.help {

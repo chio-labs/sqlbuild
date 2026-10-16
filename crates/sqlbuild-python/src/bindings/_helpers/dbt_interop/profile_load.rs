@@ -13,9 +13,11 @@ use sqlbuild_config::dbt_profile::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_interop::profile::raised;
 use crate::bindings::_helpers::dbt_interop::profile_connection::profile_error;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const PROFILE_LOAD_MODULE: &str = "sqlbuild.integrations.dbt._helpers.profile.load";
-const DBT_MODELS: &str = "sqlbuild._native";
 const DBT_PROJECT_FILE: &str = "dbt_project.yml";
 const PROFILES_FILE: &str = "profiles.yml";
 const DEFAULT_PROFILES_DIR: &str = "~/.dbt";
@@ -64,7 +66,7 @@ fn yaml_mapping<'py>(file: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyD
         ));
     }
     let document: Bound<'py, PyAny> = call_with(
-        &imported(py, PROFILE_LOAD_MODULE, "load_dbt_yaml")?,
+        &host::entry(py, ThirdPartyHost::LoadDbtYaml)?,
         &[("file_path", file.clone())],
     )?;
     dbt_yaml_mapping(&display, &yaml_value(Some(&document))?).map_err(|error| raised(py, error))?;
@@ -130,7 +132,7 @@ pub(crate) fn load_selected_dbt_profile_output<'py>(
     let (target, index): (String, usize) =
         select_dbt_profile_target(&validated, target_name).map_err(|error| raised(py, error))?;
     call_with(
-        &imported(py, DBT_MODELS, "SelectedDbtProfileOutput")?,
+        &registry::class(py, RecordId::SelectedDbtProfileOutput)?,
         &[
             ("profile_name", PyString::new(py, profile_name).into_any()),
             ("target_name", PyString::new(py, &target).into_any()),

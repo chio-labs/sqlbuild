@@ -1,5 +1,7 @@
 //! Typed SQL value normalization between Python authored values and native `SqlValue`s.
 
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -13,10 +15,6 @@ use sqlbuild_model_config::sql_values::errors::SqlValueFailure;
 use sqlbuild_model_config::sql_values::main::normalize_sql_value::normalize_sql_value as normalized;
 use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue, SqlValueLimits};
 
-const MODELS_MODULE: &str = "sqlbuild._native";
-const TYPES_MODULE: &str = "sqlbuild._native";
-const NATIVE_MODULE: &str = "sqlbuild._native";
-
 /// The Python classes authored values are told apart by and normalized values are built from.
 pub(crate) struct SqlValueClasses<'py> {
     decimal: Bound<'py, PyAny>,
@@ -29,15 +27,13 @@ pub(crate) struct SqlValueClasses<'py> {
 
 impl<'py> SqlValueClasses<'py> {
     pub(crate) fn load(py: Python<'py>) -> PyResult<Self> {
-        let models = py.import(MODELS_MODULE)?;
-        let native = py.import(NATIVE_MODULE)?;
         Ok(Self {
             decimal: py.import("decimal")?.getattr("Decimal")?,
-            authored_set: native.getattr("AuthoredSqlSet")?,
-            value_call: native.getattr("AuthoredSqlValueCall")?,
-            sql_value: models.getattr("SqlValue")?,
-            logical_type: models.getattr("SqlLogicalType")?,
-            kind: py.import(TYPES_MODULE)?.getattr("SqlValueKind")?,
+            authored_set: registry::class(py, RecordId::AuthoredSqlSet)?,
+            value_call: registry::class(py, RecordId::AuthoredSqlValueCall)?,
+            sql_value: registry::class(py, RecordId::SqlValue)?,
+            logical_type: registry::class(py, RecordId::SqlLogicalType)?,
+            kind: registry::class(py, RecordId::SqlValueKind)?,
         })
     }
 }
@@ -178,9 +174,7 @@ pub(crate) fn sql_value<'py>(
 pub(crate) fn sql_value_error(py: Python<'_>, failure: SqlValueFailure) -> PyResult<PyErr> {
     Ok(match failure {
         SqlValueFailure::Invalid(message) => PyErr::from_value(
-            py.import(NATIVE_MODULE)?
-                .getattr("SqlValueValidationError")?
-                .call1((message,))?,
+            registry::native(py, NativeAttr::SqlValueValidationError)?.call1((message,))?,
         ),
         SqlValueFailure::DecimalOverflow => {
             let overflow = py.import("decimal")?.getattr("Overflow")?;
@@ -204,10 +198,7 @@ fn normalize_sql_value<'py>(
     let raw = self::raw_value(raw_value, &classes)?;
     let applied: Bound<'py, PyAny> = match limits {
         Some(limits) if !limits.is_none() => limits.clone(),
-        _ => py
-            .import(NATIVE_MODULE)?
-            .getattr("SqlValueLimits")?
-            .call0()?,
+        _ => registry::class(py, RecordId::SqlValueLimits)?.call0()?,
     };
     let limits = SqlValueLimits {
         max_depth: applied.getattr("max_depth")?.extract()?,

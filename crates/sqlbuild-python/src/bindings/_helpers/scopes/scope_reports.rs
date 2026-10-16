@@ -21,6 +21,8 @@ use sqlbuild_scopes::scope_report::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::{
     NativeScopeLookup, identity_message, path_message,
 };
@@ -58,7 +60,6 @@ pub(crate) type ListArguments<'py> = (
     bool,
 );
 
-const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
 const CURRENT_FOLDER: &str = ".";
 
 /// One lookup's native lookup and every declaration's values in input order.
@@ -105,11 +106,9 @@ fn lookup_reports(lookup: &Bound<'_, PyAny>) -> PyResult<LookupReports> {
     })
 }
 
-fn scope_error(py: Python<'_>, class: &str, message: String) -> PyResult<PyErr> {
+fn scope_error(py: Python<'_>, class: ErrorId, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        py.import(EXCEPTIONS_MODULE)?
-            .getattr(class)?
-            .call1((message,))?,
+        registry::error(py, class)?.call1((message,))?,
     ))
 }
 
@@ -117,11 +116,11 @@ fn scope_error(py: Python<'_>, class: &str, message: String) -> PyResult<PyErr> 
 fn failure_error(py: Python<'_>, failure: &ReportFailure) -> PyResult<PyErr> {
     match failure {
         ReportFailure::Path(rejected) => {
-            scope_error(py, "InvalidScopePathError", path_message(rejected))
+            scope_error(py, ErrorId::InvalidScopePath, path_message(rejected))
         }
         ReportFailure::Identity(failure, text) => scope_error(
             py,
-            "InvalidQualifiedIdentityError",
+            ErrorId::InvalidQualifiedIdentity,
             identity_message(failure, text),
         ),
         ReportFailure::Serialization(message) => Ok(PyValueError::new_err(message.clone())),
@@ -153,7 +152,7 @@ pub(crate) fn scope_report(
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     let selected: Bound<'_, PyAny> = match filters.filter(|filters| !filters.is_none()) {
         Some(filters) => filters,
-        None => classes.model("ScopeReportFilters")?.call0()?,
+        None => classes.model(RecordId::ScopeReportFilters)?.call0()?,
     };
     let reports: LookupReports = lookup_reports(lookup)?;
     let request: ReportRequest = ReportRequest {
@@ -304,7 +303,7 @@ pub(crate) fn serialize_scope_report(
     match serialized(&classes, report) {
         Err(error) if error.is_instance_of::<PyValueError>(py) => {
             let message: String = error.value(py).str()?.extract()?;
-            let raised: PyErr = scope_error(py, "ScopeError", message)?;
+            let raised: PyErr = scope_error(py, ErrorId::Scope, message)?;
             raised.set_cause(py, Some(error));
             Err(raised)
         }

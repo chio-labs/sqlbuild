@@ -1,16 +1,14 @@
 //! Backfill streamed dbt results using Python's JSON and UTF-8 artifact contract.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
     PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyListMethods, PyString, PyTuple,
 };
 use std::collections::HashSet;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_RECORDS: &str = "sqlbuild._native";
 
 pub(crate) fn result_ids(results: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
     results
@@ -50,7 +48,7 @@ fn messages<'py>(raw: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyTuple>> {
     PyTuple::new(
         py,
         [call_with(
-            &imported(py, NATIVE_RECORDS, "DbtNodeMessage")?,
+            &registry::class(py, RecordId::DbtNodeMessage)?,
             &[
                 ("level", PyString::new(py, "error").into_any()),
                 ("message", text),
@@ -130,7 +128,7 @@ pub(crate) fn append_missing<'py>(
             py.None().into_bound(py)
         };
         appended.push(call_with(
-            &imported(py, NATIVE_RECORDS_MODULE, "DbtNodeExecutionResult")?,
+            &registry::class(py, RecordId::DbtNodeExecutionResult)?,
             &[
                 ("unique_id", unique_id),
                 ("resource_type", PyString::new(py, resource_type).into_any()),

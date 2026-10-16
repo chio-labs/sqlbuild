@@ -27,9 +27,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::dbt_interop::runner::{
     dbt_command_lifecycle, launch_failure, launch_os_error, report_exit,
 };
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
 const STREAM_OPTIONS: (&[&str], &[&str]) = (
     &["argv", "cwd", "stream", "use_color", "target_path"],
     &[
@@ -96,7 +97,7 @@ fn execute_dbt_json_event_stream<'py>(
             arguments.value("detail_by_unique_id")?,
         )?;
         keywords.set_item("use_color", output.use_color)?;
-        imported(py, NATIVE_MODULE, "DbtEventStream")?.call((), Some(&keywords))?
+        registry::native(py, NativeAttr::DbtEventStream)?.call((), Some(&keywords))?
     };
     let argv: Vec<String> = arguments.value("argv")?.extract()?;
     let cwd: Option<PathBuf> = arguments.value("cwd")?.extract()?;

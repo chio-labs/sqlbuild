@@ -13,7 +13,8 @@ use pyo3::types::PyTuple;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     call_with, context_variable, imported,
 };
-use crate::bindings::_helpers::output_capture::records::MODELS_MODULE;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 
 const CONTEXT_VARIABLE: &str = "sqlbuild_output_capture_context";
 static CURRENT_CONTEXT: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
@@ -29,7 +30,7 @@ pub(crate) struct CommandOutputContext {
 impl CommandOutputContext {
     fn __enter__(&self, py: Python<'_>) -> PyResult<()> {
         let context = call_with(
-            &imported(py, MODELS_MODULE, "OutputCaptureContext")?,
+            &host::entry(py, ExecutorHost::OutputCaptureContext)?,
             &[(
                 "external_context",
                 imported(py, "builtins", "dict")?.call1((self.external_context.bind(py),))?,

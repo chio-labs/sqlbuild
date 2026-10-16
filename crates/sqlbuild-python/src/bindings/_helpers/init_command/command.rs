@@ -16,16 +16,16 @@ use sqlbuild_core::init_command::main::render_init_summary::render_init_summary;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::init_command::scaffold::scaffold_blank_project;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
 const EXISTS_MESSAGE: &str = "sqlbuild_project.toml already exists in this directory";
 
 fn exists_error(py: Python<'_>) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", "C900")?;
-        imported(py, ERRORS_MODULE, "CliUserError")?.call((EXISTS_MESSAGE,), Some(&options))
+        registry::error(py, ErrorId::CliUser)?.call((EXISTS_MESSAGE,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -52,7 +52,7 @@ fn run_init_command(py: Python<'_>, project_dir: Option<Bound<'_, PyAny>>) -> Py
     let base_path: PathBuf = base_dir.extract()?;
     scaffold_blank_project(py, &base_path, &init_project_toml(&project_name))?;
     call_with(
-        &imported(py, NATIVE_MODULE, "update_sqlbuild_skills")?,
+        &registry::native(py, NativeAttr::UpdateSqlbuildSkills)?,
         &[("project_dir", base_dir)],
     )?;
     let style: CliStyle = CliStyle {

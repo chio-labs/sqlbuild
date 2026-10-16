@@ -4,15 +4,12 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::validated_model_cursor_sql;
-use crate::bindings::_helpers::compile_driver::assembly_project::ADAPTER_NAME_MODULE;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const NATIVE_MODULE: &str = "sqlbuild._native";
 /// The `CompiledSqlScenario` fields copied from its input, in Python's keyword order.
 const SCENARIO_FIELDS: [&str; 12] = [
     "sql_body",
@@ -37,10 +34,9 @@ pub(crate) fn test_model_query_overrides<'py>(
     let py: Python<'py> = inputs.py();
     let overrides: Bound<'py, PyDict> = PyDict::new(py);
     let payload: Bound<'py, PyAny> = test_input.getattr("payload")?;
-    if !payload.is_instance(&imported(
+    if !payload.is_instance(&registry::class(
         py,
-        NATIVE_RECORDS_MODULE,
-        "CompileModelSqlTestInputPayload",
+        RecordId::CompileModelSqlTestInputPayload,
     )?)? {
         return Ok(overrides);
     }
@@ -70,7 +66,7 @@ pub(crate) fn test_model_query_overrides<'py>(
         &inputs.getattr("scope_index")?,
         (&loaded_macros, &lookup),
     )?;
-    let expand: Bound<'py, PyAny> = py.import(NATIVE_MODULE)?.getattr("expand_sql_macros")?;
+    let expand: Bound<'py, PyAny> = registry::native(py, NativeAttr::ExpandSqlMacros)?;
     for model_input in inputs.getattr("model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
         let file_path: Bound<'py, PyAny> =
@@ -115,14 +111,14 @@ fn model_macro_context<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         return Ok(macro_context);
     }
     let adapter_name: Bound<'py, PyAny> = call_with(
-        &imported(py, ADAPTER_NAME_MODULE, "resolve_effective_adapter_name")?,
+        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
             ("project_config", inputs.getattr("project_config")?),
             ("local_config", inputs.getattr("local_config")?),
         ],
     )?;
     call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "MacroContext")?,
+        &registry::class(py, RecordId::MacroContext)?,
         &[
             ("adapter_name", adapter_name),
             (
@@ -142,9 +138,8 @@ pub(crate) fn compiled_sql_scenarios<'py>(
     inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = inputs.py();
-    let scenario_class: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS_MODULE, "CompiledSqlScenario")?;
-    let key_class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS_MODULE, "CompiledObjectKey")?;
+    let scenario_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledSqlScenario)?;
+    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let resource_type: Bound<'py, PyAny> =
         imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("SQL_SCENARIO")?;
     let mut scenarios: Vec<Bound<'py, PyAny>> = Vec::new();

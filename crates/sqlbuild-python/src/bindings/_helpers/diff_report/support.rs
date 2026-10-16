@@ -7,8 +7,10 @@ use sqlbuild_cli::diff_report::errors::DiffUserError;
 use sqlbuild_cli::diff_report::models::DiffRequestFacts;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-pub(crate) const EXCEPTIONS_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::models::HostId;
+use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::registry;
 
 /// `name(**pairs)` with keyword arguments.
 pub(crate) fn call<'py>(
@@ -34,13 +36,13 @@ pub(crate) fn object<'py, T: pyo3::IntoPyObjectExt<'py>>(
 }
 
 /// `class(message, code=code, help=help)` from the CLI exceptions module.
-pub(crate) fn cli_error(py: Python<'_>, class: &str, error: &DiffUserError) -> PyErr {
+pub(crate) fn cli_error(py: Python<'_>, class: ErrorId, error: &DiffUserError) -> PyErr {
     let raised = (|| -> PyResult<Bound<'_, PyAny>> {
         let help: Bound<'_, PyAny> = object(py, error.help.as_deref())?;
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", error.code.as_str())?;
         keywords.set_item("help", help)?;
-        imported(py, EXCEPTIONS_MODULE, class)?.call((error.message.as_str(),), Some(&keywords))
+        registry::error(py, class)?.call((error.message.as_str(),), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),
@@ -71,9 +73,14 @@ pub(crate) fn caused(py: Python<'_>, replacement: PyErr, cause: PyErr) -> PyErr 
 pub(crate) fn matches_class(
     py: Python<'_>,
     error: &PyErr,
-    (module, class): (&str, &str),
+    class: impl Into<HostId>,
 ) -> PyResult<bool> {
-    error.value(py).is_instance(&imported(py, module, class)?)
+    error.value(py).is_instance(&host::entry(py, class)?)
+}
+
+/// Whether `error` is an instance of the native error class `class`.
+pub(crate) fn matches_native(py: Python<'_>, error: &PyErr, class: ErrorId) -> PyResult<bool> {
+    error.value(py).is_instance(&registry::error(py, class)?)
 }
 
 /// Whether `error` is an `Exception` rather than a `BaseException` such as an interrupt.

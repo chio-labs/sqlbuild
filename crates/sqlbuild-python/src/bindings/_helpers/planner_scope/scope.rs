@@ -1,12 +1,12 @@
 //! Planner scope assembly using native graph and selector operations.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_scope::loaders::expand_selected_loader_dependencies;
-use crate::bindings::_helpers::planner_scope::values::{NATIVE, edges, keys};
+use crate::bindings::_helpers::planner_scope::values::{edges, keys};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::PyDictMethods;
 use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
@@ -15,8 +15,6 @@ use sqlbuild_analysis::planner_scope::main::{
     managed_sources::managed_sources, source_selectors::source_selectors,
 };
 use std::collections::HashSet;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
 
 #[pyfunction]
 #[pyo3(signature = (*, selected_keys, upstream_deps, project))]
@@ -65,14 +63,16 @@ pub(crate) fn build_planner_scope<'py>(
     let select = default_tuple(&args.value("select")?);
     let exclude = default_tuple(&args.value("exclude")?);
     let auto_load = args.value("auto_load_sources")?.is_truthy()?;
-    let mut upstream = imported(py, NATIVE, "build_execution_upstream_deps")?.call1((&project,))?;
-    let mut downstream = imported(py, NATIVE, "build_downstream_deps")?.call1((&upstream,))?;
+    let mut upstream =
+        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((&project,))?;
+    let mut downstream =
+        registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
     let lineage = project.getattr("lineage_graph")?;
-    let all_keys = imported(py, NATIVE, "lineage_graph_names")?.call1((&lineage,))?;
+    let all_keys = registry::native(py, NativeAttr::LineageGraphNames)?.call1((&lineage,))?;
     let mut selected = args.value("selected_keys")?;
     if selected.is_none() {
         selected = call_with(
-            &imported(py, NATIVE, "resolve_graph_selection")?,
+            &registry::native(py, NativeAttr::ResolveGraphSelection)?,
             &[
                 ("graph", lineage),
                 ("select", select.clone()),
@@ -114,11 +114,12 @@ pub(crate) fn build_planner_scope<'py>(
             expand_selected_loader_dependencies(&project, &selected, &upstream, Some(&executable))?;
         selected = expanded.into_any();
         upstream = deps.into_any();
-        downstream = imported(py, NATIVE, "build_downstream_deps")?.call1((&upstream,))?;
+        downstream = registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
     }
-    let origins = imported(py, NATIVE, "build_execution_edge_origins")?.call1((&project,))?;
+    let origins =
+        registry::native(py, NativeAttr::BuildExecutionEdgeOrigins)?.call1((&project,))?;
     let order = call_with(
-        &imported(py, NATIVE, "topologically_order_keys")?,
+        &registry::native(py, NativeAttr::TopologicallyOrderKeys)?,
         &[
             ("upstream", upstream.clone()),
             ("injected_edge_origins", origins),
@@ -135,10 +136,10 @@ pub(crate) fn build_planner_scope<'py>(
     }
     let mut tests = args.value("sql_test_selection")?;
     if !tests.is_truthy()? {
-        tests = imported(py, NATIVE_RECORDS_MODULE, "SqlTestSelection")?.call0()?;
+        tests = registry::class(py, RecordId::SqlTestSelection)?.call0()?;
     }
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "PlannerScope")?,
+        &registry::class(py, RecordId::PlannerScope)?,
         &[
             ("upstream_deps", upstream),
             ("downstream_deps", downstream),

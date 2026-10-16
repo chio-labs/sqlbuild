@@ -9,17 +9,15 @@ use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use sqlbuild_config::command_connection::constants::COMMAND_WAREHOUSE_GROUPS;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const ENTRY_MODELS: &str = "sqlbuild._native";
-const WAREHOUSE_GROUP: (&str, &str) = ("sqlbuild._native", "WarehouseGroup");
-const COMMAND_TYPES: &str = "sqlbuild._native";
 const CONTEXT_ATTRIBUTE: &str = "_command_warehouse_scope_context";
 const CONTEXT_NAME: &str = "sqlbuild_command_warehouse_scope";
 
 fn context_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import(NATIVE_MODULE)?.getattr(CONTEXT_ATTRIBUTE)
+    registry::native(py, NativeAttr::CommandWarehouseScopeContext)
 }
 
 /// Installs one command's warehouse scope for the duration of a `with` block.
@@ -67,7 +65,7 @@ pub(crate) fn command_warehouse_scope<'py>(
     let group: Bound<'py, PyAny> = if command.is_none() {
         py.None().into_bound(py)
     } else {
-        let name: String = imported(py, COMMAND_TYPES, "CliCommand")?
+        let name: String = registry::class(py, RecordId::CliCommand)?
             .call1((command,))?
             .str()?
             .to_string();
@@ -76,7 +74,7 @@ pub(crate) fn command_warehouse_scope<'py>(
             .find(|(candidate, _)| *candidate == name)
             .and_then(|(_, group)| *group)
         {
-            Some(group) => imported(py, WAREHOUSE_GROUP.0, WAREHOUSE_GROUP.1)?.call1((group,))?,
+            Some(group) => registry::class(py, RecordId::WarehouseGroup)?.call1((group,))?,
             None => py.None().into_bound(py),
         }
     };
@@ -85,7 +83,7 @@ pub(crate) fn command_warehouse_scope<'py>(
         None => PyDict::new(py).into_any(),
     };
     let scope: Bound<'py, PyAny> = call_with(
-        &imported(py, ENTRY_MODELS, "CommandWarehouseScope")?,
+        &registry::class(py, RecordId::CommandWarehouseScope)?,
         &[
             ("group", group),
             ("cli_warehouse", cli_warehouse.clone()),
@@ -106,7 +104,7 @@ pub(crate) fn current_command_warehouse_scope(py: Python<'_>) -> PyResult<Bound<
         return Ok(scope);
     }
     call_with(
-        &imported(py, ENTRY_MODELS, "CommandWarehouseScope")?,
+        &registry::class(py, RecordId::CommandWarehouseScope)?,
         &[("group", py.None().into_bound(py))],
     )
 }

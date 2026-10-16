@@ -11,10 +11,10 @@ use sqlbuild_state::events::models::{
     ColumnEventKey, EventOrder, EventRelation, MoveEventKey, OldNameFactKey, OldNameStep,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::state_rows::constants::{
-    MIGRATION_MODELS, OLD_NAME_VIEW_CONFIG_KEY,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::state_rows::constants::OLD_NAME_VIEW_CONFIG_KEY;
 use crate::bindings::_helpers::state_rows::events::relation as event_relation;
 use crate::bindings::_helpers::state_rows::migration_objects::event_order;
 
@@ -108,7 +108,7 @@ pub(crate) fn old_name_views<'py>(
             })
         })
         .collect::<PyResult<_>>()?;
-    let history = imported(py, MIGRATION_MODELS, "OldNameViewHistory")?;
+    let history = registry::class(py, RecordId::OldNameViewHistory)?;
     let fact_at = |index: Option<usize>| chosen(py, &facts, index);
     let histories: Vec<Bound<'py, PyAny>> = old_name_histories(&move_orders, &fact_keys)
         .into_iter()

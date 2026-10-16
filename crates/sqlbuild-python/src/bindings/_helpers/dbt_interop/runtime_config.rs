@@ -12,16 +12,15 @@ use sqlbuild_core::dbt_cli::errors::DbtCliError;
 use sqlbuild_core::dbt_cli::main::dbt_flag_value::dbt_flag_value;
 use sqlbuild_core::dbt_cli::models::DbtParsedFlags;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::dbt_interop::cli::{raised, resolved_path};
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const BUILTIN_ADAPTERS_MODULE: &str = "sqlbuild.adapter.discovery.main.builtins";
-const PROJECT_ADAPTERS_MODULE: &str = "sqlbuild.adapter.discovery.main.project_adapters";
-const ARGUMENT_ERROR: &str = "DbtInteropArgumentError";
-const CONFIG_ERROR: &str = "DbtInteropConfigError";
+const ARGUMENT_ERROR: ErrorId = ErrorId::DbtInteropArgument;
+const CONFIG_ERROR: ErrorId = ErrorId::DbtInteropConfig;
 const ARGUMENT_CODE: &str = "C238";
 const UNRECOGNIZED_HELP: &str = "SQLBuild flags go before `--`; pass raw dbt flags after `--`.";
 const PARSER_HELP: &str = "Run `-h` to list supported flags; pass raw dbt flags after `--`.";
@@ -105,7 +104,7 @@ pub(crate) fn parsed_flags(
 
 fn parsed_args_model<'py>(py: Python<'py>, flags: DbtParsedFlags) -> PyResult<Bound<'py, PyAny>> {
     call_with(
-        &imported(py, NATIVE_MODULE, "DbtInteropParsedArgs")?,
+        &registry::class(py, RecordId::DbtInteropParsedArgs)?,
         &[
             ("select", PyTuple::new(py, flags.select)?.into_any()),
             ("exclude", PyTuple::new(py, flags.exclude)?.into_any()),
@@ -185,7 +184,7 @@ pub(crate) fn config_overrides<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let value = |name: &str| optional_text(py, dbt_flag_value(args, name));
     call_with(
-        &imported(py, NATIVE_MODULE, "DbtCliConfigOverrides")?,
+        &registry::class(py, RecordId::DbtCliConfigOverrides)?,
         &[
             ("project_dir", value("--project-dir")),
             ("profiles_dir", value("--profiles-dir")),
@@ -266,7 +265,7 @@ pub(crate) fn plan_options<'py>(
     let local_config: Bound<'py, PyAny> =
         discovered_inputs.getattr("local_config")?.getattr("dbt")?;
     let resolved: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "resolve_dbt_config")?,
+        &registry::native(py, NativeAttr::ResolveDbtConfig)?,
         &[
             ("project_root", project_dir.clone()),
             ("config", project_config.clone()),
@@ -285,7 +284,7 @@ pub(crate) fn plan_options<'py>(
         )?
     };
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "DbtCliOptions")?,
+        &registry::class(py, RecordId::DbtCliOptions)?,
         &[
             ("project_dir", resolved.getattr("project_dir")?),
             ("profiles_dir", resolved.getattr("profiles_dir")?),
@@ -321,10 +320,9 @@ pub(crate) fn interop_adapter<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = adapter_name.py();
-    let builtin: Bound<'py, PyDict> =
-        imported(py, BUILTIN_ADAPTERS_MODULE, "builtin_adapter_classes")?
-            .call0()?
-            .cast_into()?;
+    let builtin: Bound<'py, PyDict> = host::entry(py, AdapterHost::BuiltinAdapterClasses)?
+        .call0()?
+        .cast_into()?;
     let mut adapter_class: Option<Bound<'py, PyAny>> = None;
     if !project_dir.is_none() {
         let reserved: Bound<'py, PyAny> = py
@@ -332,7 +330,7 @@ pub(crate) fn interop_adapter<'py>(
             .getattr("frozenset")?
             .call1((builtin.clone(),))?;
         let local: Bound<'py, PyDict> = call_with(
-            &imported(py, PROJECT_ADAPTERS_MODULE, "discover_project_adapters")?,
+            &host::entry(py, AdapterHost::DiscoverProjectAdapters)?,
             &[
                 ("project_dir", project_dir.clone()),
                 ("reserved_names", reserved),

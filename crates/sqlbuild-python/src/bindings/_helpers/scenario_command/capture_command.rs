@@ -9,7 +9,9 @@ use sqlbuild_core::scenario_command::main::snapshot_capture_warning::snapshot_ca
 use sqlbuild_core::scenario_command::main::sql_analysis_required_error::sql_analysis_required_error;
 use sqlbuild_core::scenario_command::models::SqlAnalysisCommand;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
 use crate::bindings::_helpers::scenario_command::presentation::{
     CompletionKind, SectionStatus, activity, begin_section, connection_hooks, progress_relay,
@@ -22,7 +24,6 @@ use crate::bindings::_helpers::scenario_command::setup::{
     write, write_headers,
 };
 
-const EXECUTOR_RUN_MODULE: &str = "sqlbuild.executor.pipeline.main.run";
 const EXECUTION_COMMAND: &str = "sqb scenario capture";
 
 fn count(label: &str, value: usize) -> SummaryCount {
@@ -106,7 +107,7 @@ fn run_scenario_capture_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
         ),
     )?;
     let results: Vec<Bound<'_, PyAny>> = call_with(
-        &imported(py, EXECUTOR_RUN_MODULE, "run_scenario_capture_pipeline")?,
+        &host::entry(py, ExecutorHost::RunScenarioCapturePipeline)?,
         &[
             ("project_dir", project.project_dir.clone()),
             ("pipeline_result", pipeline),

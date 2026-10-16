@@ -1,6 +1,5 @@
 //! The executable Python-node graph built from discovered project inputs.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -8,17 +7,15 @@ use sqlbuild_analysis::python_selection::main::python_node_graph_indexes::python
 use sqlbuild_analysis::python_selection::models::{InventoryIndexes, InventoryNode};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::discovery::imported_modules::provider_usages;
 use crate::bindings::_helpers::graph::python_selection::resolve_python_sql_run_selection;
 use crate::bindings::_helpers::graph::views::compiled_graph_keys;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const USER_INVENTORY_MODULE: &str = "sqlbuild.compiler.python_nodes._helpers.user_inventory";
-const NODE_MODELS_MODULE: &str = "sqlbuild._native";
-const NODE_TYPES_MODULE: &str = "sqlbuild.compiler.python_nodes.types";
-const SQL_REF_MODULE: &str = "sqlbuild.python_nodes.models";
 const NAME_KEY: &str = "name";
 
 /// One discovered function collection, its node kind and whether it carries documentation.
@@ -57,12 +54,12 @@ fn kind_parts<'py>(
 ) -> PyResult<(Bound<'py, PyDict>, &'static str, Bound<'py, PyAny>)> {
     let config: Bound<'py, PyDict> = PyDict::new(py);
     let get = |name: &str| attribute_value(discovered, name);
-    let metadata = |class: &str, fields: &[&str]| -> PyResult<Bound<'py, PyAny>> {
+    let metadata = |class: RecordId, fields: &[&str]| -> PyResult<Bound<'py, PyAny>> {
         let pairs: Vec<(&str, Bound<'py, PyAny>)> = fields
             .iter()
             .map(|field| Ok((*field, get(field)?)))
             .collect::<PyResult<_>>()?;
-        call_with(&shape_class_at(py, NODE_MODELS_MODULE, class)?, &pairs)
+        call_with(&registry::class(py, class)?, &pairs)
     };
     Ok(match kind {
         "LOADER" => {
@@ -73,7 +70,7 @@ fn kind_parts<'py>(
             config.set_item("unique_key", get("unique_key")?)?;
             config.set_item("write_strategy", optional_value(&get("write_strategy")?)?)?;
             let record = metadata(
-                "DiscoveredPythonLoaderMetadata",
+                RecordId::DiscoveredPythonLoaderMetadata,
                 &[
                     "destination",
                     "write_strategy",
@@ -89,20 +86,20 @@ fn kind_parts<'py>(
         "TASK" => (
             config,
             "task",
-            metadata("DiscoveredPythonTaskMetadata", &["retry"])?,
+            metadata(RecordId::DiscoveredPythonTaskMetadata, &["retry"])?,
         ),
         "ASSET" => {
             config.set_item("columns", get("columns")?)?;
             config.set_item("column_lineage", get("column_lineage")?)?;
             let record = metadata(
-                "DiscoveredPythonAssetMetadata",
+                RecordId::DiscoveredPythonAssetMetadata,
                 &["columns", "column_lineage", "retry"],
             )?;
             (config, "asset", record)
         }
         _ => {
             config.set_item("severity", get("severity")?.getattr("value")?)?;
-            let record = metadata("DiscoveredPythonCheckMetadata", &["severity"])?;
+            let record = metadata(RecordId::DiscoveredPythonCheckMetadata, &["severity"])?;
             (config, "check", record)
         }
     })
@@ -180,8 +177,7 @@ fn upstream_names(
             name,
         )?;
     }
-    let dependency_key: Bound<'_, PyAny> =
-        imported(py, USER_INVENTORY_MODULE, "python_node_dependency_key")?;
+    let dependency_key: Bound<'_, PyAny> = host::entry(py, UserCodeHost::PythonNodeDependencyKey)?;
     nodes
         .iter()
         .map(|node| {
@@ -224,10 +220,10 @@ pub(crate) fn python_node_graph<'py>(
         providers.set_item(provider.getattr("name")?, provider)?;
     }
     let vocabulary: Vocabulary<'py> = Vocabulary {
-        node: imported(py, NODE_MODELS_MODULE, "DiscoveredPythonNode")?,
-        kinds: imported(py, NODE_TYPES_MODULE, "PythonNodeKind")?,
-        sql_ref: imported(py, SQL_REF_MODULE, "SqlResourceRef")?,
-        identity: imported(py, USER_INVENTORY_MODULE, "python_node_identity")?,
+        node: registry::class(py, RecordId::DiscoveredPythonNode)?,
+        kinds: host::entry(py, UserCodeHost::PythonNodeKind)?,
+        sql_ref: host::entry(py, UserCodeHost::SqlResourceRef)?,
+        identity: host::entry(py, UserCodeHost::PythonNodeIdentity)?,
         providers,
     };
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -258,8 +254,7 @@ fn graph_record<'py>(
         tags,
         paths,
     } = indexes;
-    let edge_class: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "PythonNodeDependencyEdge")?;
+    let edge_class: Bound<'py, PyAny> = registry::class(py, RecordId::PythonNodeDependencyEdge)?;
     let dependency_edges: Vec<Bound<'py, PyAny>> = edges
         .into_iter()
         .map(|(upstream_name, downstream_name)| {
@@ -302,7 +297,7 @@ fn graph_record<'py>(
         by_selector.set_item(format!("{kind}:{}", name.str()?), node)?;
     }
     call_with(
-        &imported(py, NODE_MODELS_MODULE, "PythonNodeGraph")?,
+        &registry::class(py, RecordId::PythonNodeGraph)?,
         &[
             ("nodes", PyTuple::new(py, nodes)?.into_any()),
             (
@@ -330,7 +325,7 @@ pub(crate) fn run_selection_from_inputs<'py>(
     let (sql_keys, python_node_names) =
         resolve_python_sql_run_selection(project_graph, &python_graph, select, exclude)?;
     call_with(
-        &imported(py, NATIVE_RECORDS_MODULE, "PythonSqlRunSelection")?,
+        &registry::class(py, RecordId::PythonSqlRunSelection)?,
         &[
             ("sql_keys", compiled_graph_keys(py, sql_keys)?.into_any()),
             (

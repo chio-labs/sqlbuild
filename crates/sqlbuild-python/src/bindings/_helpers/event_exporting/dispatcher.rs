@@ -29,8 +29,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::event_exporting::constants::{
     DISPATCHER_THREAD_NAME, EXIT_JOIN_SECONDS, HEALTH_THREAD_NAME, JOIN_GRACE_SECONDS, NO_SECONDS,
-    NOTIFIER_THREAD_NAME, OUTPUT_SINK_THREAD_NAME, POLL_SECONDS, RUN_OUTPUT_SINKS_MODULE,
-    WORKER_ATTRIBUTE,
+    NOTIFIER_THREAD_NAME, OUTPUT_SINK_THREAD_NAME, POLL_SECONDS, WORKER_ATTRIBUTE,
 };
 use crate::bindings::_helpers::event_exporting::models::{
     BoundEventExporter, EventExportSummary, EventExporterFailure,
@@ -39,6 +38,8 @@ use crate::bindings::_helpers::event_exporting::values::{
     export_policy, input_error, severity_from, state_error,
 };
 use crate::bindings::_helpers::event_exporting::workers::{DispatcherWorker, WorkerRole};
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
 use crate::bindings::_helpers::native_threads::exit_signal::{
     interpreter_exiting, signal_interpreter_exit,
@@ -510,7 +511,7 @@ impl Shared {
             &[
                 (
                     "target",
-                    imported(py, RUN_OUTPUT_SINKS_MODULE, "run_command_output_sinks")?,
+                    host::entry(py, UserCodeHost::RunCommandOutputSinks)?,
                 ),
                 ("kwargs", arguments.into_any()),
                 (

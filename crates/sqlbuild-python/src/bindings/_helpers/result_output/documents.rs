@@ -4,8 +4,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_outputs::json_report::indented_json;
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::values::{any, dict, items, text};
 use crate::bindings::_helpers::result_output::aggregation::aggregated_from_lists;
 use crate::bindings::_helpers::result_output::assets::{
@@ -44,7 +46,6 @@ const DEGRADABLE_BUILD_OPTIONS: (&[&str], &[&str]) = (
         "cost",
     ],
 );
-const OBSERVABILITY_ERRORS: &str = "sqlbuild.runtime.observability.exceptions";
 const SCENARIO_OPTIONS: (&[&str], &[&str]) = (
     &["results"],
     &["local", "run_namespace", "namespace_source", "duration_ms"],
@@ -244,7 +245,7 @@ fn format_degradable_build_execution_json<'py>(
         || error.is_instance_of::<pyo3::exceptions::PyValueError>(py)
         || error.is_instance(
             py,
-            &imported(py, OBSERVABILITY_ERRORS, "ObservabilityValidationError")?,
+            &host::entry(py, ExecutorHost::ObservabilityValidationError)?,
         );
     if !degradable {
         return Err(error);

@@ -20,11 +20,9 @@ use sqlbuild_rules::dsl_headers::models::{
 use sqlbuild_rules::dsl_headers::types::HeaderParser;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const LINT_MODELS_MODULE: &str = "sqlbuild._native";
-const LINT_TYPES_MODULE: &str = "sqlbuild._native";
-const DISCOVERY_ERRORS_MODULE: &str = "sqlbuild._native";
 const PATHLIB_MODULE: &str = "pathlib";
 const SENTINEL_PATH: &str = "<lint>";
 const ENGINE: &str = "sqlbuild";
@@ -45,10 +43,10 @@ struct PyHeaderParser<'py> {
 impl<'py> PyHeaderParser<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            parse: imported(py, NATIVE_MODULE, "parse_header_values")?,
+            parse: registry::native(py, NativeAttr::ParseHeaderValues)?,
             path: imported(py, PATHLIB_MODULE, "Path")?.call1((SENTINEL_PATH,))?,
-            syntax_error: imported(py, DISCOVERY_ERRORS_MODULE, "ModelSqlParseError")?,
-            discovery_error: imported(py, DISCOVERY_ERRORS_MODULE, "DiscoveryError")?,
+            syntax_error: registry::error(py, ErrorId::ModelSqlParse)?,
+            discovery_error: registry::error(py, ErrorId::Discovery)?,
             rejected: RefCell::new(None),
         })
     }
@@ -129,8 +127,8 @@ struct LintClasses<'py> {
 impl<'py> LintClasses<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            violation: imported(py, LINT_MODELS_MODULE, "LintViolation")?,
-            severity: imported(py, LINT_TYPES_MODULE, "LintSeverity")?,
+            violation: registry::class(py, RecordId::LintViolation)?,
+            severity: registry::class(py, RecordId::LintSeverity)?,
         })
     }
 
@@ -211,7 +209,7 @@ fn scan_headers<'py>(
     first_only: bool,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = contents.py();
-    let class: Bound<'py, PyAny> = imported(py, LINT_MODELS_MODULE, "HeaderSpan")?;
+    let class: Bound<'py, PyAny> = registry::class(py, RecordId::HeaderSpan)?;
     let headers: Vec<Bound<'py, PyAny>> = scan(&text(contents)?, first_only)
         .into_iter()
         .map(|header| {
@@ -320,7 +318,7 @@ fn prepare_native_header_cache(files: &Bound<'_, PyDict>) -> PyResult<()> {
             );
         }
     }
-    imported(files.py(), NATIVE_MODULE, "prepare_model_header_tokens")?.call1((headers,))?;
+    registry::native(files.py(), NativeAttr::PrepareModelHeaderTokens)?.call1((headers,))?;
     Ok(())
 }
 

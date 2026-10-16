@@ -7,7 +7,9 @@ use crate::bindings::_helpers::planner_scenario::constants::{REF, SOURCE};
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_INTERNAL, SCENARIO_PLAN_MISSING_RELATION_TARGET,
 };
-use crate::bindings::_helpers::planner_scenario::values::{MODELS, error};
+use crate::bindings::_helpers::planner_scenario::values::error;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods};
 
@@ -100,7 +102,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
         seed_fixtures.set_item(name, target)?;
     }
     call_with(
-        &imported(py, MODELS, "ScenarioRelationPlan")?,
+        &registry::class(py, RecordId::ScenarioRelationPlan)?,
         &[
             ("scenario_name", graph.getattr("name")?),
             ("relation_map", args.value("relation_map")?),
@@ -142,7 +144,7 @@ fn target_for_artifact<'py>(
         ],
     )?;
     call_with(
-        &imported(py, "sqlbuild._native", "CompiledRelationLocation")?,
+        &registry::class(py, RecordId::CompiledRelationLocation)?,
         &[
             ("database", database),
             ("schema", schema),

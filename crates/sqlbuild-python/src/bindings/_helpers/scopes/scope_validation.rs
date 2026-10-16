@@ -14,6 +14,8 @@ use sqlbuild_scopes::placement::models::{
 use sqlbuild_scopes::scope_index::models::ResourceIdentity;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::compile_usages::{
     MergeRows, SourceRow, UsageRow, merged_usage_rows, model_schema_scope_usages,
 };
@@ -25,8 +27,6 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 use crate::bindings::types::CompilerDetach;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
-const SCOPE_TYPES_MODULE: &str = "sqlbuild._native";
-const SCOPE_ERRORS_MODULE: &str = "sqlbuild._native";
 const RUNTIME_USAGE: usize = 2;
 /// Compile input groups whose items carry declaration usages, after the model inputs.
 const COMPILE_USAGE_GROUPS: [&str; 5] = [
@@ -219,7 +219,7 @@ fn placement_validated_index<'py>(
     }
     let classes: ScopeClasses<'py> = ScopeClasses::new(py)?;
     let severity: Bound<'py, PyAny> = classes.member(
-        "ScopeDiagnosticSeverity",
+        RecordId::ScopeDiagnosticSeverity,
         if enforce_placement {
             "error"
         } else {
@@ -231,7 +231,7 @@ fn placement_validated_index<'py>(
         .compiler_detach(|| Ok(placement_diagnostics(&placement)))
         .map_err(compiler_error)?;
     let records: Bound<'py, PyTuple> = tuple_attribute(index, "declarations")?;
-    let diagnostic_class: Bound<'py, PyAny> = classes.model("ScopeDiagnostic")?;
+    let diagnostic_class: Bound<'py, PyAny> = classes.model(RecordId::ScopeDiagnostic)?;
     for item in found {
         let record: Bound<'py, PyAny> = records.get_item(item.declaration)?;
         let native = &placement.declarations[item.declaration];
@@ -243,7 +243,7 @@ fn placement_validated_index<'py>(
             message: item.message.clone(),
         });
         kept.push(diagnostic_class.call1((
-            classes.member("ScopeDiagnosticCode", item.code.as_str())?,
+            classes.member(RecordId::ScopeDiagnosticCode, item.code.as_str())?,
             item.message,
             &severity,
             record.getattr("path")?,
@@ -315,7 +315,10 @@ pub(crate) fn scope_relocated_declarations(
             &records.get_item(item.declaration)?,
             &[
                 ("path", item.path.into_bound_py_any(py)?),
-                ("scope", classes.member("ScopeKind", item.scope.as_str())?),
+                (
+                    "scope",
+                    classes.member(RecordId::ScopeKind, item.scope.as_str())?,
+                ),
                 (
                     "ownership_root",
                     root_object(&classes, &item.ownership_root)?,
@@ -377,10 +380,8 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
 #[pyo3(signature = (*, index))]
 pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr> {
     let py: Python<'_> = index.py();
-    let error: Bound<'_, PyAny> = py
-        .import(SCOPE_TYPES_MODULE)?
-        .getattr("ScopeDiagnosticSeverity")?
-        .getattr("ERROR")?;
+    let error: Bound<'_, PyAny> =
+        registry::class(py, RecordId::ScopeDiagnosticSeverity)?.getattr("ERROR")?;
     let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
     for item in index.getattr("diagnostics")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
@@ -400,9 +401,7 @@ pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("diagnostics", PyTuple::new(py, errors)?)?;
     Err(PyErr::from_value(
-        py.import(SCOPE_ERRORS_MODULE)?
-            .getattr("ScopeValidationError")?
-            .call((message,), Some(&options))?,
+        registry::error(py, ErrorId::ScopeValidation)?.call((message,), Some(&options))?,
     ))
 }
 

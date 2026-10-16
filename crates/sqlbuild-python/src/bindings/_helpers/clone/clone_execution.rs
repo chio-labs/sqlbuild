@@ -13,19 +13,12 @@ use crate::bindings::_helpers::clone::clone_progress::{
     CloneFingerprintReporter, CloneItemPrinter,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_MODELS: &str = "sqlbuild._native";
 const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-const CLONE_MODELS: &str = "sqlbuild.executor.clone.models";
-const RETENTION_REQUESTS_MODULE: &str = "sqlbuild.executor.clone.main._build_retention_requests";
-const TRANSIENT_MODELS_MODULE: &str =
-    "sqlbuild.executor.clone.main._build_destination_transient_models";
-const FINGERPRINTING_MODULE: &str = "sqlbuild.executor.clone.main._fingerprinting";
-const EXECUTE_MODULE: &str = "sqlbuild.executor.clone.main.execute";
-const TARGET_CONFIG_MODULE: &str = "sqlbuild._native";
-const CONTRACT_TYPES: &str = "sqlbuild._native";
-const LIFECYCLE_MODULE: &str = "sqlbuild.runtime.observability.classes.operation_lifecycle";
 const DESTINATION_ENTRY_GROUPS: [&str; 4] = [
     "destination_source_entries",
     "destination_model_entries",
@@ -121,9 +114,9 @@ fn dependency_locations<'py>(
     } else {
         plan.getattr("source_map")?
     };
-    let key_class: Bound<'py, PyAny> = imported(py, COMPILE_MODELS, "CompiledObjectKey")?;
+    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let location_class: Bound<'py, PyAny> =
-        imported(py, COMPILE_MODELS, "CompiledRelationLocation")?;
+        registry::class(py, RecordId::CompiledRelationLocation)?;
     let source_type: Bound<'py, PyAny> =
         imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?;
     for pair in source_map.call_method0("items")?.try_iter()? {
@@ -157,7 +150,7 @@ fn dependency_locations<'py>(
 fn target_config<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.adapter.py();
     call_with(
-        &imported(py, TARGET_CONFIG_MODULE, "resolve_target_config")?,
+        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
             (
                 "project_config",
@@ -191,11 +184,7 @@ fn execution_input<'py>(
         .map(|entry| entry?.getattr("name"))
         .collect::<PyResult<_>>()?;
     let retention: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            RETENTION_REQUESTS_MODULE,
-            "build_destination_retention_requests",
-        )?,
+        &host::entry(py, ExecutorHost::BuildDestinationRetentionRequests)?,
         &[
             ("project", project.clone()),
             (
@@ -214,9 +203,9 @@ fn execution_input<'py>(
     )?;
     let allow_decrease: bool = config
         .getattr("time_travel_retention_decrease")?
-        .eq(imported(py, CONTRACT_TYPES, "RetentionDecreasePolicy")?.getattr("ALLOW")?)?;
+        .eq(registry::class(py, RecordId::RetentionDecreasePolicy)?.getattr("ALLOW")?)?;
     let source_entries: Bound<'py, PyAny> = call_with(
-        &imported(py, CLONE_MODELS, "CloneSourceEntries")?,
+        &host::entry(py, ExecutorHost::CloneSourceEntries)?,
         &[
             ("origin", pipeline.getattr("origin_source_entries")?),
             (
@@ -226,11 +215,7 @@ fn execution_input<'py>(
         ],
     )?;
     let transient: Bound<'py, PyAny> = call_with(
-        &imported(
-            py,
-            TRANSIENT_MODELS_MODULE,
-            "build_destination_transient_models",
-        )?,
+        &host::entry(py, ExecutorHost::BuildDestinationTransientModels)?,
         &[("project", project.clone())],
     )?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![("source_entries", source_entries)];
@@ -268,7 +253,10 @@ fn execution_input<'py>(
         ),
         ("on_item", on_item),
     ]);
-    call_with(&imported(py, CLONE_MODELS, "CloneExecutionInput")?, &fields)
+    call_with(
+        &host::entry(py, ExecutorHost::CloneExecutionInput)?,
+        &fields,
+    )
 }
 
 /// Copy fingerprints of the cloned relations, reporting what was not confirmed on failure.
@@ -309,7 +297,7 @@ fn copy_fingerprints<'py>(
         ("on_progress", reporter.clone().into_any()),
     ]);
     let lifecycle: Bound<'py, PyAny> = call_with(
-        &imported(py, LIFECYCLE_MODULE, "OperationLifecycle")?,
+        &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &[
             ("operation_kind", PyString::new(py, "clone").into_any()),
             (
@@ -320,7 +308,7 @@ fn copy_fingerprints<'py>(
     )?;
     let copied: PyResult<Bound<'py, PyAny>> = within(&lifecycle, |_| {
         call_with(
-            &imported(py, FINGERPRINTING_MODULE, "copy_clone_fingerprints")?,
+            &host::entry(py, ExecutorHost::CopyCloneFingerprints)?,
             &fields,
         )
     });
@@ -340,7 +328,7 @@ pub(crate) fn execute_clone_plan<'py>(
     let py: Python<'py> = pipeline.py();
     let started: Instant = Instant::now();
     let event_writer: Bound<'py, PyAny> = call_with(
-        &imported(py, NATIVE_MODULE, "ExecutionEventWriter")?,
+        &registry::native(py, NativeAttr::ExecutionEventWriter)?,
         &[("path", request.getattr("event_output_path")?)],
     )?;
     let printer: Py<CloneItemPrinter> = Py::new(
@@ -363,7 +351,7 @@ pub(crate) fn execute_clone_plan<'py>(
             ),
         )?;
         call_with(
-            &imported(py, EXECUTE_MODULE, "execute_clone")?,
+            &host::entry(py, ExecutorHost::ExecuteClone)?,
             &[("inputs", input)],
         )
     })();

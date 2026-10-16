@@ -7,11 +7,8 @@ use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_cli::argv::main::cli_namespace_defaults::cli_namespace_defaults;
 use sqlbuild_cli::argv::models::NamespaceDefault;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const COMPILE_LINEAGE_MODULE: &str = "sqlbuild._native";
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
 /// Typed namespace for all CLI arguments across all commands.
 #[pyclass(module = "sqlbuild._native", dict, frozen)]
@@ -26,10 +23,10 @@ fn default_object(py: Python<'_>, default: NamespaceDefault) -> PyResult<Bound<'
         NamespaceDefault::EmptyList => Ok(PyList::empty(py).into_any()),
         NamespaceDefault::EmptyDict => Ok(PyDict::new(py).into_any()),
         NamespaceDefault::CompileLineageFast => {
-            imported(py, COMPILE_LINEAGE_MODULE, "CompileLineageMode")?.getattr("FAST")
+            registry::class(py, RecordId::CompileLineageMode)?.getattr("FAST")
         }
         NamespaceDefault::ColumnLineageRich => {
-            imported(py, NATIVE_RECORDS_MODULE, "ColumnLineageMode")?.getattr("RICH")
+            registry::class(py, RecordId::ColumnLineageMode)?.getattr("RICH")
         }
     }
 }

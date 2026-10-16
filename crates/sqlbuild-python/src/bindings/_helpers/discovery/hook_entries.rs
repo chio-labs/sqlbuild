@@ -4,9 +4,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const DISCOVERY_MODELS_MODULE: &str = "sqlbuild._native";
 const RELATIVE_PATH_FIELD: &str = "relative_path";
 const SQL_HOOK_FIELDS: [&str; 6] = [
     "statement",
@@ -47,8 +47,8 @@ pub(crate) fn hook_entries<'py>(
     if !value.is_instance_of::<PyList>() && !value.is_instance_of::<PyTuple>() {
         return Ok(hooks);
     }
-    let sql_class: Bound<'py, PyAny> = imported(py, DISCOVERY_MODELS_MODULE, "SqlHookEntry")?;
-    let python_class: Bound<'py, PyAny> = imported(py, DISCOVERY_MODELS_MODULE, "PythonHookEntry")?;
+    let sql_class: Bound<'py, PyAny> = registry::class(py, RecordId::SqlHookEntry)?;
+    let python_class: Bound<'py, PyAny> = registry::class(py, RecordId::PythonHookEntry)?;
     for entry in value.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
         if entry.is_instance(&sql_class)? {

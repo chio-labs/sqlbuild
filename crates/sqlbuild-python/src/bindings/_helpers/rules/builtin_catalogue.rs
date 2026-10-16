@@ -1,6 +1,5 @@
 //! The built-in rule catalogue returned as the Python `Rule` models.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -11,9 +10,9 @@ use sqlbuild_rules::rules::main::selected_sql_codes::selected_sql_codes;
 use sqlbuild_rules::rules::models::{BuiltinOption, BuiltinOptionKind};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const MODELS_MODULE: &str = "sqlbuild._native";
-const TYPES_MODULE: &str = "sqlbuild._native";
 const FAMILY_SUFFIX_LENGTH: usize = 3;
 
 fn keywords<'py>(
@@ -51,19 +50,18 @@ fn option<'py>(
 }
 
 fn rule<'py>(
-    models: &Bound<'py, PyModule>,
+    py: Python<'py>,
     subjects: &Bound<'py, PyAny>,
     check: &Bound<'py, PyAny>,
     metadata: RuleMetadata,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = models.py();
-    let option_class: Bound<'py, PyAny> = models.getattr("RuleOption")?;
+    let option_class: Bound<'py, PyAny> = registry::class(py, RecordId::RuleOption)?;
     let options: Vec<Bound<'py, PyAny>> = builtin_options(&metadata.code)
         .into_iter()
         .map(|declared| option(&option_class, declared))
         .collect::<PyResult<_>>()?;
     let guidance: Bound<'py, PyAny> = match metadata.guidance {
-        Some(guidance) => shape_class(models.as_any(), "RuleGuidance")?.call(
+        Some(guidance) => registry::class(py, RecordId::RuleGuidance)?.call(
             (),
             Some(&keywords(
                 py,
@@ -112,7 +110,7 @@ fn rule<'py>(
             ("guidance", guidance),
         ],
     )?;
-    models.getattr("Rule")?.call((), Some(&arguments))
+    registry::class(py, RecordId::Rule)?.call((), Some(&arguments))
 }
 
 /// Every built-in rule as a `Rule` whose `check` is the given placeholder.
@@ -120,11 +118,10 @@ pub(crate) fn builtin_rules<'py>(
     py: Python<'py>,
     check: Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let models: Bound<'py, PyModule> = py.import(MODELS_MODULE)?;
-    let subjects: Bound<'py, PyAny> = py.import(TYPES_MODULE)?.getattr("RuleSubject")?;
+    let subjects: Bound<'py, PyAny> = registry::class(py, RecordId::RuleSubject)?;
     compiler_guard(|| Ok(catalogue()))?
         .into_iter()
-        .map(|metadata| rule(&models, &subjects, &check, metadata))
+        .map(|metadata| rule(py, &subjects, &check, metadata))
         .collect()
 }
 

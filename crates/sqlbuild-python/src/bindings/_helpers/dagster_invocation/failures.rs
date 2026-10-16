@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::dagster_invocation::access::{
     constant_contains, get, items, text_of,
 };
+use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
 const LIVE_FAILURE_MESSAGE: &str =
     "SQLBuild resource attempt failed; see final execution diagnostics";
@@ -94,7 +95,7 @@ pub(crate) fn dagster_failure<'py>(
             let limits: Bound<'py, PyDict> = PyDict::new(py);
             for asset in items(&payload, "assets")? {
                 let status: String = text_of(&asset, "status")?;
-                if constant_contains(py, ("COMPLETED_EXECUTION_STATUSES", &status))? {
+                if constant_contains(py, (ThirdPartyHost::CompletedExecutionStatuses, &status))? {
                     continue;
                 }
                 let failure: AssetFailure = asset_failure(&asset)?;

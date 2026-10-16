@@ -6,12 +6,9 @@ use pyo3::types::{PyList, PyTuple};
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_driver::assembly_checks::test_model_query_overrides;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const NATIVE_MODULE: &str = "sqlbuild._native";
-const COMPILE_ERRORS_MODULE: &str = "sqlbuild._native";
-const COLLECTOR_MODULE: &str = "sqlbuild._native";
 const DECIMAL_MODULE: &str = "decimal";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const SQL_TEST_INPUT_FAILURE: &str = "input";
@@ -23,7 +20,7 @@ pub(crate) fn assembled_sql_tests<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = inputs.py();
     let assemblies: Vec<Bound<'py, PyAny>> = call_with(
-        &imported(py, NATIVE_MODULE, "assemble_native_sql_tests")?,
+        &registry::native(py, NativeAttr::AssembleNativeSqlTests)?,
         &[("inputs", inputs.clone())],
     )?
     .try_iter()?
@@ -37,9 +34,9 @@ pub(crate) fn assembled_sql_tests<'py>(
             "native SQL test assembly returned a different number of tests",
         ));
     }
-    let report: Bound<'py, PyAny> = imported(py, COLLECTOR_MODULE, "report_compile_diagnostic")?;
+    let report: Bound<'py, PyAny> = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
     let mocked_input: Bound<'py, PyAny> =
-        imported(py, NATIVE_RECORDS_MODULE, "CompileModelSqlTestInputPayload")?;
+        registry::class(py, RecordId::CompileModelSqlTestInputPayload)?;
     let mut tests: Vec<Bound<'py, PyAny>> = Vec::with_capacity(assemblies.len());
     for (test_input, assembly) in test_inputs.iter().zip(assemblies) {
         let failure: Bound<'py, PyAny> = assembly.getattr("failure")?;
@@ -86,7 +83,7 @@ fn assembly_error(
     };
     if kind == Some(SQL_TEST_INPUT_FAILURE) {
         let error: Bound<'_, PyAny> =
-            imported(py, COMPILE_ERRORS_MODULE, "CompileInputError")?.call1((message,))?;
+            registry::error(py, ErrorId::CompileInput)?.call1((message,))?;
         return Ok(PyErr::from_value(error));
     }
     Ok(NativeCompilerError::new_err(message))
@@ -99,11 +96,7 @@ fn with_model_queries<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = test.py();
     let payload: Bound<'py, PyAny> = test.getattr("payload")?;
-    if !payload.is_instance(&imported(
-        py,
-        NATIVE_RECORDS_MODULE,
-        "CompiledModelSqlTestPayload",
-    )?)? {
+    if !payload.is_instance(&registry::class(py, RecordId::CompiledModelSqlTestPayload)?)? {
         return Ok(test.clone());
     }
     let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;

@@ -70,7 +70,15 @@ The same check fails when the workspace version, the `pyproject.toml` version an
   `import(MODULE)?.getattr("name")`, or written as a `("sqlbuild.module", "name")` pair;
 - module paths are never built at runtime: a `format!` or `concat!` template may not start with
   `sqlbuild.` or with a `{..PACKAGE..}.`/`{..MODULE..}.` constant. Write the complete module
-  path as a constant instead.
+  path as a constant instead;
+- every row of the host table (`bindings/_helpers/native_host/`) must resolve as an attribute of
+  `sqlbuild._native_host`.
+
+Staying-Python entry points (adapter, user code, executor and runtime, third-party and public
+facade) are reached through the host table and `native_host::host::entry`, which imports only
+`sqlbuild._native_host`. Classes, enums, errors and functions `sqlbuild._native` registers are
+reached through the typed registry (`records::registry` with `RecordId`, `ErrorId` and
+`NativeAttr`), never by module path.
 
 ## Compiler
 

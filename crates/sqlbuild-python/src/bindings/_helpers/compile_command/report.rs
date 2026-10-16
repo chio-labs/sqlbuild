@@ -20,12 +20,12 @@ use crate::bindings::_helpers::compile_outputs::json_report::{
 };
 use crate::bindings::_helpers::discovery::constants::SQL_HOOK_OUTPUT_FIELDS;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const HOOK_IDENTITIES_MODULE: &str = "sqlbuild.compiler.python_nodes.main._hook_identities";
-const COMPILE_MODELS_MODULE: &str = "sqlbuild._native";
 const METADATA_MODULE: &str = "importlib.metadata";
 const TARGET_DIRECTORY: &str = "target";
 const COMPILED_DIRECTORY: &str = "compiled";
@@ -661,7 +661,7 @@ fn hook_definitions<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyL
     }
     let functions: Bound<'py, PyAny> = project.getattr("hook_functions")?;
     let identities: Bound<'py, PyAny> =
-        imported(py, HOOK_IDENTITIES_MODULE, "build_hook_identities")?.call1((&functions,))?;
+        host::entry(py, UserCodeHost::BuildHookIdentities)?.call1((&functions,))?;
     for hook in functions.try_iter()? {
         let hook: Bound<'py, PyAny> = hook?;
         let identity: Bound<'py, PyAny> = identities.get_item(hook.getattr("name")?)?;
@@ -761,21 +761,18 @@ fn audit_resource<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
 fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = test.py();
     let payload: Bound<'py, PyAny> = test.getattr("payload")?;
-    let expected_models: Bound<'py, PyList> = if payload.is_instance(&imported(
-        py,
-        NATIVE_RECORDS_MODULE,
-        "CompiledModelSqlTestPayload",
-    )?)? {
-        PyList::new(
-            py,
-            payload
-                .getattr("expected_model_names")?
-                .try_iter()?
-                .collect::<PyResult<Vec<_>>>()?,
-        )?
-    } else {
-        PyList::empty(py)
-    };
+    let expected_models: Bound<'py, PyList> =
+        if payload.is_instance(&registry::class(py, RecordId::CompiledModelSqlTestPayload)?)? {
+            PyList::new(
+                py,
+                payload
+                    .getattr("expected_model_names")?
+                    .try_iter()?
+                    .collect::<PyResult<Vec<_>>>()?,
+            )?
+        } else {
+            PyList::empty(py)
+        };
     let test_file_path: Bound<'py, PyAny> = test.getattr("test_file")?.getattr("relative_path")?;
     let item: Bound<'py, PyDict> = dict(
         py,
@@ -1042,7 +1039,7 @@ pub(crate) fn format_compile_error_json<'py>(
         )
     };
     let diagnostic: Bound<'py, PyAny> = call_with(
-        &imported(py, COMPILE_MODELS_MODULE, "CompilerDiagnostic")?,
+        &registry::class(py, RecordId::CompilerDiagnostic)?,
         &[
             ("phase", any(py, "compile")?),
             ("severity", any(py, ERROR_SEVERITY)?),

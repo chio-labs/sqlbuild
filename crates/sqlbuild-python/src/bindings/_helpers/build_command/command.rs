@@ -15,17 +15,17 @@ use crate::bindings::_helpers::build_command::planning::{
     compile_build_plan, enforce_build_plan_policies, run_defer_clone_prephase,
     write_compile_target, write_plan_text,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
-
-const TIMING_TRACKER_MODULE: &str = "sqlbuild._native";
-const RESOURCE_REPORTING_MODULE: &str = "sqlbuild.diagnostics.main.process_resource_reporting";
-const DEADLINE_MODULE: &str = "sqlbuild.runtime.execution_limits.main.execution_deadline_scope";
-const PROVIDER_SESSION_MODULE: &str = "sqlbuild.provider.main.session";
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::ids::NativeAttr;
+use crate::bindings::_helpers::records::registry;
 
 fn run_with_providers(context: &BuildContext<'_>) -> PyResult<i32> {
     let py: Python<'_> = context.py();
     let session: Bound<'_, PyAny> = call_with(
-        &imported(py, PROVIDER_SESSION_MODULE, "build_provider_session")?,
+        &host::entry(py, UserCodeHost::BuildProviderSession)?,
         &[(
             "discovered_providers",
             context.get("discovered_inputs")?.getattr("providers")?,
@@ -71,7 +71,7 @@ fn run_within_limits(
     let context: BuildContext<'_> = resolve_build_context(request, tracker, started)?;
     let limits: Bound<'_, PyAny> = context.get("execution_limits")?;
     let deadline: Bound<'_, PyAny> = call_with(
-        &imported(py, DEADLINE_MODULE, "execution_deadline_scope")?,
+        &host::entry(py, ExecutorHost::ExecutionDeadlineScope)?,
         &[
             (
                 "max_duration_seconds",
@@ -90,9 +90,9 @@ fn run_within_limits(
 #[pyo3(signature = (*, request))]
 fn run_build_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let tracker: Bound<'_, PyAny> =
-        imported(py, TIMING_TRACKER_MODULE, "BuildPhaseTimingTracker")?.call0()?;
+        registry::native(py, NativeAttr::BuildPhaseTimingTracker)?.call0()?;
     let reporting: Bound<'_, PyAny> = call_with(
-        &imported(py, RESOURCE_REPORTING_MODULE, "process_resource_reporting")?,
+        &host::entry(py, ExecutorHost::ProcessResourceReporting)?,
         &[("enabled", request.getattr("debug")?)],
     )?;
     within(&reporting, |_| {

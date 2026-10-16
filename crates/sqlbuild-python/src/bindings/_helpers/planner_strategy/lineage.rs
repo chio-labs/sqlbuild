@@ -17,9 +17,8 @@ use crate::bindings::_helpers::model_config::config_values::config_str;
 use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, microbatch_limit_config,
 };
-use crate::bindings::_helpers::planner_strategy::values::{
-    COMPILE_EXCEPTIONS_MODULE, PLANNER_EXCEPTIONS_MODULE, input_error, text,
-};
+use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
+use crate::bindings::_helpers::records::ids::ErrorId;
 
 const MICROBATCH_MODE: &str = "microbatch";
 
@@ -106,7 +105,7 @@ fn lineage_error(py: Python<'_>, failure: LineageFailure<PyErr>) -> PyErr {
         LineageFailure::Graph(error) => error,
         LineageFailure::NotInLineage { model, input } => input_error(
             py,
-            (PLANNER_EXCEPTIONS_MODULE, "PlannerInputError"),
+            ErrorId::PlannerInput,
             &LineageFailure::<PyErr>::message(&model, &input),
             Some(LineageFailure::<PyErr>::code()),
         ),
@@ -158,7 +157,7 @@ fn reject_capped_watermark_inputs<'py>(
         Ok(None) => Ok(()),
         Ok(Some(capped)) => Err(input_error(
             py,
-            (COMPILE_EXCEPTIONS_MODULE, "CompileInputError"),
+            ErrorId::CompileInput,
             &capped.message(),
             None,
         )),

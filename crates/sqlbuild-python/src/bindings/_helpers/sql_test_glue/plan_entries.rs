@@ -5,10 +5,12 @@ use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::describe_missing_expected_columns;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::sql_test_glue::constants::{COMPILE_TYPES, PLAN_MODELS};
+use crate::bindings::_helpers::sql_test_glue::constants::COMPILE_TYPES;
 use crate::bindings::_helpers::sql_test_glue::constants::{TABLE_FN, UDF};
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
 
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
 
 fn prefixed_names<'py>(test: &Bound<'py, PyAny>, prefix: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -124,7 +126,7 @@ pub(super) fn entry<'py>(
     fields.set_item("chain", plan.getattr("chain")?)?;
     fields.set_item("assertions", plan.getattr("assertions")?)?;
     fields.set_item("sql_analysis_enabled", analysis)?;
-    imported(py, PLAN_MODELS, "SqlTestPlanEntry")?.call((), Some(&fields))
+    registry::class(py, RecordId::SqlTestPlanEntry)?.call((), Some(&fields))
 }
 
 pub(super) fn expected_diagnostics(

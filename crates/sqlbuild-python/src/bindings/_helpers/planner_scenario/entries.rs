@@ -1,15 +1,13 @@
 //! Existing seed and function plan dataclass construction.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_UNKNOWN_SEED;
 use crate::bindings::_helpers::planner_scenario::{
-    models::SqlContext,
-    sql::required_target,
-    values::{MODELS, error},
+    models::SqlContext, sql::required_target, values::error,
 };
+use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
@@ -44,7 +42,7 @@ pub(super) fn seed_entries<'py>(
             "seed",
         )?;
         result.push(call_with(
-            &imported(py, MODELS, "SeedPlanEntry")?,
+            &registry::class(py, RecordId::SeedPlanEntry)?,
             &[
                 ("key", seed.getattr("key")?),
                 ("name", seed.getattr("name")?),
@@ -55,7 +53,7 @@ pub(super) fn seed_entries<'py>(
                 ),
                 (
                     "columns",
-                    imported(py, "sqlbuild._native", "extract_seed_columns")?.call1((&seed,))?,
+                    registry::native(py, NativeAttr::ExtractSeedColumns)?.call1((&seed,))?,
                 ),
                 (
                     "csv_settings",
@@ -75,7 +73,7 @@ pub(super) fn function_entry<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = function.py();
     let body = call_with(
-        &imported(py, "sqlbuild._native", "resolve_function_sql")?,
+        &registry::native(py, NativeAttr::ResolveFunctionSql)?,
         &[
             ("adapter", context.adapter.clone()),
             ("function", function.clone()),
@@ -110,12 +108,8 @@ pub(super) fn function_entry<'py>(
     fields.push(("body_sql", body));
     fields.push((
         "fingerprint_query_sql",
-        imported(
-            py,
-            "sqlbuild._native",
-            "build_compiled_function_fingerprint_sql",
-        )?
-        .call1((function,))?,
+        registry::native(py, NativeAttr::BuildCompiledFunctionFingerprintSql)?
+            .call1((function,))?,
     ));
     for name in [
         "fingerprint_destination",
@@ -128,7 +122,7 @@ pub(super) fn function_entry<'py>(
     ] {
         fields.push((name, function.getattr(name)?));
     }
-    call_with(&imported(py, MODELS, "FunctionPlanEntry")?, &fields)
+    call_with(&registry::class(py, RecordId::FunctionPlanEntry)?, &fields)
 }
 
 #[pyfunction]

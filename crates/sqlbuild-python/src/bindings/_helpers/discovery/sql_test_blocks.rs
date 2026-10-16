@@ -1,6 +1,5 @@
 //! SQL `TEST(...)` blocks validated natively and built as discovery records.
 
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -10,21 +9,16 @@ use sqlbuild_model_config::sql_tests::models::{SqlTestBlock, SqlTestCase};
 use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue};
 
 use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_value, sql_value};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::registry;
 
-const NATIVE_RECORDS_MODULE: &str = "sqlbuild._native";
-
-const MODELS_MODULE: &str = "sqlbuild._native";
-const ERRORS_MODULE: &str = "sqlbuild._native";
 const TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-const SQL_VALUE_TYPES_MODULE: &str = "sqlbuild._native";
 
 pub(crate) type NativeBlock<'py> = (Bound<'py, PyDict>, String, Bound<'py, PyAny>);
 
 fn parse_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        py.import(ERRORS_MODULE)?
-            .getattr("SqlTestParseError")?
-            .call1((message,))?,
+        registry::error(py, ErrorId::SqlTestParse)?.call1((message,))?,
     ))
 }
 
@@ -50,9 +44,11 @@ fn case_record<'py>(
             [name.into_bound_py_any(py)?, sql_value(value, classes)?],
         )?);
     }
-    py.import(NATIVE_RECORDS_MODULE)?
-        .getattr("DiscoveredSqlTestCase")?
-        .call1((case.name.as_str(), PyTuple::new(py, values)?, case_index))
+    registry::class(py, RecordId::DiscoveredSqlTestCase)?.call1((
+        case.name.as_str(),
+        PyTuple::new(py, values)?,
+        case_index,
+    ))
 }
 
 fn block_record<'py>(
@@ -61,13 +57,12 @@ fn block_record<'py>(
     block: SqlTestBlock,
     classes: &SqlValueClasses<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let models = py.import(MODELS_MODULE)?;
-    let kind = py.import(SQL_VALUE_TYPES_MODULE)?.getattr("SqlValueKind")?;
+    let kind = registry::class(py, RecordId::SqlValueKind)?;
     let parameters = block
         .parameters
         .iter()
         .map(|parameter| {
-            models.getattr("SqlTestParameterDeclaration")?.call1((
+            registry::class(py, RecordId::SqlTestParameterDeclaration)?.call1((
                 parameter.name.as_str(),
                 kind.call1((parameter.value_type,))?,
                 parameter.nullable,
@@ -96,7 +91,7 @@ fn block_record<'py>(
     keywords.set_item("cursor_start", block.cursor_start)?;
     keywords.set_item("cursor_end", block.cursor_end)?;
     keywords.set_item("sql_body_span", &native.2)?;
-    shape_class(models.as_any(), "DiscoveredSqlTestBlock")?.call((), Some(&keywords))
+    registry::class(py, RecordId::DiscoveredSqlTestBlock)?.call((), Some(&keywords))
 }
 
 /// Each `(header, sql_body, span)` block of a SQL test file as a `DiscoveredSqlTestBlock`.

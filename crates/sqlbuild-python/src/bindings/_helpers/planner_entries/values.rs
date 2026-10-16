@@ -1,47 +1,41 @@
 //! Python boundary values shared by plan entry and plan output assembly.
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
-use crate::bindings::_helpers::compiler_records::shape_classes::shape_class_at;
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
+use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyString;
 
-pub(super) const NATIVE_MODULE: &str = "sqlbuild._native";
-pub(super) const PLANNER_MODELS: &str = "sqlbuild._native";
-pub(super) const PLANNER_TYPES: &str = "sqlbuild._native";
-pub(super) const PLANNER_EXCEPTIONS: &str = "sqlbuild._native";
 pub(super) const MICROBATCH_CONCURRENCY_MESSAGE: &str =
     "batch_concurrency > 1 requires concurrent microbatches; selected model(s): ";
-pub(super) const COMPILE_EXCEPTIONS: &str = "sqlbuild._native";
 pub(super) const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
-pub(super) const COMPILE_MODELS: &str = "sqlbuild._native";
-pub(super) const DISCOVERY_MODELS: &str = "sqlbuild._native";
 
 /// `sqlbuild._native.name(**pairs)`.
 pub(super) fn native<'py>(
     py: Python<'py>,
-    name: &str,
+    name: impl Into<NativeItem>,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&imported(py, NATIVE_MODULE, name)?, pairs)
+    call_with(&registry::item(py, name)?, pairs)
 }
 
 /// The planner record `name(**pairs)`.
 pub(super) fn planner_model<'py>(
     py: Python<'py>,
-    name: &str,
+    name: RecordId,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&shape_class_at(py, PLANNER_MODELS, name)?, pairs)
+    call_with(&registry::class(py, name)?, pairs)
 }
 
 /// One member of a planner enumeration.
 pub(super) fn planner_type<'py>(
     py: Python<'py>,
-    class: &str,
+    class: RecordId,
     member: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(py, PLANNER_TYPES, class)?.getattr(member)
+    registry::member(py, class, member)
 }
 
 /// A Python string.
@@ -71,11 +65,11 @@ pub(super) fn replaced<'py>(
 /// `class(message, **fields)` from `module`, as a raised error.
 pub(super) fn error_of(
     py: Python<'_>,
-    (module, class): (&str, &str),
+    class: ErrorId,
     message: &str,
     fields: &[(&str, Bound<'_, PyAny>)],
 ) -> PyErr {
-    match imported(py, module, class)
+    match registry::error(py, class)
         .and_then(|class| class.call((message,), Some(&keywords(py, fields)?)))
     {
         Ok(error) => PyErr::from_value(error),
