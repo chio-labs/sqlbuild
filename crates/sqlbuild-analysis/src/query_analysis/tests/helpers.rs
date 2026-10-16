@@ -543,6 +543,25 @@ pub(crate) fn borrowed_facts_preserve_union_dependencies_and_join_nullability() 
         polyglot_sql::ProjectionNullability::NonNull
     );
     let expression = polyglot_sql::parse_one(
+        "SELECT order_id FROM orders UNION ALL BY NAME SELECT customer_id AS extra_id, customer_id AS ORDER_ID FROM customers",
+        polyglot_sql::DialectType::Snowflake,
+    ).expect("valid SQL");
+    let facts = crate::query_analysis::borrowed_facts::infer(
+        &expression,
+        Some(&schema),
+        polyglot_sql::DialectType::Snowflake,
+    );
+    assert_eq!(
+        facts
+            .iter()
+            .map(|fact| (fact.name.as_str(), fact.nullability, fact.upstream.len()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("order_id", polyglot_sql::ProjectionNullability::NonNull, 2),
+            ("extra_id", polyglot_sql::ProjectionNullability::Nullable, 1),
+        ]
+    );
+    let expression = polyglot_sql::parse_one(
         "SELECT o.order_id, c.customer_id FROM orders o LEFT JOIN customers c ON o.order_id = c.customer_id",
         polyglot_sql::DialectType::Snowflake,
     ).expect("valid SQL");

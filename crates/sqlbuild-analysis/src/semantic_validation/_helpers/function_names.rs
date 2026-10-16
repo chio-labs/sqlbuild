@@ -4,10 +4,10 @@ use crate::semantic_validation::models::FunctionProbes;
 use crate::semantic_validation::types::ProbeKey;
 use polyglot_sql::{Dialect, DialectType, Expression, ValidationError};
 use polyglot_sql_function_catalogs::{CatalogSink, FunctionNameCase, FunctionSignature};
+use rustc_hash::{FxHashMap, FxHashSet};
 use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
 use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
 use sqlbuild_sqltext::sql_scan::models::{QuotePolicy, Unclosed};
-use std::collections::{HashMap, HashSet};
 use std::mem::Discriminant;
 use std::sync::{LazyLock, OnceLock, PoisonError};
 
@@ -37,20 +37,21 @@ const NOT_KEYWORD: &str = "NOT";
 const MATERIALIZED_KEYWORD: &str = "MATERIALIZED";
 const DISTINCT_KEYWORD: &str = "DISTINCT";
 
-type SpellingIndex = HashMap<Signature, Vec<String>>;
+type SpellingIndex = FxHashMap<Signature, Vec<String>>;
 
-static KEYWORDS: LazyLock<HashSet<&'static str>> =
+static KEYWORDS: LazyLock<FxHashSet<&'static str>> =
     LazyLock::new(|| NON_CALL_KEYWORDS.split_whitespace().collect());
-static EXPRESSION_STARTS: LazyLock<HashSet<&'static str>> =
+static EXPRESSION_STARTS: LazyLock<FxHashSet<&'static str>> =
     LazyLock::new(|| EXPRESSION_KEYWORDS.split_whitespace().collect());
-static CLAUSE_KEYWORDS: LazyLock<HashSet<&'static str>> =
+static CLAUSE_KEYWORDS: LazyLock<FxHashSet<&'static str>> =
     LazyLock::new(|| CLAUSE_KEYWORD_LIST.split_whitespace().collect());
 static ROOT_FRAME: Frame = Frame {
     select_seen: false,
     clause: Clause::Other,
 };
-static SNOWFLAKE: LazyLock<HashSet<String>> = LazyLock::new(|| accepted_names(SNOWFLAKE_FUNCTIONS));
-static DUCKDB: LazyLock<HashSet<String>> = LazyLock::new(|| {
+static SNOWFLAKE: LazyLock<FxHashSet<String>> =
+    LazyLock::new(|| accepted_names(SNOWFLAKE_FUNCTIONS));
+static DUCKDB: LazyLock<FxHashSet<String>> = LazyLock::new(|| {
     let mut sink: CatalogNames = CatalogNames::default();
     polyglot_sql_function_catalogs::register_enabled_catalogs(&mut sink);
     sink.names
@@ -106,7 +107,7 @@ enum Signature {
 /// Upper-case DuckDB names from the SQL library's introspected function catalogue.
 #[derive(Default)]
 struct CatalogNames {
-    names: HashSet<String>,
+    names: FxHashSet<String>,
 }
 
 /// Incremental byte-to-character position, so locating every call stays linear in the SQL.
@@ -185,7 +186,7 @@ impl FunctionProbes {
     }
 }
 
-fn accepted_names(source: &str) -> HashSet<String> {
+fn accepted_names(source: &str) -> FxHashSet<String> {
     source
         .lines()
         .map(str::trim)
@@ -194,7 +195,7 @@ fn accepted_names(source: &str) -> HashSet<String> {
         .collect()
 }
 
-fn accepted(dialect: DialectType) -> Option<&'static HashSet<String>> {
+fn accepted(dialect: DialectType) -> Option<&'static FxHashSet<String>> {
     match dialect {
         DialectType::Snowflake => Some(&SNOWFLAKE),
         DialectType::DuckDB => Some(&DUCKDB),
@@ -483,7 +484,7 @@ fn spelling_index(dialect: DialectType, arity: usize) -> Option<&'static Spellin
         _ => return None,
     };
     Some(indexes.get(arity)?.get_or_init(|| {
-        let mut index: SpellingIndex = HashMap::new();
+        let mut index: SpellingIndex = FxHashMap::default();
         for name in names {
             if let Some(signature) = parsed_signature(dialect, name, arity) {
                 index.entry(signature).or_default().push(name.clone());

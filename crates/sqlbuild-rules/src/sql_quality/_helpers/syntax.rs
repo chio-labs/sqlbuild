@@ -1,12 +1,11 @@
 //! Shared syntax helpers for SQL quality Rules.
 
-use std::collections::HashMap;
-
 use polyglot_sql::expressions::{Column, Select, Star};
 use polyglot_sql::tokens::{Token, TokenType};
 use polyglot_sql::{Expression, ExpressionWalk};
 
 use crate::sql_quality::constants::MIN_REMOVABLE_OUTPUTS;
+use rustc_hash::FxHashMap;
 
 /// One projection of a select list.
 pub(super) enum Projection<'a> {
@@ -83,11 +82,11 @@ pub(super) fn sources(select: &Select) -> Vec<(String, Option<String>, &Expressi
 }
 
 /// Token index of the SELECT opening each `name AS (SELECT` CTE body, by lower-cased name.
-pub(super) fn cte_select_tokens(tokens: &[Token]) -> HashMap<String, usize> {
+pub(super) fn cte_select_tokens(tokens: &[Token]) -> FxHashMap<String, usize> {
     let significant: Vec<usize> = (0..tokens.len())
         .filter(|&index| !is_trivia(&tokens[index]))
         .collect();
-    let mut found: HashMap<String, usize> = HashMap::new();
+    let mut found: FxHashMap<String, usize> = FxHashMap::default();
     for window in significant.windows(4) {
         let [name_index, as_index, paren_index, select_index] = window else {
             continue;

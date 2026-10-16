@@ -1,7 +1,6 @@
 //! SQBRSQL042: output columns of non-final CTEs that no later step reads.
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
 
 use polyglot_sql::expressions::{Cte, JoinKind, Select};
 use polyglot_sql::scope::walk_in_scope;
@@ -18,6 +17,7 @@ use crate::sql_quality::syntax::{
     Projection, columns, cte_select_tokens, lower, projection_removal, projections, qualifier,
     sources,
 };
+use rustc_hash::{FxHashMap, FxHashSet};
 use sqlbuild_analysis::sql_tokens::main::projection_spans::projection_spans;
 
 const HARNESS_PREFIX: &str = "__";
@@ -27,7 +27,7 @@ const LAYOUT_FIX_REFUSAL: &str = "The projection list could not be mapped to aut
 /// What one later step reads from a CTE.
 #[derive(Default)]
 struct Usage {
-    names: HashSet<String>,
+    names: FxHashSet<String>,
     everything: bool,
     passes_to: Vec<String>,
     read: bool,
@@ -66,8 +66,8 @@ pub(crate) fn diagnostics(request: &QualityRequest<'_>) -> Vec<LintDiagnostic> {
         terminal.with = None;
         let terminal: Expression = Expression::Select(Box::new(terminal));
         let names: Vec<String> = with.ctes.iter().map(|cte| lower(&cte.alias.name)).collect();
-        let used: HashMap<String, Usage> = reads(&with.ctes, &names, &terminal);
-        let select_tokens: HashMap<String, usize> = cte_select_tokens(request.tokens);
+        let used: FxHashMap<String, Usage> = reads(&with.ctes, &names, &terminal);
+        let select_tokens: FxHashMap<String, usize> = cte_select_tokens(request.tokens);
         for (index, cte) in with
             .ctes
             .iter()
@@ -94,15 +94,15 @@ pub(crate) fn diagnostics(request: &QualityRequest<'_>) -> Vec<LintDiagnostic> {
 }
 
 /// Names each CTE's later readers use, following `SELECT *` pass-through to the reader.
-fn reads(ctes: &[Cte], names: &[String], terminal: &Expression) -> HashMap<String, Usage> {
+fn reads(ctes: &[Cte], names: &[String], terminal: &Expression) -> FxHashMap<String, Usage> {
     let bodies: Vec<(Option<String>, &Expression)> = ctes
         .iter()
         .map(|cte| (Some(lower(&cte.alias.name)), &cte.this))
         .chain(std::iter::once((None, terminal)))
         .collect();
-    let known: HashSet<&str> = names.iter().map(String::as_str).collect();
-    let outputs: Vec<Option<HashSet<String>>> = ctes.iter().map(output_names).collect();
-    let mut readers: HashMap<String, Vec<usize>> = HashMap::new();
+    let known: FxHashSet<&str> = names.iter().map(String::as_str).collect();
+    let outputs: Vec<Option<FxHashSet<String>>> = ctes.iter().map(output_names).collect();
+    let mut readers: FxHashMap<String, Vec<usize>> = FxHashMap::default();
     for (index, (_, body)) in bodies.iter().enumerate() {
         for name in read_relations(body) {
             if known.contains(name.as_str()) {
@@ -110,7 +110,7 @@ fn reads(ctes: &[Cte], names: &[String], terminal: &Expression) -> HashMap<Strin
             }
         }
     }
-    let mut usage: HashMap<String, Usage> = HashMap::new();
+    let mut usage: FxHashMap<String, Usage> = FxHashMap::default();
     for (index, name) in names.iter().enumerate() {
         let mut current: Usage = Usage::default();
         if index + 1 == names.len() {
@@ -146,7 +146,7 @@ fn reads(ctes: &[Cte], names: &[String], terminal: &Expression) -> HashMap<Strin
 }
 
 /// The output names of a CTE, or None when a star or unnamed projection hides them.
-fn output_names(cte: &Cte) -> Option<HashSet<String>> {
+fn output_names(cte: &Cte) -> Option<FxHashSet<String>> {
     let Expression::Select(select) = &cte.this else {
         return None;
     };
@@ -159,7 +159,7 @@ fn output_names(cte: &Cte) -> Option<HashSet<String>> {
         .collect()
 }
 
-fn read_relations(body: &Expression) -> HashSet<String> {
+fn read_relations(body: &Expression) -> FxHashSet<String> {
     body.dfs()
         .filter_map(|node| match node {
             Expression::Table(table) => Some(lower(&table.name.name)),
@@ -171,13 +171,13 @@ fn read_relations(body: &Expression) -> HashSet<String> {
 /// The CTE whose readers are being inspected.
 struct Target<'a> {
     name: &'a str,
-    outputs: Option<&'a HashSet<String>>,
+    outputs: Option<&'a FxHashSet<String>>,
 }
 
 fn reader_usage(target: &Target<'_>, reader: Option<String>, body: &Expression) -> Usage {
     let name: &str = target.name;
     let mut usage: Usage = Usage::default();
-    let mut aliases: HashSet<String> = HashSet::new();
+    let mut aliases: FxHashSet<String> = FxHashSet::default();
     let mut top_level_star: bool = false;
     for node in body.dfs() {
         let Expression::Select(select) = node else {
@@ -254,7 +254,7 @@ fn reader_usage(target: &Target<'_>, reader: Option<String>, body: &Expression) 
 }
 
 /// Whether a reader consumes whole rows: a nested star, `COLUMNS(...)`, or the alias itself.
-fn reads_as_row(select: &Select, local: &[String], outputs: Option<&HashSet<String>>) -> bool {
+fn reads_as_row(select: &Select, local: &[String], outputs: Option<&FxHashSet<String>>) -> bool {
     for clause in clause_roots(select) {
         for node in walk_in_scope(clause, false) {
             if reads_row_at(select, node, local, outputs) {
@@ -269,7 +269,7 @@ fn reads_row_at(
     select: &Select,
     node: &Expression,
     local: &[String],
-    outputs: Option<&HashSet<String>>,
+    outputs: Option<&FxHashSet<String>>,
 ) -> bool {
     match node {
         Expression::Star(star) => {
@@ -308,12 +308,12 @@ fn clause_roots(select: &Select) -> Vec<&Expression> {
 }
 
 /// Lateral alias reuse: a later projection or a clause of the CTE reading an earlier output.
-fn self_reads(body: &Expression) -> HashSet<String> {
-    let mut reads: HashSet<String> = HashSet::new();
+fn self_reads(body: &Expression) -> FxHashSet<String> {
+    let mut reads: FxHashSet<String> = FxHashSet::default();
     let Expression::Select(select) = body else {
         return reads;
     };
-    let mut earlier: HashSet<String> = HashSet::new();
+    let mut earlier: FxHashSet<String> = FxHashSet::default();
     for item in projections(select) {
         if let Projection::Named { name, expression } = item {
             for read in unqualified_reads(expression) {
@@ -357,7 +357,7 @@ fn unqualified_reads(expression: &Expression) -> Vec<String> {
 
 fn unused_outputs(
     request: &QualityRequest<'_>,
-    select_tokens: &HashMap<String, usize>,
+    select_tokens: &FxHashMap<String, usize>,
     outputs: CteOutputs<'_>,
 ) -> Vec<LintDiagnostic> {
     let CteOutputs { cte, name, usage } = outputs;
@@ -381,7 +381,7 @@ fn unused_outputs(
         .get(name)
         .map(|&select_token| projection_spans(request.tokens, select_token))
         .unwrap_or_default();
-    let grouped: HashSet<String> = select
+    let grouped: FxHashSet<String> = select
         .group_by
         .iter()
         .flat_map(|group| group.expressions.iter())

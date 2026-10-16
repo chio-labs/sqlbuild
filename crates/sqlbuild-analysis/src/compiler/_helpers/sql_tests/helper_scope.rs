@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use sqlbuild_core::graph_walk::main::depth_first_postorder::depth_first_postorder;
 
 use polyglot_sql::Dialect;
+use rustc_hash::FxHashSet;
 
 use crate::compiler::_helpers::sql_tests::cte_rename::defined_cte_keys;
 use crate::compiler::_helpers::sql_tests::cte_slices::SliceDialect;
@@ -549,7 +550,7 @@ fn is_generated_cte_name(name: &str) -> bool {
 /// Distinct lowercase identifiers outside strings and comments, in first-appearance order.
 fn identifier_tokens(sql: &str, patterns: &SqlTestPatterns) -> Vec<String> {
     let protected = protected_ranges(&patterns.lexical, sql);
-    let mut seen: HashSet<String> = HashSet::new();
+    let mut seen: FxHashSet<String> = FxHashSet::default();
     let mut tokens: Vec<String> = Vec::new();
     let mut push = |token: &str| {
         let lowered = token.to_ascii_lowercase();

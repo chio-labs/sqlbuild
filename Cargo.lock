@@ -1148,6 +1148,7 @@ dependencies = [
  "polyglot-sql-function-catalogs",
  "rayon",
  "regex",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2",
@@ -1175,6 +1176,7 @@ version = "0.156.1"
 dependencies = [
  "blake3",
  "rayon",
+ "rustc-hash",
  "serde_json",
  "sha2",
  "sqlbuild-core",
@@ -1315,6 +1317,7 @@ dependencies = [
  "polyglot-sql",
  "rayon",
  "regex",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2",

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use polyglot_sql::tokens::{Span, Token, TokenType};
 
@@ -9,6 +9,7 @@ use crate::sql_lint::_helpers::engine::{
 };
 use crate::sql_lint::constants::RELATION_MODIFIER_KEYWORDS;
 use crate::sql_lint::models::{AdditionalFactOptions, AdditionalQueryFacts};
+use rustc_hash::{FxHashMap, FxHashSet};
 use sqlbuild_core::constants::{CLOSE_PAREN, OPEN_PAREN, SQL_WILDCARD};
 
 const COUNT_ONE_LITERAL: &str = "1";
@@ -32,7 +33,7 @@ struct QuerySlice<'a> {
 
 struct ReferenceFactContext<'a> {
     query: &'a QuerySlice<'a>,
-    outer_relations: &'a HashSet<String>,
+    outer_relations: &'a FxHashSet<String>,
     external_identifiers: &'a HashSet<String>,
     query_start: usize,
     query_end: usize,
@@ -42,7 +43,7 @@ struct ReferenceCandidateContext<'a> {
     tokens: &'a [Token],
     references: &'a [usize],
     external_identifiers: &'a HashSet<String>,
-    projection_aliases: &'a HashMap<String, usize>,
+    projection_aliases: &'a FxHashMap<String, usize>,
 }
 
 struct SelectFactContext<'a> {
@@ -751,8 +752,8 @@ fn unqualified_reference(
     .then_some(index)
 }
 
-fn relation_names(tokens: &[Token], relation_clause: &[usize]) -> HashSet<String> {
-    let mut names: HashSet<String> = HashSet::new();
+fn relation_names(tokens: &[Token], relation_clause: &[usize]) -> FxHashSet<String> {
+    let mut names: FxHashSet<String> = FxHashSet::default();
     for (position, &index) in relation_clause.iter().enumerate() {
         let starts_relation = position == 0
             || matches!(
@@ -801,8 +802,8 @@ fn outer_relation_names(
     depths: &[usize],
     select_index: usize,
     depth: usize,
-) -> HashSet<String> {
-    let mut names: HashSet<String> = HashSet::new();
+) -> FxHashSet<String> {
+    let mut names: FxHashSet<String> = FxHashSet::default();
     for outer_select in (0..select_index).filter(|&index| {
         tokens[index].token_type == TokenType::Select
             && depths[index] < depth
@@ -1022,8 +1023,8 @@ fn is_context_value(token: &Token) -> bool {
     )
 }
 
-fn projection_alias_positions(tokens: &[Token], projection: &[usize]) -> HashMap<String, usize> {
-    let mut aliases: HashMap<String, usize> = HashMap::new();
+fn projection_alias_positions(tokens: &[Token], projection: &[usize]) -> FxHashMap<String, usize> {
+    let mut aliases: FxHashMap<String, usize> = FxHashMap::default();
     for window in projection.windows(2) {
         if tokens[window[0]].token_type == TokenType::As && is_identifier(&tokens[window[1]]) {
             aliases.insert(tokens[window[1]].text.to_ascii_lowercase(), window[1]);
@@ -1519,7 +1520,7 @@ fn ambiguous_order_direction_spans(tokens: &[Token], direct: &[usize]) -> Vec<Sp
 }
 
 fn duplicate_alias_spans(tokens: &[Token], indices: &[usize]) -> Vec<Span> {
-    let mut seen: HashSet<String> = HashSet::new();
+    let mut seen: FxHashSet<String> = FxHashSet::default();
     let mut duplicates: Vec<Span> = Vec::new();
     for window in indices.windows(2) {
         if tokens[window[0]].token_type != TokenType::As || !is_identifier(&tokens[window[1]]) {
