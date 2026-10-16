@@ -17,7 +17,6 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const GENERIC_DIALECT: &str = "generic";
 const UDF_PREFIX: &str = "__sqlbuild_udf_";
 
@@ -290,7 +289,7 @@ fn record_expression_shapes<'py>(
         )));
     }
     let unknown: Bound<'py, PyAny> =
-        imported(py, LINEAGE_TYPES_MODULE, "InferredNullability")?.getattr("UNKNOWN")?;
+        registry::class(py, RecordId::InferredNullability)?.getattr("UNKNOWN")?;
     for (source_input, shape) in sources.iter().zip(shapes) {
         if shape.is_none() {
             continue;

@@ -1201,11 +1201,7 @@ const R_INFERRED_COLUMN: RecordSpec = RecordSpec {
         FieldSpec::new("type", FieldDefault::None),
         FieldSpec::new(
             "nullability",
-            FieldDefault::Member(
-                "sqlbuild.compiler.lineage.types",
-                "InferredNullability",
-                "UNKNOWN",
-            ),
+            FieldDefault::NativeMember(RecordId::InferredNullability, "UNKNOWN"),
         ),
     ],
 };

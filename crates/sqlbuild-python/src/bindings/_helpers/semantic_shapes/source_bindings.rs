@@ -23,7 +23,6 @@ use crate::bindings::_helpers::semantic_shapes::shapes::{
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const GRAPHLIB_MODULE: &str = "graphlib";
@@ -156,10 +155,8 @@ fn rebound_models<'py>(
         .call1((graph,))?
         .call_method0("static_order")?;
     let query_class: Object<'py> = registry::class(py, RecordId::NativeColumnQuery)?;
-    let unknown: Object<'py> = py
-        .import(LINEAGE_TYPES_MODULE)?
-        .getattr("InferredNullability")?
-        .getattr("UNKNOWN")?;
+    let unknown: Object<'py> =
+        registry::class(py, RecordId::InferredNullability)?.getattr("UNKNOWN")?;
     let infer: Object<'py> = registry::native(py, NativeAttr::InferNativeQueryColumns)?;
     let mut affected: HashSet<String> = HashSet::new();
     let mut models: Vec<Object<'py>> = Vec::new();
@@ -303,9 +300,8 @@ fn validated_diagnostics<'py>(
     let skipped: Object<'py> = PyString::new(py, BINDING_UNKNOWN_TABLE_INTERNAL_CODE).into_any();
     let types = py.import(COMPILE_TYPES_MODULE)?;
     let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
-    let severity_class: Object<'py> = registry::class(types.py(), RecordId::DiagnosticSeverity)?;
-    let phase: Object<'py> =
-        registry::class(types.py(), RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
+    let severity_class: Object<'py> = registry::class(py, RecordId::DiagnosticSeverity)?;
+    let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
     let model_type: Object<'py> = types.getattr("CompiledResourceType")?.getattr("MODEL")?;
     let mut diagnostics: Vec<Object<'py>> = Vec::new();
     for ((model, request), result) in models.iter().zip(&requests).zip(results.try_iter()?) {

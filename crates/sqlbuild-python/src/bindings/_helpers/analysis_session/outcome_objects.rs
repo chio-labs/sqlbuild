@@ -12,7 +12,6 @@ use crate::bindings::_helpers::record_behaviours::lineage_facts::{
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const LINEAGE_NATIVE: &str = "native";
 
 type Object<'py> = Bound<'py, PyAny>;
@@ -140,9 +139,7 @@ fn inferred_columns<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
         return Ok(rows.clone());
     }
     let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability_class: Bound<'py, PyAny> = py
-        .import(LINEAGE_TYPES_MODULE)?
-        .getattr("InferredNullability")?;
+    let nullability_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     let mut columns: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in rows.try_iter()? {
         let (name, data_type, nullability): (

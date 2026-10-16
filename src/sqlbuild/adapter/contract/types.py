@@ -6,7 +6,7 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import Literal, Protocol
 
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild._native import InferredNullability
 
 type FunctionNullabilityRule = Callable[[tuple[InferredNullability, ...]], InferredNullability]
 type StatementSizeLimit = tuple[int, Literal["bytes", "characters"]]

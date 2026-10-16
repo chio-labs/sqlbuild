@@ -4,11 +4,10 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_analysis::lineage::models::{LineageColumn, LineageSource};
 
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const LOGGING_MODULE: &str = "logging";
 const LINEAGE_LOGGER: &str = "sqlbuild.lineage";
@@ -35,11 +34,10 @@ pub(crate) struct LineageClasses<'py> {
 
 impl<'py> LineageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
-        let types: Bound<'py, PyModule> = py.import(LINEAGE_TYPES_MODULE)?;
         let resource_type: Bound<'py, PyAny> = py
             .import(COMPILE_TYPES_MODULE)?
             .getattr("CompiledResourceType")?;
-        let nullability: Bound<'py, PyAny> = types.getattr("InferredNullability")?;
+        let nullability: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
         Ok(Self {
             qualified_column: registry::class(py, RecordId::QualifiedLineageColumn)?,
             lineage_source: registry::class(py, RecordId::ColumnLineageSource)?,
@@ -50,9 +48,9 @@ impl<'py> LineageClasses<'py> {
             column_fact: registry::class(py, RecordId::CompiledLineageColumnFact)?,
             source_fact: registry::class(py, RecordId::CompiledLineageSourceFact)?,
             compact_facts: registry::class(py, RecordId::CompactLineageFacts)?,
-            transform_kind: registry::class(types.py(), RecordId::ColumnTransformKind)?,
-            confidence: registry::class(types.py(), RecordId::ColumnLineageConfidence)?,
-            analysis_dialect: registry::class(types.py(), RecordId::PolyglotAnalysisDialect)?,
+            transform_kind: registry::class(py, RecordId::ColumnTransformKind)?,
+            confidence: registry::class(py, RecordId::ColumnLineageConfidence)?,
+            analysis_dialect: registry::class(py, RecordId::PolyglotAnalysisDialect)?,
             model_resource: resource_type.getattr("MODEL")?,
             unknown_nullability: nullability.getattr("UNKNOWN")?,
             nullability,

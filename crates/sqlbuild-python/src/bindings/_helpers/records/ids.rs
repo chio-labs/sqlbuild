@@ -275,6 +275,7 @@ native_ids! {
         IncrementalMode => "IncrementalMode",
         IncrementalStrategy => "IncrementalStrategy",
         InferredColumn => "InferredColumn",
+        InferredNullability => "InferredNullability",
         InitialValidFrom => "InitialValidFrom",
         IntegerValue => "IntegerValue",
         IntegrationLoaderConfig => "IntegrationLoaderConfig",

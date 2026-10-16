@@ -18,7 +18,6 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";
 const LEGACY_MODE: &str = "legacy";
 
@@ -53,9 +52,7 @@ fn infer_fixture_column_facts<'py>(
         .map_err(|reason| compiler_error(native_failure(PROJECTION_FACTS_CONTEXT, &reason)))?;
     let simple_types: HashMap<String, String> = facts.types.into_iter().collect();
     let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability_class: Bound<'py, PyAny> = py
-        .import(LINEAGE_TYPES_MODULE)?
-        .getattr("InferredNullability")?;
+    let nullability_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(columns.len());
     for (name, data_type, nullability) in columns {
         let data_type: Option<String> = data_type

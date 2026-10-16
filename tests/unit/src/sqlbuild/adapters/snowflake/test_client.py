@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from sqlbuild._native import FunctionArgument, FunctionReturnColumn
+from sqlbuild._native import FunctionArgument, FunctionReturnColumn, InferredNullability
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import (
@@ -25,7 +25,6 @@ from sqlbuild.adapter.contract.types import (
 )
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapters.snowflake._test_types import (
     SnowflakeConnectConfigTestCase,
     SnowflakeExpressionInferenceProfileTestCase,

@@ -79,6 +79,15 @@ const E_COLUMN_LINEAGE_CONFIDENCE: EnumSpec = EnumSpec {
         ("UNKNOWN", "unknown"),
     ],
 };
+const E_INFERRED_NULLABILITY: EnumSpec = EnumSpec {
+    name: "InferredNullability",
+    doc: "Conservative nullability state inferred for an output column.",
+    members: &[
+        ("NON_NULL", "non_null"),
+        ("NULLABLE", "nullable"),
+        ("UNKNOWN", "unknown"),
+    ],
+};
 const E_COLUMN_LINEAGE_MODE: EnumSpec = EnumSpec {
     name: "ColumnLineageMode",
     doc: "Column lineage analyzer mode.",
@@ -715,6 +724,7 @@ pub(crate) const COMPILER_ENUMS: &[EnumSpec] = &[
     E_COLUMN_TRANSFORM_KIND,
     E_COLUMN_LINEAGE_CONFIDENCE,
     E_COLUMN_LINEAGE_MODE,
+    E_INFERRED_NULLABILITY,
     E_POLYGLOT_ANALYSIS_DIALECT,
     E_MIGRATION_DISCOVERY,
     E_MIGRATION_COMPATIBILITY,

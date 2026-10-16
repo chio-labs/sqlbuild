@@ -34,7 +34,6 @@ const LINEAGE_RESOURCE_TYPES: [(&str, &str); 4] = [
     ("seed", "seed"),
     ("table_fn", "table_fn"),
 ];
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 
 /// Each query's `(succeeded, column rows, has star)`; a native internal failure raises.
 #[pyfunction]
@@ -72,9 +71,7 @@ fn infer_native_query_columns<'py>(
     )?;
     let query_columns: Bound<'py, PyAny> = registry::class(py, RecordId::NativeQueryColumns)?;
     let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability_class: Bound<'py, PyAny> = py
-        .import(LINEAGE_TYPES_MODULE)?
-        .getattr("InferredNullability")?;
+    let nullability_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     let mut analyses: Vec<Bound<'py, PyAny>> = Vec::with_capacity(rows.len());
     for (succeeded, columns, has_star) in rows {
         let columns: Bound<'py, PyAny> = match columns {

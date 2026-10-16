@@ -1,7 +1,6 @@
 """Public adapter conditional nullability inference operation."""
 
-from sqlbuild._native import infer_conditional_result_nullability
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild._native import InferredNullability, infer_conditional_result_nullability
 
 
 def conditional_result_nullability(

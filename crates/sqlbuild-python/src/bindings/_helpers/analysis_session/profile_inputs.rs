@@ -9,8 +9,9 @@ use crate::bindings::_helpers::analysis::binding_catalog::{
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const GENERIC_DIALECT: &str = "generic";
 const ADAPTER_RULE_ID: &str = "python";
 /// The nullability rules the native analysis knows, with their native rule ids.
@@ -53,9 +54,7 @@ pub(crate) fn nullability_rules(profile: &Bound<'_, PyAny>) -> PyResult<(Pairs, 
     if adapter.is_empty() {
         return Ok((rows, None));
     }
-    let nullability: Bound<'_, PyAny> = py
-        .import(LINEAGE_TYPES_MODULE)?
-        .getattr("InferredNullability")?;
+    let nullability: Bound<'_, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     Ok((rows, Some((adapter.unbind(), nullability.unbind()))))
 }
 

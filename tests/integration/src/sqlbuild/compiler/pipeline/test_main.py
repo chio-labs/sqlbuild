@@ -11,6 +11,7 @@ from sqlbuild._native import (
     CompilePipelineResult,
     DiscoveredProjectInputs,
     InferredColumn,
+    InferredNullability,
     ModelPlanEntry,
     RulesError,
     build_compiled_project,
@@ -21,7 +22,6 @@ from sqlbuild._native import (
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import (
     AppendCursorPipelineIntegrationTestCase,
     CompileProgressIntegrationTestCase,

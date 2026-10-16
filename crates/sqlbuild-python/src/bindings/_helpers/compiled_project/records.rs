@@ -15,7 +15,6 @@ use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
-const LINEAGE_TYPES_MODULE: &str = "sqlbuild.compiler.lineage.types";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const DECIMAL_KIND: &str = "decimal";
 const COLLECTION_KINDS: [&str; 2] = ["list", "set"];
@@ -387,7 +386,7 @@ pub(crate) fn record_model_analyses<'py>(
         .collect::<PyResult<_>>()?;
     let mut transferred: usize = NativeCompiledProject::record_view_analyses(project, views)?;
     let nullable: Bound<'py, PyAny> =
-        imported(py, LINEAGE_TYPES_MODULE, "InferredNullability")?.getattr("NULLABLE")?;
+        registry::class(py, RecordId::InferredNullability)?.getattr("NULLABLE")?;
     for model in &models {
         if model.is_instance_of::<NativeCompiledModel>() {
             continue;

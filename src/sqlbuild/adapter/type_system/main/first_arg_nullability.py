@@ -1,7 +1,6 @@
 """Public adapter unary nullability inference operation."""
 
-from sqlbuild._native import infer_first_arg_nullability
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild._native import InferredNullability, infer_first_arg_nullability
 
 
 def first_arg_nullability(args: tuple[InferredNullability, ...]) -> InferredNullability:

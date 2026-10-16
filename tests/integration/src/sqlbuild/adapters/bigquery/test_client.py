@@ -11,6 +11,7 @@ from sqlbuild._native import (
     FINGERPRINT_TABLE_NAME,
     Fingerprint,
     FingerprintSet,
+    InferredNullability,
     SourceFreshnessValueKind,
     normalize_source_freshness_data_version,
     read_latest_fingerprints,
@@ -31,7 +32,6 @@ from sqlbuild.adapter.contract.models import (
 )
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
-from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.integration.src.sqlbuild.adapters.bigquery._test_types import (
     BigQueryBuildFlowTestCase,
     BigQueryDeleteInsertCursorTestCase,

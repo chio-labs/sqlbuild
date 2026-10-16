@@ -11,6 +11,7 @@ from sqlbuild._native import (
     CompileSqlReference,
     ExpansionSpan,
     InferredColumn,
+    InferredNullability,
     ResolvedTimeTravelRetention,
     SourceLocation,
     SqlLexicalSyntax,
@@ -20,9 +21,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
-from sqlbuild.compiler.lineage.types import (
-    InferredNullability,
-)
 
 if TYPE_CHECKING:
     from sqlbuild._native import CompileInputsView

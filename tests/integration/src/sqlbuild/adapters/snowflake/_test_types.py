@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlbuild._native import TableType
+from sqlbuild._native import InferredNullability, TableType
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     QueryResult,
@@ -9,7 +9,6 @@ from sqlbuild.adapter.contract.models import (
     RowDiffSampleRow,
     SchemaDiffResult,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
 from sqlbuild.cost.types import CostStatus
 
 

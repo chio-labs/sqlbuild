@@ -713,11 +713,6 @@ rule = 1
 note = "Shape rule: data enums and aliases only (CostCapability, CostStatus), no logic; consumed by adapters/snowflake/classes/snowflake_adapter.py."
 
 [[stays]]
-path = "compiler/lineage/types.py"
-rule = 1
-note = "Shape rule: data enums and aliases only (InferredNullability), no logic; consumed by adapter/contract/types.py, adapter/type_system/main/conditional_result_nullability.py, adapter/type_system/main/first_arg_nullability.py and adapter/type_system/main/safe_cast_nullability.py, and read natively to build nullability results."
-
-[[stays]]
 path = "compiler/macro_bridge/models.py"
 rule = 2
 note = "Shape rule: data records only (ModuleSources), no logic; consumed by compiler/macro_bridge/_helpers/store_environment.py, compiler/macro_bridge/classes/macro_bridge.py."

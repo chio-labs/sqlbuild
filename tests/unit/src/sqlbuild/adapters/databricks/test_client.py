@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from sqlbuild._native import FunctionArgument, FunctionReturnColumn
+from sqlbuild._native import FunctionArgument, FunctionReturnColumn, InferredNullability
 from sqlbuild.adapter.contract.models import (
     ExpressionInferenceProfile,
     RelationInfo,
@@ -15,7 +15,6 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import FunctionNullabilityRule, LoaderLogicalType
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.compiler.compile.types import FunctionLanguage
-from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapters.databricks._test_types import (
     DatabricksDeltaDetailAgeTestCase,
     DatabricksExpressionInferenceProfileTestCase,

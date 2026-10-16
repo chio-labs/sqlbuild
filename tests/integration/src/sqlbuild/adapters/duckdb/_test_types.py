@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from sqlbuild._native import SeedCsvSettings
+from sqlbuild._native import InferredNullability, SeedCsvSettings
 from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
@@ -9,7 +9,6 @@ from sqlbuild.adapter.contract.models import (
     RowDiffTolerances,
     SchemaDiffResult,
 )
-from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 @dataclass(frozen=True)

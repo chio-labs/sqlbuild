@@ -1,11 +1,11 @@
 import pytest
 
+from sqlbuild._native import InferredNullability
 from sqlbuild.adapter.type_system.main.conditional_result_nullability import (
     conditional_result_nullability,
 )
 from sqlbuild.adapter.type_system.main.first_arg_nullability import first_arg_nullability
 from sqlbuild.adapter.type_system.main.safe_cast_nullability import safe_cast_nullability
-from sqlbuild.compiler.lineage.types import InferredNullability
 from tests.unit.src.sqlbuild.adapter.type_system._test_types import (
     FirstArgIdentityTestCase,
     NullabilityRuleTestCase,

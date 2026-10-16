@@ -65,9 +65,6 @@ from sqlbuild.compiler.compile.types import (
     SqlTestMode,
     TypedSqlValueRenderer,
 )
-from sqlbuild.compiler.lineage.types import (
-    InferredNullability,
-)
 from sqlbuild.compiler.python_nodes.types import PythonNodeKind
 from sqlbuild.compiler.references.models import (
     ProjectRelation,
@@ -11173,6 +11170,13 @@ class DiagnosticSeverity(StrEnum):
     ERROR = "error"
     WARNING = "warning"
     INFO = "info"
+
+class InferredNullability(StrEnum):
+    """Conservative nullability state inferred for an output column."""
+
+    NON_NULL = "non_null"
+    NULLABLE = "nullable"
+    UNKNOWN = "unknown"
 
 class ColumnTransformKind(StrEnum):
     """High-level transform classification for one output column."""

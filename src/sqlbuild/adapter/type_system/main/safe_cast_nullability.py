@@ -1,7 +1,6 @@
 """Public adapter safe-cast nullability inference operation."""
 
-from sqlbuild._native import infer_safe_cast_nullability
-from sqlbuild.compiler.lineage.types import InferredNullability
+from sqlbuild._native import InferredNullability, infer_safe_cast_nullability
 
 
 def safe_cast_nullability(args: tuple[InferredNullability, ...]) -> InferredNullability:

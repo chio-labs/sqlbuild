@@ -12,6 +12,7 @@ from sqlbuild._native import (
     CompileModelConfig,
     DynamicColumnContractProof,
     InferredColumn,
+    InferredNullability,
     SchemaAuditInstance,
     SchemaColumn,
     SchemaDynamicColumnFamily,
@@ -20,7 +21,6 @@ from sqlbuild._native import (
     SourceLocation,
 )
 from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
-from sqlbuild.compiler.lineage.types import InferredNullability
 
 
 def make_contract_project(
