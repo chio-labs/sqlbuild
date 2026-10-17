@@ -21,9 +21,9 @@ use sqlbuild_scopes::scope_report::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::{
     NativeScopeLookup, identity_message, path_message,
 };
@@ -108,7 +108,7 @@ fn lookup_reports(lookup: &Bound<'_, PyAny>) -> PyResult<LookupReports> {
 
 fn scope_error(py: Python<'_>, class: ErrorId, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, class)?.call1((message,))?,
+        error_class(py, class)?.call1((message,))?,
     ))
 }
 

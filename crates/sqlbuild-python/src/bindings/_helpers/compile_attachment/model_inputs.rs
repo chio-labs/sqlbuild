@@ -26,9 +26,9 @@ use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_c
 
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 /// The explicit reference call kinds and the `SqlResourceRefKind` member each resolves to.
 const EXPLICIT_REFERENCE_KINDS: [(&str, &str); 3] =
@@ -97,12 +97,15 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ),
             (
                 "macro_argument_error",
-                registry::error(py, ErrorId::MacroArgument)?,
+                error_class(py, ErrorId::MacroArgument)?,
             ),
             ("expansion", macro_expansion_classes(py)?.into_any()),
             (
                 "generic_syntax",
-                new_record(py, RecordId::SqlLexicalSyntax, (), None)?.getattr("native_mapping")?,
+                native_field(
+                    &new_record(py, RecordId::SqlLexicalSyntax, (), None)?,
+                    "native_mapping",
+                )?,
             ),
         ],
     )
@@ -218,8 +221,7 @@ pub(crate) fn build_model_inputs<'py>(
         ],
     )?;
     let session: Bound<'py, PyAny> = native_model_config_session(&config_inputs, &validator)?;
-    let provider_names: Vec<Bound<'py, PyAny>> = discovered_inputs
-        .getattr("providers")?
+    let provider_names: Vec<Bound<'py, PyAny>> = native_field(discovered_inputs, "providers")?
         .try_iter()?
         .map(|provider| native_field(&provider?, "name"))
         .collect::<PyResult<_>>()?;
@@ -284,8 +286,7 @@ pub(crate) fn build_model_inputs<'py>(
         )
         .and_then(|value| pyo3::Bound::new(py, value))
         .map(pyo3::Bound::into_any)?;
-    let files: Vec<Py<NativeModelFile>> = discovered_inputs
-        .getattr("model_files")?
+    let files: Vec<Py<NativeModelFile>> = native_field(discovered_inputs, "model_files")?
         .try_iter()?
         .map(|file| file?.extract())
         .collect::<PyResult<_>>()?;

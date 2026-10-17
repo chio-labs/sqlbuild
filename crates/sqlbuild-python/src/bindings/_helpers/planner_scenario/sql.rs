@@ -10,6 +10,7 @@ use crate::bindings::_helpers::planner_scenario::{
     values::{error, string},
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -45,7 +46,7 @@ pub(super) fn resolve_sql(
         }
         let locations = context.relations.getattr(field)?;
         result = replace_markers(&result, kind, Some(syntax.clone().into()), |name, marker| {
-            let target = locations.call_method1("get", (name,))?;
+            let target = mapping_get(&locations, name)?;
             let target = if target.is_none() {target} else if kind == super::constants::SOURCE_MARKER {
                 object(py, render_source_relation(&target, Some(&context.adapter.clone()).filter(|value| !value.is_none()))?)?
             } else {native_field(&target, "qualified_name")?};
@@ -70,7 +71,7 @@ pub(super) fn resolve_sql(
 pub(super) fn resolve_model_dbt_refs(sql: &str, relations: &Bound<'_, PyAny>) -> PyResult<String> {
     let locations = native_field(relations, "dbt_ref_fixture_locations")?;
     replace_markers(sql, 3, None, |name, marker| {
-        let target = locations.call_method1("get", (name,))?;
+        let target = mapping_get(&locations, name)?;
         let qualified = if target.is_none() {
             target
         } else {
@@ -105,7 +106,7 @@ pub(super) fn required_target<'py>(
     name: &str,
     kind: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let target = native_field(relations, field)?.call_method1("get", (name,))?;
+    let target = mapping_get(&native_field(relations, field)?, name)?;
     if target.is_none() {
         return Err(error(
             relations.py(),

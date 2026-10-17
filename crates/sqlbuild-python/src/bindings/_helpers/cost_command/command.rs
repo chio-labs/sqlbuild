@@ -264,8 +264,7 @@ fn run_detail(request: &CostRequest<'_>) -> PyResult<i32> {
         ),
     )?;
     let record: Bound<'_, PyAny> = resolve_run(request)?;
-    let resources: Vec<Bound<'_, PyAny>> = record
-        .getattr("cost")?
+    let resources: Vec<Bound<'_, PyAny>> = native_field(&record, "cost")?
         .getattr("resources")?
         .try_iter()?
         .collect::<PyResult<_>>()?;

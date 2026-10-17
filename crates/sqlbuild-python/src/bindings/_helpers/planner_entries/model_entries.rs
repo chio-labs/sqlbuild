@@ -43,6 +43,7 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
 use crate::bindings::_helpers::planner_strategy::values::text;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::semantic_shapes::source_bindings::source_binding_diagnostics;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -463,7 +464,7 @@ pub(crate) fn plan_entries<'py>(
         if !selected_keys.contains(&key)? || !models.contains(&name)? {
             continue;
         }
-        let model = models_by_name.call_method1("get", (&name,))?;
+        let model = mapping_get(&models_by_name, &name)?;
         let resolved = models.get_item(&name)?;
         if model.is_none() {
             continue;

@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::load::ingestr_command::connection;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 
 const DLT_ERROR: ThirdPartyHost = ThirdPartyHost::DltIntegrationError;
 
@@ -50,7 +51,7 @@ fn argument<'py>(
     let py: Python<'py> = connection_config.py();
     match value {
         DltValue::Text(text) => Ok(PyString::new(py, text).into_any()),
-        DltValue::Port { default } => connection_config.call_method1("get", ("port", *default)),
+        DltValue::Port { default } => mapping_get_or(connection_config, "port", *default),
         DltValue::Object(fields) => Ok(arguments(fields, connection_config)?.into_any()),
     }
 }

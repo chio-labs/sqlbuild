@@ -20,10 +20,10 @@ use sqlbuild_config::dbt_manifest::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const DBT_REF_KIND: &str = "dbt_ref";
 const RELATION_OPTIONS: (&[&str], &[&str]) =
@@ -35,7 +35,7 @@ fn raised(py: Python<'_>, error: ManifestError) -> PyErr {
         keywords.set_item("code", error.code)?;
         keywords.set_item("help", error.help)?;
         let instance: Bound<'_, PyAny> =
-            registry::error(py, ErrorId::CompileInput)?.call((error.message,), Some(&keywords))?;
+            error_class(py, ErrorId::CompileInput)?.call((error.message,), Some(&keywords))?;
         Ok(PyErr::from_value(instance))
     };
     created().unwrap_or_else(|failure| failure)
@@ -421,8 +421,7 @@ fn resolved_model<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = manifest.py();
     if let Some(package) = package_name {
-        let model: Bound<'py, PyAny> = manifest
-            .getattr("models_by_package_and_name")?
+        let model: Bound<'py, PyAny> = native_field(manifest, "models_by_package_and_name")?
             .call_method1("get", ((package, name),))?;
         if model.is_none() {
             return Err(raised(
@@ -432,8 +431,7 @@ fn resolved_model<'py>(
         }
         return Ok(model);
     }
-    let matches: Bound<'py, PyAny> = manifest
-        .getattr("models_by_name")?
+    let matches: Bound<'py, PyAny> = native_field(manifest, "models_by_name")?
         .call_method1("get", (name, PyTuple::empty(py)))?;
     let matches: Vec<Bound<'py, PyAny>> = matches.try_iter()?.collect::<PyResult<_>>()?;
     match matches.as_slice() {

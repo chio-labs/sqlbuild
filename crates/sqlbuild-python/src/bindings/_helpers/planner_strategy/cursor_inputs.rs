@@ -22,6 +22,8 @@ use crate::bindings::_helpers::planner_strategy::models::CursorInputLookups;
 use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
@@ -107,10 +109,7 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
     let warehouse_columns: &Bound<'py, PyAny> = &lookups.source_warehouse_columns;
     let model_name: String = model_reads::model_name(model)?;
     for role in ["filter_inputs", "watermark_inputs"] {
-        for item in native_field(&roles, role)?
-            .call_method0("items")?
-            .try_iter()?
-        {
+        for item in mapping_items(&native_field(&roles, role)?)?.try_iter()? {
             let (input_name, column): (String, String) = item?.extract()?;
             let reference: Bound<'py, PyAny> = resolve_lineage_reference(
                 model,
@@ -128,11 +127,9 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
                 known_columns,
             };
             if kind == MODEL_REFERENCE {
-                let upstream: Bound<'py, PyAny> = models_by_name.call_method1("get", (&name,))?;
+                let upstream: Bound<'py, PyAny> = mapping_get(models_by_name, &name)?;
                 if upstream.is_none()
-                    || !model_values(&upstream)?
-                        .call_method1("get", ("contract",))?
-                        .eq(ENFORCED_CONTRACT)?
+                    || !mapping_get(&model_values(&upstream)?, "contract")?.eq(ENFORCED_CONTRACT)?
                 {
                     continue;
                 }
@@ -148,13 +145,13 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
             if kind != SOURCE_REFERENCE {
                 continue;
             }
-            let source: Bound<'py, PyAny> = source_map.call_method1("get", (&name,))?;
+            let source: Bound<'py, PyAny> = mapping_get(source_map, &name)?;
             if !source.is_none() && native_field(&source, "contract")?.eq(ENFORCED_CONTRACT)? {
                 let declared: Vec<String> = names(&native_field(&source, "columns")?)?;
                 check_column(check(CursorInputColumnOwner::SourceContract, declared), py)?;
                 continue;
             }
-            let known: Bound<'py, PyAny> = warehouse_columns.call_method1("get", (&name,))?;
+            let known: Bound<'py, PyAny> = mapping_get(warehouse_columns, &name)?;
             if known.is_none() {
                 continue;
             }
@@ -175,16 +172,16 @@ fn input_relation<'py>(
     let py: Python<'py> = adapter.py();
     let location: Bound<'py, PyAny> = match kind {
         MODEL_REFERENCE => {
-            let model: Bound<'py, PyAny> = lookups.model_locations.call_method1("get", (name,))?;
+            let model: Bound<'py, PyAny> = mapping_get(&lookups.model_locations, name)?;
             if model.is_none() {
-                lookups.seed_locations.call_method1("get", (name,))?
+                mapping_get(&lookups.seed_locations, name)?
             } else {
                 model
             }
         }
-        SEED_REFERENCE => lookups.seed_locations.call_method1("get", (name,))?,
+        SEED_REFERENCE => mapping_get(&lookups.seed_locations, name)?,
         SOURCE_REFERENCE => {
-            let source: Bound<'py, PyAny> = lookups.source_map.call_method1("get", (name,))?;
+            let source: Bound<'py, PyAny> = mapping_get(&lookups.source_map, name)?;
             if source.is_none() {
                 return Ok(None);
             }
@@ -273,7 +270,7 @@ pub(crate) fn build_cursor_input_relations<'py>(
     let mut relations: Vec<Bound<'py, PyAny>> = Vec::new();
     let watermarks: Bound<'py, PyAny> =
         native_field(&resolve_cursor_input_roles(&model)?, "watermark_inputs")?;
-    for item in watermarks.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&watermarks)?.try_iter()? {
         let (input_name, column): (String, Bound<'py, PyAny>) = item?.extract()?;
         let reference: Bound<'py, PyAny> = resolve_lineage_reference(
             &model,
@@ -288,7 +285,7 @@ pub(crate) fn build_cursor_input_relations<'py>(
             continue;
         };
         let producer: Option<Bound<'py, PyAny>> = if kind == MODEL_REFERENCE {
-            Some(models_by_name.call_method1("get", (&name,))?).filter(|model| !model.is_none())
+            Some(mapping_get(models_by_name, &name)?).filter(|model| !model.is_none())
         } else {
             None
         };
@@ -346,7 +343,7 @@ pub(crate) fn runtime_cursor_producer_names<'py>(
         match text(&native_field(&key, "resource_type")?)?.as_str() {
             "model" | "seed" => names.push(name),
             "source" => {
-                let source: Bound<'py, PyAny> = source_map.call_method1("get", (&name,))?;
+                let source: Bound<'py, PyAny> = mapping_get(source_map, &name)?;
                 if !source.is_none() && !native_field(&source, "loader")?.is_none() {
                     names.push(name);
                 }

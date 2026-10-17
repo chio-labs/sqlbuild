@@ -1,10 +1,10 @@
 //! Project native planning failures into existing located diagnostic exceptions.
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::plan_values::string;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -76,7 +76,7 @@ pub(super) fn planning_error(
             ErrorId::CompileInput
         };
         return Ok(PyErr::from_value(
-            registry::error(py, class)?.call((message,), Some(&kwargs))?,
+            error_class(py, class)?.call((message,), Some(&kwargs))?,
         ));
     }
     let (class, message) = if let Some(message) = message.strip_prefix("compile_input:") {
@@ -90,6 +90,6 @@ pub(super) fn planning_error(
         )
     };
     Ok(PyErr::from_value(
-        registry::error(py, class)?.call1((string(py, &message),))?,
+        error_class(py, class)?.call1((string(py, &message),))?,
     ))
 }

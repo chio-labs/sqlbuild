@@ -11,6 +11,7 @@ use crate::bindings::_helpers::analysis::relation_names::{
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const RUNTIME_RELATION_PREFIX: &str = "SELECT 1 FROM ";
 
@@ -111,7 +112,7 @@ fn runtime_project_relations<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let relation_type: Bound<'py, PyAny> = host::entry(py, ExecutorHost::ProjectRelation)?;
     let resolved: Bound<'py, PyDict> = PyDict::new(py);
-    for item in relations.call_method0("items")?.try_iter()? {
+    for item in mapping_items(relations)?.try_iter()? {
         let (reference, qualified): (Bound<'py, PyAny>, String) = item?.extract()?;
         let sql: String = format!("{RUNTIME_RELATION_PREFIX}{qualified}");
         let Some((mut names, _)) = extract_sql_relation_names(py, &sql, dialect)? else {

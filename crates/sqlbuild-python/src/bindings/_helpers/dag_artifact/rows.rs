@@ -15,6 +15,7 @@ use sqlbuild_analysis::dag_artifact::types::DagColumnLineage;
 
 use crate::bindings::_helpers::python_values::values::python_value;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 
 const AUDIT_SEVERITY_MODULE: &str = "sqlbuild.compiler.auditing.types";
 const DECIMAL_KIND: &str = "decimal";
@@ -191,8 +192,7 @@ fn model_schema(entry: &Bound<'_, PyAny>) -> PyResult<Option<DagModelSchemaInput
 
 /// `str()` of each configured tag when the `tags` value is a list or tuple.
 fn config_tags(values: &Bound<'_, PyAny>) -> PyResult<Option<Vec<String>>> {
-    let tags: Bound<'_, PyAny> =
-        values.call_method1("get", ("tags", PyTuple::empty(values.py())))?;
+    let tags: Bound<'_, PyAny> = mapping_get_or(values, "tags", PyTuple::empty(values.py()))?;
     if !(tags.is_instance_of::<PyList>() || tags.is_instance_of::<PyTuple>()) {
         return Ok(None);
     }
@@ -213,8 +213,7 @@ fn model(model: &Bound<'_, PyAny>) -> PyResult<DagModelInput> {
         authored_sql: text(model, "authored_sql")?,
         schema: model_schema(&attribute(model, "schema_entry")?)?,
         config_tags: config_tags(&values)?,
-        materialization: values
-            .call_method1("get", ("materialized", DEFAULT_MATERIALIZATION))?
+        materialization: mapping_get_or(&values, "materialized", DEFAULT_MATERIALIZATION)?
             .str()?
             .to_string(),
         inferred_columns: if inferred.is_none() {

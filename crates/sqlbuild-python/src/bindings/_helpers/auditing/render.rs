@@ -7,6 +7,7 @@ use sqlbuild_analysis::auditing::main::replace_reference_calls::replace_referenc
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
 const REF_FUNCTION: &str = "__ref";
@@ -15,7 +16,7 @@ const SOURCE_FUNCTION: &str = "__source";
 
 /// `mapping.get(name)`, or `None` when absent or `None`.
 fn lookup<'py>(mapping: &Bound<'py, PyAny>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let value: Bound<'py, PyAny> = mapping.call_method1("get", (name,))?;
+    let value: Bound<'py, PyAny> = mapping_get(mapping, name)?;
     Ok(Some(value).filter(|value| !value.is_none()))
 }
 

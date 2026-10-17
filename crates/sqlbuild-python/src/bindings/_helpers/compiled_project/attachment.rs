@@ -26,6 +26,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -171,11 +172,10 @@ pub(crate) fn attach_resources<'py>(
             .into_iter()
             .map(Bound::unbind)
             .collect(),
-        &registry::error(py, ErrorId::CompileInput)?,
+        &error_class(py, ErrorId::CompileInput)?,
     )?;
-    let defaults: Bound<'py, PyAny> = discovered_inputs
-        .getattr("project_config")?
-        .getattr("defaults")?;
+    let defaults: Bound<'py, PyAny> =
+        native_field(discovered_inputs, "project_config")?.getattr("defaults")?;
     let function_kind: Bound<'py, PyAny> = enum_member(py, RecordId::ResourceKind, "FUNCTION")?;
     let functions = NativeCompiledProject::attach_functions(
         native_project,
@@ -493,8 +493,7 @@ fn loader_rows<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<HashMap<String, 
                 attr(&loader, DESCRIPTION_KEY)?,
                 relative_path.str()?.to_string(),
                 YAML_FILE_SUFFIXES.contains(
-                    &relative_path
-                        .getattr("suffix")?
+                    &native_field(&relative_path, "suffix")?
                         .extract::<String>()?
                         .as_str(),
                 ),
@@ -514,7 +513,7 @@ fn diagnostic_settings<'py>(
         "compiler_diagnostic",
         record_class(py, RecordId::CompilerDiagnostic)?,
     )?;
-    settings.set_item("compile_error", registry::error(py, ErrorId::CompileInput)?)?;
+    settings.set_item("compile_error", error_class(py, ErrorId::CompileInput)?)?;
     settings.set_item(
         "source_location",
         record_class(py, RecordId::SourceLocation)?,
@@ -541,8 +540,7 @@ fn diagnostic_settings<'py>(
                     native_field(scenario, "name")?,
                     text(scenario, "relative_path")?.into_bound_py_any(py)?,
                     native_field(scenario, "contents")?,
-                    scenario
-                        .getattr("header_values")?
+                    native_field(scenario, "header_values")?
                         .call_method1("get", (DESCRIPTION_KEY,))?,
                 ],
             )

@@ -12,12 +12,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::discovery::guidance::explicit_references_help;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{
     enum_member, new_record, new_record_with, record_class,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::render::macro_expansion::{
@@ -78,7 +78,10 @@ fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
             ),
             (
                 "generic_syntax",
-                new_record(py, RecordId::SqlLexicalSyntax, (), None)?.getattr("native_mapping")?,
+                native_field(
+                    &new_record(py, RecordId::SqlLexicalSyntax, (), None)?,
+                    "native_mapping",
+                )?,
             ),
             ("generated_help", help),
             ("all_markers", markers),
@@ -98,14 +101,14 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     keywords(
         py,
         &[
-            ("compile_error", registry::error(py, ErrorId::CompileInput)?),
+            ("compile_error", error_class(py, ErrorId::CompileInput)?),
             (
                 "macro_argument_error",
-                registry::error(py, ErrorId::MacroArgument)?,
+                error_class(py, ErrorId::MacroArgument)?,
             ),
             (
                 "mismatch_error",
-                registry::error(py, ErrorId::NativeStageMismatch)?,
+                error_class(py, ErrorId::NativeStageMismatch)?,
             ),
             (
                 "declaration_identity",

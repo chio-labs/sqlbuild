@@ -107,8 +107,7 @@ impl SqlExpansionInputs {
             constants: field("constants")?,
             value_renderer: field("value_renderer")?,
             collection_rendering: field("collection_rendering")?,
-            local_declarations: record
-                .getattr("local_declarations")?
+            local_declarations: native_field(record, "local_declarations")?
                 .downcast_into::<PyDict>()?
                 .unbind(),
             declaration_resolver: field("declaration_resolver")?,
@@ -225,9 +224,7 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
             ("_collection_rendering", collection_rendering.clone()),
             (
                 "_enforce_explicit_references",
-                project_config
-                    .getattr("references")?
-                    .getattr("enforce_explicit")?,
+                native_field(&project_config, "references")?.getattr("enforce_explicit")?,
             ),
         ],
     )?;

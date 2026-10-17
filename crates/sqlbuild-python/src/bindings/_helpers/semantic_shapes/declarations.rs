@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 
 const UNKNOWN: &str = "UNKNOWN";
@@ -25,8 +26,8 @@ pub(crate) fn declared_types(
     column_types: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<String>> {
     let mut types: BTreeSet<String> = BTreeSet::new();
-    for columns in column_types.call_method0("values")?.try_iter()? {
-        for column_type in columns?.call_method0("values")?.try_iter()? {
+    for columns in mapping_values(column_types)?.try_iter()? {
+        for column_type in mapping_values(&columns?)?.try_iter()? {
             types.insert(column_type?.extract()?);
         }
     }

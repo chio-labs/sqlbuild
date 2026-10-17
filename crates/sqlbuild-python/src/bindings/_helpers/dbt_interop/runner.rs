@@ -22,10 +22,10 @@ use crate::bindings::_helpers::dbt_interop::cli::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const LAUNCH_FAILURE: &str = "failed to execute dbt";
@@ -35,9 +35,9 @@ const POISONED_CACHE: &str = "dbt ls cache is poisoned";
 #[pyclass(module = "sqlbuild._native", frozen, subclass)]
 pub(crate) struct DbtRunner {
     #[pyo3(get)]
-    dbt_executable: String,
+    pub(crate) dbt_executable: String,
     #[pyo3(get)]
-    invoker: Option<Py<PyAny>>,
+    pub(crate) invoker: Option<Py<PyAny>>,
     ls_cache: Mutex<HashMap<Vec<String>, Py<PyAny>>>,
 }
 
@@ -288,8 +288,8 @@ pub(crate) fn launch_failure(py: Python<'_>, error: PyErr) -> PyErr {
     let created = || -> PyResult<PyErr> {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("help", error.value(py).str()?)?;
-        let instance: Bound<'_, PyAny> = registry::error(py, ErrorId::DbtInteropRuntime)?
-            .call((LAUNCH_FAILURE,), Some(&options))?;
+        let instance: Bound<'_, PyAny> =
+            error_class(py, ErrorId::DbtInteropRuntime)?.call((LAUNCH_FAILURE,), Some(&options))?;
         let raised: PyErr = PyErr::from_value(instance);
         raised.set_cause(py, Some(error.clone_ref(py)));
         Ok(raised)

@@ -141,12 +141,10 @@ impl DirectPythonLifecycle {
 
     /// SQL-stage loaders, keeping dependencies Python ingress already satisfied only when needed.
     pub(crate) fn loader_functions<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let loaders: Vec<Bound<'py, PyAny>> = self
-            .discovered
-            .bind(py)
-            .getattr("loader_functions")?
-            .try_iter()?
-            .collect::<PyResult<_>>()?;
+        let loaders: Vec<Bound<'py, PyAny>> =
+            native_field(self.discovered.bind(py), "loader_functions")?
+                .try_iter()?
+                .collect::<PyResult<_>>()?;
         let functions: Vec<Bound<'py, PyAny>> = loaders
             .iter()
             .map(|loader| native_field(loader, "function"))
@@ -171,12 +169,10 @@ impl DirectPythonLifecycle {
     }
 
     fn ingress_keys<'py>(&self, py: Python<'py>, failed_only: bool) -> PyResult<Bound<'py, PyAny>> {
-        let entries: Vec<Bound<'py, PyAny>> = self
-            .plan
-            .bind(py)
-            .getattr("source_load_entries")?
-            .try_iter()?
-            .collect::<PyResult<_>>()?;
+        let entries: Vec<Bound<'py, PyAny>> =
+            native_field(self.plan.bind(py), "source_load_entries")?
+                .try_iter()?
+                .collect::<PyResult<_>>()?;
         let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
         for result in self.ingress_load_results.bind(py).try_iter()? {
             let result: Bound<'py, PyAny> = result?;

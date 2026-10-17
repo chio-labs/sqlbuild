@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_resolution::values::{
     cursor_wrap, filtering_of, method, string,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::sqltext::code_scanner::SqlCodeScanner;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -61,7 +62,7 @@ pub(crate) fn resolve_refs(
         let mut last = 0;
         for span in reference_spans(&sql, kind) {
             output.push_str(&sql[last..span.start]);
-            let target = locations.call_method1("get", (&span.name,))?;
+            let target = mapping_get(locations, &span.name)?;
             if target.is_none() {
                 output.push_str(&sql[span.start..span.end]);
             } else {
@@ -154,7 +155,7 @@ fn resolve_function_calls(
             code_index = query_sql[..span.end].chars().count();
         }
         output.push_str(query_sql.get(last..span.start).unwrap_or_default());
-        let target = locations.call_method1("get", (&span.name,))?;
+        let target = mapping_get(locations, &span.name)?;
         let qualified = if target.is_none() {
             py.None().into_bound(py)
         } else {

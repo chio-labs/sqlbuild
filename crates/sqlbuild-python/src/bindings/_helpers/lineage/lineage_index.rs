@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
@@ -58,7 +59,7 @@ impl<'py> PythonKeys<'py> {
 
 fn ordered_edges(edges: &Bound<'_, PyAny>) -> PyResult<Vec<(LineageKey, Vec<LineageKey>)>> {
     let mut ordered: Vec<(LineageKey, Vec<LineageKey>)> = Vec::new();
-    for item in edges.call_method0("items")?.try_iter()? {
+    for item in mapping_items(edges)?.try_iter()? {
         let (key, targets): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
         ordered.push((lineage_key(&key)?, lineage_keys(&targets)?));
     }
@@ -135,8 +136,7 @@ fn project_nodes(project: &Bound<'_, PyAny>) -> PyResult<HashMap<LineageKey, Lin
 pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
     let views: Bound<'_, PyAny> = native_field(graph, "lineage_views")?;
     let mut all_keys: Vec<(String, LineageKey)> = Vec::new();
-    for item in views
-        .getattr("all_keys")?
+    for item in native_field(&views, "all_keys")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -144,8 +144,7 @@ pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
         all_keys.push((name, lineage_key(&key)?));
     }
     let mut tags: Vec<(String, Vec<LineageKey>)> = Vec::new();
-    for item in views
-        .getattr("tag_index")?
+    for item in native_field(&views, "tag_index")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -153,8 +152,7 @@ pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
         tags.push((tag, lineage_keys(&keys)?));
     }
     let mut paths: Vec<(LineageKey, String)> = Vec::new();
-    for item in views
-        .getattr("path_index")?
+    for item in native_field(&views, "path_index")?
         .call_method0("items")?
         .try_iter()?
     {

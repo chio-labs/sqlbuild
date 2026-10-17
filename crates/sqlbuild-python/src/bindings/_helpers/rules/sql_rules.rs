@@ -22,11 +22,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     NativeCompiledModel, SqlRuleInputs, SqlRuleKey,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::early_sql_lint::{
     EarlyLintResult, EarlySqlLint, PreparedSqlLint, sql_lint_settings, sql_rule_cache_path,
@@ -610,9 +610,8 @@ fn violation_findings(
     model_paths: &BTreeSet<String>,
 ) -> PyResult<Vec<RuleFinding>> {
     let py: Python<'_> = run.project.py();
-    let engine_error: String = registry::error(py, ErrorId::NativeLint)?
-        .getattr("code")?
-        .extract()?;
+    let engine_error: String =
+        native_field(&error_class(py, ErrorId::NativeLint)?, "code")?.extract()?;
     let resolved_dir: PathBuf = resolved(&run.project_dir);
     let no_paths: BTreeSet<String> = BTreeSet::new();
     let mut evaluated: Vec<RuleFinding> = Vec::new();

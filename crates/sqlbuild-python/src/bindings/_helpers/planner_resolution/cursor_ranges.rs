@@ -29,10 +29,10 @@ use crate::bindings::_helpers::planner_resolution::cursor_windows::without_desti
 use crate::bindings::_helpers::planner_resolution::future_safety::resolve_future_cursor_safety;
 use crate::bindings::_helpers::planner_resolution::values::string;
 use crate::bindings::_helpers::planner_strategy::model_entries::resolve_microbatch_lookback;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyString, PyTuple};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
@@ -526,7 +526,7 @@ pub(crate) fn cursor_safety_configs<'py>(
 }
 
 fn compile_input_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::CompileInput).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::CompileInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

@@ -20,10 +20,11 @@ use sqlbuild_scopes::scope_index::models::{
 
 use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const INACCESSIBLE_DECLARATION_CODE: &str = "S006";
 const SCHEMA_USAGE_KINDS: [&str; 2] = ["schema", "enum"];
@@ -99,7 +100,7 @@ pub(crate) fn model_schema_scope_usages<'py>(
     let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut record_rows: Vec<(IdentityRow, RecordRow)> = Vec::new();
     let declarations = native_field(&native_field(resolver, "lookup")?, "declarations")?;
-    for item in declarations.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&declarations)?.try_iter()? {
         let (identity, found): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         if !found.is_truthy()?
             || !native_field(&identity, "owner")?.is_none()
@@ -144,7 +145,7 @@ pub(crate) fn model_schema_scope_usages<'py>(
     let (usages, diagnostics, error) = scope_schema_usages(schemas, record_rows)?;
     if let Some(message) = error {
         return Err(PyErr::from_value(
-            registry::error(py, ErrorId::InvalidScopePath)?.call1((message,))?,
+            error_class(py, ErrorId::InvalidScopePath)?.call1((message,))?,
         ));
     }
     report_inaccessible(py, diagnostics)?;

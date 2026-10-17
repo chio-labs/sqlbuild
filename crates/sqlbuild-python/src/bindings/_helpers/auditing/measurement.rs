@@ -10,11 +10,11 @@ use sqlbuild_analysis::auditing::models::{MeasurementOutcome, Thresholds};
 use crate::bindings::_helpers::auditing::identity::thresholds as read_thresholds;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 fn measurement_error(py: Python<'_>, message: &str) -> PyErr {
-    match registry::error(py, ErrorId::MeasurementAudit).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::MeasurementAudit).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

@@ -16,6 +16,7 @@ use sqlbuild_config::project::main::resolve_config_file::resolve_config_file;
 use sqlbuild_config::project::models::{Built, ConfigFile, ConfigPaths};
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
@@ -85,7 +86,7 @@ fn config_error(py: Python<'_>, failure: &ConfigFailure, files: &Files<'_>) -> P
     }
     let keywords = PyDict::new(py);
     keywords.set_item("help", failure.help.as_deref())?;
-    let error = registry::error(py, ErrorId::ProjectConfig)?.call((message,), Some(&keywords))?;
+    let error = error_class(py, ErrorId::ProjectConfig)?.call((message,), Some(&keywords))?;
     Ok(PyErr::from_value(error))
 }
 

@@ -21,9 +21,8 @@ pub(crate) fn sql_analysis_guidance(
     purpose: &str,
 ) -> PyResult<Option<(String, String)>> {
     let local: Bound<'_, PyAny> = native_field(discovered_inputs, "local_config")?;
-    let local_override: bool = local
-        .getattr("setting_overrides")?
-        .contains(SQL_ANALYSIS_KEY)?;
+    let local_override: bool =
+        native_field(&local, "setting_overrides")?.contains(SQL_ANALYSIS_KEY)?;
     let owner: Bound<'_, PyAny> = if local_override {
         local
     } else {

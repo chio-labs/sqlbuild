@@ -27,10 +27,10 @@ use crate::bindings::_helpers::planner_resolution::cursor_windows::without_desti
 use crate::bindings::_helpers::planner_resolution::future_safety::resolve_future_cursor_safety;
 use crate::bindings::_helpers::planner_resolution::models::ModelSqlRequest;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::{IntoPyObject, PyErr};
 
@@ -155,7 +155,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
                 ),
             )?;
             return Err(PyErr::from_value(call_with(
-                &registry::error(py, ErrorId::PlannerInput)?,
+                &error_class(py, ErrorId::PlannerInput)?,
                 &[
                     ("message", refusal.get_item(0)?),
                     ("code", string(py, "S302")),

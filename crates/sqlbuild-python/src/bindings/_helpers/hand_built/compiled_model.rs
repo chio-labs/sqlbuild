@@ -5,6 +5,7 @@ use crate::bindings::_helpers::analysis_session::outcome_objects::dynamic_contra
 use crate::bindings::_helpers::analysis_session::outcome_objects::session_outcome_analysis;
 use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
@@ -156,7 +157,7 @@ fn destination<'py>(config: &Object<'py>, model_name: &Object<'py>) -> PyResult<
     let py: Python<'py> = config.py();
     let values: Object<'py> = native_field(config, "values")?;
     let text = |key: &str| -> PyResult<Option<Object<'py>>> {
-        let value: Object<'py> = values.call_method1("get", (key,))?;
+        let value: Object<'py> = mapping_get(&values, key)?;
         Ok(value.is_instance_of::<PyString>().then_some(value))
     };
     let none: Object<'py> = py.None().into_bound(py);

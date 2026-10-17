@@ -283,24 +283,22 @@ pub(crate) fn plain_typed_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Boun
 /// An enum declaration as the native project row.
 fn enum_row<'py>(declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = declaration.py();
-    let members: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = declaration
-        .getattr("members")?
-        .try_iter()?
-        .map(|member| {
-            let member: Bound<'py, PyAny> = member?;
-            Ok((
-                native_field(&member, "name")?,
-                native_field(&member, "value")?,
-            ))
-        })
-        .collect::<PyResult<_>>()?;
+    let members: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> =
+        native_field(declaration, "members")?
+            .try_iter()?
+            .map(|member| {
+                let member: Bound<'py, PyAny> = member?;
+                Ok((
+                    native_field(&member, "name")?,
+                    native_field(&member, "value")?,
+                ))
+            })
+            .collect::<PyResult<_>>()?;
     PyTuple::new(
         py,
         [
             native_field(declaration, "name")?,
-            declaration
-                .getattr("relative_path")?
-                .call_method0("as_posix")?,
+            native_field(declaration, "relative_path")?.call_method0("as_posix")?,
             members.into_bound_py_any(py)?,
             py.None().into_bound(py),
             py.None().into_bound(py),
@@ -317,14 +315,10 @@ fn constant_row<'py>(declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyT
         py,
         [
             native_field(declaration, "name")?,
-            declaration
-                .getattr("relative_path")?
-                .call_method0("as_posix")?,
+            native_field(declaration, "relative_path")?.call_method0("as_posix")?,
             PyList::empty(py).into_any(),
             plain_typed_value(&native_field(declaration, "value")?)?,
-            declaration
-                .getattr("logical_type")?
-                .getattr("display_name")?,
+            native_field(declaration, "logical_type")?.getattr("display_name")?,
             if render_as.is_none() {
                 render_as
             } else {
@@ -421,8 +415,7 @@ pub(crate) fn record_model_analyses<'py>(
                 .map(|(_, _, nullability)| nullability.eq(&nullable))
                 .collect::<PyResult<_>>()?,
             native_field(model, "fast_lineage_has_star")?.is_truthy()?,
-            model
-                .getattr("unchecked_output_columns")?
+            native_field(model, "unchecked_output_columns")?
                 .try_iter()?
                 .map(|column| column?.extract())
                 .collect::<PyResult<_>>()?,
@@ -477,8 +470,7 @@ fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = model.py();
     let relative_path: Bound<'py, PyAny> = native_field(model, "relative_path")?;
     let config: Bound<'py, PyAny> = native_field(model, "config")?;
-    let references: Vec<Bound<'py, PyTuple>> = model
-        .getattr("references")?
+    let references: Vec<Bound<'py, PyTuple>> = native_field(model, "references")?
         .try_iter()?
         .map(|reference| {
             let reference: Bound<'py, PyAny> = reference?;
@@ -516,8 +508,7 @@ fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
                     native_field(&config, "values")?,
                     PyList::new(
                         py,
-                        config
-                            .getattr("model_header_keys")?
+                        native_field(&config, "model_header_keys")?
                             .try_iter()?
                             .collect::<PyResult<Vec<_>>>()?,
                     )?
@@ -529,8 +520,7 @@ fn model_row<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
             PyList::new(py, references)?.into_any(),
             PyList::new(
                 py,
-                model
-                    .getattr("enum_columns")?
+                native_field(model, "enum_columns")?
                     .try_iter()?
                     .collect::<PyResult<Vec<_>>>()?,
             )?

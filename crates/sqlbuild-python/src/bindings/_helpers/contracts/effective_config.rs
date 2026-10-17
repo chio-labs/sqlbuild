@@ -211,12 +211,10 @@ pub(crate) fn effective_config_target_fields<'py>(
 ) -> PyResult<Outcome<'py, Vec<FieldRow<'py>>>> {
     let (project_config, local_config) = configs;
     let name: Key<'py> = key(target_name)?;
-    let project_target: Option<Bound<'py, PyAny>> = project_config
-        .getattr("targets")?
+    let project_target: Option<Bound<'py, PyAny>> = native_field(&project_config, "targets")?
         .downcast::<PyDict>()?
         .get_item(&name.handle)?;
-    let local_target: Option<Bound<'py, PyAny>> = local_config
-        .getattr("targets")?
+    let local_target: Option<Bound<'py, PyAny>> = native_field(&local_config, "targets")?
         .downcast::<PyDict>()?
         .get_item(&name.handle)?;
     let local: Option<Layer<'py>> = local_target.as_ref().map(target_layer).transpose()?;

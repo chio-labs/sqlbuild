@@ -20,6 +20,9 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const MISSING_RELATION_CODE: &str = "C682";
 const MODEL_KIND: &str = "model";
@@ -87,7 +90,7 @@ pub(crate) fn load_results_by_loader_name<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = source_map.py();
     let loader_by_source: Bound<'py, PyDict> = PyDict::new(py);
-    for item in source_map.call_method0("items")?.try_iter()? {
+    for item in mapping_items(source_map)?.try_iter()? {
         let (name, source): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         let loader: Bound<'py, PyAny> = native_field(&source, "loader")?;
         if !loader.is_none() {
@@ -215,10 +218,10 @@ pub(crate) fn relevant_check_functions<'py>(
         if !native_field(&node, "kind")?.eq(&check_kind)? || excluded.contains(&name)? {
             continue;
         }
-        let upstream: Vec<Bound<'py, PyAny>> = upstream_deps
-            .call_method1("get", (&name, PyTuple::empty(py)))?
-            .try_iter()?
-            .collect::<PyResult<_>>()?;
+        let upstream: Vec<Bound<'py, PyAny>> =
+            mapping_get_or(&upstream_deps, &name, PyTuple::empty(py))?
+                .try_iter()?
+                .collect::<PyResult<_>>()?;
         let mut sql_names: Vec<Bound<'py, PyAny>> = Vec::new();
         for reference in native_field(&node, "sql_deps")?.try_iter()? {
             sql_names.push(native_field(&reference?, "name")?);
@@ -271,9 +274,8 @@ fn table_source<'py>(
     plan_output: &Bound<'py, PyAny>,
     name: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let source: Bound<'py, PyAny> = plan_output
-        .getattr("python_source_entries")?
-        .call_method1("get", (name,))?;
+    let source: Bound<'py, PyAny> =
+        native_field(plan_output, "python_source_entries")?.call_method1("get", (name,))?;
     if source.is_none()
         || !native_field(&source, "expression")?.is_none()
         || native_field(&source, "table")?.is_none()
@@ -292,8 +294,10 @@ fn located<'py>(
         SEED_KIND => "seed_locations",
         _ => return Ok(None),
     };
-    let location: Bound<'py, PyAny> = native_field(plan_output, attribute)?
-        .call_method1("get", (native_field(reference, "name")?,))?;
+    let location: Bound<'py, PyAny> = mapping_get(
+        &native_field(plan_output, attribute)?,
+        native_field(reference, "name")?,
+    )?;
     Ok((!location.is_none()).then_some(location))
 }
 
@@ -470,9 +474,8 @@ pub(crate) fn run_read_side_dependencies<'py>(
     inputs: &ReadSideInputs<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.adapter.py();
-    let read_side_names: Bound<'py, PyAny> = inputs
-        .lifecycle_plan
-        .getattr("read_side_python_node_names")?;
+    let read_side_names: Bound<'py, PyAny> =
+        native_field(&inputs.lifecycle_plan, "read_side_python_node_names")?;
     let to_validate: Bound<'py, PyAny> = if inputs.validation_refs.is_none() {
         read_side_references(&inputs.python_graph, &read_side_names)?
     } else {

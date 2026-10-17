@@ -16,6 +16,7 @@ use crate::bindings::_helpers::planner_strategy::fixture_context::planning_conte
 use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestAssembly;
 use crate::bindings::_helpers::sql_test_glue::plan_assembly::assemble_sql_test_plans;
@@ -38,7 +39,7 @@ fn optional_get<'py>(
     key: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     if mapping.is_truthy()? {
-        return mapping.call_method1("get", (key,));
+        return mapping_get(mapping, key);
     }
     Ok(none(mapping.py()))
 }
@@ -279,7 +280,7 @@ fn require_intermediate_loader_targets<'py>(
     )?;
     let existing = native_field(snapshot, "existing_relations")?;
     for entry in source_load_entries.try_iter()? {
-        let source_entry = source_map.call_method1("get", (native_field(&entry?, "name")?,))?;
+        let source_entry = mapping_get(source_map, native_field(&entry?, "name")?)?;
         if source_entry.is_none() || native_field(&source_entry, "loader")?.is_none() {
             continue;
         }
@@ -294,7 +295,7 @@ fn require_intermediate_loader_targets<'py>(
         )?;
         for dependency_name in dependencies.try_iter()? {
             let dependency_name = dependency_name?;
-            let dependency = source_map.call_method1("get", (&dependency_name,))?;
+            let dependency = mapping_get(source_map, &dependency_name)?;
             if dependency.is_none()
                 || selected_names.contains(native_field(&dependency, "name")?)?
             {
@@ -740,7 +741,7 @@ pub(crate) fn plan_selected_sql_tests<'py>(
 /// Return model closures resolved natively in one project batch, keyed by SQL test key.
 #[pyfunction]
 #[pyo3(signature = (*, project, tests))]
-fn sql_test_model_chain_names_by_key<'py>(
+pub(crate) fn sql_test_model_chain_names_by_key<'py>(
     project: &Bound<'py, PyAny>,
     tests: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {

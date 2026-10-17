@@ -21,6 +21,7 @@ use crate::bindings::_helpers::project_assembly::syntax_validation::{
 };
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::render::macro_calls::top_level_macro_call_names;
 
@@ -80,7 +81,7 @@ fn compiled_model<'py>(
         &analysis_cursor_sql(
             py,
             &native_field(model_input, "query_sql")?.extract::<String>()?,
-            &config_values.call_method1("get", ("cursor_type",))?,
+            &mapping_get(&config_values, "cursor_type")?,
         )?,
     )
     .into_any();
@@ -117,7 +118,7 @@ fn compiled_model<'py>(
     if request.sql_validation_enabled && validates {
         for hook_name in HOOK_NAMES {
             validate_hook_sql_syntax(
-                config_values.call_method1("get", (hook_name,))?,
+                mapping_get(&config_values, hook_name)?,
                 hook_name,
                 location()?,
                 syntax()?,
@@ -161,9 +162,7 @@ fn compiled_model<'py>(
     } else {
         top_level_macro_call_names(
             py,
-            &model_input
-                .getattr("macro_source_sql")?
-                .extract::<String>()?,
+            &native_field(model_input, "macro_source_sql")?.extract::<String>()?,
         )?
         .into_any()
     };

@@ -100,12 +100,10 @@ pub(crate) fn run_build_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
         within(&tracker.call_method0("scope")?, |_| {
             let started: Instant = Instant::now();
             run_within_limits(request, &tracker, started).inspect_err(|_| {
-                let verbose: bool = request
-                    .getattr("verbose")
+                let verbose: bool = native_field(request, "verbose")
                     .and_then(|value| value.is_truthy())
                     .unwrap_or(false)
-                    || request
-                        .getattr("debug")
+                    || native_field(request, "debug")
                         .and_then(|value| value.is_truthy())
                         .unwrap_or(false);
                 if verbose {

@@ -20,6 +20,9 @@ use sqlbuild_core::terminal_events::models::TerminalRequest;
 use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 /// The module attribute holding the `ContextVar` of the installed projector.
 const CONTEXT_ATTRIBUTE: &str = "_native_progress_projector_context";
@@ -43,7 +46,7 @@ pub(crate) struct NativeProgressProjector {
 }
 
 fn payload_value<'py>(payload: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    payload.call_method1("get", (key,))
+    mapping_get(payload, key)
 }
 
 fn text_value(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
@@ -86,7 +89,7 @@ fn number_value(value: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {
 
 /// `str(payload.get(key, default))`.
 fn display_value(payload: &Bound<'_, PyAny>, key: &str, default: &str) -> PyResult<String> {
-    let value: Bound<'_, PyAny> = payload.call_method1("get", (key, default))?;
+    let value: Bound<'_, PyAny> = mapping_get_or(payload, key, default)?;
     Ok(value.str()?.to_string())
 }
 
@@ -251,7 +254,7 @@ impl NativeProgressProjector {
     #[pyo3(signature = (*, ordinals, total))]
     fn configure_resources(&self, ordinals: &Bound<'_, PyAny>, total: i64) -> PyResult<()> {
         let mut entries: Vec<(String, i64)> = Vec::new();
-        for item in ordinals.call_method0("items")?.try_iter()? {
+        for item in mapping_items(ordinals)?.try_iter()? {
             entries.push(item?.extract()?);
         }
         self.locked()?.configure_resources(entries, total);

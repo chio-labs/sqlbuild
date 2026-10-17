@@ -323,107 +323,107 @@ impl NativeProjectView {
     }
 
     #[getter]
-    fn run_id(&self) -> String {
+    pub(crate) fn run_id(&self) -> String {
         self.fields.run_id.clone()
     }
 
     #[getter]
-    fn effective_target_name(&self) -> Option<String> {
+    pub(crate) fn effective_target_name(&self) -> Option<String> {
         self.fields.effective_target_name.clone()
     }
 
     #[getter]
-    fn effective_target_database(&self) -> Option<String> {
+    pub(crate) fn effective_target_database(&self) -> Option<String> {
         self.fields.effective_target_database.clone()
     }
 
     #[getter]
-    fn effective_target_schema(&self) -> Option<String> {
+    pub(crate) fn effective_target_schema(&self) -> Option<String> {
         self.fields.effective_target_schema.clone()
     }
 
     #[getter]
-    fn sql_analysis_dialect(&self) -> Option<String> {
+    pub(crate) fn sql_analysis_dialect(&self) -> Option<String> {
         self.fields.sql_analysis_dialect.clone()
     }
 
     #[getter(enforce_explicit_references)]
-    fn is_explicit_reference_enforced(&self) -> bool {
+    pub(crate) fn is_explicit_reference_enforced(&self) -> bool {
         self.fields.enforce_explicit_references
     }
 
     #[getter]
-    fn models(&self, py: Python<'_>) -> Py<PyTuple> {
+    pub(crate) fn models(&self, py: Python<'_>) -> Py<PyTuple> {
         self.fields.models.clone_ref(py)
     }
 
     #[getter]
-    fn native_project(&self, py: Python<'_>) -> Py<NativeCompiledProject> {
+    pub(crate) fn native_project(&self, py: Python<'_>) -> Py<NativeCompiledProject> {
         self.owner.clone_ref(py)
     }
 
     #[getter]
-    fn effective_connection(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn effective_connection(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.effective_connection.clone_ref(py)
     }
 
     #[getter]
-    fn effective_vars(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn effective_vars(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.effective_vars.clone_ref(py)
     }
 
     #[getter]
-    fn binding_catalog(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn binding_catalog(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.binding_catalog.clone_ref(py)
     }
 
     #[getter]
-    fn sql_lexical_syntax(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn sql_lexical_syntax(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.sql_lexical_syntax.clone_ref(py)
     }
 
     #[getter]
-    fn compile_cache_dir(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn compile_cache_dir(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.compile_cache_dir.clone_ref(py)
     }
 
     #[getter]
-    fn loader_functions(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn loader_functions(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.loader_functions.clone_ref(py)
     }
 
     #[getter]
-    fn hook_functions(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn hook_functions(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.hook_functions.clone_ref(py)
     }
 
     #[getter]
-    fn sql_hook_files(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn sql_hook_files(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.sql_hook_files.clone_ref(py)
     }
 
     #[getter]
-    fn materialization_files(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn materialization_files(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.materialization_files.clone_ref(py)
     }
 
     #[getter]
-    fn public_enums(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn public_enums(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.public_enums.clone_ref(py)
     }
 
     #[getter]
-    fn public_constants(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn public_constants(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.public_constants.clone_ref(py)
     }
 
     #[getter]
-    fn loaded_macros(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn loaded_macros(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.loaded_macros.clone_ref(py)
     }
 
     #[getter]
-    fn external_sql_reference_resolver(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn external_sql_reference_resolver(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields
             .boundary
             .external_sql_reference_resolver
@@ -431,57 +431,57 @@ impl NativeProjectView {
     }
 
     #[getter]
-    fn native_session(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn native_session(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.native_session.clone_ref(py)
     }
 
     #[getter]
-    fn settings(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn settings(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.settings.clone_ref(py)
     }
 
     #[getter]
-    fn scenario(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn scenario(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.scenario.clone_ref(py)
     }
 
     #[getter]
-    fn sources(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn sources(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.sources.clone_ref(py)
     }
 
     #[getter]
-    fn seeds(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn seeds(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.seeds.clone_ref(py)
     }
 
     #[getter]
-    fn functions(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn functions(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.functions.clone_ref(py)
     }
 
     #[getter]
-    fn audits(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn audits(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.audits.clone_ref(py)
     }
 
     #[getter]
-    fn sql_tests(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn sql_tests(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.sql_tests.clone_ref(py)
     }
 
     #[getter]
-    fn sql_scenarios(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn sql_scenarios(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.sql_scenarios.clone_ref(py)
     }
 
     #[getter]
-    fn diagnostics(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn diagnostics(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.diagnostics.clone_ref(py)
     }
 
     #[getter]
-    fn unmatched_literal_sql_relations(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn unmatched_literal_sql_relations(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields
             .compiler
             .unmatched_literal_sql_relations
@@ -489,13 +489,13 @@ impl NativeProjectView {
     }
 
     #[getter]
-    fn scope_index(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn scope_index(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.scope_index.clone_ref(py)
     }
 
     /// Each model's authored-to-expanded passes by file path, where interpolation kept the query.
     #[getter]
-    fn sql_expansions(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+    pub(crate) fn sql_expansions(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         self.sql_expansions
             .get_or_try_init(py, || {
                 let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
@@ -516,7 +516,7 @@ impl NativeProjectView {
 
     /// The lineage edges, tags, model folders and names, indexed natively once per project.
     #[getter]
-    fn lineage_graph(&self, py: Python<'_>) -> PyResult<Py<NativeProjectGraph>> {
+    pub(crate) fn lineage_graph(&self, py: Python<'_>) -> PyResult<Py<NativeProjectGraph>> {
         self.lineage_graph
             .get_or_try_init(py, || {
                 let mut rows: Vec<ResourceRow> = Vec::new();

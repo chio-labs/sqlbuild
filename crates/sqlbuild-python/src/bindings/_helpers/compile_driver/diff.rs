@@ -17,10 +17,11 @@ use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::graph::views::project_lineage_views;
 use crate::bindings::_helpers::records::construct::enum_member;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Indexes of the `CompiledObjectKey`s a diff graph names, assigned on first sight.
 struct KeyIndexes<'py> {
@@ -48,7 +49,7 @@ fn adjacency<'py>(
     keys: &KeyIndexes<'py>,
 ) -> PyResult<Vec<(usize, Vec<usize>)>> {
     let mut rows: Vec<(usize, Vec<usize>)> = Vec::new();
-    for item in edges.call_method0("items")?.try_iter()? {
+    for item in mapping_items(edges)?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         rows.push((
             keys.index(&item.get_item(0)?)?,
@@ -76,8 +77,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
         adjacency(&native_field(&lineage, "upstream_deps")?, keys)?;
     let downstream: Vec<(usize, Vec<usize>)> =
         adjacency(&native_field(&lineage, "downstream_deps")?, keys)?;
-    for item in lineage
-        .getattr("tag_index")?
+    for item in native_field(&lineage, "tag_index")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -87,8 +87,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
             keys.indexes(&item.get_item(1)?)?,
         ));
     }
-    for item in lineage
-        .getattr("path_index")?
+    for item in native_field(&lineage, "path_index")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -113,7 +112,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
 /// The `PlannerInputError` a rejected selector raises.
 fn selector_error(py: Python<'_>, error: SelectorError) -> PyErr {
     let raised: PyResult<Bound<'_, PyAny>> = (|| {
-        registry::error(py, ErrorId::PlannerInput)?.call(
+        error_class(py, ErrorId::PlannerInput)?.call(
             (error.message,),
             Some(&keywords(
                 py,

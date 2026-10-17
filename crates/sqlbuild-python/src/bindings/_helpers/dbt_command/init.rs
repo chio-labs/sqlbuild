@@ -16,16 +16,16 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::dbt_command::init_project::build_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::init_project::validate_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 fn missing_project(py: Python<'_>) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", "C242")?;
-        registry::error(py, ErrorId::CliUser)?.call(
+        error_class(py, ErrorId::CliUser)?.call(
             ("sqb dbt init requires --project-dir pointing at a dbt project",),
             Some(&options),
         )
@@ -51,8 +51,7 @@ fn dbt_project_dir<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
     if !given.is_none() {
         return optional_path(given);
     }
-    let in_project: bool = request
-        .getattr("cwd")?
+    let in_project: bool = native_field(request, "cwd")?
         .call_method1("__truediv__", (DBT_PROJECT_FILE,))?
         .call_method0("exists")?
         .is_truthy()?;

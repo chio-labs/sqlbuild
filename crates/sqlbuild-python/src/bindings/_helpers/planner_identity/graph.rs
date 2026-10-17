@@ -26,10 +26,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::graph::algorithms::{closure, inverted};
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const TABLE_FN_TEST_MODE: &str = "table_fn";
 const INLINE_SQL_HOOK: &str = "inline SQL";
@@ -247,7 +249,7 @@ pub(crate) fn build_downstream_deps<'py>(
 }
 
 fn planner_input_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -261,7 +263,7 @@ fn edge_origins<'py>(
     if origins.is_none() {
         return Ok(edges);
     }
-    for item in origins.call_method0("items")?.try_iter()? {
+    for item in mapping_items(origins)?.try_iter()? {
         let ((dependent, dependency), origin): ((Bound<'py, PyAny>, Bound<'py, PyAny>), String) =
             item?.extract()?;
         edges.insert((objects.key(dependent)?, objects.key(dependency)?), origin);
@@ -279,7 +281,7 @@ pub(crate) fn topologically_order_keys<'py>(
     let py: Python<'py> = upstream.py();
     let mut objects = KeyObjects::new();
     let mut edges: Vec<(GraphKey, Vec<GraphKey>)> = Vec::new();
-    for item in upstream.call_method0("items")?.try_iter()? {
+    for item in mapping_items(upstream)?.try_iter()? {
         let (key, deps): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         edges.push((objects.key(key)?, objects.keys(&deps)?));
     }
@@ -357,7 +359,7 @@ pub(crate) fn check_buildability<'py>(
     let mut deps: HashMap<GraphKey, Vec<GraphKey>> = HashMap::new();
     for key in &selected {
         let dep_keys: Bound<'py, PyAny> =
-            upstream_deps.call_method1("get", (objects.object(key), PyTuple::empty(py)))?;
+            mapping_get_or(&upstream_deps, objects.object(key), PyTuple::empty(py))?;
         deps.insert(key.clone(), objects.keys(&dep_keys)?);
     }
     let available = AvailableUpstreams {

@@ -14,6 +14,7 @@ use crate::bindings::_helpers::planner_warehouse::constants::RUN_SCOPE;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{destination_nodes, lower};
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyDict as KeywordDict;
@@ -90,7 +91,7 @@ fn state_schemas(
     if schemas.is_empty() {
         let models = native_field(scope, "models_by_name")?;
         for name in model_key_names(&native_field(scope, "selected_keys")?)? {
-            let model = models.call_method1("get", (name,))?;
+            let model = mapping_get(&models, name)?;
             if model.is_none() {
                 continue;
             }

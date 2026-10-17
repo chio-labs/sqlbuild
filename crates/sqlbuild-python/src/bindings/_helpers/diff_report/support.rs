@@ -9,9 +9,9 @@ use sqlbuild_cli::diff_report::models::DiffRequestFacts;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::models::HostId;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 /// `name(**pairs)` with keyword arguments.
 pub(crate) fn call<'py>(
@@ -43,7 +43,7 @@ pub(crate) fn cli_error(py: Python<'_>, class: ErrorId, error: &DiffUserError) -
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", error.code.as_str())?;
         keywords.set_item("help", help)?;
-        registry::error(py, class)?.call((error.message.as_str(),), Some(&keywords))
+        error_class(py, class)?.call((error.message.as_str(),), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),
@@ -81,7 +81,7 @@ pub(crate) fn matches_class(
 
 /// Whether `error` is an instance of the native error class `class`.
 pub(crate) fn matches_native(py: Python<'_>, error: &PyErr, class: ErrorId) -> PyResult<bool> {
-    error.value(py).is_instance(&registry::error(py, class)?)
+    error.value(py).is_instance(&error_class(py, class)?)
 }
 
 /// Whether `error` is an `Exception` rather than a `BaseException` such as an interrupt.

@@ -12,9 +12,9 @@ use sqlbuild_state::events::constants::{
 use sqlbuild_state::events::models::EventOrder;
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::constants::{COLUMN_KIND, MODEL_KIND, OLD_NAME_KIND};
 use crate::bindings::_helpers::state_rows::models::{EventTable, EventTableLayout};
 use crate::bindings::_helpers::state_rows::timestamps::presumed_utc;
@@ -57,7 +57,7 @@ pub(crate) fn layout(kind: &str) -> PyResult<EventTableLayout> {
 
 /// `MigrationStateError(message)`.
 pub(crate) fn state_error(py: Python<'_>, message: &str) -> PyErr {
-    match registry::error(py, ErrorId::MigrationState).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::MigrationState).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

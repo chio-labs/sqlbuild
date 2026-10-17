@@ -16,10 +16,12 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::audit_views::audit_reference_rows;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
@@ -119,7 +121,7 @@ fn shape(
     columns: &Bound<'_, PyAny>,
 ) -> PyResult<(String, Vec<(String, String)>)> {
     let mut pairs: Vec<(String, String)> = Vec::new();
-    for pair in columns.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(columns)?.try_iter()? {
         pairs.push(pair?.extract()?);
     }
     Ok((name.extract()?, pairs))
@@ -196,7 +198,7 @@ fn model_input(
     let values: Bound<'_, PyAny> = native_field(&native_field(model, "config")?, "values")?;
     let mut hooks: Vec<HookSqlInput> = Vec::new();
     for key in MODEL_HOOK_KEYS {
-        let entries: Bound<'_, PyAny> = values.call_method1("get", (key,))?;
+        let entries: Bound<'_, PyAny> = mapping_get(&values, key)?;
         if !(entries.is_instance_of::<PyList>() || entries.is_instance_of::<PyTuple>()) {
             continue;
         }
@@ -253,9 +255,7 @@ fn optional_attribute<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bo
 
 /// Whether the values set `sql_analysis = false`.
 fn opts_out(values: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(values
-        .call_method1("get", (SQL_ANALYSIS_CONFIG_KEY,))?
-        .is(PyBool::new(values.py(), false)))
+    Ok(mapping_get(values, SQL_ANALYSIS_CONFIG_KEY)?.is(PyBool::new(values.py(), false)))
 }
 
 /// `sorted(binding_relation_names(...))` of a native view's reference rows.
@@ -348,7 +348,7 @@ fn python_diagnostic<'py>(
 fn failure_error(py: Python<'_>, failure: ResourceSqlFailure) -> PyResult<PyErr> {
     Ok(match failure {
         ResourceSqlFailure::CursorIntrinsic(message) => {
-            PyErr::from_value(registry::error(py, ErrorId::CompileInput)?.call1((message,))?)
+            PyErr::from_value(error_class(py, ErrorId::CompileInput)?.call1((message,))?)
         }
         ResourceSqlFailure::Normalization(message) | ResourceSqlFailure::Internal(message) => {
             compiler_error(message)

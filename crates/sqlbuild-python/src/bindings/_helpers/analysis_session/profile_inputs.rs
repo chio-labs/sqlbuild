@@ -11,6 +11,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -37,8 +38,7 @@ pub(crate) fn nullability_rules(profile: &Bound<'_, PyAny>) -> PyResult<(Pairs, 
     }
     let adapter: Bound<'_, PyDict> = PyDict::new(py);
     let mut rows: Pairs = Vec::new();
-    for item in profile
-        .getattr("function_nullability_rules")?
+    for item in native_field(profile, "function_nullability_rules")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -62,10 +62,10 @@ pub(crate) fn nullability_rules(profile: &Bound<'_, PyAny>) -> PyResult<(Pairs, 
 /// `{relation: {column: value}}` as ordered rows, each value as `str(value)`.
 pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<Shapes> {
     let mut rows: Shapes = Vec::new();
-    for item in shapes.call_method0("items")?.try_iter()? {
+    for item in mapping_items(shapes)?.try_iter()? {
         let (name, shape): (String, Bound<'_, PyAny>) = item?.extract()?;
         let mut pairs: Pairs = Vec::new();
-        for column in shape.call_method0("items")?.try_iter()? {
+        for column in mapping_items(&shape)?.try_iter()? {
             let (column, value): (String, Bound<'_, PyAny>) = column?.extract()?;
             pairs.push((column, value.str()?.extract()?));
         }
@@ -76,8 +76,7 @@ pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<Shapes> {
 
 /// A `{key: value}` text mapping's items in order.
 pub(crate) fn pairs(mapping: &Bound<'_, PyAny>) -> PyResult<Pairs> {
-    mapping
-        .call_method0("items")?
+    mapping_items(mapping)?
         .try_iter()?
         .map(|item| item?.extract())
         .collect()
@@ -109,10 +108,7 @@ pub(crate) fn case_sensitive_shapes(
     profile: &Bound<'_, PyAny>,
     dialect: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
-    if profile
-        .getattr("quoted_identifiers_ignore_case")?
-        .is_truthy()?
-    {
+    if native_field(profile, "quoted_identifiers_ignore_case")?.is_truthy()? {
         return Ok(false);
     }
     if dialect.is_none() {
@@ -136,9 +132,7 @@ pub(crate) fn profile_catalog<'py>(
         py,
         (
             dialect.to_owned(),
-            profile
-                .getattr("quoted_identifiers_ignore_case")?
-                .extract()?,
+            native_field(profile, "quoted_identifiers_ignore_case")?.extract()?,
             Vec::new(),
             Vec::new(),
         ),

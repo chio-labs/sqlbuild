@@ -15,10 +15,11 @@ use sqlbuild_model_config::name_patterns::models::NamePattern;
 use crate::bindings::_helpers::contracts::effective_config::{
     effective_config_target_fields, effective_config_target_name,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const TARGET_GROUPS: [(&str, RecordId); 4] = [
     ("clone", RecordId::ClonePolicy),
@@ -43,7 +44,7 @@ thread_local! {
 
 fn spec_error<'py>(py: Python<'py>, message: Bound<'py, PyString>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::SpecConfig)?.call1((message,))?,
+        error_class(py, ErrorId::SpecConfig)?.call1((message,))?,
     ))
 }
 
@@ -129,9 +130,7 @@ pub(crate) fn resolve_effective_collection_rendering<'py>(
     if !declaration_override.is_none() {
         return Ok(declaration_override.clone());
     }
-    project_config
-        .getattr("constants")?
-        .getattr("collection_rendering")
+    native_field(project_config, "constants")?.getattr("collection_rendering")
 }
 
 /// `local` when set, else `project`.
@@ -150,16 +149,14 @@ pub(crate) fn resolve_effective_scenario_config<'py>(
     let project: Bound<'py, PyAny> = native_field(project_config, "scenario")?;
     let local: Bound<'py, PyAny> = native_field(local_config, "scenario")?;
     let overrides: Bound<'py, PyDict> = PyDict::new(py);
-    for item in project
-        .getattr("local_type_overrides")?
+    for item in native_field(&project, "local_type_overrides")?
         .call_method0("items")?
         .try_iter()?
     {
         let (dialect, rules): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         overrides.set_item(dialect, py.get_type::<PyDict>().call1((rules,))?)?;
     }
-    for item in local
-        .getattr("local_type_overrides")?
+    for item in native_field(&local, "local_type_overrides")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -214,12 +211,16 @@ fn scenario_local_type_overrides_for_dialect<'py>(
     let overrides: Bound<'py, PyDict> = PyDict::new(py);
     overrides.call_method1(
         "update",
-        (rules.call_method1("get", (ALL_DIALECTS, PyDict::new(py)))?,),
+        (mapping_get_or(&rules, ALL_DIALECTS, PyDict::new(py))?,),
     )?;
     if !sql_analysis_dialect.is_none() {
         overrides.call_method1(
             "update",
-            (rules.call_method1("get", (sql_analysis_dialect, PyDict::new(py)))?,),
+            (mapping_get_or(
+                &rules,
+                sql_analysis_dialect,
+                PyDict::new(py),
+            )?,),
         )?;
     }
     Ok(overrides)

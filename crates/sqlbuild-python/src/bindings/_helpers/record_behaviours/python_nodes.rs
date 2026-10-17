@@ -8,6 +8,8 @@ use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 
 use crate::bindings::_helpers::graph::node_set::PyNodeSet;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 
 /// `PythonNodeGraph.selected_sql_refs(selected_names=...)`: SQL references of the selected closure.
 pub(crate) fn graph_selected_sql_refs(
@@ -30,13 +32,12 @@ pub(crate) fn graph_selected_sql_refs(
     let starts: Vec<Bound<'_, PyAny>> = selected.try_iter()?.collect::<PyResult<_>>()?;
     let mut visited: PyNodeSet<'_> = PyNodeSet(PySet::new(py, &starts)?);
     breadth_first_reach(starts, None, &mut visited, |name| {
-        upstream
-            .call_method1("get", (name, PyTuple::empty(py)))?
+        mapping_get_or(&upstream, name, PyTuple::empty(py))?
             .try_iter()?
             .collect::<PyResult<Vec<Bound<'_, PyAny>>>>()
     })?;
     for name in visited.0.iter() {
-        let node: Bound<'_, PyAny> = nodes_by_name.call_method1("get", (name,))?;
+        let node: Bound<'_, PyAny> = mapping_get(&nodes_by_name, name)?;
         if !node.is_none() {
             for reference in native_field(&node, "sql_deps")?.try_iter()? {
                 refs.add(reference?)?;

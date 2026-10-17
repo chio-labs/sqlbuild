@@ -24,6 +24,8 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 
@@ -95,7 +97,7 @@ fn session_request<'py>(
     let py: Python<'py> = catalog.py();
     let profile: &Bound<'py, PyAny> = &request.profile;
     let mut families: Vec<(String, Vec<_>)> = Vec::new();
-    for item in request.dynamic_families.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&request.dynamic_families)?.try_iter()? {
         let (name, declared): (String, Bound<'py, PyAny>) = item?.extract()?;
         families.push((name, family_rows(&declared)?));
     }
@@ -198,9 +200,7 @@ fn record_catalog_changes<'py>(
     }
     schemas.call_method1("update", (&additions,))?;
     if !additions.is_empty() {
-        catalog
-            .getattr("native")?
-            .call_method1("update_relations", (&additions,))?;
+        native_field(catalog, "native")?.call_method1("update_relations", (&additions,))?;
     }
     let selected_types: Bound<'py, PyDict> = PyDict::new(py);
     let selected_nullability: Bound<'py, PyDict> = PyDict::new(py);
@@ -217,9 +217,7 @@ fn record_catalog_changes<'py>(
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("types", selected_types)?;
     arguments.set_item("nullability", selected_nullability)?;
-    catalog
-        .getattr("prepare_analysis")?
-        .call((), Some(&arguments))?;
+    native_field(catalog, "prepare_analysis")?.call((), Some(&arguments))?;
     Ok(())
 }
 
@@ -260,7 +258,7 @@ fn model_rows<'py>(
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::with_capacity(model_inputs.len());
     for model_input in model_inputs {
         let values: Bound<'py, PyAny> = native_field(model_input, "config")?.getattr("values")?;
-        let get = |key: &str| values.call_method1("get", (key,));
+        let get = |key: &str| mapping_get(&values, key);
         let query_sql: Bound<'py, PyAny> = PyString::new(
             py,
             &analysis_cursor_sql(
@@ -273,7 +271,7 @@ fn model_rows<'py>(
         let mut placeholders: Vec<(String, String)> = Vec::new();
         let raw: Bound<'py, PyAny> = get("placeholders")?;
         if raw.is_instance_of::<PyDict>() {
-            for item in raw.call_method0("items")?.try_iter()? {
+            for item in mapping_items(&raw)?.try_iter()? {
                 let (key, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
                 placeholders.push((key.str()?.extract()?, value.str()?.extract()?));
             }

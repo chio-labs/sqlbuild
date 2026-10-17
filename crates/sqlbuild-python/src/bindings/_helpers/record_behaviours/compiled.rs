@@ -4,10 +4,10 @@ use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::relation_keys::entry_relation_key_row;
 
 /// `CompilerDiagnostic` positions.
@@ -385,6 +385,6 @@ pub(crate) fn build_context_declaration_expansion(
 /// A `CompileInputError` carrying `message`.
 pub(crate) fn compile_input_error(py: Python<'_>, message: &str) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
+        error_class(py, ErrorId::CompileInput)?.call1((message,))?,
     ))
 }

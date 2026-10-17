@@ -24,9 +24,11 @@ use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::project_assembly::models::{
     NativeProjectResources, NativeResourceFailure,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const OS_MODULE: &str = "os";
@@ -102,7 +104,7 @@ fn opaque_render<'py>(value: &Bound<'py, PyAny>) -> PyResult<Render<'py>> {
 fn variables<'py>(effective_vars: &Bound<'py, PyAny>) -> PyResult<RequestVariables<'py>> {
     let mut rows: Vec<(String, Variable)> = Vec::new();
     let mut held: Vec<Bound<'py, PyAny>> = Vec::new();
-    for item in effective_vars.call_method0("items")?.try_iter()? {
+    for item in mapping_items(effective_vars)?.try_iter()? {
         let (name, value): (String, Bound<'py, PyAny>) = item?.extract()?;
         if let Some(scalar) = plain_scalar(&value)? {
             rows.push((name, Variable::Scalar(scalar)));
@@ -135,7 +137,7 @@ fn environment_rows(
     environment_template_names(values)
         .into_iter()
         .map(|name| {
-            let value: Option<String> = environment.call_method1("get", (&name,))?.extract()?;
+            let value: Option<String> = mapping_get(&environment, &name)?.extract()?;
             Ok((name, value))
         })
         .collect()
@@ -172,8 +174,7 @@ fn model_facts(model_input: &Bound<'_, PyAny>, checks: &Bound<'_, PyAny>) -> PyR
     for check in checks.try_iter()? {
         let (sql, placeholders): (String, Bound<'_, PyAny>) = check?.extract()?;
         let placeholders: Pairs = if placeholders.is_truthy()? {
-            placeholders
-                .call_method0("items")?
+            mapping_items(&placeholders)?
                 .try_iter()?
                 .map(|pair| pair?.extract())
                 .collect::<PyResult<_>>()?
@@ -334,15 +335,14 @@ fn failure_error<'py>(
     held: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     match error {
-        AssemblyError::CompileInput { message, help } => {
-            registry::error(py, ErrorId::CompileInput)?.call(
+        AssemblyError::CompileInput { message, help } => error_class(py, ErrorId::CompileInput)?
+            .call(
                 (message,),
                 Some(&keywords(
                     py,
                     &[("help", help.into_pyobject(py)?.into_any())],
                 )?),
-            )
-        }
+            ),
         AssemblyError::Value(message) => {
             Ok(PyValueError::new_err(message).value(py).clone().into_any())
         }

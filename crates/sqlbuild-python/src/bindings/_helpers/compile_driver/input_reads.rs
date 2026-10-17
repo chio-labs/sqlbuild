@@ -169,13 +169,13 @@ impl CompileInputReads {
 
     /// The recorded environment variable names in sorted order.
     #[getter]
-    fn environment_names<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn environment_names<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(py, self.locked().environment_names.iter())
     }
 
     /// The recorded settings classes in discovery order.
     #[getter]
-    fn settings_classes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn settings_classes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let classes: Vec<Py<PyAny>> = self
             .locked()
             .settings_classes
@@ -187,7 +187,7 @@ impl CompileInputReads {
 
     /// Whether any template read the per-invocation run identity.
     #[getter]
-    fn read_run_id(&self) -> bool {
+    pub(crate) fn read_run_id(&self) -> bool {
         self.locked().read_run_id
     }
 }

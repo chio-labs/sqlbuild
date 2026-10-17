@@ -22,9 +22,9 @@ use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_
 use crate::bindings::_helpers::query_command::query_values::{
     csv_text, display_text, json_cell, python_json_rows, strict_width,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const LONG_FORMAT: &str = "long";
 const TABLE_FORMAT: &str = "table";
@@ -43,7 +43,7 @@ fn user_error(py: Python<'_>, message: &str, code: Option<&str>, help: Option<&s
         if let Some(help) = help {
             options.set_item("help", help)?;
         }
-        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -189,7 +189,7 @@ fn run_sql<'py>(
             Err(_) => value.str().map(Bound::into_any),
         };
         let wrapped: PyErr = match message
-            .and_then(|message| registry::error(py, ErrorId::QueryExecution)?.call1((message,)))
+            .and_then(|message| error_class(py, ErrorId::QueryExecution)?.call1((message,)))
         {
             Ok(raised) => PyErr::from_value(raised),
             Err(failure) => failure,

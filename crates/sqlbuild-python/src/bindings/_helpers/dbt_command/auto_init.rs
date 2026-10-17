@@ -71,8 +71,7 @@ pub(crate) fn ensure_twin_project<'py>(
         Some(raw) => resolved(&effective_dir, &raw)?,
         None => resolved_path(&effective_dir, effective_dir.clone())?,
     };
-    let twin: Bound<'py, PyAny> = dbt_project_dir
-        .getattr("parent")?
+    let twin: Bound<'py, PyAny> = native_field(&dbt_project_dir, "parent")?
         .call_method1("__truediv__", (TWIN_PROJECT_DIR,))?;
     let forwarded: Vec<String> = forwarded_args(&args, &effective_dir)?;
     if project_config_found(&twin)? {

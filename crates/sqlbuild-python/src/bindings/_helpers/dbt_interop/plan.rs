@@ -14,6 +14,7 @@ use crate::bindings::_helpers::records::construct::{
     enum_from_value, enum_member, new_record, new_record_with,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const BUILD_OPTIONS: (&[&str], &[&str]) = (
@@ -72,7 +73,7 @@ fn plan_text(plan: &Bound<'_, PyAny>) -> PyResult<DbtInteropPlanText> {
     let mut anchors: Vec<(String, Vec<String>)> = Vec::new();
     for term in native_field(&selection, "dbt_anchor_terms")?.try_iter()? {
         let term: Bound<'_, PyAny> = term?;
-        let unique_ids: Vec<String> = strings(&anchor_ids.call_method1("get", (&term, &empty))?)?;
+        let unique_ids: Vec<String> = strings(&mapping_get_or(&anchor_ids, &term, &empty)?)?;
         anchors.push((term.extract()?, unique_ids));
     }
     let mut path_translations: Vec<(String, String)> = Vec::new();
@@ -83,8 +84,7 @@ fn plan_text(plan: &Bound<'_, PyAny>) -> PyResult<DbtInteropPlanText> {
         command: native_field(plan, "command")?.getattr("value")?.extract()?,
         dbt_argv: strings(&native_field(plan, "dbt_command_argv")?)?,
         supplemental_dbt_argvs: argvs(&native_field(plan, "supplemental_dbt_command_argvs")?)?,
-        dbt_nodes: plan
-            .getattr("dbt_selected_nodes")?
+        dbt_nodes: native_field(plan, "dbt_selected_nodes")?
             .try_iter()?
             .map(|node| ls_node(&node?))
             .collect::<PyResult<_>>()?,

@@ -23,9 +23,9 @@ use crate::bindings::_helpers::lineage::lineage_objects::{LineageClasses, log_li
 use crate::bindings::_helpers::lineage::project_schema::{
     fast_schema, inferred_names, rich_schema,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
@@ -46,8 +46,7 @@ pub(crate) fn build_project_column_lineage<'py>(
         return Ok(None);
     }
     let classes: LineageClasses<'py> = LineageClasses::new(project.py())?;
-    if !project
-        .getattr("settings")?
+    if !native_field(project, "settings")?
         .getattr("sql_analysis")?
         .is_truthy()?
     {
@@ -253,8 +252,7 @@ fn fast_lineage<'py>(
 fn output_columns(classes: &LineageClasses<'_>, facts: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     if facts.is_instance(&classes.compact_facts)? {
         let pool: Bound<'_, PyAny> = native_field(facts, "string_pool")?;
-        return facts
-            .getattr("rows")?
+        return native_field(facts, "rows")?
             .try_iter()?
             .map(|row| pool.get_item(row?.get_item(0)?)?.extract())
             .collect();
@@ -266,7 +264,7 @@ fn output_columns(classes: &LineageClasses<'_>, facts: &Bound<'_, PyAny>) -> PyR
 }
 
 fn unknown_dialect_error(py: Python<'_>, dialect: &str) -> PyErr {
-    match registry::error(py, ErrorId::UnknownLineageDialect)
+    match error_class(py, ErrorId::UnknownLineageDialect)
         .and_then(|class| class.call1((format!("Unknown dialect: {dialect}"),)))
     {
         Ok(error) => PyErr::from_value(error),
@@ -360,11 +358,9 @@ fn polyglot_dialect(
         .extract()?;
     match analysis_dialect(&normalized) {
         AnalysisDialect::Alias(value) => Ok(value.to_owned()),
-        AnalysisDialect::Named(name) => classes
-            .analysis_dialect
-            .call1((name,))?
-            .getattr("value")?
-            .extract(),
+        AnalysisDialect::Named(name) => {
+            native_field(&classes.analysis_dialect.call1((name,))?, "value")?.extract()
+        }
     }
 }
 

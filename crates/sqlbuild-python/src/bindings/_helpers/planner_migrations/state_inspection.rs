@@ -21,6 +21,8 @@ use crate::bindings::_helpers::planner_migrations::constants::{
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::state_rows::constants::{COLUMN_KIND, MODEL_KIND, OLD_NAME_KIND};
 use crate::bindings::_helpers::state_rows::migration_io::{read_events, stored_old_name_columns};
 use crate::bindings::_helpers::state_rows::migration_objects::layout;
@@ -169,10 +171,7 @@ impl MigrationStateInspection {
         schema: &Bound<'py, PyAny>,
         key: &str,
     ) -> PyResult<Vec<Py<PyAny>>> {
-        let known: Bound<'py, PyAny> = self
-            .known_fingerprints
-            .bind(py)
-            .call_method1("get", (key,))?;
+        let known: Bound<'py, PyAny> = mapping_get(self.known_fingerprints.bind(py), key)?;
         let latest: Bound<'py, PyAny> = if known.is_none() {
             let adapter: &Bound<'py, PyAny> = self.adapter.bind(py);
             let fingerprint_set: Bound<'py, PyAny> = read_latest_fingerprints(Some(&keywords(
@@ -255,25 +254,25 @@ impl MigrationStateInspection {
 
     /// The database whose namespaces this inspection reads.
     #[getter]
-    fn database(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn database(&self, py: Python<'_>) -> Py<PyAny> {
         self.database.clone_ref(py)
     }
 
     /// Every migration event read so far.
     #[getter]
-    fn events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         tuple_of(py, &self.events)
     }
 
     /// Every column migration event read so far.
     #[getter]
-    fn column_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn column_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         tuple_of(py, &self.column_events)
     }
 
     /// The old-name history of every move read by `inspect_old_name_views`.
     #[getter]
-    fn old_name_histories<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn old_name_histories<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         old_name_views(
             tuple_of(py, &self.old_name_moves)?.as_any(),
             tuple_of(py, &self.old_name_facts)?.as_any(),
@@ -504,7 +503,7 @@ impl MigrationStateInspection {
         let empty: Bound<'_, PyTuple> = PyTuple::empty(py);
         for (key, relation) in matched {
             let relation_columns: Bound<'_, PyAny> =
-                columns.call_method1("get", (native_field(&relation, "identity")?, &empty))?;
+                mapping_get_or(&columns, native_field(&relation, "identity")?, &empty)?;
             let mut this: PyRefMut<'_, Self> = slf.borrow_mut();
             this.relations.insert(key.clone(), relation.unbind());
             this.columns.insert(key, relation_columns.unbind());

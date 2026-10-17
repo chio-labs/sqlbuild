@@ -18,6 +18,7 @@ use crate::bindings::_helpers::freshness::observation::{
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 use sqlbuild_core::freshness_text::main::freshness_status::freshness_status;
 use sqlbuild_core::freshness_text::models::{
@@ -71,8 +72,7 @@ fn previous_record<'py>(
     let Some(lookup) = &state.by_identity else {
         return Ok(None);
     };
-    let found: Bound<'py, PyAny> =
-        lookup.call_method1("get", (native_field(record, "identity")?,))?;
+    let found: Bound<'py, PyAny> = mapping_get(lookup, native_field(record, "identity")?)?;
     Ok(found.is_truthy()?.then_some(found))
 }
 
@@ -109,8 +109,7 @@ fn observed_result(
             let tolerance: Option<String> = lag_tolerance.extract()?;
             if equivalent(previous, &current, tolerance.as_deref())? {
                 StateComparison::Equivalent {
-                    same_hash: previous
-                        .getattr("data_version_hash")?
+                    same_hash: native_field(previous, "data_version_hash")?
                         .eq(native_field(&current, "data_version_hash")?)?,
                 }
             } else {
@@ -183,9 +182,8 @@ fn adapter_observation<'py>(
             optional_text(native_field(&unknown, "message")?)?,
         )?));
     }
-    let observation: Bound<'py, PyAny> = batch
-        .getattr("observations")?
-        .call_method1("get", (name,))?;
+    let observation: Bound<'py, PyAny> =
+        native_field(batch, "observations")?.call_method1("get", (name,))?;
     if observation.is_none() {
         return Ok(Err(target_result(
             source,

@@ -26,6 +26,9 @@ use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_t
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    SQL_TEST_ARTIFACT_PLANS, SQL_TEST_MODEL_CHAINS, count_stage,
+};
 use crate::bindings::_helpers::compile_outputs::artifacts::{
     publish_staged_artifacts, remove_stale_artifacts,
 };
@@ -34,10 +37,13 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::plan_output::sql_test_model_chain_names_by_key;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::sql_test_glue::plan_driver::plan_compiled_sql_test_artifacts;
 
 const COMPILED_DIR: &str = "compiled";
 const MODELS_DIR: &str = "models";
@@ -139,8 +145,7 @@ fn function_sql(adapter: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyRe
     ] {
         arguments.push((field, native_field(function, field)?));
     }
-    let statements: Vec<String> = adapter
-        .getattr("render_create_function")?
+    let statements: Vec<String> = native_field(adapter, "render_create_function")?
         .call((), Some(&keywords(py, &arguments)?))?
         .extract()?;
     Ok(statements.join(";\n\n"))
@@ -246,8 +251,7 @@ fn write_planned_target<'py>(
     batch.flush(py)?;
     for entry in native_field(plan_output, "function_entries")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
-        if entry
-            .getattr("destination")?
+        if native_field(&entry, "destination")?
             .getattr("qualified_name")?
             .is_none()
         {
@@ -362,17 +366,21 @@ fn planned_artifacts<'py>(
         ],
     )?;
     within(&lifecycle, |entered| {
-        let artifacts: Vec<Py<PyAny>> = call_with(
-            &registry::native(py, NativeAttr::PlanCompiledSqlTestArtifacts)?,
-            &[
-                ("project", project.clone()),
-                ("tests", PyTuple::new(py, tests)?.into_any()),
-                ("adapter", adapter.clone()),
-                (
-                    "sql_analysis_enabled",
-                    native_field(project, "settings")?.getattr("sql_analysis")?,
-                ),
-            ],
+        count_stage(py, SQL_TEST_ARTIFACT_PLANS, 1)?;
+        let artifacts: Vec<Py<PyAny>> = plan_compiled_sql_test_artifacts(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project", project.clone()),
+                    ("tests", PyTuple::new(py, tests)?.into_any()),
+                    ("adapter", adapter.clone()),
+                    (
+                        "sql_analysis_enabled",
+                        native_field(&native_field(project, "settings")?, "sql_analysis")?,
+                    ),
+                ],
+            )?),
         )?
         .try_iter()?
         .map(|artifact| artifact.map(Bound::unbind))
@@ -403,10 +411,9 @@ fn plan_tests<'py>(
         None
     } else {
         let context: IdentityContext<'py> = identity_context(project, adapter)?;
-        let chains: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::SqlTestModelChainNamesByKey)?,
-            &[("project", project.clone()), ("tests", tests.clone())],
-        )?;
+        count_stage(py, SQL_TEST_MODEL_CHAINS, 1)?;
+        let chains: Bound<'py, PyAny> =
+            sql_test_model_chain_names_by_key(project, &tests)?.into_any();
         Some((context, chains))
     };
     let mut pending: Vec<PendingTest> = Vec::new();
@@ -420,8 +427,7 @@ fn plan_tests<'py>(
             continue;
         };
         let record_key: String = artifact_record_key(&test)?;
-        let chain: Bound<'py, PyAny> =
-            chains.call_method1("get", (native_field(&test, "key")?, &empty))?;
+        let chain: Bound<'py, PyAny> = mapping_get_or(chains, native_field(&test, "key")?, &empty)?;
         let identity: String = artifact_identity(&test, &chain, context)?;
         let reusable: Option<SqlTestArtifactRecord> = cached
             .get(&record_key)
@@ -492,7 +498,7 @@ fn artifact_diagnostics<'py>(
                 ("severity", "error".into_bound_py_any(py)?),
                 (
                     "code",
-                    registry::error(py, ErrorId::PlannerInput)?.getattr("code")?,
+                    native_field(&error_class(py, ErrorId::PlannerInput)?, "code")?,
                 ),
                 ("message", message?),
                 ("resource_type", "sql_test".into_bound_py_any(py)?),
@@ -581,8 +587,7 @@ pub(crate) fn write_static_target<'py>(
     batch.flush(py)?;
     for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        if function
-            .getattr("destination")?
+        if native_field(&function, "destination")?
             .getattr("qualified_name")?
             .is_none()
         {
@@ -702,7 +707,7 @@ pub(crate) fn publish_staged_target<'py>(
 
 /// `StagedArtifactsChangedError(message, help=...)`.
 pub(crate) fn staging_changed(py: Python<'_>, message: &str) -> PyResult<PyErr> {
-    let error: Bound<'_, PyAny> = registry::error(py, ErrorId::StagedArtifactsChanged)?.call(
+    let error: Bound<'_, PyAny> = error_class(py, ErrorId::StagedArtifactsChanged)?.call(
         (message,),
         Some(&keywords(
             py,
@@ -773,7 +778,7 @@ pub(crate) fn static_sql_test_planning_diagnostics<'py>(
 /// Plan every SQL test whose cached artifact under `target_dir` cannot be reused.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_static_sql_tests<'py>(
+pub(crate) fn plan_static_sql_tests<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<PlannedStaticSqlTests> {

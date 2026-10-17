@@ -61,12 +61,8 @@ pub(crate) fn compile_analysis_selection<'py>(
         }
     }
     let no_cache: Bound<'py, PyAny> = native_field(options, "no_cache")?;
-    if (options
-        .getattr("resolve_python_run_selectors")?
-        .is_truthy()?
-        && has_python_nodes)
-        || options
-            .getattr("sql_test_selection")?
+    if (native_field(options, "resolve_python_run_selectors")?.is_truthy()? && has_python_nodes)
+        || native_field(options, "sql_test_selection")?
             .getattr("names")?
             .is_truthy()?
     {

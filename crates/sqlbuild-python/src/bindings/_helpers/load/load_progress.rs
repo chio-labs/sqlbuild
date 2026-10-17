@@ -49,13 +49,11 @@ pub(crate) fn load_result_text(result: &Bound<'_, PyAny>) -> PyResult<LoadResult
     Ok(LoadResultText {
         source_name: native_field(result, "source_name")?.extract()?,
         loader_name: native_field(result, "loader_name")?.str()?.extract()?,
-        resource_kind: result
-            .getattr("resource_kind")?
+        resource_kind: native_field(result, "resource_kind")?
             .getattr("value")?
             .extract()?,
         status: LoadStatus::from_value(
-            &result
-                .getattr("status")?
+            &native_field(result, "status")?
                 .getattr("value")?
                 .extract::<String>()?,
         ),
@@ -230,8 +228,7 @@ impl LoadProgressReporter {
         if reporter.projector.is_some() || !reporter.is_tty {
             return Ok(());
         }
-        let loader_node: bool = source
-            .getattr("meta")?
+        let loader_node: bool = native_field(source, "meta")?
             .call_method1("get", (LOADER_NODE_KEY,))?
             .is(PyBool::new(py, true).to_owned());
         {

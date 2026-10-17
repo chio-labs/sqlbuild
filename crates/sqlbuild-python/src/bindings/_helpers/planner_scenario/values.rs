@@ -1,8 +1,8 @@
 //! Existing Python model constructors and scenario diagnostics.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyErr, PyResult, Python};
 use pyo3::types::PyString;
 
@@ -21,7 +21,7 @@ pub(super) fn error(
         args.push(("help", string(py, help)));
     }
     Ok(PyErr::from_value(call_with(
-        &registry::error(py, ErrorId::PlannerInput)?,
+        &error_class(py, ErrorId::PlannerInput)?,
         &args,
     )?))
 }

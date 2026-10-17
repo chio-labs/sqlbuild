@@ -17,6 +17,8 @@ use sqlbuild_analysis::dag_artifact::models::{
 use crate::bindings::_helpers::dag_artifact::selection::selected_node_ids;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 
 const PROJECT_NAME_KEY: &str = "project_name";
 const DEFAULT_MATERIALIZATION: &str = "table";
@@ -40,15 +42,15 @@ fn listed<'py>(value: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
 fn projection_node(node: &Bound<'_, PyAny>) -> PyResult<DagProjectionNode> {
     Ok(DagProjectionNode {
         id: text(&node.get_item("id")?)?,
-        kind: text(&node.call_method1("get", ("kind",))?)?,
+        kind: text(&mapping_get(node, "kind")?)?,
     })
 }
 
 fn projection_check(check: &Bound<'_, PyAny>) -> PyResult<DagProjectionCheck> {
     let empty: Bound<'_, PyTuple> = PyTuple::empty(check.py());
     Ok(DagProjectionCheck {
-        kind: text(&check.call_method1("get", ("kind",))?)?,
-        checked_asset_ids: listed(&check.call_method1("get", ("checked_asset_ids", empty))?)?
+        kind: text(&mapping_get(check, "kind")?)?,
+        checked_asset_ids: listed(&mapping_get_or(check, "checked_asset_ids", empty)?)?
             .iter()
             .map(text)
             .collect::<PyResult<_>>()?,
@@ -77,7 +79,7 @@ fn artifact_graph<'py>(dag: &Bound<'py, PyAny>, with_checks: bool) -> PyResult<A
             .collect::<PyResult<_>>()?
     };
     Ok(ArtifactGraph {
-        project_name: dag.call_method1("get", (PROJECT_NAME_KEY,))?,
+        project_name: mapping_get(dag, PROJECT_NAME_KEY)?,
         graph: DagProjectionGraph {
             nodes: nodes.iter().map(projection_node).collect::<PyResult<_>>()?,
             edges,
@@ -131,7 +133,7 @@ fn picked<'py>(objects: &[Bound<'py, PyAny>], indexes: &[usize]) -> Vec<Bound<'p
 
 /// `str(node.get("materialization_type") or "table")`.
 fn materialization_type(node: &Bound<'_, PyAny>) -> PyResult<String> {
-    let value: Bound<'_, PyAny> = node.call_method1("get", ("materialization_type",))?;
+    let value: Bound<'_, PyAny> = mapping_get(node, "materialization_type")?;
     if value.is_truthy()? {
         text(&value)
     } else {
@@ -206,7 +208,7 @@ fn rivers_asset_plans<'py>(dag: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLis
 
 /// `str(check.get("path"))`, or `None` without a path.
 fn check_description<'py>(check: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let path: Bound<'py, PyAny> = check.call_method1("get", ("path",))?;
+    let path: Bound<'py, PyAny> = mapping_get(check, "path")?;
     if path.is_none() {
         Ok(path)
     } else {
@@ -263,9 +265,8 @@ fn dagster_selected_asset_nodes<'py>(
 ) -> PyResult<Bound<'py, PyList>> {
     let py: Python<'py> = dag.py();
     let selected: BTreeSet<String> = selected_node_ids(dag, (select, exclude))?;
-    let nodes: Vec<Bound<'py, PyAny>> =
-        listed(&dag.call_method1("get", ("nodes", PyTuple::empty(py)))?)?;
-    let project_name: Bound<'py, PyAny> = dag.call_method1("get", (PROJECT_NAME_KEY,))?;
+    let nodes: Vec<Bound<'py, PyAny>> = listed(&mapping_get_or(dag, "nodes", PyTuple::empty(py))?)?;
+    let project_name: Bound<'py, PyAny> = mapping_get(dag, PROJECT_NAME_KEY)?;
     let graph: DagProjectionGraph = DagProjectionGraph {
         nodes: nodes.iter().map(selection_node).collect::<PyResult<_>>()?,
         ..DagProjectionGraph::default()
@@ -282,8 +283,8 @@ fn dagster_selected_asset_nodes<'py>(
 /// A node read the way selection reads it: `str(node.get("id"))` and `str(node.get("kind"))`.
 fn selection_node(node: &Bound<'_, PyAny>) -> PyResult<DagProjectionNode> {
     Ok(DagProjectionNode {
-        id: text(&node.call_method1("get", ("id",))?)?,
-        kind: text(&node.call_method1("get", ("kind",))?)?,
+        id: text(&mapping_get(node, "id")?)?,
+        kind: text(&mapping_get(node, "kind")?)?,
     })
 }
 

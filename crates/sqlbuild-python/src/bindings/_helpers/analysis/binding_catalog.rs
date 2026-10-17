@@ -13,6 +13,10 @@ use crate::bindings::_helpers::analysis::conversions;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::models::{CatalogInput, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
@@ -35,17 +39,17 @@ const GENERIC_DIALECT: &str = "generic";
 #[pyclass(module = "sqlbuild._native")]
 pub(crate) struct BindingCatalog {
     #[pyo3(get)]
-    schemas: Py<PyDict>,
+    pub(crate) schemas: Py<PyDict>,
     #[pyo3(get)]
-    dialect: String,
+    pub(crate) dialect: String,
     #[pyo3(get)]
-    quoted_ignore_case: bool,
+    pub(crate) quoted_ignore_case: bool,
     #[pyo3(get)]
-    analysis_shapes: Py<PyDict>,
+    pub(crate) analysis_shapes: Py<PyDict>,
     #[pyo3(get)]
-    expression_shapes: Py<PyDict>,
+    pub(crate) expression_shapes: Py<PyDict>,
     #[pyo3(get)]
-    native: Py<ProjectCatalog>,
+    pub(crate) native: Py<ProjectCatalog>,
 }
 
 /// A catalog's dialect, case mode, known functions and known types.
@@ -90,7 +94,7 @@ impl BindingCatalog {
         let additions: Bound<'_, PyDict> = PyDict::new(py);
         for request in requests {
             let schema: Bound<'_, PyAny> = native_field(request, "schema")?;
-            for item in schema.call_method0("items")?.try_iter()? {
+            for item in mapping_items(&schema)?.try_iter()? {
                 let (name, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
                 if columns.is_truthy()? && !schemas.contains(&name)? {
                     additions.set_item(&name, &columns)?;
@@ -164,9 +168,9 @@ impl BindingCatalog {
     ) -> PyResult<()> {
         let shapes: &Bound<'_, PyDict> = self.analysis_shapes.bind(py);
         let updates: Bound<'_, PyDict> = PyDict::new(py);
-        for item in nullability.call_method0("items")?.try_iter()? {
+        for item in mapping_items(nullability)?.try_iter()? {
             let (name, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
-            let typed: Bound<'_, PyAny> = types.call_method1("get", (&name, PyDict::new(py)))?;
+            let typed: Bound<'_, PyAny> = mapping_get_or(types, &name, PyDict::new(py))?;
             let shape: Bound<'_, PyTuple> = PyTuple::new(py, [typed, columns])?;
             let unchanged: bool = match shapes.get_item(&name)? {
                 Some(known) => known.eq(&shape)?,
@@ -221,7 +225,7 @@ impl BindingCatalog {
             return Ok(columns.clone());
         }
         let mut exact_input: bool = false;
-        for shape in inputs.call_method0("values")?.try_iter()? {
+        for shape in mapping_values(inputs)?.try_iter()? {
             for name in shape?.try_iter()? {
                 let name: String = name?.extract()?;
                 exact_input |= name.contains(QUOTED_IDENTIFIER_DELIMITER);
@@ -256,7 +260,7 @@ pub(crate) fn ignores_quoted_case(
     if dialect.is_none() || dialect.extract::<String>()? != SNOWFLAKE_DIALECT {
         return Ok(false);
     }
-    let parameters: Bound<'_, PyAny> = connection.call_method1("get", (SESSION_PARAMETERS,))?;
+    let parameters: Bound<'_, PyAny> = mapping_get(connection, SESSION_PARAMETERS)?;
     let Ok(parameters) = parameters.downcast::<PyDict>() else {
         return Ok(false);
     };
@@ -295,9 +299,7 @@ pub(crate) fn schema_validations<'py>(
     for (index, request) in requests.iter().enumerate() {
         let key: CatalogKey = (
             native_dialect(&native_field(request, "dialect")?)?,
-            request
-                .getattr("quoted_identifiers_ignore_case")?
-                .extract()?,
+            native_field(request, "quoted_identifiers_ignore_case")?.extract()?,
             native_field(request, "known_functions")?.extract()?,
             native_field(request, "known_types")?.extract()?,
         );

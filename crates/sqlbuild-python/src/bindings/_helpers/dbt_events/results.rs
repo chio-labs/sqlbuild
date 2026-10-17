@@ -82,8 +82,7 @@ fn field<T: for<'a> pyo3::FromPyObject<'a>>(value: &Bound<'_, PyAny>, name: &str
 
 /// A Python `DbtNodeExecutionResult` as plain data.
 pub(crate) fn native_result(result: &Bound<'_, PyAny>) -> PyResult<DbtNodeResult> {
-    let messages: Vec<DbtNodeMessage> = result
-        .getattr("messages")?
+    let messages: Vec<DbtNodeMessage> = native_field(result, "messages")?
         .try_iter()?
         .map(|message| {
             let message: Bound<'_, PyAny> = message?;

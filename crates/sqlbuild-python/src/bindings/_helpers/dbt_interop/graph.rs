@@ -24,10 +24,11 @@ use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt
 use crate::bindings::_helpers::planner_selection::model_selectors::{
     resolve_sqlbuild_model_selector_names, split_selector_expansion,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const MODEL_RESOURCE_TYPE: &str = "model";
 const SELECTION_OPTIONS: (&[&str], &[&str]) = (
@@ -67,7 +68,7 @@ impl DbtCombinedGraph {
 impl DbtCombinedGraph {
     /// Every node's stable ID.
     #[getter]
-    fn nodes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
+    pub(crate) fn nodes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
         PyFrozenSet::new(
             py,
             self.graph.upstream.order.iter().map(|key| key.stable_id()),
@@ -76,13 +77,13 @@ impl DbtCombinedGraph {
 
     /// Upstream edges by stable ID.
     #[getter]
-    fn upstream_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub(crate) fn upstream_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         stable_edges(py, &self.graph.upstream)
     }
 
     /// Downstream edges by stable ID.
     #[getter]
-    fn downstream_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub(crate) fn downstream_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         stable_edges(py, &self.graph.downstream)
     }
 
@@ -107,8 +108,7 @@ fn key_set(mapping: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
 
 fn graph_manifest(manifest: &Bound<'_, PyAny>) -> PyResult<DbtGraphManifest> {
     let mut models: Vec<DbtGraphManifestModel> = Vec::new();
-    for model in manifest
-        .getattr("models_by_unique_id")?
+    for model in native_field(manifest, "models_by_unique_id")?
         .call_method0("values")?
         .try_iter()?
     {
@@ -148,10 +148,7 @@ fn project_models<'py>(
         let mut model_deps: Vec<String> = Vec::new();
         for dependency in native_field(&model, "deps")?.try_iter()? {
             let dependency: Bound<'py, PyAny> = dependency?;
-            if dependency
-                .getattr("resource_type")?
-                .eq(MODEL_RESOURCE_TYPE)?
-            {
+            if native_field(&dependency, "resource_type")?.eq(MODEL_RESOURCE_TYPE)? {
                 model_deps.push(native_field(&dependency, "name")?.extract()?);
             }
         }
@@ -217,7 +214,7 @@ fn selection_error(py: Python<'_>, error: DbtSelectionError<PyErr>) -> PyErr {
             let raised = || -> PyResult<PyErr> {
                 let keywords: Bound<'_, PyDict> = PyDict::new(py);
                 keywords.set_item("code", PATH_SELECTOR_ERROR_CODE)?;
-                let error: Bound<'_, PyAny> = registry::error(py, ErrorId::DbtInteropArgument)?
+                let error: Bound<'_, PyAny> = error_class(py, ErrorId::DbtInteropArgument)?
                     .call((message,), Some(&keywords))?;
                 Ok(PyErr::from_value(error))
             };
@@ -231,7 +228,7 @@ fn anchors(mapping: &Bound<'_, PyAny>) -> PyResult<HashMap<String, Vec<String>>>
     if mapping.is_none() {
         return Ok(result);
     }
-    for item in mapping.call_method0("items")?.try_iter()? {
+    for item in mapping_items(mapping)?.try_iter()? {
         let (term, unique_ids): (String, Bound<'_, PyAny>) = item?.extract()?;
         result.insert(term, texts(&unique_ids)?);
     }

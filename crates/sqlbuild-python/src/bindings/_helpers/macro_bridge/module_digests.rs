@@ -14,6 +14,7 @@ use crate::bindings::_helpers::cache::native_store::digest_files;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::macro_bridge::store_keys::text;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 /// The fields of one stored row: a path and its digest.
 const MODULE_DIGEST_ROW_FIELDS: usize = 2;
@@ -52,7 +53,7 @@ fn module_digests_metadata<'py>(
     digests: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyBytes>> {
     let mut rows: Vec<(JsonValue, JsonValue)> = Vec::new();
-    for item in digests.call_method0("items")?.try_iter()? {
+    for item in mapping_items(digests)?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         rows.push((
             text(item.get_item(0)?.downcast::<PyString>()?)?,

@@ -8,6 +8,7 @@ use pyo3::types::{PyDict, PyDictMethods, PySlice, PyTuple, PyTupleMethods};
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// `ColumnTransformKind` members by native transform code.
@@ -50,7 +51,7 @@ fn resource_name<'py>(
     index: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let names: Bound<'py, PyAny> = native_field(facts, "resource_names")?;
-    let name: Bound<'py, PyAny> = names.call_method1("get", (index,))?;
+    let name: Bound<'py, PyAny> = mapping_get(&names, index)?;
     if !name.is_none() {
         return Ok(name);
     }

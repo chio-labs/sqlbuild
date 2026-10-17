@@ -36,10 +36,10 @@ use sqlbuild_rules::sql_lint::types::PreparedSql;
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::authored_sql::{AuthoredExpansion, expand_with_inputs};
 use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
 use crate::bindings::_helpers::rules::dsl_headers::header_violations;
@@ -481,7 +481,7 @@ pub(crate) fn lint_sources(
 fn check_stop(py: Python<'_>, stop: Option<&AtomicBool>) -> PyResult<()> {
     if stop.is_some_and(|stop| stop.load(Ordering::Acquire)) {
         return Err(PyErr::from_value(
-            registry::error(py, ErrorId::LintStopped)?.call0()?,
+            error_class(py, ErrorId::LintStopped)?.call0()?,
         ));
     }
     Ok(())
@@ -863,7 +863,7 @@ pub(crate) fn prepare_single_body(request: &SingleBodyRequest<'_, '_>) -> PyResu
 /// The `NativeLintError` of a body native preparation declined.
 fn not_prepared(py: Python<'_>, path: &Path) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::NativeLint)?.call1((format!(
+        error_class(py, ErrorId::NativeLint)?.call1((format!(
             "{} could not be prepared for native SQL lint",
             path.display()
         ),))?,
@@ -951,7 +951,7 @@ fn expand_bodies(
                         let error: PyErr = expansion_error(file_path, error);
                         if !error
                             .value(py)
-                            .is_instance(&registry::error(py, ErrorId::ProjectCompile)?)?
+                            .is_instance(&error_class(py, ErrorId::ProjectCompile)?)?
                         {
                             return Err(error);
                         }
@@ -983,7 +983,7 @@ fn expansion_error(file_path: &Bound<'_, PyAny>, error: PyErr) -> PyErr {
     let wrapped = (|| -> PyResult<Option<PyErr>> {
         if !error
             .value(py)
-            .is_instance(&registry::error(py, ErrorId::CompileInput)?)?
+            .is_instance(&error_class(py, ErrorId::CompileInput)?)?
         {
             return Ok(None);
         }
@@ -993,7 +993,7 @@ fn expansion_error(file_path: &Bound<'_, PyAny>, error: PyErr) -> PyErr {
             error.value(py).str()?
         );
         Ok(Some(PyErr::from_value(
-            registry::error(py, ErrorId::ProjectCompile)?.call1((message,))?,
+            error_class(py, ErrorId::ProjectCompile)?.call1((message,))?,
         )))
     })();
     match wrapped {

@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyList, PyTuple};
@@ -82,8 +83,7 @@ pub(crate) fn project_facts(
         let hook: Bound<'_, PyAny> = hook?;
         hooks.push(PythonHook {
             name: native_field(&hook, "name")?.extract()?,
-            path: hook
-                .getattr("relative_path")?
+            path: native_field(&hook, "relative_path")?
                 .call_method0("as_posix")?
                 .extract()?,
             reads: ref_keys(&native_field(&hook, "reads")?)?,
@@ -124,7 +124,7 @@ fn model_references(
         native_field(model, "destination_row")?.extract()?;
     let mut sql_hooks: Vec<SqlHook> = Vec::new();
     for hook_key in MODEL_HOOK_KEYS {
-        for (index, entry) in hook_items(&values.call_method1("get", (hook_key,))?)?
+        for (index, entry) in hook_items(&mapping_get(&values, hook_key)?)?
             .into_iter()
             .enumerate()
         {
@@ -166,7 +166,7 @@ fn python_hook_names(
 ) -> PyResult<Vec<String>> {
     let mut names: Vec<String> = Vec::new();
     for hook_key in MODEL_HOOK_KEYS {
-        let value: Bound<'_, PyAny> = values.call_method1("get", (hook_key,))?;
+        let value: Bound<'_, PyAny> = mapping_get(values, hook_key)?;
         let items: Vec<Bound<'_, PyAny>> = if value.is_instance(&entries.python)? {
             vec![value]
         } else if is_sequence(&value) {
@@ -201,7 +201,7 @@ fn is_sequence(value: &Bound<'_, PyAny>) -> bool {
 
 /// The `migrate_from` string when the model keeps an old-name view, as Python resolves it.
 fn migrate_from(values: &Bound<'_, PyAny>, retains_old_names: bool) -> PyResult<Option<String>> {
-    let raw: Bound<'_, PyAny> = values.call_method1("get", (MIGRATE_FROM_KEY,))?;
+    let raw: Bound<'_, PyAny> = mapping_get(values, MIGRATE_FROM_KEY)?;
     let Ok(text) = raw.extract::<String>() else {
         return Ok(None);
     };
@@ -225,8 +225,7 @@ fn audit_gate(audit: &Bound<'_, PyAny>) -> PyResult<AuditGate> {
     };
     Ok(AuditGate {
         name: native_field(audit, "name")?.extract()?,
-        path: audit
-            .getattr("audit_file")?
+        path: native_field(audit, "audit_file")?
             .getattr("relative_path")?
             .str()?
             .extract()?,

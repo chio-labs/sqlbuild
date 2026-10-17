@@ -236,8 +236,7 @@ fn inventory_node(node: &Bound<'_, PyAny>, upstream: Vec<String>) -> PyResult<In
     Ok(InventoryNode {
         name: native_field(node, "name")?.extract()?,
         tags: native_field(node, "tags")?.extract()?,
-        relative_path: node
-            .getattr("relative_path")?
+        relative_path: native_field(node, "relative_path")?
             .call_method0("as_posix")?
             .extract()?,
         upstream,

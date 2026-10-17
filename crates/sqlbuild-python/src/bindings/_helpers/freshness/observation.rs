@@ -19,6 +19,7 @@ use crate::bindings::_helpers::records::construct::{
     enum_from_value, enum_member, new_record, new_record_with,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
@@ -201,9 +202,7 @@ fn observe_configured_inner<'py>(
         };
         let relation: String = render_source_relation(source, Some(&observer.adapter))?;
         call_with(
-            &observer
-                .adapter
-                .getattr("render_source_freshness_max_query")?,
+            &native_field(&observer.adapter, "render_source_freshness_max_query")?,
             &[
                 ("column", column),
                 ("source_relation", text(py, &relation)),
@@ -500,8 +499,7 @@ fn observe_adapter_batch_inner<'py>(
                 ),
             )],
         )?;
-        let metadata: Bound<'py, PyAny> =
-            metadata_by_request.call_method1("get", (request, missing))?;
+        let metadata: Bound<'py, PyAny> = mapping_get_or(&metadata_by_request, request, missing)?;
         if let Some(unknown) = metadata_unknown(&name, &metadata)? {
             unknown_sources.set_item(&name, unknown)?;
             continue;

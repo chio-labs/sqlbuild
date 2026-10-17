@@ -16,9 +16,9 @@ use sqlbuild_core::init_command::main::render_init_summary::render_init_summary;
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::init_command::scaffold::scaffold_blank_project;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::workspace_commands::commands::update_sqlbuild_skills;
 
 const EXISTS_MESSAGE: &str = "sqlbuild_project.toml already exists in this directory";
@@ -27,7 +27,7 @@ fn exists_error(py: Python<'_>) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", "C900")?;
-        registry::error(py, ErrorId::CliUser)?.call((EXISTS_MESSAGE,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((EXISTS_MESSAGE,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),

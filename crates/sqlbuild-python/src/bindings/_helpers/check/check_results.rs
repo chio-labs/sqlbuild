@@ -95,14 +95,10 @@ fn grouping(
     }
     let py: Python<'_> = python_graph.py();
     let empty: Bound<'_, PyAny> = pyo3::types::PyTuple::empty(py).into_any();
-    let mut dependencies: Vec<String> = names(
-        python_graph
-            .getattr("upstream_deps")?
-            .call_method1("get", (name, empty))?,
-    )?;
-    let node: Bound<'_, PyAny> = python_graph
-        .getattr("nodes_by_name")?
-        .call_method1("get", (name,))?;
+    let mut dependencies: Vec<String> =
+        names(native_field(python_graph, "upstream_deps")?.call_method1("get", (name, empty))?)?;
+    let node: Bound<'_, PyAny> =
+        native_field(python_graph, "nodes_by_name")?.call_method1("get", (name,))?;
     if !node.is_none() {
         for reference in native_field(&node, "sql_deps")?.try_iter()? {
             dependencies.push(native_field(&reference?, "name")?.extract()?);

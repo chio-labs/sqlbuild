@@ -20,9 +20,10 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::relationship_scan::{
     RelationshipScanSettings, ScenarioRow, TestFileRow, scanned_relationships,
 };
@@ -587,7 +588,7 @@ impl<'py> Walk<'py> {
             let key: String = normalized(py, &native_field(&macro_file, "relative_path")?)?;
             macro_files.insert(key, macro_file);
         }
-        for loaded in loaded_macros.call_method0("values")?.try_iter()? {
+        for loaded in mapping_values(loaded_macros)?.try_iter()? {
             let loaded: Bound<'py, PyAny> = loaded?;
             let key: String = normalized(py, &native_field(&loaded, "relative_path")?)?;
             let (line, metadata) = self.loaded_metadata(&loaded)?;
@@ -625,7 +626,7 @@ fn normalized(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<String> {
 
 fn unindexable(py: Python<'_>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::UnindexableScope)?.call1((UNINDEXABLE_SCOPE_MESSAGE,))?,
+        error_class(py, ErrorId::UnindexableScope)?.call1((UNINDEXABLE_SCOPE_MESSAGE,))?,
     ))
 }
 
@@ -821,13 +822,13 @@ fn scenario_row(scenario: &Bound<'_, PyAny>) -> PyResult<ScenarioRow> {
 impl NativeScopeIndex {
     /// The static index, without grants.
     #[getter]
-    fn index(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn index(&self, py: Python<'_>) -> Py<PyAny> {
         self.index.clone_ref(py)
     }
 
     /// Whether any macro, enum or constant is scoped, which makes relationship grants matter.
     #[getter]
-    fn has_scoped_relationship_declarations(&self) -> bool {
+    pub(crate) fn has_scoped_relationship_declarations(&self) -> bool {
         self.native.has_scoped_relationship_declarations
     }
 

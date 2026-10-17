@@ -18,6 +18,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 
@@ -81,15 +82,12 @@ pub(crate) fn published_shape<'py>(
     let shape: Bound<'py, PyDict> = binding_shape(model, columns, inputs, profile)?;
     let values: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?;
     let snapshot: Bound<'py, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
-    if values
-        .call_method1("get", ("materialized",))?
-        .eq(snapshot)?
-    {
+    if mapping_get(&values, "materialized")?.eq(snapshot)? {
         for (key, default) in [
             ("valid_from_column", VALID_FROM_DEFAULT),
             ("valid_to_column", VALID_TO_DEFAULT),
         ] {
-            let name: Bound<'py, PyAny> = values.call_method1("get", (key,))?;
+            let name: Bound<'py, PyAny> = mapping_get(&values, key)?;
             let name: Bound<'py, PyAny> = if name.is_truthy()? {
                 name
             } else {

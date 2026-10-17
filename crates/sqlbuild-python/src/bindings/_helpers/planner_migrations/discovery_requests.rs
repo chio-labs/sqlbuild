@@ -11,6 +11,7 @@ use crate::bindings::_helpers::planner_migrations::models::{
 };
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
@@ -118,7 +119,7 @@ pub(super) fn automatic<'py>(
         }
         let name = native_field(item, "name")?;
         let event = matches.1.get_item(&name)?;
-        let candidate = matches.0.call_method1("get", (&name,))?;
+        let candidate = mapping_get(matches.0, &name)?;
         let origin = if let Some(event) = event {
             Some((
                 location(runtime, &native_field(&event, "origin")?, true)?,

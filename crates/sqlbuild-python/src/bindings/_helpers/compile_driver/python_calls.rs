@@ -1,9 +1,35 @@
 //! Calling the Python stages the native driver still runs: imports, keyword calls and `with`.
 
+use std::collections::HashMap;
+use std::sync::{Mutex, PoisonError};
+
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString};
+
+/// Standard-library modules whose attributes tests and users never replace, so lookups are kept.
+const STABLE_MODULES: &[&str] = &[
+    "builtins",
+    "collections.abc",
+    "dataclasses",
+    "decimal",
+    "enum",
+    "functools",
+    "hashlib",
+    "itertools",
+    "json",
+    "math",
+    "operator",
+    "pathlib",
+    "re",
+    "uuid",
+];
+
+type ImportedCache = Mutex<HashMap<(String, String), Py<PyAny>>>;
+
+/// `imported` attributes of `STABLE_MODULES`, looked up once.
+static IMPORTED: PyOnceLock<ImportedCache> = PyOnceLock::new();
 
 /// `module.name`, imported.
 pub(crate) fn imported<'py>(
@@ -11,7 +37,25 @@ pub(crate) fn imported<'py>(
     module: &str,
     name: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    py.import(module)?.getattr(name)
+    if !STABLE_MODULES.contains(&module) {
+        return py.import(module)?.getattr(name);
+    }
+    let cache: &ImportedCache = IMPORTED.get_or_init(py, || Mutex::new(HashMap::new()));
+    let key: (String, String) = (module.to_owned(), name.to_owned());
+    let cached: Option<Py<PyAny>> = cache
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .get(&key)
+        .map(|found| found.clone_ref(py));
+    if let Some(found) = cached {
+        return Ok(found.into_bound(py));
+    }
+    let found: Bound<'py, PyAny> = py.import(module)?.getattr(name)?;
+    let _ = cache
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .insert(key, found.clone().unbind());
+    Ok(found)
 }
 
 /// Keyword arguments built from `(name, value)` pairs, in order.

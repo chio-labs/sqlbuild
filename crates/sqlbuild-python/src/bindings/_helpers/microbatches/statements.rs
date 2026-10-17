@@ -21,6 +21,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const MISSING_SCHEMA: &str = "microbatch history requires a target schema";
 const EMPTY_INSERT: &str = "bulk microbatch event insert requires at least one event";
@@ -244,7 +245,7 @@ fn create_indexes<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'
     };
     let mut indexes: Vec<(String, Vec<String>)> = Vec::new();
     let definitions: Bound<'_, PyAny> = host::entry(py, ExecutorHost::MicrobatchDirectIndexes)?;
-    for item in definitions.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&definitions)?.try_iter()? {
         let (name, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
         let columns: Vec<String> = columns
             .try_iter()?

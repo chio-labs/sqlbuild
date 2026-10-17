@@ -12,10 +12,10 @@ use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
 use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::relations::build_scenario_relation_plan;
 use crate::bindings::_helpers::planner_scenario::values::string;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
@@ -177,7 +177,7 @@ fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     if let Some(code) = code {
         return Err(PyErr::from_value(call_with(
-            &registry::error(py, ErrorId::PlannerInput)?,
+            &error_class(py, ErrorId::PlannerInput)?,
             &[
                 ("message", string(py, &messages.join("\n"))),
                 ("code", code),

@@ -1,9 +1,9 @@
 //! Rule findings converted between the Python `Finding` model and native rows and payloads.
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use serde_json::Value;
@@ -97,7 +97,7 @@ pub(crate) fn finding_fault(finding: &Bound<'_, PyAny>) -> PyResult<Fault> {
 /// The `RulesError` a malformed native or custom-rule finding raises.
 pub(crate) fn invalid_finding(py: Python<'_>) -> PyErr {
     let raised = || -> PyResult<PyErr> {
-        let class: Bound<'_, PyAny> = registry::error(py, ErrorId::Rules)?;
+        let class: Bound<'_, PyAny> = error_class(py, ErrorId::Rules)?;
         Ok(PyErr::from_value(class.call1((INVALID_FINDING,))?))
     };
     raised().unwrap_or_else(|error| error)

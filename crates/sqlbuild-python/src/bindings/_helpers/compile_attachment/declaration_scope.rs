@@ -7,10 +7,11 @@ use pyo3::types::PyTuple;
 use crate::bindings::_helpers::cache::sql_test_scan_store::SqlTestScanCache;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compile_driver::stage_work::{DECLARATION_SCOPES, count_stage};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
@@ -21,7 +22,7 @@ use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
 fn compile_error(py: Python<'_>, message: Bound<'_, PyAny>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
+        error_class(py, ErrorId::CompileInput)?.call1((message,))?,
     ))
 }
 
@@ -82,16 +83,14 @@ pub(crate) fn build_declaration_scope<'py>(
     .into_any();
     let validated: Result<(), PyErr> = validate_scope_index(&native_field(&native, "index")?);
     if let Err(error) = validated {
-        if !error.is_instance(py, &registry::error(py, ErrorId::ScopeValidation)?) {
+        if !error.is_instance(py, &error_class(py, ErrorId::ScopeValidation)?) {
             return Err(error);
         }
         let raised: PyErr = compile_error(py, error.value(py).str()?.into_any())?;
         raised.set_cause(py, Some(error));
         return Err(raised);
     }
-    if native
-        .getattr("has_scoped_relationship_declarations")?
-        .is_truthy()?
+    if native_field(&native, "has_scoped_relationship_declarations")?.is_truthy()?
         && (test_files.is_truthy()? || scenario_files.is_truthy()?)
     {
         let faults: Bound<'py, PyAny> = call_with(
@@ -132,7 +131,7 @@ fn indexed_macro_metadata<'py>(loaded_macros: &Bound<'py, PyAny>) -> PyResult<Bo
     let code_type: Bound<'py, PyAny> = imported(py, "types", "CodeType")?;
     let signature: Bound<'py, PyAny> = imported(py, "inspect", "signature")?;
     let mut rows: Vec<Bound<'py, PyTuple>> = Vec::new();
-    for pair in loaded_macros.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(loaded_macros)?.try_iter()? {
         let (key, loaded): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let function: Bound<'py, PyAny> = native_field(&loaded, "function")?;
         let code: Bound<'py, PyAny> =
@@ -144,9 +143,7 @@ fn indexed_macro_metadata<'py>(loaded_macros: &Bound<'py, PyAny>) -> PyResult<Bo
         };
         let parameters: Bound<'py, PyTuple> = PyTuple::new(
             py,
-            signature
-                .call1((&function,))?
-                .getattr("parameters")?
+            native_field(&signature.call1((&function,))?, "parameters")?
                 .try_iter()?
                 .collect::<PyResult<Vec<_>>>()?,
         )?;

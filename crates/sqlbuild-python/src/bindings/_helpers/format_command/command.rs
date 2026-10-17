@@ -134,14 +134,12 @@ fn fixture_inputs<'py>(resolved: &Resolved<'py>) -> PyResult<Option<Bound<'py, P
         return Ok(None);
     }
     let local: Bound<'py, PyAny> = native_field(discovered, "local_config")?;
-    let settings_owner: Bound<'py, PyAny> = if local
-        .getattr("setting_overrides")?
-        .contains(SQL_ANALYSIS_SETTING_KEY)?
-    {
-        local
-    } else {
-        native_field(discovered, "project_config")?
-    };
+    let settings_owner: Bound<'py, PyAny> =
+        if native_field(&local, "setting_overrides")?.contains(SQL_ANALYSIS_SETTING_KEY)? {
+            local
+        } else {
+            native_field(discovered, "project_config")?
+        };
     let enabled: bool = native_field(
         &native_field(&settings_owner, "settings")?,
         SQL_ANALYSIS_SETTING_KEY,

@@ -585,7 +585,7 @@ impl PostgresExecutionHistory {
 
     /// The number of incremental projection calls.
     #[getter]
-    fn project_calls(&self) -> i64 {
+    pub(crate) fn project_calls(&self) -> i64 {
         self.project_calls.load(Ordering::SeqCst)
     }
 
@@ -834,8 +834,7 @@ impl PostgresExecutionHistory {
             slf,
             |cursor| {
                 Self::lock_history(cursor)?;
-                let stored: Bound<'py, PyAny> = slf
-                    .getattr("_read_all_events")?
+                let stored: Bound<'py, PyAny> = native_field(slf, "_read_all_events")?
                     .call((), Some(&keywords(py, &[("cursor", cursor.clone())])?))?;
                 let projected = checked(py, project_runs(projection_facts(&stored)?, Vec::new()))?;
                 let records: Bound<'py, PyTuple> = run_records(py, &projected)?;

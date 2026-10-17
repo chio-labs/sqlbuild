@@ -30,10 +30,10 @@ use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_co
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::refactor::contract_compare::compare_contracts;
 
 const GENERATE_ACTION: &str = "generate";
@@ -43,7 +43,7 @@ fn user_error(py: Python<'_>, message: &str, code: &str) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
-        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -328,8 +328,7 @@ fn resource_text(item: Bound<'_, PyAny>) -> PyResult<ContractResourceText> {
         resource_type: native_field(&item, "resource_type")?.str()?.to_string(),
         resource_name: native_field(&item, "resource_name")?.str()?.to_string(),
         relation: parts.join("."),
-        findings: item
-            .getattr("findings")?
+        findings: native_field(&item, "findings")?
             .try_iter()?
             .map(|finding| finding_text(finding?))
             .collect::<PyResult<_>>()?,
@@ -339,13 +338,11 @@ fn resource_text(item: Bound<'_, PyAny>) -> PyResult<ContractResourceText> {
 fn report(result: &Bound<'_, PyAny>) -> PyResult<ContractReport> {
     Ok(ContractReport {
         from_target: native_field(result, "from_target")?.str()?.to_string(),
-        resources: result
-            .getattr("evidence")?
+        resources: native_field(result, "evidence")?
             .try_iter()?
             .map(|item| resource_text(item?))
             .collect::<PyResult<_>>()?,
-        written_paths: result
-            .getattr("written_paths")?
+        written_paths: native_field(result, "written_paths")?
             .try_iter()?
             .map(|path| Ok(path?.str()?.to_string()))
             .collect::<PyResult<_>>()?,
@@ -394,8 +391,7 @@ pub(crate) fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -
         &discovered.clone(),
     )?;
     let from_target: Bound<'_, PyAny> = native_field(request, "from_target")?;
-    if !discovered
-        .getattr("project_config")?
+    if !native_field(&discovered, "project_config")?
         .getattr("targets")?
         .contains(&from_target)?
     {

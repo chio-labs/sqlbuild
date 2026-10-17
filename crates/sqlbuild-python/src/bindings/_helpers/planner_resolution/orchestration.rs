@@ -16,11 +16,12 @@ use crate::bindings::_helpers::planner_resolution::refs::{
     resolve_udf_references,
 };
 use crate::bindings::_helpers::planner_resolution::sources::resolve_sources;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{PyErr, pyfunction, wrap_pyfunction};
@@ -268,7 +269,7 @@ fn intrinsic_bounds<'py>(
 }
 
 fn unresolved_bounds_error(py: Python<'_>, name: &str, cause: Option<&str>) -> PyResult<PyErr> {
-    let error = registry::error(py, ErrorId::PlannerInput)?;
+    let error = error_class(py, ErrorId::PlannerInput)?;
     let kwargs = PyDict::new(py);
     let message = if let Some(cause) = cause {
         kwargs.set_item("help", "rebuild it with an explicit cursor interval (--start-cursor-ts and --end-cursor-ts, or the -int forms), or make it a microbatch model so a full rebuild can run batch by batch")?;
@@ -344,10 +345,7 @@ pub(crate) fn model_hook_entries<'py>(
     let name: String = model_reads::model_name(model)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ["pre_hooks", "post_hooks"] {
-        hooks.push(resolution.hook(
-            values.call_method1("get", (key,))?,
-            &format!("Model '{name}' {key}"),
-        )?);
+        hooks.push(resolution.hook(mapping_get(&values, key)?, &format!("Model '{name}' {key}"))?);
     }
     PyTuple::new(model.py(), hooks)
 }

@@ -18,6 +18,7 @@ use crate::bindings::_helpers::planner_warehouse::source_columns::gather_source_
 use crate::bindings::_helpers::planner_warehouse::source_deferral::build_source_read_map;
 use crate::bindings::_helpers::planner_warehouse::source_deferral::with_declared_source_reads;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
@@ -61,8 +62,7 @@ fn source_warehouse_columns<'py>(
     }
     let entries = PyTuple::new(
         py,
-        source_read_map
-            .call_method0("values")?
+        mapping_values(source_read_map)?
             .try_iter()?
             .collect::<PyResult<Vec<_>>>()?,
     )?;

@@ -207,8 +207,7 @@ fn read_exporters(
             continue;
         }
         filters.push(ExporterFilter {
-            event_kinds: exporter
-                .getattr("event_kinds")?
+            event_kinds: native_field(&exporter, "event_kinds")?
                 .try_iter()?
                 .map(|kind| kind.and_then(|kind| kind.extract::<String>()))
                 .collect::<PyResult<_>>()?,
@@ -230,8 +229,7 @@ fn read_output_sinks(sinks: &Bound<'_, PyAny>) -> PyResult<Vec<OutputSink>> {
         bound.push(OutputSink {
             function: native_field(&sink, "function")?.unbind(),
             provider_arguments: native_field(&sink, "provider_arguments")?.unbind(),
-            streams: sink
-                .getattr("streams")?
+            streams: native_field(&sink, "streams")?
                 .try_iter()?
                 .map(|stream| stream.and_then(|stream| stream.extract::<String>()))
                 .collect::<PyResult<_>>()?,
@@ -712,12 +710,12 @@ impl EventExporterDispatcher {
     }
 
     #[getter]
-    fn thread(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn thread(&self, py: Python<'_>) -> Py<PyAny> {
         self.thread.clone_ref(py)
     }
 
     #[getter]
-    fn notification_thread(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+    pub(crate) fn notification_thread(&self, py: Python<'_>) -> Option<Py<PyAny>> {
         self.notification_thread
             .as_ref()
             .map(|thread| thread.clone_ref(py))
@@ -818,9 +816,8 @@ impl EventExporterDispatcher {
         let delivered = (|| -> PyResult<Delivery> {
             for record in records.try_iter()? {
                 let record: Bound<'_, PyAny> = record?;
-                let is_output: bool = record
-                    .getattr("record_type")?
-                    .eq(COMMAND_OUTPUT_RECORD_TYPE)?;
+                let is_output: bool =
+                    native_field(&record, "record_type")?.eq(COMMAND_OUTPUT_RECORD_TYPE)?;
                 let stream: Option<String> = if is_output {
                     Some(native_field(&record, "stream")?.extract()?)
                 } else {

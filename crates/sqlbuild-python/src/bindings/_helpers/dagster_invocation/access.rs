@@ -7,6 +7,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
 
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 
 /// An asset path as Dagster spells it.
 pub(crate) type AssetPath = Vec<String>;
@@ -15,7 +17,7 @@ pub(crate) type CheckKey = (AssetPath, String);
 
 /// `mapping.get(key)`.
 pub(crate) fn get<'py>(mapping: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    mapping.call_method1("get", (key,))
+    mapping_get(mapping, key)
 }
 
 /// `mapping.get(key, default)`.
@@ -24,7 +26,7 @@ pub(crate) fn value_or<'py>(
     key: &str,
     default: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    mapping.call_method1("get", (key, default))
+    mapping_get_or(mapping, key, default)
 }
 
 /// `str(mapping.get(key))`.
@@ -76,7 +78,7 @@ pub(crate) fn constant_contains(
 pub(crate) fn enabled(record: &Bound<'_, PyAny>, field_constant: ThirdPartyHost) -> PyResult<bool> {
     let py: Python<'_> = record.py();
     let field: Bound<'_, PyAny> = constant(py, field_constant)?;
-    record.call_method1("get", (field, true))?.is_truthy()
+    mapping_get_or(record, field, true)?.is_truthy()
 }
 
 /// Whether a translated DAG node is owned by the SQLBuild asset definition.

@@ -17,6 +17,7 @@ use sqlbuild_core::dbt_events::models::{DbtRowPosition, DbtStreamState, DbtStrea
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::dbt_events::event::dbt_event;
 use crate::bindings::_helpers::dbt_events::results::{native_result, python_result};
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 
 const STREAM_OPTIONS: (&[&str], &[&str]) =
     (&["display_total", "detail_by_unique_id", "use_color"], &[]);
@@ -29,13 +30,13 @@ const RENDER_OPTIONS: (&[&str], &[&str]) = (
 #[pyclass(module = "sqlbuild._native", frozen, get_all)]
 pub(crate) struct DbtEventStreamUpdate {
     /// The node-started progress message.
-    status_message: Option<String>,
+    pub(crate) status_message: Option<String>,
     /// The started or finished node.
-    result: Option<Py<PyAny>>,
+    pub(crate) result: Option<Py<PyAny>>,
     /// The rendered row and its messages.
-    row: Option<String>,
+    pub(crate) row: Option<String>,
     /// Whether `result` is a final result rather than a start.
-    finished: bool,
+    pub(crate) finished: bool,
 }
 
 /// Read dbt's JSON log lines into node progress, rows and results.
@@ -53,7 +54,7 @@ impl DbtEventStream {
         if details.is_none() {
             return Ok(String::new());
         }
-        details.call_method1("get", (unique_id, ""))?.extract()
+        mapping_get_or(details, unique_id, "")?.extract()
     }
 
     fn update(&self, py: Python<'_>, update: DbtStreamUpdate) -> PyResult<DbtEventStreamUpdate> {

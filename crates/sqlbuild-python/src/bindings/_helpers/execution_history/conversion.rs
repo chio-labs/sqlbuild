@@ -194,8 +194,7 @@ pub(crate) fn parsed_status(py: Python<'_>, text: &str) -> PyResult<RunStatus> {
 
 /// A `RunFilter`'s fields.
 pub(crate) fn run_filter_spec(value: &Bound<'_, PyAny>) -> PyResult<RunFilterSpec> {
-    let statuses: Vec<RunStatus> = value
-        .getattr("statuses")?
+    let statuses: Vec<RunStatus> = native_field(value, "statuses")?
         .try_iter()?
         .map(|item| item.and_then(|item| run_status(&item)))
         .collect::<PyResult<_>>()?;

@@ -13,6 +13,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
 const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
@@ -92,10 +93,7 @@ pub(crate) fn build_project_relation_targets<'py>(
         (&["adapter", "plan_output"], &[]),
     )?;
     let plan_output: Bound<'py, PyAny> = arguments.value("plan_output")?;
-    if !plan_output
-        .getattr("enforce_explicit_references")?
-        .is_truthy()?
-    {
+    if !native_field(&plan_output, "enforce_explicit_references")?.is_truthy()? {
         return Ok(None);
     }
     let kinds: RefKinds<'py> = RefKinds::load(py)?;
@@ -208,9 +206,8 @@ fn planned_relation<'py>(
     let kind: Bound<'py, PyAny> = native_field(reference, "kind")?;
     let name: Bound<'py, PyAny> = native_field(reference, "name")?;
     if kind.eq(&kinds.source)? {
-        let source: Bound<'py, PyAny> = plan_output
-            .getattr("python_source_entries")?
-            .call_method1("get", (name,))?;
+        let source: Bound<'py, PyAny> =
+            native_field(plan_output, "python_source_entries")?.call_method1("get", (name,))?;
         if source.is_none() {
             return Ok(source);
         }
@@ -222,7 +219,7 @@ fn planned_relation<'py>(
     } else {
         "seed_locations"
     })?;
-    let location: Bound<'py, PyAny> = locations.call_method1("get", (name,))?;
+    let location: Bound<'py, PyAny> = mapping_get(&locations, name)?;
     if location.is_none() {
         return Ok(location);
     }

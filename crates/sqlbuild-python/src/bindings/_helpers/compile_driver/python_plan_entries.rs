@@ -19,6 +19,7 @@ use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const SKIPPED_UPSTREAM_CODE: &str = "P501";
@@ -47,8 +48,7 @@ impl<'py> NodeKinds<'py> {
 /// `python_graph.upstream_deps` as names.
 fn upstream_names(graph: &Bound<'_, PyAny>) -> PyResult<HashMap<String, Vec<String>>> {
     let mut upstream: HashMap<String, Vec<String>> = HashMap::new();
-    for item in graph
-        .getattr("upstream_deps")?
+    for item in native_field(graph, "upstream_deps")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -141,8 +141,7 @@ pub(crate) fn build_python_run_plan_outputs<'py>(
     }
     let graph: Bound<'py, PyAny> = node_graph(&arguments.value("discovered_inputs")?)?;
     let kinds: NodeKinds<'py> = NodeKinds::load(py)?;
-    let mut warnings: Vec<Bound<'py, PyAny>> = plan_output
-        .getattr("warnings")?
+    let mut warnings: Vec<Bound<'py, PyAny>> = native_field(&plan_output, "warnings")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     warnings.extend(skipped_ingress_warnings(
@@ -291,7 +290,7 @@ fn previous_identity<'py>(
             native_field(identity, "node_name")?,
         ],
     )?;
-    previous_identities.call_method1("get", (key,))
+    mapping_get(previous_identities, key)
 }
 
 /// `_identity_status`: whether a node's identity is unknown, new, unchanged or changed.
@@ -307,10 +306,7 @@ fn identity_status<'py>(
     if previous.is_none() {
         return native_field(&statuses, "NEW");
     }
-    if previous
-        .getattr("version_hash")?
-        .eq(native_field(identity, "version_hash")?)?
-    {
+    if native_field(&previous, "version_hash")?.eq(native_field(identity, "version_hash")?)? {
         return native_field(&statuses, "UNCHANGED");
     }
     native_field(&statuses, "CHANGED")

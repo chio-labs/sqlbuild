@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import ANY
 
 import pytest
 
 import sqlbuild._native as native_module
-from sqlbuild._native import (
-    NativeSqlTestArtifact,
-)
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    CompileReuseRun,
     prepare_compile_reuse_project,
     seam_recording_compile,
 )
@@ -25,10 +22,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     [
         NativeAnalysisSeamTestCase(
             description="models_contracts_lineage_and_sql_tests",
-            expected_native_returns={
-                "plan_compiled_sql_test_artifacts": [ANY],
-            },
             expected_stage_work={
+                "plan_compiled_sql_test_artifacts": 1,
                 "evaluate_model_contracts": 1,
                 "build_project_column_lineage": 1,
                 "infer_native_expression_source_shapes": 1,
@@ -49,22 +44,17 @@ def test_given_project_when_compiling_then_native_seams_answer(
 ) -> None:
     prepared_project: Path = tmp_path / "orders"
     prepare_compile_reuse_project(project_dir=prepared_project)
-    native_run, native_seams = seam_recording_compile(
+    native_run: CompileReuseRun = seam_recording_compile(
         project_dir=prepared_project, monkeypatch=monkeypatch, capsys=capsys
     )
 
     assert native_run.returncode == 0, native_run.stderr
     assert native_run.compiled
-    assert native_seams == test_case.expected_native_returns
     stage_work: dict[str, int] = native_module.compile_stage_work_info()
     assert {
         stage: stage_work.get(stage, 0) for stage in test_case.expected_stage_work
     } == test_case.expected_stage_work
-    for seams in (native_seams,):
-        planned_artifacts: object = seams["plan_compiled_sql_test_artifacts"][0]
-        assert isinstance(planned_artifacts, tuple)
-        assert planned_artifacts
-        assert all(isinstance(artifact, NativeSqlTestArtifact) for artifact in planned_artifacts)
+    assert any((prepared_project / "target" / "compiled" / "tests").rglob("*.sql"))
 
 
 if __name__ == "__main__":

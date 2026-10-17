@@ -28,11 +28,11 @@ use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compiled_project::records::compiled_project_record;
 use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_ABANDONED_SUFFIX, CUSTOM_HOST_CANCELLED_MARKER, CUSTOM_HOST_RUNTIME_VERSION,
 };
@@ -490,7 +490,7 @@ fn text(path: &Path) -> String {
 }
 
 fn rules_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::Rules).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::Rules).and_then(|class| class.call1((message,))) {
         Ok(instance) => PyErr::from_value(instance),
         Err(error) => error,
     }

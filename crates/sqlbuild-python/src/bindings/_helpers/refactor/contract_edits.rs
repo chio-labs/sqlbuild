@@ -15,10 +15,10 @@ use sqlbuild_refactor::refactoring::models::{
 use sqlbuild_refactor::refactoring::types::PhysicalColumn;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 /// Finding kinds an edit resolves without overwrite, then the ones overwrite also resolves.
 const RESOLVED_KINDS: ([&str; 1], [&str; 2]) = (
@@ -41,7 +41,7 @@ fn edit_row(result: Result<ContractEdit, RefactorError>) -> PyResult<EditRow> {
 
 /// `ContractAdoptionError(message)`.
 fn adoption_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::ContractAdoption).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::ContractAdoption).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

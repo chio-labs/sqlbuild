@@ -148,9 +148,7 @@ fn compile_audits<'py>(
             ("options", options),
             (
                 "on_progress",
-                invocation
-                    .getattr("planning_progress")?
-                    .getattr("on_progress")?,
+                native_field(invocation, "planning_progress")?.getattr("on_progress")?,
             ),
         ],
     )?))?;
@@ -188,8 +186,7 @@ fn prepare_run<'py>(
         native_field(pipeline, "plan_output")?.getattr("audit_entries")?;
     let requested: Bound<'py, PyAny> = native_field(request, "concurrency")?;
     let concurrency: i64 = if requested.is_none() {
-        pipeline
-            .getattr("project")?
+        native_field(pipeline, "project")?
             .getattr("settings")?
             .getattr("concurrency")?
             .extract::<i64>()?
@@ -322,8 +319,7 @@ fn execute<'py>(
             )?;
         }
         let run_id: Bound<'py, PyAny> = native_field(&project, "run_id")?;
-        let ledger_path: Bound<'py, PyAny> = invocation
-            .getattr("effective_project_dir")?
+        let ledger_path: Bound<'py, PyAny> = native_field(invocation, "effective_project_dir")?
             .call_method1("__truediv__", ("target",))?
             .call_method1("__truediv__", ("executions",))?
             .call_method1("__truediv__", (&run_id,))?
@@ -471,8 +467,7 @@ fn complete(
         ..AuditCounts::default()
     };
     for result in results {
-        match result
-            .getattr("outcome")?
+        match native_field(result, "outcome")?
             .getattr("value")?
             .extract::<String>()?
             .as_str()

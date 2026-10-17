@@ -29,10 +29,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::graph::execution_gates::model_python_hook_names;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const EXPLICIT_REFERENCES_CONTEXT: &str = "native explicit-reference checks";
@@ -100,8 +101,7 @@ pub(crate) fn explicit_reference_report<'py>(
     {
         path_order.set_item(path?, index)?;
     }
-    let retains_old_names: bool = !discovered_inputs
-        .getattr("project_config")?
+    let retains_old_names: bool = !native_field(discovered_inputs, "project_config")?
         .getattr("migrations")?
         .getattr("old_name_views")?
         .is_none();
@@ -141,7 +141,7 @@ pub(crate) fn explicit_reference_report<'py>(
     {
         Ok(report) => python_report(py, &report, &owners),
         Err(ReferenceFailure::CompileInput(message)) => Err(PyErr::from_value(
-            registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
+            error_class(py, ErrorId::CompileInput)?.call1((message,))?,
         )),
         Err(ReferenceFailure::UnknownDialect(message)) => Err(compiler_error(message)),
         Err(ReferenceFailure::Internal(reason)) => Err(compiler_error(native_failure(
@@ -205,8 +205,7 @@ fn loader_owners<'py>(
     let mut sources_by_loader: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for source in native_field(project, "sources")?.try_iter()? {
         let source: Bound<'py, PyAny> = source?;
-        let loader: Option<String> = source
-            .getattr("source_entry")?
+        let loader: Option<String> = native_field(&source, "source_entry")?
             .getattr("loader")?
             .extract()?;
         if let Some(loader) = loader {
@@ -405,7 +404,7 @@ pub(crate) fn hard_coded_relation_remedy(
     );
     let mut upstream_loaders: Vec<(String, String)> = Vec::new();
     if let Some(loaders) = upstream_loader_by_source.filter(|loaders| !loaders.is_none()) {
-        for item in loaders.call_method0("items")?.try_iter()? {
+        for item in mapping_items(loaders)?.try_iter()? {
             upstream_loaders.push(item?.extract()?);
         }
     }

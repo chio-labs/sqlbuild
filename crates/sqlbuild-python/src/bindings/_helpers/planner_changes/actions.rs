@@ -6,6 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
@@ -30,7 +31,7 @@ pub(crate) fn resolve_model_actions<'py>(
             continue;
         }
         let name: Bound<'py, PyAny> = native_field(&key, "name")?;
-        let change: Bound<'py, PyAny> = model_changes.call_method1("get", (&name,))?;
+        let change: Bound<'py, PyAny> = mapping_get(&model_changes, &name)?;
         if !models_by_name.contains(&name)? || change.is_none() {
             continue;
         }

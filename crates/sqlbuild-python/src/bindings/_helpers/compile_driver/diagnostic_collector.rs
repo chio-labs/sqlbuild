@@ -8,9 +8,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{PyErr, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const CONTEXT_VARIABLE_NAME: &str = "sqlbuild_collected_compile_diagnostics";
 
@@ -69,7 +69,7 @@ impl CollectedCompileDiagnostics {
 
     /// The recorded diagnostics in deterministic key order.
     #[getter]
-    fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let by_key: &Bound<'py, PyDict> = self.by_key.bind(py);
         let keys: Bound<'py, PyAny> = imported(py, "builtins", "sorted")?.call1((by_key,))?;
         let diagnostics: Vec<Bound<'py, PyAny>> = keys
@@ -126,7 +126,7 @@ pub(crate) fn report_compile_diagnostic(
     keywords.set_item("help", native_field(diagnostic, "help")?)?;
     let message: String = format!("{}{pointer}", native_field(diagnostic, "message")?.str()?);
     Err(PyErr::from_value(
-        registry::error(py, ErrorId::CompileInput)?.call((message,), Some(&keywords))?,
+        error_class(py, ErrorId::CompileInput)?.call((message,), Some(&keywords))?,
     ))
 }
 

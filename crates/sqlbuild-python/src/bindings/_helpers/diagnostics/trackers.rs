@@ -57,17 +57,17 @@ pub(crate) struct BuildPhaseTimingTracker {
     monotonic: Py<PyAny>,
     started_at: f64,
     #[pyo3(get, set)]
-    compile_seconds: Option<f64>,
+    pub(crate) compile_seconds: Option<f64>,
     #[pyo3(get, set)]
-    planning_seconds: Option<f64>,
+    pub(crate) planning_seconds: Option<f64>,
     #[pyo3(get, set)]
-    connection_preparation_seconds: Option<f64>,
+    pub(crate) connection_preparation_seconds: Option<f64>,
     #[pyo3(get, set)]
-    schema_preparation_seconds: Option<f64>,
+    pub(crate) schema_preparation_seconds: Option<f64>,
     #[pyo3(get, set)]
-    execution_seconds: Option<f64>,
+    pub(crate) execution_seconds: Option<f64>,
     #[pyo3(get, set)]
-    cost_collection_seconds: Option<f64>,
+    pub(crate) cost_collection_seconds: Option<f64>,
     tokens: Mutex<Vec<Py<PyAny>>>,
 }
 

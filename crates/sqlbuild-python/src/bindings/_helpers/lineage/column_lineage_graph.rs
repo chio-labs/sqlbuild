@@ -15,6 +15,8 @@ use crate::bindings::_helpers::record_behaviours::lineage_facts::{
     confidence_member, transform_kind_member,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 /// One compact model's facts and root-star flag.
 struct CompactModel {
@@ -62,12 +64,10 @@ impl ProjectColumnLineage {
         for edge in edges.try_iter()? {
             let edge: Bound<'_, PyAny> = edge?;
             keys.push(EdgeKey {
-                source_name: edge
-                    .getattr("source")?
+                source_name: native_field(&edge, "source")?
                     .getattr("resource_name")?
                     .extract()?,
-                target_model: edge
-                    .getattr("target")?
+                target_model: native_field(&edge, "target")?
                     .getattr("resource_name")?
                     .extract()?,
                 ..empty_key()
@@ -115,7 +115,7 @@ impl ProjectColumnLineage {
                 let _ = edge_counts.insert(name.clone(), count);
             }
         }
-        for item in models.call_method0("items")?.try_iter()? {
+        for item in mapping_items(models)?.try_iter()? {
             let (name, model): (String, Bound<'_, PyAny>) = item?.extract()?;
             let _ = edge_counts.insert(name, upstream_count(&native_field(&model, "columns")?)?);
         }
@@ -131,7 +131,7 @@ impl ProjectColumnLineage {
 
     /// Return model lineage, expanding compact model facts on first access.
     #[getter]
-    fn models(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn models(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyAny>> {
         let py: Python<'_> = slf.py();
         if !slf.compact.is_empty() {
             let classes: LineageClasses<'_> = LineageClasses::new(py)?;
@@ -154,7 +154,7 @@ impl ProjectColumnLineage {
 
     /// Return all graph edges, expanding compact edge records on first access.
     #[getter]
-    fn edges(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn edges(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyAny>> {
         let py: Python<'_> = slf.py();
         if let Some(edges) = &slf.edges {
             return Ok(edges.clone_ref(py));
@@ -242,8 +242,7 @@ impl ProjectColumnLineage {
         let mut consumers: Vec<Bound<'py, PyAny>> = Vec::new();
         for edge in sourced.try_iter()? {
             let edge: Bound<'py, PyAny> = edge?;
-            if edge
-                .getattr("source")?
+            if native_field(&edge, "source")?
                 .getattr("column_name")?
                 .eq(column_name)?
             {
@@ -289,7 +288,7 @@ impl ProjectColumnLineage {
                 builder.push_facts(classes, name, compact.columns.bind(py))?;
                 continue;
             }
-            let model: Bound<'_, PyAny> = models.call_method1("get", (name,))?;
+            let model: Bound<'_, PyAny> = mapping_get(&models, name)?;
             if model.is_none() {
                 continue;
             }

@@ -7,10 +7,11 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 /// The materializations a model's storage policies are inherited for, besides none.
 const TABLE_BACKED_MATERIALIZATIONS: [&str; 3] = ["TABLE", "INCREMENTAL", "SNAPSHOT"];
@@ -94,7 +95,7 @@ fn named_records<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
         .collect::<PyResult<_>>()?;
     let declarations: Bound<'py, PyAny> =
         native_field(resolver, "lookup")?.getattr("declarations")?;
-    for pair in declarations.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(&declarations)?.try_iter()? {
         let (identity, records_of): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let kind: Bound<'py, PyAny> = native_field(&identity, "kind")?;
         if kinds.iter().any(|named| kind.is(named))
@@ -124,7 +125,7 @@ fn schema_enums<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict
     let enum_class: Bound<'py, PyAny> = record_class(py, RecordId::EnumDeclaration)?;
     let declarations: Bound<'py, PyAny> =
         native_field(resolver, "projection")?.getattr("declarations")?;
-    for pair in declarations.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(&declarations)?.try_iter()? {
         let (identity, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         if native_field(&identity, "kind")?.is(&enum_kind)
             && native_field(&identity, "owner")?.is_none()
@@ -152,8 +153,7 @@ fn hook_signature<'py>(function: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLi
         let parameter: Bound<'py, PyAny> = parameter?;
         parameters.push((
             native_field(&parameter, "name")?.extract()?,
-            parameter
-                .getattr("kind")?
+            native_field(&parameter, "kind")?
                 .call_method0("__int__")?
                 .extract()?,
             !native_field(&parameter, "default")?.is(&empty),
@@ -405,14 +405,14 @@ pub(crate) fn model_loop_classes<'py>(
         py,
         vec![
             ("usage_record", record_class(py, RecordId::UsageRecord)?),
-            ("compile_error", registry::error(py, ErrorId::CompileInput)?),
+            ("compile_error", error_class(py, ErrorId::CompileInput)?),
             ("syntax_help", host("syntax_help")?),
             ("source_syntax_help", host("source_syntax_help")?),
             ("macros", host("macros")?),
             ("sql_hooks", host("sql_hooks")?),
             (
                 "scope_path_error",
-                registry::error(py, ErrorId::InvalidScopePath)?,
+                error_class(py, ErrorId::InvalidScopePath)?,
             ),
             ("sql_hook_entry", record_class(py, RecordId::SqlHookEntry)?),
             (

@@ -253,8 +253,7 @@ impl MigrationFingerprintCache {
             Some(connection) => connection,
             None => {
                 let created = call_with(
-                    &match path
-                        .getattr("parent")
+                    &match native_field(path, "parent")
                         .and_then(|parent| native_field(&parent, "mkdir"))
                     {
                         Ok(mkdir) => mkdir,

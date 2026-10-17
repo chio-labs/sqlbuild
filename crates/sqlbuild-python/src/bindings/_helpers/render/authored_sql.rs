@@ -10,6 +10,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -58,7 +59,7 @@ fn substituted<'py>(
     record_reads(py, reads.iter().map(|(kind, name)| (*kind, name.as_str())))?;
     if let Some(message) = error {
         return Err(PyErr::from_value(
-            registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
+            error_class(py, ErrorId::CompileInput)?.call1((message,))?,
         ));
     }
     Ok((rendered.unwrap_or(text), spans))
@@ -116,7 +117,7 @@ fn declarations_expanded<'py>(
     );
     let classes = ExpansionClasses {
         usage_record: record_class(py, RecordId::UsageRecord)?,
-        compile_error: registry::error(py, ErrorId::CompileInput)?,
+        compile_error: error_class(py, ErrorId::CompileInput)?,
     };
     let path: String = file_path.str()?.extract()?;
     let expanded: ExpandedDeclarations<'py> = expand_declarations(&DeclarationExpansion {

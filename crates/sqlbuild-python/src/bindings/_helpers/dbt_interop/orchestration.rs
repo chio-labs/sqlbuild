@@ -23,9 +23,9 @@ use crate::bindings::_helpers::dbt_interop::graph::{
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
 use crate::bindings::_helpers::dbt_interop::plan::build_dbt_interop_plan;
 use crate::bindings::_helpers::records::construct::enum_from_value;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const PLAN_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -67,7 +67,7 @@ fn listed<'py>(
         || py.None().into_bound(py),
         |detail| PyString::new(py, &detail).into_any(),
     );
-    let error: Bound<'py, PyAny> = registry::error(py, ErrorId::DbtInteropRuntime)?
+    let error: Bound<'py, PyAny> = error_class(py, ErrorId::DbtInteropRuntime)?
         .call(("dbt ls failed",), Some(&keywords(py, &[("help", help)])?))?;
     Err(PyErr::from_value(error))
 }

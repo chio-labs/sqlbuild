@@ -40,9 +40,9 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const DEFAULT_DIFF_MAX_FULL_ROWS: i64 = 10_000_000;
 const ADAPTER_ERRORS: AdapterHost = AdapterHost::AdapterUserError;
@@ -198,12 +198,8 @@ fn run_query_diff(
             &native_field(&preparation, "right_label")?.extract::<String>()?,
         ),
         (
-            preparation
-                .getattr("effective_max_column_examples")?
-                .extract()?,
-            preparation
-                .getattr("effective_max_row_only_examples")?
-                .extract()?,
+            native_field(&preparation, "effective_max_column_examples")?.extract()?,
+            native_field(&preparation, "effective_max_row_only_examples")?.extract()?,
         ),
         (&models, Some(phases), Some(outcome)),
     );
@@ -335,7 +331,7 @@ fn size_guard_error(
     keywords.set_item("details", details)?;
     keywords.set_item("code", "C270")?;
     keywords.set_item("help", report.help)?;
-    let replacement: Bound<'_, PyAny> = registry::error(py, ErrorId::DiffSizeGuard)?
+    let replacement: Bound<'_, PyAny> = error_class(py, ErrorId::DiffSizeGuard)?
         .call((report.message.as_str(),), Some(&keywords))?;
     Ok(caused(py, PyErr::from_value(replacement), error))
 }

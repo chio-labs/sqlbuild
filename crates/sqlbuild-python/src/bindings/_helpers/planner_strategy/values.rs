@@ -14,9 +14,9 @@ use sqlbuild_analysis::planner_strategy::models::{
     ChangeFacts, MaterializationType, PlanChangeKind, WarningRow, WarningSeverity,
 };
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const YML_SOURCE: &str = "yml";
 const FULL_BACKFILL: &str = "full";
@@ -154,7 +154,7 @@ pub(crate) fn input_error(
     message: &str,
     code: Option<&str>,
 ) -> PyErr {
-    let raised: PyResult<Bound<'_, PyAny>> = registry::error(py, class).and_then(|class| {
+    let raised: PyResult<Bound<'_, PyAny>> = error_class(py, class).and_then(|class| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         if let Some(code) = code {
             options.set_item("code", code)?;

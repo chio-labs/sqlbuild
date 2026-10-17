@@ -44,8 +44,7 @@ fn history_value(record: &Bound<'_, PyAny>, field: &str) -> PyResult<Py<PyAny>> 
         "completed" => attribute(record, "completed_at"),
         "cost" => attribute(record, "cost.estimated_usd"),
         "credits" => attribute(record, "cost.estimated_compute_credits"),
-        "duration" => Ok(record
-            .getattr("completed_at")?
+        "duration" => Ok(native_field(record, "completed_at")?
             .sub(native_field(record, "started_at")?)?
             .unbind()),
         "models" => Ok(PyInt::new(
@@ -111,8 +110,7 @@ pub(crate) fn sort_history<'py>(
     let mut available: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut missing: Vec<Bound<'py, PyAny>> = Vec::new();
     for record in records {
-        let status: String = record
-            .getattr("cost")?
+        let status: String = native_field(&record, "cost")?
             .getattr("status")?
             .getattr("value")?
             .extract()?;

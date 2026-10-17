@@ -230,92 +230,92 @@ impl NativeInputsView {
     }
 
     #[getter]
-    fn run_id(&self) -> String {
+    pub(crate) fn run_id(&self) -> String {
         self.fields.run_id.clone()
     }
 
     #[getter]
-    fn effective_target_name(&self) -> Option<String> {
+    pub(crate) fn effective_target_name(&self) -> Option<String> {
         self.fields.effective_target_name.clone()
     }
 
     #[getter(no_sql_validation)]
-    fn is_sql_validation_skipped(&self) -> bool {
+    pub(crate) fn is_sql_validation_skipped(&self) -> bool {
         self.fields.no_sql_validation
     }
 
     #[getter]
-    fn model_inputs(&self, py: Python<'_>) -> Py<PyTuple> {
+    pub(crate) fn model_inputs(&self, py: Python<'_>) -> Py<PyTuple> {
         self.fields.model_inputs.clone_ref(py)
     }
 
     #[getter]
-    fn native_project(&self, py: Python<'_>) -> Py<NativeCompiledProject> {
+    pub(crate) fn native_project(&self, py: Python<'_>) -> Py<NativeCompiledProject> {
         self.owner.clone_ref(py)
     }
 
     #[getter]
-    fn project_config(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn project_config(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.project_config.clone_ref(py)
     }
 
     #[getter]
-    fn local_config(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn local_config(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.local_config.clone_ref(py)
     }
 
     #[getter]
-    fn discovered_inputs(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn discovered_inputs(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.discovered_inputs.clone_ref(py)
     }
 
     #[getter]
-    fn sql_lexical_syntax(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn sql_lexical_syntax(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.sql_lexical_syntax.clone_ref(py)
     }
 
     #[getter]
-    fn effective_target(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn effective_target(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.effective_target.clone_ref(py)
     }
 
     #[getter]
-    fn compile_cache_dir(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn compile_cache_dir(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.compile_cache_dir.clone_ref(py)
     }
 
     #[getter]
-    fn effective_connection(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn effective_connection(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.effective_connection.clone_ref(py)
     }
 
     #[getter]
-    fn effective_vars(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn effective_vars(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.effective_vars.clone_ref(py)
     }
 
     #[getter]
-    fn macro_context(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn macro_context(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.macro_context.clone_ref(py)
     }
 
     #[getter]
-    fn loaded_macros(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn loaded_macros(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.loaded_macros.clone_ref(py)
     }
 
     #[getter]
-    fn public_enums(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn public_enums(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.public_enums.clone_ref(py)
     }
 
     #[getter]
-    fn public_constants(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn public_constants(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.boundary.public_constants.clone_ref(py)
     }
 
     #[getter]
-    fn external_sql_reference_resolver(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn external_sql_reference_resolver(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields
             .boundary
             .external_sql_reference_resolver
@@ -323,52 +323,52 @@ impl NativeInputsView {
     }
 
     #[getter]
-    fn effective_settings(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn effective_settings(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.effective_settings.clone_ref(py)
     }
 
     #[getter]
-    fn seed_inputs(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn seed_inputs(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.seed_inputs.clone_ref(py)
     }
 
     #[getter]
-    fn source_inputs(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn source_inputs(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.source_inputs.clone_ref(py)
     }
 
     #[getter]
-    fn sql_function_inputs(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn sql_function_inputs(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.sql_function_inputs.clone_ref(py)
     }
 
     #[getter]
-    fn test_inputs(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn test_inputs(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.test_inputs.clone_ref(py)
     }
 
     #[getter]
-    fn scenario_inputs(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn scenario_inputs(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.scenario_inputs.clone_ref(py)
     }
 
     #[getter]
-    fn audit_inputs(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn audit_inputs(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.audit_inputs.clone_ref(py)
     }
 
     #[getter]
-    fn diagnostics(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn diagnostics(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.diagnostics.clone_ref(py)
     }
 
     #[getter]
-    fn scope_index(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn scope_index(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.scope_index.clone_ref(py)
     }
 
     #[getter]
-    fn declaration_scope(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn declaration_scope(&self, py: Python<'_>) -> Py<PyAny> {
         self.fields.compiler.declaration_scope.clone_ref(py)
     }
 }

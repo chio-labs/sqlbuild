@@ -83,8 +83,7 @@ pub(crate) fn unchecked_columns(model: &Bound<'_, PyAny>) -> PyResult<Vec<String
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return Ok(view.get().unchecked_columns().to_vec());
     }
-    model
-        .getattr("unchecked_output_columns")?
+    native_field(model, "unchecked_output_columns")?
         .try_iter()?
         .map(|column| column?.extract())
         .collect()

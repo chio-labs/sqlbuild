@@ -11,15 +11,15 @@ use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue};
 use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_value, sql_value};
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 pub(crate) type NativeBlock<'py> = (Bound<'py, PyDict>, String, Bound<'py, PyAny>);
 
 fn parse_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::SqlTestParse)?.call1((message,))?,
+        error_class(py, ErrorId::SqlTestParse)?.call1((message,))?,
     ))
 }
 

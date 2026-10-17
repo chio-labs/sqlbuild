@@ -32,6 +32,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The `WarehouseGroup` whose warehouse is a target's `warehouses.build`; any other reads `query`.
@@ -155,12 +156,10 @@ pub(crate) fn find_authored<'py>(
     if target_name.is_none() {
         return Ok(None);
     }
-    let local_target: Bound<'py, PyAny> = local_config
-        .getattr("targets")?
-        .call_method1("get", (&target_name,))?;
-    let project_target: Bound<'py, PyAny> = project_config
-        .getattr("targets")?
-        .call_method1("get", (&target_name,))?;
+    let local_target: Bound<'py, PyAny> =
+        native_field(&local_config, "targets")?.call_method1("get", (&target_name,))?;
+    let project_target: Bound<'py, PyAny> =
+        native_field(&project_config, "targets")?.call_method1("get", (&target_name,))?;
     let target_name: String = target_name.extract()?;
     let group_name: String = native_field(group, "value")?.extract()?;
     Ok(authored_warehouse(
@@ -205,8 +204,7 @@ fn expand_authored(
 }
 
 fn connection_warehouse(connection_config: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    let value: Bound<'_, PyAny> =
-        connection_config.call_method1("get", (CONNECTION_WAREHOUSE_KEY,))?;
+    let value: Bound<'_, PyAny> = mapping_get(connection_config, CONNECTION_WAREHOUSE_KEY)?;
     if !value.is_instance_of::<PyString>() {
         return Ok(None);
     }

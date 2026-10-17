@@ -19,9 +19,9 @@ use crate::bindings::_helpers::janitor::janitor_planning::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const UNKNOWN_VIEW_CODE: &str = "C503";
 const UNKNOWN_VIEW_HELP: &str =
@@ -201,7 +201,7 @@ fn unknown_view_error(py: Python<'_>, requests: &Bound<'_, PyAny>) -> PyResult<P
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("code", UNKNOWN_VIEW_CODE)?;
     options.set_item("help", UNKNOWN_VIEW_HELP)?;
-    let error: Bound<'_, PyAny> = registry::error(py, ErrorId::CliUser)?.call(
+    let error: Bound<'_, PyAny> = error_class(py, ErrorId::CliUser)?.call(
         (format!(
             "no compatibility view is recorded at {}",
             names.join(", ")
@@ -221,8 +221,7 @@ pub(crate) fn build_janitor_execution_plan<'py>(
     let started: Instant = Instant::now();
     let status: Bound<'py, PyAny> = status_reporter(&stdout(py)?, use_color(invocation)?)?;
     status.call_method1("start", ("Inspecting warehouse state...",))?;
-    let janitor: Bound<'py, PyAny> = invocation
-        .getattr("discovered_inputs")?
+    let janitor: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?
         .getattr("project_config")?
         .getattr("janitor")?;
     let plan: Bound<'py, PyAny> = within(
@@ -242,14 +241,14 @@ pub(crate) fn build_janitor_execution_plan<'py>(
                         .is_truthy()?,
                     exclude_patterns: native_field(&janitor, "exclude_patterns")?.extract()?,
                     direct_mode: true,
-                    state_history_versions: settings
-                        .getattr("direct_state_history_versions")?
+                    state_history_versions: native_field(
+                        settings,
+                        "direct_state_history_versions",
+                    )?
+                    .extract()?,
+                    archive_retention_days: native_field(settings, "archive_retention_days")?
                         .extract()?,
-                    archive_retention_days: settings
-                        .getattr("archive_retention_days")?
-                        .extract()?,
-                    early_old_name_view_drops: settings
-                        .getattr("drop_old_name_views")?
+                    early_old_name_view_drops: native_field(settings, "drop_old_name_views")?
                         .extract()?,
                 },
                 &RelationScope {
@@ -276,9 +275,8 @@ pub(crate) fn build_janitor_execution_plan<'py>(
     )?;
     options.set_item("blank_line_after", true)?;
     status.call_method("complete", (), Some(&options))?;
-    let unknown: Bound<'py, PyAny> = plan
-        .getattr("old_name_views")?
-        .getattr("unknown_requests")?;
+    let unknown: Bound<'py, PyAny> =
+        native_field(&plan, "old_name_views")?.getattr("unknown_requests")?;
     if unknown.is_truthy()? {
         return Err(unknown_view_error(py, &unknown)?);
     }

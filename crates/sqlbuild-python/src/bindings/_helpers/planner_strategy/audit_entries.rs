@@ -23,6 +23,7 @@ use crate::bindings::_helpers::planner_strategy::constants::{
 };
 use crate::bindings::_helpers::planner_strategy::models::AuditPlanning;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// Render and validate one audit query with the supplied adapter callbacks.
@@ -118,9 +119,7 @@ fn plan_audit<'py>(
     let target = attachment.get_item(1)?;
     let kind_text: String = kind.extract()?;
     let materialization = if kind_text == MODEL_ATTACHMENT && !target.is_none() {
-        request
-            .model_materializations
-            .call_method1("get", (&target,))?
+        mapping_get(&request.model_materializations, &target)?
     } else {
         py.None().into_bound(py)
     };

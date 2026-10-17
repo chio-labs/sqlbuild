@@ -17,9 +17,9 @@ use sqlbuild_core::build_command::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const SNAPSHOT_VALUE: &str = "snapshot";
 const FULL_REFRESH_REASON: &str = "full_refresh";
@@ -47,7 +47,7 @@ pub(crate) fn build_command_error(py: Python<'_>, error: BuildCommandError) -> P
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", error.code)?;
         options.set_item("help", error.help)?;
-        registry::error(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),

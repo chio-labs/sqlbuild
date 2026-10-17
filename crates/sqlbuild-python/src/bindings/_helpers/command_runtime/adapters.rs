@@ -9,9 +9,9 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const ADAPTER_CONFIGURATION_CODE: &str = "C601";
 
@@ -22,7 +22,7 @@ fn cli_adapter_error(py: Python<'_>, error: &PyErr) -> PyResult<PyErr> {
     keywords.set_item("code", ADAPTER_CONFIGURATION_CODE)?;
     keywords.set_item("help", native_field(&value, "help")?)?;
     let raised: PyErr = PyErr::from_value(
-        registry::error(py, ErrorId::CliUser)?
+        error_class(py, ErrorId::CliUser)?
             .call((native_field(&value, "message")?,), Some(&keywords))?,
     );
     raised.set_cause(py, Some(error.clone_ref(py)));

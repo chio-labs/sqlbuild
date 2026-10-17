@@ -29,6 +29,7 @@ use crate::bindings::_helpers::plan_output::python_identity::{
 use crate::bindings::_helpers::plan_output::values::{items, optional_text, text, texts};
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const SKIP_ACTION: &str = "skip";
@@ -364,7 +365,7 @@ fn metadata_names(value: Option<Bound<'_, PyAny>>) -> PyResult<Vec<String>> {
 
 /// The metadata `selection_diagnostics.enabled` flag, when it is a bool.
 pub(crate) fn selection_diagnostics(metadata: &Bound<'_, PyAny>) -> PyResult<Option<bool>> {
-    let diagnostics: Bound<'_, PyAny> = metadata.call_method1("get", ("selection_diagnostics",))?;
+    let diagnostics: Bound<'_, PyAny> = mapping_get(metadata, "selection_diagnostics")?;
     let Ok(diagnostics) = diagnostics.downcast::<PyDict>() else {
         return Ok(None);
     };
@@ -377,7 +378,7 @@ pub(crate) fn selection_diagnostics(metadata: &Bound<'_, PyAny>) -> PyResult<Opt
 }
 
 fn source_freshness(metadata: &Bound<'_, PyAny>) -> PyResult<Option<SourceFreshnessText>> {
-    let freshness: Bound<'_, PyAny> = metadata.call_method1("get", ("direct_source_freshness",))?;
+    let freshness: Bound<'_, PyAny> = mapping_get(metadata, "direct_source_freshness")?;
     let Ok(freshness) = freshness.downcast::<PyDict>() else {
         return Ok(None);
     };
@@ -396,7 +397,7 @@ fn source_freshness(metadata: &Bound<'_, PyAny>) -> PyResult<Option<SourceFreshn
 
 /// The names of a metadata tuple that are strings.
 fn pruned_models(metadata: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    let names: Bound<'_, PyAny> = metadata.call_method1("get", ("direct_pruned_model_names",))?;
+    let names: Bound<'_, PyAny> = mapping_get(metadata, "direct_pruned_model_names")?;
     if !names.is_instance_of::<PyTuple>() {
         return Ok(Vec::new());
     }
@@ -486,9 +487,10 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
             .collect::<PyResult<_>>()?,
         warnings,
         source_freshness: source_freshness(&metadata)?,
-        remaining_stale_models: metadata_names(Some(
-            metadata.call_method1("get", ("direct_remaining_stale_model_names",))?,
-        ))?,
+        remaining_stale_models: metadata_names(Some(mapping_get(
+            &metadata,
+            "direct_remaining_stale_model_names",
+        )?))?,
         pruned_models: pruned_models(&metadata)?,
         pre_build_lines: pre_build,
     })

@@ -88,8 +88,7 @@ fn execution_limits<'py>(
         adapter_name: adapter_name.to_owned(),
         configures_max_duration: !native_field(&limits, "max_duration")?.is_none(),
         max_duration_seconds: native_field(&limits, "max_duration_seconds")?.extract()?,
-        adapter_limit_seconds: adapter
-            .getattr("execution_duration_limit_seconds")?
+        adapter_limit_seconds: native_field(adapter, "execution_duration_limit_seconds")?
             .extract()?,
         remediation: native_field(&limits, "remediation")?.extract()?,
     };
@@ -200,9 +199,11 @@ pub(crate) fn resolve_build_context<'py>(
     let load_sources: Bound<'py, PyAny> = native_field(request, "load_sources")?;
     let should_load_sources: bool = native_field(request, "reload_sources")?.is_truthy()?
         || if load_sources.is_none() {
-            build_effective_settings_config(&discovered.clone())?
-                .getattr("auto_load_sources")?
-                .is_truthy()?
+            native_field(
+                &build_effective_settings_config(&discovered.clone())?,
+                "auto_load_sources",
+            )?
+            .is_truthy()?
         } else {
             load_sources.is_truthy()?
         };

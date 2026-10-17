@@ -18,6 +18,9 @@ use crate::bindings::_helpers::analysis::model_reads::binding_validated;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::inputs::{
     column_names, resource_sql_diagnostics, sql_test_columns,
@@ -320,7 +323,7 @@ fn sql_test_diagnostic<'py>(
 /// `{name: {column: value}}` as ordered rows.
 pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<ShapeRows> {
     let mut rows: ShapeRows = Vec::new();
-    for item in shapes.call_method0("items")?.try_iter()? {
+    for item in mapping_items(shapes)?.try_iter()? {
         let (name, columns): (String, Bound<'_, PyAny>) = item?.extract()?;
         rows.push((name, pairs(&columns)?));
     }
@@ -329,8 +332,7 @@ pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<ShapeRows> {
 
 /// A `{key: value}` text mapping's items in order.
 fn pairs(mapping: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
-    mapping
-        .call_method0("items")?
+    mapping_items(mapping)?
         .try_iter()?
         .map(|item| item?.extract())
         .collect()
@@ -413,19 +415,19 @@ fn text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 
 fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyResult<MetadataModel> {
     let values: Bound<'_, PyAny> = native_field(&native_field(model, "config")?, "values")?;
-    let get = |key: &str| values.call_method1("get", (key,));
+    let get = |key: &str| mapping_get(&values, key);
     let mut references: Vec<NamesRow> = Vec::new();
     for key in METADATA_CONFIG_KEYS {
         references.push((key.to_owned(), column_names(&get(key)?)?));
     }
     let custom: Bound<'_, PyAny> = get("config")?;
     if custom.is_instance_of::<PyDict>() {
-        let partition: Bound<'_, PyAny> = custom.call_method1("get", ("partition_column",))?;
+        let partition: Bound<'_, PyAny> = mapping_get(&custom, "partition_column")?;
         references.push(("partition_column".to_owned(), column_names(&partition)?));
     }
     let tolerances: Bound<'_, PyAny> = get("row_diff_tolerances")?;
     if tolerances.is_instance_of::<PyDict>() {
-        let by_column: Bound<'_, PyAny> = tolerances.call_method1("get", ("by_column",))?;
+        let by_column: Bound<'_, PyAny> = mapping_get(&tolerances, "by_column")?;
         if by_column.is_instance_of::<PyDict>() {
             let names: Vec<String> = by_column
                 .try_iter()?
@@ -437,7 +439,7 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
     let cursor_inputs: Bound<'_, PyAny> = get("cursor_inputs")?;
     let mut upstreams: Vec<NamesRow> = Vec::new();
     if cursor_inputs.is_instance_of::<PyDict>() {
-        for item in cursor_inputs.call_method0("items")?.try_iter()? {
+        for item in mapping_items(&cursor_inputs)?.try_iter()? {
             let (upstream, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
             upstreams.push((upstream.str()?.extract()?, column_names(&columns)?));
         }
@@ -505,7 +507,7 @@ fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
     let mut audits: Vec<MetadataAudit> = Vec::with_capacity(attached.len());
     for (column, audit) in attached {
         let arguments: Bound<'_, PyAny> = native_field(&audit, "arguments")?;
-        let values: Bound<'_, PyAny> = arguments.call_method1("get", ("values",))?;
+        let values: Bound<'_, PyAny> = mapping_get(&arguments, "values")?;
         let values: Option<Vec<AuditValue>> =
             if values.is_instance_of::<PyList>() || values.is_instance_of::<PyTuple>() {
                 Some(
@@ -520,13 +522,9 @@ fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
         audits.push(MetadataAudit {
             column,
             definition: native_field(&audit, "definition_name")?.extract()?,
-            expression: text(&arguments.call_method1("get", ("expression",))?)?,
-            target: arguments
-                .call_method1("get", ("to", &empty))?
-                .str()?
-                .extract()?,
-            field: arguments
-                .call_method1("get", ("field", &empty))?
+            expression: text(&mapping_get(&arguments, "expression")?)?,
+            target: mapping_get_or(&arguments, "to", &empty)?.str()?.extract()?,
+            field: mapping_get_or(&arguments, "field", &empty)?
                 .str()?
                 .extract()?,
             values,

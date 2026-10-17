@@ -44,9 +44,9 @@ use crate::bindings::_helpers::graph::python_selection::python_node_names;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
 const GRAPH_OPERATOR_CODE: &str = "C681";
@@ -70,7 +70,7 @@ fn user_error(py: Python<'_>, (code, message): (&str, &str)) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
-        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -120,8 +120,7 @@ fn node_kind<'py>(
     graph: &Bound<'py, PyAny>,
     name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    graph
-        .getattr("nodes_by_name")?
+    native_field(graph, "nodes_by_name")?
         .get_item(name)?
         .getattr("kind")
 }
@@ -252,9 +251,7 @@ fn compile_pipeline<'py>(
             ("relation_keys", keys),
             (
                 "on_progress",
-                invocation
-                    .getattr("planning_progress")?
-                    .getattr("on_progress")?,
+                native_field(invocation, "planning_progress")?.getattr("on_progress")?,
             ),
         ],
     )?))?;
@@ -452,15 +449,11 @@ fn run_checks<'py>(
             ("python_graph", prepared.python_graph.clone()),
             (
                 "selected_python_names",
-                prepared
-                    .lifecycle_plan
-                    .getattr("ingress_python_node_names")?,
+                native_field(&prepared.lifecycle_plan, "ingress_python_node_names")?,
             ),
             (
                 "loader_functions",
-                invocation
-                    .getattr("discovered_inputs")?
-                    .getattr("loader_functions")?,
+                native_field(invocation, "discovered_inputs")?.getattr("loader_functions")?,
             ),
             ("source_map", source_map.clone()),
             (
@@ -631,8 +624,7 @@ fn complete<'py>(
     stream.call_method0("flush")?;
     let tuple: Bound<'py, PyAny> = PyTuple::new(py, results)?.into_any();
     write_python_check_runtime_target(
-        &invocation
-            .getattr("effective_project_dir")?
+        &native_field(invocation, "effective_project_dir")?
             .call_method1("__truediv__", ("target",))?,
         &tuple,
     )?;
@@ -671,9 +663,7 @@ pub(crate) fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
         &host::entry(py, UserCodeHost::BuildProviderSession)?,
         &[(
             "discovered_providers",
-            invocation
-                .getattr("discovered_inputs")?
-                .getattr("providers")?,
+            native_field(&invocation, "discovered_inputs")?.getattr("providers")?,
         )],
     )?;
     let outcome: PyResult<i32> = (|| {

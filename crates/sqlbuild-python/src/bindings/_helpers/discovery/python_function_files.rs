@@ -21,10 +21,10 @@ use crate::bindings::_helpers::discovery::declaration_records::path_class;
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::NativeProjectTree;
 
 const AST_MODULE: &str = "ast";
@@ -44,7 +44,7 @@ fn parse_error(source: &FunctionSource<'_>, detail: &str, cause: Option<PyErr>) 
     let py: Python<'_> = source.file_path.py();
     let raised = (|| {
         let message: String = format!("Python function '{}' {detail}", source.file_path.str()?);
-        registry::error(py, ErrorId::ModelSqlParse)?.call1((message,))
+        error_class(py, ErrorId::ModelSqlParse)?.call1((message,))
     })();
     match raised {
         Ok(instance) => {
@@ -128,7 +128,7 @@ fn unsupported_keys(source: &FunctionSource<'_>, function: &UdfFunction) -> PyRe
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("help", help)?;
     let error: Bound<'_, PyAny> =
-        registry::error(py, ErrorId::ModelSqlParse)?.call((message,), Some(&keywords))?;
+        error_class(py, ErrorId::ModelSqlParse)?.call((message,), Some(&keywords))?;
     Err(PyErr::from_value(error))
 }
 

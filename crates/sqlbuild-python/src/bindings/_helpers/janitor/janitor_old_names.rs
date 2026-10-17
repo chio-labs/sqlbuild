@@ -63,8 +63,7 @@ fn read_histories<'py>(
             Some((_, listed)) => listed
                 .iter()
                 .map(|relation| {
-                    Ok(relation
-                        .getattr("name")?
+                    Ok(native_field(relation, "name")?
                         .extract::<String>()?
                         .to_lowercase())
                 })
@@ -362,8 +361,7 @@ pub(crate) fn pending_migration_origins(
     let schemas: Vec<SchemaKey> = sorted_schemas(managed);
     let mut pending: Vec<(Folded, String)> = Vec::new();
     for (destination, model) in model_destinations(project)? {
-        let raw: Bound<'_, PyAny> = model
-            .getattr("config")?
+        let raw: Bound<'_, PyAny> = native_field(&model, "config")?
             .getattr("values")?
             .call_method1("get", (MIGRATE_FROM_CONFIG_KEY,))?;
         let Ok(raw) = raw.extract::<String>() else {

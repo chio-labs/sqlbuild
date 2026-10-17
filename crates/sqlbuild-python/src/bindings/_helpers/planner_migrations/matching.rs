@@ -6,6 +6,7 @@ use crate::bindings::_helpers::planner_migrations::models::{
     FingerprintInputs, ModelMigrationRequest,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -93,11 +94,7 @@ pub(super) fn migration_destination_fingerprints<'py>(
     for request in requests {
         let model = &request.model;
         let name = model_reads::name_object(model)?;
-        if inputs
-            .metadata_jsons
-            .call_method1("get", (&name,))?
-            .is_none()
-        {
+        if mapping_get(&inputs.metadata_jsons, &name)?.is_none() {
             continue;
         }
         result.set_item(

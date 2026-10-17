@@ -5,6 +5,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
 use crate::bindings::_helpers::sql_test_glue::fixture_validation::validated_fixtures;
@@ -45,8 +46,7 @@ pub(super) fn validated_test<'py>(
         let mut replacement = cte.clone();
         for (index, prefix) in ["__ref__", "__source__", "__seed__"].iter().enumerate() {
             if let Some(name) = name.strip_prefix(prefix) {
-                let sql = completed[index]
-                    .call_method1("get", (name, native_field(&cte, "sql_body")?))?;
+                let sql = mapping_get_or(&completed[index], name, native_field(&cte, "sql_body")?)?;
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("sql_body", sql)?;
                 replacement = replaced_keywords(&cte, &kwargs)?;
@@ -63,7 +63,7 @@ pub(super) fn validated_test<'py>(
         let kwargs = PyDict::new(py);
         kwargs.set_item(
             "sql_body",
-            completed[3].call_method1("get", (name, native_field(&cte, "sql_body")?))?,
+            mapping_get_or(&completed[3], name, native_field(&cte, "sql_body")?)?,
         )?;
         expected_ctes.push(replaced_keywords(&cte, &kwargs)?);
     }

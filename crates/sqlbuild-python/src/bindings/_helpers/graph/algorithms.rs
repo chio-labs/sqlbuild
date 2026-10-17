@@ -9,6 +9,8 @@ use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 use sqlbuild_core::graph_walk::main::directed_path_nodes::directed_path_nodes;
 
 use crate::bindings::_helpers::graph::node_set::PyNodeSet;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const BUILTINS_MODULE: &str = "builtins";
 
@@ -41,10 +43,7 @@ fn neighbours<'py>(
     current: &Bound<'py, PyAny>,
     none: &Bound<'py, PyTuple>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    edges
-        .call_method1("get", (current, none))?
-        .try_iter()?
-        .collect()
+    mapping_get_or(edges, current, none)?.try_iter()?.collect()
 }
 
 /// Keys within `max_depth` edges of any start, plus the starts when requested.
@@ -80,7 +79,7 @@ pub(crate) fn inverted<'py>(edges: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Py
     for key in edges.try_iter()? {
         inverted.set_item(key?, PyList::empty(py))?;
     }
-    for item in edges.call_method0("items")?.try_iter()? {
+    for item in mapping_items(edges)?.try_iter()? {
         let (source, targets): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         for target in targets.try_iter()? {
             let target: Bound<'py, PyAny> = target?;

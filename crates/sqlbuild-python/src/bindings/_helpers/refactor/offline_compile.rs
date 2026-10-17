@@ -10,10 +10,10 @@ use pyo3::types::{PyBool, PyString, PyTuple};
 use crate::bindings::_helpers::compile_command::target_writer::static_sql_test_planning_diagnostics;
 use crate::bindings::_helpers::compile_driver::analysis::analyze_compile_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const DEFAULT_ERROR_CODE: &str = "E001";
 
@@ -25,7 +25,7 @@ pub(crate) struct OfflineCompile<'py> {
 
 fn matches_any_class(py: Python<'_>, error: &PyErr, classes: &[ErrorId]) -> PyResult<bool> {
     for class in classes {
-        if error.value(py).is_instance(&registry::error(py, *class)?)? {
+        if error.value(py).is_instance(&error_class(py, *class)?)? {
             return Ok(true);
         }
     }
@@ -67,7 +67,7 @@ fn compile_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bou
 fn planning_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bound<'py, PyAny>> {
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
     let location: Bound<'py, PyAny> =
-        if value.is_instance(&registry::error(py, ErrorId::SqlTestReference)?)? {
+        if value.is_instance(&error_class(py, ErrorId::SqlTestReference)?)? {
             native_field(&value, "location")?
         } else {
             py.None().into_bound(py)

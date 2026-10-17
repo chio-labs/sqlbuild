@@ -18,9 +18,10 @@ use sqlbuild_analysis::python_selection::models::{
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 type NameRows = Vec<(String, Vec<String>)>;
 /// `(name, tags, POSIX relative path, upstream node names)` of one discovered node.
@@ -40,7 +41,7 @@ fn planner_error(py: Python<'_>, error: SelectorError) -> PyErr {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", error.code)?;
         keywords.set_item("help", error.help)?;
-        registry::error(py, ErrorId::PlannerInput)?.call((error.message,), Some(&keywords))
+        error_class(py, ErrorId::PlannerInput)?.call((error.message,), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),
@@ -55,7 +56,7 @@ fn strings(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 /// A `dict[str, Iterable[str]]` as rows in dict order.
 fn name_rows(mapping: &Bound<'_, PyAny>) -> PyResult<NameRows> {
     let mut rows: NameRows = Vec::new();
-    for item in mapping.call_method0("items")?.try_iter()? {
+    for item in mapping_items(mapping)?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
         rows.push((item.get_item(0)?.extract()?, strings(&item.get_item(1)?)?));
     }
@@ -83,16 +84,14 @@ fn selection_node(node: &Bound<'_, PyAny>) -> PyResult<PythonSelectionNode> {
 /// A `PythonNodeGraph` as the native selection graph.
 fn selection_graph(graph: &Bound<'_, PyAny>) -> PyResult<PythonSelectionGraph> {
     Ok(PythonSelectionGraph {
-        nodes: graph
-            .getattr("nodes")?
+        nodes: native_field(graph, "nodes")?
             .try_iter()?
             .map(|node| selection_node(&node?))
             .collect::<PyResult<_>>()?,
         upstream: name_rows(&native_field(graph, "upstream_deps")?)?,
         downstream: name_rows(&native_field(graph, "downstream_deps")?)?,
         tags: name_rows(&native_field(graph, "tag_index")?)?,
-        paths: graph
-            .getattr("path_index")?
+        paths: native_field(graph, "path_index")?
             .call_method0("items")?
             .try_iter()?
             .map(|item| item?.extract())
@@ -102,15 +101,13 @@ fn selection_graph(graph: &Bound<'_, PyAny>) -> PyResult<PythonSelectionGraph> {
 
 /// `(name, loader)` of every source in the compiled project.
 fn project_sources(project: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>)>> {
-    project
-        .getattr("sources")?
+    native_field(project, "sources")?
         .try_iter()?
         .map(|source| {
             let source: Bound<'_, PyAny> = source?;
             Ok((
                 native_field(&source, "name")?.extract()?,
-                source
-                    .getattr("source_entry")?
+                native_field(&source, "source_entry")?
                     .getattr("loader")?
                     .extract()?,
             ))

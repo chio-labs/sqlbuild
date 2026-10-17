@@ -11,10 +11,10 @@ use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_a
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 
 use crate::bindings::_helpers::project_assembly::resources::syntax_error_message;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const GENERIC_DIALECT: &str = "generic";
 
@@ -44,7 +44,7 @@ fn syntax_error(py: Python<'_>, message: String) -> PyErr {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("help", sql_analysis_opt_out_help(true))?;
         let error: Bound<'_, PyAny> =
-            registry::error(py, ErrorId::CompileInput)?.call((message,), Some(&keywords))?;
+            error_class(py, ErrorId::CompileInput)?.call((message,), Some(&keywords))?;
         Ok(PyErr::from_value(error))
     };
     raised().unwrap_or_else(|error| error)

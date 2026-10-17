@@ -19,6 +19,7 @@ use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_selection::unit_tests::split_project_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -94,9 +95,7 @@ fn planner_scopes<'py>(
 
 /// The stale-warning scope's models of `scopes`.
 fn scoped_models<'py>(scopes: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    scopes
-        .getattr("stale_warning_scope")?
-        .getattr("models_by_name")
+    native_field(scopes, "stale_warning_scope")?.getattr("models_by_name")
 }
 
 /// Return options whose selectors name only resources, with unit tests selected apart.
@@ -118,8 +117,7 @@ pub(crate) fn resolve_configured_rule_selection<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = options.py();
-    if !options
-        .getattr("sql_test_selection")?
+    if !native_field(options, "sql_test_selection")?
         .getattr("models_selected")?
         .is_truthy()?
     {
@@ -130,8 +128,7 @@ pub(crate) fn resolve_configured_rule_selection<'py>(
         return Ok(py.None().into_bound(py));
     }
     let models: Bound<'py, PyAny> = scoped_models(&planner_scopes(project, &selection)?)?;
-    let keys: Vec<Bound<'py, PyAny>> = models
-        .call_method0("values")?
+    let keys: Vec<Bound<'py, PyAny>> = mapping_values(&models)?
         .try_iter()?
         .map(|model| native_field(&model?, "key"))
         .collect::<PyResult<_>>()?;
@@ -234,8 +231,7 @@ pub(crate) fn compile_static_command_context<'py>(
     let mut selected_keys: Bound<'py, PyAny> =
         request.optional("selected_keys")?.unwrap_or_else(none);
     if selected_keys.is_none()
-        && !options
-            .getattr("sql_test_selection")?
+        && !native_field(&options, "sql_test_selection")?
             .getattr("models_selected")?
             .is_truthy()?
     {

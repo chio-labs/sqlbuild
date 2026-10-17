@@ -31,10 +31,10 @@ use crate::bindings::_helpers::discovery::yaml_records::{
 };
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const SELECTION_CODE: &str = "S007";
 
@@ -56,7 +56,7 @@ fn planner_error(py: Python<'_>, message: &str, code: &str) -> PyErr {
     let raised = (|| -> PyResult<Bound<'_, PyAny>> {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", code)?;
-        registry::error(py, ErrorId::PlannerInput)?.call((message,), Some(&keywords))
+        error_class(py, ErrorId::PlannerInput)?.call((message,), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),
@@ -104,9 +104,8 @@ fn model_names_and_paths(scope: &Scope<'_, '_>) -> PyResult<Vec<(String, PathBuf
     for model_file in native_field(scope.discovered, "model_files")?.try_iter()? {
         let model_file: Bound<'_, PyAny> = model_file?;
         let relative_path: Bound<'_, PyAny> = native_field(&model_file, "relative_path")?;
-        let configured: Bound<'_, PyAny> = model_file
-            .getattr("header_values")?
-            .call_method1("get", ("name",))?;
+        let configured: Bound<'_, PyAny> =
+            native_field(&model_file, "header_values")?.call_method1("get", ("name",))?;
         let name: String = match configured.downcast::<PyString>() {
             Ok(text) if !text.to_str()?.is_empty() => text.to_str()?.to_owned(),
             _ => native_field(&relative_path, "stem")?.extract()?,

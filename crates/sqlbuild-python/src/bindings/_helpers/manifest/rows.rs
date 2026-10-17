@@ -15,6 +15,8 @@ use sqlbuild_analysis::python_values::models::PythonValue;
 use crate::bindings::_helpers::python_values::values::python_value;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const DECIMAL_KIND: &str = "decimal";
@@ -174,12 +176,12 @@ fn config_value<'py>(
     key: &str,
     default: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    values.call_method1("get", (key, default))
+    mapping_get_or(values, key, default)
 }
 
 fn config(values: &Bound<'_, PyAny>) -> PyResult<ManifestConfigInput> {
     let py: Python<'_> = values.py();
-    let get = |key: &str| values.call_method1("get", (key,));
+    let get = |key: &str| mapping_get(values, key);
     let materialized: Bound<'_, PyAny> = config_value(
         values,
         "materialized",

@@ -24,6 +24,7 @@ use crate::bindings::_helpers::lifecycle_events::validation::{
     timestamp_check,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const EVENT_REQUIRED_TEXT: [&str; 5] = [
     "event_id",
@@ -218,7 +219,7 @@ fn validated_operation_metadata<'py>(
             ));
         }
     }
-    for item in metadata.call_method0("items")?.try_iter()? {
+    for item in mapping_items(metadata)?.try_iter()? {
         let (key, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         if !nonnegative_int(&value)? {
             return Err(validation_error(

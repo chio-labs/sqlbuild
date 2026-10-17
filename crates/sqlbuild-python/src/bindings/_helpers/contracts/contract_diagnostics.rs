@@ -45,17 +45,14 @@ fn output_column_location<'py>(
     model: &Bound<'py, PyAny>,
     column_name: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let recorded: Bound<'py, PyAny> = model
-        .getattr("output_column_locations")?
-        .call_method1("get", (column_name,))?;
+    let recorded: Bound<'py, PyAny> =
+        native_field(model, "output_column_locations")?.call_method1("get", (column_name,))?;
     let authored: Option<String> = native_field(model, "authored_sql")?.extract()?;
     let authored: String = authored.unwrap_or_default();
     if !recorded.is_none() || authored.is_empty() {
         return Ok(Some(recorded).filter(|location| !location.is_none()));
     }
-    let implicit: bool = model
-        .getattr("extract_implicit_alias_columns")?
-        .is_truthy()?;
+    let implicit: bool = native_field(model, "extract_implicit_alias_columns")?.is_truthy()?;
     let rows: Vec<ColumnLocation> = location_rows(model_output_columns(&authored, implicit));
     let Some((_, line, column, end_line, end_column)) = rows
         .into_iter()
@@ -88,8 +85,7 @@ fn diagnostic_location<'py>(
     if let Some(index) = declared_index
         && !schema_entry.is_none()
     {
-        return schema_entry
-            .getattr("columns")?
+        return native_field(&schema_entry, "columns")?
             .get_item(index)?
             .getattr("location");
     }
@@ -166,8 +162,7 @@ pub(crate) fn evaluate_model_contracts<'py>(
     project: &Bound<'py, PyAny>,
     dialect: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let mode: String = project
-        .getattr("settings")?
+    let mode: String = native_field(project, "settings")?
         .getattr("column_contract_mode")?
         .str()?
         .extract()?;
@@ -210,8 +205,7 @@ pub(crate) fn promotion_conflict_diagnostics<'py>(
     adapter_default: &Bound<'py, PyAny>,
     settings_file: String,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let explicit_mode: Option<String> = project
-        .getattr("settings")?
+    let explicit_mode: Option<String> = native_field(project, "settings")?
         .getattr("table_promotion_mode")?
         .extract()?;
     let native: Bound<'py, PyAny> = native_project(project)?;

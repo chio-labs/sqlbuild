@@ -16,8 +16,8 @@ use sqlbuild_model_config::errors::{ConfigError, ErrorClass};
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::contract_classes::yaml_entry_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, audit_tuple};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 /// The directory whose schema YAML files may declare seeds.
 const SEEDS_DIRECTORY: &str = "seeds";
@@ -47,8 +47,8 @@ pub(crate) struct YamlClasses<'py> {
 /// The Python error `error` raises: a resource identity error, else the file kind's parse error.
 fn parse_error(py: Python<'_>, error: ConfigError, parse_class: ErrorId) -> PyResult<PyErr> {
     let class: Bound<'_, PyAny> = match error.class {
-        ErrorClass::ResourceIdentity => registry::error(py, ErrorId::ResourceIdentity)?,
-        _ => registry::error(py, parse_class)?,
+        ErrorClass::ResourceIdentity => error_class(py, ErrorId::ResourceIdentity)?,
+        _ => error_class(py, parse_class)?,
     };
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     if let Some(help) = error.help {

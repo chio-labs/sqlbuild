@@ -1,5 +1,8 @@
 //! Construction, comparison and display of native record field values.
 
+use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, OnceLock};
+
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyAttributeError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -14,10 +17,16 @@ use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{
-    FROZEN_INSTANCE_ERROR, ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
+    CACHED_PROPERTIES, CLASS_PROPERTIES, FROZEN_INSTANCE_ERROR, NATIVE_MODULE, ORDERED_RECORDS,
+    RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
+use crate::bindings::_helpers::records::getters::getter_field;
 use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
+use crate::bindings::_helpers::records::types::ClassProperty;
+
+/// How a test run treats `field` falling back to `getattr` on a native class: unset outside tests.
+pub(crate) const NATIVE_FIELD_STRICT_ENV_VAR: &str = "SQLBUILD_NATIVE_FIELD_STRICT";
 
 /// Every registered record spec, in registration order.
 pub(crate) fn all_specs() -> impl Iterator<Item = &'static RecordSpec> {
@@ -39,9 +48,10 @@ pub(crate) fn record_spec(cls: &Bound<'_, PyType>) -> PyResult<&'static RecordSp
 }
 
 /// A declared field of a native record read from its values; any other attribute, or object, by `getattr`.
+#[track_caller]
 pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    if let Ok(record) = value.cast::<NativeRecord>() {
-        let record: &NativeRecord = record.get();
+    if let Ok(cell) = value.cast::<NativeRecord>() {
+        let record: &NativeRecord = cell.get();
         if let Some(found) = record
             .spec
             .fields
@@ -51,8 +61,179 @@ pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Boun
         {
             return Ok(found.bind(value.py()).clone());
         }
+        if let Some(&(property, cached_name)) = record_properties().get(&(record.spec.name, name)) {
+            return property_value(cell, property, cached_name)
+                .map(|found| found.into_bound(value.py()));
+        }
+    } else if let Some(found) = getter_field(value, name) {
+        return found;
     }
+    strict_fallback(value, name)?;
     value.getattr(name)
+}
+
+/// A strict-mode setting: record fallbacks to a file, or fail on any fallback missing from an allowlist.
+enum StrictFields {
+    Record(String, Mutex<HashSet<String>>),
+    Enforce(Result<HashSet<String>, String>),
+}
+
+fn strict_fields() -> Option<&'static StrictFields> {
+    static STRICT: OnceLock<Option<StrictFields>> = OnceLock::new();
+    STRICT
+        .get_or_init(|| {
+            let setting: String = std::env::var_os(NATIVE_FIELD_STRICT_ENV_VAR)?
+                .to_string_lossy()
+                .into_owned();
+            if let Some(path) = setting.strip_prefix("record:") {
+                return Some(StrictFields::Record(
+                    path.to_owned(),
+                    Mutex::new(HashSet::new()),
+                ));
+            }
+            let path: &str = setting.strip_prefix("enforce:")?;
+            Some(StrictFields::Enforce(
+                std::fs::read_to_string(path)
+                    .map(|listed| allowlist_entries(&listed))
+                    .map_err(|error| format!("cannot read native field allowlist {path}: {error}")),
+            ))
+        })
+        .as_ref()
+}
+
+/// The non-comment entries of an allowlist file.
+fn allowlist_entries(listed: &str) -> HashSet<String> {
+    let mut entries: HashSet<String> = HashSet::new();
+    for line in listed.lines().map(str::trim) {
+        if !line.is_empty() && !line.starts_with('#') {
+            let _ = entries.insert(line.to_owned());
+        }
+    }
+    entries
+}
+
+/// In strict test runs, record or reject a `getattr` fallback on one of SQLBuild's own native classes.
+#[track_caller]
+fn strict_fallback(value: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
+    let Some(strict) = strict_fields() else {
+        return Ok(());
+    };
+    let class: Bound<'_, PyType> = value.get_type();
+    if class.module()?.to_cow()? != NATIVE_MODULE {
+        return Ok(());
+    }
+    let caller: &std::panic::Location<'_> = std::panic::Location::caller();
+    let qualname: Bound<'_, PyString> = class.qualname()?;
+    let entry: String = format!("{}\t{}.{name}", caller.file(), qualname.to_cow()?);
+    match strict {
+        StrictFields::Enforce(Err(error)) => Err(PyRuntimeError::new_err(error.clone())),
+        StrictFields::Enforce(Ok(allowed)) if !allowed.contains(&entry) => {
+            value.py().check_signals()?;
+            Err(PyRuntimeError::new_err(format!(
+                "native field read fell back to Python: {}",
+                entry.replace('\t', " ")
+            )))
+        }
+        StrictFields::Enforce(Ok(_)) => Ok(()),
+        StrictFields::Record(path, seen) => {
+            let new: bool = seen
+                .lock()
+                .map(|mut held| held.insert(entry.clone()))
+                .unwrap_or(false);
+            if new
+                && let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+            {
+                let _ = std::io::Write::write_all(&mut file, format!("{entry}\n").as_bytes());
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Record properties by class and attribute name, each with its cache key when cached.
+type PropertyTable = HashMap<(&'static str, &'static str), (ClassProperty, Option<&'static str>)>;
+
+/// A record property's function by class and attribute name, with its cache key when cached.
+fn record_properties() -> &'static PropertyTable {
+    static TABLE: OnceLock<PropertyTable> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut table: PropertyTable = HashMap::new();
+        for &(class, name, property) in CLASS_PROPERTIES.iter().flat_map(|group| group.iter()) {
+            let _ = table.insert((class, name), (property, None));
+        }
+        for &(class, name, property) in CACHED_PROPERTIES.iter().flat_map(|group| group.iter()) {
+            let _ = table.insert((class, name), (property, Some(name)));
+        }
+        table
+    })
+}
+
+/// A record property computed as its descriptor computes it, cached ones computed once.
+fn property_value(
+    record: &Bound<'_, NativeRecord>,
+    property: ClassProperty,
+    cached_name: Option<&'static str>,
+) -> PyResult<Py<PyAny>> {
+    let Some(cached_name) = cached_name else {
+        return property(record.as_any());
+    };
+    if let Some(value) = cached_value(record, cached_name)? {
+        return Ok(value);
+    }
+    let value: Py<PyAny> = property(record.as_any())?;
+    store_cached(record, cached_name, &value)?;
+    Ok(value)
+}
+
+/// `mapping.get(key)`: a dict is read through the C API.
+pub(crate) fn mapping_get<'py, K: pyo3::IntoPyObject<'py>>(
+    mapping: &Bound<'py, PyAny>,
+    key: K,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = mapping.py();
+    let key: Bound<'py, PyAny> = key.into_bound_py_any(py)?;
+    match mapping.cast_exact::<PyDict>() {
+        Ok(dict) => Ok(dict
+            .get_item(&key)?
+            .unwrap_or_else(|| py.None().into_bound(py))),
+        Err(_) => mapping.call_method1("get", (key,)),
+    }
+}
+
+/// `mapping.get(key, default)`: a dict is read through the C API.
+pub(crate) fn mapping_get_or<'py, K: pyo3::IntoPyObject<'py>, D: pyo3::IntoPyObject<'py>>(
+    mapping: &Bound<'py, PyAny>,
+    key: K,
+    default: D,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = mapping.py();
+    let key: Bound<'py, PyAny> = key.into_bound_py_any(py)?;
+    if let Ok(dict) = mapping.cast_exact::<PyDict>() {
+        if let Some(found) = dict.get_item(&key)? {
+            return Ok(found);
+        }
+        return default.into_bound_py_any(py);
+    }
+    mapping.call_method1("get", (key, default.into_bound_py_any(py)?))
+}
+
+/// `mapping.items()` for iteration: a dict yields its `(key, value)` pairs through the C API.
+pub(crate) fn mapping_items<'py>(mapping: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    match mapping.cast_exact::<PyDict>() {
+        Ok(dict) => Ok(dict.items().into_any()),
+        Err(_) => mapping.call_method0("items"),
+    }
+}
+
+/// `mapping.values()` for iteration: a dict yields its values through the C API.
+pub(crate) fn mapping_values<'py>(mapping: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    match mapping.cast_exact::<PyDict>() {
+        Ok(dict) => Ok(dict.values().into_any()),
+        Err(_) => mapping.call_method0("values"),
+    }
 }
 
 /// `dataclasses.replace(value, **changes)`: a native record is rebuilt from its own values.

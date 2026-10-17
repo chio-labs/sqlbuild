@@ -19,6 +19,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -182,7 +184,7 @@ pub(crate) fn plan_reference_renames<'py>(
     let target_name: Bound<'py, PyAny> =
         native_field(&native_field(runtime, "project")?, "effective_target_name")?;
     let mut renames: Vec<Bound<'py, PyAny>> = Vec::new();
-    for item in planned.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&planned)?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         let (new_name, origin_name) = (item.get_item(0)?, item.get_item(1)?);
         if new_name.ne(&origin_name)? {
@@ -224,8 +226,7 @@ fn changed_referencing_query(
     let models_by_name: Bound<'_, PyAny> = native_field(scope, "models_by_name")?;
     let mut selected: Vec<Bound<'_, PyAny>> = Vec::new();
     for key in native_field(scope, "selected_keys")?.try_iter()? {
-        let model: Bound<'_, PyAny> =
-            models_by_name.call_method1("get", (native_field(&key?, "name")?,))?;
+        let model: Bound<'_, PyAny> = mapping_get(&models_by_name, native_field(&key?, "name")?)?;
         if !model.is_none() {
             selected.push(model);
         }
@@ -236,7 +237,7 @@ fn changed_referencing_query(
     let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
     for model in selected {
         let recorded: Bound<'_, PyAny> =
-            recorded_models.call_method1("get", (model_reads::name_object(&model)?,))?;
+            mapping_get(&recorded_models, model_reads::name_object(&model)?)?;
         if recorded.is_none() {
             continue;
         }

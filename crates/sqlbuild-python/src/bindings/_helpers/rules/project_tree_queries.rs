@@ -22,9 +22,9 @@ use sqlbuild_rules::project_tree::main::read_project_text::read_project_text;
 use sqlbuild_rules::project_tree::main::resolve_project_path::resolve_project_path;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::rule_api::{usage_error_for, validate_project_relative};
 
 const PATHLIB_MODULE: &str = "pathlib";
@@ -115,7 +115,7 @@ fn not_beneath(path: &Bound<'_, PyAny>, under: &Bound<'_, PyAny>) -> PyErr {
             .add(under_text)
     });
     match message.and_then(|message| {
-        registry::error(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,)))
+        error_class(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,)))
     }) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
@@ -176,7 +176,7 @@ fn project_tree_read_text(root: PathBuf, path: &Bound<'_, PyAny>) -> PyResult<St
         return Err(PyValueError::new_err(raised.message));
     }
     Err(PyErr::from_value(
-        registry::error(py, ErrorId::RuleUsage)?.call1((raised.message,))?,
+        error_class(py, ErrorId::RuleUsage)?.call1((raised.message,))?,
     ))
 }
 
@@ -217,7 +217,7 @@ fn python_read_error(py: Python<'_>, file: &Path, text: &str) -> PyErr {
             error.value(py).str()?
         );
         let usage: PyErr =
-            PyErr::from_value(registry::error(py, ErrorId::RuleUsage)?.call1((message,))?);
+            PyErr::from_value(error_class(py, ErrorId::RuleUsage)?.call1((message,))?);
         usage.set_cause(py, Some(error));
         Ok(usage)
     };

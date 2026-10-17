@@ -123,13 +123,11 @@ pub(crate) fn comparison_request(
     set_difference_operator: &str,
     sql_analysis_dialect: Option<&str>,
 ) -> PyResult<Value> {
-    let chain: Vec<Value> = entry
-        .getattr("chain")?
+    let chain: Vec<Value> = native_field(entry, "chain")?
         .try_iter()?
         .map(|step| chain_step_request(&step?))
         .collect::<PyResult<_>>()?;
-    let assertions: Vec<Value> = entry
-        .getattr("assertions")?
+    let assertions: Vec<Value> = native_field(entry, "assertions")?
         .try_iter()?
         .map(|assertion| {
             let assertion: Bound<'_, PyAny> = assertion?;

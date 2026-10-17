@@ -20,6 +20,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::graph::build_downstream_model_name_closure;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 
@@ -60,9 +62,7 @@ fn previous_records<'py>(
     let merged: Bound<'py, PyDict> = PyDict::new(py);
     for schema in arguments.value("state_schemas")?.try_iter()? {
         let schema: Bound<'py, PyAny> = schema?;
-        let exists: bool = exists_by_schema
-            .call_method1("get", (&schema, false))?
-            .is_truthy()?;
+        let exists: bool = mapping_get_or(&exists_by_schema, &schema, false)?.is_truthy()?;
         let previous: Bound<'py, PyAny> =
             read_latest(&read, (&database, &schema), exists, source_names)?;
         for (identity, candidate) in native_field(&previous, "records")?
@@ -71,8 +71,7 @@ fn previous_records<'py>(
         {
             let replace: bool = match merged.get_item(&identity)? {
                 None => true,
-                Some(current) => candidate
-                    .getattr("observed_at")?
+                Some(current) => native_field(&candidate, "observed_at")?
                     .gt(native_field(&current, "observed_at")?)?,
             };
             if replace {
@@ -213,7 +212,7 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
     let age_statuses: Bound<'py, PyDict> = PyDict::new(py);
     for (name, source) in observed_sources.iter() {
         let observation: Bound<'py, PyAny> = if freshness_strategy_is_adapter(&source)? {
-            let observation: Bound<'py, PyAny> = observations.call_method1("get", (&name,))?;
+            let observation: Bound<'py, PyAny> = mapping_get(&observations, &name)?;
             if observation.is_none() {
                 continue;
             }
@@ -244,9 +243,7 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
         } else {
             (
                 native_field(&freshness, "age_policy")?,
-                freshness
-                    .getattr("lag_tolerance")?
-                    .extract::<Option<String>>()?,
+                native_field(&freshness, "lag_tolerance")?.extract::<Option<String>>()?,
             )
         };
         let identity: Bound<'py, PyAny> = native_field(&record, "identity")?;
@@ -338,10 +335,7 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
         stale.call_method1("update", (&models,))?;
         changed.set_item(identity, models)?;
     }
-    for name in source_freshness
-        .getattr("unknown_source_names")?
-        .try_iter()?
-    {
+    for name in native_field(source_freshness, "unknown_source_names")?.try_iter()? {
         let name: Bound<'py, PyAny> = name?;
         let models: Bound<'py, PyFrozenSet> = downstream_models(&name, &downstream_deps)?;
         stale.call_method1("update", (&models,))?;
@@ -349,8 +343,7 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
     }
     let error_status: Bound<'py, PyAny> =
         enum_member(py, RecordId::SourceFreshnessAgeStatus, "ERROR")?;
-    for (identity, status) in source_freshness
-        .getattr("age_statuses")?
+    for (identity, status) in native_field(source_freshness, "age_statuses")?
         .downcast::<PyDict>()?
         .iter()
     {

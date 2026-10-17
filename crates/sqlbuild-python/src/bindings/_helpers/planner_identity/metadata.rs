@@ -20,6 +20,8 @@ use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::planner_identity::hashing::function_definition_hash;
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, SPACED, sorted_dumps};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const LOCAL_FUNCTION_HASHES_KEY: &str = "local_function_hashes";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -96,7 +98,7 @@ pub(crate) fn model_version_identity_metadata_json<'py>(
                 continue;
             }
             let name: Bound<'py, PyAny> = native_field(&upstream_key, "name")?;
-            let upstream_hash: Bound<'py, PyAny> = function_hashes.call_method1("get", (&name,))?;
+            let upstream_hash: Bound<'py, PyAny> = mapping_get(function_hashes, &name)?;
             if !upstream_hash.is_none() {
                 local_function_hashes.set_item(name, upstream_hash)?;
             }
@@ -135,7 +137,7 @@ fn execution_signature<'py>(
     }
     let python_hook_fields: Bound<'py, PyDict> = PyDict::new(py);
     if let Some(hashes) = hook_version_hashes.filter(|hashes| !hashes.is_none()) {
-        for item in hashes.call_method0("items")?.try_iter()? {
+        for item in mapping_items(hashes)?.try_iter()? {
             let (name, version_hash): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
             let fields: Bound<'py, PyDict> = PyDict::new(py);
             fields.set_item("version_hash", version_hash)?;
@@ -176,9 +178,8 @@ fn contract_output_signature<'py>(
     if !(columns.is_truthy()? || families.is_truthy()?) {
         return Ok(None);
     }
-    let enforced: bool = config_values
-        .call_method1("get", (CONTRACT_CONFIG_KEY,))?
-        .eq(ENFORCED_CONTRACT_POLICY)?;
+    let enforced: bool =
+        mapping_get(config_values, CONTRACT_CONFIG_KEY)?.eq(ENFORCED_CONTRACT_POLICY)?;
     if !enforced && native_field(&schema_entry, "model_schema")?.is_none() {
         return Ok(None);
     }
@@ -188,7 +189,7 @@ fn contract_output_signature<'py>(
         let column: Bound<'py, PyAny> = column?;
         let entry: Bound<'py, PyDict> = column_signature(&column)?;
         let declaration: Bound<'py, PyAny> =
-            enum_columns.call_method1("get", (native_field(&column, "name")?,))?;
+            mapping_get(&enum_columns, native_field(&column, "name")?)?;
         if !declaration.is_none() {
             let members: Bound<'py, PyList> = PyList::empty(py);
             for member in native_field(&declaration, "members")?.try_iter()? {

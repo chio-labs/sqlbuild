@@ -7,6 +7,7 @@ use sqlbuild_core::lifecycle_events::models::PayloadValue;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 /// `ObservabilityValidationError(message)`.
 pub(crate) fn validation_error(py: Python<'_>, message: &str) -> PyErr {
@@ -74,7 +75,7 @@ pub(crate) fn frozen<'py>(
     }
     if abc_mapping(value)? {
         let copied: Bound<'py, PyDict> = PyDict::new(py);
-        for item in value.call_method0("items")?.try_iter()? {
+        for item in mapping_items(value)?.try_iter()? {
             let (key, item): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
             let Ok(name) = key.downcast::<PyString>() else {
                 return Err(validation_error(
@@ -146,8 +147,7 @@ pub(crate) fn payload_value(value: &Bound<'_, PyAny>) -> PyResult<PayloadValue> 
 
 /// The entries of a frozen JSON object in iteration order.
 pub(crate) fn object_entries(value: &Bound<'_, PyAny>) -> PyResult<Vec<(String, PayloadValue)>> {
-    value
-        .call_method0("items")?
+    mapping_items(value)?
         .try_iter()?
         .map(|item| {
             let (key, item): (String, Bound<'_, PyAny>) = item?.extract()?;

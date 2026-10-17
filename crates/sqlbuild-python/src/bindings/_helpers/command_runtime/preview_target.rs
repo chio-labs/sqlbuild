@@ -10,8 +10,7 @@ use crate::bindings::_helpers::command_runtime::runtime_errors::raised;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 fn target_names(config: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    config
-        .getattr("targets")?
+    native_field(config, "targets")?
         .try_iter()?
         .map(|name| name?.extract())
         .collect()

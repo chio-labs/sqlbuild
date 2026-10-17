@@ -18,6 +18,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
@@ -58,8 +59,7 @@ pub(crate) fn resource_types_by_name(
         .map(|entry| {
             Ok((
                 native_field(entry, "name")?.extract()?,
-                entry
-                    .getattr("key")?
+                native_field(entry, "key")?
                     .getattr("resource_type")?
                     .str()?
                     .extract()?,
@@ -123,7 +123,7 @@ fn dependency_locations<'py>(
         native_field(&plan, "source_map")?
     };
     let source_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
-    for pair in source_map.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(&source_map)?.try_iter()? {
         let (name, source): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let table: Bound<'py, PyAny> = native_field(&source, "table")?;
         if table.is_none() {
@@ -175,8 +175,7 @@ fn execution_input<'py>(
     let project: Bound<'py, PyAny> = native_field(pipeline, "destination_project")?;
     let plan: Bound<'py, PyAny> = native_field(pipeline, "clone_plan")?;
     let config: Bound<'py, PyAny> = target_config(invocation)?;
-    let selected: Vec<Bound<'py, PyAny>> = pipeline
-        .getattr("destination_model_entries")?
+    let selected: Vec<Bound<'py, PyAny>> = native_field(pipeline, "destination_model_entries")?
         .try_iter()?
         .map(|entry| native_field(&entry?, "name"))
         .collect::<PyResult<_>>()?;
@@ -198,8 +197,7 @@ fn execution_input<'py>(
             ),
         ],
     )?;
-    let allow_decrease: bool = config
-        .getattr("time_travel_retention_decrease")?
+    let allow_decrease: bool = native_field(&config, "time_travel_retention_decrease")?
         .eq(enum_member(py, RecordId::RetentionDecreasePolicy, "ALLOW")?)?;
     let source_entries: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::CloneSourceEntries)?,
@@ -233,9 +231,7 @@ fn execution_input<'py>(
         ("run_id", native_field(&project, "run_id")?),
         (
             "query_change_tracking",
-            project
-                .getattr("settings")?
-                .getattr("query_change_tracking")?,
+            native_field(&project, "settings")?.getattr("query_change_tracking")?,
         ),
         ("upstream_deps", native_field(&plan, "upstream_deps")?),
         (
@@ -287,9 +283,7 @@ fn copy_fingerprints<'py>(
         ("run_id", native_field(&project, "run_id")?),
         (
             "query_change_tracking",
-            project
-                .getattr("settings")?
-                .getattr("query_change_tracking")?,
+            native_field(&project, "settings")?.getattr("query_change_tracking")?,
         ),
         ("on_progress", reporter.clone().into_any()),
     ]);

@@ -9,10 +9,14 @@ use pyo3::{IntoPyObject, pyclass, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{
     enum_member, new_record, new_record_with, record_class,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::declaration_contexts::NativeDeclarationContexts;
@@ -96,7 +100,7 @@ fn runtime_declarations<'py>(
         }
     }
     if !loaded_macros.is_none() {
-        for name_and_macro in loaded_macros.call_method0("values")?.try_iter()? {
+        for name_and_macro in mapping_values(loaded_macros)?.try_iter()? {
             let declared_macro: Bound<'py, PyAny> = name_and_macro?;
             let identity = declaration_identity(
                 &classes,
@@ -191,7 +195,7 @@ fn value_kind_code(classes: &[Bound<'_, PyAny>], value: &Bound<'_, PyAny>) -> Py
 /// `{owner: list(items)}` of an index position mapping.
 fn listed_positions<'py>(positions: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let listed: Bound<'py, PyDict> = PyDict::new(positions.py());
-    for item in positions.call_method0("items")?.try_iter()? {
+    for item in mapping_items(positions)?.try_iter()? {
         let (owner, items): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         listed.set_item(
             owner,
@@ -228,7 +232,7 @@ pub(crate) fn native_declaration_contexts<'py>(
         let identity: Bound<'py, PyAny> = identity?;
         let key: Bound<'py, PyAny> =
             identity_keys.call_method1("setdefault", (&identity, identity_keys.len()))?;
-        let value: Bound<'py, PyAny> = declarations.call_method1("get", (&identity,))?;
+        let value: Bound<'py, PyAny> = mapping_get(declarations, &identity)?;
         positions.push(PyTuple::new(
             py,
             [
@@ -298,12 +302,9 @@ pub(crate) fn native_declaration_contexts<'py>(
     )?;
     lookups.set_item(
         "identity_error",
-        registry::error(py, ErrorId::InvalidQualifiedIdentity)?,
+        error_class(py, ErrorId::InvalidQualifiedIdentity)?,
     )?;
-    lookups.set_item(
-        "path_error",
-        registry::error(py, ErrorId::InvalidScopePath)?,
-    )?;
+    lookups.set_item("path_error", error_class(py, ErrorId::InvalidScopePath)?)?;
     let global_positions: Bound<'py, PyList> = PyList::new(
         py,
         native_field(&index, "global_positions")?
@@ -415,7 +416,7 @@ pub(crate) fn constant_declaration_sql<'py>(
         None => relative_path.str()?.to_string(),
     };
     let compile_error: Bound<'py, PyAny> =
-        registry::error(py, ErrorId::CompileInput)?.call1((format!(
+        error_class(py, ErrorId::CompileInput)?.call1((format!(
             "{} constant '{}' could not be rendered in '{}' by adapter '{}' as {}: {}",
             relative_path.str()?,
             native_field(declaration, "name")?.str()?,

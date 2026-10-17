@@ -69,25 +69,23 @@ impl NativeDeclarationContexts {
         }
         .try_iter()?
         .collect::<PyResult<_>>()?;
-        let cache: Bound<'py, PyDict> = resolver
-            .getattr(intern!(py, "contexts_by_directory"))?
-            .downcast_into()?;
-        let specific: Bound<'py, PyAny> = resolver.getattr(intern!(py, "resource_specific"))?;
+        let cache: Bound<'py, PyDict> =
+            native_field(resolver, "contexts_by_directory")?.downcast_into()?;
+        let specific: Bound<'py, PyAny> = native_field(resolver, "resource_specific")?;
         let mut cache_key: Option<Bound<'py, PyTuple>> = None;
         if let [record] = resources.as_slice()
             && !specific.is_none()
-            && !specific.contains(record.getattr(intern!(py, "identity"))?)?
+            && !specific.contains(native_field(record, "identity")?)?
         {
-            let path: String = record.getattr(intern!(py, "path"))?.extract()?;
-            let root: Bound<'py, PyAny> = record
-                .getattr(intern!(py, "ownership_root"))?
-                .getattr(intern!(py, "path"))?;
+            let path: String = native_field(record, "path")?.extract()?;
+            let root: Bound<'py, PyAny> =
+                native_field(record, "ownership_root")?.getattr(intern!(py, "path"))?;
             let key: Bound<'py, PyTuple> = PyTuple::new(
                 py,
                 [PyString::new(py, &posix_parent(&path)).into_any(), root],
             )?;
             if let Some(cached) = cache.get_item(&key)? {
-                let consumer: Bound<'py, PyAny> = record.getattr(intern!(py, "identity"))?;
+                let consumer: Bound<'py, PyAny> = native_field(record, "identity")?;
                 return Ok((self.rebound_context(&cached, &consumer)?, false));
             }
             cache_key = Some(key);
@@ -104,7 +102,7 @@ impl NativeDeclarationContexts {
         } else {
             let consumer: Bound<'py, PyAny> = match resource {
                 Some(resource) => resource.clone(),
-                None => resources[0].getattr(intern!(py, "identity"))?,
+                None => native_field(&resources[0], "identity")?,
             };
             (resources, consumer)
         };
@@ -157,7 +155,7 @@ impl NativeDeclarationContexts {
         if !matches.is_empty() || declaration_matches > 0 {
             let consumer: Bound<'py, PyAny> = match (resource, matches.first()) {
                 (Some(resource), _) => resource.clone(),
-                (None, Some(first)) => first.getattr(intern!(py, "identity"))?,
+                (None, Some(first)) => native_field(first, "identity")?,
                 (None, None) => py.None().into_bound(py),
             };
             return Ok((matches, consumer));
@@ -181,12 +179,11 @@ impl NativeDeclarationContexts {
         let private: &Bound<'_, PyAny> = inputs.private_scope.bind(py);
         for record in inputs.index_declarations.bind(py).try_iter()? {
             let record: Bound<'_, PyAny> = record?;
-            let path: String = record.getattr(intern!(py, "path"))?.extract()?;
-            if path != target || record.getattr(intern!(py, "scope"))?.is(private) {
+            let path: String = native_field(&record, "path")?.extract()?;
+            if path != target || native_field(&record, "scope")?.is(private) {
                 continue;
             }
-            let owning_path: Option<String> =
-                record.getattr(intern!(py, "owning_path"))?.extract()?;
+            let owning_path: Option<String> = native_field(&record, "owning_path")?.extract()?;
             let owner: String = owning_path
                 .filter(|path| !path.is_empty())
                 .unwrap_or_else(|| CURRENT_FOLDER.to_owned());
@@ -305,9 +302,9 @@ impl NativeDeclarationContexts {
                 let record: Bound<'py, PyAny> = record?;
                 items.push(self.visibility_record_for(
                     consumer,
-                    &record.getattr(intern!(py, "declaration"))?,
-                    &record.getattr(intern!(py, "reason"))?,
-                    &record.getattr(intern!(py, "through"))?,
+                    &native_field(&record, "declaration")?,
+                    &native_field(&record, "reason")?,
+                    &native_field(&record, "through")?,
                 )?);
             }
             rebound.set_item(name, PyTuple::new(py, items)?)?;

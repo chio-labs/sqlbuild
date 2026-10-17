@@ -263,9 +263,8 @@ pub(crate) fn plan_options<'py>(
     args: &[String],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
-    let project_config: Bound<'py, PyAny> = discovered_inputs
-        .getattr("project_config")?
-        .getattr("dbt")?;
+    let project_config: Bound<'py, PyAny> =
+        native_field(discovered_inputs, "project_config")?.getattr("dbt")?;
     let local_config: Bound<'py, PyAny> =
         native_field(discovered_inputs, "local_config")?.getattr("dbt")?;
     let resolved: Bound<'py, PyAny> = resolve_dbt_config(

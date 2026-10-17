@@ -203,10 +203,8 @@ fn orphaned_factories<'py>(diagnostics: &Diagnostics<'_, 'py>) -> PyResult<Vec<B
     let py: Python<'py> = diagnostics.py;
     let mut referenced: HashSet<String> = HashSet::new();
     for model_file in &diagnostics.settings.model_files {
-        let header: Bound<'py, PyDict> = model_file
-            .bind(py)
-            .getattr("header_values")?
-            .downcast_into()?;
+        let header: Bound<'py, PyDict> =
+            native_field(model_file.bind(py), "header_values")?.downcast_into()?;
         let Some(names) = header.get_item(AUDIT_FACTORIES_KEY)? else {
             continue;
         };

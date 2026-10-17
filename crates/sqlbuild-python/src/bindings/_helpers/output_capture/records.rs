@@ -22,6 +22,7 @@ use crate::bindings::_helpers::output_capture::values::{
     freeze, json_value, object, output_error, plain_int, validation_error,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 
 const ENVELOPE_FIELDS: [&str; 16] = [
     "record_id",
@@ -308,7 +309,7 @@ pub(crate) fn invocation_context<'py>(
         Some(environment) if !environment.is_none() => environment,
         _ => imported(py, "os", "environ")?,
     };
-    let raw = environment.call_method1("get", (INVOCATION_CONTEXT_ENV,))?;
+    let raw = mapping_get(&environment, INVOCATION_CONTEXT_ENV)?;
     if raw.is_none() {
         return Ok(PyDict::new(py).into_any());
     }

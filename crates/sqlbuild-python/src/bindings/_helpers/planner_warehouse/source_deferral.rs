@@ -15,6 +15,7 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
 };
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
@@ -54,7 +55,7 @@ fn hook_source_reads(
     let source_kind = host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
     let values = native_field(&native_field(model, "config")?, "values")?;
     for key in MODEL_HOOK_CONFIG_KEYS {
-        let value = values.call_method1("get", (key,))?;
+        let value = mapping_get(&values, key)?;
         let entries: Vec<Bound<'_, PyAny>> =
             if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
                 value.try_iter()?.collect::<PyResult<_>>()?

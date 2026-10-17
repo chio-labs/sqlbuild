@@ -116,13 +116,13 @@ pub(crate) fn snapshot_memo<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bo
 impl NativeDirectorySnapshot {
     /// The project directory the snapshot lists.
     #[getter]
-    fn project_dir(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn project_dir(&self, py: Python<'_>) -> Py<PyAny> {
         self.project_dir.clone_ref(py)
     }
 
     /// The values the pass's native calls share.
     #[getter]
-    fn memo(&self, py: Python<'_>) -> Py<PyDict> {
+    pub(crate) fn memo(&self, py: Python<'_>) -> Py<PyDict> {
         self.memo.clone_ref(py)
     }
 }

@@ -31,4 +31,4 @@ mod planning_execution;
 mod planning_origin;
 pub(crate) mod projections;
 pub(crate) mod registration;
-mod state_inspection;
+pub(crate) mod state_inspection;

@@ -10,6 +10,7 @@ use crate::bindings::_helpers::analysis::explicit_references::{
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const PATHLIB_MODULE: &str = "pathlib";
@@ -97,7 +98,7 @@ pub(crate) fn model_python_hook_names<'py>(
     let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
     let mut names: Vec<String> = Vec::new();
     for hook_key in MODEL_HOOK_KEYS {
-        let entries: Bound<'_, PyAny> = values.call_method1("get", (hook_key,))?;
+        let entries: Bound<'_, PyAny> = mapping_get(&values, hook_key)?;
         if entries.is_instance(&entry_type)? {
             names.push(native_field(&entries, "name")?.extract()?);
         } else if entries.is_instance_of::<PyList>() || entries.is_instance_of::<PyTuple>() {

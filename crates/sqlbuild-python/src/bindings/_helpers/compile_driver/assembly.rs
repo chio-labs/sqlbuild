@@ -206,8 +206,7 @@ fn referenced_project(py: Python<'_>, request: AssemblyRequest) -> PyResult<Boun
         py,
         &project,
         &native_field(&inputs, "discovered_inputs")?,
-        inputs
-            .getattr("project_config")?
+        native_field(&inputs, "project_config")?
             .getattr("references")?
             .getattr("enforce_explicit")?
             .extract()?,

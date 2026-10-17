@@ -6,6 +6,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyList};
 use crate::bindings::_helpers::plan_output::safety::{future_cursor_safety, maximum_start_safety};
 use crate::bindings::_helpers::plan_output::values::{any, dict, items, optional_enum_value};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::result_output::projection::{Projection, rounded};
 
 const FAILED_STATUS: &str = "failed";
@@ -43,10 +45,7 @@ fn targets<'py>(
     };
     let py: Python<'py> = plan.py();
     let names: Bound<'py, PyDict> = PyDict::new(py);
-    for item in native_field(plan, field)?
-        .call_method0("items")?
-        .try_iter()?
-    {
+    for item in mapping_items(&native_field(plan, field)?)?.try_iter()? {
         let (name, location): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         names.set_item(name, native_field(&location, "qualified_name")?)?;
     }
@@ -60,7 +59,7 @@ fn target<'py>(
     name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     match targets {
-        Some(targets) => targets.call_method1("get", (name,)),
+        Some(targets) => mapping_get(targets, name),
         None => Ok(py.None().into_bound(py)),
     }
 }

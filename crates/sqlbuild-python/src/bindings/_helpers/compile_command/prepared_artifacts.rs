@@ -9,15 +9,19 @@ use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::compile_command::reuse_recording::CompileArtifactWrites;
 use crate::bindings::_helpers::compile_command::target_writer::{
+    PlannedStaticSqlTests, plan_static_sql_tests,
+};
+use crate::bindings::_helpers::compile_command::target_writer::{
     Prepared, planning_diagnostics, publish_staged_target, staging_changed, write_static_target,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    BACKGROUND_SQL_TEST_PLANS, count_stage,
+};
 use crate::bindings::_helpers::compile_outputs::artifacts::staged_artifact_files;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 const MIN_PREPARED_ARTIFACT_MODELS: usize = 128;
 const MAX_PREPARED_ARTIFACT_MODELS: usize = 5000;
@@ -288,22 +292,26 @@ impl PreparedCompileArtifacts {
                          _: Option<&Bound<'_, PyDict>>|
               -> PyResult<Py<PyAny>> {
             let py: Python<'_> = arguments.py();
-            Ok(call_with(
-                &registry::native(py, NativeAttr::PlanStaticSqlTests)?,
-                &[
-                    ("target_dir", planned_target.bind(py).clone()),
-                    ("adapter", planned_adapter.bind(py).clone()),
-                    ("project", planned_project.bind(py).clone()),
-                    (
-                        "artifact_writes",
-                        recorder.as_ref().map_or_else(
-                            || py.None().into_bound(py),
-                            |recorder| recorder.bind(py).clone().into_any(),
+            count_stage(py, BACKGROUND_SQL_TEST_PLANS, 1)?;
+            let planned: PlannedStaticSqlTests = plan_static_sql_tests(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("target_dir", planned_target.bind(py).clone()),
+                        ("adapter", planned_adapter.bind(py).clone()),
+                        ("project", planned_project.bind(py).clone()),
+                        (
+                            "artifact_writes",
+                            recorder.as_ref().map_or_else(
+                                || py.None().into_bound(py),
+                                |recorder| recorder.bind(py).clone().into_any(),
+                            ),
                         ),
-                    ),
-                ],
-            )?
-            .unbind())
+                    ],
+                )?),
+            )?;
+            Ok(Py::new(py, planned)?.into_any())
         };
         let future: Bound<'py, PyAny> =
             submit_in_context(&executor, PyCFunction::new_closure(py, None, None, plan)?)?;
@@ -376,7 +384,7 @@ impl PreparedCompileArtifacts {
     }
 
     #[getter]
-    fn enabled(&self) -> bool {
+    pub(crate) fn enabled(&self) -> bool {
         self.enabled
     }
 

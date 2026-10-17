@@ -257,52 +257,58 @@ impl NativeModelFile {
     }
 
     #[getter]
-    fn file_path(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn file_path(&self, py: Python<'_>) -> Py<PyAny> {
         self.file_path.clone_ref(py)
     }
 
     #[getter]
-    fn relative_path(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn relative_path(&self, py: Python<'_>) -> Py<PyAny> {
         self.relative_path.clone_ref(py)
     }
 
     #[getter]
-    fn contents(&self, py: Python<'_>) -> Py<PyString> {
+    pub(crate) fn contents(&self, py: Python<'_>) -> Py<PyString> {
         self.contents.clone_ref(py)
     }
 
     #[getter]
-    fn header_values(&self, py: Python<'_>) -> Py<PyDict> {
+    pub(crate) fn header_values(&self, py: Python<'_>) -> Py<PyDict> {
         self.header_values.clone_ref(py)
     }
 
     #[getter]
-    fn header_column_locations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub(crate) fn header_column_locations<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyDict>> {
         self.header_locations(py)
     }
 
     #[getter]
-    fn output_column_locations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub(crate) fn output_column_locations<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyDict>> {
         self.output_column_locations.dict(py, &self.relative_path)
     }
 
     #[getter]
-    fn query_sql(&self, py: Python<'_>) -> Py<PyString> {
+    pub(crate) fn query_sql(&self, py: Python<'_>) -> Py<PyString> {
         self.query_sql.clone_ref(py)
     }
 
     #[getter]
-    fn enum_declarations(&self, py: Python<'_>) -> Py<PyTuple> {
+    pub(crate) fn enum_declarations(&self, py: Python<'_>) -> Py<PyTuple> {
         self.enum_declarations.clone_ref(py)
     }
 
     #[getter]
-    fn constant_declarations(&self, py: Python<'_>) -> Py<PyTuple> {
+    pub(crate) fn constant_declarations(&self, py: Python<'_>) -> Py<PyTuple> {
         self.constant_declarations.clone_ref(py)
     }
 
     #[getter]
-    fn extract_implicit_alias_columns(&self) -> bool {
+    pub(crate) fn extract_implicit_alias_columns(&self) -> bool {
         self.extract_implicit_alias_columns
     }
 

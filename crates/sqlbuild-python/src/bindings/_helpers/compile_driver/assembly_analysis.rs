@@ -27,6 +27,8 @@ use crate::bindings::_helpers::project_assembly::declared_relations::{
 };
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
@@ -57,8 +59,7 @@ pub(crate) fn selected_for_analysis(
 
 /// The model's name: its file's stem.
 pub(crate) fn model_stem<'py>(model_input: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    model_input
-        .getattr("model_file")?
+    native_field(model_input, "model_file")?
         .getattr("file_path")?
         .getattr("stem")
 }
@@ -83,9 +84,7 @@ pub(crate) fn analysis_context<'py>(
 ) -> PyResult<AnalysisContext<'py>> {
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let sql_analysis_enabled: Bound<'py, PyAny> = and_not(
-        &inputs
-            .getattr("effective_settings")?
-            .getattr("sql_analysis")?,
+        &native_field(inputs, "effective_settings")?.getattr("sql_analysis")?,
         request.skip_column_inference.bind(py),
     )?;
     let (column_types, nullability, complete_schemas): DeclaredRelations<'py> =
@@ -115,12 +114,9 @@ pub(crate) fn analysis_context<'py>(
         record_expression_shapes(request, &context)?;
     }
     let catalog: Bound<'py, PyAny> = native_field(&context.profile, "binding_catalog")?;
-    catalog
-        .getattr("native")?
+    native_field(&catalog, "native")?
         .call_method1("update_relations", (&context.complete_schemas,))?;
-    catalog
-        .getattr("schemas")?
-        .call_method1("update", (&context.complete_schemas,))?;
+    native_field(&catalog, "schemas")?.call_method1("update", (&context.complete_schemas,))?;
     context.analyses = model_analyses(request, &context)?;
     Ok(context)
 }
@@ -132,8 +128,7 @@ fn dynamic_families_by_table<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<
     let families: Bound<'py, PyDict> = PyDict::new(py);
     for model_input in native_field(inputs, "model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
-        let contract: Bound<'py, PyAny> = model_input
-            .getattr("config")?
+        let contract: Bound<'py, PyAny> = native_field(&model_input, "config")?
             .getattr("values")?
             .call_method1("get", ("contract",))?;
         if !contract.eq(&enforced)? {
@@ -217,9 +212,7 @@ fn profile_with_catalog<'py>(
             py,
             (
                 dialect,
-                profile
-                    .getattr("quoted_identifiers_ignore_case")?
-                    .extract()?,
+                native_field(&profile, "quoted_identifiers_ignore_case")?.extract()?,
                 native_field(&profile, "semantic_known_functions")?.extract()?,
                 native_field(&profile, "semantic_known_types")?.extract()?,
             ),
@@ -266,9 +259,8 @@ fn record_expression_shapes<'py>(
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
     for source_input in native_field(inputs, "source_inputs")?.try_iter()? {
         let source_input: Bound<'py, PyAny> = source_input?;
-        let expression: Bound<'py, PyAny> = source_input
-            .getattr("source_entry")?
-            .getattr("expression")?;
+        let expression: Bound<'py, PyAny> =
+            native_field(&source_input, "source_entry")?.getattr("expression")?;
         if expression.is_truthy()? {
             sources.push(source_input);
             expressions.push(expression);
@@ -305,26 +297,24 @@ fn record_expression_shapes<'py>(
         }
         let name: Bound<'py, PyAny> =
             native_field(source_input, "source_entry")?.getattr("name")?;
-        let declared_types: Bound<'py, PyAny> = context
-            .column_types
-            .call_method1("get", (&name, PyDict::new(py)))?;
+        let declared_types: Bound<'py, PyAny> =
+            mapping_get_or(&context.column_types, &name, PyDict::new(py))?;
         let declared_shape: Bound<'py, PyDict> = PyDict::new(py);
-        for item in shape.call_method0("items")?.try_iter()? {
+        for item in mapping_items(&shape)?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             let column: Bound<'py, PyAny> = item.get_item(0)?;
             declared_shape.set_item(
                 &column,
-                declared_types.call_method1("get", (&column, item.get_item(1)?))?,
+                mapping_get_or(&declared_types, &column, item.get_item(1)?)?,
             )?;
         }
         context.complete_schemas.set_item(&name, &declared_shape)?;
         context.column_types.set_item(&name, &declared_shape)?;
         let nullability: Bound<'py, PyDict> = PyDict::new(py);
         for column in declared_shape.keys() {
-            let known: Bound<'py, PyAny> = context
-                .nullability
-                .call_method1("get", (&name, PyDict::new(py)))?;
-            nullability.set_item(&column, known.call_method1("get", (&column, &unknown))?)?;
+            let known: Bound<'py, PyAny> =
+                mapping_get_or(&context.nullability, &name, PyDict::new(py))?;
+            nullability.set_item(&column, mapping_get_or(&known, &column, &unknown)?)?;
         }
         context.nullability.set_item(&name, nullability)?;
     }

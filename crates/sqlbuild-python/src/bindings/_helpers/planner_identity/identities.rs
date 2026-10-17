@@ -24,6 +24,8 @@ use crate::bindings::_helpers::planner_identity::metadata::{
 };
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 
@@ -39,8 +41,7 @@ fn graph_keys(keys: &Bound<'_, PyAny>) -> PyResult<Vec<GraphKey>> {
 }
 
 fn string_pairs(mapping: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
-    mapping
-        .call_method0("items")?
+    mapping_items(mapping)?
         .try_iter()?
         .map(|item| item?.extract::<(String, String)>())
         .collect()
@@ -52,7 +53,7 @@ fn hook_version_hashes<'py>(hook_functions: &Bound<'py, PyAny>) -> PyResult<Boun
     let hashes: Bound<'py, PyDict> = PyDict::new(py);
     let identities: Bound<'py, PyAny> =
         host::entry(py, UserCodeHost::BuildHookIdentities)?.call1((hook_functions,))?;
-    for item in identities.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&identities)?.try_iter()? {
         let (name, identity): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         hashes.set_item(name, native_field(&identity, "version_hash")?)?;
     }
@@ -155,7 +156,7 @@ pub(crate) fn direct_model_version_identities<'py>(
         if order_key.kind != MODEL_RESOURCE {
             continue;
         }
-        let model: Bound<'py, PyAny> = models_by_name.call_method1("get", (&order_key.name,))?;
+        let model: Bound<'py, PyAny> = mapping_get(&models_by_name, &order_key.name)?;
         if model.is_none() {
             continue;
         }
@@ -272,7 +273,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
                 local_hash: Some(seed_hash.clone()),
             },
         );
-        let fingerprint: Bound<'py, PyAny> = recorded_seeds.call_method1("get", (&name,))?;
+        let fingerprint: Bound<'py, PyAny> = mapping_get(&recorded_seeds, &name)?;
         let write_hash: String = if selected.contains(&seed_key) || fingerprint.is_none() {
             seed_hash
         } else {
@@ -291,13 +292,13 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
             key_of(MODEL_RESOURCE, &name.extract::<String>()?),
             IdentityNode {
                 upstream_keys: graph_keys(&native_field(&model, "deps")?)?,
-                local_hash: local_hashes.call_method1("get", (&name,))?.extract()?,
+                local_hash: mapping_get(&local_hashes, &name)?.extract()?,
             },
         );
     }
     let recorded_models: Bound<'py, PyAny> =
         native_field(&native_field(&snapshot, "fingerprints")?, "models")?;
-    for item in recorded_models.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&recorded_models)?.try_iter()? {
         let (name, fingerprint): (String, Bound<'py, PyAny>) = item?.extract()?;
         let version_hash: Bound<'py, PyAny> = native_field(&fingerprint, "version_hash")?;
         if version_hash.is_truthy()? {
@@ -328,12 +329,12 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         if order_key.kind != MODEL_RESOURCE || !selected.contains(&order_key) {
             continue;
         }
-        let model: Bound<'py, PyAny> = models_by_name.call_method1("get", (&order_key.name,))?;
+        let model: Bound<'py, PyAny> = mapping_get(&models_by_name, &order_key.name)?;
         if model.is_none() {
             continue;
         }
         let name: Bound<'py, PyAny> = model_reads::name_object(&model)?;
-        if local_hashes.call_method1("get", (&name,))?.is_none() {
+        if mapping_get(&local_hashes, &name)?.is_none() {
             continue;
         }
         let Some(write_hash) =
@@ -373,7 +374,7 @@ pub(crate) fn merge_recomputed_model_changes<'py>(
         .try_iter()?
     {
         let (name, resolved): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
-        let mut change: Bound<'py, PyAny> = recomputed.call_method1("get", (&name,))?;
+        let mut change: Bound<'py, PyAny> = mapping_get(&recomputed, &name)?;
         if change.is_none() {
             change = native_field(&resolved, "change")?;
         }

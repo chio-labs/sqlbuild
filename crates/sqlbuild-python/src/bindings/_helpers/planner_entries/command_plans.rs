@@ -20,6 +20,7 @@ use crate::bindings::_helpers::planner_strategy::audit_entries::build_selected_a
 use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
 use crate::bindings::_helpers::planner_strategy::strategy::materialization_of;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PyString, PyTuple};
@@ -303,7 +304,7 @@ pub(crate) fn build_seed_command_plan<'py>(
         }
         let identity = object(py, build_seed_identity(&seed)?)?;
         let (version_hash, metadata_json) = (identity.get_item(0)?, identity.get_item(1)?);
-        let previous = existing.call_method1("get", (native_field(&seed, "name")?,))?;
+        let previous = mapping_get(&existing, native_field(&seed, "name")?)?;
         let reason = if previous.is_none() {
             "FIRST_RUN"
         } else if native_field(&previous, "version_hash")?.ne(&version_hash)? {

@@ -13,6 +13,7 @@ use crate::bindings::_helpers::planner_migrations::models::{
 use crate::bindings::_helpers::planner_migrations::projections::renames_explain_change;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -135,7 +136,7 @@ pub(super) fn cursors<'py>(
     let origins = PyDict::new(py);
     for entry in entries {
         let name = native_field(entry, "model_name")?;
-        let model = models.call_method1("get", (&name,))?;
+        let model = mapping_get(&models, &name)?;
         let cursor = if model.is_truthy()? {
             config(&model, "cursor")?
         } else {
@@ -153,7 +154,7 @@ pub(super) fn cursors<'py>(
     }
     let targets = PyDict::new(py);
     for (name, _) in origins.iter() {
-        let physical = columns.physical_relations.call_method1("get", (&name,))?;
+        let physical = mapping_get(&columns.physical_relations, &name)?;
         let target = if physical.is_truthy()? {
             physical
         } else {

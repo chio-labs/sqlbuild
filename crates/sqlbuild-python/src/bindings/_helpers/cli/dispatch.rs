@@ -52,6 +52,7 @@ use sqlbuild_core::format_command::main::format_path_selectors::format_path_sele
 use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -233,7 +234,7 @@ fn user_error(py: Python<'_>, failure: DispatchFailure) -> PyErr {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", failure.code)?;
         keywords.set_item("help", failure.help)?;
-        registry::error(py, ErrorId::CliUser)?.call((failure.message,), Some(&keywords))
+        error_class(py, ErrorId::CliUser)?.call((failure.message,), Some(&keywords))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -246,8 +247,7 @@ fn selector_inputs<'py>(
     args: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyTuple>, Bound<'py, PyTuple>)> {
     let py: Python<'py> = args.py();
-    let mut selectors: Vec<Bound<'py, PyAny>> = args
-        .getattr("select")?
+    let mut selectors: Vec<Bound<'py, PyAny>> = native_field(args, "select")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let mut files: Vec<Bound<'py, PyAny>> = Vec::new();

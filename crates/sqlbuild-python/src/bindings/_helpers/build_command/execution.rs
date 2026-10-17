@@ -34,6 +34,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const EXECUTION_COMMAND: &str = "sqb build";
@@ -91,8 +92,7 @@ fn run_context_facts(
         + count(pipeline, "python_plan_entries")?;
     let mut loaded_sources: usize = 0;
     for source in native_field(&project, "sources")?.try_iter()? {
-        if !source?
-            .getattr("source_entry")?
+        if !native_field(&source?, "source_entry")?
             .getattr("loader")?
             .is_none()
         {
@@ -122,7 +122,7 @@ fn run_context_facts(
     };
     let variables: Bound<'_, PyAny> = native_field(&project, "effective_vars")?;
     let variable = |name: &str| -> PyResult<Option<Bound<'_, PyAny>>> {
-        let value: Bound<'_, PyAny> = variables.call_method1("get", (name,))?;
+        let value: Bound<'_, PyAny> = mapping_get(&variables, name)?;
         Ok((!value.is_none()).then_some(value))
     };
     let mut selector_files: Vec<SelectorFileFact> = Vec::new();

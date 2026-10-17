@@ -22,6 +22,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 
@@ -111,9 +113,7 @@ impl<'py> ReportInputs<'py> {
 
     /// The project's models, kept to the selected ones.
     fn selected_models(&self) -> PyResult<Vec<Bound<'py, PyAny>>> {
-        let models: Vec<Bound<'py, PyAny>> = self
-            .project
-            .getattr("models")?
+        let models: Vec<Bound<'py, PyAny>> = native_field(&self.project, "models")?
             .try_iter()?
             .collect::<PyResult<_>>()?;
         let Some(names) = self.selected_names(MODEL_TYPE)? else {
@@ -132,9 +132,7 @@ impl<'py> ReportInputs<'py> {
     fn selected_count(&self, types: &[&str]) -> PyResult<usize> {
         let mut count: usize = 0;
         if self.selected_keys.is_none() {
-            for key in self
-                .graph
-                .getattr("native")?
+            for key in native_field(&self.graph, "native")?
                 .call_method0("keys")?
                 .try_iter()?
             {
@@ -192,10 +190,8 @@ impl<'py> ReportInputs<'py> {
     /// `written.target_dir / "compiled"` relative to its `target` directory, POSIX style.
     fn compiled_dir(&self) -> PyResult<Bound<'py, PyAny>> {
         let py: Python<'py> = self.py();
-        let path: Bound<'py, PyAny> = self
-            .written
-            .getattr("target_dir")?
-            .div(COMPILED_DIRECTORY)?;
+        let path: Bound<'py, PyAny> =
+            native_field(&self.written, "target_dir")?.div(COMPILED_DIRECTORY)?;
         let parts: Bound<'py, PyTuple> = native_field(&path, "parts")?.downcast_into()?;
         for (index, part) in parts.iter().enumerate() {
             if part.eq(TARGET_DIRECTORY)? {
@@ -373,9 +369,7 @@ pub(crate) fn format_compile_text<'py>(
     let lineage: LineageNote = if !inputs.lineage.is_none() && inputs.lineage_mode == RICH_LINEAGE {
         LineageNote::Rich
     } else if inputs.lineage.is_none()
-        && inputs
-            .project
-            .getattr("settings")?
+        && native_field(&inputs.project, "settings")?
             .getattr("sql_analysis")?
             .is_truthy()?
         && inputs.lineage_mode != NO_LINEAGE
@@ -596,9 +590,7 @@ fn model_resource<'py>(
     let py: Python<'py> = model.py();
     let key: Bound<'py, PyAny> = native_field(model, "key")?;
     let mut depends_on: Vec<Bound<'py, PyDict>> = Vec::new();
-    for upstream in inputs
-        .graph
-        .getattr("native")?
+    for upstream in native_field(&inputs.graph, "native")?
         .call_method1(
             "upstream",
             ((
@@ -622,8 +614,7 @@ fn model_resource<'py>(
             ),
             (
                 "materialized",
-                values
-                    .call_method1("get", ("materialized", "view"))?
+                mapping_get_or(&values, "materialized", "view")?
                     .str()?
                     .into_any(),
             ),
@@ -638,7 +629,7 @@ fn model_resource<'py>(
     )?;
     qualified_name(&item, model)?;
     for hook_key in HOOK_KEYS {
-        let hooks: Bound<'py, PyAny> = values.call_method1("get", (hook_key,))?;
+        let hooks: Bound<'py, PyAny> = mapping_get(&values, hook_key)?;
         if !hooks.is_none() {
             item.set_item(
                 hook_key,
@@ -749,8 +740,7 @@ fn audit_resource<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ("name", native_field(audit, "name")?),
             (
                 "relative_path",
-                audit
-                    .getattr("audit_file")?
+                native_field(audit, "audit_file")?
                     .getattr("relative_path")?
                     .str()?
                     .into_any(),
@@ -783,8 +773,7 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
         if payload.is_instance(&record_class(py, RecordId::CompiledModelSqlTestPayload)?)? {
             PyList::new(
                 py,
-                payload
-                    .getattr("expected_model_names")?
+                native_field(&payload, "expected_model_names")?
                     .try_iter()?
                     .collect::<PyResult<Vec<_>>>()?,
             )?
@@ -805,8 +794,7 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
     if case_name.is_none() {
         return Ok(item);
     }
-    let schema: Vec<Bound<'py, PyAny>> = test
-        .getattr("parameter_schema")?
+    let schema: Vec<Bound<'py, PyAny>> = native_field(test, "parameter_schema")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let types: Bound<'py, PyDict> = PyDict::new(py);
@@ -888,8 +876,7 @@ fn source_resource<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
             ("name", native_field(source, "name")?),
             (
                 "relative_path",
-                source
-                    .getattr("source_file")?
+                native_field(source, "source_file")?
                     .getattr("relative_path")?
                     .str()?
                     .into_any(),
@@ -977,10 +964,7 @@ pub(crate) fn format_compile_json(
             ),
             (
                 "execution_layers",
-                inputs
-                    .graph
-                    .getattr("native")?
-                    .call_method0("model_layer_count")?,
+                native_field(&inputs.graph, "native")?.call_method0("model_layer_count")?,
             ),
             ("errors", any(py, inputs.severity_count(ERROR_SEVERITY)?)?),
             (

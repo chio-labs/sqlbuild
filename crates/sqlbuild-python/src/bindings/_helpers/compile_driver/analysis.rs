@@ -208,8 +208,7 @@ fn analyzed<'py>(
         select_project_graph(&graph, &driver.select, &driver.exclude)?.into_any();
     let core_diagnostics: Bound<'py, PyTuple> = PyTuple::new(
         py,
-        project
-            .getattr("diagnostics")?
+        native_field(&project, "diagnostics")?
             .try_iter()?
             .chain(native_field(&contracts.result, "diagnostics")?.try_iter()?)
             .collect::<PyResult<Vec<_>>>()?,
@@ -296,16 +295,14 @@ impl<'py> Driver<'_, 'py> {
         let started: Instant = Instant::now();
         self.status.start("Discovering project...")?;
         let false_value: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
-        let override_analysis: Bound<'py, PyAny> = if self
-            .options
-            .profile_flags
-            .getattr("skip_discovery_sql_analysis")?
-            .is_truthy()?
-        {
-            false_value.clone()
-        } else {
-            py.None().into_bound(py)
-        };
+        let override_analysis: Bound<'py, PyAny> =
+            if native_field(&self.options.profile_flags, "skip_discovery_sql_analysis")?
+                .is_truthy()?
+            {
+                false_value.clone()
+            } else {
+                py.None().into_bound(py)
+            };
         let discovered: Bound<'py, PyAny> = discover_project_inputs(
             py,
             Some(keywords(
@@ -424,11 +421,8 @@ impl<'py> Driver<'_, 'py> {
         let thread_time: Bound<'py, PyAny> = imported(py, "time", "thread_time")?;
         let started: Instant = Instant::now();
         let cpu_started: f64 = thread_time.call0()?.extract()?;
-        let skip: bool = self
-            .options
-            .profile_flags
-            .getattr("skip_contracts")?
-            .is_truthy()?;
+        let skip: bool =
+            native_field(&self.options.profile_flags, "skip_contracts")?.is_truthy()?;
         let result: Bound<'py, PyAny> = if skip {
             new_record_with(
                 py,

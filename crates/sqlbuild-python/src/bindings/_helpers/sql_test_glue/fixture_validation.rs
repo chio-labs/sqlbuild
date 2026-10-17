@@ -18,6 +18,8 @@ use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanning
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::sql_test_glue::constants::FIXTURE_PREFIXES;
 
@@ -112,8 +114,7 @@ pub(super) fn validated_fixtures<'py>(
                 }
             } else {
                 let key = PyTuple::new(py, [kind, &key_name])?;
-                Some(inferred_by_fixture.call_method1("get", (key,))?)
-                    .filter(|value| !value.is_none())
+                Some(mapping_get(inferred_by_fixture, key)?).filter(|value| !value.is_none())
             };
             let Some(columns) = inferred else {
                 continue;
@@ -167,7 +168,7 @@ pub(super) fn validated_fixtures<'py>(
             let result = PyDict::new(py);
             for (name, sql) in fixtures.iter() {
                 let key = PyTuple::new(py, [kind.clone(), name.clone()])?;
-                result.set_item(&name, fixture_sql.call_method1("get", (key, sql))?)?;
+                result.set_item(&name, mapping_get_or(fixture_sql, key, sql)?)?;
             }
             Ok(result)
         };

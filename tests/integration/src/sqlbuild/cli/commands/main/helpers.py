@@ -15,13 +15,9 @@ import duckdb
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild._native as plan_artifacts_module
 from sqlbuild._native import (
     CompilerStage,
     CustomHostObserver,
-    NativeSqlTestArtifact,
-    NativeSqlTestPlanningError,
-    PlannedStaticSqlTests,
     PreparedCompileArtifacts,
 )
 from sqlbuild._native import run_cli as main
@@ -165,29 +161,6 @@ def compile_then_edit_one_test(*, project_dir: Path, capsys: pytest.CaptureFixtu
 
 def keep_native_planner(monkeypatch: pytest.MonkeyPatch) -> None:
     """Leave the real native SQL-test planner in place."""
-
-
-def fail_native_planner(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make the native SQL-test planner fail as an unexpected internal error would."""
-
-    def fail(**kwargs: object) -> tuple[NativeSqlTestArtifact, ...]:
-        raise NativeSqlTestPlanningError("native SQL-test planning failed: worker stopped")
-
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", fail)
-
-
-def record_test_planning_threads(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Record the thread-name prefix of every background SQL-test planning task."""
-
-    threads: list[str] = []
-    plan: Callable[..., PlannedStaticSqlTests] = native_module.plan_static_sql_tests
-
-    def recorded_plan(**kwargs: Any) -> PlannedStaticSqlTests:
-        threads.append(threading.current_thread().name.rpartition("_")[0])
-        return plan(**kwargs)
-
-    monkeypatch.setattr(native_module, "plan_static_sql_tests", recorded_plan)
-    return threads
 
 
 def use_prepared_artifacts(

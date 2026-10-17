@@ -42,9 +42,11 @@ use crate::bindings::_helpers::compile_attachment::effective_config::build_effec
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::discovery::guidance::setting_help;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const DEFAULTS_SECTION: &str = "defaults";
@@ -57,7 +59,7 @@ type TargetNamespaces = (Vec<(String, String)>, Vec<Namespace>);
 /// A `PlannerInputError` with `message`, `code` and optional `help`.
 fn planner_error(py: Python<'_>, message: String, code: &str, help: Option<String>) -> PyErr {
     let raised: PyResult<Bound<'_, PyAny>> = (|| {
-        registry::error(py, ErrorId::PlannerInput)?.call(
+        error_class(py, ErrorId::PlannerInput)?.call(
             (message,),
             Some(&keywords(
                 py,
@@ -123,10 +125,7 @@ pub(crate) fn named_target_schema_strategy(
     selected_target: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'_> = discovered.py();
-    if adapter
-        .getattr("allows_implicit_managed_write_schema")?
-        .is_truthy()?
-    {
+    if native_field(adapter, "allows_implicit_managed_write_schema")?.is_truthy()? {
         return Ok(());
     }
     let project_config: Bound<'_, PyAny> = native_field(discovered, "project_config")?;
@@ -279,7 +278,7 @@ fn target_namespaces(
         resolved_connection.clone()
     };
     let mut identity: Vec<(String, String)> = Vec::new();
-    for item in connection.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&connection)?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
         let key: Bound<'_, PyAny> = item.get_item(0)?;
         let Some(key) = text_or_none(&key)? else {
@@ -332,7 +331,7 @@ fn managed_source_namespace(
         &[
             native_field(source_entry, "database")?,
             native_field(target_config, "database")?,
-            connection.call_method1("get", ("database",))?,
+            mapping_get(connection, "database")?,
         ],
         || adapter.call_method0("default_database"),
     )?;
@@ -341,7 +340,7 @@ fn managed_source_namespace(
             native_field(source_entry, "schema")?,
             native_field(target_config, "loader_schema")?,
             native_field(target_config, "schema")?,
-            connection.call_method1("get", ("schema",))?,
+            mapping_get(connection, "schema")?,
         ],
         || adapter.call_method0("default_schema"),
     )?;
@@ -498,17 +497,12 @@ pub(crate) fn managed_write_schemas(
     adapter: &Bound<'_, PyAny>,
     project: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    if adapter
-        .getattr("allows_implicit_managed_write_schema")?
-        .is_truthy()?
-    {
+    if native_field(adapter, "allows_implicit_managed_write_schema")?.is_truthy()? {
         return Ok(());
     }
     let connection_schema: Option<String> = explicit_write_schema(
         text_or_none(
-            &project
-                .getattr("effective_connection")?
-                .call_method1("get", ("schema",))?,
+            &native_field(project, "effective_connection")?.call_method1("get", ("schema",))?,
         )?
         .as_deref(),
     );

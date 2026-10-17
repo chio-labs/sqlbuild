@@ -11,12 +11,12 @@ use sqlbuild_core::json::errors::JsonEmitError;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::dag_artifact::rows::{project_input, python_graph_input};
 use crate::bindings::_helpers::graph::project_graph::CompiledProjectGraph;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 fn python_error(error: DagArtifactError, py: pyo3::Python<'_>) -> PyErr {
     match error {
-        DagArtifactError::LoaderDestination(message) => registry::error(py, ErrorId::SpecConfig)
+        DagArtifactError::LoaderDestination(message) => error_class(py, ErrorId::SpecConfig)
             .and_then(|class| class.call1((message,)))
             .map_or_else(|error| error, PyErr::from_value),
         DagArtifactError::MissingParameterType(name) => PyKeyError::new_err(name),

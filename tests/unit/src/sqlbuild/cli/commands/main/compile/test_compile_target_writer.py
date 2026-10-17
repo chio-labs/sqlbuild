@@ -3,12 +3,10 @@ from __future__ import annotations
 import os
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 
 import sqlbuild._native as _native
-import sqlbuild._native as model_chain_module
 import sqlbuild._native as plan_artifacts_module
 from sqlbuild._native import (
     ChainStep,
@@ -44,6 +42,9 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
     read_target_files,
 )
 from tests.unit.src.sqlbuild.compiler.manifest.helpers import build_test_project
+
+SQL_TEST_ARTIFACT_PLANS: str = "plan_compiled_sql_test_artifacts"
+SQL_TEST_MODEL_CHAINS: str = "sql_test_model_chain_names_by_key"
 
 
 @pytest.mark.parametrize(
@@ -340,7 +341,6 @@ def test_given_invalid_utf8_artifact_when_writing_again_then_existing_decode_err
 )
 def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_reconstruction(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -352,8 +352,7 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
     )
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     original_mtime_ns: int = artifact_path.stat().st_mtime_ns
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -362,7 +361,10 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
     )
 
     assert artifact_path.stat().st_mtime_ns == original_mtime_ns
-    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
 
 
 @pytest.mark.parametrize(
@@ -376,7 +378,6 @@ def test_given_unchanged_test_artifact_when_writing_again_then_skips_test_plan_r
 )
 def test_given_artifact_with_moved_mtime_and_same_bytes_when_writing_then_reuses_it(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -389,8 +390,7 @@ def test_given_artifact_with_moved_mtime_and_same_bytes_when_writing_then_reuses
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     moved_mtime_ns: int = artifact_path.stat().st_mtime_ns + 1_000_000_000
     os.utime(artifact_path, ns=(moved_mtime_ns, moved_mtime_ns))
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -403,7 +403,10 @@ def test_given_artifact_with_moved_mtime_and_same_bytes_when_writing_then_reuses
         project=project,
     )
 
-    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
     assert artifact_path.stat().st_mtime_ns == moved_mtime_ns
 
 
@@ -422,7 +425,6 @@ def test_given_artifact_with_moved_mtime_and_same_bytes_when_writing_then_reuses
 )
 def test_given_test_with_planning_error_when_writing_twice_then_error_is_not_cached(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterPlanningErrorTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -432,8 +434,7 @@ def test_given_test_with_planning_error_when_writing_twice_then_error_is_not_cac
         adapter=DuckDbAdapter(),
         project=project,
     )
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
 
     second: WrittenTarget = write_static_compile_target(
         target_dir=target_dir,
@@ -441,7 +442,10 @@ def test_given_test_with_planning_error_when_writing_twice_then_error_is_not_cac
         project=project,
     )
 
-    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
     assert first.diagnostics == second.diagnostics
     (diagnostic,) = second.diagnostics
     assert diagnostic.is_error
@@ -463,7 +467,6 @@ def test_given_test_with_planning_error_when_writing_twice_then_error_is_not_cac
 )
 def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_artifact(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -473,8 +476,7 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
         adapter=DuckDbAdapter(),
         project=project,
     )
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
     changed_project: CompiledProjectView = project_with(
         project=project,
         models=(
@@ -488,7 +490,10 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
         project=changed_project,
     )
 
-    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
 
 
 @pytest.mark.parametrize(
@@ -498,7 +503,6 @@ def test_given_changed_model_in_test_closure_when_writing_then_rebuilds_test_art
 )
 def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -519,15 +523,17 @@ def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
         project=project,
         models=(*project.models, unrelated_model),
     )
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
         adapter=DuckDbAdapter(),
         project=changed_project,
     )
-    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
 
 
 @pytest.mark.parametrize(
@@ -537,7 +543,6 @@ def test_given_changed_unrelated_model_when_writing_then_reuses_test_artifact(
 )
 def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -547,8 +552,7 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
     changed_test: CompiledSqlTest = replace(
         project.sql_tests[0], sql_body=project.sql_tests[0].sql_body + "\n-- edit"
     )
@@ -559,7 +563,10 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
         project=project_with(project=project, sql_tests=(changed_test,)),
     )
 
-    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
 
 
 @pytest.mark.parametrize(
@@ -573,7 +580,6 @@ def test_given_changed_test_sql_when_writing_then_rebuilds_test_artifact(
 )
 def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -583,8 +589,7 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
         adapter=DuckDbAdapter(),
         project=project,
     )
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -592,7 +597,10 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
         project=project_with(project=project, effective_target_schema="changed_schema"),
     )
 
-    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
 
 
 @pytest.mark.parametrize(
@@ -602,7 +610,6 @@ def test_given_changed_compile_target_when_writing_then_rebuilds_test_artifact(
 )
 def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_artifact(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -610,14 +617,7 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
         project=build_cached_target_writer_project(target_dir=target_dir),
         compile_cache_dir=None,
     )
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
-    closure_index_spy: Mock = Mock(wraps=model_chain_module.sql_test_model_chain_names_by_key)
-    monkeypatch.setattr(
-        model_chain_module,
-        "sql_test_model_chain_names_by_key",
-        closure_index_spy,
-    )
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
 
     for _ in range(2):
         _ = write_static_compile_target(
@@ -626,8 +626,11 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
             project=project,
         )
 
-    assert planner_spy.call_count == test_case.expected_builder_calls
-    assert closure_index_spy.call_count == 0
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
+    assert plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_MODEL_CHAINS, 0) == 0
     assert not (target_dir / "cache" / "compiler" / "sql-test-artifacts.json").exists()
 
 
@@ -638,7 +641,6 @@ def test_given_compile_cache_disabled_when_writing_twice_then_rebuilds_test_arti
 )
 def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     test_case: TargetWriterCacheTestCase,
 ) -> None:
     target_dir: Path = tmp_path / "target"
@@ -651,8 +653,7 @@ def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
     artifact_path: Path = next((target_dir / "compiled" / "tests").rglob("*.sql"))
     expected_sql: str = artifact_path.read_text(encoding="utf-8")
     artifact_path.write_text("SELECT 'tampered'\n", encoding="utf-8")
-    planner_spy: Mock = Mock(wraps=plan_artifacts_module.plan_compiled_sql_test_artifacts)
-    monkeypatch.setattr(plan_artifacts_module, "plan_compiled_sql_test_artifacts", planner_spy)
+    _ = plan_artifacts_module.compile_stage_work_info(reset=True)
 
     _ = write_static_compile_target(
         target_dir=target_dir,
@@ -660,5 +661,8 @@ def test_given_modified_test_artifact_when_writing_then_rebuilds_expected_sql(
         project=project,
     )
 
-    assert planner_spy.call_count == test_case.expected_builder_calls
+    assert (
+        plan_artifacts_module.compile_stage_work_info().get(SQL_TEST_ARTIFACT_PLANS, 0)
+        == test_case.expected_builder_calls
+    )
     assert artifact_path.read_text(encoding="utf-8") == expected_sql

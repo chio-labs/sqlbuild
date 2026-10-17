@@ -57,10 +57,7 @@ pub(crate) fn pipeline_result<'py>(
     let sql_test_selection: Bound<'py, PyAny> = native_field(options, "sql_test_selection")?;
     if !native_field(&sql_test_selection, "models_selected")?.is_truthy()? {
         selected_sql_keys = empty()?;
-    } else if options
-        .getattr("resolve_python_run_selectors")?
-        .is_truthy()?
-    {
+    } else if native_field(options, "resolve_python_run_selectors")?.is_truthy()? {
         let graph: Bound<'py, PyAny> = build_project_graph_from_compiled_project(
             py,
             Some(keywords(py, &[("project", project.clone())])?),

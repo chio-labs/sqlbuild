@@ -63,8 +63,7 @@ pub(crate) fn project_facts(
         hook_functions: each(inputs, "hook_functions", named)?,
         event_exporters: each(inputs, "event_exporters", named)?,
         providers: each(inputs, "providers", named)?,
-        path_default_keys: inputs
-            .getattr("project_config")?
+        path_default_keys: native_field(inputs, "project_config")?
             .getattr("path_defaults")?
             .try_iter()?
             .map(|key| key?.extract())

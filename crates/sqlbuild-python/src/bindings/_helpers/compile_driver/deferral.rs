@@ -11,10 +11,11 @@ use sqlbuild_model_config::templates::models::DeferredSegment;
 
 use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const PRESERVE_TARGET_VALUE: &str = "preserve";
 /// `sorted(DEFERRED_TARGET_CONTEXT_KEYS)`.
@@ -172,7 +173,7 @@ fn target_field<'py>(
 
 /// A `PlannerInputError` with `message` and the default code.
 fn planner_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -255,7 +256,7 @@ fn deferred_relations<'py>(
     let py: Python<'py> = adapter.py();
     let mut schemas: Vec<String> = Vec::new();
     let mut database: Bound<'py, PyAny> = py.None().into_bound(py);
-    for location in locations.call_method0("values")?.try_iter()? {
+    for location in mapping_values(locations)?.try_iter()? {
         let location: Bound<'py, PyAny> = location?;
         let schema: Bound<'py, PyAny> = native_field(&location, "schema")?;
         if !schema.is_none() {

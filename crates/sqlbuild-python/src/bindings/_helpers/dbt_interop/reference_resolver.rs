@@ -16,10 +16,10 @@ use crate::bindings::_helpers::dbt_interop::manifest::validate_compile_dbt_model
 use crate::bindings::_helpers::dbt_interop::manifest::validate_compile_dbt_model_reference;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const VALIDATE_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -37,7 +37,7 @@ const SEED_CONFLICT_CODE: &str = "C217";
 
 fn compile_input_error(py: Python<'_>, message: String, code: &str) -> PyErr {
     let created = || -> PyResult<PyErr> {
-        let error: Bound<'_, PyAny> = registry::error(py, ErrorId::CompileInput)?.call(
+        let error: Bound<'_, PyAny> = error_class(py, ErrorId::CompileInput)?.call(
             (message,),
             Some(&keywords(
                 py,
@@ -98,7 +98,7 @@ impl DbtCompileReferenceResolver {
     }
 
     #[getter(_dbt_manifest)]
-    fn dbt_manifest<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
+    pub(crate) fn dbt_manifest<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
         self.dbt_manifest.as_ref().map_or_else(
             || py.None().into_bound(py),
             |manifest| manifest.bind(py).clone(),
@@ -126,8 +126,7 @@ impl DbtCompileReferenceResolver {
         let Some(manifest) = self.manifest(py) else {
             return Ok(names);
         };
-        for item in manifest
-            .getattr("models_by_name")?
+        for item in native_field(&manifest, "models_by_name")?
             .call_method0("items")?
             .try_iter()?
         {
@@ -175,8 +174,7 @@ impl DbtCompileReferenceResolver {
         let Some(manifest) = self.manifest(py) else {
             return Ok(names);
         };
-        let sources: Vec<Bound<'py, PyAny>> = manifest
-            .getattr("sources_by_unique_id")?
+        let sources: Vec<Bound<'py, PyAny>> = native_field(&manifest, "sources_by_unique_id")?
             .call_method0("values")?
             .try_iter()?
             .collect::<PyResult<_>>()?;
@@ -223,8 +221,7 @@ impl DbtCompileReferenceResolver {
         let Some(manifest) = self.manifest(py) else {
             return Ok(names);
         };
-        let seeds: Vec<Bound<'py, PyAny>> = manifest
-            .getattr("seeds_by_unique_id")?
+        let seeds: Vec<Bound<'py, PyAny>> = native_field(&manifest, "seeds_by_unique_id")?
             .call_method0("values")?
             .try_iter()?
             .collect::<PyResult<_>>()?;
@@ -347,8 +344,7 @@ pub(crate) fn resolve_external_sql_reference_resolver<'py>(
     discovered_inputs: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
-    let target_path: Bound<'py, PyAny> = discovered_inputs
-        .getattr("project_config")?
+    let target_path: Bound<'py, PyAny> = native_field(&discovered_inputs, "project_config")?
         .getattr("dbt")?
         .getattr("target_path")?;
     let contents: Bound<'py, PyAny> = if target_path.is_none() {

@@ -10,6 +10,7 @@ use sqlbuild_rules::lint_text::models::{
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
 use crate::bindings::types::CompilerDetach;
 
@@ -39,7 +40,7 @@ fn relation_keys(
     let mut keys: Vec<(String, Vec<Vec<String>>)> = Vec::new();
     for relation in native_field(body, "dependency_relations")?.try_iter()? {
         let (sentinel, name): (String, Bound<'_, PyAny>) = relation?.extract()?;
-        let found: Bound<'_, PyAny> = declared.call_method1("get", (name,))?;
+        let found: Bound<'_, PyAny> = mapping_get(declared, name)?;
         if found.is_truthy()? {
             keys.push((sentinel, found.extract()?));
         }

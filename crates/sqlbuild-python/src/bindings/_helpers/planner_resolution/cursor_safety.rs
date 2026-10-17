@@ -3,17 +3,17 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::duration;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use sqlbuild_cursor::algebra::models::{DurationSpan, Grain, Scalar};
 use sqlbuild_cursor::planner::main::safety_horizon::safety_horizon;
 
 pub(super) fn safety_error(py: Python<'_>, class: ErrorId, message: &str) -> PyErr {
-    match registry::error(py, class).and_then(|class| class.call1((message,))) {
+    match error_class(py, class).and_then(|class| class.call1((message,))) {
         Ok(value) => PyErr::from_value(value),
         Err(error) => error,
     }

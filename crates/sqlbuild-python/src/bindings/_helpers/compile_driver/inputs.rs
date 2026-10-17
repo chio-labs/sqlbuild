@@ -131,8 +131,7 @@ pub(crate) fn attached_inputs<'py>(
     }
     let diagnostics: Bound<'py, PyTuple> = PyTuple::new(
         py,
-        built
-            .getattr("diagnostics")?
+        native_field(&built, "diagnostics")?
             .try_iter()?
             .chain(collected.try_iter()?)
             .collect::<PyResult<Vec<_>>>()?,
@@ -298,9 +297,7 @@ fn target_context<'py>(
             ),
             (
                 "_enforce_explicit_references",
-                project_config
-                    .getattr("references")?
-                    .getattr("enforce_explicit")?,
+                native_field(&project_config, "references")?.getattr("enforce_explicit")?,
             ),
         ],
     )?;
