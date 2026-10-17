@@ -92,8 +92,11 @@ jobs:
         if: steps.release.outputs.prs_created == 'true'
         env:
           RELEASE_BRANCH: ${{ steps.release_branch.outputs.name }}
+        # Release Please only bumps workspace versions, so updating the workspace entries of
+        # Cargo.lock is enough and needs no compile; metadata --locked proves the lock is complete.
         run: |
-          cargo check --workspace
+          cargo update --workspace
+          cargo metadata --locked --format-version 1 > /dev/null
           uv lock --python 3.12
           uv sync --locked --all-groups --all-extras --python 3.12
           if git diff --quiet -- Cargo.lock uv.lock; then
@@ -142,21 +145,24 @@ jobs:
           }
 
           # Verify is the required status, so it only succeeds after every trusted check passes,
-          # including the same-runner comparison with the previous release. Each dispatched run
-          # carries this attempt's request id in its run name and is matched on it exactly.
-          workflows=(pull-request-metadata.yml version-guard.yml release-performance.yml)
-          contexts=("Pull Request Metadata" "Block automatic 1.0 releases" "Release performance")
+          # including building the distributions that Publish reuses once the release is tagged.
+          # Verify's test suites skip release pull requests, whose product code already passed
+          # them on main; release performance runs on main after each merge and does not gate.
+          # Each dispatched run carries this attempt's request id in its run name and is matched
+          # on it exactly.
+          workflows=(pull-request-metadata.yml version-guard.yml release-distributions.yml)
+          contexts=("Pull Request Metadata" "Block automatic 1.0 releases" "Release distributions")
           for context in "${contexts[@]}"; do
             post_status pending "${context}" "Trusted release check is running"
           done
-          post_status pending Verify "Validating trusted release metadata and performance"
+          post_status pending Verify "Validating trusted release metadata and distributions"
 
           dispatched_after="$(date -u -d '-2 minutes' +%Y-%m-%dT%H:%M:%SZ)"
           gh workflow run pull-request-metadata.yml --ref "${RELEASE_BRANCH}" \
             -f "pr_number=${RELEASE_PR}" -f "request_id=${REQUEST_ID}"
           gh workflow run version-guard.yml --ref "${RELEASE_BRANCH}" \
             -f "request_id=${REQUEST_ID}"
-          gh workflow run release-performance.yml --ref "${RELEASE_BRANCH}" \
+          gh workflow run release-distributions.yml --ref "${RELEASE_BRANCH}" \
             -f "request_id=${REQUEST_ID}"
           for index in "${!workflows[@]}"; do
             workflow="${workflows[${index}]}"
@@ -185,6 +191,7 @@ jobs:
             fi
           done
 
+          # Keep this allowlist in sync with the release metadata check in verify.yml.
           unexpected_files="$(gh pr view "${RELEASE_PR}" --repo "${GITHUB_REPOSITORY}" \
             --json files --jq '[.files[].path | select(. != ".release-please-manifest.json" and . != "CHANGELOG.md" and . != "pyproject.toml" and . != "uv.lock" and . != "Cargo.lock" and . != "Cargo.toml")] | join("\n")')"
           if [[ -n "${unexpected_files}" ]]; then
