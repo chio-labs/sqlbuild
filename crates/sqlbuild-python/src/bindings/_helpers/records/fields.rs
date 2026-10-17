@@ -1,7 +1,7 @@
 //! Construction, comparison and display of native record field values.
 
-use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Mutex, OnceLock};
 
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyAttributeError, PyRuntimeError, PyTypeError};
@@ -17,8 +17,8 @@ use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{
-    CACHED_PROPERTIES, CLASS_PROPERTIES, FROZEN_INSTANCE_ERROR, ORDERED_RECORDS, RECORD_FINISHERS,
-    RECORD_SPEC_ATTRIBUTE, RECORDS,
+    CACHED_PROPERTIES, CLASS_PROPERTIES, FROZEN_INSTANCE_ERROR, NATIVE_MODULE, ORDERED_RECORDS,
+    RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::getters::getter_field;
@@ -45,6 +45,7 @@ pub(crate) fn record_spec(cls: &Bound<'_, PyType>) -> PyResult<&'static RecordSp
 }
 
 /// A declared field of a native record read from its values; any other attribute, or object, by `getattr`.
+#[track_caller]
 pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
     if let Ok(cell) = value.cast::<NativeRecord>() {
         let record: &NativeRecord = cell.get();
@@ -64,7 +65,79 @@ pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Boun
     } else if let Some(found) = getter_field(value, name) {
         return found;
     }
+    strict_fallback(value, name)?;
     value.getattr(name)
+}
+
+/// How a test run treats `field` falling back to `getattr` on a native class: unset outside tests.
+pub(crate) const NATIVE_FIELD_STRICT_ENV_VAR: &str = "SQLBUILD_NATIVE_FIELD_STRICT";
+
+/// A strict-mode setting: record fallbacks to a file, or fail on any fallback missing from an allowlist.
+enum StrictFields {
+    Record(String, Mutex<HashSet<String>>),
+    Enforce(HashSet<String>),
+}
+
+fn strict_fields() -> Option<&'static StrictFields> {
+    static STRICT: OnceLock<Option<StrictFields>> = OnceLock::new();
+    STRICT
+        .get_or_init(|| {
+            let setting: String = std::env::var(NATIVE_FIELD_STRICT_ENV_VAR).ok()?;
+            if let Some(path) = setting.strip_prefix("record:") {
+                return Some(StrictFields::Record(
+                    path.to_owned(),
+                    Mutex::new(HashSet::new()),
+                ));
+            }
+            let path: &str = setting.strip_prefix("enforce:")?;
+            let allowed: HashSet<String> = std::fs::read_to_string(path)
+                .unwrap_or_default()
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(str::to_owned)
+                .collect();
+            Some(StrictFields::Enforce(allowed))
+        })
+        .as_ref()
+}
+
+/// In strict test runs, record or reject a `getattr` fallback on one of SQLBuild's own native classes.
+#[track_caller]
+fn strict_fallback(value: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
+    let Some(strict) = strict_fields() else {
+        return Ok(());
+    };
+    let class: Bound<'_, PyType> = value.get_type();
+    if class.module()?.to_cow()? != NATIVE_MODULE {
+        return Ok(());
+    }
+    let caller: &std::panic::Location<'_> = std::panic::Location::caller();
+    let entry: String = format!("{}\t{}.{name}", caller.file(), class.qualname()?);
+    match strict {
+        StrictFields::Enforce(allowed) if !allowed.contains(&entry) => {
+            Err(PyRuntimeError::new_err(format!(
+                "native field read fell back to Python: {}",
+                entry.replace('\t', " ")
+            )))
+        }
+        StrictFields::Enforce(_) => Ok(()),
+        StrictFields::Record(path, seen) => {
+            let new: bool = seen
+                .lock()
+                .map(|mut held| held.insert(entry.clone()))
+                .unwrap_or(false);
+            if new
+                && let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+            {
+                let _ = std::io::Write::write_all(&mut file, format!("{entry}\n").as_bytes());
+            }
+            Ok(())
+        }
+    }
 }
 
 /// Record properties by class and attribute name, each with its cache key when cached.
