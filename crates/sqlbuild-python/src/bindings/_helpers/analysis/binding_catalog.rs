@@ -39,17 +39,17 @@ const GENERIC_DIALECT: &str = "generic";
 #[pyclass(module = "sqlbuild._native")]
 pub(crate) struct BindingCatalog {
     #[pyo3(get)]
-    schemas: Py<PyDict>,
+    pub(crate) schemas: Py<PyDict>,
     #[pyo3(get)]
-    dialect: String,
+    pub(crate) dialect: String,
     #[pyo3(get)]
-    quoted_ignore_case: bool,
+    pub(crate) quoted_ignore_case: bool,
     #[pyo3(get)]
-    analysis_shapes: Py<PyDict>,
+    pub(crate) analysis_shapes: Py<PyDict>,
     #[pyo3(get)]
-    expression_shapes: Py<PyDict>,
+    pub(crate) expression_shapes: Py<PyDict>,
     #[pyo3(get)]
-    native: Py<ProjectCatalog>,
+    pub(crate) native: Py<ProjectCatalog>,
 }
 
 /// A catalog's dialect, case mode, known functions and known types.

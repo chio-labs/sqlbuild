@@ -285,7 +285,7 @@ pub(crate) struct ExpansionReuse {
 #[pyclass(module = "sqlbuild._native")]
 pub(crate) struct EarlySqlLint {
     #[pyo3(get)]
-    enabled: bool,
+    pub(crate) enabled: bool,
     preparation: Option<Py<PreparedSqlLint>>,
     expansion_reuse: Option<ExpansionReuse>,
     stop_requested: Arc<AtomicBool>,

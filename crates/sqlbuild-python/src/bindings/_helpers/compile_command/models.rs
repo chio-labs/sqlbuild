@@ -12,16 +12,16 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 #[derive(Debug)]
 pub(crate) struct CompileReuseAttempt {
     /// `hit`, `miss` or `bypass`.
-    outcome: Py<PyAny>,
-    project_dir: Py<PyAny>,
-    started: Py<PyAny>,
-    check_ms: Py<PyAny>,
-    exit_code: Py<PyAny>,
-    entry_path: Py<PyAny>,
+    pub(crate) outcome: Py<PyAny>,
+    pub(crate) project_dir: Py<PyAny>,
+    pub(crate) started: Py<PyAny>,
+    pub(crate) check_ms: Py<PyAny>,
+    pub(crate) exit_code: Py<PyAny>,
+    pub(crate) entry_path: Py<PyAny>,
     /// The natively checked attempt, recorded natively after a miss.
-    native: Py<PyAny>,
-    selected_target: Py<PyAny>,
-    json_output: Py<PyAny>,
+    pub(crate) native: Py<PyAny>,
+    pub(crate) selected_target: Py<PyAny>,
+    pub(crate) json_output: Py<PyAny>,
 }
 
 #[pymethods]

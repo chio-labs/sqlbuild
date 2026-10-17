@@ -19,7 +19,7 @@ static SHARED_COORDINATOR: PyOnceLock<Py<TransientLineCoordinator>> = PyOnceLock
 pub(crate) struct TransientLineCoordinator {
     /// The re-entrant lock every writer holds while it draws.
     #[pyo3(get)]
-    lock: Py<PyAny>,
+    pub(crate) lock: Py<PyAny>,
     active: Mutex<Option<ActiveLine>>,
 }
 

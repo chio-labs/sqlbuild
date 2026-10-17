@@ -30,13 +30,13 @@ const RENDER_OPTIONS: (&[&str], &[&str]) = (
 #[pyclass(module = "sqlbuild._native", frozen, get_all)]
 pub(crate) struct DbtEventStreamUpdate {
     /// The node-started progress message.
-    status_message: Option<String>,
+    pub(crate) status_message: Option<String>,
     /// The started or finished node.
-    result: Option<Py<PyAny>>,
+    pub(crate) result: Option<Py<PyAny>>,
     /// The rendered row and its messages.
-    row: Option<String>,
+    pub(crate) row: Option<String>,
     /// Whether `result` is a final result rather than a start.
-    finished: bool,
+    pub(crate) finished: bool,
 }
 
 /// Read dbt's JSON log lines into node progress, rows and results.

@@ -35,9 +35,9 @@ const POISONED_CACHE: &str = "dbt ls cache is poisoned";
 #[pyclass(module = "sqlbuild._native", frozen, subclass)]
 pub(crate) struct DbtRunner {
     #[pyo3(get)]
-    dbt_executable: String,
+    pub(crate) dbt_executable: String,
     #[pyo3(get)]
-    invoker: Option<Py<PyAny>>,
+    pub(crate) invoker: Option<Py<PyAny>>,
     ls_cache: Mutex<HashMap<Vec<String>, Py<PyAny>>>,
 }
 

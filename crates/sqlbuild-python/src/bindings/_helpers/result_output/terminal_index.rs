@@ -44,9 +44,9 @@ pub(crate) struct TerminalEventIndex {
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct TerminalEventClaim {
     #[pyo3(get)]
-    terminal: Py<PyAny>,
+    pub(crate) terminal: Py<PyAny>,
     #[pyo3(get)]
-    event_sequence: usize,
+    pub(crate) event_sequence: usize,
 }
 
 /// `payload.get(key)` when it is a string.

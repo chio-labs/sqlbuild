@@ -8,7 +8,7 @@ use sqlbuild_core::cli_text::models::CliStyle as NativeStyle;
 #[pyclass(name = "CliStyle", module = "sqlbuild._native", frozen)]
 pub(crate) struct PythonCliStyle {
     #[pyo3(get)]
-    use_color: bool,
+    pub(crate) use_color: bool,
 }
 
 impl PythonCliStyle {
