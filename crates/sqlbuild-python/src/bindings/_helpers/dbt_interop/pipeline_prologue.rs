@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::discovery::discover_project_input
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -105,8 +106,9 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
         )?;
     }
     let dbt_stream = native_field(request, "dbt_stdout_stream")?;
-    call_with(
-        &registry::class(py, RecordId::DbtInteropInvocation)?,
+    new_record_with(
+        py,
+        RecordId::DbtInteropInvocation,
         &[
             ("dbt_executable", executable),
             ("output_stream", stream.clone()),
@@ -211,8 +213,9 @@ fn compile_dbt_interop_project<'py>(
         )?),
     )?;
     completed(&callback, "Compiled SQLBuild project.", start)?;
-    call_with(
-        &registry::class(py, RecordId::DbtInteropCompiledProject)?,
+    new_record_with(
+        py,
+        RecordId::DbtInteropCompiledProject,
         &[
             ("adapter_name", name),
             ("adapter", adapter),
@@ -246,8 +249,9 @@ fn resolve_dbt_interop_plan<'py>(
     let invocation = args.value("invocation")?;
     let routed = native_field(&invocation, "routed")?;
     let tuple = py.import("builtins")?.getattr("tuple")?;
-    let command_args = call_with(
-        &registry::class(py, RecordId::DbtInteropCommandArgs)?,
+    let command_args = new_record_with(
+        py,
+        RecordId::DbtInteropCommandArgs,
         &[
             ("select", tuple.call1((native_field(&routed, "select")?,))?),
             (
@@ -282,8 +286,9 @@ fn resolve_dbt_interop_plan<'py>(
         ],
     )?;
     completed(&callback, "Resolved dbt and SQLBuild selection.", start)?;
-    call_with(
-        &registry::class(py, RecordId::DbtInteropPlanResolution)?,
+    new_record_with(
+        py,
+        RecordId::DbtInteropPlanResolution,
         &[("graph", graph), ("plan", plan)],
     )
 }

@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -161,8 +162,9 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                 ("defer_to", flag_value(&args, "--defer-to")?),
             ],
         )?;
-        let cursor = call_with(
-            &registry::class(py, RecordId::CursorOverrides)?,
+        let cursor = new_record_with(
+            py,
+            RecordId::CursorOverrides,
             &[
                 ("start_ts", flag_value(&args, "--start-cursor-ts")?),
                 ("end_ts", flag_value(&args, "--end-cursor-ts")?),
@@ -171,12 +173,14 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
             ],
         )?;
         let full_refresh = boolean(py, args.contains("--full-refresh")?);
-        let selection = call_with(
-            &registry::class(py, RecordId::PlannerSelection)?,
+        let selection = new_record_with(
+            py,
+            RecordId::PlannerSelection,
             &[("select", selected.clone())],
         )?;
-        let overrides = call_with(
-            &registry::class(py, RecordId::PlannerOverrides)?,
+        let overrides = new_record_with(
+            py,
+            RecordId::PlannerOverrides,
             &[
                 ("cursor_overrides", cursor),
                 ("full_refresh", full_refresh.clone()),
@@ -198,7 +202,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
                 ("deferral", deferral),
                 (
                     "policies",
-                    registry::class(py, RecordId::PlannerPolicies)?.call0()?,
+                    new_record(py, RecordId::PlannerPolicies, (), None)?,
                 ),
                 ("on_progress", native_field(&hooks, "on_progress")?),
                 (
@@ -238,8 +242,9 @@ fn attach_sqlbuild_plan_output<'py>(
     let args = KeywordArguments::read(py, "attach_sqlbuild_plan_output", options, ATTACH_OPTIONS)?;
     let compiled = args.value("compiled")?;
     let plan = args.value("plan")?;
-    let environment = call_with(
-        &registry::class(py, RecordId::DbtPlanEnvironment)?,
+    let environment = new_record_with(
+        py,
+        RecordId::DbtPlanEnvironment,
         &[
             ("project_dir", args.value("project_dir")?),
             ("discovered_inputs", args.value("discovered_inputs")?),
@@ -248,8 +253,9 @@ fn attach_sqlbuild_plan_output<'py>(
             ("adapter_name", native_field(&compiled, "adapter_name")?),
         ],
     )?;
-    let request = call_with(
-        &registry::class(py, RecordId::DbtSqlbuildPlanRequest)?,
+    let request = new_record_with(
+        py,
+        RecordId::DbtSqlbuildPlanRequest,
         &[
             (
                 "selected_model_names",

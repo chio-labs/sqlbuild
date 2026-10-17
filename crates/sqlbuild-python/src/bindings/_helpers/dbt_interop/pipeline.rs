@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::runtime_config::config_overrides;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -108,7 +109,7 @@ fn resolve_plan<'py>(
 fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64> {
     let py = request.py();
     let command = native_field(request, "command")?;
-    let kind = registry::class(py, RecordId::DbtInteropCommand)?;
+    let kind = record_class(py, RecordId::DbtInteropCommand)?;
     if !command.eq(native_field(&kind, "RUN")?)? && !command.eq(native_field(&kind, "BUILD")?)? {
         return Err(PyErr::from_value(
             registry::error(py, ErrorId::DbtInteropArgument)?.call1((format!(
@@ -245,12 +246,13 @@ fn plan_dbt_interop_from_project<'py>(
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let args = KeywordArguments::read(py, "plan_dbt_interop_from_project", options, PLAN_OPTIONS)?;
-    let request = call_with(
-        &registry::class(py, RecordId::DbtInteropExecutionRequest)?,
+    let request = new_record_with(
+        py,
+        RecordId::DbtInteropExecutionRequest,
         &[
             (
                 "command",
-                registry::class(py, RecordId::DbtInteropCommand)?.getattr("PLAN")?,
+                enum_member(py, RecordId::DbtInteropCommand, "PLAN")?,
             ),
             ("project_dir", args.value("project_dir")?),
             ("args", args.value("args")?),
@@ -354,8 +356,9 @@ fn debug_dbt_from_project(py: Python<'_>, options: Option<Bound<'_, PyDict>>) ->
             ("require_project_dir", boolean(py, true)),
         ],
     )?;
-    let dbt_options = call_with(
-        &registry::class(py, RecordId::DbtCliOptions)?,
+    let dbt_options = new_record_with(
+        py,
+        RecordId::DbtCliOptions,
         &[
             ("project_dir", native_field(&resolved, "project_dir")?),
             ("profiles_dir", native_field(&resolved, "profiles_dir")?),

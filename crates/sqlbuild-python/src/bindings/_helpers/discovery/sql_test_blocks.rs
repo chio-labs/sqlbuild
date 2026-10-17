@@ -11,6 +11,7 @@ use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue};
 use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_value, sql_value};
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -44,11 +45,12 @@ fn case_record<'py>(
             [name.into_bound_py_any(py)?, sql_value(value, classes)?],
         )?);
     }
-    registry::class(py, RecordId::DiscoveredSqlTestCase)?.call1((
-        case.name.as_str(),
-        PyTuple::new(py, values)?,
-        case_index,
-    ))
+    new_record(
+        py,
+        RecordId::DiscoveredSqlTestCase,
+        (case.name.as_str(), PyTuple::new(py, values)?, case_index),
+        None,
+    )
 }
 
 fn block_record<'py>(
@@ -57,16 +59,20 @@ fn block_record<'py>(
     block: SqlTestBlock,
     classes: &SqlValueClasses<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let kind = registry::class(py, RecordId::SqlValueKind)?;
     let parameters = block
         .parameters
         .iter()
         .map(|parameter| {
-            registry::class(py, RecordId::SqlTestParameterDeclaration)?.call1((
-                parameter.name.as_str(),
-                kind.call1((parameter.value_type,))?,
-                parameter.nullable,
-            ))
+            new_record(
+                py,
+                RecordId::SqlTestParameterDeclaration,
+                (
+                    parameter.name.as_str(),
+                    enum_from_value(py, RecordId::SqlValueKind, parameter.value_type)?,
+                    parameter.nullable,
+                ),
+                None,
+            )
         })
         .collect::<PyResult<Vec<_>>>()?;
     let cases = block
@@ -89,7 +95,7 @@ fn block_record<'py>(
     keywords.set_item("cursor_start", block.cursor_start)?;
     keywords.set_item("cursor_end", block.cursor_end)?;
     keywords.set_item("sql_body_span", &native.2)?;
-    registry::class(py, RecordId::DiscoveredSqlTestBlock)?.call((), Some(&keywords))
+    new_record(py, RecordId::DiscoveredSqlTestBlock, (), Some(&keywords))
 }
 
 /// Each `(header, sql_body, span)` block of a SQL test file as a `DiscoveredSqlTestBlock`.

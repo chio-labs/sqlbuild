@@ -6,6 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::model_headers::{
@@ -101,7 +102,6 @@ fn source_locations<'py>(
     relative_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = relative_path.py();
-    let location_class: Bound<'py, PyAny> = registry::class(py, RecordId::SourceLocation)?;
     let locations: Bound<'py, PyDict> = PyDict::new(py);
     for (name, line, column, end_line, end_column) in rows {
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
@@ -110,7 +110,10 @@ fn source_locations<'py>(
         arguments.set_item("column", column)?;
         arguments.set_item("end_line", end_line)?;
         arguments.set_item("end_column", end_column)?;
-        locations.set_item(name, location_class.call((), Some(&arguments))?)?;
+        locations.set_item(
+            name,
+            new_record(py, RecordId::SourceLocation, (), Some(&arguments))?,
+        )?;
     }
     Ok(locations)
 }

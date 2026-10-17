@@ -15,7 +15,7 @@ use sqlbuild_discovery::sql_tests::models::{
 };
 use sqlbuild_discovery::tree::models::ProjectTree;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::path_object;
@@ -27,9 +27,9 @@ use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::discovery::sql_test_blocks::{
     sql_test_block_records, validate_block_names,
 };
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::NativeProjectTree;
 
@@ -128,8 +128,9 @@ fn test_file<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let (file_path, relative_path) = paths;
     let py: Python<'py> = file_path.py();
-    call_with(
-        &registry::class(py, RecordId::DiscoveredSqlTestFile)?,
+    new_record_with(
+        py,
+        RecordId::DiscoveredSqlTestFile,
         &[
             ("file_path", file_path.clone()),
             ("relative_path", relative_path.clone()),
@@ -181,8 +182,9 @@ fn scenario_file<'py>(
             "SQL scenario '{shown}' must define SQL after SCENARIO(...)"
         ));
     }
-    call_with(
-        &registry::class(py, RecordId::DiscoveredSqlScenarioFile)?,
+    new_record_with(
+        py,
+        RecordId::DiscoveredSqlScenarioFile,
         &[
             ("file_path", file_path.clone()),
             ("relative_path", relative_path.clone()),

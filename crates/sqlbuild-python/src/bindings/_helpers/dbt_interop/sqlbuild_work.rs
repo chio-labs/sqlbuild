@@ -14,6 +14,7 @@ use crate::bindings::_helpers::build_command::support::{
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -33,8 +34,9 @@ const WORK_OPTIONS: (&[&str], &[&str]) = (
 /// Interop has no allow flags; destructive work uses the ordinary interactive safety gates.
 #[pyfunction]
 fn dbt_interop_plan_safety_gates(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    call_with(
-        &registry::class(py, RecordId::PlanSafetyGates)?,
+    new_record_with(
+        py,
+        RecordId::PlanSafetyGates,
         &[
             ("allow_missing_migration_origin", boolean(py, false)),
             ("allow_snapshot_full_refresh", boolean(py, false)),
@@ -110,7 +112,7 @@ fn execute_dbt_sqlbuild_work<'py>(
         ],
     )?;
     let command = args.value("command")?;
-    let kinds = registry::class(py, RecordId::DbtInteropCommand)?;
+    let kinds = record_class(py, RecordId::DbtInteropCommand)?;
     let display = if command.eq(native_field(&kinds, "RUN")?)? {
         "sqb build --no-tests --no-audits".to_owned()
     } else {

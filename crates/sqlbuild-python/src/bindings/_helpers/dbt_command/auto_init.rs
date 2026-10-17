@@ -13,6 +13,7 @@ use sqlbuild_core::dbt_command::models::ForwardedArg;
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
+use crate::bindings::_helpers::records::construct::new_record_with;
 
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -87,8 +88,9 @@ pub(crate) fn ensure_twin_project<'py>(
             ("use_color", flag(py, use_color)),
         ],
     )?;
-    let callbacks: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::DbtInitProgressCallbacks)?,
+    let callbacks: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::DbtInitProgressCallbacks,
         &[
             ("start", native_field(&progress, "start")?),
             ("complete", native_field(&progress, "complete")?),
@@ -103,8 +105,9 @@ pub(crate) fn ensure_twin_project<'py>(
         Some(raw) => PyString::new(py, &raw).into_any(),
         None => none.clone(),
     };
-    let request: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::DbtInitRequest)?,
+    let request: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::DbtInitRequest,
         &[
             ("cwd", effective_dir),
             ("dbt_project_dir", dbt_project_dir),

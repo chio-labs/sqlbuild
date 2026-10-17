@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::plan_output::{connection_config, connection_hooks};
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -32,8 +33,9 @@ const OPTIONS: (&[&str], &[&str]) = (
 fn environment<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>> {
     let request = args.value("request")?;
     let compiled = args.value("compiled")?;
-    call_with(
-        &registry::class(request.py(), RecordId::DbtPlanEnvironment)?,
+    new_record_with(
+        request.py(),
+        RecordId::DbtPlanEnvironment,
         &[
             ("project_dir", native_field(&request, "project_dir")?),
             (
@@ -99,8 +101,9 @@ fn write_dbt_execution_plan_text(
             ("use_color", native_field(&request, "use_color")?),
             (
                 "display_options",
-                call_with(
-                    &registry::class(py, RecordId::DisplayOptions)?,
+                new_record_with(
+                    py,
+                    RecordId::DisplayOptions,
                     &[("max_entries_per_section", limit)],
                 )?,
             ),
@@ -206,8 +209,9 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
             ("use_color", args.value("request")?.getattr("use_color")?),
         ],
     )?;
-    let request = call_with(
-        &registry::class(py, RecordId::DbtSqlbuildPlanRequest)?,
+    let request = new_record_with(
+        py,
+        RecordId::DbtSqlbuildPlanRequest,
         &[
             ("selected_model_names", selected),
             (
@@ -236,7 +240,7 @@ fn execution_limits<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = discovered.py();
     if target.is_none() {
-        return registry::class(py, RecordId::ExecutionLimitsConfig)?.call0();
+        return new_record(py, RecordId::ExecutionLimitsConfig, (), None);
     }
     call_with(
         &registry::native(py, NativeAttr::ResolveTargetConfig)?,
@@ -265,8 +269,9 @@ fn run_dbt_sqlbuild_work<'py>(
     let compiled = args.value("compiled")?;
     let project = native_field(&compiled, "project")?;
     let discovered = native_field(&invocation, "discovered_inputs")?;
-    let context = call_with(
-        &registry::class(py, RecordId::DbtSqlbuildWorkContext)?,
+    let context = new_record_with(
+        py,
+        RecordId::DbtSqlbuildWorkContext,
         &[
             ("plan_output", args.value("plan_output")?),
             ("connection_config", args.value("connection_config")?),

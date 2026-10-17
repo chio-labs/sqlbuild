@@ -18,6 +18,7 @@ use sqlbuild_model_config::sql_values::models::RawSqlValue;
 use crate::bindings::_helpers::contracts::sql_values::{
     SqlValueClasses, raw_value, sql_value, sql_value_error,
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -51,7 +52,6 @@ fn enum_record<'py>(
     facts: EnumFacts,
     owner: &Owner<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let member_class = registry::class(py, RecordId::EnumMember)?;
     let int_class = py.import("builtins")?.getattr("int")?;
     let members = facts
         .members
@@ -61,16 +61,21 @@ fn enum_record<'py>(
                 EnumValue::Text(text) => text.into_bound_py_any(py)?,
                 EnumValue::Integer(digits) => int_class.call1((digits,))?,
             };
-            member_class.call1((name, value))
+            new_record(py, RecordId::EnumMember, (name, value), None)
         })
         .collect::<PyResult<Vec<_>>>()?;
-    registry::class(py, RecordId::EnumDeclaration)?.call1((
-        facts.name,
-        PyTuple::new(py, members)?,
-        facts.scalar_type,
-        &owner.relative_path,
-        owner.model_name.as_deref(),
-    ))
+    new_record(
+        py,
+        RecordId::EnumDeclaration,
+        (
+            facts.name,
+            PyTuple::new(py, members)?,
+            facts.scalar_type,
+            &owner.relative_path,
+            owner.model_name.as_deref(),
+        ),
+        None,
+    )
 }
 
 fn constant_record<'py>(
@@ -80,18 +85,21 @@ fn constant_record<'py>(
     classes: &SqlValueClasses<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let render_as = match facts.render_as {
-        Some(rendering) => {
-            registry::class(py, RecordId::CollectionRendering)?.call1((rendering,))?
-        }
+        Some(rendering) => enum_from_value(py, RecordId::CollectionRendering, rendering)?,
         None => py.None().into_bound(py),
     };
-    registry::class(py, RecordId::ConstantDeclaration)?.call1((
-        facts.name,
-        sql_value(&facts.value, classes)?,
-        &owner.relative_path,
-        owner.model_name.as_deref(),
-        render_as,
-    ))
+    new_record(
+        py,
+        RecordId::ConstantDeclaration,
+        (
+            facts.name,
+            sql_value(&facts.value, classes)?,
+            &owner.relative_path,
+            owner.model_name.as_deref(),
+            render_as,
+        ),
+        None,
+    )
 }
 
 fn optional_raw(

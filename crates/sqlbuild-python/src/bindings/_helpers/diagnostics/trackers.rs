@@ -10,8 +10,8 @@ use pyo3::{pyclass, pymethods};
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const TRACKER_VARIABLE: &str = "sqlbuild_build_phase_timing_tracker";
 const PHASES: [&str; 6] = [
@@ -107,7 +107,7 @@ impl BuildPhaseTimingTracker {
             keywords.set_item(phase, value)?;
         }
         keywords.set_item("total_seconds", non_negative(now, self.started_at))?;
-        registry::class(py, RecordId::PartialBuildPhaseTimings)?.call((), Some(&keywords))
+        new_record(py, RecordId::PartialBuildPhaseTimings, (), Some(&keywords))
     }
 
     /// Return the active build timing tracker.

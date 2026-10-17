@@ -4,9 +4,8 @@ use pyo3::exceptions::{PyOSError, PySyntaxError, PyUnicodeError, PyValueError};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyTuple;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const PROJECT_DIR_MARKER: &str = ".";
 
@@ -45,8 +44,9 @@ impl<'py> FileFaults<'py> {
             .value(py)
             .str()?
             .call_method1("replace", (self.project_dir.str()?, PROJECT_DIR_MARKER))?;
-        on_fault.call1((call_with(
-            &registry::class(py, RecordId::DiscoveryFileFault)?,
+        on_fault.call1((new_record_with(
+            py,
+            RecordId::DiscoveryFileFault,
             &[("path", relative_path.clone()), ("message", message)],
         )?,))?;
         Ok(None)

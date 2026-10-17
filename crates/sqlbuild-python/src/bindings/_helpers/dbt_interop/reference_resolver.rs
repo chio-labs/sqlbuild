@@ -12,6 +12,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -257,8 +258,9 @@ impl DbtCompileReferenceResolver {
     ) -> Result<(), PyErr> {
         let arguments: KeywordArguments<'_> =
             KeywordArguments::read(py, "validate_reference", options, VALIDATE_OPTIONS)?;
-        let reference: Bound<'_, PyAny> = call_with(
-            &registry::class(py, RecordId::CompileSqlReference)?,
+        let reference: Bound<'_, PyAny> = new_record_with(
+            py,
+            RecordId::CompileSqlReference,
             &[
                 ("ref_kind", arguments.value("ref_kind")?),
                 ("ref_name", arguments.value("ref_name")?),

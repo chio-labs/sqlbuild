@@ -9,6 +9,9 @@ use sqlbuild_core::cli_text::main::format_dbt_interop_plan_json::format_dbt_inte
 use sqlbuild_core::cli_text::models::{DbtInteropPlanText, DbtLsNodeText, DisplayLimit};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, enum_member, new_record, new_record_with,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -121,7 +124,7 @@ fn skip_reason<'py>(py: Python<'py>, has_work: bool, member: &str) -> PyResult<B
     if has_work {
         return Ok(py.None().into_bound(py));
     }
-    registry::class(py, RecordId::DbtInteropSkipReason)?.getattr(member)
+    enum_member(py, RecordId::DbtInteropSkipReason, member)
 }
 
 /// Build a display-ready selection plan without dbt model state.
@@ -134,7 +137,7 @@ pub(crate) fn build_dbt_interop_plan<'py>(
     let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "build_dbt_interop_plan", options, BUILD_OPTIONS)?;
     let command: Bound<'py, PyAny> =
-        registry::class(py, RecordId::DbtInteropCommand)?.call1((arguments.value("command")?,))?;
+        enum_from_value(py, RecordId::DbtInteropCommand, arguments.value("command")?)?;
     let nodes: Bound<'py, PyAny> = tuple_of(arguments.value("dbt_ls_nodes")?)?;
     let mut selected: Vec<String> = Vec::new();
     for node in nodes.try_iter()? {
@@ -149,8 +152,9 @@ pub(crate) fn build_dbt_interop_plan<'py>(
         strings(&empty_or(arguments.value("warnings")?))?,
         dbt_has_work || sqlbuild_has_work,
     );
-    call_with(
-        &registry::class(py, RecordId::DbtInteropPlan)?,
+    new_record_with(
+        py,
+        RecordId::DbtInteropPlan,
         &[
             ("command", command),
             (
@@ -212,7 +216,7 @@ fn render_dbt_interop_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -
     }
     let mut display: Bound<'_, PyAny> = arguments.value("display_options")?;
     if !display.is_truthy()? {
-        display = registry::class(py, RecordId::DisplayOptions)?.call0()?;
+        display = new_record(py, RecordId::DisplayOptions, (), None)?;
     }
     let use_color: bool = arguments.flag("use_color")?;
     let plan_output: Bound<'_, PyAny> = native_field(&plan, "sqlbuild_plan_output")?;

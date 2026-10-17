@@ -13,6 +13,7 @@ use sqlbuild_core::dbt_command::models::DbtInitSummary;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -87,15 +88,17 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
             ("use_color", flag(py, use_color)),
         ],
     )?;
-    let callbacks: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::DbtInitProgressCallbacks)?,
+    let callbacks: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::DbtInitProgressCallbacks,
         &[
             ("start", native_field(&progress, "start")?),
             ("complete", native_field(&progress, "complete")?),
         ],
     )?;
-    let init_request: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::DbtInitRequest)?,
+    let init_request: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::DbtInitRequest,
         &[
             ("cwd", native_field(request, "cwd")?),
             ("dbt_project_dir", project_dir),

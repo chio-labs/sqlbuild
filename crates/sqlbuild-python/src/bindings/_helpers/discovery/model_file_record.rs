@@ -1,7 +1,7 @@
 //! A discovered SQL model file as a native record whose Python attributes are built on demand.
 
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
@@ -62,16 +62,20 @@ impl Locations {
         Ok(self
             .projected
             .get_or_try_init(py, || {
-                let class: Bound<'py, PyAny> = registry::class(py, RecordId::SourceLocation)?;
                 let dict: Bound<'py, PyDict> = PyDict::new(py);
                 for (name, span) in &self.rows {
-                    let location: Bound<'py, PyAny> = class.call1((
-                        path.bind(py),
-                        span.line,
-                        span.column,
-                        span.end_line,
-                        span.end_column,
-                    ))?;
+                    let location: Bound<'py, PyAny> = new_record(
+                        py,
+                        RecordId::SourceLocation,
+                        (
+                            path.bind(py),
+                            span.line,
+                            span.column,
+                            span.end_line,
+                            span.end_column,
+                        ),
+                        None,
+                    )?;
                     dict.set_item(name, location)?;
                 }
                 Ok::<_, pyo3::PyErr>(dict.unbind())

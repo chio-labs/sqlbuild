@@ -19,9 +19,8 @@ use sqlbuild_config::dbt_manifest::models::{
     ManifestNode, NodeChecksum, ParsedModel, ParsedSeed, ParsedSource,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -139,8 +138,9 @@ fn model_object<'py>(
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
-    call_with(
-        &registry::class(py, RecordId::DbtManifestModel)?,
+    new_record_with(
+        py,
+        RecordId::DbtManifestModel,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &model.package_name)),
@@ -170,8 +170,9 @@ fn seed_object<'py>(
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
-    call_with(
-        &registry::class(py, RecordId::DbtManifestSeed)?,
+    new_record_with(
+        py,
+        RecordId::DbtManifestSeed,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &seed.package_name)),
@@ -191,8 +192,9 @@ fn source_object<'py>(
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
-    call_with(
-        &registry::class(py, RecordId::DbtManifestSource)?,
+    new_record_with(
+        py,
+        RecordId::DbtManifestSource,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &source.package_name)),
@@ -337,8 +339,9 @@ fn manifest_index<'py>(raw_data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
             parse_manifest_source(&manifest_node(&raw)?).map_err(|error| raised(py, error))?;
         sources_by_unique_id.set_item(&unique_id, source_object(&unique_id, &source, &raw)?)?;
     }
-    call_with(
-        &registry::class(py, RecordId::DbtManifestIndex)?,
+    new_record_with(
+        py,
+        RecordId::DbtManifestIndex,
         &[
             ("models_by_unique_id", indexes.by_unique_id.into_any()),
             ("models_by_name", indexes.by_name.into_any()),

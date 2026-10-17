@@ -22,6 +22,7 @@ use crate::bindings::_helpers::dbt_interop::graph::{
 };
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
 use crate::bindings::_helpers::dbt_interop::plan::build_dbt_interop_plan;
+use crate::bindings::_helpers::records::construct::enum_from_value;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -143,7 +144,7 @@ fn plan_dbt_interop_command<'py>(
     let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "plan_dbt_interop_command", options, PLAN_OPTIONS)?;
     let command: Bound<'py, PyAny> =
-        registry::class(py, RecordId::DbtInteropCommand)?.call1((arguments.value("command")?,))?;
+        enum_from_value(py, RecordId::DbtInteropCommand, arguments.value("command")?)?;
     let command_args: Bound<'py, PyAny> = arguments.value("command_args")?;
     let (select, exclude) = (
         native_field(&command_args, "select")?,

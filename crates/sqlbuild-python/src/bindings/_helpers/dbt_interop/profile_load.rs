@@ -15,8 +15,8 @@ use crate::bindings::_helpers::dbt_interop::profile::raised;
 use crate::bindings::_helpers::dbt_interop::profile_connection::profile_error;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DBT_PROJECT_FILE: &str = "dbt_project.yml";
 const PROFILES_FILE: &str = "profiles.yml";
@@ -131,8 +131,9 @@ pub(crate) fn load_selected_dbt_profile_output<'py>(
             .map_err(|error| raised(py, error))?;
     let (target, index): (String, usize) =
         select_dbt_profile_target(&validated, target_name).map_err(|error| raised(py, error))?;
-    call_with(
-        &registry::class(py, RecordId::SelectedDbtProfileOutput)?,
+    new_record_with(
+        py,
+        RecordId::SelectedDbtProfileOutput,
         &[
             ("profile_name", PyString::new(py, profile_name).into_any()),
             ("target_name", PyString::new(py, &target).into_any()),

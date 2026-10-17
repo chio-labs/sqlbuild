@@ -7,7 +7,6 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::project_config::{
     load_local_config_file, load_project_config_file,
 };
@@ -23,10 +22,10 @@ use crate::bindings::_helpers::discovery::sql_test_records::{
     discover_scenario_files, discover_test_files,
 };
 use crate::bindings::_helpers::discovery::yaml_records::discover_source_files;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
 const FALLBACK_PROJECT_NAME: &str = "project";
@@ -66,8 +65,9 @@ impl<'py> Faults<'py> {
             Some(path) => path_class(py)?.call1((path,))?,
             None => py.None().into_bound(py),
         };
-        call_with(
-            &registry::class(py, RecordId::DiscoveryFileFault)?,
+        new_record_with(
+            py,
+            RecordId::DiscoveryFileFault,
             &[
                 ("path", path),
                 ("message", PyString::new(py, &message).into_any()),
@@ -120,8 +120,9 @@ fn configs<'py>(
             } else {
                 PyString::new(py, FALLBACK_PROJECT_NAME).into_any()
             };
-            call_with(
-                &registry::class(py, RecordId::ProjectConfig)?,
+            new_record_with(
+                py,
+                RecordId::ProjectConfig,
                 &[
                     ("name", name),
                     ("adapter", PyString::new(py, FALLBACK_ADAPTER).into_any()),
@@ -133,7 +134,7 @@ fn configs<'py>(
         faults,
         (&list, Some(LOCAL_CONFIG_FILENAME)),
         load_local_config_file(py, project_dir).map(|config| config.into_bound(py)),
-        || registry::class(py, RecordId::LocalConfig)?.call0(),
+        || new_record(py, RecordId::LocalConfig, (), None),
     )?;
     Ok((project_config, local_config, list))
 }
@@ -228,9 +229,10 @@ fn tolerant_discovery<'py>(project_dir: &Bound<'py, PyAny>) -> PyResult<Bound<'p
         inputs.set_item(field, value)?;
     }
     let discovered_inputs: Bound<'py, PyAny> =
-        registry::class(py, RecordId::DiscoveredProjectInputs)?.call((), Some(&inputs))?;
-    call_with(
-        &registry::class(py, RecordId::TolerantScopeDiscovery)?,
+        new_record(py, RecordId::DiscoveredProjectInputs, (), Some(&inputs))?;
+    new_record_with(
+        py,
+        RecordId::TolerantScopeDiscovery,
         &[
             ("discovered_inputs", discovered_inputs),
             (

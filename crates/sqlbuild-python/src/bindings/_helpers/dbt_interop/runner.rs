@@ -22,6 +22,7 @@ use crate::bindings::_helpers::dbt_interop::cli::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -125,8 +126,9 @@ impl DbtRunner {
         let result: Bound<'py, PyAny> =
             self.run(command, &native_field(options, "project_dir")?)?;
         let stdout: String = native_field(&result, "stdout")?.extract()?;
-        let listing: Bound<'py, PyAny> = call_with(
-            &registry::class(py, RecordId::DbtLsResult)?,
+        let listing: Bound<'py, PyAny> = new_record_with(
+            py,
+            RecordId::DbtLsResult,
             &[
                 ("nodes", ls_nodes(py, &stdout)?.into_any()),
                 ("command", result),
@@ -193,8 +195,9 @@ impl DbtRunner {
             Ok(output)
         });
         let output: DbtProcessOutput = output.map_err(|error| launch_failure(py, error))?;
-        call_with(
-            &registry::class(py, RecordId::DbtCommandResult)?,
+        new_record_with(
+            py,
+            RecordId::DbtCommandResult,
             &[
                 ("argv", command.into_any()),
                 ("returncode", output.returncode.into_pyobject_any(py)?),

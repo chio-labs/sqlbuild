@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::runtime_results::{append_missing, result_ids};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -112,7 +113,6 @@ fn execute_dbt_commands<'py>(
         &registry::native(py, NativeAttr::CliStyle)?,
         &[("use_color", arguments.value("use_color")?)],
     )?;
-    let result_type = registry::class(py, RecordId::DbtCommandExecutionResult)?;
     if argv.is_none() {
         let message = arguments.value("skip_message")?;
         let message = if message.is_none() {
@@ -129,8 +129,9 @@ fn execute_dbt_commands<'py>(
                     .extract::<String>()?
             ),
         )?;
-        return call_with(
-            &result_type,
+        return new_record_with(
+            py,
+            RecordId::DbtCommandExecutionResult,
             &[("returncode", PyInt::new(py, 0).into_any())],
         );
     }
@@ -240,8 +241,9 @@ fn execute_dbt_commands<'py>(
         }
     }
     progress(&arguments, "Finalized dbt run.")?;
-    call_with(
-        &result_type,
+    new_record_with(
+        py,
+        RecordId::DbtCommandExecutionResult,
         &[("returncode", returncode), ("node_results", results)],
     )
 }

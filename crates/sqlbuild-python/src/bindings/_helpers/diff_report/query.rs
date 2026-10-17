@@ -22,6 +22,7 @@ use crate::bindings::_helpers::diff_report::tolerances::cli_tolerance_overrides;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -258,7 +259,7 @@ pub(crate) fn prepare_query_diff<'py>(
         )
     };
     call(
-        &registry::class(py, RecordId::QueryDiffPreparation)?,
+        &record_class(py, RecordId::QueryDiffPreparation)?,
         &[
             ("adapter", &adapter),
             ("connection_config", &config),
@@ -698,7 +699,7 @@ fn inspect_inputs<'py>(
             ));
         }
     }
-    let ttl: Bound<'py, PyAny> = registry::class(py, RecordId::Duration)?
+    let ttl: Bound<'py, PyAny> = record_class(py, RecordId::Duration)?
         .call_method1("parse", (native_field(preparation, "artifact_ttl")?,))?;
     if ttl.is_none() {
         return Err(failure(

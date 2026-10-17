@@ -11,6 +11,7 @@ use crate::bindings::_helpers::dbt_command::auto_init::{args_tuple, ensure_twin_
 use crate::bindings::_helpers::dbt_command::debug::run_dbt_debug;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, effective_dir, flag, stream};
 use crate::bindings::_helpers::dbt_interop::runtime_config::validate_dbt_execution_args;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -79,8 +80,9 @@ fn run_plan(project_dir: &Bound<'_, PyAny>, args: &[String], no_color: bool) -> 
             ("use_color", flag(py, progress.use_color)),
         ],
     )?;
-    let display: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::DisplayOptions)?,
+    let display: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::DisplayOptions,
         &[(
             "max_entries_per_section",
             if options.verbose {
@@ -115,8 +117,9 @@ fn run_execution(
     let options: DbtOutputOptions = dbt_output_options(args);
     let progress: Progress<'_> = Progress::new(py, &options, no_color)?;
     progress.blank_line()?;
-    let request: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::DbtInteropExecutionRequest)?,
+    let request: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::DbtInteropExecutionRequest,
         &[
             ("command", command.clone()),
             ("project_dir", project_dir.clone()),

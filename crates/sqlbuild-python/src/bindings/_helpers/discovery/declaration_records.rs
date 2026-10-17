@@ -16,7 +16,7 @@ use sqlbuild_discovery::tree::models::ProjectTree;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 use std::sync::Arc;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::header_declarations::typed_constant_record;
@@ -29,8 +29,8 @@ use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::model_config::header_columns::schema_columns;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{NativeDiscoverySession, NativeProjectTree};
 
@@ -72,7 +72,7 @@ impl<'py> FileContext<'_, 'py> {
     }
 
     fn record(&self, class: RecordId, fields: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyAny>> {
-        registry::class(self.py(), class)?.call((), Some(fields))
+        new_record(self.py(), class, (), Some(fields))
     }
 }
 
@@ -85,7 +85,7 @@ pub(crate) fn add_scope_fields(
     let py: Python<'_> = fields.py();
     fields.set_item(
         "scope_kind",
-        registry::class(py, RecordId::ScopeKind)?.call1((scope.scope_kind,))?,
+        enum_from_value(py, RecordId::ScopeKind, scope.scope_kind)?,
     )?;
     for (name, path) in [
         ("ownership_root", &scope.ownership_root),
@@ -128,16 +128,21 @@ fn single_value<'py>(
 
 fn enum_file<'py>(context: &FileContext<'_, 'py>, file: &EnumFile) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
-    let member_class: Bound<'py, PyAny> = registry::class(py, RecordId::EnumMember)?;
-    let declaration_class: Bound<'py, PyAny> = registry::class(py, RecordId::EnumDeclaration)?;
     let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(file.declarations.len());
     for declaration in &file.declarations {
         let members: Vec<Bound<'py, PyAny>> = authored(py, &declaration.members)?
             .iter()
-            .map(|(name, value)| call_with(&member_class, &[("name", name), ("value", value)]))
+            .map(|(name, value)| {
+                new_record_with(
+                    py,
+                    RecordId::EnumMember,
+                    &[("name", name), ("value", value)],
+                )
+            })
             .collect::<PyResult<_>>()?;
-        declarations.push(call_with(
-            &declaration_class,
+        declarations.push(new_record_with(
+            py,
+            RecordId::EnumDeclaration,
             &[
                 ("name", declaration.name.as_str().into_bound_py_any(py)?),
                 ("members", PyTuple::new(py, members)?.into_any()),
@@ -189,13 +194,13 @@ pub(crate) fn source_locations<'py>(
     relative_path: &Bound<'py, PyAny>,
     rows: &[(String, LineColumnSpan)],
 ) -> PyResult<Bound<'py, PyDict>> {
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::SourceLocation)?;
     let located: Bound<'py, PyDict> = PyDict::new(py);
     for (name, span) in rows {
         located.set_item(
             name,
-            call_with(
-                &class,
+            new_record_with(
+                py,
+                RecordId::SourceLocation,
                 &[
                     ("path", relative_path.clone()),
                     ("line", span.line.into_bound_py_any(py)?),
@@ -215,8 +220,6 @@ fn schema_file<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
     let file_path: String = context.file_path.str()?.to_string();
-    let declaration_class: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ModelSchemaDeclaration)?;
     let mut declarations: Vec<Bound<'py, PyAny>> = Vec::with_capacity(file.declarations.len());
     for declaration in &file.declarations {
         let raw_columns: Bound<'py, PyAny> =
@@ -230,8 +233,9 @@ fn schema_file<'py>(
             &source_locations(py, &context.relative_path, &declaration.column_locations)?,
         )?
         .into_any();
-        declarations.push(call_with(
-            &declaration_class,
+        declarations.push(new_record_with(
+            py,
+            RecordId::ModelSchemaDeclaration,
             &[
                 ("name", declaration.name.as_str().into_bound_py_any(py)?),
                 (
@@ -288,8 +292,9 @@ fn audit_block<'py>(py: Python<'py>, block: &AuditBlock) -> PyResult<Bound<'py, 
         host::entry(py, FacadeHost::AuditEvaluationMode)?.call1((block.evaluation_mode,))?;
     let measurement: Bound<'py, PyAny> =
         if mode.is(&host::entry(py, FacadeHost::AuditEvaluationMode)?.getattr(MEASUREMENT_MODE)?) {
-            call_with(
-                &registry::class(py, RecordId::MeasurementContract)?,
+            new_record_with(
+                py,
+                RecordId::MeasurementContract,
                 &[
                     ("value_column", header_values.as_any().get_item("value")?),
                     (
@@ -309,8 +314,9 @@ fn audit_block<'py>(py: Python<'py>, block: &AuditBlock) -> PyResult<Bound<'py, 
         } else {
             py.None().into_bound(py)
         };
-    call_with(
-        &registry::class(py, RecordId::DiscoveredAuditBlock)?,
+    new_record_with(
+        py,
+        RecordId::DiscoveredAuditBlock,
         &[
             ("audit_index", block.audit_index.into_bound_py_any(py)?),
             ("header_values", header_values.into_any()),
@@ -345,7 +351,7 @@ fn audit_file<'py>(
     let declaration_kind: &str = context.scope.map_or("", |scope| scope.declaration_kind);
     fields.set_item(
         "declaration_kind",
-        registry::class(py, RecordId::DeclarationKind)?.call1((declaration_kind,))?,
+        enum_from_value(py, RecordId::DeclarationKind, declaration_kind)?,
     )?;
     context.add_scope(&fields)?;
     context.record(RecordId::DiscoveredAuditFile, &fields)
@@ -518,13 +524,13 @@ fn seed_records<'py, T>(
     files: &[ScopedFile<T>],
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = faults.project_dir.py();
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::DiscoveredSeedFile)?;
     let seeds: Vec<Bound<'py, PyAny>> = files
         .iter()
         .map(|scoped| {
             let relative: Py<PyAny> = path_object(py, tree, scoped.file.relative_path.clone())?;
-            call_with(
-                &class,
+            new_record_with(
+                py,
+                RecordId::DiscoveredSeedFile,
                 &[
                     ("file_path", faults.project_dir.div(relative.bind(py))?),
                     ("relative_path", path_class(py)?.call1((relative,))?),
@@ -665,8 +671,9 @@ pub(crate) fn discover_adapter_file<'py>(
     if !file_path.call_method0("is_file")?.is_truthy()? {
         return Ok(py.None().into_bound(py));
     }
-    call_with(
-        &registry::class(py, RecordId::DiscoveredAdapterFile)?,
+    new_record_with(
+        py,
+        RecordId::DiscoveredAdapterFile,
         &[
             ("file_path", file_path),
             ("relative_path", path_class(py)?.call1(("adapter.py",))?),

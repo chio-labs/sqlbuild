@@ -21,6 +21,7 @@ use sqlbuild_core::dbt_graph::types::DbtSelectorResolver;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -267,8 +268,9 @@ fn selection_result<'py>(py: Python<'py>, selection: DbtSelection) -> PyResult<B
         .into_iter()
         .map(|(term, translated)| PyTuple::new(py, [term, translated]))
         .collect::<PyResult<_>>()?;
-    call_with(
-        &registry::class(py, RecordId::DbtInteropSelectionResult)?,
+    new_record_with(
+        py,
+        RecordId::DbtInteropSelectionResult,
         &[
             (
                 "sqlbuild_model_names",

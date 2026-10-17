@@ -17,7 +17,7 @@ use sqlbuild_discovery::yaml_files::models::{YamlFileOutcome, YamlPathFailure};
 use std::path::PathBuf;
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{
@@ -29,8 +29,8 @@ use crate::bindings::_helpers::discovery::snapshot::{
 use crate::bindings::_helpers::discovery::yaml_entries::{
     parse_schema_document, parse_sources_document,
 };
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::{NativeProjectTree, YamlDiscoveryRequest};
 
 /// The most YAML bytes one native load reads before its files are built and released.
@@ -223,7 +223,6 @@ pub(crate) fn discover_source_files<'py>(
             project_dir: project_dir.clone(),
             on_fault,
         };
-        let class: Bound<'py, PyAny> = registry::class(py, RecordId::DiscoveredSourceFile)?;
         let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
         load_files(
             project_dir,
@@ -231,8 +230,9 @@ pub(crate) fn discover_source_files<'py>(
             |(relative_path, file_path), built| {
                 let record = built.and_then(|(contents, loaded)| {
                     let shown: String = file_path.str()?.to_str()?.to_owned();
-                    call_with(
-                        &class,
+                    new_record_with(
+                        py,
+                        RecordId::DiscoveredSourceFile,
                         &[
                             ("file_path", file_path.clone()),
                             ("relative_path", relative_path.clone()),
@@ -283,7 +283,6 @@ pub(crate) fn discover_schema_files<'py>(
         if paths.is_empty() {
             return record_tuple(py, Vec::new());
         }
-        let class: Bound<'py, PyAny> = registry::class(py, RecordId::DiscoveredSchemaFile)?;
         let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
         load_files(
             project_dir,
@@ -291,8 +290,9 @@ pub(crate) fn discover_schema_files<'py>(
             |(relative_path, file_path), built| {
                 let (contents, loaded) = built?;
                 let shown: String = file_path.str()?.to_str()?.to_owned();
-                records.push(call_with(
-                    &class,
+                records.push(new_record_with(
+                    py,
+                    RecordId::DiscoveredSchemaFile,
                     &[
                         ("file_path", file_path.clone()),
                         ("relative_path", relative_path),

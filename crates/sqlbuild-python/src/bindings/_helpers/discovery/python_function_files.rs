@@ -17,11 +17,11 @@ use sqlbuild_pysource::udf_functions::main::udf_function::udf_function;
 use sqlbuild_pysource::udf_functions::models::{UdfFunction, UdfShape};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::discovery::declaration_records::path_class;
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -250,8 +250,9 @@ fn function_record<'py>(
         contents: PyString::new(py, &contents),
     };
     let (header_values, entry_point, body_python) = parsed_function(&source)?;
-    call_with(
-        &registry::class(py, RecordId::DiscoveredPythonFunctionFile)?,
+    new_record_with(
+        py,
+        RecordId::DiscoveredPythonFunctionFile,
         &[
             ("file_path", source.file_path.clone()),
             ("relative_path", source.relative_path.clone()),

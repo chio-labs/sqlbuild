@@ -17,6 +17,7 @@ use crate::bindings::_helpers::dbt_interop::profile_load::{
     load_dbt_project_metadata, load_selected_dbt_profile_output,
 };
 use crate::bindings::_helpers::dbt_interop::runner::launch_os_error;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::types::CompilerDetach;
 use sqlbuild_config::dbt_profile::models::DbtProjectMetadata;
 
@@ -146,8 +147,9 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
         project_file.call_method("write_text", (&toml,), Some(&encoding))?;
         progress(&callbacks, "complete", "Wrote SQLBuild project config.")?;
     }
-    call_with(
-        &registry::class(py, RecordId::DbtInitResult)?,
+    new_record_with(
+        py,
+        RecordId::DbtInitResult,
         &[
             ("output_dir", output_dir),
             ("project_file", project_file),

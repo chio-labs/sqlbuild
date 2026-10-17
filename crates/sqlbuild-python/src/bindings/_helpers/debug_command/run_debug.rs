@@ -36,6 +36,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -123,7 +124,7 @@ fn warehouse_checks(
         selected_target: &context.selected_target,
     };
     let mut checks: Vec<WarehouseCheck> = Vec::new();
-    for group in registry::class(py, RecordId::WarehouseGroup)?.try_iter()? {
+    for group in record_class(py, RecordId::WarehouseGroup)?.try_iter()? {
         let group: Bound<'_, PyAny> = group?;
         let group_name: String = native_field(&group, "value")?.str()?.extract()?;
         if !supports_session_warehouse {

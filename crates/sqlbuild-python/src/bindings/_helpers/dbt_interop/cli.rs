@@ -21,6 +21,9 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, new_record_with, record_class,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -224,7 +227,7 @@ fn parse_dbt_ls_json_lines<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound
 
 /// The `DbtLsNode`s of `dbt ls --output json` lines.
 pub(crate) fn ls_nodes<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound<'py, PyTuple>> {
-    let node_class: Bound<'py, PyAny> = registry::class(py, RecordId::DbtLsNode)?;
+    let node_class: Bound<'py, PyAny> = record_class(py, RecordId::DbtLsNode)?;
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
     for line in python_splitlines(stdout) {
         let stripped: &str = python_strip(line);
@@ -299,10 +302,10 @@ fn route_dbt_interop_args<'py>(
     let flags: DbtParsedFlags = parsed_flags(parsed)?;
     let (kind, routed): (DbtInteropCommandKind, DbtRoutedArgs) =
         route(&command, &flags).map_err(|error| raised(py, ErrorId::DbtInteropArgument, error))?;
-    let command: Bound<'py, PyAny> =
-        registry::class(py, RecordId::DbtInteropCommand)?.call1((kind.name(),))?;
-    call_with(
-        &registry::class(py, RecordId::DbtInteropRoutedArgs)?,
+    let command: Bound<'py, PyAny> = enum_from_value(py, RecordId::DbtInteropCommand, kind.name())?;
+    new_record_with(
+        py,
+        RecordId::DbtInteropRoutedArgs,
         &[
             ("command", command),
             ("select", PyTuple::new(py, flags.select)?.into_any()),
@@ -382,8 +385,9 @@ fn resolve_dbt_config<'py>(
         || py.None().into_bound(py),
         |target| PyString::new(py, &target).into_any(),
     );
-    call_with(
-        &registry::class(py, RecordId::ResolvedDbtConfig)?,
+    new_record_with(
+        py,
+        RecordId::ResolvedDbtConfig,
         &[
             (
                 "project_dir",
