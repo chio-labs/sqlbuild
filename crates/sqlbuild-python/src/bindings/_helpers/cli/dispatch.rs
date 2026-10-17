@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use crate::bindings::_helpers::cli::launch_state::withhold_launch_record;
 use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehouse_scope;
+use crate::bindings::_helpers::command_runtime::warehouses::validate_cli_warehouse;
 use crate::bindings::_helpers::diff_report::support::cli_error;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use pyo3::IntoPyObjectExt;
@@ -19,7 +20,7 @@ use sqlbuild_cli::dispatch::models::{
 use sqlbuild_core::format_command::main::format_path_selectors::format_path_selectors;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -346,13 +347,12 @@ pub(crate) fn dispatch_command<'py>(
                 .call1((raw_project_dir,))?
                 .call_method0("resolve")?
         };
-        call_with(
-            &registry::native(py, NativeAttr::ValidateCliWarehouse)?,
-            &[
-                ("cli_warehouse", warehouse.clone()),
-                ("project_dir", project_dir),
-            ],
-        )?;
+        validate_cli_warehouse(
+            py,
+            warehouse.clone().extract::<Option<String>>()?,
+            project_dir,
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     }
     let scope: Bound<'py, PyAny> = Bound::new(
         py,

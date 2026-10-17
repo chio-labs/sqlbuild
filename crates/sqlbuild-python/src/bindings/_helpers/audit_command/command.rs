@@ -12,13 +12,18 @@ use sqlbuild_core::audit_command::models::AuditCounts;
 use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords, within};
+use crate::bindings::_helpers::compile_driver::selection_phases::compile_static_command_context;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::command_plans::build_audit_command_plan;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::result_output::documents::format_audit_execution_json;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 
 const EXECUTION_COMMAND: &str = "sqb audit";
 const PASS_OUTCOME: &str = "pass";
@@ -135,8 +140,8 @@ fn compile_audits<'py>(
             ("external_sql_reference_resolver", resolver),
         ],
     )?;
-    let context: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::CompileStaticCommandContext)?,
+    let context: Bound<'py, PyAny> = compile_static_command_context(Some(&keywords(
+        py,
         &[
             ("discovered_inputs", discovered),
             ("adapter", adapter.clone()),
@@ -148,19 +153,19 @@ fn compile_audits<'py>(
                     .getattr("on_progress")?,
             ),
         ],
+    )?))?;
+    let plan_output: Bound<'py, PyAny> = build_audit_command_plan(
+        &native_field(&context, "project")?,
+        &adapter,
+        &native_field(&context, "scope")?,
+        &native_field(&context, "relations")?,
     )?;
-    let plan_output: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildAuditCommandPlan)?,
-        &[
-            ("project", native_field(&context, "project")?),
-            ("adapter", adapter),
-            ("scope", native_field(&context, "scope")?),
-            ("relations", native_field(&context, "relations")?),
-        ],
-    )?;
-    call_with(
-        &registry::native(py, NativeAttr::BuildStaticPipelineResult)?,
-        &[("context", context), ("plan_output", plan_output)],
+    build_static_pipeline_result(
+        py,
+        Some(keywords(
+            py,
+            &[("context", context), ("plan_output", plan_output)],
+        )?),
     )
 }
 
@@ -400,17 +405,13 @@ fn audit_payload<'py>(
     (concurrency, worker_count): (i64, i64),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = results.py();
-    let payload: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::FormatAuditExecutionJson)?,
-        &[
-            ("results", results.clone()),
-            (
-                "configured_concurrency",
-                PyInt::new(py, concurrency).into_any(),
-            ),
-            ("worker_count", PyInt::new(py, worker_count).into_any()),
-        ],
-    )?;
+    let payload: Bound<'py, PyAny> = format_audit_execution_json(
+        py,
+        results.clone(),
+        Some(PyInt::new(py, concurrency).into_any()).filter(|value| !value.is_none()),
+        Some(PyInt::new(py, worker_count).into_any()).filter(|value| !value.is_none()),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let projection: Bound<'py, PyAny> =
         host::entry(py, ExecutorHost::CurrentAuditResultProjection)?.call0()?;
     if projection.is_none() {
@@ -478,17 +479,13 @@ fn complete(
         &PyTuple::new(py, results)?.into_any(),
         (run.concurrency, run.worker_count),
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
-        &[
-            ("payload", payload),
-            ("json_output", native_field(request, "json_output")?),
-            (
-                "json_output_path",
-                native_field(request, "json_output_path")?,
-            ),
-        ],
-    )?;
+    write_execution_json_output(
+        py,
+        payload,
+        native_field(request, "json_output")?.extract::<bool>()?,
+        native_field(request, "json_output_path")?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(audit_exit_code(counts.failed))
 }
 

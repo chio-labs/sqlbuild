@@ -18,7 +18,11 @@ use crate::bindings::_helpers::check::check_core::{
     build_check_relation_targets, load_results_by_loader_name, record_python_run_state_results,
     relevant_check_functions,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::check::check_results::write_check_results;
+use crate::bindings::_helpers::cli::progress_text::write_execution_header;
+use crate::bindings::_helpers::command_runtime::warehouses::describe_connection_warehouse;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords, within};
+use crate::bindings::_helpers::compile_driver::relation_targets::build_project_relation_targets;
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::freshness::publication::append_freshness_records;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
@@ -101,16 +105,11 @@ fn run_context_facts(
         + loaded_sources
         + count(&discovered, "task_functions")?
         + count(&discovered, "asset_functions")?;
-    let resolved: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DescribeConnectionWarehouse)?,
-        &[
-            ("discovered_inputs", discovered),
-            (
-                "selected_target",
-                native_field(&project, "effective_target_name")?,
-            ),
-            ("connection_config", context.get("connection_config")?),
-        ],
+    let resolved: Bound<'_, PyAny> = describe_connection_warehouse(
+        py,
+        discovered,
+        native_field(&project, "effective_target_name")?,
+        context.get("connection_config")?,
     )?;
     let warehouse: Bound<'_, PyAny> = native_field(&resolved, "warehouse")?;
     let warehouse: Option<(String, String)> = if warehouse.is_none() {
@@ -224,16 +223,20 @@ pub(crate) fn prepare_build_execution<'py>(
     if context.verbose {
         write_run_context(context, pipeline)?;
     } else {
-        call_with(
-            &registry::native(py, NativeAttr::WriteExecutionHeader)?,
-            &[
-                ("stream", context.stream.clone()),
-                ("command", text(py, EXECUTION_COMMAND)),
-                ("target", none(py)),
-                ("concurrency", concurrency.clone()),
-                ("use_color", boolean(py, context.use_color)),
-            ],
-        )?;
+        write_execution_header(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("stream", context.stream.clone()),
+                    ("command", text(py, EXECUTION_COMMAND)),
+                    ("target", none(py)),
+                    ("concurrency", concurrency.clone()),
+                    ("use_color", boolean(py, context.use_color)),
+                ],
+            )?),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     }
     let connection_progress: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
@@ -325,10 +328,14 @@ pub(crate) fn execute_build_plan<'py>(
             ("providers", providers.clone()),
             (
                 "project_relations",
-                call_with(
-                    &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
-                    &[("adapter", adapter.clone()), ("plan_output", plan.clone())],
-                )?,
+                build_project_relation_targets(
+                    py,
+                    Some(keywords(
+                        py,
+                        &[("adapter", adapter.clone()), ("plan_output", plan.clone())],
+                    )?),
+                )
+                .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?,
             ),
         ],
     )?;
@@ -458,13 +465,17 @@ fn check_runtime<'py>(
             ),
             (
                 "project_relations",
-                call_with(
-                    &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
-                    &[
-                        ("adapter", adapter),
-                        ("plan_output", native_field(pipeline, "plan_output")?),
-                    ],
-                )?,
+                build_project_relation_targets(
+                    py,
+                    Some(keywords(
+                        py,
+                        &[
+                            ("adapter", adapter),
+                            ("plan_output", native_field(pipeline, "plan_output")?),
+                        ],
+                    )?),
+                )
+                .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?,
             ),
             ("providers", providers.clone()),
         ],
@@ -559,16 +570,20 @@ pub(crate) fn run_post_build_python_checks<'py>(
     let closed: PyResult<Bound<'py, PyAny>> = adapter.call_method1("close", (connection,));
     let check_results: Bound<'py, PyAny> = executed?;
     closed?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteCheckResults)?,
-        &[
-            ("stream", context.stream.clone()),
-            ("results", check_results.clone()),
-            ("use_color", boolean(py, context.use_color)),
-            ("check_functions", tuple(py, &checks)?),
-            ("python_graph", graph),
-        ],
-    )?;
+    write_check_results(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("stream", context.stream.clone()),
+                ("results", check_results.clone()),
+                ("use_color", boolean(py, context.use_color)),
+                ("check_functions", tuple(py, &checks)?),
+                ("python_graph", graph),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(check_results)
 }
 

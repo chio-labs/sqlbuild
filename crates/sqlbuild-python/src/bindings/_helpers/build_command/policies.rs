@@ -240,7 +240,7 @@ pub(crate) fn enforce_plan_policies(
 /// Apply every plan safety gate before a build executes anything.
 #[pyfunction]
 #[pyo3(name = "enforce_plan_safety_policies", signature = (**options))]
-fn enforce_plan_safety_policies_binding<'py>(
+pub(crate) fn enforce_plan_safety_policies_binding<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> Result<(), PyErr> {

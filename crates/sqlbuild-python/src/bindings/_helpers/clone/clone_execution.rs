@@ -13,6 +13,7 @@ use crate::bindings::_helpers::clone::clone_progress::{
     CloneFingerprintReporter, CloneItemPrinter,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
@@ -156,22 +157,11 @@ fn dependency_locations<'py>(
 
 fn target_config<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.adapter.py();
-    call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            (
-                "project_config",
-                native_field(&invocation.discovered, "project_config")?,
-            ),
-            (
-                "local_config",
-                native_field(&invocation.discovered, "local_config")?,
-            ),
-            (
-                "target_name",
-                PyString::new(py, &invocation.destination).into_any(),
-            ),
-        ],
+    resolve_target_config(
+        py,
+        &native_field(&invocation.discovered, "project_config")?,
+        &native_field(&invocation.discovered, "local_config")?,
+        &PyString::new(py, &invocation.destination).into_any(),
     )
 }
 

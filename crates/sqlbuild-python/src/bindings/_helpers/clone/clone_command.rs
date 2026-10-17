@@ -24,16 +24,22 @@ use crate::bindings::_helpers::clone::clone_execution::{
 use crate::bindings::_helpers::clone::clone_pipeline::{ClonePipeline, prepared_clone_pipeline};
 use crate::bindings::_helpers::clone::clone_progress::{clone_item_text, write_line};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::command_runtime::connection::resolve_target_connection_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::result_output::documents::format_clone_execution_json;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 
 const NO_DESTINATION: (&str, &str) = (
     "C406",
@@ -107,16 +113,11 @@ fn target_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
 
 fn clone_policy(discovered: &Bound<'_, PyAny>, (target, flag): (&str, &str)) -> PyResult<bool> {
     let py: Python<'_> = discovered.py();
-    call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered, "project_config")?,
-            ),
-            ("local_config", native_field(discovered, "local_config")?),
-            ("target_name", text(py, target)),
-        ],
+    resolve_target_config(
+        py,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
+        &text(py, target),
     )?
     .getattr("clone")?
     .getattr(flag)?
@@ -140,27 +141,20 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
         Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     progress.call_method1("complete", ("Discovered project.",))?;
-    call_with(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", native_field(request, "select")?),
-            ("exclude", native_field(request, "exclude")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    reject_unit_test_selectors(
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
+        &discovered.clone(),
     )?;
     let mut destination: Bound<'py, PyAny> = native_field(request, "destination_target_name")?;
     if destination.is_none() {
-        destination = call_with(
-            &registry::native(py, NativeAttr::ResolveTargetName)?,
-            &[
-                (
-                    "project_config",
-                    native_field(&discovered, "project_config")?,
-                ),
-                ("local_config", native_field(&discovered, "local_config")?),
-                ("selected_target", py.None().into_bound(py)),
-            ],
-        )?;
+        destination = resolve_target_name(
+            py,
+            &native_field(&discovered, "project_config")?,
+            &native_field(&discovered, "local_config")?,
+            &py.None().into_bound(py),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     }
     if destination.is_none() {
         return Err(user_error(py, NO_DESTINATION));
@@ -203,14 +197,17 @@ fn connect<'py>(
     invocation: &Invocation<'py>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = request.py();
-    let config: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConnectionConfig)?,
-        &[
-            ("discovered_inputs", invocation.discovered.clone()),
-            ("project_dir", invocation.project_dir.clone()),
-            ("target_name", text(py, &invocation.destination)),
-            ("cli_vars", native_field(request, "cli_vars")?),
-        ],
+    let config: Bound<'py, PyAny> = resolve_target_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", invocation.discovered.clone()),
+                ("project_dir", invocation.project_dir.clone()),
+                ("target_name", text(py, &invocation.destination)),
+                ("cli_vars", native_field(request, "cli_vars")?),
+            ],
+        )?),
     )?;
     let progress: Bound<'py, PyAny> = progress_reporter(&invocation.stream, invocation.style)?;
     progress.call_method1(
@@ -350,24 +347,19 @@ fn run_clone_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32
     for (name, resource_type) in resource_types_by_name(&pipeline)? {
         resource_types.set_item(name, resource_type)?;
     }
-    let payload: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::FormatCloneExecutionJson)?,
-        &[
-            ("result", result.clone()),
-            ("resource_types_by_name", resource_types.into_any()),
-        ],
-    )?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
-        &[
-            ("payload", payload),
-            ("json_output", PyBool::new(py, false).to_owned().into_any()),
-            (
-                "json_output_path",
-                native_field(request, "json_output_path")?,
-            ),
-        ],
-    )?;
+    let payload: Bound<'_, PyAny> =
+        format_clone_execution_json(py, result.clone(), resource_types.into_any())
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    write_execution_json_output(
+        py,
+        payload,
+        PyBool::new(py, false)
+            .to_owned()
+            .into_any()
+            .extract::<bool>()?,
+        native_field(request, "json_output_path")?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(clone_exit_code(&items))
 }
 

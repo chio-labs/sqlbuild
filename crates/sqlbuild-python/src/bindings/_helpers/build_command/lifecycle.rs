@@ -14,14 +14,17 @@ use sqlbuild_core::cli_text::models::CliStyle;
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, frozenset, or_none, text, tuple,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::relation_targets::build_project_relation_targets;
+use crate::bindings::_helpers::compile_driver::relation_targets::build_python_relation_targets;
+use crate::bindings::_helpers::graph::python_lifecycle::build_python_sql_run_lifecycle;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_scope::loaders::build_intermediate_source_map;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const SUCCESS_STATUS: &str = "success";
 
@@ -319,10 +322,7 @@ fn lifecycle_plan<'py>(
             ),
         ],
     )?;
-    let plan: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildPythonSqlRunLifecycle)?,
-        &[("selection", selection), ("python_graph", graph.clone())],
-    )?;
+    let plan: Bound<'py, PyAny> = build_python_sql_run_lifecycle(&selection, &graph.clone())?;
     let source_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for name in native_field(&plan, "ingress_loader_names")?.try_iter()? {
@@ -336,13 +336,11 @@ fn lifecycle_plan<'py>(
         imported(py, "builtins", "dict")?.call1((native_field(&plan_output, "source_map")?,))?;
     source_map.call_method1(
         "update",
-        (call_with(
-            &registry::native(py, NativeAttr::BuildIntermediateSourceMap)?,
-            &[
-                ("project", native_field(pipeline, "project")?),
-                ("selected_keys", frozenset(py, &keys)?),
-            ],
-        )?,),
+        (build_intermediate_source_map(
+            &native_field(pipeline, "project")?,
+            &frozenset(py, &keys)?,
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?,),
     )?;
     Ok(LifecyclePlan {
         graph,
@@ -404,22 +402,30 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
             )?,
         )],
     )?;
-    let relation_targets: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildPythonRelationTargets)?,
-        &[
-            ("adapter", adapter.clone()),
-            ("project", project.clone()),
-            ("plan_output", plan_output.clone()),
-            ("required_refs", required),
-        ],
-    )?;
-    let project_relations: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
-        &[
-            ("adapter", adapter.clone()),
-            ("plan_output", plan_output.clone()),
-        ],
-    )?;
+    let relation_targets: Bound<'py, PyAny> = build_python_relation_targets(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter", adapter.clone()),
+                ("project", project.clone()),
+                ("plan_output", plan_output.clone()),
+                ("required_refs", required),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    let project_relations: Bound<'py, PyAny> = build_project_relation_targets(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter", adapter.clone()),
+                ("plan_output", plan_output.clone()),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let parts: RuntimeParts<'_, 'py> = RuntimeParts {
         adapter: &adapter,
         connection_config: &connection_config,

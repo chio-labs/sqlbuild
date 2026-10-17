@@ -14,9 +14,12 @@ use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none,
 };
 use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::pipeline::run_compile_pipeline;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::manifest::builder::build_manifest;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::plan_output::plan_text::format_plan;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -111,14 +114,17 @@ pub(crate) fn compile_build_plan<'py>(context: &BuildContext<'py>) -> PyResult<B
     )?;
     let verbose: bool = native_field(&context.request, "verbose")?.is_truthy()?;
     with_verbose_inspection(py, verbose, || {
-        call_with(
-            &registry::native(py, NativeAttr::RunCompilePipeline)?,
-            &[
-                ("discovered_inputs", context.get("discovered_inputs")?),
-                ("adapter", context.get("adapter")?),
-                ("options", request_options(context)?),
-                ("hooks", hooks),
-            ],
+        run_compile_pipeline(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("discovered_inputs", context.get("discovered_inputs")?),
+                    ("adapter", context.get("adapter")?),
+                    ("options", request_options(context)?),
+                    ("hooks", hooks),
+                ],
+            )?),
         )
     })
 }
@@ -133,22 +139,26 @@ pub(crate) fn write_plan_text(
     let stream: Bound<'_, PyAny> =
         py.import("sys")?
             .getattr(if machine { "stderr" } else { "stdout" })?;
-    let plan_text: String = call_with(
-        &registry::native(py, NativeAttr::FormatPlan)?,
-        &[
-            ("plan", native_field(pipeline, "plan_output")?),
-            (
-                "full_refresh",
-                native_field(&context.request, "full_refresh")?,
-            ),
-            ("use_color", boolean(py, context.use_color)),
-            (
-                "python_plan_entries",
-                native_field(pipeline, "python_plan_entries")?,
-            ),
-            ("include_direct_freshness_diagnostics", boolean(py, false)),
-        ],
-    )?
+    let plan_text: String = format_plan(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", native_field(pipeline, "plan_output")?),
+                (
+                    "full_refresh",
+                    native_field(&context.request, "full_refresh")?,
+                ),
+                ("use_color", boolean(py, context.use_color)),
+                (
+                    "python_plan_entries",
+                    native_field(pipeline, "python_plan_entries")?,
+                ),
+                ("include_direct_freshness_diagnostics", boolean(py, false)),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .extract()?;
     emit(&stream, &format!("\n{plan_text}\n\n"))
 }
@@ -199,8 +209,8 @@ pub(crate) fn write_compile_target(
     let py: Python<'_> = context.py();
     let plan: Bound<'_, PyAny> = native_field(pipeline, "plan_output")?;
     let manifest: Bound<'_, PyAny> = if context.request_flag("manifest")? {
-        call_with(
-            &registry::native(py, NativeAttr::BuildManifest)?,
+        build_manifest(Some(&keywords(
+            py,
             &[
                 ("project", native_field(pipeline, "project")?),
                 ("plan_output", plan.clone()),
@@ -215,21 +225,25 @@ pub(crate) fn write_compile_target(
                 ("upstream_deps", native_field(&plan, "upstream_deps")?),
                 ("downstream_deps", native_field(&plan, "downstream_deps")?),
             ],
-        )?
+        )?))
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     } else {
         none(py)
     };
-    call_with(
-        &registry::native(py, NativeAttr::WriteCompileTarget)?,
-        &[
-            (
-                "target_dir",
-                joined(&context.get("effective_project_dir")?, &["target"])?,
-            ),
-            ("adapter", context.get("adapter")?),
-            ("plan_output", plan),
-            ("manifest", manifest),
-        ],
+    crate::bindings::_helpers::compile_command::target_writer::write_compile_target(
+        py,
+        Some(keywords(
+            py,
+            &[
+                (
+                    "target_dir",
+                    joined(&context.get("effective_project_dir")?, &["target"])?,
+                ),
+                ("adapter", context.get("adapter")?),
+                ("plan_output", plan),
+                ("manifest", manifest),
+            ],
+        )?),
     )?;
     Ok(())
 }

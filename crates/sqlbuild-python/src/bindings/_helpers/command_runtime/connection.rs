@@ -15,9 +15,12 @@ use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 use crate::bindings::_helpers::command_runtime::runtime_errors::raised;
 use crate::bindings::_helpers::command_runtime::warehouses::{WarehouseInputs, apply_warehouse};
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -206,14 +209,13 @@ fn require_configured_connection(
     {
         return Ok(());
     }
-    let target_name: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetName)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("selected_target", selected_target.clone()),
-        ],
-    )?;
+    let target_name: Bound<'_, PyAny> = resolve_target_name(
+        py,
+        &project_config.clone(),
+        &local_config.clone(),
+        &selected_target.clone(),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let project_file: String = path(py, project_dir)?
         .div(PROJECT_CONFIG_FILENAME)?
         .str()?
@@ -221,14 +223,8 @@ fn require_configured_connection(
     if target_name.is_none() {
         return Err(raised(py, missing_connection_error(&project_file, None)));
     }
-    let target_config: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            ("project_config", project_config),
-            ("local_config", local_config),
-            ("target_name", target_name.clone()),
-        ],
-    )?;
+    let target_config: Bound<'_, PyAny> =
+        resolve_target_config(py, &project_config, &local_config, &target_name.clone())?;
     if !native_field(&target_config, "connection_name")?.is_none()
         || native_field(&target_config, "connection")?.is_truthy()?
     {
@@ -250,13 +246,10 @@ pub(crate) fn project_connection_config<'py>(
     if require_connection {
         require_configured_connection(discovered_inputs, project_dir, selected_target)?;
     }
-    let raw_config: Bound<'py, PyDict> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
-        &[
-            ("discovered_inputs", discovered_inputs.clone()),
-            ("selected_target", selected_target.clone()),
-            ("cli_vars", cli_vars.clone()),
-        ],
+    let raw_config: Bound<'py, PyDict> = build_effective_connection_config(
+        &discovered_inputs.clone(),
+        Some(selected_target.clone()).filter(|value| !value.is_none()),
+        Some(cli_vars.clone()).filter(|value| !value.is_none()),
     )?
     .cast_into()?;
     let adapter_name: Bound<'py, PyAny> = call_with(
@@ -308,7 +301,7 @@ pub(crate) fn resolve_project_connection_config<'py>(
 /// Resolve the effective connection config for one named target.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_target_connection_config<'py>(
+pub(crate) fn resolve_target_connection_config<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

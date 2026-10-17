@@ -17,19 +17,24 @@ use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, none, text, utc_now,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::build_progress::footer::format_build_footer;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::plan_has_executable_work;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     write_python_check_runtime_target, write_runtime_target,
 };
 use crate::bindings::_helpers::cost_report::degradation::{
     finalize_build_cost as finalize_cost, render_build_cost,
 };
+use crate::bindings::_helpers::cost_report::functions::cost_output_payload;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::result_output::documents::format_build_execution_json;
+use crate::bindings::_helpers::result_output::documents::format_degradable_build_execution_json;
 
 const SUCCESS_STATUS: &str = "success";
 const PENDING_MESSAGE: &str = "Build cost collection has not completed.";
@@ -156,10 +161,8 @@ fn cost_payload<'py>(py: Python<'py>, record: &Bound<'py, PyAny>) -> PyResult<Bo
     if record.is_none() {
         return Ok(none(py));
     }
-    call_with(
-        &registry::native(py, NativeAttr::CostOutputPayload)?,
-        &[("record", record.clone())],
-    )
+    cost_output_payload(py, &record.clone())
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
 
 fn run_id_for<'py>(
@@ -194,16 +197,20 @@ fn write_json(context: &BuildContext<'_>, payload: Bound<'_, PyAny>) -> PyResult
 fn finalize_no_work(context: &BuildContext<'_>, pipeline: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = context.py();
     let plan: Bound<'_, PyAny> = native_field(pipeline, "plan_output")?;
-    if call_with(
-        &registry::native(py, NativeAttr::PlanHasExecutableWork)?,
-        &[
-            ("plan", plan.clone()),
-            (
-                "python_plan_entries",
-                native_field(pipeline, "python_plan_entries")?,
-            ),
-        ],
-    )?
+    if plan_has_executable_work(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", plan.clone()),
+                (
+                    "python_plan_entries",
+                    native_field(pipeline, "python_plan_entries")?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .is_truthy()?
     {
         return Ok(false);
@@ -232,15 +239,19 @@ fn finalize_no_work(context: &BuildContext<'_>, pipeline: &Bound<'_, PyAny>) -> 
             host::entry(py, ExecutorHost::BuildStatus)?.getattr("SUCCESS")?,
         )],
     )?;
-    let payload: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::FormatBuildExecutionJson)?,
-        &[
-            ("result", result),
-            ("plan", plan),
-            ("run_id", run_id_for(pipeline, &record)?),
-            ("cost", cost_payload(py, &record)?),
-        ],
-    )?;
+    let payload: Bound<'_, PyAny> = format_build_execution_json(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("result", result),
+                ("plan", plan),
+                ("run_id", run_id_for(pipeline, &record)?),
+                ("cost", cost_payload(py, &record)?),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     write_json(context, payload)?;
     Ok(true)
 }
@@ -353,30 +364,32 @@ pub(crate) fn complete_direct_build<'py>(
     );
     let cost_seconds: f64 = finish_cost_timing(context, cost_started);
     let record: Bound<'py, PyAny> = record?;
-    let footer: String = call_with(
-        &registry::native(py, NativeAttr::FormatBuildFooter)?,
-        &[
-            ("result", result.clone()),
-            ("elapsed", native_field(&preparation.callbacks, "elapsed")?),
-            ("use_color", boolean(py, context.use_color)),
-            ("python_node_results", outcome.python_results.clone()),
-        ],
-    )?
+    let footer: String = format_build_footer(
+        &result.clone(),
+        native_field(&preparation.callbacks, "elapsed")?.extract::<f64>()?,
+        boolean(py, context.use_color).extract::<bool>()?,
+        Some(&outcome.python_results.clone()).filter(|value| !value.is_none()),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .extract()?;
     emit(&context.stream, &format!("\n{footer}\n"))?;
-    let payload: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::FormatDegradableBuildExecutionJson)?,
-        &[
-            ("result", result.clone()),
-            ("plan", plan),
-            ("python_node_results", outcome.python_results.clone()),
-            ("python_check_results", check_results.clone()),
-            ("command", text(py, "build")),
-            ("run_id", run_id_for(pipeline, &record)?),
-            ("cost", cost_payload(py, &record)?),
-            ("execution_succeeded", boolean(py, exit_code == 0)),
-        ],
-    )?;
+    let payload: Bound<'py, PyAny> = format_degradable_build_execution_json(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("result", result.clone()),
+                ("plan", plan),
+                ("python_node_results", outcome.python_results.clone()),
+                ("python_check_results", check_results.clone()),
+                ("command", text(py, "build")),
+                ("run_id", run_id_for(pipeline, &record)?),
+                ("cost", cost_payload(py, &record)?),
+                ("execution_succeeded", boolean(py, exit_code == 0)),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     write_json(context, payload)?;
     render_build_cost(&record, &context.stream, context.use_color)?;
     if context.verbose {

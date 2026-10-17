@@ -6,13 +6,12 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::planner_entries::clone_plans::run_clone_planning;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The `ClonePipelineResult` fields after the two projects, in `run_clone_planning` order.
 const PLANNED_FIELDS: [&str; 8] = [
@@ -118,19 +117,23 @@ pub(crate) fn prepared_clone_pipeline<'py>(
         source_project(pipeline, &origin_project, origin_target)?;
     let destination_source_project: Bound<'py, PyAny> =
         source_project(pipeline, &destination_project, destination_target)?;
-    let planned: Bound<'py, PyTuple> = call_with(
-        &registry::native(py, NativeAttr::RunClonePlanning)?,
-        &[
-            ("project", destination_project.clone()),
-            ("select", native_field(&pipeline.options, "select")?),
-            ("exclude", native_field(&pipeline.options, "exclude")?),
-            ("adapter", pipeline.adapter.clone()),
-            ("connection", native_field(&pipeline.connection, "handle")?),
-            ("origin_project", origin_project.clone()),
-            ("origin_source_project", origin_source_project),
-            ("destination_source_project", destination_source_project),
-        ],
-    )?
+    let planned: Bound<'py, PyTuple> = run_clone_planning(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project", destination_project.clone()),
+                ("select", native_field(&pipeline.options, "select")?),
+                ("exclude", native_field(&pipeline.options, "exclude")?),
+                ("adapter", pipeline.adapter.clone()),
+                ("connection", native_field(&pipeline.connection, "handle")?),
+                ("origin_project", origin_project.clone()),
+                ("origin_source_project", origin_source_project),
+                ("destination_source_project", destination_source_project),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .downcast_into()?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
         ("origin_project", origin_project),

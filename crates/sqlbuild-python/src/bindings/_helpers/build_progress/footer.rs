@@ -11,7 +11,7 @@ use crate::bindings::_helpers::build_progress::result_text::{build_text, python_
 /// Render the build completion line, warnings, failures and skipped rollup.
 #[pyfunction]
 #[pyo3(signature = (*, result, elapsed, use_color, python_node_results = None))]
-fn format_build_footer(
+pub(crate) fn format_build_footer(
     result: &Bound<'_, PyAny>,
     elapsed: f64,
     use_color: bool,

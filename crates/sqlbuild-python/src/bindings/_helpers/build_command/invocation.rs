@@ -10,9 +10,12 @@ use sqlbuild_core::build_command::models::DurationLimit;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -58,16 +61,11 @@ fn target_config<'py>(
     target_name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
-    call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered, "project_config")?,
-            ),
-            ("local_config", native_field(discovered, "local_config")?),
-            ("target_name", target_name.clone()),
-        ],
+    resolve_target_config(
+        py,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
+        &target_name.clone(),
     )
 }
 
@@ -119,17 +117,13 @@ pub(crate) fn resolve_build_context<'py>(
         )?),
     )?;
     let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
-    let target_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered, "project_config")?,
-            ),
-            ("local_config", native_field(&discovered, "local_config")?),
-            ("selected_target", selected_target.clone()),
-        ],
-    )?;
+    let target_name: Bound<'py, PyAny> = resolve_target_name(
+        py,
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
+        &selected_target.clone(),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let defer_clone_from: Bound<'py, PyAny> =
         or_none(native_field(request, "defer_clone_from")?, || {
             if target_name.is_none() {
@@ -201,12 +195,9 @@ pub(crate) fn resolve_build_context<'py>(
     let load_sources: Bound<'py, PyAny> = native_field(request, "load_sources")?;
     let should_load_sources: bool = native_field(request, "reload_sources")?.is_truthy()?
         || if load_sources.is_none() {
-            call_with(
-                &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
-                &[("discovered_inputs", discovered.clone())],
-            )?
-            .getattr("auto_load_sources")?
-            .is_truthy()?
+            build_effective_settings_config(&discovered.clone())?
+                .getattr("auto_load_sources")?
+                .is_truthy()?
         } else {
             load_sources.is_truthy()?
         };

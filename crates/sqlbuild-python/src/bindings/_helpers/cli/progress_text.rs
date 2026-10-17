@@ -29,7 +29,11 @@ const HEADER_OPTIONS: (&[&str], &[&str]) = (
 /// Format command and execution context for a progress header.
 #[pyfunction]
 #[pyo3(signature = (*, command, target, concurrency))]
-fn format_execution_header(command: &str, target: Option<&str>, concurrency: i64) -> String {
+pub(crate) fn format_execution_header(
+    command: &str,
+    target: Option<&str>,
+    concurrency: i64,
+) -> String {
     format_header(command, target, concurrency)
 }
 
