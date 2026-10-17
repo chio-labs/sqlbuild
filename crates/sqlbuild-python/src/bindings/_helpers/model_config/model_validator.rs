@@ -97,7 +97,10 @@ fn returns_table(file: &Bound<'_, PyAny>) -> PyResult<bool> {
 impl NativeModelValidator {
     /// The validator for the resources and materializations `inputs` discovered.
     #[staticmethod]
-    fn from_inputs(inputs: Bound<'_, PyAny>, microbatch_concurrency: bool) -> PyResult<Self> {
+    pub(crate) fn from_inputs(
+        inputs: Bound<'_, PyAny>,
+        microbatch_concurrency: bool,
+    ) -> PyResult<Self> {
         let names: ResourceNames = discovered_names(&inputs)?;
         let custom_materializations: HashSet<String> =
             each(&inputs, "materialization_files", |file| {

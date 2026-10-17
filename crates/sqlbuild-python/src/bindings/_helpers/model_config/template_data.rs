@@ -186,7 +186,7 @@ fn expand_effective_vars<'py>(raw_values: &Bound<'py, PyDict>) -> PyResult<Bound
 
 /// Record native template environment and context reads for project reuse, in order.
 #[pyfunction]
-fn record_template_reads(py: Python<'_>, reads: Vec<(String, String)>) -> PyResult<()> {
+pub(crate) fn record_template_reads(py: Python<'_>, reads: Vec<(String, String)>) -> PyResult<()> {
     record_reads(
         py,
         reads

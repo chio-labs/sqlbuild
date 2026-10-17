@@ -45,7 +45,7 @@ pub(crate) struct DbtRunner {
 impl DbtRunner {
     #[new]
     #[pyo3(signature = (*, dbt_executable = None, invoker = None))]
-    fn new(dbt_executable: Option<String>, invoker: Option<Py<PyAny>>) -> Self {
+    pub(crate) fn new(dbt_executable: Option<String>, invoker: Option<Py<PyAny>>) -> Self {
         Self {
             dbt_executable: dbt_executable
                 .filter(|value| !value.is_empty())

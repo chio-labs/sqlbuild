@@ -639,7 +639,7 @@ fn complete(
 /// Run one `sqb test` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let inspect_only: bool = request.getattr("inspect")?.is_truthy()?;
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,

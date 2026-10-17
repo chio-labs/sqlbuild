@@ -264,7 +264,7 @@ pub(crate) fn enforce_plan_safety_policies_binding<'py>(
 /// Reject a build whose expanded model count exceeds its target policy.
 #[pyfunction]
 #[pyo3(name = "enforce_model_execution_limit", signature = (**options))]
-fn enforce_model_execution_limit_binding<'py>(
+pub(crate) fn enforce_model_execution_limit_binding<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> Result<(), PyErr> {

@@ -4,20 +4,35 @@ use std::sync::Mutex;
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use sqlbuild_config::command_connection::constants::COMMAND_WAREHOUSE_GROUPS;
 
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const CONTEXT_ATTRIBUTE: &str = "_command_warehouse_scope_context";
 const CONTEXT_NAME: &str = "sqlbuild_command_warehouse_scope";
 
+/// The `ContextVar` holding the active command's warehouse scope.
+static CONTEXT: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+
 fn context_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    registry::native(py, NativeAttr::CommandWarehouseScopeContext)
+    Ok(CONTEXT
+        .get_or_try_init(py, || {
+            let keywords: Bound<'_, PyDict> = PyDict::new(py);
+            keywords.set_item("default", py.None())?;
+            Ok::<_, pyo3::PyErr>(
+                py.import("contextvars")?
+                    .getattr("ContextVar")?
+                    .call((CONTEXT_NAME,), Some(&keywords))?
+                    .unbind(),
+            )
+        })?
+        .bind(py)
+        .clone())
 }
 
 /// Installs one command's warehouse scope for the duration of a `with` block.
@@ -112,14 +127,7 @@ pub(crate) fn current_command_warehouse_scope(py: Python<'_>) -> PyResult<Bound<
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py: Python<'_> = module.py();
-    let keywords: Bound<'_, PyDict> = PyDict::new(py);
-    keywords.set_item("default", py.None())?;
-    module.add(
-        CONTEXT_ATTRIBUTE,
-        py.import("contextvars")?
-            .getattr("ContextVar")?
-            .call((CONTEXT_NAME,), Some(&keywords))?,
-    )?;
+    module.add(CONTEXT_ATTRIBUTE, context_variable(py)?)?;
     module.add_class::<CommandWarehouseScopeInstall>()?;
     module.add_function(wrap_pyfunction!(command_warehouse_scope, module)?)?;
     module.add_function(wrap_pyfunction!(current_command_warehouse_scope, module)?)

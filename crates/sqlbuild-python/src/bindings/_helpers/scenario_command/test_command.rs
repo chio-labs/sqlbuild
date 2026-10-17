@@ -312,7 +312,10 @@ fn run_scenarios(
 /// Run one `sqb scenario test` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_scenario_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_scenario_test_command(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+) -> PyResult<i32> {
     let run: TestRun<'_> = prepare(py, request)?;
     let planning: Bound<'_, PyAny> = write_headers(
         &run.stream,

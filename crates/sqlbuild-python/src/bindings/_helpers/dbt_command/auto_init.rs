@@ -11,14 +11,13 @@ use sqlbuild_core::dbt_command::main::forwarded_dbt_args::forwarded_dbt_args;
 use sqlbuild_core::dbt_command::main::render_dbt_auto_init::render_dbt_auto_init;
 use sqlbuild_core::dbt_command::models::ForwardedArg;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::cli::progress_reporters::DbtInitProgressReporter;
 use crate::bindings::_helpers::dbt_command::init_project::build_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 use crate::bindings::_helpers::records::construct::new_record_with;
 
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 fn project_config_found(directory: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -82,13 +81,12 @@ pub(crate) fn ensure_twin_project<'py>(
     let use_color: bool =
         !no_color && !args.iter().any(|arg| arg == JSON_OPTION) && color_enabled(py)?;
     let progress_stream: Bound<'py, PyAny> = stream(py, "stderr")?;
-    let progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DbtInitProgressReporter)?,
-        &[
-            ("stream", progress_stream.clone()),
-            ("use_color", flag(py, use_color)),
-        ],
-    )?;
+    let progress: Bound<'py, PyAny> = DbtInitProgressReporter::new(
+        &progress_stream.clone(),
+        flag(py, use_color).extract::<bool>()?,
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let callbacks: Bound<'py, PyAny> = new_record_with(
         py,
         RecordId::DbtInitProgressCallbacks,

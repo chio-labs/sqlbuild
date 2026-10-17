@@ -651,7 +651,7 @@ fn complete<'py>(
 /// Run one `sqb check` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
         &record_class(py, RecordId::CheckInvocation)?,

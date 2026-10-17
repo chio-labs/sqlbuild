@@ -285,7 +285,10 @@ fn render(result: &Bound<'_, PyAny>, output_format: &str, limit: Option<i64>) ->
 /// Execute ad hoc SQL against the active project connection.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_query_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_query_command(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'_> = KeywordArguments::read(
         py,
         "run_query_command",

@@ -40,7 +40,7 @@ type ProofObjects<'py> = (
 /// The outcome at `position` of a finished session as `ModelSqlAnalysis`, for hand-built inputs.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn session_outcome_analysis<'py>(
+pub(crate) fn session_outcome_analysis<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let request = Request::new("session_outcome_analysis", request)?;
@@ -92,7 +92,7 @@ fn session_outcome_analysis<'py>(
 
 /// A native dynamic pivot proof row as Python's proof, None when absent.
 #[pyfunction]
-fn dynamic_contract_proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn dynamic_contract_proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     proof(row)
 }
 

@@ -148,7 +148,7 @@ pub(crate) fn prepared_clone_pipeline<'py>(
 /// Run a clone pipeline with explicit compilation controls.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn run_clone_pipeline_with_options<'py>(
+pub(crate) fn run_clone_pipeline_with_options<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let request: Request<'_, 'py> = Request::new("run_clone_pipeline_with_options", request)?;

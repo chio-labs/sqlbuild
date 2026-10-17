@@ -202,7 +202,7 @@ impl EventExporterCommandScope {
 impl EventExporterCommandScope {
     #[new]
     #[pyo3(signature = (*, dispatcher))]
-    fn new(dispatcher: Py<PyAny>) -> Self {
+    pub(crate) fn new(dispatcher: Py<PyAny>) -> Self {
         Self {
             dispatcher,
             state: Mutex::new(ScopeState {
@@ -411,7 +411,7 @@ impl EventExporterScopeContext {
 
 /// Install one command-owned exporter scope.
 #[pyfunction]
-fn event_exporter_command_scope(scope: Py<PyAny>) -> EventExporterScopeContext {
+pub(crate) fn event_exporter_command_scope(scope: Py<PyAny>) -> EventExporterScopeContext {
     EventExporterScopeContext {
         scope,
         token: Mutex::new(None),

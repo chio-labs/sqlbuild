@@ -82,7 +82,7 @@ impl From<ReuseRulesPy> for ReuseRules {
 /// One reuse check: where the project and its store slot are, and the host's identity facts.
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
-struct ReuseCheckPy {
+pub(crate) struct ReuseCheckPy {
     project_dir: PathBuf,
     store_directory: PathBuf,
     selected_target: Option<OsString>,
@@ -115,7 +115,7 @@ struct CompileRecordPy {
 
 /// One invocation's native reuse state, from the check to the record.
 #[pyclass(module = "sqlbuild._native", frozen)]
-struct NativeReuseAttempt {
+pub(crate) struct NativeReuseAttempt {
     attempt: Mutex<ReuseAttempt>,
 }
 
@@ -246,7 +246,10 @@ fn recorded_artifact(artifact: ArtifactRow) -> RecordedArtifact {
 
 /// Check the stored compile for this invocation, replaying it on a hit.
 #[pyfunction]
-fn check_compile_reuse(py: Python<'_>, check: ReuseCheckPy) -> PyResult<NativeReuseAttempt> {
+pub(crate) fn check_compile_reuse(
+    py: Python<'_>,
+    check: ReuseCheckPy,
+) -> PyResult<NativeReuseAttempt> {
     compiler_guard(|| {
         let rules: ReuseRules = check.rules.into();
         let request: ReuseCheck<'_> = ReuseCheck {

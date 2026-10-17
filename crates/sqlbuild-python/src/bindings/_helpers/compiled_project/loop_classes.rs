@@ -9,7 +9,7 @@ use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 /// The materializations a model's storage policies are inherited for, besides none.
@@ -393,7 +393,11 @@ pub(crate) fn model_loop_classes<'py>(
             ("replace", imported(py, "dataclasses", "replace")?),
             (
                 "declaration_rows",
-                registry::native(py, NativeAttr::DeclarationRows)?,
+                pyo3::wrap_pyfunction!(
+                    crate::bindings::_helpers::compiled_project::records::declaration_rows,
+                    py
+                )?
+                .into_any(),
             ),
         ],
     )?;

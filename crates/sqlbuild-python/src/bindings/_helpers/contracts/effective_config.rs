@@ -255,7 +255,7 @@ pub(crate) fn effective_config_target_fields<'py>(
 
 /// `build_effective_vars` before template expansion.
 #[pyfunction]
-fn effective_config_vars<'py>(
+pub(crate) fn effective_config_vars<'py>(
     py: Python<'py>,
     configs: (Bound<'py, PyAny>, Bound<'py, PyAny>),
     target_config: &Bound<'py, PyAny>,
@@ -283,7 +283,7 @@ fn named<'py>(mapping: &Bound<'py, PyAny>) -> PyResult<Entries<Key<'py>, Pairs<'
 
 /// `build_effective_connection` before template expansion, or the unknown-connection message.
 #[pyfunction]
-fn effective_config_connection<'py>(
+pub(crate) fn effective_config_connection<'py>(
     py: Python<'py>,
     project_config: &Bound<'py, PyAny>,
     local_config: &Bound<'py, PyAny>,
@@ -312,7 +312,7 @@ fn effective_config_connection<'py>(
 
 /// `build_effective_settings`: setting values by field name, local overrides applied.
 #[pyfunction]
-fn effective_config_settings<'py>(
+pub(crate) fn effective_config_settings<'py>(
     py: Python<'py>,
     settings: (Bound<'py, PyAny>, Bound<'py, PyAny>),
     overrides: &Bound<'py, PyAny>,

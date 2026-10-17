@@ -54,7 +54,7 @@ struct Recorders<'py> {
 /// Run one full compile, recording it for reuse; returns the exit code.
 #[pyfunction]
 #[pyo3(signature = (request, reuse_attempt=None))]
-fn run_compile_command<'py>(
+pub(crate) fn run_compile_command<'py>(
     py: Python<'py>,
     request: Bound<'py, PyAny>,
     reuse_attempt: Option<Bound<'py, PyAny>>,

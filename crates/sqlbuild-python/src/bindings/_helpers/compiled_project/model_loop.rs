@@ -201,7 +201,7 @@ struct LoopModel<'a, 'py> {
 #[pymethods]
 impl NativeModelLoop {
     #[new]
-    fn new(
+    pub(crate) fn new(
         checks: LoopChecks,
         syntax: LexicalSyntaxInput,
         reserved_markers: Vec<String>,

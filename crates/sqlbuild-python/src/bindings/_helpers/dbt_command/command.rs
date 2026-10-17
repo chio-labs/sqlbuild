@@ -6,6 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::dbt_command::main::dbt_output_options::dbt_output_options;
 use sqlbuild_core::dbt_command::models::DbtOutputOptions;
 
+use crate::bindings::_helpers::cli::progress_reporters::PlanningProgressReporter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, keywords,
 };
@@ -41,13 +42,13 @@ impl<'py> Progress<'py> {
                 "stdout"
             },
         )?;
-        let reporter: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::PlanningProgressReporter)?,
-            &[
-                ("stream", stream.clone()),
-                ("use_color", flag(py, use_color)),
-            ],
-        )?;
+        let reporter: Bound<'py, PyAny> = PlanningProgressReporter::new(
+            py,
+            &stream.clone(),
+            flag(py, use_color).extract::<bool>()?,
+        )
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?;
         Ok(Self {
             stream,
             use_color,
@@ -150,7 +151,7 @@ fn run_execution(
 /// Execute one `sqb dbt` interop command.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_dbt_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_dbt_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
     let arguments: KeywordArguments<'_> = KeywordArguments::read(
         py,
         "run_dbt_command",

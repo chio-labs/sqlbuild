@@ -5,10 +5,13 @@ use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::dbt_interop::cli::resolve_dbt_executable;
 use crate::bindings::_helpers::dbt_interop::cli::route_dbt_interop_args;
 use crate::bindings::_helpers::dbt_interop::graph::build_dbt_combined_graph;
 use crate::bindings::_helpers::dbt_interop::manifest::load_dbt_manifest_index;
 use crate::bindings::_helpers::dbt_interop::orchestration::plan_dbt_interop_command;
+use crate::bindings::_helpers::dbt_interop::plan_output::dbt_failure_detail;
+use crate::bindings::_helpers::dbt_interop::runner::DbtRunner;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -20,7 +23,7 @@ use crate::bindings::_helpers::dbt_interop::runtime_config::{
     interop_adapter, manifest_path, parse_dbt_execution_args, plan_options, vars_mapping,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
@@ -74,7 +77,7 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
     let py = request.py();
     let mut executable = native_field(request, "dbt_executable")?;
     if !executable.is_truthy()? {
-        executable = registry::native(py, NativeAttr::ResolveDbtExecutable)?.call0()?;
+        executable = pyo3::IntoPyObjectExt::into_bound_py_any(resolve_dbt_executable(), py)?;
     }
     let mut stream = native_field(request, "progress_stream")?;
     if !stream.is_truthy()? {
@@ -102,10 +105,11 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
     .into_any();
     let mut runner = native_field(request, "dbt_runner")?;
     if !runner.is_truthy()? {
-        runner = call_with(
-            &registry::native(py, NativeAttr::DbtRunner)?,
-            &[("dbt_executable", executable.clone())],
-        )?;
+        runner = pyo3::Bound::new(
+            py,
+            DbtRunner::new(executable.clone().extract::<Option<String>>()?, None),
+        )
+        .map(pyo3::Bound::into_any)?;
     }
     let dbt_stream = native_field(request, "dbt_stdout_stream")?;
     new_record_with(
@@ -138,7 +142,7 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
 /// Compile dbt and load the manifest after a successful subprocess result.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn load_compiled_dbt_manifest<'py>(
+pub(crate) fn load_compiled_dbt_manifest<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -154,7 +158,7 @@ fn load_compiled_dbt_manifest<'py>(
         ],
     )?;
     if native_field(&result, "returncode")?.extract::<i64>()? != 0 {
-        let detail = registry::native(py, NativeAttr::DbtFailureDetail)?.call1((result,))?;
+        let detail = dbt_failure_detail(&result)?;
         let error = registry::error(py, ErrorId::DbtInteropRuntime)?.call(
             ("dbt compile failed",),
             Some(&keywords(py, &[("help", detail)])?),
@@ -173,7 +177,7 @@ fn load_compiled_dbt_manifest<'py>(
 /// Compile SQLBuild models against dbt references using the existing adapter boundary.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn compile_dbt_interop_project<'py>(
+pub(crate) fn compile_dbt_interop_project<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -220,7 +224,7 @@ fn compile_dbt_interop_project<'py>(
 /// Build the combined graph and resolve its dbt and SQLBuild selections.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_dbt_interop_plan<'py>(
+pub(crate) fn resolve_dbt_interop_plan<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

@@ -19,11 +19,14 @@ use sqlbuild_core::dbt_graph::models::{
 };
 use sqlbuild_core::dbt_graph::types::DbtSelectorResolver;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
+use crate::bindings::_helpers::planner_selection::model_selectors::{
+    resolve_sqlbuild_model_selector_names, split_selector_expansion,
+};
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const MODEL_RESOURCE_TYPE: &str = "model";
@@ -178,25 +181,19 @@ pub(crate) fn build_dbt_combined_graph<'py>(
 
 pub(crate) struct PlannerResolver<'py> {
     project: Bound<'py, PyAny>,
-    split: Bound<'py, PyAny>,
-    resolve: Bound<'py, PyAny>,
 }
 
 /// The planner's selector parsing and SQLBuild model selector resolution over `project`.
 pub(crate) fn planner_resolver(project: Bound<'_, PyAny>) -> PyResult<PlannerResolver<'_>> {
-    let py: Python<'_> = project.py();
-    Ok(PlannerResolver {
-        split: registry::native(py, NativeAttr::SplitSelectorExpansion)?,
-        resolve: registry::native(py, NativeAttr::ResolveSqlbuildModelSelectorNames)?,
-        project,
-    })
+    Ok(PlannerResolver { project })
 }
 
 impl DbtSelectorResolver for PlannerResolver<'_> {
     type Error = PyErr;
 
     fn split(&self, term: &str) -> PyResult<DbtSelectorExpansion> {
-        let parsed: Bound<'_, PyAny> = self.split.call1((term,))?;
+        let parsed: Bound<'_, PyAny> =
+            split_selector_expansion(&PyString::new(self.project.py(), term))?;
         Ok(DbtSelectorExpansion {
             core: native_field(&parsed, "core")?.extract()?,
             upstream: native_field(&parsed, "upstream")?.is_truthy()?,
@@ -206,14 +203,9 @@ impl DbtSelectorResolver for PlannerResolver<'_> {
 
     fn model_names(&self, core: &str) -> PyResult<(Vec<String>, Option<String>)> {
         let py: Python<'_> = self.project.py();
-        let (names, translated): (Bound<'_, PyAny>, Option<String>) = call_with(
-            &self.resolve,
-            &[
-                ("project", self.project.clone()),
-                ("term", PyString::new(py, core).into_any()),
-            ],
-        )?
-        .extract()?;
+        let (names, translated): (Bound<'_, PyAny>, Option<String>) =
+            resolve_sqlbuild_model_selector_names(&self.project, &PyString::new(py, core))?
+                .extract()?;
         Ok((texts(&names)?, translated))
     }
 }

@@ -34,14 +34,25 @@ use sqlbuild_core::cli_text::models::CliStyle;
 use crate::bindings::_helpers::build_progress::transient_status::maybe_status;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::project::build_project_graph;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::lineage::lineage_cache::{
     lineage_fingerprint, read_lineage_cache, write_lineage_cache,
 };
 use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views, lineage_keys};
+use crate::bindings::_helpers::lineage::project_lineage::build_direct_semantic_uses;
+use crate::bindings::_helpers::lineage::project_lineage::build_project_column_lineage;
+use crate::bindings::_helpers::planner_selection::selectors::resolve_project_selector_tokens;
+use crate::bindings::_helpers::planner_selection::selectors::resolve_project_selectors;
+use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
+use crate::bindings::_helpers::planner_selection::selectors::{
+    match_project_selector, parse_project_selector,
+};
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const UNKNOWN_SELECTOR_ERROR_CODE: &str = "S007";
@@ -141,20 +152,12 @@ fn discover<'py>(
     discover_project_inputs(py, Some(options))
 }
 
-fn reject_unit_tests(
-    py: Python<'_>,
-    request: &Bound<'_, PyAny>,
-    discovered: &Bound<'_, PyAny>,
-) -> PyResult<()> {
-    let options: Bound<'_, PyDict> = keywords(
-        py,
-        &[
-            ("select", &native_field(request, "select")?),
-            ("exclude", &native_field(request, "exclude")?),
-            ("discovered_inputs", discovered),
-        ],
+fn reject_unit_tests(request: &Bound<'_, PyAny>, discovered: &Bound<'_, PyAny>) -> PyResult<()> {
+    reject_unit_test_selectors(
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
+        discovered,
     )?;
-    registry::native(py, NativeAttr::RejectUnitTestSelectors)?.call((), Some(&options))?;
     Ok(())
 }
 
@@ -177,21 +180,11 @@ fn prepare_source<'py>(
     }
     let discovered: Bound<'py, PyAny> =
         discover(py, project_dir, if compiled { None } else { Some(false) })?;
-    reject_unit_tests(py, request, &discovered)?;
-    let adapter_name: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?.call(
-            (),
-            Some(&keywords(
-                py,
-                &[
-                    (
-                        "project_config",
-                        &native_field(&discovered, "project_config")?,
-                    ),
-                    ("local_config", &native_field(&discovered, "local_config")?),
-                ],
-            )?),
-        )?;
+    reject_unit_tests(request, &discovered)?;
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
+    )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
     let no_validation: bool =
         native_field(request, "no_sql_validation")?.extract::<bool>()? || !compiled;
@@ -205,8 +198,7 @@ fn prepare_source<'py>(
     )?;
     options.set_item("no_sql_validation", no_validation)?;
     options.set_item("skip_column_inference", !compiled)?;
-    let graph: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::BuildProjectGraph)?.call((), Some(&options))?;
+    let graph: Bound<'py, PyAny> = build_project_graph(py, Some(options.clone()))?;
     let index: LineageIndex = graph_index(&graph)?;
     if let Some(fingerprint) = &fingerprint {
         write_lineage_cache(py, &directory, fingerprint, &index)?;
@@ -266,16 +258,13 @@ fn semantic_uses(
     };
     let targets: Vec<String> = strings(&native_field(request, "targets")?)?;
     let model_names: Vec<String> = if targets.is_empty() {
-        let options: Bound<'_, PyDict> = keywords(
-            py,
-            &[
-                ("graph", graph),
-                ("select", &native_field(request, "select")?),
-                ("exclude", &native_field(request, "exclude")?),
-            ],
-        )?;
         let keys: Vec<LineageKey> = lineage_keys(
-            &registry::native(py, NativeAttr::SelectProjectGraph)?.call((), Some(&options))?,
+            select_project_graph(
+                graph,
+                &native_field(request, "select")?,
+                &native_field(request, "exclude")?,
+            )?
+            .as_any(),
         )?;
         keys.into_iter()
             .filter(|key| key.resource_type == MODEL_RESOURCE_TYPE)
@@ -291,12 +280,15 @@ fn semantic_uses(
             })
             .collect()
     };
-    let uses: Bound<'_, PyAny> =
-        registry::native(py, NativeAttr::BuildDirectSemanticUses)?.call1((
-            native_field(graph, "project")?,
-            adapter.call_method0("sql_analysis_dialect")?,
-            PyFrozenSet::new(py, model_names)?,
-        ))?;
+    let uses: Bound<'_, PyAny> = build_direct_semantic_uses(
+        &native_field(graph, "project")?,
+        adapter
+            .call_method0("sql_analysis_dialect")?
+            .extract::<Option<String>>()?
+            .as_deref(),
+        PyFrozenSet::new(py, model_names)?.as_any(),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     uses.try_iter()?
         .map(|value| semantic_use(&value?))
         .collect()
@@ -382,12 +374,13 @@ fn column_lineage<'py>(
         py,
         (&message, rich && count >= RICH_STATUS_MODEL_THRESHOLD),
         || {
-            registry::native(py, NativeAttr::BuildProjectColumnLineage)?.call1((
-                native_field(graph, "project")?,
-                py.None(),
+            build_project_column_lineage(
+                &native_field(graph, "project")?,
+                None,
                 mode,
-                PyFrozenSet::new(py, &candidates.model_names)?,
-            ))
+                Some(PyFrozenSet::new(py, &candidates.model_names)?.as_any()),
+            )
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
         },
     )
 }
@@ -477,8 +470,6 @@ fn selector_anchors(
     select: &[String],
     require_clear_anchors: bool,
 ) -> PyResult<LineageAnchors> {
-    let parse: Bound<'_, PyAny> = registry::native(py, NativeAttr::ParseProjectSelector)?;
-    let matcher: Bound<'_, PyAny> = registry::native(py, NativeAttr::MatchProjectSelector)?;
     let path_class: Bound<'_, PyAny> = record_class(py, RecordId::PathSelector)?;
     let names: HashMap<&str, &LineageKey> = name_lookup(index);
     let named = |name: String| -> PyResult<LineageKey> {
@@ -500,7 +491,8 @@ fn selector_anchors(
                 ));
             }
             for part in token.split(SELECTOR_INTERSECTION_MARKER) {
-                let parsed: Bound<'_, PyAny> = parse.call1((part,))?;
+                let parsed: Bound<'_, PyAny> =
+                    parse_project_selector(&pyo3::types::PyString::new(py, part))?;
                 if parsed.is_instance(&path_class)? {
                     let start: LineageKey = named(native_field(&parsed, "start_name")?.extract()?)?;
                     let end: LineageKey = named(native_field(&parsed, "end_name")?.extract()?)?;
@@ -524,8 +516,15 @@ fn selector_anchors(
                 }
                 let options: Bound<'_, PyDict> =
                     view_options(views, &["all_keys", "tag_index", "path_index"])?;
-                options.set_item("parsed", &parsed)?;
-                let matched: Vec<LineageKey> = lineage_keys(&matcher.call((), Some(&options))?)?;
+                let matched: Vec<LineageKey> = lineage_keys(
+                    match_project_selector(
+                        &parsed,
+                        &options.as_any().get_item("all_keys")?,
+                        &options.as_any().get_item("tag_index")?,
+                        &options.as_any().get_item("path_index")?,
+                    )?
+                    .as_any(),
+                )?;
                 let upstream: bool = native_field(&parsed, "upstream")?.extract()?;
                 let downstream: bool = native_field(&parsed, "downstream")?.extract()?;
                 if set_kind || upstream {
@@ -557,7 +556,8 @@ fn selector_rendering(
     options.set_item("select", &select)?;
     options.set_item("exclude", &exclude)?;
     let selected: Vec<LineageKey> = lineage_keys(
-        &registry::native(py, NativeAttr::ResolveProjectSelectors)?.call((), Some(&options))?,
+        &resolve_project_selectors(py, Some(options.clone()))
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?,
     )?;
     let index: &LineageIndex = source.index();
     let direction: Option<String> = native_field(request, "direction")?.extract()?;
@@ -566,8 +566,8 @@ fn selector_rendering(
         let options: Bound<'_, PyDict> = view_options(&views, &GRAPH_VIEW_NAMES)?;
         options.set_item("selectors", &exclude)?;
         let excluded: Vec<LineageKey> = lineage_keys(
-            &registry::native(py, NativeAttr::ResolveProjectSelectorTokens)?
-                .call((), Some(&options))?,
+            &resolve_project_selector_tokens(py, Some(options.clone()))
+                .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?,
         )?;
         select_directional_lineage(index, (&selected, &excluded), (&direction, depth))
     } else {
@@ -594,7 +594,7 @@ fn selector_failure(
         {
             return Ok(());
         }
-        reject_unit_tests(py, request, &discover(py, project_dir, Some(false))?)
+        reject_unit_tests(request, &discover(py, project_dir, Some(false))?)
     };
     match check() {
         Ok(()) => error,
@@ -645,7 +645,7 @@ fn request_shape(request: &Bound<'_, PyAny>) -> PyResult<LineageRequestShape> {
 /// Run one `sqb lineage` request and print its result.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_lineage_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_lineage_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let shape: LineageRequestShape = request_shape(request)?;
     validate_lineage_request(&shape).map_err(|error| user_error(py, error))?;
     let depth: Option<i64> =

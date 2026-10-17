@@ -433,7 +433,7 @@ fn load_seeds<'py>(
 /// Run one `sqb seed` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> =
         resolve_command_invocation(request, &record_class(py, RecordId::SeedInvocation)?)?;
     let pipeline: Bound<'_, PyAny> = compile_seeds(request, &invocation)?;

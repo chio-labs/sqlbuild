@@ -13,14 +13,22 @@ use sqlbuild_core::build_command::errors::BuildCommandError;
 
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
+use crate::bindings::_helpers::build_command::policies::enforce_model_execution_limit_binding;
+use crate::bindings::_helpers::clone::clone_pipeline::run_clone_pipeline_with_options;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::clone_plans::{
+    resolve_clone_boundary, resolve_skipped_view_chain,
+};
+use crate::bindings::_helpers::planner_scope::scope::build_planner_scope;
+use crate::bindings::_helpers::planner_selection::unit_tests::split_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const VIEW_MATERIALIZATION: &str = "view";
 const RECREATED_TYPES: [&str; 2] = ["udf", "table_fn"];
@@ -102,20 +110,27 @@ fn membership<'py>(
     PyFrozenSet::new(py, &members)?.getattr("__contains__")
 }
 
+/// A clone-plan traversal from selected keys over upstream dependencies.
+type TraversalFunction =
+    for<'py> fn(Python<'py>, Option<Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyFrozenSet>>;
+
 fn traversed_names<'py>(
     scope: &Bound<'py, PyAny>,
-    function: NativeAttr,
+    function: TraversalFunction,
     (is_clonable, is_view): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Vec<String>> {
     let py: Python<'py> = scope.py();
-    let keys: Bound<'py, PyAny> = call_with(
-        &registry::native(py, function)?,
-        &[
-            ("selected", native_field(scope, "selected_keys")?),
-            ("upstream", native_field(scope, "upstream_deps")?),
-            ("is_clonable", is_clonable.clone()),
-            ("is_view", is_view.clone()),
-        ],
+    let keys: Bound<'py, PyFrozenSet> = function(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("selected", native_field(scope, "selected_keys")?),
+                ("upstream", native_field(scope, "upstream_deps")?),
+                ("is_clonable", is_clonable.clone()),
+                ("is_view", is_view.clone()),
+            ],
+        )?),
     )?;
     let mut names: Vec<String> = Vec::new();
     for key in keys.try_iter()? {
@@ -159,8 +174,8 @@ fn defer_clone_selection(scope: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, Vec
     let is_view: Bound<'_, PyAny> = membership(py, &keys, |key| recreated_over_clones(scope, key))?;
     let callbacks: (&Bound<'_, PyAny>, &Bound<'_, PyAny>) = (&is_clonable, &is_view);
     Ok((
-        traversed_names(scope, NativeAttr::ResolveCloneBoundary, callbacks)?,
-        traversed_names(scope, NativeAttr::ResolveSkippedViewChain, callbacks)?,
+        traversed_names(scope, resolve_clone_boundary, callbacks)?,
+        traversed_names(scope, resolve_skipped_view_chain, callbacks)?,
         selected_executable_model_count(scope)?,
     ))
 }
@@ -174,26 +189,11 @@ fn resolve_defer_clone_selection(
     defer_clone_selection(scope)
 }
 
-fn native<'py>(
-    py: Python<'py>,
-    name: NativeAttr,
-    fields: &[(&str, Bound<'py, PyAny>)],
-) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::native(py, name)?, fields)
-}
-
 fn external_resolver<'py>(
     project_dir: &Bound<'py, PyAny>,
     discovered: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    native(
-        project_dir.py(),
-        NativeAttr::ResolveExternalSqlReferenceResolver,
-        &[
-            ("project_dir", project_dir.clone()),
-            ("discovered_inputs", discovered.clone()),
-        ],
-    )
+    resolve_external_sql_reference_resolver(project_dir.clone(), discovered.clone())
 }
 
 /// The resolved defer-clone prephase: what to clone, from where, into which target.
@@ -224,20 +224,11 @@ fn clone_input<'py>(
     let project: Bound<'py, PyAny> = native_field(pipeline, "destination_project")?;
     let destination_models: Bound<'py, PyAny> =
         native_field(pipeline, "destination_model_entries")?;
-    let target: Bound<'py, PyAny> = native(
+    let target: Bound<'py, PyAny> = resolve_target_config(
         py,
-        NativeAttr::ResolveTargetConfig,
-        &[
-            (
-                "project_config",
-                native_field(&prephase.discovered, "project_config")?,
-            ),
-            (
-                "local_config",
-                native_field(&prephase.discovered, "local_config")?,
-            ),
-            ("target_name", prephase.destination.clone()),
-        ],
+        &native_field(&prephase.discovered, "project_config")?,
+        &native_field(&prephase.discovered, "local_config")?,
+        &prephase.destination.clone(),
     )?;
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in destination_models.try_iter()? {
@@ -427,9 +418,8 @@ fn clone_boundaries<'py>(
         .getattr("on_progress")?;
     let start: Instant = Instant::now();
     let request: &Bound<'py, PyAny> = &context.request;
-    let pipeline: Bound<'py, PyAny> = native(
+    let pipeline: Bound<'py, PyAny> = run_clone_pipeline_with_options(Some(&keywords(
         py,
-        NativeAttr::RunClonePipelineWithOptions,
         &[
             ("discovered_inputs", prephase.discovered.clone()),
             ("adapter", prephase.adapter.clone()),
@@ -470,7 +460,7 @@ fn clone_boundaries<'py>(
                 external_resolver(&prephase.project_dir, &prephase.discovered)?,
             ),
         ],
-    )?;
+    )?))?;
     progress(
         &on_progress,
         &format!(
@@ -572,14 +562,10 @@ pub(crate) fn run_defer_clone_boundary_prephase(
     let py: Python<'_> = context.py();
     let (request, invocation) = (&context.request, &context.invocation);
     let discovered: Bound<'_, PyAny> = native_field(invocation, "discovered_inputs")?;
-    let split: Bound<'_, PyAny> = native(
-        py,
-        NativeAttr::SplitUnitTestSelectors,
-        &[
-            ("select", native_field(request, "select")?),
-            ("exclude", native_field(request, "exclude")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    let split: Bound<'_, PyAny> = split_unit_test_selectors(
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
+        &discovered.clone(),
     )?;
     if !split
         .getattr("sql_test_selection")?
@@ -618,37 +604,42 @@ pub(crate) fn run_defer_clone_boundary_prephase(
             ],
         )?),
     )?;
-    let scope: Bound<'_, PyAny> = native(
+    let scope: Bound<'_, PyAny> = build_planner_scope(
         py,
-        NativeAttr::BuildPlannerScope,
-        &[
-            ("project", project.clone()),
-            ("select", native_field(&split, "select")?),
-            ("exclude", native_field(&split, "exclude")?),
-            (
-                "auto_load_sources",
-                native_field(invocation, "should_load_sources")?,
-            ),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("select", native_field(&split, "select")?),
+                ("exclude", native_field(&split, "exclude")?),
+                (
+                    "auto_load_sources",
+                    native_field(invocation, "should_load_sources")?,
+                ),
+            ],
+        )?),
     )?;
     let (boundary, view_chain, model_count): (Vec<String>, Vec<String>, usize) =
         defer_clone_selection(&scope)?;
-    native(
+    enforce_model_execution_limit_binding(
         py,
-        NativeAttr::EnforceModelExecutionLimit,
-        &[
-            ("model_count", model_count.into_pyobject(py)?.into_any()),
-            (
-                "target_name",
-                native_field(invocation, "effective_target_name")?,
-            ),
-            ("limits", native_field(invocation, "execution_limits")?),
-            (
-                "refusal_note",
-                EXECUTION_LIMIT_BUILD_NOTE.into_bound_py_any(py)?,
-            ),
-        ],
-    )?;
+        Some(keywords(
+            py,
+            &[
+                ("model_count", model_count.into_pyobject(py)?.into_any()),
+                (
+                    "target_name",
+                    native_field(invocation, "effective_target_name")?,
+                ),
+                ("limits", native_field(invocation, "execution_limits")?),
+                (
+                    "refusal_note",
+                    EXECUTION_LIMIT_BUILD_NOTE.into_bound_py_any(py)?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let mut select: Vec<String> = boundary;
     select.extend(view_chain);
     run_prephase(

@@ -181,7 +181,7 @@ fn diff_model_names<'py>(
 /// Compile both environments and resolve selected diffable model names.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_diff_pipeline<'py>(
+pub(crate) fn run_diff_pipeline<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

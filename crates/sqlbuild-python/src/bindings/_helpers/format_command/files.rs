@@ -91,7 +91,7 @@ fn write_atomically(path: &Path, contents: &str) -> PyResult<()> {
 /// `write_atomically(*, path, contents)`: replace a text file atomically, keeping its mode.
 #[pyfunction]
 #[pyo3(name = "write_atomically", signature = (*, path, contents))]
-fn write_file_atomically(path: PathBuf, contents: &str) -> PyResult<()> {
+pub(crate) fn write_file_atomically(path: PathBuf, contents: &str) -> PyResult<()> {
     write_atomically(&path, contents)
 }
 

@@ -26,11 +26,12 @@ use sqlbuild_pysource::literal_sql::models::FunctionSource;
 use crate::bindings::_helpers::analysis::reference_facts::{ProjectFacts, project_facts};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::graph::execution_gates::model_python_hook_names;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
@@ -169,14 +170,11 @@ fn python_sql_owners<'py>(
         }
     }
     owners.extend(loader_owners(project, discovered_inputs)?);
-    let hook_names = registry::native(py, NativeAttr::ModelPythonHookNames)?;
     let mut attached: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        let keywords: Bound<'py, PyDict> = PyDict::new(py);
-        keywords.set_item("model", &model)?;
         let model_name: String = native_field(&model, "name")?.extract()?;
-        for hook_name in hook_names.call((), Some(&keywords))?.try_iter()? {
+        for hook_name in model_python_hook_names(py, &model)?.try_iter()? {
             attached
                 .entry(hook_name?.extract()?)
                 .or_default()

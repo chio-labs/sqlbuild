@@ -289,7 +289,7 @@ fn write_output(
 /// Run one `sqb plan` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_plan_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_plan_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let py: Python<'_> = request.py();
     let invocation: PlanInvocation<'_> = resolve_invocation(request)?;
     if !native_field(request, "json_output")?.is_truthy()? {

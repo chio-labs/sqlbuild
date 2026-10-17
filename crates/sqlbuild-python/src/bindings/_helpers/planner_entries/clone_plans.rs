@@ -621,7 +621,7 @@ impl<'py> CloneGraph<'py> {
 /// Return non-view clonable ancestors anchoring selected nodes.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_clone_boundary<'py>(
+pub(crate) fn resolve_clone_boundary<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
@@ -637,7 +637,7 @@ fn resolve_clone_boundary<'py>(
 /// Return skipped view ancestors rebuilt over cloned boundaries.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_skipped_view_chain<'py>(
+pub(crate) fn resolve_skipped_view_chain<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {

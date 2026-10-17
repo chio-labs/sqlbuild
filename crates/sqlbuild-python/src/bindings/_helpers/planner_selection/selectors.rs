@@ -157,7 +157,7 @@ pub(crate) fn select_project_graph<'py>(
 /// Model, source, seed and function selectors resolved against compiled graph mappings.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_project_selectors<'py>(
+pub(crate) fn resolve_project_selectors<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
@@ -177,7 +177,7 @@ fn resolve_project_selectors<'py>(
 /// The keys whitespace-separated selector tokens match, without required build resources.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_project_selector_tokens<'py>(
+pub(crate) fn resolve_project_selector_tokens<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
@@ -209,7 +209,7 @@ fn arguments_graph(arguments: &KeywordArguments<'_>) -> PyResult<NativeProjectGr
 /// The keys one parsed selector matches before `+` graph expansion.
 #[pyfunction]
 #[pyo3(signature = (*, parsed, all_keys, tag_index, path_index))]
-fn match_project_selector<'py>(
+pub(crate) fn match_project_selector<'py>(
     parsed: &Bound<'py, PyAny>,
     all_keys: &Bound<'py, PyAny>,
     tag_index: &Bound<'py, PyAny>,

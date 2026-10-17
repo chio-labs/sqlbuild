@@ -129,7 +129,7 @@ pub(crate) fn shared_coordinator(py: Python<'_>) -> PyResult<Bound<'_, Transient
 
 /// Return the coordinator shared by every terminal writer in this process.
 #[pyfunction]
-fn shared_transient_line_coordinator(
+pub(crate) fn shared_transient_line_coordinator(
     py: Python<'_>,
 ) -> PyResult<Bound<'_, TransientLineCoordinator>> {
     shared_coordinator(py)

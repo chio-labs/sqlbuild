@@ -64,7 +64,7 @@ pub(crate) fn build_project_column_lineage<'py>(
 
 /// Direct non-projection semantic column uses of the requested models.
 #[pyfunction]
-fn build_direct_semantic_uses<'py>(
+pub(crate) fn build_direct_semantic_uses<'py>(
     project: &Bound<'py, PyAny>,
     dialect: Option<&str>,
     model_names: &Bound<'py, PyAny>,

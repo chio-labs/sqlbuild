@@ -243,7 +243,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
 /// Attach live SQLBuild planning when the selection contains SQLBuild models.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn attach_sqlbuild_plan_output<'py>(
+pub(crate) fn attach_sqlbuild_plan_output<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -300,7 +300,7 @@ fn attach_sqlbuild_plan_output<'py>(
 
 /// Prefer stderr for dbt subprocess failure details, retaining Python whitespace semantics.
 #[pyfunction]
-fn dbt_failure_detail<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn dbt_failure_detail<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let stderr = native_field(result, "stderr")?;
     let detail = if stderr.is_truthy()? {
         stderr

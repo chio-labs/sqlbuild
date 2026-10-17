@@ -216,7 +216,7 @@ fn clean(
 /// Run one `sqb janitor` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = invocation(py, request)?;
     let style: CliStyle = CliStyle {
         use_color: native_field(&invocation, "use_color")?.extract()?,

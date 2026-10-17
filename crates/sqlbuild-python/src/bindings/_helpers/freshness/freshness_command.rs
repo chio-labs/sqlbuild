@@ -269,7 +269,7 @@ fn write_json_output(
 /// Run one `sqb freshness` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let fail_on_stale: bool = native_field(request, "fail_on_stale")?.extract()?;
     let fail_on_error: bool = native_field(request, "fail_on_error")?.extract()?;
     if fail_on_stale && !native_field(request, "compare_state")?.extract::<bool>()? {

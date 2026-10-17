@@ -610,7 +610,7 @@ fn start_worker<'py>(
 impl EventExporterDispatcher {
     #[new]
     #[pyo3(signature = (**options))]
-    fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
         let options: KeywordArguments<'_> = KeywordArguments::read(
             py,
             "EventExporterDispatcher",

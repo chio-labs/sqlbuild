@@ -154,7 +154,10 @@ fn print(py: Python<'_>, text: &str) -> PyResult<()> {
 /// `sqb skills`: install or update SQLBuild skill files.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_skills_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_skills_command(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "run_skills_command", options, SKILLS_OPTIONS)?;
     let project_dir: Bound<'_, PyAny> = arguments.value("project_dir")?;
@@ -180,7 +183,7 @@ fn run_skills_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyR
 
 /// `sqb playground`: create a self-contained playground project.
 #[pyfunction]
-fn run_playground_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_playground_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let project_dir: Bound<'_, PyAny> = native_field(request, "project_dir")?;
     let base: PathBuf = if project_dir.is_none() {
         current_dir(py)?

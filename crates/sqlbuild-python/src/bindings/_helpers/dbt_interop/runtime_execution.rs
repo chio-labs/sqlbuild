@@ -1,5 +1,6 @@
 //! Execute dbt through the subprocess boundary and finalize results in artifact order.
 
+use crate::bindings::_helpers::build_progress::transient_status::TransientStatusReporter;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, keywords,
 };
@@ -8,10 +9,10 @@ use crate::bindings::_helpers::dbt_interop::cli::parse_dbt_ls_json_lines;
 use crate::bindings::_helpers::dbt_interop::event_stream::execute_dbt_json_event_stream;
 use crate::bindings::_helpers::dbt_interop::execution::dbt_execution_ls_argv;
 use crate::bindings::_helpers::dbt_interop::runtime_results::{append_missing, result_ids};
+use crate::bindings::_helpers::presentation_text::style::PythonCliStyle;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyInt, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -53,13 +54,14 @@ fn expected_total<'py>(
     if ls.is_none() {
         return Ok(py.None().into_bound(py));
     }
-    let status = call_with(
-        &registry::native(py, NativeAttr::TransientStatusReporter)?,
-        &[
-            ("stream", arguments.value("progress_stream")?),
-            ("use_color", arguments.value("use_color")?),
-        ],
-    )?;
+    let status = TransientStatusReporter::new(
+        py,
+        &arguments.value("progress_stream")?,
+        arguments.value("use_color")?.extract::<bool>()?,
+        true,
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     status.call_method1("start", ("Resolving dbt execution selection...",))?;
     let start = Instant::now();
     let result = call_with(
@@ -113,10 +115,8 @@ pub(crate) fn execute_dbt_commands<'py>(
     let arguments = KeywordArguments::read(py, "execute_dbt_commands", options, OPTIONS)?;
     let argv = arguments.value("merged_argv")?;
     let output = arguments.value("progress_stream")?;
-    let style = call_with(
-        &registry::native(py, NativeAttr::CliStyle)?,
-        &[("use_color", arguments.value("use_color")?)],
-    )?;
+    let style = Bound::new(py, PythonCliStyle::new(&arguments.value("use_color")?)?)
+        .map(Bound::into_any)?;
     if argv.is_none() {
         let message = arguments.value("skip_message")?;
         let message = if message.is_none() {

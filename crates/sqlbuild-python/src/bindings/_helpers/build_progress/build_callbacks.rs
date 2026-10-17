@@ -31,8 +31,7 @@ use crate::bindings::_helpers::build_progress::terminal::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
 const RUNTIME_LOGGER: &str = "sqlbuild.executor.runtime";
 const PASS_OUTCOME: &str = "pass";
@@ -379,7 +378,7 @@ fn statement(telemetry: &Bound<'_, PyAny>) -> PyResult<StatementText> {
 impl BuildProgressCallbacks {
     #[new]
     #[pyo3(signature = (**options))]
-    fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
         let arguments = KeywordArguments::read(
             py,
             "BuildProgressCallbacks",
@@ -406,11 +405,11 @@ impl BuildProgressCallbacks {
         } else {
             py.None().into_bound(py)
         };
-        let writer_options: Bound<'_, PyDict> = PyDict::new(py);
-        writer_options.set_item("path", path)?;
-        let event_writer: Bound<'_, PyAny> =
-            registry::native(py, NativeAttr::ExecutionEventWriter)?
-                .call((), Some(&writer_options))?;
+        let event_writer: Bound<'_, PyAny> = Bound::new(
+            py,
+            ExecutionEventWriter::new(py, Some(path).filter(|value| !value.is_none()))?,
+        )?
+        .into_any();
         let facts: BuildPlanFacts = build_plan_facts(&plan)?;
         let projector: Option<Py<PyAny>> = projector(py)?;
         if let Some(projector) = &projector {

@@ -22,7 +22,9 @@ use crate::bindings::_helpers::records::construct::{enum_member, new_record_with
 use crate::bindings::_helpers::compile_driver::assembly::assemble_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::selection_phases::resolve_analysis_model_names;
-use crate::bindings::_helpers::compile_driver::stage_work::{PROMOTION_CONFLICTS, count_stage};
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    PROJECT_GRAPHS, PROMOTION_CONFLICTS, count_stage,
+};
 use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::contracts::contract_diagnostics::promotion_conflict_diagnostics;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
@@ -322,6 +324,7 @@ pub(crate) fn build_project_graph<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    count_stage(py, PROJECT_GRAPHS, 1)?;
     let mut optional: Vec<&str> = GRAPH_OPTIONAL.to_vec();
     optional.push("no_cache");
     let arguments: KeywordArguments<'py> = KeywordArguments::read(

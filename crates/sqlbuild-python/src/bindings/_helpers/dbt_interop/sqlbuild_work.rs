@@ -12,17 +12,20 @@ use crate::bindings::_helpers::build_command::policies::enforce_plan_safety_poli
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none, text, tuple,
 };
+use crate::bindings::_helpers::build_progress::build_callbacks::BuildProgressCallbacks;
 use crate::bindings::_helpers::build_progress::footer::format_build_footer;
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::cli::progress_text::format_execution_header;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, keywords,
 };
+use crate::bindings::_helpers::compile_outputs::runtime_target::write_runtime_target;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::presentation_text::style::PythonCliStyle;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const WORK_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -111,15 +114,20 @@ pub(crate) fn execute_dbt_sqlbuild_work<'py>(
         )?),
     )
     .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
-    let callbacks = call_with(
-        &registry::native(py, NativeAttr::BuildProgressCallbacks)?,
-        &[
-            ("plan", plan.clone()),
-            ("use_color", color.clone()),
-            ("verbose", args.value("verbose")?),
-            ("debug", boolean(py, false)),
-        ],
-    )?;
+    let callbacks = BuildProgressCallbacks::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", plan.clone()),
+                ("use_color", color.clone()),
+                ("verbose", args.value("verbose")?),
+                ("debug", boolean(py, false)),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let command = args.value("command")?;
     let kinds = record_class(py, RecordId::DbtInteropCommand)?;
     let display = if command.eq(native_field(&kinds, "RUN")?)? {
@@ -139,10 +147,7 @@ pub(crate) fn execute_dbt_sqlbuild_work<'py>(
         ),
         py,
     )?;
-    let style = call_with(
-        &registry::native(py, NativeAttr::CliStyle)?,
-        &[("use_color", color.clone())],
-    )?;
+    let style = Bound::new(py, PythonCliStyle::new(&color.clone())?).map(Bound::into_any)?;
     emit(
         &output,
         &format!(
@@ -155,15 +160,20 @@ pub(crate) fn execute_dbt_sqlbuild_work<'py>(
                 .extract::<String>()?
         ),
     )?;
-    let connection = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", native_field(&context, "adapter_name")?),
-            ("stream", output.clone()),
-            ("blank_line_after_complete", boolean(py, true)),
-            ("use_color", color.clone()),
-        ],
-    )?;
+    let connection = ConnectionProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter_name", native_field(&context, "adapter_name")?),
+                ("stream", output.clone()),
+                ("blank_line_after_complete", boolean(py, true)),
+                ("use_color", color.clone()),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let build = command.eq(native_field(&kinds, "BUILD")?)?;
     let runtime = call_with(
         &host::entry(py, ExecutorHost::BuildRuntimeParams)?,
@@ -228,16 +238,10 @@ pub(crate) fn execute_dbt_sqlbuild_work<'py>(
             ("callbacks", hooks),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteRuntimeTarget)?,
-        &[
-            (
-                "target_dir",
-                joined(&args.value("project_dir")?, &["target"])?,
-            ),
-            ("plan_output", plan),
-            ("result", result.clone()),
-        ],
+    write_runtime_target(
+        &joined(&args.value("project_dir")?, &["target"])?,
+        &plan,
+        &result,
     )?;
     let footer = format_build_footer(
         &result.clone(),

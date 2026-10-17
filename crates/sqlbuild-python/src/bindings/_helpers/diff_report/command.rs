@@ -17,9 +17,14 @@ use sqlbuild_cli::diff_report::types::QueryDiffPhase;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, StdlibJsonOptions};
 
+use crate::bindings::_helpers::command_runtime::connection::resolve_target_connection_config;
+use crate::bindings::_helpers::compile_driver::diff::run_diff_pipeline;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::diff_report::facts::diff_facts;
 use crate::bindings::_helpers::diff_report::query::{
     execute_query_diff, execution_options, prepare_query_diff, project_adapter,
@@ -34,8 +39,9 @@ use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
 const DEFAULT_DIFF_MAX_FULL_ROWS: i64 = 10_000_000;
@@ -90,13 +96,10 @@ fn resolve_invocation<'py>(
             Some(keywords(py, &[("project_dir", project_dir.clone())])?),
         )?
     };
-    call(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", &native_field(request, "select")?),
-            ("exclude", &native_field(request, "exclude")?),
-            ("discovered_inputs", &discovered),
-        ],
+    reject_unit_test_selectors(
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
+        &discovered.clone(),
     )?;
     if facts.select.is_empty() && !query_mode {
         return Err(rejected(
@@ -226,16 +229,11 @@ fn target_max_full_rows<'py>(
     target: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
-    let configured: Bound<'py, PyAny> = call(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            (
-                "project_config",
-                &native_field(discovered, "project_config")?,
-            ),
-            ("local_config", &native_field(discovered, "local_config")?),
-            ("target_name", target),
-        ],
+    let configured: Bound<'py, PyAny> = resolve_target_config(
+        py,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
+        target,
     )?
     .getattr("diff")?
     .getattr("max_full_rows")?;
@@ -259,17 +257,13 @@ fn diff_to_target<'py>(
     if !to_name.is_none() {
         return Ok(to_name);
     }
-    let active: Bound<'py, PyAny> = call(
-        &registry::native(py, NativeAttr::ResolveTargetName)?,
-        &[
-            (
-                "project_config",
-                &native_field(discovered, "project_config")?,
-            ),
-            ("local_config", &native_field(discovered, "local_config")?),
-            ("selected_target", &none(py)),
-        ],
-    )?;
+    let active: Bound<'py, PyAny> = resolve_target_name(
+        py,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
+        &none(py),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     if active.is_none() {
         return Err(rejected(
             py,
@@ -381,40 +375,42 @@ fn run_model_diff(
     let from_target: Bound<'_, PyAny> = object(py, from_name)?;
     let (_, adapter) = project_adapter(discovered, project_dir)?;
     let cli_vars: Bound<'_, PyAny> = native_field(request, "cli_vars")?;
-    let connection_config: Bound<'_, PyAny> = call(
-        &registry::native(py, NativeAttr::ResolveTargetConnectionConfig)?,
-        &[
-            ("discovered_inputs", discovered),
-            ("project_dir", project_dir),
-            ("target_name", &to_target),
-            ("cli_vars", &cli_vars),
-        ],
+    let connection_config: Bound<'_, PyAny> = resolve_target_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("project_dir", project_dir.clone()),
+                ("target_name", to_target.clone()),
+                ("cli_vars", cli_vars.clone()),
+            ],
+        )?),
     )?;
-    let resolver: Bound<'_, PyAny> = call(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            ("project_dir", project_dir),
-            ("discovered_inputs", discovered),
-        ],
-    )?;
-    let pipeline: Bound<'_, PyTuple> = call(
-        &registry::native(py, NativeAttr::RunDiffPipeline)?,
-        &[
-            ("discovered_inputs", discovered),
-            ("adapter", &adapter),
-            ("from_target", &from_target),
-            ("to_target", &to_target),
-            ("resolved_connection", &connection_config),
-            (
-                "no_sql_validation",
-                &native_field(request, "no_sql_validation")?,
-            ),
-            ("select", &native_field(request, "select")?),
-            ("exclude", &native_field(request, "exclude")?),
-            ("cli_vars", &cli_vars),
-            ("external_sql_reference_resolver", &resolver),
-        ],
-    )?
+    let resolver: Bound<'_, PyAny> =
+        resolve_external_sql_reference_resolver(project_dir.clone(), discovered.clone())?;
+    let pipeline: Bound<'_, PyTuple> = run_diff_pipeline(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("adapter", adapter.clone()),
+                ("from_target", from_target.clone()),
+                ("to_target", to_target.clone()),
+                ("resolved_connection", connection_config.clone()),
+                (
+                    "no_sql_validation",
+                    native_field(request, "no_sql_validation")?,
+                ),
+                ("select", native_field(request, "select")?),
+                ("exclude", native_field(request, "exclude")?),
+                ("cli_vars", cli_vars.clone()),
+                ("external_sql_reference_resolver", resolver.clone()),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .downcast_into()?;
     let selected: Bound<'_, PyAny> = pipeline.get_item(2)?;
     if !selected.is_truthy()? {

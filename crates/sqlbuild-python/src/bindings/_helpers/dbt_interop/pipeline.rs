@@ -9,10 +9,18 @@ use sqlbuild_core::dbt_cli::main::dbt_debug_args::dbt_debug_args;
 use std::time::Instant;
 
 use crate::bindings::_helpers::build_command::support::{boolean, none, text};
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::plan_has_executable_work;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::dbt_interop::cli::resolve_dbt_config;
+use crate::bindings::_helpers::dbt_interop::execution::build_failed_sqlbuild_model_names;
+use crate::bindings::_helpers::dbt_interop::execution::build_merged_dbt_execution_argv;
+use crate::bindings::_helpers::dbt_interop::pipeline_phases::resolve_dbt_connection_config;
+use crate::bindings::_helpers::dbt_interop::pipeline_phases::run_dbt_sqlbuild_work;
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
+use crate::bindings::_helpers::dbt_interop::runner::DbtRunner;
 use crate::bindings::_helpers::dbt_interop::runtime_config::config_overrides;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -50,9 +58,8 @@ fn prepare<'py>(
     let py = request.py();
     let invocation =
         registry::native(py, NativeAttr::ResolveDbtExecutionInvocation)?.call1((request,))?;
-    let manifest = native(
-        py,
-        NativeAttr::LoadCompiledDbtManifest,
+    let manifest = call_with(
+        &registry::native(py, NativeAttr::LoadCompiledDbtManifest)?,
         &[
             ("runner", native_field(&invocation, "runner")?),
             ("dbt_options", native_field(&invocation, "dbt_options")?),
@@ -60,9 +67,8 @@ fn prepare<'py>(
             ("on_progress", native_field(request, "on_progress")?),
         ],
     )?;
-    let compiled = native(
-        py,
-        NativeAttr::CompileDbtInteropProject,
+    let compiled = call_with(
+        &registry::native(py, NativeAttr::CompileDbtInteropProject)?,
         &[
             ("project_dir", native_field(request, "project_dir")?),
             (
@@ -121,22 +127,24 @@ fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64>
     let (invocation, manifest, compiled) = prepare(request)?;
     let resolution = resolve_plan(request, &invocation, &compiled, &manifest)?;
     let plan = native_field(&resolution, "plan")?;
-    let merged = native(
+    let merged = build_merged_dbt_execution_argv(
         py,
-        NativeAttr::BuildMergedDbtExecutionArgv,
-        &[
-            ("command", command),
-            ("options", native_field(&invocation, "dbt_options")?),
-            (
-                "routed_args",
-                native_field(&invocation, "routed")?.getattr("dbt_args")?,
-            ),
-            ("plan", plan.clone()),
-        ],
-    )?;
-    native(
-        py,
-        NativeAttr::WriteDbtExecutionPlanText,
+        Some(keywords(
+            py,
+            &[
+                ("command", command),
+                ("options", native_field(&invocation, "dbt_options")?),
+                (
+                    "routed_args",
+                    native_field(&invocation, "routed")?.getattr("dbt_args")?,
+                ),
+                ("plan", plan.clone()),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    call_with(
+        &registry::native(py, NativeAttr::WriteDbtExecutionPlanText)?,
         &[
             ("request", request.clone()),
             ("invocation", invocation.clone()),
@@ -144,40 +152,35 @@ fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64>
             ("merged_dbt_argv", merged.clone()),
         ],
     )?;
-    let execution = native(
-        py,
-        NativeAttr::ExecuteDbtWithoutStateTracking,
+    let execution = call_with(
+        &registry::native(py, NativeAttr::ExecuteDbtWithoutStateTracking)?,
         &[
             ("request", request.clone()),
             ("invocation", invocation.clone()),
             ("merged_dbt_argv", merged),
         ],
     )?;
-    native(
-        py,
-        NativeAttr::WriteDbtExecutionSummary,
+    call_with(
+        &registry::native(py, NativeAttr::WriteDbtExecutionSummary)?,
         &[
             ("request", request.clone()),
             ("invocation", invocation.clone()),
             ("execution", execution.clone()),
         ],
     )?;
-    let failed = native(
-        py,
-        NativeAttr::BuildFailedSqlbuildModelNames,
-        &[
-            ("graph", native_field(&resolution, "graph")?),
-            ("manifest", manifest.clone()),
-            ("node_results", native_field(&execution, "node_results")?),
-        ],
-    )?;
+    let failed = build_failed_sqlbuild_model_names(
+        &native_field(&resolution, "graph")?
+            .cast_into::<crate::bindings::_helpers::dbt_interop::graph::DbtCombinedGraph>()?,
+        &manifest.clone(),
+        &native_field(&execution, "node_results")?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let code: i64 = native_field(&execution, "returncode")?.extract()?;
     if code != 0 && !native_field(&execution, "node_results")?.is_truthy()? {
         return Ok(code);
     }
-    let output = native(
-        py,
-        NativeAttr::ResolveSqlbuildExecutionPlanOutput,
+    let output = call_with(
+        &registry::native(py, NativeAttr::ResolveSqlbuildExecutionPlanOutput)?,
         &[
             ("request", request.clone()),
             ("invocation", invocation.clone()),
@@ -192,21 +195,17 @@ fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64>
             return Ok(code);
         }
         Some("No SQLBuild work selected.")
-    } else if !native(
-        py,
-        NativeAttr::PlanHasExecutableWork,
-        &[("plan", output.clone())],
-    )?
-    .is_truthy()?
+    } else if !plan_has_executable_work(py, Some(keywords(py, &[("plan", output.clone())])?))
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
+        .is_truthy()?
     {
         Some("Skipping SQLBuild: no executable work selected.")
     } else {
         None
     };
     if let Some(message) = skip {
-        native(
-            py,
-            NativeAttr::WriteSqlbuildSkipNotice,
+        call_with(
+            &registry::native(py, NativeAttr::WriteSqlbuildSkipNotice)?,
             &[
                 ("request", request.clone()),
                 ("invocation", invocation),
@@ -215,25 +214,29 @@ fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64>
         )?;
         return Ok(code);
     }
-    let connection = native(
+    let connection = resolve_dbt_connection_config(
         py,
-        NativeAttr::ResolveDbtConnectionConfig,
-        &[
-            ("request", request.clone()),
-            ("invocation", invocation.clone()),
-            ("compiled", compiled.clone()),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("request", request.clone()),
+                ("invocation", invocation.clone()),
+                ("compiled", compiled.clone()),
+            ],
+        )?),
     )?;
-    let result = native(
+    let result = run_dbt_sqlbuild_work(
         py,
-        NativeAttr::RunDbtSqlbuildWork,
-        &[
-            ("request", request.clone()),
-            ("invocation", invocation),
-            ("compiled", compiled),
-            ("plan_output", output),
-            ("connection_config", connection),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("request", request.clone()),
+                ("invocation", invocation),
+                ("compiled", compiled),
+                ("plan_output", output),
+                ("connection_config", connection),
+            ],
+        )?),
     )?;
     Ok(code.max(result.extract()?))
 }
@@ -280,21 +283,24 @@ pub(crate) fn plan_dbt_interop_from_project<'py>(
     let connection = if stream.is_none() {
         none(py)
     } else {
-        native(
+        ConnectionProgressReporter::new(
             py,
-            NativeAttr::ConnectionProgressReporter,
-            &[
-                ("adapter_name", native_field(&compiled, "adapter_name")?),
-                ("stream", stream),
-                ("use_color", args.value_or_false("use_color")?),
-            ],
-        )?
+            Some(keywords(
+                py,
+                &[
+                    ("adapter_name", native_field(&compiled, "adapter_name")?),
+                    ("stream", stream),
+                    ("use_color", args.value_or_false("use_color")?),
+                ],
+            )?),
+        )
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?
     };
     let start = Instant::now();
     let resolution = resolve_plan(&request, &invocation, &compiled, &manifest)?;
-    let plan = native(
-        py,
-        NativeAttr::AttachSqlbuildPlanOutput,
+    let plan = call_with(
+        &registry::native(py, NativeAttr::AttachSqlbuildPlanOutput)?,
         &[
             ("plan", native_field(&resolution, "plan")?),
             ("project_dir", args.value("project_dir")?),
@@ -342,22 +348,24 @@ pub(crate) fn debug_dbt_from_project(
         .map(|arg| arg?.extract())
         .collect::<PyResult<_>>()?;
     let overrides = config_overrides(py, &dbt_args)?;
-    let resolved = native(
+    let resolved = resolve_dbt_config(
         py,
-        NativeAttr::ResolveDbtConfig,
-        &[
-            ("project_root", args.value("project_dir")?),
-            (
-                "config",
-                native_field(&discovered, "project_config")?.getattr("dbt")?,
-            ),
-            (
-                "local_config",
-                native_field(&discovered, "local_config")?.getattr("dbt")?,
-            ),
-            ("overrides", overrides),
-            ("require_project_dir", boolean(py, true)),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("project_root", args.value("project_dir")?),
+                (
+                    "config",
+                    native_field(&discovered, "project_config")?.getattr("dbt")?,
+                ),
+                (
+                    "local_config",
+                    native_field(&discovered, "local_config")?.getattr("dbt")?,
+                ),
+                ("overrides", overrides),
+                ("require_project_dir", boolean(py, true)),
+            ],
+        )?),
     )?;
     let dbt_options = new_record_with(
         py,
@@ -370,10 +378,14 @@ pub(crate) fn debug_dbt_from_project(
     )?;
     let mut runner = args.value("dbt_runner")?;
     if !runner.is_truthy()? {
-        runner = call_with(
-            &registry::native(py, NativeAttr::DbtRunner)?,
-            &[("dbt_executable", args.value("dbt_executable")?)],
-        )?;
+        runner = pyo3::Bound::new(
+            py,
+            DbtRunner::new(
+                args.value("dbt_executable")?.extract::<Option<String>>()?,
+                None,
+            ),
+        )
+        .map(pyo3::Bound::into_any)?;
     }
     let argv: Vec<String> = args.value("args")?.extract()?;
     let result = call_with(

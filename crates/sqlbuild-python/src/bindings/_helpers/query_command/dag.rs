@@ -26,7 +26,10 @@ fn array_length(document: &serde_json::Value, key: &str) -> PyResult<usize> {
 /// Run one `sqb dag` invocation.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_dag_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_dag_command<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "run_dag_command",

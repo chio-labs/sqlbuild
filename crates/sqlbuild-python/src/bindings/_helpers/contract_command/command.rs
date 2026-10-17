@@ -19,6 +19,7 @@ use sqlbuild_core::contract_command::models::{
 };
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_graph_from_compiled_project;
@@ -31,7 +32,7 @@ use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_s
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::refactor::contract_compare::compare_contracts;
 
@@ -173,17 +174,22 @@ fn compare<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let adapter: Bound<'py, PyAny> = native_field(context, "adapter")?;
-    let reporter: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", native_field(context, "adapter_name")?),
-            ("stream", progress.stream.clone()),
-            (
-                "use_color",
-                PyBool::new(py, progress.use_color).to_owned().into_any(),
-            ),
-        ],
-    )?;
+    let reporter: Bound<'py, PyAny> = ConnectionProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter_name", native_field(context, "adapter_name")?),
+                ("stream", progress.stream.clone()),
+                (
+                    "use_color",
+                    PyBool::new(py, progress.use_color).to_owned().into_any(),
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let connection_started: Instant = Instant::now();
     reporter.call_method1("on_connection_start", (1,))?;
     let connection: Bound<'py, PyAny> =
@@ -361,7 +367,7 @@ fn progress_for<'py>(request: &Bound<'py, PyAny>) -> PyResult<Progress<'py>> {
 /// Compare or adopt selected contracts from one read-only target.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let action: String = native_field(request, "action")?.str()?.to_string();
     let generate_write: bool =
         action == GENERATE_ACTION && native_field(request, "write")?.is_truthy()?;

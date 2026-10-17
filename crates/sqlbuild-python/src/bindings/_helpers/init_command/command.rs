@@ -38,7 +38,10 @@ fn exists_error(py: Python<'_>) -> PyErr {
 /// Create a minimal SQLBuild project in the project directory.
 #[pyfunction]
 #[pyo3(signature = (project_dir = None))]
-fn run_init_command(py: Python<'_>, project_dir: Option<Bound<'_, PyAny>>) -> PyResult<i32> {
+pub(crate) fn run_init_command(
+    py: Python<'_>,
+    project_dir: Option<Bound<'_, PyAny>>,
+) -> PyResult<i32> {
     let base_dir: Bound<'_, PyAny> = match project_dir.filter(|path| !path.is_none()) {
         Some(path) => path,
         None => imported(py, "pathlib", "Path")?.call_method0("cwd")?,

@@ -153,7 +153,7 @@ impl TerminalEventIndex {
 #[pymethods]
 impl TerminalEventIndex {
     #[new]
-    fn new(py: Python<'_>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>) -> PyResult<Self> {
         Ok(Self {
             state: Mutex::new(IndexState {
                 index: TerminalIndex::default(),
@@ -294,7 +294,7 @@ pub(crate) fn current_terminal_event_index(py: Python<'_>) -> PyResult<Bound<'_,
 
 /// Install and reliably restore one invocation terminal event index.
 #[pyfunction]
-fn terminal_event_index_scope(index: Py<TerminalEventIndex>) -> TerminalEventIndexScope {
+pub(crate) fn terminal_event_index_scope(index: Py<TerminalEventIndex>) -> TerminalEventIndexScope {
     TerminalEventIndexScope {
         index,
         token: Mutex::new(None),

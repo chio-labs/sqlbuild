@@ -6,12 +6,12 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::format_command::files::write_file_atomically;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::refactor::contract_edits::edit_contract_model;
 use crate::bindings::_helpers::refactor::contract_edits::edit_contract_source;
 use crate::bindings::_helpers::refactor::contract_edits::remaining_contract_findings;
@@ -168,10 +168,8 @@ fn applied<'py>(
 
 /// Write each `path: contents` pair atomically, in order.
 fn write_all(contents_by_path: &Bound<'_, PyDict>) -> PyResult<()> {
-    let py: Python<'_> = contents_by_path.py();
-    let write_atomically: Bound<'_, PyAny> = registry::native(py, NativeAttr::WriteAtomically)?;
     for (path, contents) in contents_by_path.iter() {
-        call_with(&write_atomically, &[("path", path), ("contents", contents)])?;
+        write_file_atomically(path.extract()?, &contents.extract::<String>()?)?;
     }
     Ok(())
 }

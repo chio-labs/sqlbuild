@@ -19,7 +19,7 @@ type LocatedRow = (
 
 /// Each reported diagnostic of `rows` through `(authored, query, cleaned)` and the expansion.
 #[pyfunction]
-fn locate_model_binding_diagnostics(
+pub(crate) fn locate_model_binding_diagnostics(
     rows: Vec<DiagnosticRow>,
     texts: (String, String, String),
     expansion: Option<(String, Vec<Vec<Expansion>>)>,

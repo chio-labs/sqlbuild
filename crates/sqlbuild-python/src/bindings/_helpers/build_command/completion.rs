@@ -31,10 +31,10 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::result_output::documents::format_build_execution_json;
 use crate::bindings::_helpers::result_output::documents::format_degradable_build_execution_json;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 
 const SUCCESS_STATUS: &str = "success";
 const PENDING_MESSAGE: &str = "Build cost collection has not completed.";
@@ -176,21 +176,12 @@ fn run_id_for<'py>(
 }
 
 fn write_json(context: &BuildContext<'_>, payload: Bound<'_, PyAny>) -> PyResult<()> {
-    call_with(
-        &registry::native(context.py(), NativeAttr::WriteExecutionJsonOutput)?,
-        &[
-            ("payload", payload),
-            (
-                "json_output",
-                native_field(&context.request, "json_output")?,
-            ),
-            (
-                "json_output_path",
-                native_field(&context.request, "json_output_path")?,
-            ),
-        ],
-    )?;
-    Ok(())
+    write_execution_json_output(
+        context.py(),
+        payload,
+        native_field(&context.request, "json_output")?.extract()?,
+        native_field(&context.request, "json_output_path")?,
+    )
 }
 
 /// Persist and emit a completed zero-cost record when the plan has no work.

@@ -4,22 +4,29 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods};
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    FORMAT_LINT_BATCHES, FORMAT_LINT_FILES, count_stage,
+};
 use crate::bindings::_helpers::discovery::description_inputs::externally_described_models;
 use crate::bindings::_helpers::format_command::files::{
     FormatChange, file_dictionary, overlaid, persist_changes, sorted_items,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::rules::dsl_headers::format_native_headers;
+use crate::bindings::_helpers::rules::dsl_headers::reject_unparseable_header_rewrites;
+use crate::bindings::_helpers::rules::dsl_headers::safe_format_files;
 use crate::bindings::_helpers::rules::dsl_headers::{header_violations, rules_config};
 use crate::bindings::_helpers::rules::fixture_formatting::format_redundant_fixture_nulls;
 use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
 use crate::bindings::_helpers::rules::lint_text::apply_lint_suppressions;
+use crate::bindings::_helpers::rules::lint_text::format_lint_sql_bodies;
 use sqlbuild_rules::dsl_headers::main::scan_headers::scan_headers;
 use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderViolation};
 
@@ -48,10 +55,6 @@ pub(crate) struct FormatOutcome<'py> {
     pub(crate) final_contents: Bound<'py, PyDict>,
 }
 
-fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
-    registry::native(py, name)
-}
-
 /// Fixture-null rewrites proven safe by the contracts, when fixture inputs are known.
 fn fixture_autofix<'py>(
     request: &FormatRequest<'_, 'py>,
@@ -78,15 +81,19 @@ fn format_bodies<'py>(
     files: &Bound<'py, PyDict>,
 ) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyAny>)> {
     let py: Python<'py> = files.py();
-    let items: Vec<Bound<'py, PyAny>> = sorted_items(files)?
+    let items: Vec<(Bound<'py, PyAny>, String)> = sorted_items(files)?
         .into_iter()
-        .map(|(path, contents)| Ok(PyTuple::new(py, [path, contents])?.into_any()))
+        .map(|(path, contents)| Ok((path, contents.extract::<String>()?)))
         .collect::<PyResult<_>>()?;
-    let result: Bound<'py, PyAny> = native(py, NativeAttr::FormatLintSqlBodies)?.call1((
-        PyList::new(py, items)?,
-        request.project_dir,
+    count_stage(py, FORMAT_LINT_BATCHES, 1)?;
+    count_stage(py, FORMAT_LINT_FILES, items.len() as u64)?;
+    let result: Bound<'py, PyAny> = format_lint_sql_bodies(
+        py,
+        items,
+        request.project_dir.extract::<std::path::PathBuf>()?,
         request.config,
-    ))?;
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok((
         result.get_item(0)?.downcast_into::<PyDict>()?,
         result.get_item(1)?,
@@ -107,14 +114,9 @@ fn apply_fixes<'py>(
     }
     let current: Bound<'py, PyDict> = overlaid(files, &updated)?;
     for (path, contents) in sorted_items(&current)? {
-        let result: Bound<'py, PyAny> = call_with(
-            &native(py, NativeAttr::FormatNativeHeaders)?,
-            &[
-                ("contents", contents.clone()),
-                ("file_path", path.clone()),
-                ("config", request.config.clone()),
-            ],
-        )?;
+        let result: Bound<'py, PyAny> =
+            format_native_headers(&contents.clone(), &path.clone(), &request.config.clone())
+                .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
         for fault in result.get_item(1)?.try_iter()? {
             faults.append(fault?)?;
         }
@@ -138,14 +140,12 @@ fn apply_fixes<'py>(
         updated.update(fixture_formatted.as_mapping())?;
         updated.update(final_native.as_mapping())?;
     }
-    let result: Bound<'py, PyAny> = call_with(
-        &native(py, NativeAttr::RejectUnparseableHeaderRewrites)?,
-        &[
-            ("updated", updated.into_any()),
-            ("config", request.config.clone()),
-            ("faults", faults.into_any()),
-        ],
-    )?;
+    let result: Bound<'py, PyAny> = reject_unparseable_header_rewrites(
+        &updated.into_any().cast_into::<PyDict>()?,
+        &request.config.clone(),
+        &faults.into_any().cast_into::<PyList>()?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok((
         result.get_item(0)?.downcast_into::<PyDict>()?,
         result.get_item(1)?.downcast_into::<PyList>()?,
@@ -269,13 +269,11 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
         .map_err(|error| pyo3::exceptions::PyOSError::new_err(error.to_string()))?;
     let files_checked: usize = collected.len();
     let files: Bound<'py, PyDict> = file_dictionary(py, collected)?;
-    let safe: Bound<'py, PyAny> = call_with(
-        &native(py, NativeAttr::SafeFormatFiles)?,
-        &[
-            ("files", files.clone().into_any()),
-            ("config", request.config.clone()),
-        ],
-    )?;
+    let safe: Bound<'py, PyAny> = safe_format_files(
+        &files.clone().into_any().cast_into::<PyDict>()?,
+        &request.config.clone(),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let newlines: Bound<'py, PyDict> = safe.get_item(1)?.downcast_into::<PyDict>()?;
     let (safe_files, rule_fixes, rule_faults) =
         plan_rule_fixes(request, &safe.get_item(0)?.downcast_into::<PyDict>()?)?;

@@ -16,6 +16,8 @@ use sqlbuild_core::load_command::main::render_load_plan::render_load_plan;
 use sqlbuild_core::load_command::main::render_load_ready::render_load_ready;
 use sqlbuild_core::load_command::models::{LoadCounts, LoadResultText};
 
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::cli::progress_text::write_execution_header;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
@@ -36,14 +38,17 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::result_output::documents::format_load_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
+use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
 const EXECUTION_COMMAND: &str = "sqb load";
@@ -249,15 +254,14 @@ fn project_relations<'py>(
     let reference_class: Bound<'py, PyAny> = host::entry(py, UserCodeHost::SqlResourceRef)?;
     let source_kind: Bound<'py, PyAny> =
         host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
-    let render: Bound<'py, PyAny> = registry::native(py, NativeAttr::RenderSourceRelation)?;
     let relations: Bound<'py, PyDict> = PyDict::new(py);
     for (name, source) in sources.iter() {
         let key: Bound<'py, PyAny> = call_with(
             &reference_class,
             &[("kind", source_kind.clone()), ("name", name)],
         )?;
-        let relation: Bound<'py, PyAny> =
-            call_with(&render, &[("entry", source), ("adapter", adapter.clone())])?;
+        let relation: String =
+            render_source_relation(&source, Some(adapter).filter(|value| !value.is_none()))?;
         relations.set_item(key, relation)?;
     }
     Ok(relations.into_any())
@@ -303,13 +307,8 @@ fn prepare<'py>(
     } else {
         requested.extract()?
     };
-    let typed: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::TypeCursorOverrides)?,
-        &[(
-            "cursor_overrides",
-            native_field(request, "cursor_overrides")?,
-        )],
-    )?;
+    let typed: Bound<'py, PyAny> =
+        type_cursor_overrides(&native_field(request, "cursor_overrides")?, &[])?;
     let cursor_overrides: Bound<'py, PyAny> = if typed.is_truthy()? {
         typed
     } else {
@@ -395,43 +394,53 @@ fn execute<'py>(
 ) -> PyResult<(Vec<Bound<'py, PyAny>>, f64)> {
     let py: Python<'py> = request.py();
     let started: Instant = Instant::now();
-    let event_writer: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
+    let event_writer: Bound<'py, PyAny> = ExecutionEventWriter::new(py, None)
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?;
     let order: Bound<'py, PyDict> = PyDict::new(py);
     for (index, source) in invocation.selected.iter().enumerate() {
         order.set_item(native_field(source, "name")?, index + 1)?;
     }
     let reporter: Bound<'py, LoadProgressReporter> =
-        registry::native(py, NativeAttr::LoadProgressReporter)?
-            .call(
-                (),
-                Some(&{
+        crate::bindings::_helpers::load::load_progress::LoadProgressReporter::new(
+            py,
+            Some(
+                {
                     let options: Bound<'py, PyDict> = PyDict::new(py);
                     options.set_item("stream", &invocation.stream)?;
                     options.set_item("use_color", invocation.style.use_color)?;
                     options.set_item("source_order", order)?;
                     options.set_item("total_count", invocation.selected.len())?;
                     options
-                }),
-            )?
-            .downcast_into()?;
-    let connection: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", text(py, &preparation.adapter_name)),
-            ("stream", invocation.stream.clone()),
-            (
-                "blank_line_after_complete",
-                PyBool::new(py, true).to_owned().into_any(),
+                }
+                .clone(),
             ),
-            (
-                "use_color",
-                PyBool::new(py, invocation.style.use_color)
-                    .to_owned()
-                    .into_any(),
-            ),
-        ],
-    )?;
+        )
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?
+        .downcast_into()?;
+    let connection: Bound<'py, PyAny> = ConnectionProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter_name", text(py, &preparation.adapter_name)),
+                ("stream", invocation.stream.clone()),
+                (
+                    "blank_line_after_complete",
+                    PyBool::new(py, true).to_owned().into_any(),
+                ),
+                (
+                    "use_color",
+                    PyBool::new(py, invocation.style.use_color)
+                        .to_owned()
+                        .into_any(),
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let relay: Bound<'py, LoadCallbackRelay> = Bound::new(
         py,
         LoadCallbackRelay {
@@ -524,7 +533,7 @@ fn loader_node_flag(source: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// Run one `sqb load` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_load_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_load_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Invocation<'_> = invocation(py, request)?;
     write(
         &invocation.stream,
@@ -557,7 +566,8 @@ fn run_load_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
         options.set_item("target", py.None())?;
         options.set_item("concurrency", preparation.concurrency)?;
         options.set_item("use_color", invocation.style.use_color)?;
-        registry::native(py, NativeAttr::WriteExecutionHeader)?.call((), Some(&options))?;
+        write_execution_header(py, Some(options.clone()))
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
         execute(request, &invocation, &preparation)
     })();
     let closed: PyResult<Bound<'_, PyAny>> = preparation.provider_session.call_method0("close");

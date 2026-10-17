@@ -9,20 +9,21 @@ use sqlbuild_core::build_command::models::DurationLimit;
 
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::cli::progress_reporters::PlanningProgressReporter;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const DEFER_CONFLICT_CODE: &str = "C408";
 
@@ -176,21 +177,26 @@ pub(crate) fn resolve_build_context<'py>(
     } else {
         "stdout"
     })?;
-    let connection_progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", text(py, &adapter_name)),
-            ("stream", stream.clone()),
-            ("use_color", boolean(py, use_color)),
-        ],
-    )?;
-    let planning_progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
-        &[
-            ("stream", stream.clone()),
-            ("use_color", boolean(py, use_color)),
-        ],
-    )?;
+    let connection_progress: Bound<'py, PyAny> = ConnectionProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter_name", text(py, &adapter_name)),
+                ("stream", stream.clone()),
+                ("use_color", boolean(py, use_color)),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
+    let planning_progress: Bound<'py, PyAny> = PlanningProgressReporter::new(
+        py,
+        &stream.clone(),
+        boolean(py, use_color).extract::<bool>()?,
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let load_sources: Bound<'py, PyAny> = native_field(request, "load_sources")?;
     let should_load_sources: bool = native_field(request, "reload_sources")?.is_truthy()?
         || if load_sources.is_none() {

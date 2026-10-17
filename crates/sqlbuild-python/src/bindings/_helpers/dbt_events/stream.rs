@@ -88,7 +88,7 @@ impl DbtEventStream {
 impl DbtEventStream {
     #[new]
     #[pyo3(signature = (**options))]
-    fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
         let arguments: KeywordArguments<'_> =
             KeywordArguments::read(py, "DbtEventStream", options, STREAM_OPTIONS)?;
         Ok(Self {

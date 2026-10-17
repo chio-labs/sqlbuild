@@ -276,7 +276,7 @@ fn run_rule_selection(
 /// List, inspect, execute, or generate guidance for compiler rules.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let py: Python<'_> = request.py();
     let requested_dir: Bound<'_, PyAny> = native_field(request, "project_dir")?;
     let project_dir: Bound<'_, PyAny> = if requested_dir.is_none() {

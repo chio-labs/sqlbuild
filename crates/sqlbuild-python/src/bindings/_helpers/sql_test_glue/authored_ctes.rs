@@ -117,7 +117,7 @@ fn check_bodies(
 
 /// Reject the first authored test block, then scenario, whose CTE names cannot be read.
 #[pyfunction]
-fn validate_authored_sql_test_ctes(
+pub(crate) fn validate_authored_sql_test_ctes(
     py: Python<'_>,
     test_files: Bound<'_, PyAny>,
     scenario_files: Bound<'_, PyAny>,

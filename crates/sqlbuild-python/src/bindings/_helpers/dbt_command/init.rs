@@ -11,13 +11,14 @@ use sqlbuild_core::dbt_command::main::render_dbt_init_preview::render_dbt_init_p
 use sqlbuild_core::dbt_command::main::render_dbt_init_summary::render_dbt_init_summary;
 use sqlbuild_core::dbt_command::models::DbtInitSummary;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::cli::progress_reporters::DbtInitProgressReporter;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::dbt_command::init_project::build_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::init_project::validate_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 fn missing_project(py: Python<'_>) -> PyErr {
@@ -80,16 +81,15 @@ fn summary(result: &Bound<'_, PyAny>) -> PyResult<DbtInitSummary> {
 /// Execute SQLBuild-owned `sqb dbt init`.
 #[pyfunction]
 #[pyo3(signature = (request))]
-fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let project_dir: Bound<'_, PyAny> = dbt_project_dir(request)?;
     let use_color: bool = color_enabled(py)?;
-    let progress: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DbtInitProgressReporter)?,
-        &[
-            ("stream", stream(py, "stdout")?),
-            ("use_color", flag(py, use_color)),
-        ],
-    )?;
+    let progress: Bound<'_, PyAny> = DbtInitProgressReporter::new(
+        &stream(py, "stdout")?,
+        flag(py, use_color).extract::<bool>()?,
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let callbacks: Bound<'_, PyAny> = new_record_with(
         py,
         RecordId::DbtInitProgressCallbacks,

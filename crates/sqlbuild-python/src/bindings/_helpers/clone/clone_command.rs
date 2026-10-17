@@ -18,6 +18,7 @@ use sqlbuild_core::clone_text::main::validate_clone_policy::validate_clone_polic
 use sqlbuild_core::clone_text::main::validate_clone_target_names::validate_clone_target_names;
 use sqlbuild_core::clone_text::models::CloneItemText;
 
+use crate::bindings::_helpers::cli::progress_reporters::PlanningProgressReporter;
 use crate::bindings::_helpers::clone::clone_execution::{
     destination_entry_count, execute_clone_plan, resource_types_by_name,
 };
@@ -38,7 +39,7 @@ use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_s
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::result_output::documents::format_clone_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
@@ -87,10 +88,11 @@ fn progress_reporter<'py>(
     style: CliStyle,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = stream.py();
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item("stream", stream)?;
-    options.set_item("use_color", style.use_color)?;
-    registry::native(py, NativeAttr::PlanningProgressReporter)?.call((), Some(&options))
+    Ok(Bound::new(
+        py,
+        PlanningProgressReporter::new(py, stream, style.use_color)?,
+    )?
+    .into_any())
 }
 
 fn lifecycle<'py>(py: Python<'py>, (kind, name): (&str, &str)) -> PyResult<Bound<'py, PyAny>> {
@@ -316,7 +318,7 @@ fn clone<'py>(
 /// Run one `sqb clone` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_clone_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_clone_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Invocation<'_> = invocation(py, request)?;
     let (config, connection) = connect(request, &invocation)?;
     let outcome = clone(request, &invocation, (&config, &connection));

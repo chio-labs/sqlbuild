@@ -103,7 +103,7 @@ pub(crate) fn discovered_model_files<'py>(
 /// Discover the (selected) model files natively, reporting failing files to `on_fault`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn discover_model_files<'py>(
+pub(crate) fn discover_model_files<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

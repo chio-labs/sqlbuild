@@ -89,7 +89,7 @@ fn hook_read_edges<'py>(
 /// The Python hooks attached to one model, in lifecycle order without repeats.
 #[pyfunction]
 #[pyo3(signature = (*, model))]
-fn model_python_hook_names<'py>(
+pub(crate) fn model_python_hook_names<'py>(
     py: Python<'py>,
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {

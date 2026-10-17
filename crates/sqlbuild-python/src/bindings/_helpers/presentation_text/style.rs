@@ -23,7 +23,7 @@ impl PythonCliStyle {
 impl PythonCliStyle {
     #[new]
     #[pyo3(signature = (*, use_color))]
-    fn new(use_color: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub(crate) fn new(use_color: &Bound<'_, PyAny>) -> PyResult<Self> {
         Ok(Self {
             use_color: use_color.is_truthy()?,
         })

@@ -3,6 +3,8 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyBool;
 
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::cli::progress_reporters::PlanningProgressReporter;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
@@ -12,8 +14,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The project directory, discovered inputs, adapter context, colour and progress stream.
 type InvocationContext<'py> = (
@@ -142,27 +143,32 @@ pub(crate) fn resolve_reported_command_invocation<'py>(
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = context_fields(&context)?;
     fields.push((
         "connection_progress",
-        call_with(
-            &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-            &[
-                (
-                    "adapter_name",
-                    native_field(adapter_context, "adapter_name")?,
-                ),
-                ("stream", stream.clone()),
-                ("use_color", boolean(py, *use_color)),
-            ],
-        )?,
+        ConnectionProgressReporter::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    (
+                        "adapter_name",
+                        native_field(adapter_context, "adapter_name")?,
+                    ),
+                    ("stream", stream.clone()),
+                    ("use_color", boolean(py, *use_color)),
+                ],
+            )?),
+        )
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?,
     ));
     fields.push((
         "planning_progress",
-        call_with(
-            &registry::native(py, NativeAttr::PlanningProgressReporter)?,
-            &[
-                ("stream", stream.clone()),
-                ("use_color", boolean(py, *use_color)),
-            ],
-        )?,
+        PlanningProgressReporter::new(
+            py,
+            &stream.clone(),
+            boolean(py, *use_color).extract::<bool>()?,
+        )
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?,
     ));
     call_with(invocation_type, &fields)
 }

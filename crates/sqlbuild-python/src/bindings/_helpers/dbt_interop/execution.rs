@@ -25,7 +25,7 @@ const MERGED_OPTIONS: (&[&str], &[&str]) = (&["command", "options", "routed_args
 /// Merge the original dbt selection with dbt models SQLBuild work requires; `None` without dbt work.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_merged_dbt_execution_argv<'py>(
+pub(crate) fn build_merged_dbt_execution_argv<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Option<Bound<'py, PyTuple>>> {
@@ -80,7 +80,7 @@ fn executed_nodes(node_results: &Bound<'_, PyAny>) -> PyResult<Vec<DbtExecutedNo
 /// SQLBuild models downstream of failed or skipped dbt models and the models failed tests check.
 #[pyfunction]
 #[pyo3(signature = (*, graph, manifest, node_results))]
-fn build_failed_sqlbuild_model_names<'py>(
+pub(crate) fn build_failed_sqlbuild_model_names<'py>(
     graph: &Bound<'py, DbtCombinedGraph>,
     manifest: &Bound<'py, PyAny>,
     node_results: &Bound<'py, PyAny>,

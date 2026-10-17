@@ -145,12 +145,3 @@ pub(crate) fn record_named(name: &str) -> PyResult<RecordId> {
         ))
     })
 }
-
-/// The native module attribute a pure-Rust crate names, failing as `getattr` would.
-pub(crate) fn attribute_named(name: &str) -> PyResult<NativeAttr> {
-    NativeAttr::from_name(name).ok_or_else(|| {
-        PyAttributeError::new_err(format!(
-            "module 'sqlbuild._native' has no attribute '{name}'"
-        ))
-    })
-}

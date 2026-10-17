@@ -17,14 +17,14 @@ use crate::bindings::_helpers::cost_command::bounds::{parse_bound, parse_since};
 use crate::bindings::_helpers::cost_command::refresh::refresh_pending_cost_run;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
 use crate::bindings::_helpers::cost_command::sorting::{sort_history, sort_resources};
+use crate::bindings::_helpers::cost_report::functions::format_cost_breakdown;
 use crate::bindings::_helpers::cost_report::functions::format_cost_history;
 use crate::bindings::_helpers::cost_report::functions::format_cost_history_json;
+use crate::bindings::_helpers::cost_report::functions::format_cost_json;
 use crate::bindings::_helpers::cost_report::functions::list_cost_runs;
 use crate::bindings::_helpers::cost_report::functions::resolve_cost_run;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 /// The request fields every cost view reads.
 struct CostRequest<'py> {
@@ -285,16 +285,16 @@ fn run_detail(request: &CostRequest<'_>) -> PyResult<i32> {
         }
         None => record.clone(),
     };
-    let payload: String = registry::native(py, NativeAttr::FormatCostJson)?
-        .call1((json_record,))?
+    let payload: String = format_cost_json(&json_record)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .extract()?;
     request.emit(&payload, || {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("record", &record)?;
         options.set_item("use_color", request.use_color()?)?;
         options.set_item("limit", limit)?;
-        registry::native(py, NativeAttr::FormatCostBreakdown)?
-            .call((), Some(&options))?
+        format_cost_breakdown(py, Some(options.clone()))
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
             .extract()
     })?;
     Ok(0)
@@ -311,7 +311,7 @@ fn report(request: &Bound<'_, PyAny>) -> PyResult<i32> {
 
 /// Refresh a delayed run, then render persisted cost history or one run breakdown.
 #[pyfunction]
-fn run_cost_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_cost_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     refresh_pending_cost_run(py, request);
     report(request)
 }

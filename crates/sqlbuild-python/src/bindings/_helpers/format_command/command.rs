@@ -263,7 +263,10 @@ fn run_command(
 /// Run one `sqb format` invocation.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_format_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_format_command<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "run_format_command",

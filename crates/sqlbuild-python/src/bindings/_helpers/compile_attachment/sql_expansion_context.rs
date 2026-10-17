@@ -16,8 +16,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::render::declaration_indexes::public_declaration_indexes;
 use pyo3::IntoPyObjectExt;
 
 /// Build the declaration scope of `discovered`; a static scope lends only its index to macros.
@@ -196,8 +196,8 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
         )?,
     };
     let (enums, constants): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
-        registry::native(py, NativeAttr::PublicDeclarationIndexes)?
-            .call1((&discovered,))?
+        public_declaration_indexes(discovered.clone())
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
             .extract()?;
     let collection_rendering: Bound<'_, PyAny> =
         resolve_effective_collection_rendering(&project_config.clone(), &py.None().into_bound(py))

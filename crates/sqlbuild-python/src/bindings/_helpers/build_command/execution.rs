@@ -14,24 +14,27 @@ use crate::bindings::_helpers::build_command::lifecycle::{
 use crate::bindings::_helpers::build_command::support::{
     boolean, display_text, emit, frozenset, joined, keyword_relay, line_writer, none, text, tuple,
 };
+use crate::bindings::_helpers::build_progress::build_callbacks::BuildProgressCallbacks;
 use crate::bindings::_helpers::check::check_core::{
     build_check_relation_targets, load_results_by_loader_name, record_python_run_state_results,
     relevant_check_functions,
 };
 use crate::bindings::_helpers::check::check_results::write_check_results;
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::cli::progress_text::write_execution_header;
 use crate::bindings::_helpers::command_runtime::warehouses::describe_connection_warehouse;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords, within};
 use crate::bindings::_helpers::compile_driver::relation_targets::build_project_relation_targets;
+use crate::bindings::_helpers::cost_telemetry::context::CostContext;
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::freshness::publication::append_freshness_records;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const EXECUTION_COMMAND: &str = "sqb build";
 const SUCCESS_STATUS: &str = "success";
@@ -177,13 +180,8 @@ fn cursors<'py>(
     let py: Python<'py> = context.py();
     let mut overrides: Bound<'py, PyAny> = native_field(plan, "cursor_overrides")?;
     if !overrides.is_truthy()? {
-        overrides = call_with(
-            &registry::native(py, NativeAttr::TypeCursorOverrides)?,
-            &[(
-                "cursor_overrides",
-                native_field(&context.request, "cursor_overrides")?,
-            )],
-        )?;
+        overrides =
+            type_cursor_overrides(&native_field(&context.request, "cursor_overrides")?, &[])?;
     }
     if !overrides.is_truthy()? {
         overrides = new_record(py, RecordId::CursorOverrides, (), None)?;
@@ -205,19 +203,24 @@ pub(crate) fn prepare_build_execution<'py>(
     let py: Python<'py> = context.py();
     let plan: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
     let debug: bool = context.request_flag("debug")? || context.request_flag("json_output")?;
-    let callbacks: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildProgressCallbacks)?,
-        &[
-            ("plan", plan.clone()),
-            ("use_color", boolean(py, context.use_color)),
-            ("verbose", native_field(&context.request, "verbose")?),
-            ("debug", boolean(py, debug)),
-            (
-                "event_output_path",
-                native_field(&context.request, "event_output_path")?,
-            ),
-        ],
-    )?;
+    let callbacks: Bound<'py, PyAny> = BuildProgressCallbacks::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", plan.clone()),
+                ("use_color", boolean(py, context.use_color)),
+                ("verbose", native_field(&context.request, "verbose")?),
+                ("debug", boolean(py, debug)),
+                (
+                    "event_output_path",
+                    native_field(&context.request, "event_output_path")?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let concurrency: Bound<'py, PyAny> =
         context.concurrency(&native_field(pipeline, "project")?)?;
     if context.verbose {
@@ -238,19 +241,24 @@ pub(crate) fn prepare_build_execution<'py>(
         )
         .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     }
-    let connection_progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", context.get("adapter_name")?),
-            ("stream", context.stream.clone()),
-            (
-                "blank_line_before_start",
-                boolean(py, native_field(&plan, "source_load_entries")?.is_truthy()?),
-            ),
-            ("blank_line_after_complete", boolean(py, true)),
-            ("use_color", boolean(py, context.use_color)),
-        ],
-    )?;
+    let connection_progress: Bound<'py, PyAny> = ConnectionProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter_name", context.get("adapter_name")?),
+                ("stream", context.stream.clone()),
+                (
+                    "blank_line_before_start",
+                    boolean(py, native_field(&plan, "source_load_entries")?.is_truthy()?),
+                ),
+                ("blank_line_after_complete", boolean(py, true)),
+                ("use_color", boolean(py, context.use_color)),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let cursors: [Bound<'py, PyAny>; 4] = cursors(context, &plan)?;
     let inputs: LifecycleInputs<'py> = LifecycleInputs {
         cursors: cursors.clone(),
@@ -602,7 +610,6 @@ pub(crate) fn execute_direct_build<'py>(
     } else {
         context.get("adapter_name")?
     };
-    let cost_context: Bound<'py, PyAny> = registry::native(py, NativeAttr::CostContext)?;
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("run_id", &run_id)?;
     options.set_item("resource_type", "run")?;
@@ -620,20 +627,26 @@ pub(crate) fn execute_direct_build<'py>(
         )?,
     )?;
     options.set_item("phase", "build")?;
-    let scope: Bound<'py, PyAny> = cost_context.call_method("scope", (), Some(&options))?;
+    let scope: Bound<'py, PyAny> =
+        Bound::new(py, CostContext::scope(py, Some(options))?)?.into_any();
     within(&scope, |_| {
         let preparation: Preparation<'py> = prepare_build_execution(context, pipeline, providers)?;
         let ran: PyResult<(Outcome<'py>, Bound<'py, PyAny>)> = (|| {
             let outcome: Outcome<'py> =
                 execute_build_plan(context, pipeline, &preparation, providers)?;
-            let checks_scope: Bound<'py, PyAny> = call_with(
-                &native_field(&cost_context, "resource_scope")?,
-                &[
-                    ("resource_type", text(py, "run")),
-                    ("resource_name", resource_name.clone()),
-                    ("phase", text(py, "post_build_checks")),
-                ],
-            )?;
+            let checks_scope: Bound<'py, PyAny> = CostContext::resource_scope(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("resource_type", text(py, "run")),
+                        ("resource_name", resource_name.clone()),
+                        ("phase", text(py, "post_build_checks")),
+                    ],
+                )?),
+            )
+            .and_then(|scope| Bound::new(py, scope))?
+            .into_any();
             let checks: Bound<'py, PyAny> = within(&checks_scope, |_| {
                 run_post_build_python_checks(context, pipeline, (&outcome, &preparation), providers)
             })?;

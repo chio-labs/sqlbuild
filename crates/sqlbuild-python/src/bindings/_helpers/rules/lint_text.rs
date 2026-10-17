@@ -209,7 +209,7 @@ fn relative_parts(path: &std::path::Path, project_dir: &std::path::Path) -> Opti
 
 /// Format the SQL bodies of `files`; return changed texts by path and declined-body faults.
 #[pyfunction]
-fn format_lint_sql_bodies<'py>(
+pub(crate) fn format_lint_sql_bodies<'py>(
     py: Python<'py>,
     files: Vec<(Bound<'py, PyAny>, String)>,
     project_dir: PathBuf,

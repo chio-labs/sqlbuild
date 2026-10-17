@@ -75,7 +75,7 @@ pub(crate) struct BuildPhaseTimingTracker {
 impl BuildPhaseTimingTracker {
     #[new]
     #[pyo3(signature = (*, monotonic = None))]
-    fn new(py: Python<'_>, monotonic: Option<Bound<'_, PyAny>>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>, monotonic: Option<Bound<'_, PyAny>>) -> PyResult<Self> {
         let monotonic: Bound<'_, PyAny> = clock(py, monotonic)?;
         let started_at: f64 = monotonic.call0()?.extract()?;
         Ok(Self {

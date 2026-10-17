@@ -8,13 +8,13 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_sqltext::compiler::main::model_output_columns::model_output_columns;
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::records::compiled_project_facts;
 use crate::bindings::_helpers::contracts::model_contracts::{
     ConflictRow, DiagnosticRow, evaluate_project_model_contracts, project_promotion_conflicts,
 };
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::sqltext::model_headers::{ColumnLocation, location_rows};
 
 const PATHLIB_MODULE: &str = "pathlib";
@@ -37,7 +37,7 @@ fn keyword_call<'py>(
 
 /// The compile's retained native project, read through `_native.compiled_project_facts`.
 fn native_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    registry::native(project.py(), NativeAttr::CompiledProjectFacts)?.call1((project,))
+    Ok(compiled_project_facts(project)?.into_any())
 }
 
 /// Where the model's SQL produces `column_name`, recovered from the authored SQL when needed.

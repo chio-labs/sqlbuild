@@ -134,7 +134,7 @@ fn lint_native_headers<'py>(
 /// `contents` with header formatting fixes applied, and the faults relocation reported.
 #[pyfunction]
 #[pyo3(signature = (*, contents, file_path, config))]
-fn format_native_headers<'py>(
+pub(crate) fn format_native_headers<'py>(
     contents: &Bound<'py, PyAny>,
     file_path: &Bound<'py, PyAny>,
     config: &Bound<'py, PyAny>,
@@ -167,7 +167,7 @@ fn parse_faults<'py>(
 /// Parse-safe files, and every file's authored newline convention.
 #[pyfunction]
 #[pyo3(signature = (*, files, config))]
-fn safe_format_files<'py>(
+pub(crate) fn safe_format_files<'py>(
     files: &Bound<'py, PyDict>,
     config: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyDict>)> {
@@ -198,7 +198,7 @@ fn safe_format_files<'py>(
 /// Every rewrite whose header still parses, with the faults of the discarded ones appended.
 #[pyfunction]
 #[pyo3(signature = (*, updated, config, faults))]
-fn reject_unparseable_header_rewrites<'py>(
+pub(crate) fn reject_unparseable_header_rewrites<'py>(
     updated: &Bound<'py, PyDict>,
     config: &Bound<'py, PyAny>,
     faults: &Bound<'py, PyList>,

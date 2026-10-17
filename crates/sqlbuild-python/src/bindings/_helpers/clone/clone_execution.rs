@@ -18,8 +18,8 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
 const DESTINATION_ENTRY_GROUPS: [&str; 4] = [
     "destination_source_entries",
@@ -324,10 +324,12 @@ pub(crate) fn execute_clone_plan<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, f64)> {
     let py: Python<'py> = pipeline.py();
     let started: Instant = Instant::now();
-    let event_writer: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ExecutionEventWriter)?,
-        &[("path", native_field(request, "event_output_path")?)],
-    )?;
+    let event_writer: Bound<'py, PyAny> = ExecutionEventWriter::new(
+        py,
+        Some(native_field(request, "event_output_path")?).filter(|value| !value.is_none()),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let printer: Py<CloneItemPrinter> = Py::new(
         py,
         CloneItemPrinter {

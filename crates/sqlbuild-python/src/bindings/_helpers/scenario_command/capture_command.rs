@@ -37,7 +37,10 @@ fn count(label: &str, value: usize) -> SummaryCount {
 /// Run one `sqb scenario capture` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_scenario_capture_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_scenario_capture_command(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+) -> PyResult<i32> {
     let no_sql_validation: Bound<'_, PyAny> = native_field(request, "no_sql_validation")?;
     if let Some(error) = sql_analysis_required_error(
         SqlAnalysisCommand::Capture,

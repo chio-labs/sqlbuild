@@ -31,7 +31,9 @@ fn shared_input_error(carrier: &Carrier<'_>, message: &str) -> PyErr {
 
 /// Split `+selector+` marker syntax from the selector core without resolving the core.
 #[pyfunction]
-fn split_selector_expansion<'py>(raw: &Bound<'py, PyString>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn split_selector_expansion<'py>(
+    raw: &Bound<'py, PyString>,
+) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     let carrier: Carrier<'py> = Carrier::single(raw)?;
     let expansion: SelectorExpansion =
@@ -79,7 +81,7 @@ fn selectable_model(model: &Bound<'_, PyAny>) -> PyResult<SelectableModel> {
 /// One SQLBuild-owned model selector core's model names, and its path selector when translated.
 #[pyfunction]
 #[pyo3(signature = (*, project, term))]
-fn resolve_sqlbuild_model_selector_names<'py>(
+pub(crate) fn resolve_sqlbuild_model_selector_names<'py>(
     project: &Bound<'py, PyAny>,
     term: &Bound<'py, PyString>,
 ) -> PyResult<Bound<'py, PyTuple>> {

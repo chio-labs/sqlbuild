@@ -80,7 +80,7 @@ pub(crate) fn resolve_cost_run<'py>(
 
 /// `sqb cost --json` text of one run.
 #[pyfunction]
-fn format_cost_json(record: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn format_cost_json(record: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(cost_report_json(&cost_run(record)?))
 }
 
@@ -107,7 +107,10 @@ pub(crate) fn cost_output_payload(
 /// The aligned human breakdown of one run.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_cost_breakdown(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn format_cost_breakdown(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "format_cost_breakdown", options, BREAKDOWN_OPTIONS)?;
     let limit: Bound<'_, PyAny> = arguments.value("limit")?;

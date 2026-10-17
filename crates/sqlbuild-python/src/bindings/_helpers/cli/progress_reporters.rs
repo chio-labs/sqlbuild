@@ -218,7 +218,7 @@ pub(crate) struct DbtInitProgressReporter {
 impl DbtInitProgressReporter {
     #[new]
     #[pyo3(signature = (*, stream, use_color))]
-    fn new(stream: &Bound<'_, PyAny>, use_color: bool) -> PyResult<Self> {
+    pub(crate) fn new(stream: &Bound<'_, PyAny>, use_color: bool) -> PyResult<Self> {
         Ok(Self {
             stream: stream.clone().unbind(),
             status: status_reporter(stream, use_color)?.unbind(),

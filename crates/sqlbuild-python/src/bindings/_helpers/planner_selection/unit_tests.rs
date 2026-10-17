@@ -155,7 +155,7 @@ pub(crate) fn split_project_unit_test_selectors<'py>(
 /// Split unit-test selectors from resource selectors for a command that runs unit tests.
 #[pyfunction]
 #[pyo3(signature = (*, select, exclude, discovered_inputs))]
-fn split_unit_test_selectors<'py>(
+pub(crate) fn split_unit_test_selectors<'py>(
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
     discovered_inputs: &Bound<'py, PyAny>,

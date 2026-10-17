@@ -12,12 +12,16 @@ use sqlbuild_cli::dispatch::main::failure_report::failure_report;
 use sqlbuild_cli::dispatch::main::invocation_policy::invocation_policy;
 use sqlbuild_cli::dispatch::models::{CommandFacts, CommandFailure, InvocationPolicy};
 
+use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
 use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
 use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
 use crate::bindings::_helpers::cli::observability::cli_observability_scope;
 use crate::bindings::_helpers::compile_command::report::format_compile_error_json;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    call_with, imported, keywords, within,
+};
+use crate::bindings::_helpers::diff_report::registration::render_diff_error_json;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
@@ -25,7 +29,7 @@ use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::workspace_commands::commands::maintain_sqlbuild_skills;
 use sqlbuild_cli::launcher::constants::LAUNCH_RECORD_OPTION;
@@ -186,10 +190,8 @@ fn render_diff_error<'py>(
     py: Python<'py>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::native(py, NativeAttr::RenderDiffErrorJson)?,
-        fields,
-    )
+    render_diff_error_json(py, Some(keywords(py, fields)?))
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
 
 /// The diff JSON error document, and the publication error that replaces `error` if any.
@@ -452,8 +454,8 @@ fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, Py
     let policy: InvocationPolicy = invocation_policy(&invocation.facts);
     report_skill_freshness(invocation, policy)?;
     let dispatched: PyResult<Bound<'py, PyAny>> = observed_dispatch(invocation, policy);
-    registry::native(py, NativeAttr::SharedTransientLineCoordinator)?
-        .call0()?
+    shared_transient_line_coordinator(py)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .call_method0("clear_active")?;
     let error: PyErr = match dispatched {
         Ok(exit_code) => return Ok(exit_code),

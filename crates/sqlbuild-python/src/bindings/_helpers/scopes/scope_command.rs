@@ -331,7 +331,7 @@ fn use_color(
 /// Load offline compiler facts, run one pure query, and present its result.
 #[pyfunction]
 #[pyo3(signature = (*, request, load_scope_index = None, output_stream = None))]
-fn run_scope_command(
+pub(crate) fn run_scope_command(
     py: Python<'_>,
     request: &Bound<'_, PyAny>,
     load_scope_index: Option<Bound<'_, PyAny>>,
