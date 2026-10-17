@@ -171,7 +171,7 @@ fn tolerant_index<'py>(
 /// Load or build scope facts without credentials, a connection, or warehouse access.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, no_cache=false))]
-fn load_or_build_scope_index<'py>(
+pub(crate) fn load_or_build_scope_index<'py>(
     project_dir: &Bound<'py, PyAny>,
     no_cache: bool,
 ) -> PyResult<Bound<'py, PyAny>> {

@@ -7,7 +7,7 @@ use crate::bindings::_helpers::native_host::models::HostId;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyString, PyTuple};
@@ -41,13 +41,13 @@ pub(crate) fn planner_model<'py>(
     new_record_with(py, name, fields)
 }
 
-/// `sqlbuild._native.name(**fields)`.
+/// The native record `name(**fields)`.
 pub(crate) fn native<'py>(
     py: Python<'py>,
-    name: impl Into<NativeItem>,
+    name: RecordId,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::item(py, name)?, fields)
+    new_record_with(py, name, fields)
 }
 
 /// `dataclasses.replace(value, **fields)`.

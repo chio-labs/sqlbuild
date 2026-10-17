@@ -1018,14 +1018,6 @@ native_ids! {
     }
 }
 
-/// Any registered native name, for helpers that accept records, errors and module attributes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum NativeItem {
-    Record(RecordId),
-    Error(ErrorId),
-    Attr(NativeAttr),
-}
-
 impl RecordId {
     /// The record registered under `name`, for class names a pure-Rust crate chose.
     pub(crate) fn from_name(name: &str) -> Option<Self> {
@@ -1037,23 +1029,5 @@ impl NativeAttr {
     /// The attribute registered under `name`, for function names a pure-Rust crate chose.
     pub(crate) fn from_name(name: &str) -> Option<Self> {
         Self::ALL.iter().copied().find(|id| id.name() == name)
-    }
-}
-
-impl From<RecordId> for NativeItem {
-    fn from(id: RecordId) -> Self {
-        Self::Record(id)
-    }
-}
-
-impl From<ErrorId> for NativeItem {
-    fn from(id: ErrorId) -> Self {
-        Self::Error(id)
-    }
-}
-
-impl From<NativeAttr> for NativeItem {
-    fn from(id: NativeAttr) -> Self {
-        Self::Attr(id)
     }
 }

@@ -17,8 +17,9 @@ use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_colo
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::scopes::scope_loading::load_or_build_scope_index;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_objects::ScopeClasses;
 use crate::bindings::_helpers::scopes::scope_report_objects::read_result;
@@ -340,18 +341,23 @@ fn run_scope_command(
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let loader: Bound<'_, PyAny> = match load_scope_index {
-        Some(loader) => loader,
-        None => registry::native(py, NativeAttr::LoadOrBuildScopeIndex)?,
+    let index: Bound<'_, PyAny> = match load_scope_index {
+        Some(loader) => {
+            let options: Bound<'_, PyDict> = keywords(
+                py,
+                &[
+                    ("project_dir", project_dir),
+                    ("no_cache", native_field(request, "no_cache")?),
+                ],
+            )?;
+            loader.call((), Some(&options))?
+        }
+        None => load_or_build_scope_index(
+            &project_dir,
+            native_field(request, "no_cache")?.is_truthy()?,
+        )?
+        .into_any(),
     };
-    let options: Bound<'_, PyDict> = keywords(
-        py,
-        &[
-            ("project_dir", project_dir),
-            ("no_cache", native_field(request, "no_cache")?),
-        ],
-    )?;
-    let index: Bound<'_, PyAny> = loader.call((), Some(&options))?;
     let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
     let target: Option<String> =
         qualify_target(py, &lookup, native_field(request, "target")?.extract()?)?;

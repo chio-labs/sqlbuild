@@ -9,7 +9,7 @@ use pyo3::types::PyString;
 
 use crate::bindings::_helpers::records::constants::{ENUMS, ERRORS, NATIVE_MODULE};
 use crate::bindings::_helpers::records::fields::all_specs;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, NativeItem, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 
 /// The extension module, imported once for attribute lookups.
 static MODULE: PyOnceLock<Py<PyModule>> = PyOnceLock::new();
@@ -135,15 +135,6 @@ pub(crate) fn member<'py>(
     name: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     class(py, id)?.getattr(name)
-}
-
-/// Any registered native name.
-pub(crate) fn item(py: Python<'_>, id: impl Into<NativeItem>) -> PyResult<Bound<'_, PyAny>> {
-    match id.into() {
-        NativeItem::Record(id) => class(py, id),
-        NativeItem::Error(id) => error(py, id),
-        NativeItem::Attr(id) => native(py, id),
-    }
 }
 
 /// The native record class or string enum a pure-Rust crate names, failing as `getattr` would.
