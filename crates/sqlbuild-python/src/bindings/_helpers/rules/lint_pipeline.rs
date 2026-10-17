@@ -2,11 +2,12 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use pyo3::exceptions::{PyException, PyValueError};
-use pyo3::prelude::{Bound, IntoPyObject, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
+use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
 use sqlbuild_core::text::main::python_str_repr::python_str_repr;
@@ -176,8 +177,8 @@ impl CompiledExpansion {
 pub(crate) enum CompiledSource {
     Owned(CompiledExpansion),
     Shared {
-        authored_sql: Py<PyString>,
-        expanded_sql: Py<PyString>,
+        authored_sql: Arc<str>,
+        expanded_sql: Arc<str>,
         passes: Vec<Vec<ExpansionSpan>>,
     },
 }
@@ -192,18 +193,18 @@ impl CompiledSource {
     }
 
     /// The shared texts as an expansion of their own, built only while one file is linted.
-    fn shared(&self, py: Python<'_>) -> PyResult<Option<CompiledExpansion>> {
+    fn shared(&self) -> Option<CompiledExpansion> {
         match self {
-            Self::Owned(_) => Ok(None),
+            Self::Owned(_) => None,
             Self::Shared {
                 authored_sql,
                 expanded_sql,
                 passes,
-            } => Ok(Some(CompiledExpansion {
-                authored_sql: authored_sql.bind(py).to_str()?.to_owned(),
-                expanded_sql: expanded_sql.bind(py).to_str()?.to_owned(),
+            } => Some(CompiledExpansion {
+                authored_sql: authored_sql.to_string(),
+                expanded_sql: expanded_sql.to_string(),
                 passes: passes.clone(),
-            })),
+            }),
         }
     }
 }
@@ -592,7 +593,7 @@ pub(crate) fn lint(
             }
         };
         let file: &LintFile = &files[plan.file];
-        let (traits, bodies) = match shared_plan(py, request, file)? {
+        let (traits, bodies) = match shared_plan(request, file) {
             Some(Ok(planned)) => planned,
             Some(Err(failure)) => {
                 scan_failure = Some(failure.into_pyerr(py));
@@ -643,29 +644,25 @@ pub(crate) fn lint(
 }
 
 /// A file's bodies planned again against its shared compile expansion, read only for this file.
-fn shared_plan(
-    py: Python<'_>,
-    request: &LintRequest<'_>,
-    file: &LintFile,
-) -> PyResult<Option<PlannedBodies>> {
+fn shared_plan(request: &LintRequest<'_>, file: &LintFile) -> Option<PlannedBodies> {
     let Some(source) = request.compiled_expansions.get(&file.path) else {
-        return Ok(None);
+        return None;
     };
-    let Some(compiled) = source.shared(py)? else {
-        return Ok(None);
+    let Some(compiled) = source.shared() else {
+        return None;
     };
     let Ok(relative) = file.path.strip_prefix(request.project_dir) else {
-        return Ok(None);
+        return None;
     };
     let parts: Vec<String> = path_parts(relative);
     let text: Vec<char> = file.contents.chars().collect();
     let headers: Vec<HeaderSpan> = scan_headers(&text, first_header_only(&parts));
-    Ok(Some(plan_bodies(
+    Some(plan_bodies(
         request,
         file,
         (&text, &headers),
         (&parts, Some(&compiled)),
-    )))
+    ))
 }
 
 /// Each file's headers, header violations and bodies in path order, up to the first failure.

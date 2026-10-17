@@ -23,6 +23,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -436,10 +437,12 @@ impl NativeCompiledModel {
         Ok((facts.authored_sql.clone(), facts.query_sql.clone()))
     }
 
-    fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
-        self.read(py, |record, py| {
-            Ok(native_field(record.model_file.bind(py), name)?.unbind())
-        })
+    fn model_file<T>(
+        &self,
+        py: Python<'_>,
+        read: impl FnOnce(&NativeModelFile) -> PyResult<T>,
+    ) -> PyResult<T> {
+        self.read(py, |record, _| read(record.model_file.get()))
     }
 }
 
@@ -510,12 +513,12 @@ impl NativeCompiledModel {
 
     #[getter]
     pub(crate) fn relative_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.model_file_attribute(py, "relative_path")
+        self.model_file(py, |file| file.relative_path(py))
     }
 
     #[getter]
-    pub(crate) fn query_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
-        self.read(py, |record, _| Ok(record.query_sql.clone_ref(py)))
+    pub(crate) fn query_sql<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
+        self.read(py, |record, py| Ok(PyString::new(py, &record.query_sql)))
     }
 
     #[getter]
@@ -710,23 +713,29 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    pub(crate) fn authored_sql(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.model_file_attribute(py, "contents")
+    pub(crate) fn authored_sql<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
+        self.model_file(py, |file| Ok(file.contents(py)))
     }
 
     #[getter]
-    pub(crate) fn authored_query_sql(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.model_file_attribute(py, "query_sql")
+    pub(crate) fn authored_query_sql<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyString>> {
+        self.model_file(py, |file| Ok(file.query_sql(py)))
     }
 
     #[getter]
-    pub(crate) fn output_column_locations(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.model_file_attribute(py, "output_column_locations")
+    pub(crate) fn output_column_locations<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        self.model_file(py, |file| file.output_column_locations(py))
     }
 
     #[getter]
-    pub(crate) fn extract_implicit_alias_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.model_file_attribute(py, "extract_implicit_alias_columns")
+    pub(crate) fn extract_implicit_alias_columns(&self, py: Python<'_>) -> PyResult<bool> {
+        self.model_file(py, |file| Ok(file.extract_implicit_alias_columns()))
     }
 
     #[getter]
@@ -759,7 +768,7 @@ impl NativeCompiledModel {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, py| {
             let name: String = model_name(record);
-            let path: Bound<'_, PyAny> = native_field(record.model_file.bind(py), "relative_path")?;
+            let path: Bound<'_, PyAny> = record.model_file.get().path_objects(py)?.1;
             compiled_of(record)?
                 .analysis
                 .binding_tuple(py, &classes.compiled, (&name, &path))
@@ -848,10 +857,7 @@ pub(crate) fn model_graph_row(
                 tags.push(tag?.str()?.extract()?);
             }
         }
-        let folder: String = native_field(record.model_file.bind(py), "relative_path")?
-            .getattr("parent")?
-            .str()?
-            .extract()?;
+        let folder: String = record.model_file.get().folder(py)?;
         Ok((
             (MODEL_RESOURCE.to_owned(), model_name(record)),
             compiled.deps.clone(),

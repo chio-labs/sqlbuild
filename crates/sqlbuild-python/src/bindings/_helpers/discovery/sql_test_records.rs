@@ -98,7 +98,7 @@ fn test_blocks<'py>(
     let mut native = Vec::with_capacity(blocks.len());
     for block in blocks {
         native.push((
-            map_to_python(py, block.header_values)?
+            map_to_python(py, &block.header_values)?
                 .into_bound(py)
                 .downcast_into::<PyDict>()?,
             block.sql_body,
@@ -154,7 +154,7 @@ fn scenario_file<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let (file_path, relative_path) = paths;
     let py: Python<'py> = file_path.py();
-    let header_values: Bound<'py, PyDict> = map_to_python(py, file.header_values)?
+    let header_values: Bound<'py, PyDict> = map_to_python(py, &file.header_values)?
         .into_bound(py)
         .downcast_into::<PyDict>()?;
     let shown: Bound<'py, PyString> = file_path.str()?;

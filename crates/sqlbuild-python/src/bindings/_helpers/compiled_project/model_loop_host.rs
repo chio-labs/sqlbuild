@@ -1,8 +1,10 @@
 //! The Python host the loop hands finished models and user-code steps to.
 
+use std::sync::Arc;
+
 use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::compiled_project::main::plain_model_facts::plain_model_facts;
 use sqlbuild_analysis::compiled_project::models::{
     CompiledModelFacts, ModelConfigFacts, PlainModel,
@@ -37,31 +39,18 @@ const CONSTANTS_ARGUMENT: &str = "constants";
 const LOCAL_ENUMS_ATTRIBUTE: &str = "local_enums";
 const LOCAL_CONSTANTS_ATTRIBUTE: &str = "local_constants";
 const NAME_ATTRIBUTE: &str = "name";
-const STEM_ATTRIBUTE: &str = "stem";
-const AS_POSIX_METHOD: &str = "as_posix";
 
-/// What the host hands the loop for one model: its file, declaration scan and interpolation.
-pub(crate) type ModelLoopInput = (
-    Py<NativeModelFile>,
-    Option<DeclarationScan>,
-    InterpolationRow,
-);
 /// A model's scanned declaration references and the scan's stop marker.
 pub(crate) type DeclarationScan = (Vec<ScannedReference>, Option<u8>);
 
 /// The names a model's file is known by.
-pub(crate) struct ModelPaths {
-    pub(crate) name: String,
-    pub(crate) posix_path: String,
-    pub(crate) relative_path: String,
-    pub(crate) file_path: String,
-}
+pub(crate) use crate::bindings::_helpers::discovery::model_file_record::ModelFileTexts as ModelPaths;
 
 /// One model the loop builds: its discovered file and what the host prepared for it.
 pub(crate) struct ModelLoopRow {
     pub(crate) paths: ModelPaths,
-    pub(crate) authored_query: String,
-    pub(crate) contents: String,
+    pub(crate) authored_query: Arc<str>,
+    pub(crate) contents: Arc<str>,
     pub(crate) scan: Option<DeclarationScan>,
     /// The `@@`-interpolated query, its template reads, its error, and its substitution spans.
     pub(crate) interpolation: InterpolationRow,
@@ -70,24 +59,21 @@ pub(crate) struct ModelLoopRow {
 }
 
 impl ModelLoopRow {
-    pub(crate) fn new(py: Python<'_>, input: ModelLoopInput) -> PyResult<Self> {
-        let (model_file, scan, interpolation) = input;
+    pub(crate) fn new(
+        file: (Py<NativeModelFile>, ModelPaths),
+        scan: Option<DeclarationScan>,
+        interpolation: InterpolationRow,
+    ) -> Self {
+        let (model_file, paths) = file;
         let record: &NativeModelFile = model_file.get();
-        let (file_path, relative_path) = record.paths(py);
-        let (query_sql, contents) = record.texts(py);
-        Ok(Self {
-            paths: ModelPaths {
-                name: native_field(file_path, STEM_ATTRIBUTE)?.extract()?,
-                posix_path: relative_path.call_method0(AS_POSIX_METHOD)?.extract()?,
-                relative_path: relative_path.str()?.to_str()?.to_owned(),
-                file_path: file_path.str()?.to_str()?.to_owned(),
-            },
-            authored_query: query_sql.to_str()?.to_owned(),
-            contents: contents.to_str()?.to_owned(),
+        Self {
+            paths,
+            authored_query: record.query_text().clone(),
+            contents: record.contents_text().clone(),
             scan,
             interpolation,
             model_file,
-        })
+        }
     }
 }
 /// `(interpolated query, template reads, error, substitution spans)`.
@@ -224,19 +210,13 @@ pub(crate) fn finished_record<'py>(
         type_enforcement: schema.type_enforcement,
         model_schema: schema.model_schema.clone(),
     });
-    let discovered_query: Py<PyString> = model_file.get().texts(py).0.clone().unbind();
-    let authored: Py<PyString> = shared_sql(py, &authored_query_sql, &[&discovered_query])?;
-    let macro_source: Py<PyString> =
-        shared_sql(py, &finished.declarations.spliced.sql, &[&authored])?;
-    let expanded: Py<PyString> = shared_sql(py, &macro_sql, &[&authored, &macro_source])?;
-    let query: Py<PyString> = shared_sql(
-        py,
-        &finished.query_sql,
-        &[&authored, &macro_source, &expanded],
-    )?;
+    let authored: Arc<str> = authored_query_sql.clone();
+    let macro_source: Arc<str> = shared_sql(&finished.declarations.spliced.sql, &[&authored]);
+    let expanded: Arc<str> = shared_sql(&macro_sql, &[&authored, &macro_source]);
+    let query: Arc<str> = shared_sql(&finished.query_sql, &[&authored, &macro_source, &expanded]);
     let record: ModelInputRecord = ModelInputRecord {
         name: name.clone(),
-        model_file: model_file.clone_ref(py).into_any(),
+        model_file,
         config: config.unbind(),
         query_sql: query,
         macro_source_sql: macro_source,
@@ -256,7 +236,7 @@ pub(crate) fn finished_record<'py>(
         macro_usages: PyTuple::new(py, macro_usages)?.unbind(),
         declaration_usages: PyTuple::new(py, unique(py, declaration_usages)?)?.unbind(),
         expansion: ExpansionRecord {
-            authored: interpolated_sql == authored_query_sql,
+            authored: *interpolated_sql == *authored_query_sql,
             authored_sql: authored,
             expanded_sql: expanded,
             interpolation_spans,
@@ -271,8 +251,8 @@ pub(crate) fn finished_record<'py>(
         name,
         relative_path,
         query_sql: finished.query_sql,
-        authored_query_sql,
-        authored_sql,
+        authored_query_sql: authored_query_sql.to_string(),
+        authored_sql: authored_sql.to_string(),
         config: ModelConfigFacts {
             values,
             encoding_error,
@@ -296,13 +276,13 @@ pub(crate) fn finished_record<'py>(
 }
 
 /// Reuse an identical immutable spelling already owned by this model.
-fn shared_sql(py: Python<'_>, sql: &str, candidates: &[&Py<PyString>]) -> PyResult<Py<PyString>> {
+fn shared_sql(sql: &str, candidates: &[&Arc<str>]) -> Arc<str> {
     for candidate in candidates {
-        if candidate.bind(py).to_str()? == sql {
-            return Ok(candidate.clone_ref(py));
+        if ***candidate == *sql {
+            return Arc::clone(candidate);
         }
     }
-    Ok(PyString::new(py, sql).unbind())
+    Arc::from(sql)
 }
 
 /// A dict's values in insertion order.

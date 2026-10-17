@@ -1097,10 +1097,16 @@ pub(crate) fn read_native_model_file<'py>(
         return None;
     };
     Some(match name {
-        "file_path" => this.file_path(py).into_bound_py_any(py),
-        "relative_path" => this.relative_path(py).into_bound_py_any(py),
+        "file_path" => this
+            .file_path(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "relative_path" => this
+            .relative_path(py)
+            .and_then(|value| value.into_bound_py_any(py)),
         "contents" => this.contents(py).into_bound_py_any(py),
-        "header_values" => this.header_values(py).into_bound_py_any(py),
+        "header_values" => this
+            .header_values(py)
+            .and_then(|value| value.into_bound_py_any(py)),
         "header_column_locations" => this
             .header_column_locations(py)
             .and_then(|value| value.into_bound_py_any(py)),

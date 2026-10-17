@@ -267,14 +267,12 @@ fn prepared_rows<'py>(
 ) -> PyResult<Vec<ModelLoopRow>> {
     let hooks = &classes.sql_hooks;
     let mut sqls: Vec<(String, String)> = Vec::with_capacity(model_files.len());
+    let mut paths: Vec<ModelPaths> = Vec::with_capacity(model_files.len());
     for model_file in &model_files {
         let record: &NativeModelFile = model_file.get();
-        let (file_path, _) = record.paths(py);
-        let (query_sql, _) = record.texts(py);
-        sqls.push((
-            query_sql.to_str()?.to_owned(),
-            file_path.str()?.to_str()?.to_owned(),
-        ));
+        let texts: ModelPaths = record.path_texts(py)?;
+        sqls.push((record.query_text().to_string(), texts.file_path.clone()));
+        paths.push(texts);
     }
     let interpolated: Vec<SqlInterpolationRow> = interpolation_batch(
         InterpolationSources(
@@ -286,8 +284,11 @@ fn prepared_rows<'py>(
         &sqls,
     )?;
     let mut rows: Vec<ModelLoopRow> = Vec::with_capacity(model_files.len());
-    for ((model_file, (authored, _)), (rendered, spans, reads, error)) in
-        model_files.into_iter().zip(sqls).zip(interpolated)
+    for (((model_file, paths), (authored, _)), (rendered, spans, reads, error)) in model_files
+        .into_iter()
+        .zip(paths)
+        .zip(sqls)
+        .zip(interpolated)
     {
         let sql: String = rendered.unwrap_or(authored);
         let scan: Option<DeclarationScan> = error.is_none().then(|| declaration_scan(&sql));
@@ -296,7 +297,7 @@ fn prepared_rows<'py>(
             .map(|(kind, name)| (kind.to_owned(), name))
             .collect();
         let interpolation: InterpolationRow = (sql, reads, error, spans);
-        rows.push(ModelLoopRow::new(py, (model_file, scan, interpolation))?);
+        rows.push(ModelLoopRow::new((model_file, paths), scan, interpolation));
     }
     Ok(rows)
 }
@@ -342,7 +343,7 @@ impl NativeModelLoop {
             )?;
             let config: Bound<'py, PyAny> = configs.effective(
                 &context,
-                record.header_value_dict(py),
+                &record.header_value_dict(py)?,
                 (name, relative_path),
             )?;
             let model: LoopModel<'_, 'py> = LoopModel {
@@ -589,7 +590,7 @@ impl NativeModelLoop {
                 relative_path,
                 contents,
                 authored_query,
-                authored: &interpolated == authored_query,
+                authored: interpolated.as_str() == &**authored_query,
                 declaration_spans: &declarations.spliced.spans,
             };
             Some(expanded_macros(
@@ -634,7 +635,8 @@ impl NativeModelLoop {
         let scanned = match extract_sql_references(&query_sql, &self.syntax) {
             ReferenceExtraction::Extracted(scanned) => scanned,
             ReferenceExtraction::Failed(failure) => {
-                let authored: bool = &interpolated == authored_query && query_sql == macro_sql;
+                let authored: bool =
+                    interpolated.as_str() == &**authored_query && query_sql == macro_sql;
                 let origin: ScanFaultOrigin<'_> = ScanFaultOrigin {
                     relative_path: posix_path,
                     contents,

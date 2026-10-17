@@ -4,7 +4,7 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyString};
+use pyo3::types::PyTuple;
 use pyo3::{IntoPyObjectExt, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_discovery::model_files::main::parse_model_text::parse_model_text;
 use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOptions};
@@ -12,19 +12,19 @@ use sqlbuild_discovery::tree::models::ProjectTree;
 use std::path::Path;
 
 use crate::bindings::_helpers::discovery::declaration_records::source_locations;
-use crate::bindings::_helpers::discovery::header_declarations::{
-    HeaderDeclarations, model_header_declarations,
+use crate::bindings::_helpers::discovery::header_declarations::model_header_declarations;
+use crate::bindings::_helpers::discovery::model_file_record::{
+    DiscoveredPaths, ModelFileParts, NativeModelFile, PendingModelFile,
 };
-use crate::bindings::_helpers::discovery::model_file_record::{ModelFileParts, NativeModelFile};
 use crate::bindings::_helpers::discovery::raised::failure_error;
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
+use crate::bindings::_helpers::sqltext::authored_values::{
+    map_to_python, optional_authored_value_to_python,
+};
 use crate::bindings::models::{ModelTextRequest, NativeProjectTree};
 use crate::bindings::types::CompilerDetach;
 
 pub(crate) type PyObject = Py<PyAny>;
 
-const STEM_ATTRIBUTE: &str = "stem";
 const ENUMS_KEY: &str = "enums";
 const CONSTANTS_KEY: &str = "constants";
 
@@ -51,46 +51,46 @@ impl NativeProjectTree {
 }
 
 /// One parsed model file's record, or its header declaration error, raised only if it is built.
-pub(crate) fn model_record<'py>(
-    py: Python<'py>,
+pub(crate) fn model_record(
+    py: Python<'_>,
     model: DiscoveredModelFile,
-    paths: (Bound<'py, PyAny>, Bound<'py, PyAny>),
+    paths: DiscoveredPaths,
     extract_implicit_alias_columns: bool,
 ) -> PyResult<Result<PyObject, PyErr>> {
-    let (file_path, relative_path) = paths;
-    let header_values: Bound<'py, PyDict> = map_to_python(py, model.header_values)?
-        .into_bound(py)
-        .downcast_into::<PyDict>()?;
-    let model_name: String = native_field(&file_path, STEM_ATTRIBUTE)?.extract()?;
-    let declarations: HeaderDeclarations<'py> = match model_header_declarations(
+    let pending: PendingModelFile = PendingModelFile::new(
         py,
-        (
-            header_values.get_item(ENUMS_KEY)?,
-            header_values.get_item(CONSTANTS_KEY)?,
-        ),
-        model_name,
-        relative_path.clone(),
-    ) {
-        Ok(declarations) => declarations,
-        Err(error) if error.is_instance_of::<PyException>(py) => return Ok(Err(error)),
-        Err(error) => return Err(error),
-    };
-    let (enum_declarations, constant_declarations) = declarations;
-    let record: NativeModelFile = NativeModelFile::discovered(
-        py,
+        paths,
         ModelFileParts {
-            file_path: file_path.unbind(),
-            relative_path: relative_path.unbind(),
-            contents: PyString::new(py, &model.contents).unbind(),
-            header_values: header_values.unbind(),
+            contents: model.contents,
+            header_values: model.header_values,
             header_column_locations: model.header_column_locations,
             output_column_locations: model.output_column_locations,
-            query_sql: PyString::new(py, &model.query_sql).unbind(),
-            declarations: (enum_declarations.unbind(), constant_declarations.unbind()),
+            query_sql: model.query_sql,
             extract_implicit_alias_columns,
         },
     )?;
-    Ok(Ok(record.into_py_any(py)?))
+    let authored = |key: &str| -> PyResult<Option<Bound<'_, PyAny>>> {
+        Ok(
+            optional_authored_value_to_python(py, pending.header_value(key))?
+                .map(|value| value.into_bound(py)),
+        )
+    };
+    let (enums, constants) = (authored(ENUMS_KEY)?, authored(CONSTANTS_KEY)?);
+    let declarations: (Py<PyTuple>, Py<PyTuple>) = if enums.is_none() && constants.is_none() {
+        (PyTuple::empty(py).unbind(), PyTuple::empty(py).unbind())
+    } else {
+        match model_header_declarations(
+            py,
+            (enums, constants),
+            pending.name(py)?,
+            pending.relative_path(py)?,
+        ) {
+            Ok((enums, constants)) => (enums.unbind(), constants.unbind()),
+            Err(error) if error.is_instance_of::<PyException>(py) => return Ok(Err(error)),
+            Err(error) => return Err(error),
+        }
+    };
+    Ok(Ok(pending.finished(declarations).into_py_any(py)?))
 }
 
 /// Parse model contents as discovery does: `(header_values, query_sql, column locations)`.
@@ -115,7 +115,7 @@ fn parse_model_contents(
         .getattr("Path")?
         .call1((request.file_path.as_str(),))?;
     Ok((
-        map_to_python(py, model.header_values)?,
+        map_to_python(py, &model.header_values)?,
         model.query_sql,
         source_locations(py, &path, &model.header_column_locations)?
             .into_any()

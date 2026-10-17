@@ -22,6 +22,7 @@ use sqlbuild_analysis::resource_diagnostics::main::yaml_help::yaml_help;
 use sqlbuild_analysis::resource_diagnostics::models::{CursorModel, HeaderHelp};
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MISSING_DESCRIPTION_CODE: &str = "P010";
@@ -201,6 +202,9 @@ pub(crate) fn resource_diagnostics<'py>(
 
 fn orphaned_factories<'py>(diagnostics: &Diagnostics<'_, 'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = diagnostics.py;
+    if diagnostics.settings.audit_factories.is_empty() {
+        return Ok(Vec::new());
+    }
     let mut referenced: HashSet<String> = HashSet::new();
     for model_file in &diagnostics.settings.model_files {
         let header: Bound<'py, PyDict> =
@@ -249,12 +253,10 @@ fn missing_descriptions<'py>(
     let py: Python<'py> = diagnostics.py;
     let mut found: Vec<Option<Bound<'py, PyAny>>> = Vec::new();
     for record in project.inputs() {
-        let model_file: &Bound<'py, PyAny> = record.model_file.bind(py);
+        let model_file: &NativeModelFile = record.model_file.get();
         let name: String = record.name.clone();
-        let path: String = native_field(model_file, "relative_path")?
-            .str()?
-            .extract()?;
-        let contents: String = native_field(model_file, "contents")?.extract()?;
+        let path: String = model_file.relative_text(py)?;
+        let contents: &str = model_file.contents_text();
         let entry: String = format!("description \"What one row of {name} represents\"");
         let help: String = header_help(&HeaderHelp {
             kind: "model",
@@ -271,7 +273,7 @@ fn missing_descriptions<'py>(
         found.push(diagnostics.described(
             ("model", &name, Some("model")),
             description,
-            || diagnostics.header_location(&path, &contents),
+            || diagnostics.header_location(&path, contents),
             &help,
         )?);
     }
@@ -487,7 +489,7 @@ fn cursor_without_inputs<'py>(
         let materialized: Option<String> = config_text(&values, "materialized")?;
         let cursor: Option<String> = config_text(&values, CURSOR_KEY)?;
         let strategy: Option<String> = config_text(&values, "microbatch_strategy")?;
-        let model_file: &Bound<'py, PyAny> = record.model_file.bind(py);
+        let model_file: &NativeModelFile = record.model_file.get();
         let name: String = record.name.clone();
         let Some((message, help)) = cursor_lacks_inputs(
             &name,
@@ -503,13 +505,11 @@ fn cursor_without_inputs<'py>(
         ) else {
             continue;
         };
-        let path: String = native_field(model_file, "relative_path")?
-            .str()?
-            .extract()?;
-        let contents: String = native_field(model_file, "contents")?.extract()?;
+        let path: String = model_file.relative_text(py)?;
+        let contents: &str = model_file.contents_text();
         let span: Option<(usize, usize)> =
-            model_header_entry_span(&contents, CURSOR_KEY).map_err(PyValueError::new_err)?;
-        let start: TextPosition = text_position(&contents, span.map_or(0, |span| span.0));
+            model_header_entry_span(contents, CURSOR_KEY).map_err(PyValueError::new_err)?;
+        let start: TextPosition = text_position(contents, span.map_or(0, |span| span.0));
         let location: Bound<'py, PyAny> = diagnostics.location(
             &path,
             (start.line, start.column),

@@ -110,7 +110,7 @@ fn authored<'py>(
     py: Python<'py>,
     values: &[(String, AuthoredValue)],
 ) -> PyResult<Bound<'py, PyDict>> {
-    Ok(map_to_python(py, values.to_vec())?
+    Ok(map_to_python(py, values)?
         .into_bound(py)
         .downcast_into::<PyDict>()?)
 }

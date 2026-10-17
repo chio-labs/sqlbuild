@@ -162,9 +162,7 @@ impl NativeCompiledProject {
             };
             owners.push(model_owner(
                 record.name.clone(),
-                native_field(record.model_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
-                    .str()?
-                    .to_string(),
+                record.model_file.get().relative_text(py)?,
                 (
                     schema.audits.bind(py),
                     (schema.columns.as_ref(), &fact.columns),
@@ -443,9 +441,7 @@ impl NativeCompiledProject {
             .iter()
             .map(|record| {
                 Ok((
-                    native_field(record.model_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
-                        .str()?
-                        .to_string(),
+                    record.model_file.get().relative_text(py)?,
                     record.references.clone(),
                 ))
             })

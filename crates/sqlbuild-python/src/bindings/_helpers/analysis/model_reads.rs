@@ -204,11 +204,7 @@ pub(crate) fn model_name(model: &Bound<'_, PyAny>) -> PyResult<String> {
 /// The model's compiled query SQL.
 pub(crate) fn query_sql<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
-        return Ok(view
-            .get()
-            .query_sql(model.py())?
-            .into_bound(model.py())
-            .into_any());
+        return Ok(view.get().query_sql(model.py())?.into_any());
     }
     native_field(model, "query_sql")
 }

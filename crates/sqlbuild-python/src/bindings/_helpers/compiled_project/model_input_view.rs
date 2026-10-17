@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
@@ -46,9 +47,9 @@ pub(crate) struct SchemaRecord {
 /// The expansion passes of a model's query, from authored text to expanded SQL.
 pub(crate) struct ExpansionRecord {
     /// The authored query below the header.
-    pub(crate) authored_sql: Py<PyString>,
+    pub(crate) authored_sql: Arc<str>,
     /// The declaration- and macro-expanded SQL before canonicalisation.
-    pub(crate) expanded_sql: Py<PyString>,
+    pub(crate) expanded_sql: Arc<str>,
     pub(crate) interpolation_spans: Vec<SpanRow>,
     pub(crate) declaration_spans: Vec<SpanRow>,
     pub(crate) macro_spans: Vec<SpanRow>,
@@ -61,12 +62,12 @@ pub(crate) struct ModelInputRecord {
     /// The model's name, its file stem.
     pub(crate) name: String,
     /// The discovered model file, owned by the discovery inputs.
-    pub(crate) model_file: Py<PyAny>,
+    pub(crate) model_file: Py<NativeModelFile>,
     /// The resolved config, whose values hold user values.
     pub(crate) config: Py<PyAny>,
-    /// Immutable text shared with discovery, expansions and every Python-facing projection.
-    pub(crate) query_sql: Py<PyString>,
-    pub(crate) macro_source_sql: Py<PyString>,
+    /// Immutable text shared with discovery and expansions; Python reads build strings on demand.
+    pub(crate) query_sql: Arc<str>,
+    pub(crate) macro_source_sql: Arc<str>,
     pub(crate) references: Vec<ReferenceRow>,
     pub(crate) schema: Option<SchemaRecord>,
     pub(crate) sql_validation_enabled: bool,
@@ -169,7 +170,9 @@ pub(crate) fn view_classes<'py>(
 impl NativeModelInput {
     #[getter]
     pub(crate) fn model_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.read(py, |record, py| Ok(record.model_file.clone_ref(py)))
+        self.read(py, |record, py| {
+            Ok(record.model_file.clone_ref(py).into_any())
+        })
     }
 
     #[getter]
@@ -178,13 +181,15 @@ impl NativeModelInput {
     }
 
     #[getter]
-    pub(crate) fn query_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
-        self.read(py, |record, py| Ok(record.query_sql.clone_ref(py)))
+    pub(crate) fn query_sql<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
+        self.read(py, |record, py| Ok(PyString::new(py, &record.query_sql)))
     }
 
     #[getter]
-    pub(crate) fn macro_source_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
-        self.read(py, |record, py| Ok(record.macro_source_sql.clone_ref(py)))
+    pub(crate) fn macro_source_sql<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
+        self.read(py, |record, py| {
+            Ok(PyString::new(py, &record.macro_source_sql))
+        })
     }
 
     #[getter]
@@ -444,8 +449,8 @@ fn expansion_object(
         pass_objects.push(PyTuple::new(py, span_objects)?);
     }
     let fields: Bound<'_, PyDict> = PyDict::new(py);
-    fields.set_item("authored_sql", expansion.authored_sql.bind(py))?;
-    fields.set_item("expanded_sql", expansion.expanded_sql.bind(py))?;
+    fields.set_item("authored_sql", &*expansion.authored_sql)?;
+    fields.set_item("expanded_sql", &*expansion.expanded_sql)?;
     fields.set_item("passes", PyTuple::new(py, pass_objects)?)?;
     Ok(classes.sql_expansion.call((), Some(&fields))?.unbind())
 }

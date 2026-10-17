@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
@@ -10,7 +11,6 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     ExpansionRecord, ModelInputRecord, NativeModelInput, model_relation_key_row,
 };
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
-use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledExpansion, CompiledSource, span_pass,
@@ -34,23 +34,18 @@ pub(crate) fn model_key_row(model: &Bound<'_, PyAny>) -> PyResult<RelationKeyRow
 }
 
 /// The model file path of a native input record.
-fn record_path(record: &ModelInputRecord, py: Python<'_>) -> PyResult<PathBuf> {
-    let model_file: &Bound<'_, PyAny> = record.model_file.bind(py);
-    match model_file.downcast::<NativeModelFile>() {
-        Ok(native) => Ok(native.get().file_path_buf()),
-        Err(_) => model_file.getattr(FILE_PATH_ATTRIBUTE)?.extract(),
-    }
+fn record_path(record: &ModelInputRecord) -> PathBuf {
+    record.model_file.get().file_path_buf()
 }
 
 /// The record's shared texts with the given passes, read only when their file is linted.
 fn expansion(
     expansion: &ExpansionRecord,
     passes: &[&Vec<(usize, usize, usize, usize)>],
-    py: Python<'_>,
 ) -> CompiledSource {
     CompiledSource::Shared {
-        authored_sql: expansion.authored_sql.clone_ref(py),
-        expanded_sql: expansion.expanded_sql.clone_ref(py),
+        authored_sql: Arc::clone(&expansion.authored_sql),
+        expanded_sql: Arc::clone(&expansion.expanded_sql),
         passes: passes.iter().map(|rows| span_pass(rows)).collect(),
     }
 }
@@ -61,10 +56,10 @@ pub(crate) fn model_lint_expansion(
 ) -> PyResult<Option<(PathBuf, CompiledSource)>> {
     let py: Python<'_> = model.py();
     if let Ok(input) = model.downcast::<NativeModelInput>() {
-        return input.get().read(py, |record, py| {
+        return input.get().read(py, |record, _| {
             let whole: &ExpansionRecord = &record.expansion;
             Ok(Some((
-                record_path(record, py)?,
+                record_path(record),
                 expansion(
                     whole,
                     &[
@@ -72,7 +67,6 @@ pub(crate) fn model_lint_expansion(
                         &whole.declaration_spans,
                         &whole.macro_spans,
                     ],
-                    py,
                 ),
             )))
         });
@@ -105,11 +99,10 @@ pub(crate) fn project_sql_expansions(
             let authored: &ExpansionRecord = &record.expansion;
             if authored.authored {
                 expansions.insert(
-                    record_path(record, py)?,
+                    record_path(record),
                     expansion(
                         authored,
                         &[&authored.declaration_spans, &authored.macro_spans],
-                        py,
                     ),
                 );
             }

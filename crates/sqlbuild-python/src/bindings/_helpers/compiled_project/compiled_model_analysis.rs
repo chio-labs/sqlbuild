@@ -7,7 +7,7 @@ use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::assembly::analysis_session::main::resolved_cleaned_sql::resolved_cleaned_sql;
 use sqlbuild_analysis::assembly::analysis_session::models::{
     ColumnFact, ContractProof, LineageFacts, LineageRow, ModelOutcome, PivotOutcome,
@@ -22,10 +22,10 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     CompiledViewClasses, InferredRow,
 };
 use crate::bindings::_helpers::compiled_project::model_input_view::ModelInputRecord;
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::record_behaviours::lineage_facts::{
     confidence_member, transform_kind_member,
 };
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const COMPILE_PHASE: &str = "compile";
 const MODEL_RESOURCE: &str = "model";
@@ -135,7 +135,7 @@ pub(crate) fn analysis_record(
         if let PivotOutcome::Proof(proof) = contract {
             record.proof = Some(proof.clone());
         }
-        record.binding = located(py, input, outcome)?;
+        record.binding = located(input, outcome)?;
         record.binding_validated = analysed.binding_validated;
     }
     if let Some(proof) = record.proof.as_ref().filter(|proof| proof.output_proven) {
@@ -146,31 +146,27 @@ pub(crate) fn analysis_record(
 }
 
 /// The model's binding diagnostics at their authored locations.
-fn located(
-    py: Python<'_>,
-    input: &ModelInputRecord,
-    outcome: &ModelOutcome,
-) -> PyResult<Vec<LocatedDiagnostic>> {
+fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<LocatedDiagnostic>> {
     let rows: &[DiagnosticRow] = &outcome.analysis.binding_diagnostics;
     if rows.is_empty() {
         return Ok(Vec::new());
     }
     let cleaned: Cow<'_, str> = resolved_cleaned_sql(outcome).map_err(compiler_error)?;
-    let model_file: &Bound<'_, PyAny> = input.model_file.bind(py);
-    let authored: String = native_field(model_file, "contents")?.extract()?;
-    let query: String = native_field(model_file, "query_sql")?.extract()?;
+    let model_file: &NativeModelFile = input.model_file.get();
+    let authored: &str = model_file.contents_text();
+    let query: &str = model_file.query_text();
     let expansion = &input.expansion;
     let passes: Vec<Vec<Expansion>> = vec![
         expansion.declaration_spans.clone(),
         expansion.macro_spans.clone(),
     ];
     let source: BindingSource<'_> = BindingSource {
-        authored: &authored,
-        query: &query,
+        authored,
+        query,
         cleaned: &cleaned,
         expansion: expansion
             .authored
-            .then_some((expansion.expanded_sql.bind(py).to_str()?, passes.as_slice())),
+            .then_some((&*expansion.expanded_sql, passes.as_slice())),
     };
     locate_binding_diagnostics(rows, &source).map_err(PyValueError::new_err)
 }

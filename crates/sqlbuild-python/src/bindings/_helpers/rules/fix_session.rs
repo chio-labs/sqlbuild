@@ -501,7 +501,7 @@ fn replace<'py>(
 /// A discovered model file's contents, read in place from a native model file.
 fn model_contents<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     match model.cast::<NativeModelFile>() {
-        Ok(native) => Ok(native.get().texts(model.py()).1.clone().into_any()),
+        Ok(native) => Ok(native.get().contents(model.py()).into_any()),
         Err(_) => native_field(model, "contents"),
     }
 }
@@ -509,7 +509,7 @@ fn model_contents<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 /// A discovered model file's path, read in place from a native model file.
 fn model_file_path<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     match model.cast::<NativeModelFile>() {
-        Ok(native) => Ok(native.get().paths(model.py()).0.clone()),
+        Ok(native) => Ok(native.get().path_objects(model.py())?.0),
         Err(_) => native_field(model, "file_path"),
     }
 }
@@ -534,9 +534,8 @@ fn edited_model<'py>(
         return model.call_method1("with_text", (text, query));
     };
     let native: &NativeModelFile = native.get();
-    let (query_sql, contents) = native.texts(py);
-    let contents: String = contents.to_str()?.to_owned();
-    let Some(offset) = contents.find(query_sql.to_str()?) else {
+    let (query_sql, contents): (&str, &str) = (native.query_text(), native.contents_text());
+    let Some(offset) = contents.find(query_sql) else {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "substring not found",
         ));
@@ -549,7 +548,7 @@ fn edited_model<'py>(
         .nth(start)
         .map_or("", |(index, _)| &edited[index..]);
     let query: Bound<'py, PyString> = PyString::new(py, python_strip(tail));
-    Ok(Bound::new(py, native.with_text(py, text.unbind(), query.unbind()))?.into_any())
+    Ok(Bound::new(py, native.with_text(py, text.unbind(), query.unbind())?)?.into_any())
 }
 
 fn updated_inputs<'py>(

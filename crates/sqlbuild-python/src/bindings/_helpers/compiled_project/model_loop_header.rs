@@ -105,7 +105,7 @@ pub(crate) fn header_schema<'py>(
         .columns
         .map_err(|error| raised_config_error(py, error))?;
     let locations: Bound<'py, PyDict> = source.model_file.header_locations(py)?;
-    let model_path: &Bound<'py, PyAny> = source.model_file.paths(py).1;
+    let model_path: &Bound<'py, PyAny> = &source.model_file.path_objects(py)?.1;
     let local_columns: DeclaredColumns = DeclaredColumns {
         specs: parsed_columns
             .iter()
