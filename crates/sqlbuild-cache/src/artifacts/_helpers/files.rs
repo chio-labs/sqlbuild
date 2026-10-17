@@ -5,6 +5,9 @@ use std::fs::{File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
+use crate::artifacts::constants::{PARALLEL_WRITE_MIN_FILES, WRITE_WORKERS};
 use crate::artifacts::errors::ArtifactError;
 use crate::artifacts::models::{Publication, WrittenArtifacts};
 
@@ -19,21 +22,72 @@ pub(crate) fn write_artifacts(
     files: &[(PathBuf, Vec<u8>)],
     check_existing: bool,
 ) -> Result<WrittenArtifacts, ArtifactError> {
+    if files.len() >= PARALLEL_WRITE_MIN_FILES && distinct_paths(files) {
+        return write_artifacts_parallel(files, check_existing);
+    }
     let mut outcome: WrittenArtifacts = WrittenArtifacts::default();
     for (path, contents) in files {
-        if check_existing && let Some(existing) = read_regular_file(path)? {
-            if existing == *contents {
-                outcome.unchanged += 1;
-                continue;
-            }
-            if std::str::from_utf8(&existing).is_err() {
-                return Err(ArtifactError::ExistingNotUtf8 { path: path.clone() });
-            }
+        if write_artifact(path, contents, check_existing)? {
+            outcome.written += 1;
+        } else {
+            outcome.unchanged += 1;
         }
-        overwrite_creating_parent(path, contents)?;
-        outcome.written += 1;
     }
     Ok(outcome)
+}
+
+/// Write distinct files on a small pool; the first failure in file order is the one reported.
+fn write_artifacts_parallel(
+    files: &[(PathBuf, Vec<u8>)],
+    check_existing: bool,
+) -> Result<WrittenArtifacts, ArtifactError> {
+    let write = || -> Vec<Result<bool, ArtifactError>> {
+        files
+            .par_iter()
+            .map(|(path, contents)| write_artifact(path, contents, check_existing))
+            .collect()
+    };
+    let results: Vec<Result<bool, ArtifactError>> = match rayon::ThreadPoolBuilder::new()
+        .num_threads(WRITE_WORKERS)
+        .build()
+    {
+        Ok(pool) => pool.install(write),
+        Err(_) => write(),
+    };
+    let mut outcome: WrittenArtifacts = WrittenArtifacts::default();
+    for result in results {
+        if result? {
+            outcome.written += 1;
+        } else {
+            outcome.unchanged += 1;
+        }
+    }
+    Ok(outcome)
+}
+
+fn distinct_paths(files: &[(PathBuf, Vec<u8>)]) -> bool {
+    let mut seen: HashSet<&Path> = HashSet::with_capacity(files.len());
+    files.iter().all(|(path, _)| seen.insert(path.as_path()))
+}
+
+/// Write one artifact; `false` when a byte-identical existing file was left untouched.
+fn write_artifact(
+    path: &Path,
+    contents: &[u8],
+    check_existing: bool,
+) -> Result<bool, ArtifactError> {
+    if check_existing && let Some(existing) = read_regular_file(path)? {
+        if existing == contents {
+            return Ok(false);
+        }
+        if std::str::from_utf8(&existing).is_err() {
+            return Err(ArtifactError::ExistingNotUtf8 {
+                path: path.to_path_buf(),
+            });
+        }
+    }
+    overwrite_creating_parent(path, contents)?;
+    Ok(true)
 }
 
 /// A regular file's bytes, or `None` when nothing comparable is at `path`.
