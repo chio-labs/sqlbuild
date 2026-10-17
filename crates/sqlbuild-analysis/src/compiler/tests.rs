@@ -1,5 +1,7 @@
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/simple_template/helpers.rs"]
+mod simple_template_helpers;
 #[path = "tests/test_sql_test_cte_rename.rs"]
 mod sql_test_cte_rename;
 #[path = "tests/test_sql_test_cte_slices.rs"]
@@ -22,5 +24,7 @@ mod sql_test_planning;
 mod sql_test_relation_markers;
 #[path = "tests/test_sql_test_rendering.rs"]
 mod sql_test_rendering;
+#[path = "tests/test_sql_test_simple_template.rs"]
+mod sql_test_simple_template;
 #[path = "tests/test_types.rs"]
 mod test_types;

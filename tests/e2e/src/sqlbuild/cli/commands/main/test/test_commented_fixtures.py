@@ -87,6 +87,31 @@ _MISMATCH_FRAGMENT: str = (
     "test_case",
     [
         CommentedFixtureE2ETestCase(
+            description="bounded CTE casts joins and unions execute with mocked sources",
+            test_files={
+                "macros/status.py": "",
+                "models/orders.sql": (
+                    "MODEL (description 'Orders through projected CTEs.');\n"
+                    'WITH imported AS (SELECT * FROM __source("raw_orders")),\n'
+                    "projected AS (SELECT CAST(COALESCE(b.order_id, 0) + 0 AS INTEGER) AS order_id,\n"
+                    "b.status AS status FROM imported AS b\n"
+                    "LEFT JOIN imported AS c ON c.order_id = b.order_id),\n"
+                    "combined AS (SELECT order_id, status FROM projected\n"
+                    "UNION ALL BY NAME SELECT order_id, status FROM projected WHERE order_id = 0),\n"
+                    "final AS (SELECT CAST(order_id AS INTEGER) AS order_id, status FROM combined)\n"
+                    "SELECT order_id, status FROM final\n"
+                ),
+                "tests/unit/test_orders.sql": (
+                    'TEST (name "projected_orders");\nWITH\n'
+                    "__source__raw_orders AS (\n"
+                    "SELECT 1 AS order_id, 'paid' AS status UNION ALL SELECT 2, 'void'\n"
+                    "),\n" + _LINE_COMMENTED_EXPECTED
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("PASS=1", "FAIL=0"),
+        ),
+        CommentedFixtureE2ETestCase(
             description="nested model CTEs and marker lookalikes preserve mocked source results",
             test_files={
                 "macros/status.py": "",

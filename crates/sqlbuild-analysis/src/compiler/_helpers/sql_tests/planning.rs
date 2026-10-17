@@ -143,10 +143,10 @@ struct AnalysisResolvedSql {
     reachable_mock_names: HashSet<String>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AnalysisTemplate {
-    existing_cte_names: HashSet<String>,
-    marker_calls: Arc<[(String, String)]>,
+    pub(crate) existing_cte_names: HashSet<String>,
+    pub(crate) marker_calls: Arc<[(String, String)]>,
 }
 
 type AnalysisTemplateCell = Arc<OnceLock<Option<AnalysisTemplate>>>;
@@ -1420,26 +1420,51 @@ fn analyze_and_resolve_sql(
     }))
 }
 
-fn analysis_template(
+#[cfg(test)]
+thread_local! {
+    static TEMPLATE_AST_PARSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn take_template_ast_parse_count() -> usize {
+    TEMPLATE_AST_PARSES.with(|count| count.replace(0))
+}
+
+pub(crate) fn analysis_template(
     query_sql: &str,
     dialect_name: &str,
     templates: &AnalysisTemplateCache,
 ) -> Result<Option<AnalysisTemplate>, String> {
     cached_analysis_template(query_sql, templates, || {
         Dialect::get_by_name(dialect_name).and_then(|dialect| {
-            let mut statements = match dialect.parse(query_sql) {
-                Ok(statements) => statements,
-                Err(_) => return None,
-            };
-            if statements.len() != 1 {
-                return None;
+            if let Some(template) =
+                super::simple_template::simple_analysis_template(query_sql, dialect_name, &dialect)
+            {
+                return Some(template);
             }
-            let expression = statements.remove(0);
-            Some(AnalysisTemplate {
-                existing_cte_names: top_level_cte_names(&expression),
-                marker_calls: relation_marker_calls(&expression).into(),
-            })
+            parsed_analysis_template(query_sql, &dialect)
         })
+    })
+}
+
+/// The full-parser path also serves as the differential oracle for the bounded recognizer.
+pub(crate) fn parsed_analysis_template(
+    query_sql: &str,
+    dialect: &Dialect,
+) -> Option<AnalysisTemplate> {
+    #[cfg(test)]
+    TEMPLATE_AST_PARSES.with(|count| count.set(count.get() + 1));
+    let mut statements = match dialect.parse(query_sql) {
+        Ok(statements) => statements,
+        Err(_) => return None,
+    };
+    if statements.len() != 1 {
+        return None;
+    }
+    let expression = statements.remove(0);
+    Some(AnalysisTemplate {
+        existing_cte_names: top_level_cte_names(&expression),
+        marker_calls: relation_marker_calls(&expression).into(),
     })
 }
 
