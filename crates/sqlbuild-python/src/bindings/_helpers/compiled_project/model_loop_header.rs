@@ -2,11 +2,12 @@
 
 use std::sync::Arc;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple, PyTupleMethods};
 use sqlbuild_analysis::compiled_project::models::{
     DynamicFamilyFact, ModelSchemaFact, SchemaColumnFact,
 };
+use sqlbuild_discovery::models::LineColumnSpan;
 use sqlbuild_model_config::header_metadata::main::audit_factory_references::audit_factory_references;
 use sqlbuild_model_config::header_metadata::main::merged_audit_identities::merged_audit_identities;
 use sqlbuild_model_config::header_metadata::main::parse_dynamic_columns::parse_dynamic_columns;
@@ -21,6 +22,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_contracts::{
     EnumColumns, dynamic_family_objects, enum_columns, factory_audits,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::present;
+use crate::bindings::_helpers::compiled_project::model_loop_prepass::HeaderFacts;
 use crate::bindings::_helpers::compiled_project::model_loop_schema::{
     DeclaredColumns, ModelSchema, merged_columns, schema_enums,
 };
@@ -30,7 +32,8 @@ use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::column_migrations::column_migration_error;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::header_metadata::{
-    HeaderColumns, audit_instances, native_schema_column, parsed_audit_identity,
+    HeaderColumn, HeaderColumns, NativeColumn, NativeColumnSpec, audit_instances,
+    native_schema_column, parsed_audit_identity,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 
@@ -51,6 +54,9 @@ pub(crate) struct HeaderSource<'a, 'py> {
     /// The model's visible declarations and the identity its usages are recorded for.
     pub(crate) visible: (&'a Bound<'py, PyAny>, &'a Bound<'py, PyAny>),
     pub(crate) schema: Option<&'a ModelSchema<'py>>,
+    /// What the pre-pass read from the model's native header.
+    pub(crate) facts: Option<&'a HeaderFacts>,
+    pub(crate) model_file_handle: &'a Py<NativeModelFile>,
 }
 
 /// The header's description and, when it declares any schema metadata, its entry.
@@ -100,18 +106,26 @@ pub(crate) fn header_schema<'py>(
     let none: Bound<'py, PyAny> = py.None().into_bound(py);
     let node = |value: Option<Bound<'py, PyAny>>| PyNode(value.unwrap_or_else(|| none.clone()));
     let model: (&str, &str) = (source.name, source.relative_path);
-    let metadata = parse_header_metadata(&node(columns), &node(audits), source.relative_path);
+    let native: Option<&[NativeColumn]> = native_columns(source, columns.as_ref())?;
+    let python_columns: Option<Bound<'py, PyAny>> = if native.is_some() { None } else { columns };
+    let metadata =
+        parse_header_metadata(&node(python_columns), &node(audits), source.relative_path);
     let parsed_columns = metadata
         .columns
         .map_err(|error| raised_config_error(py, error))?;
-    let locations: Bound<'py, PyDict> = source.model_file.header_locations(py)?;
     let model_path: &Bound<'py, PyAny> = &source.model_file.path_objects(py)?.1;
-    let local_columns: DeclaredColumns = DeclaredColumns {
-        specs: parsed_columns
-            .iter()
-            .map(|column| native_schema_column(py, context.contracts, column, &locations))
-            .collect::<PyResult<_>>()?,
-        facts: local_column_facts(&parsed_columns)?,
+    let local_columns: DeclaredColumns = match native {
+        Some(native) => native_declared_columns(context, source, native)?,
+        None => {
+            let locations: Bound<'py, PyDict> = source.model_file.header_locations(py)?;
+            DeclaredColumns {
+                specs: parsed_columns
+                    .iter()
+                    .map(|column| native_schema_column(py, context.contracts, column, &locations))
+                    .collect::<PyResult<_>>()?,
+                facts: local_column_facts(&parsed_columns)?,
+            }
+        }
     };
     let columns: DeclaredColumns = match source.schema {
         Some(schema) => merged_columns(
@@ -195,6 +209,66 @@ pub(crate) fn header_schema<'py>(
             fact,
         }),
     })
+}
+
+/// The natively parsed header columns, when the config's columns are the header's own value.
+fn native_columns<'a>(
+    source: &HeaderSource<'a, '_>,
+    columns: Option<&Bound<'_, PyAny>>,
+) -> PyResult<Option<&'a [NativeColumn]>> {
+    let (Some(facts), Some(columns)) = (source.facts, columns) else {
+        return Ok(None);
+    };
+    let Some(parsed) = &facts.columns else {
+        return Ok(None);
+    };
+    let header: Bound<'_, PyDict> = source.model_file.header_value_dict(columns.py())?;
+    let own: bool = header
+        .get_item(COLUMNS_KEY)?
+        .is_some_and(|value| value.is(columns));
+    Ok(own.then_some(parsed.as_slice()))
+}
+
+/// Native header columns as declared columns, their records built only when Python reads them.
+fn native_declared_columns(
+    context: &LoopContext<'_, '_>,
+    source: &HeaderSource<'_, '_>,
+    columns: &[NativeColumn],
+) -> PyResult<DeclaredColumns> {
+    let py: Python<'_> = context.host.py();
+    let rows: &[(String, LineColumnSpan)] = source.model_file.header_location_rows();
+    let contracts: Arc<Py<PyDict>> = Arc::new(context.contract_dict.clone_ref(py));
+    let mut specs: Vec<HeaderColumn> = Vec::with_capacity(columns.len());
+    let mut facts: Vec<SchemaColumnFact> = Vec::with_capacity(columns.len());
+    for column in columns {
+        let location: Option<LineColumnSpan> = rows
+            .iter()
+            .rev()
+            .find(|(name, _)| *name == column.name)
+            .map(|(_, span)| *span);
+        facts.push(SchemaColumnFact {
+            name: column.name.clone(),
+            data_type: column.column_type.clone(),
+            nullable: column.nullable,
+            described: column.description.is_some(),
+            migrate_from: column.migrate_from.clone(),
+            audit_definitions: column
+                .audits
+                .iter()
+                .map(|audit| audit.definition_name.clone())
+                .collect(),
+            location_path: None,
+        });
+        specs.push(HeaderColumn::native(
+            &context.contracts.schema_column,
+            NativeColumnSpec {
+                column: column.clone(),
+                location: location.map(|span| (source.model_file_handle.clone_ref(py), span)),
+                contracts: Arc::clone(&contracts),
+            },
+        )?);
+    }
+    Ok(DeclaredColumns { specs, facts })
 }
 
 /// The header's dynamic column families, each `name_pattern` compiled natively.

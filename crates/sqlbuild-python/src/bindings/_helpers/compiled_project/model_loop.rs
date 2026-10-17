@@ -34,6 +34,9 @@ use crate::bindings::_helpers::compiled_project::model_loop_named::{
 use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
     OptOut, OptOutModel, reject_unparseable_query, rejected_opt_out,
 };
+use crate::bindings::_helpers::compiled_project::model_loop_prepass::{
+    HeaderFacts, all_header_facts,
+};
 use crate::bindings::_helpers::compiled_project::model_loop_python_hooks::{
     HookClasses, HookSignatures,
 };
@@ -90,6 +93,11 @@ use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
+use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::types::CompilerDetach;
+use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 const MATERIALIZED_KEY: &str = "materialized";
 const CURSOR_KEY: &str = "cursor";
@@ -181,6 +189,8 @@ pub(crate) struct LoopContext<'a, 'py> {
     pub(crate) host: &'a Bound<'py, ConstantRendering>,
     pub(crate) classes: &'a LoopClasses<'py>,
     pub(crate) contracts: &'a ContractClasses<'py>,
+    /// The contract classes as Python passed them, kept by natively parsed columns.
+    pub(crate) contract_dict: &'a Py<PyDict>,
 }
 
 /// The declarations a model sees and the identity its usages are recorded for.
@@ -316,6 +326,7 @@ impl NativeModelLoop {
             host: &host,
             classes: &classes,
             contracts: &contracts,
+            contract_dict: &self.contract_classes,
         };
         project
             .borrow_mut()
@@ -345,6 +356,7 @@ impl NativeModelLoop {
                 &context,
                 &record.header_value_dict(py)?,
                 (name, relative_path),
+                row.header.as_ref(),
             )?;
             let model: LoopModel<'_, 'py> = LoopModel {
                 row: &row,
@@ -382,7 +394,22 @@ impl NativeModelLoop {
     ) -> PyResult<Vec<Bound<'py, NativeModelInput>>> {
         let py: Python<'py> = slf.py();
         let classes: LoopClasses<'py> = slf.get().loop_classes.bind(py).extract()?;
-        let models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
+        let mut models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
+        let headers: Vec<Option<(Arc<[(String, AuthoredValue)]>, String)>> = models
+            .iter()
+            .map(|row| {
+                row.model_file
+                    .get()
+                    .native_header_values()
+                    .map(|values| (Arc::clone(values), row.paths.relative_path.clone()))
+            })
+            .collect();
+        let facts: Vec<Option<HeaderFacts>> = py
+            .compiler_detach(|| all_header_facts(&headers))
+            .map_err(compiler_error)?;
+        for (row, facts) in models.iter_mut().zip(facts) {
+            row.header = facts;
+        }
         project
             .borrow_mut()
             .keep_attachment_loop(slf.clone().unbind(), host.clone().unbind());
@@ -404,6 +431,7 @@ impl NativeModelLoop {
             host,
             classes: &classes,
             contracts: &contracts,
+            contract_dict: &self.contract_classes,
         };
         let attached: Vec<AttachedSource> = attached_sources(self, &context, rows, settings)?;
         Ok(retain_sources(project, attached))
@@ -424,6 +452,7 @@ impl NativeModelLoop {
             host,
             classes: &classes,
             contracts: &contracts,
+            contract_dict: &self.contract_classes,
         };
         attached_audits(self, &context, (files, owners), settings)
     }
@@ -443,6 +472,7 @@ impl NativeModelLoop {
             host,
             classes: &classes,
             contracts: &contracts,
+            contract_dict: &self.contract_classes,
         };
         let validator: Bound<'py, NativeModelValidator> =
             self.validator.bind(py).downcast()?.clone();
@@ -510,6 +540,7 @@ impl NativeModelLoop {
             host,
             classes: &classes,
             contracts: &contracts,
+            contract_dict: &self.contract_classes,
         };
         let attached: Vec<AttachedFunction> = attached_functions(self, &context, rows, settings)?;
         checked_table_function_arities(&context, models, &attached)?;
@@ -543,6 +574,7 @@ impl NativeModelLoop {
             scan,
             interpolation,
             model_file,
+            header: header_facts,
         } = row;
         let values: Bound<'py, PyDict> =
             native_field(&config, VALUES_ATTRIBUTE)?.downcast_into()?;
@@ -698,6 +730,8 @@ impl NativeModelLoop {
             relative_path,
             visible: (&visible.declarations, &visible.consumer),
             schema: schema.as_ref(),
+            facts: header_facts.as_ref(),
+            model_file_handle: model_file,
         };
         let header: AttachedHeader<'py> = header_schema(py, context, &source)?;
         let mut named_usages: Vec<Bound<'py, PyAny>> = hook_usages;

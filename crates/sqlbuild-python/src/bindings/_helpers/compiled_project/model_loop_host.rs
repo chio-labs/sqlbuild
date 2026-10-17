@@ -17,6 +17,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_header::AttachedHead
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     reference_fact, stripped_values,
 };
+use crate::bindings::_helpers::compiled_project::model_loop_prepass::HeaderFacts;
 use crate::bindings::_helpers::compiled_project::project::{
     CONTRACT_KEY, INCREMENTAL_MODE_KEY, materialization, text_value,
 };
@@ -56,6 +57,8 @@ pub(crate) struct ModelLoopRow {
     pub(crate) interpolation: InterpolationRow,
     /// The discovered model file, owned by the discovery inputs.
     pub(crate) model_file: Py<NativeModelFile>,
+    /// What the pre-pass read from the model's native header, when it has one.
+    pub(crate) header: Option<HeaderFacts>,
 }
 
 impl ModelLoopRow {
@@ -73,6 +76,7 @@ impl ModelLoopRow {
             scan,
             interpolation,
             model_file,
+            header: None,
         }
     }
 }

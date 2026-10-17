@@ -147,3 +147,42 @@ fn given_config_values_when_checking_reuse_then_python_answers_are_returned() {
         );
     }
 }
+
+#[test]
+fn given_config_entries_when_walking_each_entry_then_the_first_found_matches_the_whole_walk() {
+    use crate::config_presence::main::entry_macro_path::entry_macro_path;
+    use crate::config_presence::main::first_macro_path::first_macro_path;
+    use crate::config_presence::models::MacroPath;
+
+    let entries = vec![
+        (Value::Str("pre_hooks"), Value::Str("@skipped()")),
+        (Value::Str("materialized"), Value::Str("table")),
+        (
+            Value::Str("columns"),
+            Value::Map(vec![(
+                Value::Str("id"),
+                Value::Map(vec![(Value::Str("description"), Value::Str("@cents(id)"))]),
+            )]),
+        ),
+        (
+            Value::Str("tags"),
+            Value::List(vec![Value::Str("@later()")]),
+        ),
+    ];
+    let whole: MacroPath = first_macro_path(&Value::Map(entries.clone()), &["pre_hooks"]);
+    let per_entry: MacroPath = entries
+        .iter()
+        .filter(|(key, _)| !matches!(key, Value::Str("pre_hooks")))
+        .map(|(key, value)| entry_macro_path(key, value))
+        .find(|found| *found != MacroPath::Absent)
+        .unwrap_or(MacroPath::Absent);
+    assert_eq!(
+        whole,
+        MacroPath::Found(vec![
+            "columns".to_owned(),
+            "id".to_owned(),
+            "description".to_owned()
+        ])
+    );
+    assert_eq!(per_entry, whole);
+}

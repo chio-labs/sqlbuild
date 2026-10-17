@@ -1263,6 +1263,7 @@ dependencies = [
  "fensu-policy",
  "mimalloc",
  "pyo3",
+ "rayon",
  "serde",
  "serde_json",
  "sqlbuild-analysis",

@@ -368,6 +368,11 @@ impl NativeModelFile {
         self.header_values.dict(py)
     }
 
+    /// The header columns' authored locations, unless Python constructed this record.
+    pub(crate) fn header_location_rows(&self) -> &[(String, LineColumnSpan)] {
+        &self.header_column_locations.rows
+    }
+
     /// The header's native authored values, unless Python constructed this record.
     pub(crate) fn native_header_values(&self) -> Option<&Arc<[(String, AuthoredValue)]>> {
         self.header_values.native.as_ref()

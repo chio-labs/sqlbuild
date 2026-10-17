@@ -12,6 +12,7 @@ use sqlbuild_model_config::config_presence::main::mutable_config_value::mutable_
 use sqlbuild_model_config::model_validation::models::{RetentionOverride, TableTypeOverride};
 
 use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, config_error};
+use crate::bindings::_helpers::compiled_project::model_loop_prepass::HeaderFacts;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::model_config_builder::{
     BuiltConfig, ConfigBuild, NativeModelConfigBuilder,
@@ -69,6 +70,7 @@ impl<'py> ModelConfigs<'py> {
         context: &LoopContext<'_, 'py>,
         header: &Bound<'py, PyDict>,
         model: (&str, &str),
+        facts: Option<&HeaderFacts>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let (name, relative_path) = model;
         let py: Python<'py> = header.py();
@@ -77,7 +79,7 @@ impl<'py> ModelConfigs<'py> {
         let matched: Option<String> = builder
             .selected_path_default(py, relative_path)?
             .map_err(|error| config_error(error.bind(py).as_any(), None))?;
-        let metadata: Option<Bound<'py, PyDict>> = reusable_metadata(header)?;
+        let metadata: Option<Bound<'py, PyDict>> = reusable_metadata(header, facts)?;
         let reusable: bool = match metadata {
             Some(_) => self.reusable(context, &matched)?,
             None => false,
@@ -90,7 +92,7 @@ impl<'py> ModelConfigs<'py> {
             values.update(metadata.as_mapping())?;
             return view(classes, &values, &cached.fields);
         }
-        let built: ConfigBuild<'py> = builder.built(py, header, matched.as_deref(), name)?;
+        let built: ConfigBuild<'py> = builder.built(py, header, matched.as_deref(), name, facts)?;
         let built: BuiltConfig<'py> = match built {
             ConfigBuild::Built(built) => built,
             ConfigBuild::Rejected(error) => {
@@ -168,7 +170,10 @@ impl<'py> ModelConfigs<'py> {
 }
 
 /// `_reusable_metadata`: the header when only plain columns and description vary, else `None`.
-fn reusable_metadata<'py>(header: &Bound<'py, PyDict>) -> PyResult<Option<Bound<'py, PyDict>>> {
+fn reusable_metadata<'py>(
+    header: &Bound<'py, PyDict>,
+    facts: Option<&HeaderFacts>,
+) -> PyResult<Option<Bound<'py, PyDict>>> {
     let py: Python<'py> = header.py();
     if header.is_empty() {
         return Ok(Some(PyDict::new(py)));
@@ -183,9 +188,14 @@ fn reusable_metadata<'py>(header: &Bound<'py, PyDict>) -> PyResult<Option<Bound<
         }
     }
     for key in [DESCRIPTION_KEY, COLUMNS_KEY] {
-        if let Some(value) = header.get_item(key)?
-            && blocks_config_reuse(&PyNode(value))
-        {
+        let Some(value) = header.get_item(key)? else {
+            continue;
+        };
+        let blocks: bool = match facts.and_then(|facts| facts.entry(key)) {
+            Some(entry) => entry.blocks_reuse,
+            None => blocks_config_reuse(&PyNode(value)),
+        };
+        if blocks {
             return Ok(None);
         }
     }
