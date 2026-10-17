@@ -1024,10 +1024,3 @@ impl RecordId {
         Self::ALL.iter().copied().find(|id| id.name() == name)
     }
 }
-
-impl NativeAttr {
-    /// The attribute registered under `name`, for function names a pure-Rust crate chose.
-    pub(crate) fn from_name(name: &str) -> Option<Self> {
-        Self::ALL.iter().copied().find(|id| id.name() == name)
-    }
-}

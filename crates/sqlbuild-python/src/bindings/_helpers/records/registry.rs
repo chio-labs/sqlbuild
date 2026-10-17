@@ -13,8 +13,6 @@ use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 
 /// The extension module, imported once for attribute lookups.
 static MODULE: PyOnceLock<Py<PyModule>> = PyOnceLock::new();
-/// Each `RecordId`'s interned attribute name, by variant position.
-static CLASS_NAMES: PyOnceLock<Vec<Py<PyString>>> = PyOnceLock::new();
 /// Each `ErrorId`'s interned attribute name, by variant position.
 static ERROR_NAMES: PyOnceLock<Vec<Py<PyString>>> = PyOnceLock::new();
 /// Each `NativeAttr`'s interned attribute name, by variant position.
@@ -98,16 +96,6 @@ pub(crate) fn verify_attributes(module: &Bound<'_, PyModule>) -> PyResult<()> {
     )))
 }
 
-/// The native record class or string enum `id`, read now so a replaced attribute is seen.
-pub(crate) fn class(py: Python<'_>, id: RecordId) -> PyResult<Bound<'_, PyAny>> {
-    attribute(
-        py,
-        &CLASS_NAMES,
-        RecordId::ALL.iter().map(|id| id.name()),
-        id as usize,
-    )
-}
-
 /// The native error class `id`, read now so a replaced attribute is seen.
 pub(crate) fn error(py: Python<'_>, id: ErrorId) -> PyResult<Bound<'_, PyAny>> {
     attribute(
@@ -126,15 +114,6 @@ pub(crate) fn native(py: Python<'_>, id: NativeAttr) -> PyResult<Bound<'_, PyAny
         NativeAttr::ALL.iter().map(|id| id.name()),
         id as usize,
     )
-}
-
-/// A member or class attribute of the native record class or string enum `id`.
-pub(crate) fn member<'py>(
-    py: Python<'py>,
-    id: RecordId,
-    name: &str,
-) -> PyResult<Bound<'py, PyAny>> {
-    class(py, id)?.getattr(name)
 }
 
 /// The native record class or string enum a pure-Rust crate names, failing as `getattr` would.

@@ -13,7 +13,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::replaced_with;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 
 const SOURCE_RESOURCE: &str = "source";
 
@@ -117,7 +117,7 @@ pub(crate) fn replaced(
     value: &Bound<'_, PyAny>,
     changes: &Bound<'_, PyDict>,
 ) -> PyResult<Py<PyAny>> {
-    Ok(replaced_with(value, changes)?.unbind())
+    Ok(replaced_keywords(value, changes)?.unbind())
 }
 
 fn read_source<'py, T>(
