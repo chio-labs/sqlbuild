@@ -16,9 +16,8 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::planner_scope::scope::build_planner_scope;
 use crate::bindings::_helpers::records::fields::{field as record_field, path_posix, replaced};
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::builtin_catalogue::builtin_rules;
 use crate::bindings::_helpers::rules::config_json::asdict_json;
 use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules as verify_rule_sources;
@@ -355,7 +354,6 @@ pub(crate) fn resolved_ignore_selectors<'py>(
     if !scoped {
         return Ok(config.clone());
     }
-    let scope: Bound<'py, PyAny> = registry::native(py, NativeAttr::BuildPlannerScope)?;
     let path_by_key: HashMap<(String, String), String> = resource_paths(project)?;
     let mut resolved: Vec<Bound<'py, PyAny>> = Vec::with_capacity(ignores.len());
     for ignore in ignores {
@@ -364,9 +362,12 @@ pub(crate) fn resolved_ignore_selectors<'py>(
             resolved.push(ignore);
             continue;
         }
-        let selected: Bound<'py, PyAny> = call_with(
-            &scope,
-            &[("project", project.clone()), ("select", selectors.clone())],
+        let selected: Bound<'py, PyAny> = build_planner_scope(
+            py,
+            Some(keywords(
+                py,
+                &[("project", project.clone()), ("select", selectors.clone())],
+            )?),
         )?;
         let mut selector_paths: BTreeSet<String> = BTreeSet::new();
         for key in record_field(&selected, "selected_keys")?.try_iter()? {

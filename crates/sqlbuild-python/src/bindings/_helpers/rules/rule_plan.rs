@@ -8,12 +8,13 @@ use std::path::Path;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::{field, replaced};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::catalogue::{
     references_custom_rules, resolved_ignore_selectors, rule_catalogue, select_rules,
     verify_custom_rules,
@@ -158,12 +159,12 @@ fn selected_models_project<'py>(
             models.push(entry.model);
         }
     }
-    call_with(
-        &registry::native(py, NativeAttr::ProjectWith)?,
-        &[
-            ("project", project.clone()),
-            ("models", PyTuple::new(py, models)?.into_any()),
-        ],
+    project_with(
+        project,
+        Some(keywords(
+            py,
+            &[("models", PyTuple::new(py, models)?.into_any())],
+        )?),
     )
 }
 

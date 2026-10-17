@@ -7,10 +7,10 @@ use crate::bindings::_helpers::analysis::binding_catalog::ignores_quoted_case;
 use crate::bindings::_helpers::analysis::schema_request::{
     SchemaRequestParts, schema_validation_request,
 };
+use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_query_columns;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_checks::resource_sql::resource_sql_diagnostics_of;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::models::ProjectCatalog;
@@ -74,8 +74,7 @@ pub(crate) fn sql_test_columns<'py>(
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("queries", PyTuple::new(py, queries)?)?;
     arguments.set_item("profile", profile)?;
-    let analyses: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::InferNativeQueryColumns)?.call((), Some(&arguments))?;
+    let analyses: Bound<'py, PyAny> = infer_native_query_columns(Some(&arguments))?.into_any();
     for (sql, analysis) in bodies.keys().iter().zip(analyses.try_iter()?) {
         let analysis: Bound<'py, PyAny> = analysis?;
         let mut names: Vec<Bound<'py, PyAny>> = Vec::new();

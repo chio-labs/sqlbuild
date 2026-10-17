@@ -9,6 +9,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, imported, keywords,
 };
+use crate::bindings::_helpers::discovery::guidance::explicit_references_help;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::{
@@ -57,13 +58,8 @@ pub(crate) struct ExpansionRequest<'py> {
 }
 
 fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    let help: Bound<'_, PyAny> = registry::native(py, NativeAttr::ExplicitReferencesHelp)?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[("allowed", PyString::new(py, GENERATED_ALLOWED).into_any())],
-        )?),
-    )?;
+    let help: Bound<'_, PyAny> =
+        PyString::new(py, &explicit_references_help(GENERATED_ALLOWED)).into_any();
     let markers: Bound<'_, PyAny> = PyList::new(py, GENERATED_REFERENCE_MARKERS)?.into_any();
     keywords(
         py,

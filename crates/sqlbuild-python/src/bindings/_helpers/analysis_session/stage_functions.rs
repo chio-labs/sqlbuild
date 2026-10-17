@@ -59,7 +59,7 @@ fn infer_native_query_column_rows<'py>(
 /// Each query's columns as `NativeQueryColumns`; a native internal failure raises.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn infer_native_query_columns<'py>(
+pub(crate) fn infer_native_query_columns<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("infer_native_query_columns", request)?;
@@ -114,7 +114,7 @@ fn infer_native_query_columns<'py>(
 /// One shape per expression, cached on the profile's binding catalog; a failure raises.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn infer_native_expression_source_shapes<'py>(
+pub(crate) fn infer_native_expression_source_shapes<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("infer_native_expression_source_shapes", request)?;

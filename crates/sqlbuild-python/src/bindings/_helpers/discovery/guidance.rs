@@ -55,7 +55,7 @@ pub(crate) fn microbatch_guidance() -> (String, String) {
 
 #[pyfunction]
 #[pyo3(signature = (*, allowed))]
-fn explicit_references_help(allowed: &str) -> String {
+pub(crate) fn explicit_references_help(allowed: &str) -> String {
     references_help(allowed)
 }
 

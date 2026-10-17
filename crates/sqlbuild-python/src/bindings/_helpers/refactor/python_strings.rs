@@ -58,7 +58,7 @@ fn read_text(path: PathBuf) -> Option<String> {
 /// Flag Python strings that name a model or column; with context, only SQL naming it too.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn find_python_string_locations<'py>(
+pub(crate) fn find_python_string_locations<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("find_python_string_locations", request)?;

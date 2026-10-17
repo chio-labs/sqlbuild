@@ -8,7 +8,7 @@ use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::types::CompilerDetach;
 
 #[pyfunction]
-fn normalize_analysis_sql(
+pub(crate) fn normalize_analysis_sql(
     py: Python<'_>,
     request: crate::bindings::models::NormalizationInput,
 ) -> PyResult<String> {

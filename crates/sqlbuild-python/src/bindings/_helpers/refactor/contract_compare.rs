@@ -7,12 +7,12 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -253,13 +253,8 @@ fn undeclared_finding<'py>(
     let py: Python<'py> = vocabulary.py();
     let name: String = native_field(physical, "name")?.extract()?;
     let physical_type: Bound<'py, PyAny> = native_field(physical, "type")?;
-    let matching: Bound<'py, PyAny> = keyword_call(
-        &registry::native(py, NativeAttr::MatchingDynamicFamilies)?,
-        vec![
-            ("families", native_field(item, "dynamic_columns")?),
-            ("column_name", text(py, &name)),
-        ],
-    )?;
+    let matching: Bound<'py, PyAny> =
+        matching_dynamic_families(&native_field(item, "dynamic_columns")?, &name)?.into_any();
     if matching.len()? == 1 {
         let family: Bound<'py, PyAny> = matching.get_item(0)?;
         let family_type: Bound<'py, PyAny> = native_field(&family, "type")?;

@@ -11,10 +11,11 @@ use sqlbuild_refactor::refactoring::models::{
     SchemaColumnFacts, SqlFileRole,
 };
 
+use crate::bindings::_helpers::model_config::config_values::config_str;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::refactor::python_strings::find_python_string_locations;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_reports::scope_move_preview;
 use crate::bindings::_helpers::scopes::scope_validation::scope_relocated_declarations;
@@ -26,10 +27,6 @@ const MODEL_KIND_PREFIX: &str = "model:";
 
 fn posix(path: &Bound<'_, PyAny>) -> PyResult<String> {
     path.call_method0("as_posix")?.extract()
-}
-
-fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
-    registry::native(py, name)
 }
 
 fn discovered_files(files: &Bound<'_, PyAny>) -> PyResult<Vec<DiscoveredFile>> {
@@ -123,12 +120,9 @@ fn model(model: &Bound<'_, PyAny>, expansion: Option<&Bound<'_, PyAny>>) -> PyRe
         "update",
         (native_field(model, "config")?.getattr("values")?,),
     )?;
-    let options: Bound<'_, PyDict> = PyDict::new(py);
-    options.set_item("values", &values)?;
-    options.set_item("key", MATERIALIZED_KEY)?;
-    let materialized: Option<String> = registry::native(py, NativeAttr::GetConfigStr)?
-        .call((), Some(&options))?
-        .extract()?;
+    let materialized: Option<String> = config_str(&values, MATERIALIZED_KEY)?
+        .map(|value| value.extract())
+        .transpose()?;
     let migrate_from: Option<Bound<'_, PyAny>> = values.get_item(MIGRATE_FROM_KEY)?;
     let mut deps: Vec<DependencyFacts> = Vec::new();
     for dep in native_field(model, "deps")?.try_iter()? {
@@ -267,10 +261,7 @@ fn python_locations(
         )?;
     }
     let mut locations: Vec<ManualLocation> = Vec::new();
-    for location in native(py, NativeAttr::FindPythonStringLocations)?
-        .call((), Some(&options))?
-        .try_iter()?
-    {
+    for location in find_python_string_locations(Some(&options))?.try_iter()? {
         let location: Bound<'_, PyAny> = location?;
         locations.push(ManualLocation {
             path: native_field(&location, "path")?.extract()?,

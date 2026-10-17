@@ -18,10 +18,10 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compiled_project::records::compiled_project_record;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULES_CACHE_FILE,
 };
@@ -306,10 +306,7 @@ fn orjson_key(key: &FactKey) -> String {
 /// The project without state no rule fact reads, before digests and host payloads use it.
 fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item("include_sql_expansions", false)?;
-    let record: Bound<'py, PyAny> = registry::native(py, NativeAttr::CompiledProjectRecord)?
-        .call((project,), Some(&options))?;
+    let record: Bound<'py, PyAny> = compiled_project_record(project, false)?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
     for (name, cleared) in HOST_PROJECT_CLEARED {
         match cleared {

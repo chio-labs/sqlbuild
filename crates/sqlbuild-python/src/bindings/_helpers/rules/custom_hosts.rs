@@ -26,10 +26,11 @@ use sqlbuild_rules::custom_host_pool::types::{HostInvocation, HostPlan};
 use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::compiled_project::records::compiled_project_record;
 use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_ABANDONED_SUFFIX, CUSTOM_HOST_CANCELLED_MARKER, CUSTOM_HOST_RUNTIME_VERSION,
@@ -421,8 +422,7 @@ pub(crate) fn host_payload_project<'py>(
         }
         models.push(new_record(py, RecordId::CompiledModel, (), Some(&fields))?);
     }
-    let record: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::CompiledProjectRecord)?.call1((project,))?;
+    let record: Bound<'py, PyAny> = compiled_project_record(project, true)?;
     let options: Bound<'py, PyDict> = PyDict::new(py);
     options.set_item("models", PyTuple::new(py, models)?)?;
     options.set_item("native_project", py.None())?;
