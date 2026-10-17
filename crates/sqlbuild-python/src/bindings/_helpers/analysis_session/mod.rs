@@ -1,6 +1,7 @@
 pub(crate) mod fixture_columns;
 pub(crate) mod fixture_inferences;
 pub(crate) mod model_analyses;
+pub(crate) mod models;
 pub(crate) mod nullability_rules;
 pub(crate) mod oracle;
 pub(crate) mod outcome_objects;

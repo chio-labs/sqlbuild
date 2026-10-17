@@ -26,7 +26,6 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
         NativeAnalysisSeamTestCase(
             description="models_contracts_lineage_and_sql_tests",
             expected_native_returns={
-                "infer_native_expression_source_shapes": [ANY, ANY, ANY],
                 "plan_compiled_sql_test_artifacts": [ANY],
             },
             expected_stage_work={
@@ -62,7 +61,6 @@ def test_given_project_when_compiling_then_native_seams_answer(
         stage: stage_work.get(stage, 0) for stage in test_case.expected_stage_work
     } == test_case.expected_stage_work
     for seams in (native_seams,):
-        assert isinstance(seams["infer_native_expression_source_shapes"][0], tuple)
         planned_artifacts: object = seams["plan_compiled_sql_test_artifacts"][0]
         assert isinstance(planned_artifacts, tuple)
         assert planned_artifacts

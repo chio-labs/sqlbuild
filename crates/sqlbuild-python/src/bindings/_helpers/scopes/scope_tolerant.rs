@@ -34,7 +34,7 @@ fn posix(path: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 fn items<'py>(item: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    item.getattr(name)?.try_iter()?.collect()
+    native_field(item, name)?.try_iter()?.collect()
 }
 
 /// New diagnostics with their order keys.

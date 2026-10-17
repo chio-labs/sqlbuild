@@ -170,7 +170,7 @@ pub(crate) fn build_effective_target_namespace<'py>(
         if target_config.is_none() {
             return Ok(py.None().into_bound(py));
         }
-        target_config.getattr(key)
+        native_field(&target_config, key)
     };
     let values: Bound<'py, PyDict> = PyDict::new(py);
     values.set_item(

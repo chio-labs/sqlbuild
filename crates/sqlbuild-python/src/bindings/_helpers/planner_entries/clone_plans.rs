@@ -23,9 +23,9 @@ use crate::bindings::_helpers::planner_resolution::orchestration::{Resolution, r
 use crate::bindings::_helpers::planner_selection::selectors::resolve_graph_selection;
 use crate::bindings::_helpers::planner_strategy::strategy::materialization_of;
 use crate::bindings::_helpers::planner_warehouse::source_columns::gather_source_columns;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::PyRef;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
@@ -36,9 +36,7 @@ const GRAPH_ARGUMENTS: [&str; 4] = ["selected", "upstream", "is_clonable", "is_v
 
 /// Whether a model is explicitly disabled with a boolean `enabled = false`.
 fn disabled_model(model: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let raw = model
-        .getattr("config")?
-        .getattr("values")?
+    let raw = native_field(&native_field(model, "config")?, "values")?
         .call_method1("get", ("enabled",))?;
     Ok(raw.is_instance_of::<PyBool>() && !raw.is_truthy()?)
 }
@@ -72,9 +70,7 @@ fn clone_plan_output<'py>(
     let selected = object(
         py,
         resolve_graph_selection(
-            project
-                .getattr("lineage_graph")?
-                .extract::<PyRef<NativeProjectGraph>>()?,
+            native_field(project, "lineage_graph")?.extract::<PyRef<NativeProjectGraph>>()?,
             select,
             exclude,
         )?,
@@ -272,7 +268,9 @@ fn clone_source_entries<'py>(
         let qualified = adapter
             .getattr("render_qualified_name")?
             .call((), Some(&kwargs))?;
-        let destination = registry::class(py, RecordId::CompiledRelationLocation)?.call(
+        let destination = new_record(
+            py,
+            RecordId::CompiledRelationLocation,
             (),
             Some(&{
                 let location = PyDict::new(py);
@@ -335,7 +333,7 @@ fn clone_function_entries<'py>(
                 ],
             )?),
         )?;
-        let field = |name: &str| function.getattr(name);
+        let field = |name: &str| native_field(&function, name);
         let entry = planner_model(
             py,
             RecordId::FunctionPlanEntry,
@@ -376,12 +374,12 @@ fn seed_entry<'py>(seed: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             ("destination", native_field(seed, "destination")?),
             (
                 "file_path",
-                native_field(seed, "seed_file")?.getattr("file_path")?,
+                native_field(&native_field(seed, "seed_file")?, "file_path")?,
             ),
             ("columns", PyTuple::empty(py).into_any()),
             (
                 "csv_settings",
-                native_field(seed, "schema_entry")?.getattr("csv_settings")?,
+                native_field(&native_field(seed, "schema_entry")?, "csv_settings")?,
             ),
         ],
     )
@@ -396,7 +394,7 @@ fn seed_entries<'py>(
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for seed in native_field(project, "seeds")?.try_iter()? {
         let seed = seed?;
-        if wanted.contains(seed.getattr(field)?)? {
+        if wanted.contains(native_field(&seed, field)?)? {
             entries.push(seed_entry(&seed)?);
         }
     }
@@ -456,7 +454,7 @@ fn origin_source_entries<'py>(
 /// Prepare planner outputs needed for clone execution.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn run_clone_planning<'py>(
+pub(crate) fn run_clone_planning<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -495,8 +493,7 @@ fn run_clone_planning<'py>(
         &destination_sources,
     )?;
     let mut sources = PyTuple::empty(py).into_any();
-    if destination_sources
-        .getattr("effective_target_name")?
+    if native_field(&destination_sources, "effective_target_name")?
         .eq(native_field(&project, "effective_target_name")?)?
     {
         sources = clone_source_entries(
@@ -528,10 +525,7 @@ fn run_clone_planning<'py>(
         let Some(origin) = origin_by_name.get_item(native_field(&entry, "name")?)? else {
             continue;
         };
-        if origin
-            .getattr("destination")?
-            .ne(native_field(&entry, "destination")?)?
-        {
+        if native_field(&origin, "destination")?.ne(native_field(&entry, "destination")?)? {
             kept_origins.push(origin);
             kept_sources.push(entry);
         }
@@ -627,7 +621,7 @@ impl<'py> CloneGraph<'py> {
 /// Return non-view clonable ancestors anchoring selected nodes.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_clone_boundary<'py>(
+pub(crate) fn resolve_clone_boundary<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
@@ -643,7 +637,7 @@ fn resolve_clone_boundary<'py>(
 /// Return skipped view ancestors rebuilt over cloned boundaries.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_skipped_view_chain<'py>(
+pub(crate) fn resolve_skipped_view_chain<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {

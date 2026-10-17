@@ -12,15 +12,20 @@ use sqlbuild_core::cost_command::main::cost_history_limit::cost_history_limit;
 use sqlbuild_core::cost_command::main::select_cost_run::select_cost_run;
 use sqlbuild_core::cost_command::main::validate_cost_request::validate_cost_request;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cost_command::bounds::{parse_bound, parse_since};
 use crate::bindings::_helpers::cost_command::refresh::refresh_pending_cost_run;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
 use crate::bindings::_helpers::cost_command::sorting::{sort_history, sort_resources};
+use crate::bindings::_helpers::cost_report::functions::format_cost_breakdown;
+use crate::bindings::_helpers::cost_report::functions::format_cost_history;
+use crate::bindings::_helpers::cost_report::functions::format_cost_history_json;
+use crate::bindings::_helpers::cost_report::functions::format_cost_json;
+use crate::bindings::_helpers::cost_report::functions::list_cost_runs;
+use crate::bindings::_helpers::cost_report::functions::resolve_cost_run;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 
 /// The request fields every cost view reads.
 struct CostRequest<'py> {
@@ -102,9 +107,12 @@ fn refused(py: Python<'_>, result: Result<(), CostCommandError>) -> PyResult<()>
 
 fn cost_runs<'py>(request: &CostRequest<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = request.request.py();
-    call_with(
-        &registry::native(py, NativeAttr::ListCostRuns)?,
-        &[("project_dir", request.project_dir.clone())],
+    list_cost_runs(
+        py,
+        request
+            .project_dir
+            .clone()
+            .extract::<std::path::PathBuf>()?,
     )?
     .try_iter()?
     .collect()
@@ -177,26 +185,20 @@ fn run_history(request: &CostRequest<'_>) -> PyResult<i32> {
     }
     let records: Bound<'_, PyAny> = PyTuple::new(py, records)?.into_any();
     let count: Bound<'_, PyAny> = PyInt::new(py, matching_count).into_any();
-    let payload: String = call_with(
-        &registry::native(py, NativeAttr::FormatCostHistoryJson)?,
-        &[
-            ("records", records.clone()),
-            ("matching_count", count.clone()),
-        ],
-    )?
-    .extract()?;
+    let payload: String =
+        format_cost_history_json(&records.clone(), count.clone().extract::<Option<usize>>()?)
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
+            .extract()?;
     request.emit(&payload, || {
-        call_with(
-            &registry::native(py, NativeAttr::FormatCostHistory)?,
-            &[
-                ("records", records),
-                ("matching_count", count),
-                (
-                    "use_color",
-                    PyBool::new(py, request.use_color()?).to_owned().into_any(),
-                ),
-            ],
-        )?
+        format_cost_history(
+            &records,
+            count.extract::<usize>()?,
+            PyBool::new(py, request.use_color()?)
+                .to_owned()
+                .into_any()
+                .extract::<bool>()?,
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .extract()
     })?;
     Ok(0)
@@ -207,13 +209,17 @@ fn resolve_run<'py>(request: &CostRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.request.py();
     let records: Vec<Bound<'py, PyAny>> = cost_runs(request)?;
     if request.selector == LATEST_SELECTOR {
-        let latest: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::ResolveCostRun)?,
-            &[
-                ("project_dir", request.project_dir.clone()),
-                ("selector", PyString::new(py, &request.selector).into_any()),
-            ],
-        )?;
+        let latest: Bound<'py, PyAny> = resolve_cost_run(
+            py,
+            request
+                .project_dir
+                .clone()
+                .extract::<std::path::PathBuf>()?,
+            &PyString::new(py, &request.selector)
+                .into_any()
+                .extract::<String>()?,
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
         if latest.is_none() {
             return Err(cost_error(
                 py,
@@ -237,14 +243,12 @@ fn with_resources<'py>(
     resources: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = record.py();
-    let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let cost_changes: Bound<'py, PyDict> = PyDict::new(py);
     cost_changes.set_item("resources", PyTuple::new(py, resources)?)?;
-    let cost: Bound<'py, PyAny> =
-        replace.call((native_field(record, "cost")?,), Some(&cost_changes))?;
+    let cost: Bound<'py, PyAny> = replaced_keywords(&native_field(record, "cost")?, &cost_changes)?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
     changes.set_item("cost", cost)?;
-    replace.call((record,), Some(&changes))
+    replaced_keywords(record, &changes)
 }
 
 fn run_detail(request: &CostRequest<'_>) -> PyResult<i32> {
@@ -280,16 +284,16 @@ fn run_detail(request: &CostRequest<'_>) -> PyResult<i32> {
         }
         None => record.clone(),
     };
-    let payload: String = registry::native(py, NativeAttr::FormatCostJson)?
-        .call1((json_record,))?
+    let payload: String = format_cost_json(&json_record)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .extract()?;
     request.emit(&payload, || {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("record", &record)?;
         options.set_item("use_color", request.use_color()?)?;
         options.set_item("limit", limit)?;
-        registry::native(py, NativeAttr::FormatCostBreakdown)?
-            .call((), Some(&options))?
+        format_cost_breakdown(py, Some(options.clone()))
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
             .extract()
     })?;
     Ok(0)
@@ -306,7 +310,7 @@ fn report(request: &Bound<'_, PyAny>) -> PyResult<i32> {
 
 /// Refresh a delayed run, then render persisted cost history or one run breakdown.
 #[pyfunction]
-fn run_cost_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_cost_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     refresh_pending_cost_run(py, request);
     report(request)
 }

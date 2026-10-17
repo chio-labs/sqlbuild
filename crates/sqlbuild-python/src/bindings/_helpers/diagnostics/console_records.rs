@@ -30,7 +30,7 @@ fn text_field(record: &Bound<'_, PyAny>, field: &str) -> PyResult<Option<String>
     if !record.hasattr(field)? {
         return Ok(None);
     }
-    let value: Bound<'_, PyAny> = record.getattr(field)?;
+    let value: Bound<'_, PyAny> = native_field(record, field)?;
     if value.is_instance_of::<PyString>() {
         return Ok(Some(value.extract()?));
     }
@@ -42,7 +42,7 @@ fn duration_seconds(record: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {
     if !record.hasattr(DURATION_FIELD)? {
         return Ok(None);
     }
-    let value: Bound<'_, PyAny> = record.getattr(DURATION_FIELD)?;
+    let value: Bound<'_, PyAny> = native_field(record, DURATION_FIELD)?;
     if !value.is_instance_of::<PyInt>() {
         return Ok(None);
     }

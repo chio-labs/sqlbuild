@@ -404,7 +404,7 @@ pub(crate) fn project_targets(
     let adapter_label: String = adapter_name.str()?.to_cow()?.into_owned();
     for (resource_kind, attribute) in [("model", "models"), ("seed", "seeds")] {
         let mut targets: Vec<(String, Bound<'_, PyAny>)> = Vec::new();
-        for resource in project.getattr(attribute)?.try_iter()? {
+        for resource in native_field(project, attribute)?.try_iter()? {
             let resource: Bound<'_, PyAny> = resource?;
             let resource_name: String = native_field(&resource, "name")?
                 .str()?
@@ -517,7 +517,7 @@ pub(crate) fn managed_write_schemas(
         ("Seed", "seeds"),
         ("Function", "functions"),
     ] {
-        for resource in project.getattr(attribute)?.try_iter()? {
+        for resource in native_field(project, attribute)?.try_iter()? {
             let resource: Bound<'_, PyAny> = resource?;
             managed_write_schema(
                 &format!(

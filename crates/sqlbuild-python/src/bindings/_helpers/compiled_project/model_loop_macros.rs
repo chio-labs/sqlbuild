@@ -80,7 +80,7 @@ pub(crate) fn expanded_macros<'py>(
     let declarations: Bound<'py, PyAny> = if classes.scoped {
         let fields: Bound<'py, PyDict> = PyDict::new(py);
         for field in CONTEXT_FIELDS {
-            fields.set_item(field, visible.declarations.getattr(field)?)?;
+            fields.set_item(field, native_field(&visible.declarations, field)?)?;
         }
         fields.set_item("consumer", &visible.consumer)?;
         classes.declaration_context.call((), Some(&fields))?
@@ -119,10 +119,7 @@ pub(crate) fn expanded_with<'py>(
             declarations.clone().unbind(),
             consumer.clone().unbind(),
         ),
-        classes
-            .macro_context
-            .getattr(ENFORCE_ATTRIBUTE)?
-            .is_truthy()?,
+        native_field(&classes.macro_context, ENFORCE_ATTRIBUTE)?.is_truthy()?,
         classes.expansion.clone_ref(py),
     )?;
     let expansion: Bound<'py, NativeMacroExpansion> = Bound::new(py, expansion)?;

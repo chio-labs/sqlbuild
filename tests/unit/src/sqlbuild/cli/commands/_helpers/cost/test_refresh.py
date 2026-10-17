@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -22,6 +21,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.cost._test_types import (
     CostRefreshDegradationTestCase,
     CostRefreshTestCase,
 )
+from tests.unit.src.sqlbuild.cli.commands._helpers.cost.helpers import write_snowflake_project
 from tests.unit.src.sqlbuild.cost.helpers import build_cost_run_record
 
 
@@ -86,24 +86,10 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
         project_dir=tmp_path,
         record=replace(record, cost=replace(record.cost, status=test_case.initial_status)),
     )
-    _ = (tmp_path / "sqlbuild_project.toml").write_text(
-        'name = "shop"\nadapter = "snowflake"\n', encoding="utf-8"
-    )
-    monkeypatch.setattr(
-        "sqlbuild._native.resolve_effective_adapter_name",
-        lambda **kwargs: "snowflake",
-    )
+    write_snowflake_project(tmp_path)
     monkeypatch.setattr(
         "sqlbuild.adapter.discovery.main.resolve_adapter.resolve_adapter",
         lambda **kwargs: _RefreshingCostAdapter(),
-    )
-    monkeypatch.setattr(
-        "sqlbuild._native.resolve_project_connection_config",
-        lambda **kwargs: {"database": "ANALYTICS"},
-    )
-    monkeypatch.setattr(
-        "sqlbuild._native.build_effective_target_config",
-        lambda **kwargs: SimpleNamespace(database=None),
     )
     request: CostCommandRequest = CostCommandRequest(
         project_dir=tmp_path,
@@ -189,21 +175,10 @@ def test_given_useful_partial_when_refresh_degrades_then_persisted_summary_is_pr
         observed_statement_count=test_case.candidate_observed_statement_count,
         query_count=test_case.candidate_query_count,
     )
-    monkeypatch.setattr(
-        "sqlbuild._native.discover_project_inputs",
-        lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
-    )
-    monkeypatch.setattr(
-        "sqlbuild._native.resolve_effective_adapter_name",
-        lambda **kwargs: "snowflake",
-    )
+    write_snowflake_project(tmp_path)
     monkeypatch.setattr(
         "sqlbuild.adapter.discovery.main.resolve_adapter.resolve_adapter",
         lambda **kwargs: _StaticCostAdapter(candidate),
-    )
-    monkeypatch.setattr(
-        "sqlbuild._native.resolve_project_connection_config",
-        lambda **kwargs: {},
     )
     request: CostCommandRequest = CostCommandRequest(
         project_dir=tmp_path,
@@ -272,21 +247,10 @@ def test_given_persisted_ledger_failure_when_refresh_has_no_coverage_then_failur
         observed_statement_count=test_case.candidate_observed_statement_count,
         query_count=test_case.candidate_query_count,
     )
-    monkeypatch.setattr(
-        "sqlbuild._native.discover_project_inputs",
-        lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
-    )
-    monkeypatch.setattr(
-        "sqlbuild._native.resolve_effective_adapter_name",
-        lambda **kwargs: "snowflake",
-    )
+    write_snowflake_project(tmp_path)
     monkeypatch.setattr(
         "sqlbuild.adapter.discovery.main.resolve_adapter.resolve_adapter",
         lambda **kwargs: _StaticCostAdapter(candidate),
-    )
-    monkeypatch.setattr(
-        "sqlbuild._native.resolve_project_connection_config",
-        lambda **kwargs: {},
     )
     request: CostCommandRequest = CostCommandRequest(
         project_dir=tmp_path,

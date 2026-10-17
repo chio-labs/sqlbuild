@@ -2,9 +2,9 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -62,7 +62,12 @@ pub(crate) fn build_python_sql_run_lifecycle<'py>(
         "read_side_python_node_names",
         PyFrozenSet::new(py, lifecycle.read_side_names)?,
     )?;
-    registry::class(py, RecordId::PythonSqlRunLifecyclePlan)?.call((), Some(&arguments))
+    new_record(
+        py,
+        RecordId::PythonSqlRunLifecyclePlan,
+        (),
+        Some(&arguments),
+    )
 }
 
 fn lifecycle_node(node: &Bound<'_, PyAny>) -> PyResult<LifecycleNode> {

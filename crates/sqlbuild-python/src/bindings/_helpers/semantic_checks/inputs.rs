@@ -7,9 +7,10 @@ use crate::bindings::_helpers::analysis::binding_catalog::ignores_quoted_case;
 use crate::bindings::_helpers::analysis::schema_request::{
     SchemaRequestParts, schema_validation_request,
 };
+use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_query_columns;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_checks::resource_sql::resource_sql_diagnostics_of;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::models::ProjectCatalog;
@@ -45,8 +46,7 @@ pub(crate) fn sql_test_columns<'py>(
         if !payload.is_instance(model_test_payload)? {
             continue;
         }
-        for cte in payload
-            .getattr("authored_ctes")?
+        for cte in native_field(&payload, "authored_ctes")?
             .try_iter()?
             .chain(native_field(&payload, "expected_ctes")?.try_iter()?)
         {
@@ -57,20 +57,23 @@ pub(crate) fn sql_test_columns<'py>(
     if bodies.is_empty() {
         return Ok(columns);
     }
-    let query_class: Bound<'py, PyAny> = registry::class(py, RecordId::NativeColumnQuery)?;
     let mut queries: Vec<Bound<'py, PyAny>> = Vec::with_capacity(bodies.len());
     for sql in bodies.keys() {
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
         arguments.set_item("sql", sql)?;
         arguments.set_item("mode", "batch")?;
         arguments.set_item("recover_cte_facts", false)?;
-        queries.push(query_class.call((), Some(&arguments))?);
+        queries.push(new_record(
+            py,
+            RecordId::NativeColumnQuery,
+            (),
+            Some(&arguments),
+        )?);
     }
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("queries", PyTuple::new(py, queries)?)?;
     arguments.set_item("profile", profile)?;
-    let analyses: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::InferNativeQueryColumns)?.call((), Some(&arguments))?;
+    let analyses: Bound<'py, PyAny> = infer_native_query_columns(Some(&arguments))?.into_any();
     for (sql, analysis) in bodies.keys().iter().zip(analyses.try_iter()?) {
         let analysis: Bound<'py, PyAny> = analysis?;
         let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -126,7 +129,8 @@ pub(crate) fn resource_sql_diagnostics<'py>(
     shapes: &Bound<'py, PyAny>,
     profile: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let native: Bound<'py, PyAny> = native_field(project, "binding_catalog")?.getattr("native")?;
+    let native: Bound<'py, PyAny> =
+        native_field(&native_field(project, "binding_catalog")?, "native")?;
     Ok(resource_sql_diagnostics_of(
         native.extract::<PyRef<'py, ProjectCatalog>>()?,
         project,

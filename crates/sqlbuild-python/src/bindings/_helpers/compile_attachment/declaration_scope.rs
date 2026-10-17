@@ -4,16 +4,20 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::PyTuple;
 
+use crate::bindings::_helpers::cache::sql_test_scan_store::SqlTestScanCache;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compile_driver::stage_work::{DECLARATION_SCOPES, count_stage};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_validation::validate_scope_index;
+use crate::bindings::_helpers::sql_test_glue::authored_ctes::validate_authored_sql_test_ctes;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
+use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
 fn compile_error(py: Python<'_>, message: Bound<'_, PyAny>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
@@ -30,8 +34,9 @@ fn scope_build<'py>(
     let py: Python<'py> = discovered.py();
     let resolver: Bound<'py, PyAny> =
         declaration_scope_resolver(discovered, &index, (loaded_macros, &lookup))?;
-    call_with(
-        &registry::class(py, RecordId::DeclarationScopeBuild)?,
+    new_record_with(
+        py,
+        RecordId::DeclarationScopeBuild,
         &[
             ("loaded_macros", loaded_macros.clone()),
             ("index", index),
@@ -52,20 +57,24 @@ pub(crate) fn build_declaration_scope<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered_inputs.py();
     count_stage(py, DECLARATION_SCOPES, 1)?;
-    let scan_cache: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::SqlTestScanCache)?,
-        &[(
-            "cache_dir",
-            compile_cache_dir.unwrap_or_else(|| py.None().into_bound(py)),
-        )],
-    )?;
+    let scan_cache: Bound<'py, PyAny> = pyo3::Bound::new(
+        py,
+        SqlTestScanCache::new(
+            compile_cache_dir
+                .unwrap_or_else(|| py.None().into_bound(py))
+                .extract::<Option<std::path::PathBuf>>()?,
+        ),
+    )
+    .map(pyo3::Bound::into_any)?;
     let test_files: Bound<'py, PyAny> = native_field(discovered_inputs, "test_files")?;
     let scenario_files: Bound<'py, PyAny> = native_field(discovered_inputs, "scenario_files")?;
-    registry::native(py, NativeAttr::ValidateAuthoredSqlTestCtes)?.call1((
-        &test_files,
-        &scenario_files,
-        native_field(sql_lexical_syntax, "native_mapping")?,
-    ))?;
+    validate_authored_sql_test_ctes(
+        py,
+        test_files.clone(),
+        scenario_files.clone(),
+        native_field(sql_lexical_syntax, "native_mapping")?.extract::<LexicalSyntaxInput>()?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let native: Bound<'py, PyAny> = Bound::new(
         py,
         open_native_scope_index(py, discovered_inputs, loaded_macros, None)?,

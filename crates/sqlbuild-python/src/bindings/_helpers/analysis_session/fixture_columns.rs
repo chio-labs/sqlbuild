@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::main::projection_facts::projection_facts;
@@ -10,34 +11,38 @@ use sqlbuild_analysis::assembly::analysis_session::models::ProjectionFacts;
 use sqlbuild_core::panics::main::native_failure::native_failure;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
+use crate::bindings::_helpers::analysis_session::models::FixtureInferenceCount;
 use crate::bindings::_helpers::analysis_session::query_columns::ColumnsRow;
 use crate::bindings::_helpers::analysis_session::stage_functions::query_column_rows;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";
 const LEGACY_MODE: &str = "legacy";
 
+/// Fixture column inferences computed in this process.
+static INFERENCES: PyOnceLock<Py<FixtureInferenceCount>> = PyOnceLock::new();
+
 /// `infer_fixture_column_facts(*, query_sql, inference_profile)`: a `FixtureColumnInference`.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn infer_fixture_column_facts<'py>(
+pub(crate) fn infer_fixture_column_facts<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let request = Request::new("infer_fixture_column_facts", request)?;
     let py: Python<'py> = request.py();
+    inference_count(py)?.borrow_mut().computed += 1;
     let query_sql: String = request.get("query_sql")?.extract()?;
     let profile: Bound<'py, PyAny> = request.get("inference_profile")?;
     let query: Bound<'py, PyDict> = PyDict::new(py);
     query.set_item("sql", &query_sql)?;
     query.set_item("mode", LEGACY_MODE)?;
     query.set_item("recover_cte_facts", false)?;
-    let query: Bound<'py, PyAny> =
-        registry::class(py, RecordId::NativeColumnQuery)?.call((), Some(&query))?;
+    let query: Bound<'py, PyAny> = new_record(py, RecordId::NativeColumnQuery, (), Some(&query))?;
     let empty: Bound<'py, PyAny> = PyDict::new(py).into_any();
     let rows: Vec<ColumnsRow> = query_column_rows(
         PyTuple::new(py, [query])?.as_any(),
@@ -52,8 +57,6 @@ fn infer_fixture_column_facts<'py>(
         .compiler_detach(|| projection_facts(&query_sql, dialect.as_deref()))
         .map_err(|reason| compiler_error(native_failure(PROJECTION_FACTS_CONTEXT, &reason)))?;
     let simple_types: HashMap<String, String> = facts.types.into_iter().collect();
-    let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(columns.len());
     for (name, data_type, nullability) in columns {
         let data_type: Option<String> = data_type
@@ -62,8 +65,16 @@ fn infer_fixture_column_facts<'py>(
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
         arguments.set_item("name", name)?;
         arguments.set_item("type", data_type)?;
-        arguments.set_item("nullability", nullability_class.call1((nullability,))?)?;
-        built.push(column_class.call((), Some(&arguments))?);
+        arguments.set_item(
+            "nullability",
+            enum_from_value(py, RecordId::InferredNullability, nullability)?,
+        )?;
+        built.push(new_record(
+            py,
+            RecordId::InferredColumn,
+            (),
+            Some(&arguments),
+        )?);
     }
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("columns", PyTuple::new(py, built)?)?;
@@ -72,9 +83,30 @@ fn infer_fixture_column_facts<'py>(
         PyFrozenSet::new(py, facts.null_literal_names)?,
     )?;
     arguments.set_item("quoted_names", PyFrozenSet::new(py, facts.quoted_names)?)?;
-    registry::class(py, RecordId::FixtureColumnInference)?.call((), Some(&arguments))
+    new_record(py, RecordId::FixtureColumnInference, (), Some(&arguments))
+}
+
+/// Fixture column inferences computed in this process, optionally clearing the count first.
+#[pyfunction]
+#[pyo3(signature = (*, reset = false))]
+fn fixture_inference_count(py: Python<'_>, reset: bool) -> PyResult<u64> {
+    let count = inference_count(py)?;
+    let mut count = count.borrow_mut();
+    if reset {
+        count.computed = 0;
+    }
+    Ok(count.computed)
+}
+
+/// The extension-wide fixture inference counter.
+fn inference_count(py: Python<'_>) -> PyResult<Bound<'_, FixtureInferenceCount>> {
+    Ok(INFERENCES
+        .get_or_try_init(py, || Py::new(py, FixtureInferenceCount::default()))?
+        .bind(py)
+        .clone())
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(infer_fixture_column_facts, module)?)
+    module.add_function(wrap_pyfunction!(infer_fixture_column_facts, module)?)?;
+    module.add_function(wrap_pyfunction!(fixture_inference_count, module)?)
 }

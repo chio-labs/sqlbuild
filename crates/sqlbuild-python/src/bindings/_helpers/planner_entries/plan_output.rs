@@ -14,9 +14,9 @@ use crate::bindings::_helpers::planner_scope::sources::build_source_load_entries
 use crate::bindings::_helpers::planner_strategy::audit_entries::build_selected_audit_entries;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestAssembly;
 use crate::bindings::_helpers::sql_test_glue::plan_assembly::assemble_sql_test_plans;
 use crate::bindings::_helpers::sql_test_glue::plan_driver::resolve_sql_test_model_chains;
@@ -76,23 +76,16 @@ fn seed_plan_reason<'py>(
     if !reason.is_none() {
         return Ok(reason);
     }
-    if !snapshot
-        .getattr("existing_relations")?
-        .contains(seed_name)?
-    {
+    if !native_field(snapshot, "existing_relations")?.contains(seed_name)? {
         return planner_type(py, RecordId::PlanReason, "FIRST_RUN");
     }
-    let fingerprint = snapshot
-        .getattr("fingerprints")?
-        .getattr("seeds")?
+    let fingerprint = native_field(&native_field(snapshot, "fingerprints")?, "seeds")?
         .call_method1("get", (seed_name,))?;
     if fingerprint.is_none() {
         return planner_type(py, RecordId::PlanReason, "FIRST_RUN");
     }
     if !expected_version_hash.is_none()
-        && fingerprint
-            .getattr("version_hash")?
-            .ne(expected_version_hash)?
+        && native_field(&fingerprint, "version_hash")?.ne(expected_version_hash)?
     {
         return planner_type(py, RecordId::PlanReason, "CONFIG_CHANGED");
     }
@@ -125,12 +118,12 @@ fn seed_entries<'py>(
                 ("destination", native_field(&seed, "destination")?),
                 (
                     "file_path",
-                    native_field(&seed, "seed_file")?.getattr("file_path")?,
+                    native_field(&native_field(&seed, "seed_file")?, "file_path")?,
                 ),
                 ("columns", object(py, extract_seed_columns(&seed)?)?),
                 (
                     "csv_settings",
-                    native_field(&seed, "schema_entry")?.getattr("csv_settings")?,
+                    native_field(&native_field(&seed, "schema_entry")?, "csv_settings")?,
                 ),
                 (
                     "fingerprint_definition",
@@ -196,10 +189,10 @@ fn hook_provider_usages<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = entry.py();
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
-    let python_hook = registry::class(py, RecordId::PythonHookEntry)?;
+    let python_hook = record_class(py, RecordId::PythonHookEntry)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for field in ["pre_hooks", "post_hooks"] {
-        let hook_entry = entry.getattr(field)?;
+        let hook_entry = native_field(entry, field)?;
         if hook_entry.is_none() {
             continue;
         }
@@ -374,7 +367,7 @@ pub(super) fn function_entry<'py>(
             ],
         )?),
     )?;
-    let field = |name: &str| function.getattr(name);
+    let field = |name: &str| native_field(function, name);
     planner_model(
         py,
         RecordId::FunctionPlanEntry,
@@ -408,7 +401,7 @@ fn function_entries<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = project.py();
     let functions = native_field(changes, "functions")?;
-    let previous = native_field(snapshot, "fingerprints")?.getattr("functions")?;
+    let previous = native_field(&native_field(snapshot, "fingerprints")?, "functions")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for function in native_field(project, "functions")?.try_iter()? {
         let function = function?;
@@ -485,7 +478,7 @@ pub(super) fn selected_test_entries<'py>(
     if selected.is_empty() {
         return Ok(SelectedTests { entries, warnings });
     }
-    let analysis = native_field(project, "settings")?.getattr("sql_analysis")?;
+    let analysis = native_field(&native_field(project, "settings")?, "sql_analysis")?;
     let fixture_context = if analysis.is_truthy()? {
         Bound::new(py, planning_context(project, None)?)?.into_any()
     } else {
@@ -694,7 +687,7 @@ pub(crate) fn plan_output_fields<'py>(
         ),
         (
             "python_identity_fingerprints",
-            native_field(&snapshot, "fingerprints")?.getattr("python_nodes")?,
+            native_field(&native_field(&snapshot, "fingerprints")?, "python_nodes")?,
         ),
     ])
 }

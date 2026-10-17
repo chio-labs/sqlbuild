@@ -27,8 +27,7 @@ pub(super) fn candidates<'py>(
         {
             continue;
         }
-        let model = scope
-            .getattr("models_by_name")?
+        let model = native_field(&scope, "models_by_name")?
             .call_method1("get", (native_field(&key, "name")?,))?;
         if model.is_none() {
             continue;
@@ -43,8 +42,7 @@ pub(super) fn candidates<'py>(
         {
             continue;
         }
-        let warehouse = snapshot
-            .getattr("existing_columns")?
+        let warehouse = native_field(&snapshot, "existing_columns")?
             .call_method1("get", (&name, PyTuple::empty(py)))?;
         let declared = PyDict::new(py);
         let schema = native_field(&model, "schema_entry")?;
@@ -60,13 +58,10 @@ pub(super) fn candidates<'py>(
                 }
             }
         }
-        let fingerprint = snapshot
-            .getattr("fingerprints")?
-            .getattr("models")?
+        let fingerprint = native_field(&native_field(&snapshot, "fingerprints")?, "models")?
             .call_method1("get", (&name,))?;
         let changed = !fingerprint.is_none()
-            && !fingerprint
-                .getattr("definition_hash")?
+            && !native_field(&fingerprint, "definition_hash")?
                 .eq(definition_hash(&model, &snapshot)?)?;
         if !warehouse.is_truthy()? || (declared.is_empty() && !changed) {
             continue;

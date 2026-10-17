@@ -1,9 +1,9 @@
 //! Model-level cursor safety policy overrides over project configuration.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::PyString;
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -38,13 +38,13 @@ fn resolve_policy<'py>(
     fields: &PolicyFields,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
-    let class = registry::class(py, fields.class)?;
+    let class = record_class(py, fields.class)?;
     let configured = if project_config.is_truthy()? {
         project_config.clone()
     } else {
         class.call0()?
     };
-    let values = native_field(model, "config")?.getattr("values")?;
+    let values = native_field(&native_field(model, "config")?, "values")?;
     let raw_distance = values.call_method1("get", (fields.distance_key,))?;
     let raw_action = values.call_method1("get", (fields.action_key,))?;
     let mut distance = configured.getattr(fields.distance)?;
@@ -57,7 +57,7 @@ fn resolve_policy<'py>(
     }
     let mut action = native_field(&configured, "action")?;
     if raw_action.is_instance_of::<PyString>() {
-        action = registry::class(py, RecordId::FutureCursorAction)?.call1((raw_action,))?;
+        action = enum_from_value(py, RecordId::FutureCursorAction, raw_action)?;
     }
     if distance.is_none() {
         return Ok(py.None().into_bound(py));

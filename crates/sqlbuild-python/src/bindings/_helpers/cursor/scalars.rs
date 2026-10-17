@@ -24,14 +24,14 @@ use sqlbuild_cursor::algebra::main::parse_integer_text::parse_integer_text;
 use sqlbuild_cursor::algebra::main::render::render;
 use sqlbuild_cursor::algebra::models::{Extreme, Grain, Scalar, ScalarValue, SortKey, ZoneOffset};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::conversion::{CursorSession, algebra_error};
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, naive_date_time};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DECIMAL_MODULE: &str = "decimal";
 const INTEGER_CURSOR: &str = "integer";
@@ -49,9 +49,12 @@ fn chained(py: Python<'_>, message: String, cause: PyErr) -> PyErr {
 fn parse_integer<'py>(raw: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     let text: String = raw.str()?.to_str()?.to_owned();
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::IntegerValue)?;
     if let Some(value) = parse_integer_text(&text) {
-        return call_with(&class, &[("value", value.into_pyobject(py)?.into_any())]);
+        return new_record_with(
+            py,
+            RecordId::IntegerValue,
+            &[("value", value.into_pyobject(py)?.into_any())],
+        );
     }
     let parsed: PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> =
         imported(py, DECIMAL_MODULE, "Decimal")?
@@ -78,7 +81,7 @@ fn parse_integer<'py>(raw: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             &format!("non-integral integer cursor value: {text}"),
         ));
     }
-    call_with(&class, &[("value", integer)])
+    new_record_with(py, RecordId::IntegerValue, &[("value", integer)])
 }
 
 /// Whether `int(Decimal(...))` failed with `InvalidOperation`, `ValueError` or `OverflowError`.
@@ -108,10 +111,7 @@ fn parse_timestamp_text<'py>(raw: &Bound<'py, PyAny>, text: &str) -> PyResult<Bo
         .call_method1("fromisoformat", (normalized.as_str(),));
     match as_date {
         Ok(date) => {
-            return call_with(
-                &registry::class(py, RecordId::DateValue)?,
-                &[("value", date)],
-            );
+            return new_record_with(py, RecordId::DateValue, &[("value", date)]);
         }
         Err(error) if error.is_instance_of::<PyValueError>(py) => {}
         Err(error) => return Err(error),
@@ -120,8 +120,9 @@ fn parse_timestamp_text<'py>(raw: &Bound<'py, PyAny>, text: &str) -> PyResult<Bo
         .call_method1("fromisoformat", (normalized.as_str(),))
         .and_then(|value| utc_normalized(&value));
     match parsed {
-        Ok(value) => call_with(
-            &registry::class(py, RecordId::TimestampValue)?,
+        Ok(value) => new_record_with(
+            py,
+            RecordId::TimestampValue,
             &[
                 ("value", value),
                 ("source_text", PyString::new(py, &normalized).into_any()),
@@ -153,16 +154,10 @@ pub(crate) fn parse_value<'py>(
     }
     if raw.is_instance(&imported(py, DATETIME_MODULE, "datetime")?)? {
         let value: Bound<'py, PyAny> = utc_normalized(raw)?;
-        return call_with(
-            &registry::class(py, RecordId::TimestampValue)?,
-            &[("value", value)],
-        );
+        return new_record_with(py, RecordId::TimestampValue, &[("value", value)]);
     }
     if raw.is_instance(&imported(py, DATETIME_MODULE, "date")?)? {
-        return call_with(
-            &registry::class(py, RecordId::DateValue)?,
-            &[("value", raw.clone())],
-        );
+        return new_record_with(py, RecordId::DateValue, &[("value", raw.clone())]);
     }
     let Ok(text) = raw.downcast::<PyString>() else {
         return Err(algebra_error(

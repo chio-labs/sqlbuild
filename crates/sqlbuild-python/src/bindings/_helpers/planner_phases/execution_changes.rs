@@ -60,7 +60,7 @@ fn config_or<'py>(
     }
     let mut value = config.clone();
     for name in path {
-        value = value.getattr(*name)?;
+        value = native_field(&value, name)?;
     }
     Ok(value)
 }
@@ -83,9 +83,10 @@ pub(crate) fn build_planner_entry_results<'py>(
         deferral: deferral.clone(),
         project_config: config.clone(),
         local_config: runtime_field(runtime, |runtime| &runtime.local_config)?,
-        known_source_columns: warehouse
-            .getattr("inspection_relations")?
-            .getattr("source_warehouse_columns")?,
+        known_source_columns: native_field(
+            &native_field(warehouse, "inspection_relations")?,
+            "source_warehouse_columns",
+        )?,
         relation_keys: py.None().into_bound(py),
     })?;
     let propagation = native_field(source_freshness, "propagation")?;
@@ -104,10 +105,10 @@ pub(crate) fn build_planner_entry_results<'py>(
     let limit_action = if config.is_none() {
         default_microbatch_limit_action(py)?
     } else {
-        config
-            .getattr("microbatches")?
-            .getattr("limits")?
-            .getattr("action")?
+        native_field(
+            &native_field(&native_field(&config, "microbatches")?, "limits")?,
+            "action",
+        )?
     };
     let build_inputs = Bound::new(
         py,
@@ -115,8 +116,7 @@ pub(crate) fn build_planner_entry_results<'py>(
             source_freshness_blocked_model_names: blocked.unbind(),
             external_blocked_model_names: PyFrozenSet::new(
                 py,
-                overrides
-                    .getattr("external_blocked_model_names")?
+                native_field(overrides, "external_blocked_model_names")?
                     .try_iter()?
                     .collect::<PyResult<Vec<_>>>()?,
             )?

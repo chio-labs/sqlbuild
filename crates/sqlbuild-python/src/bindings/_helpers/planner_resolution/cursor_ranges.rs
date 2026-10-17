@@ -29,6 +29,7 @@ use crate::bindings::_helpers::planner_resolution::cursor_windows::without_desti
 use crate::bindings::_helpers::planner_resolution::future_safety::resolve_future_cursor_safety;
 use crate::bindings::_helpers::planner_resolution::values::string;
 use crate::bindings::_helpers::planner_strategy::model_entries::resolve_microbatch_lookback;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -81,10 +82,11 @@ pub(crate) struct CursorWindowInputs<'py> {
 
 /// One string-valued model configuration entry.
 pub(crate) fn config_str<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    Ok(
-        authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
-            .unwrap_or_else(|| model.py().None().into_bound(model.py())),
-    )
+    Ok(authored_config_str(
+        &native_field(&native_field(model, "config")?, "values")?,
+        key,
+    )?
+    .unwrap_or_else(|| model.py().None().into_bound(model.py())))
 }
 
 /// One cursor-bound model configuration entry as its token text.
@@ -94,7 +96,10 @@ pub(crate) fn config_bound<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     object(
         model.py(),
-        config_cursor_bound(&native_field(model, "config")?.getattr("values")?, key)?,
+        config_cursor_bound(
+            &native_field(&native_field(model, "config")?, "values")?,
+            key,
+        )?,
     )
 }
 
@@ -171,8 +176,9 @@ fn timestamp_value<'py>(clock: &Bound<'py, PyAny>, scalar: &Scalar) -> PyResult<
     let ScalarValue::Timestamp(timestamp) = &scalar.value else {
         return Ok(clock.py().None().into_bound(clock.py()));
     };
-    call_with(
-        &registry::class(clock.py(), RecordId::TimestampValue)?,
+    new_record_with(
+        clock.py(),
+        RecordId::TimestampValue,
         &[("value", replaced(clock, &timestamp.local, timestamp.fold)?)],
     )
 }
@@ -223,8 +229,9 @@ fn rolling_window_bounds<'py>(
         handle: None,
     };
     let (start, end) = session.checked(rolling_window(&clock, &span, grain))?;
-    let mut bounds = call_with(
-        &registry::class(py, RecordId::CursorBounds)?,
+    let mut bounds = new_record_with(
+        py,
+        RecordId::CursorBounds,
         &[
             ("start", timestamp_value(&moment, &start)?),
             ("end", timestamp_value(&moment, &end)?),
@@ -313,8 +320,9 @@ fn snapshot_bounds<'py>(
     request: BoundsRequest<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
-    let policy = call_with(
-        &registry::class(py, RecordId::MaximumStartPolicyInputs)?,
+    let policy = new_record_with(
+        py,
+        RecordId::MaximumStartPolicyInputs,
         &[
             ("config", inputs.policies.1.clone()),
             ("invocation_time", inputs.invocation_time.clone()),
@@ -356,8 +364,7 @@ fn model_cursor_snapshot<'py>(
     model: &Bound<'py, PyAny>,
     snapshot: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    snapshot
-        .getattr("cursor_snapshots")?
+    native_field(snapshot, "cursor_snapshots")?
         .call_method1("get", (model_reads::name_object(model)?,))
 }
 
@@ -544,11 +551,11 @@ pub(crate) fn model_cursor_overrides<'py>(
         None
     };
     if let Some((start_field, end_field)) = typed_fields {
-        let typed_start = cursor_overrides.getattr(start_field)?;
+        let typed_start = native_field(cursor_overrides, start_field)?;
         if !typed_start.is_none() {
             resolved_start = token(py, &typed_start)?;
         }
-        let typed_end = cursor_overrides.getattr(end_field)?;
+        let typed_end = native_field(cursor_overrides, end_field)?;
         if !typed_end.is_none() {
             resolved_end = token(py, &typed_end)?;
         }

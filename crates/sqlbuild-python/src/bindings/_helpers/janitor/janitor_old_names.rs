@@ -16,6 +16,7 @@ use crate::bindings::_helpers::janitor::janitor_facts::{
 use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, optional, record, sorted_schemas, text, tuple,
 };
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::state_rows::migration_io::{
     read_histories as read_view_histories, stored_columns_binding,
 };
@@ -25,7 +26,6 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
 use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 const MIGRATE_FROM_CONFIG_KEY: &str = "migrate_from";
@@ -37,7 +37,7 @@ pub(crate) struct OldNamePlanning<'py> {
 }
 
 fn drop_reason<'py>(py: Python<'py>, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, RecordId::OldNameViewDropReason)?.getattr(member)
+    enum_member(py, RecordId::OldNameViewDropReason, member)
 }
 
 fn status<'py>(
@@ -48,7 +48,7 @@ fn status<'py>(
 }
 
 fn status_is(py: Python<'_>, value: &Bound<'_, PyAny>, member: &str) -> PyResult<bool> {
-    value.eq(registry::class(py, RecordId::OldNameViewStatus)?.getattr(member)?)
+    value.eq(enum_member(py, RecordId::OldNameViewStatus, member)?)
 }
 
 fn read_histories<'py>(

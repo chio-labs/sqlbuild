@@ -31,9 +31,9 @@ use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_phases::warehouse_state::gather_planner_warehouse_state;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::build_planner_source_freshness_result;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -53,7 +53,7 @@ fn scopes_and_cursor_overrides<'py>(
     )?;
     let selected = class_field(&scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let models_by_name = native_field(&selected, "models_by_name")?;
-    let model_type = registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let model_type = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in native_field(&selected, "selected_keys")?.try_iter()? {
         let key = key?;
@@ -234,9 +234,7 @@ pub(crate) fn build_execution_plan<'py>(
             selected_keys: native_field(&inspection, "selected_keys")?.unbind(),
             sql_test_selection: native_field(&inspection, "sql_test_selection")?.unbind(),
         },
-        args.value("policies")?
-            .getattr("plan_sql_tests")?
-            .is_truthy()?,
+        native_field(&args.value("policies")?, "plan_sql_tests")?.is_truthy()?,
     )?;
     let planned = (|| {
         let catalog = call_with(

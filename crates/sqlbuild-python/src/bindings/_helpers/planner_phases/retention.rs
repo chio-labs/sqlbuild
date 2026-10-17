@@ -15,9 +15,9 @@ use crate::bindings::_helpers::planner_phases::objects::{
     planner_model, replace, sorted_names, text, tuple,
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
@@ -35,9 +35,7 @@ pub(crate) fn effective_target_config<'py>(
     let py = runtime.py();
     let project_config = runtime_field(runtime, |runtime| &runtime.project_config)?;
     let local_config = runtime_field(runtime, |runtime| &runtime.local_config)?;
-    let target_name = runtime
-        .getattr("project")?
-        .getattr("effective_target_name")?;
+    let target_name = native_field(&native_field(runtime, "project")?, "effective_target_name")?;
     if project_config.is_none() || local_config.is_none() || target_name.is_none() {
         return native(py, RecordId::TargetConfig, &[]);
     }
@@ -59,9 +57,11 @@ fn selected_models<'py>(
         .into_iter()
         .collect();
     let mut models: Vec<_> = Vec::new();
-    for model in runtime_field(runtime, |runtime| &runtime.project)?
-        .getattr("models")?
-        .try_iter()?
+    for model in native_field(
+        &runtime_field(runtime, |runtime| &runtime.project)?,
+        "models",
+    )?
+    .try_iter()?
     {
         let model = model?;
         if names.contains(&model_reads::model_name(&model)?) {
@@ -72,10 +72,7 @@ fn selected_models<'py>(
 }
 
 fn adapter_is(runtime: &Bound<'_, PyAny>, name: &str) -> PyResult<bool> {
-    runtime
-        .getattr("adapter")?
-        .getattr("adapter_name")?
-        .eq(name)
+    native_field(&native_field(runtime, "adapter")?, "adapter_name")?.eq(name)
 }
 
 /// Entries for selected Snowflake table-type drift.
@@ -91,11 +88,11 @@ pub(crate) fn plan_table_types<'py>(
     let snowflake = adapter_is(runtime, SNOWFLAKE_ADAPTER)?;
     let mut declared: Vec<_> = Vec::new();
     for model in &models {
-        if model
-            .getattr("config")?
-            .getattr("table_type")?
-            .getattr("declared")?
-            .is_truthy()?
+        if native_field(
+            &native_field(&native_field(model, "config")?, "table_type")?,
+            "declared",
+        )?
+        .is_truthy()?
         {
             declared.push(model_reads::model_name(model)?);
         }
@@ -114,11 +111,9 @@ pub(crate) fn plan_table_types<'py>(
         return tuple(py, Vec::new());
     }
     let target = effective_target_config(runtime)?;
-    let relations = warehouse
-        .getattr("snapshot")?
-        .getattr("existing_relations")?;
+    let relations = native_field(&native_field(warehouse, "snapshot")?, "existing_relations")?;
     let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
-    let materialization = registry::class(py, RecordId::MaterializationType)?;
+    let materialization = record_class(py, RecordId::MaterializationType)?;
     let mut entries: Vec<_> = Vec::new();
     for model in models {
         let config = native_field(&model, "config")?;
@@ -162,7 +157,7 @@ pub(crate) fn plan_table_types<'py>(
                 ("model_name", model_reads::name_object(&model)?),
                 ("destination", destination),
                 ("copy_name", text(py, &copy_name(&target_name, limit))),
-                ("desired_type", native_field(&table_type, "value")?.getattr("value")?),
+                ("desired_type", native_field(&native_field(&table_type, "value")?, "value")?),
                 (
                     "actual_type",
                     optional_text(
@@ -176,11 +171,11 @@ pub(crate) fn plan_table_types<'py>(
                         }),
                     ),
                 ),
-                ("source", native_field(&table_type, "source")?.getattr("value")?),
+                ("source", native_field(&native_field(&table_type, "source")?, "value")?),
                 ("downgrade", downgrade.into_pyobject(py)?.to_owned().into_any()),
                 (
                     "downgrade_policy",
-                    native_field(&target, "table_type_downgrade")?.getattr("value")?,
+                    native_field(&native_field(&target, "table_type_downgrade")?, "value")?,
                 ),
                 (
                     "irreversible_warning",
@@ -215,9 +210,10 @@ fn entry<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = base.request.py();
     let days = |name: &str| -> PyResult<Bound<'py, PyAny>> {
-        base.state
-            .as_ref()
-            .map_or_else(|| Ok(py.None().into_bound(py)), |state| state.getattr(name))
+        base.state.as_ref().map_or_else(
+            || Ok(py.None().into_bound(py)),
+            |state| native_field(state, name),
+        )
     };
     planner_model(
         py,
@@ -268,9 +264,10 @@ fn render_changes<'py>(
         fields.push(("state", state.clone()));
     }
     call_with(
-        &runtime
-            .getattr("adapter")?
-            .getattr("render_retention_changes")?,
+        &native_field(
+            &native_field(runtime, "adapter")?,
+            "render_retention_changes",
+        )?,
         &fields,
     )
 }
@@ -295,7 +292,7 @@ fn inspect<'py>(
 }
 
 fn state_direction(state: &Bound<'_, PyAny>, desired_days: i64) -> PyResult<&'static str> {
-    let optional = |name: &str| -> PyResult<Option<i64>> { state.getattr(name)?.extract() };
+    let optional = |name: &str| -> PyResult<Option<i64>> { native_field(state, name)?.extract() };
     Ok(retention_direction(
         [
             optional("delta_log_retention_days")?,
@@ -363,13 +360,11 @@ fn relation_retention<'py>(
         request: request.clone(),
         model_names: tuple(py, vec![model_reads::name_object(model)?])?,
         state: None,
-        source: native_field(&retention, "source")?.getattr("value")?,
+        source: native_field(&native_field(&retention, "source")?, "value")?,
     };
     let snowflake = adapter_is(runtime, SNOWFLAKE_ADAPTER)?;
-    let table_type = native_field(&config, "table_type")?.getattr("value")?;
-    let relations = warehouse
-        .getattr("snapshot")?
-        .getattr("existing_relations")?;
+    let table_type = native_field(&native_field(&config, "table_type")?, "value")?;
+    let relations = native_field(&native_field(warehouse, "snapshot")?, "existing_relations")?;
     if !relations.contains(model_reads::name_object(model)?)? {
         if snowflake && desired_days > 1 && table_type.eq(TRANSIENT_TABLE_TYPE)? {
             return Err(transient_error(py, &name, desired_days, "set "));
@@ -394,9 +389,10 @@ fn relation_retention<'py>(
     let mut listed = py.None().into_bound(py);
     if native_field(&relation, "identity")?.eq(&lookup)? {
         listed = call_with(
-            &runtime
-                .getattr("adapter")?
-                .getattr("retention_state_from_relation")?,
+            &native_field(
+                &native_field(runtime, "adapter")?,
+                "retention_state_from_relation",
+            )?,
             &[("request", request.clone()), ("relation", relation.clone())],
         )?;
     }
@@ -457,10 +453,7 @@ fn bigquery_retention<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = runtime.py();
     let target = effective_target_config(runtime)?;
-    if !target
-        .getattr("owns_time_travel_retention_namespace")?
-        .is_truthy()?
-    {
+    if !native_field(&target, "owns_time_travel_retention_namespace")?.is_truthy()? {
         return Err(planner_error(
             py,
             "BigQuery managed time_travel_retention requires target owns_time_travel_retention_namespace = true",
@@ -469,12 +462,14 @@ fn bigquery_retention<'py>(
     }
     type Scope = (Option<String>, String);
     let mut managed: BTreeMap<Scope, Vec<Bound<'py, PyAny>>> = BTreeMap::new();
-    for model in runtime_field(runtime, |runtime| &runtime.project)?
-        .getattr("models")?
-        .try_iter()?
+    for model in native_field(
+        &runtime_field(runtime, |runtime| &runtime.project)?,
+        "models",
+    )?
+    .try_iter()?
     {
         let model = model?;
-        let retention = native_field(&model, "config")?.getattr("time_travel_retention")?;
+        let retention = native_field(&native_field(&model, "config")?, "time_travel_retention")?;
         let destination = model_reads::destination(&model)?;
         if native_field(&retention, "unmanaged")?.is_truthy()?
             || native_field(&retention, "desired_days")?.is_none()
@@ -508,7 +503,7 @@ fn bigquery_retention<'py>(
         let mut sources: BTreeSet<String> = BTreeSet::new();
         let mut names: Vec<_> = Vec::new();
         for item in &scope_models {
-            let retention = native_field(item, "config")?.getattr("time_travel_retention")?;
+            let retention = native_field(&native_field(item, "config")?, "time_travel_retention")?;
             let desired = native_field(&retention, "desired_days")?;
             details.push(format!(
                 "{}={}d",
@@ -597,7 +592,7 @@ pub(crate) fn plan_retention<'py>(
     let py = runtime.py();
     let mut models: Vec<_> = Vec::new();
     for model in selected_models(runtime, scope)? {
-        let retention = native_field(&model, "config")?.getattr("time_travel_retention")?;
+        let retention = native_field(&native_field(&model, "config")?, "time_travel_retention")?;
         if !native_field(&retention, "unmanaged")?.is_truthy()?
             && !native_field(&retention, "desired_days")?.is_none()
         {
@@ -616,9 +611,13 @@ pub(crate) fn plan_retention<'py>(
         }
         entries
     };
-    let policy = effective_target_config(runtime)?
-        .getattr("time_travel_retention_decrease")?
-        .getattr("value")?;
+    let policy = native_field(
+        &native_field(
+            &effective_target_config(runtime)?,
+            "time_travel_retention_decrease",
+        )?,
+        "value",
+    )?;
     let mut decided: Vec<_> = Vec::new();
     for entry in entries {
         decided.push(replace(&entry, &[("decrease_policy", policy.clone())])?);

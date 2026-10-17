@@ -23,9 +23,9 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::stage_work::{
     EXPRESSION_SHAPE_BATCHES, EXPRESSION_SHAPES_INFERRED, count_stage,
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
 
 const BATCH_MODE: &str = "batch";
@@ -59,7 +59,7 @@ fn infer_native_query_column_rows<'py>(
 /// Each query's columns as `NativeQueryColumns`; a native internal failure raises.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn infer_native_query_columns<'py>(
+pub(crate) fn infer_native_query_columns<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("infer_native_query_columns", request)?;
@@ -73,9 +73,6 @@ fn infer_native_query_columns<'py>(
         &request.get("profile")?,
         (&types, &nullability),
     )?;
-    let query_columns: Bound<'py, PyAny> = registry::class(py, RecordId::NativeQueryColumns)?;
-    let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     let mut analyses: Vec<Bound<'py, PyAny>> = Vec::with_capacity(rows.len());
     for (succeeded, columns, has_star) in rows {
         let columns: Bound<'py, PyAny> = match columns {
@@ -86,8 +83,16 @@ fn infer_native_query_columns<'py>(
                     let arguments: Bound<'py, PyDict> = PyDict::new(py);
                     arguments.set_item("name", name)?;
                     arguments.set_item("type", data_type)?;
-                    arguments.set_item("nullability", nullability_class.call1((nullability,))?)?;
-                    built.push(column_class.call((), Some(&arguments))?);
+                    arguments.set_item(
+                        "nullability",
+                        enum_from_value(py, RecordId::InferredNullability, nullability)?,
+                    )?;
+                    built.push(new_record(
+                        py,
+                        RecordId::InferredColumn,
+                        (),
+                        Some(&arguments),
+                    )?);
                 }
                 PyTuple::new(py, built)?.into_any()
             }
@@ -96,7 +101,12 @@ fn infer_native_query_columns<'py>(
         arguments.set_item("succeeded", succeeded)?;
         arguments.set_item("columns", columns)?;
         arguments.set_item("has_star", has_star)?;
-        analyses.push(query_columns.call((), Some(&arguments))?);
+        analyses.push(new_record(
+            py,
+            RecordId::NativeQueryColumns,
+            (),
+            Some(&arguments),
+        )?);
     }
     PyTuple::new(py, analyses)
 }
@@ -104,7 +114,7 @@ fn infer_native_query_columns<'py>(
 /// One shape per expression, cached on the profile's binding catalog; a failure raises.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn infer_native_expression_source_shapes<'py>(
+pub(crate) fn infer_native_expression_source_shapes<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("infer_native_expression_source_shapes", request)?;

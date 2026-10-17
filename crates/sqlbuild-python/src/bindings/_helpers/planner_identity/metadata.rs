@@ -102,7 +102,7 @@ pub(crate) fn model_version_identity_metadata_json<'py>(
             }
         }
     }
-    let config_values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
+    let config_values: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?;
     let signature: Bound<'py, PyDict> =
         execution_signature(model, &config_values, hook_version_hashes)?;
     version_identity_metadata_json(
@@ -217,7 +217,7 @@ fn contract_output_signature<'py>(
 fn column_signature<'py>(column: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let entry: Bound<'py, PyDict> = PyDict::new(column.py());
     for field in ["name", "type", "nullable"] {
-        entry.set_item(field, column.getattr(field)?)?;
+        entry.set_item(field, native_field(column, field)?)?;
     }
     Ok(entry)
 }
@@ -235,7 +235,7 @@ fn family_signatures<'py>(families: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
             "type",
             "name_pattern",
         ] {
-            entry.set_item(field, family.getattr(field)?)?;
+            entry.set_item(field, native_field(&family, field)?)?;
         }
         rendered.append(entry)?;
     }
@@ -249,9 +249,7 @@ pub(crate) fn model_declared_columns_hash(model: &Bound<'_, PyAny>) -> PyResult<
     let payload: Bound<'_, PyDict> = PyDict::new(py);
     payload.set_item(
         "contract",
-        model
-            .getattr("config")?
-            .getattr("values")?
+        native_field(&native_field(model, "config")?, "values")?
             .call_method1("get", (CONTRACT_CONFIG_KEY,))?,
     )?;
     let columns: Bound<'_, PyList> = PyList::empty(py);
@@ -284,7 +282,8 @@ pub(crate) fn function_local_hashes<'py>(
     for function in functions.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
         let name: String = native_field(&function, "name")?.extract()?;
-        let language: Bound<'py, PyAny> = native_field(&function, "language")?.getattr("value")?;
+        let language: Bound<'py, PyAny> =
+            native_field(&native_field(&function, "language")?, "value")?;
         let body_hash: String = function_definition_hash(
             py,
             &name,
@@ -307,7 +306,7 @@ pub(crate) fn function_local_hashes<'py>(
         payload.set_item("body_sql", body_hash)?;
         payload.set_item("language", language)?;
         for field in ["runtime_version", "entry_point", "packages"] {
-            payload.set_item(field, function.getattr(field)?)?;
+            payload.set_item(field, native_field(&function, field)?)?;
         }
         hashes.set_item(
             name,
@@ -331,7 +330,7 @@ fn name_type_pairs<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList
 
 /// `f"{value or ''}"` of an optional attribute.
 fn text_or_empty(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    let value: Bound<'_, PyAny> = match owner.getattr(name) {
+    let value: Bound<'_, PyAny> = match native_field(owner, name) {
         Ok(value) => value,
         Err(_) => return Ok(String::new()),
     };
@@ -361,8 +360,7 @@ pub(crate) fn compiled_function_fingerprint_sql(function: &Bound<'_, PyAny>) -> 
         return_columns: rendered_pairs(&native_field(function, "return_columns")?)?,
         runtime_version: text_or_empty(function, "runtime_version")?,
         entry_point: text_or_empty(function, "entry_point")?,
-        packages: function
-            .getattr("packages")?
+        packages: native_field(function, "packages")?
             .try_iter()?
             .map(|package| package?.extract::<String>())
             .collect::<PyResult<_>>()?,
@@ -383,7 +381,7 @@ pub(crate) fn seed_identity(seed: &Bound<'_, PyAny>) -> PyResult<(String, String
         PyList::empty(py).into_any()
     } else {
         seed_rows(
-            &native_field(seed, "seed_file")?.getattr("file_path")?,
+            &native_field(&native_field(seed, "seed_file")?, "file_path")?,
             &csv_settings,
         )?
     };
@@ -411,7 +409,7 @@ fn seed_rows<'py>(
     };
     let options: Bound<'py, PyDict> = PyDict::new(py);
     for option in SEED_DIALECT_OPTIONS {
-        let value: Bound<'py, PyAny> = csv_settings.getattr(option)?;
+        let value: Bound<'py, PyAny> = native_field(csv_settings, option)?;
         if !value.is_none() {
             options.set_item(option, value)?;
         }

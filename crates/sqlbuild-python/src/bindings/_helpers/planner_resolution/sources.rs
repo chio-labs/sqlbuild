@@ -65,8 +65,7 @@ fn check_columns(
             "S401",
         ));
     }
-    if entry
-        .getattr("contract")?
+    if native_field(entry, "contract")?
         .extract::<Option<String>>()?
         .as_deref()
         != Some("enforced")
@@ -265,8 +264,7 @@ fn resolve_one(
     let expression = !native_field(&entry, "expression")?.is_none();
     if columns.is_truthy()?
         && (!expression
-            || entry
-                .getattr("contract")?
+            || native_field(&entry, "contract")?
                 .extract::<Option<String>>()?
                 .as_deref()
                 == Some("enforced"))

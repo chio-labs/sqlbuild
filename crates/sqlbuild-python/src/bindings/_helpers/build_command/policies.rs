@@ -56,11 +56,11 @@ pub(crate) fn build_command_error(py: Python<'_>, error: BuildCommandError) -> P
 }
 
 fn text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    value.getattr(name)?.str()?.extract()
+    native_field(value, name)?.str()?.extract()
 }
 
 fn optional_text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
-    let attribute: Bound<'_, PyAny> = value.getattr(name)?;
+    let attribute: Bound<'_, PyAny> = native_field(value, name)?;
     if attribute.is_none() {
         return Ok(None);
     }
@@ -68,7 +68,7 @@ fn optional_text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String
 }
 
 fn flag(value: &Bound<'_, PyAny>, name: &str) -> PyResult<bool> {
-    value.getattr(name)?.is_truthy()
+    native_field(value, name)?.is_truthy()
 }
 
 fn model_migration(entry: &Bound<'_, PyAny>) -> PyResult<ModelMigrationFact> {
@@ -107,7 +107,7 @@ fn column_migration(entry: &Bound<'_, PyAny>) -> PyResult<ColumnMigrationFact> {
 }
 
 fn entries<'py>(plan: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    plan.getattr(name)?.try_iter()?.collect()
+    native_field(plan, name)?.try_iter()?.collect()
 }
 
 /// The models a plan executes: every model entry that is not skipped.
@@ -240,7 +240,7 @@ pub(crate) fn enforce_plan_policies(
 /// Apply every plan safety gate before a build executes anything.
 #[pyfunction]
 #[pyo3(name = "enforce_plan_safety_policies", signature = (**options))]
-fn enforce_plan_safety_policies_binding<'py>(
+pub(crate) fn enforce_plan_safety_policies_binding<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> Result<(), PyErr> {
@@ -264,7 +264,7 @@ fn enforce_plan_safety_policies_binding<'py>(
 /// Reject a build whose expanded model count exceeds its target policy.
 #[pyfunction]
 #[pyo3(name = "enforce_model_execution_limit", signature = (**options))]
-fn enforce_model_execution_limit_binding<'py>(
+pub(crate) fn enforce_model_execution_limit_binding<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> Result<(), PyErr> {

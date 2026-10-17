@@ -1,0 +1,70 @@
+//! Native record classes and string enums held natively, so records are built without a module lookup.
+
+use pyo3::IntoPyObject;
+use pyo3::call::PyCallArgs;
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyResult, Python};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::PyDict;
+
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::ids::RecordId;
+
+/// Each `RecordId`'s class, captured when the extension module is initialised.
+static CLASSES: PyOnceLock<Vec<Py<PyAny>>> = PyOnceLock::new();
+
+/// Hold every registered record class and string enum, read once while the module initialises.
+pub(crate) fn capture(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    CLASSES.get_or_try_init(module.py(), || {
+        RecordId::ALL
+            .iter()
+            .map(|id| module.getattr(id.name()).map(Bound::unbind))
+            .collect::<PyResult<Vec<Py<PyAny>>>>()
+    })?;
+    Ok(())
+}
+
+/// The native record class or string enum `id` as registered, ignoring later attribute replacement.
+pub(crate) fn record_class(py: Python<'_>, id: RecordId) -> PyResult<Bound<'_, PyAny>> {
+    let classes: &Vec<Py<PyAny>> = CLASSES
+        .get(py)
+        .ok_or_else(|| PyRuntimeError::new_err("native record classes are not registered"))?;
+    Ok(classes[id as usize].bind(py).clone())
+}
+
+/// A new `id` record built exactly as calling its class builds it, finishers included.
+pub(crate) fn new_record<'py, A: PyCallArgs<'py>>(
+    py: Python<'py>,
+    id: RecordId,
+    args: A,
+    kwargs: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    record_class(py, id)?.call(args, kwargs)
+}
+
+/// A new `id` record built from `(field, value)` keyword pairs.
+pub(crate) fn new_record_with<'py>(
+    py: Python<'py>,
+    id: RecordId,
+    pairs: &[(&str, Bound<'py, PyAny>)],
+) -> PyResult<Bound<'py, PyAny>> {
+    new_record(py, id, (), Some(&keywords(py, pairs)?))
+}
+
+/// The member `name` of the native string enum `id`, looked up rather than constructed.
+pub(crate) fn enum_member<'py>(
+    py: Python<'py>,
+    id: RecordId,
+    name: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    record_class(py, id)?.getattr(name)
+}
+
+/// The member of the native string enum `id` whose value is `value`, as `Enum(value)` finds it.
+pub(crate) fn enum_from_value<'py, V: IntoPyObject<'py>>(
+    py: Python<'py>,
+    id: RecordId,
+    value: V,
+) -> PyResult<Bound<'py, PyAny>> {
+    record_class(py, id)?.call1((value,))
+}

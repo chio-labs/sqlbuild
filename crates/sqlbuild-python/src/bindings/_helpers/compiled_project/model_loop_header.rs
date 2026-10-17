@@ -28,6 +28,7 @@ use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::column_migrations::column_migration_error;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::header_metadata::{audit_tuple, column_tuple};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DESCRIPTION_KEY: &str = "description";
 const COLUMNS_KEY: &str = "columns";
@@ -73,7 +74,7 @@ pub(crate) fn header_schema<'py>(
     source: &HeaderSource<'_, 'py>,
 ) -> PyResult<AttachedHeader<'py>> {
     let description: Option<String> = match (description(context, source)?, source.schema) {
-        (None, Some(schema)) => schema.declaration.getattr(DESCRIPTION_KEY)?.extract()?,
+        (None, Some(schema)) => native_field(&schema.declaration, DESCRIPTION_KEY)?.extract()?,
         (description, _) => description,
     };
     let columns: Option<Bound<'py, PyAny>> = present(source.values, COLUMNS_KEY)?;
@@ -154,7 +155,7 @@ pub(crate) fn header_schema<'py>(
         direct_audits.iter().chain(generated).collect::<Vec<_>>(),
     )?;
     let families: Vec<Bound<'py, PyAny>> = dynamic_family_objects(py, context, &families)?;
-    let enums: Bound<'py, PyDict> = source.visible.0.getattr(ENUMS_FIELD)?.downcast_into()?;
+    let enums: Bound<'py, PyDict> = native_field(source.visible.0, ENUMS_FIELD)?.downcast_into()?;
     let enums: Bound<'py, PyDict> = match source.schema {
         Some(schema) => {
             let merged: Bound<'py, PyDict> = enums.copy()?;

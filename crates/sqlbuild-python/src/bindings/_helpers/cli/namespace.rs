@@ -7,8 +7,8 @@ use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_cli::argv::main::cli_namespace_defaults::cli_namespace_defaults;
 use sqlbuild_cli::argv::models::NamespaceDefault;
 
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Typed namespace for all CLI arguments across all commands.
 #[pyclass(module = "sqlbuild._native", dict, frozen)]
@@ -23,11 +23,9 @@ fn default_object(py: Python<'_>, default: NamespaceDefault) -> PyResult<Bound<'
         NamespaceDefault::EmptyList => Ok(PyList::empty(py).into_any()),
         NamespaceDefault::EmptyDict => Ok(PyDict::new(py).into_any()),
         NamespaceDefault::CompileLineageFast => {
-            registry::class(py, RecordId::CompileLineageMode)?.getattr("FAST")
+            enum_member(py, RecordId::CompileLineageMode, "FAST")
         }
-        NamespaceDefault::ColumnLineageRich => {
-            registry::class(py, RecordId::ColumnLineageMode)?.getattr("RICH")
-        }
+        NamespaceDefault::ColumnLineageRich => enum_member(py, RecordId::ColumnLineageMode, "RICH"),
     }
 }
 

@@ -12,10 +12,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::name_patterns::main::compile_name_pattern::compile_name_pattern;
 use sqlbuild_model_config::name_patterns::models::NamePattern;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::effective_config::{
     effective_config_target_fields, effective_config_target_name,
 };
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -73,12 +73,11 @@ pub(crate) fn resolve_target_config<'py>(
     local_config: &Bound<'py, PyAny>,
     target_name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let target_class: Bound<'py, PyAny> = registry::class(py, RecordId::TargetConfig)?;
     let (rows, error) = effective_config_target_fields(
         py,
         (project_config.clone(), local_config.clone()),
         target_name,
-        &target_class.call0()?,
+        &new_record(py, RecordId::TargetConfig, (), None)?,
     )?;
     let Some(rows) = rows else {
         let message: Bound<'py, PyString> = error.unwrap_or_else(|| PyString::new(py, ""));
@@ -100,10 +99,10 @@ pub(crate) fn resolve_target_config<'py>(
         }
     }
     for ((group, class_name), (_, fields)) in TARGET_GROUPS.iter().zip(&grouped) {
-        let nested: Bound<'py, PyAny> = registry::class(py, *class_name)?.call((), Some(fields))?;
+        let nested: Bound<'py, PyAny> = new_record(py, *class_name, (), Some(fields))?;
         values.set_item(*group, nested)?;
     }
-    target_class.call((), Some(&values))
+    new_record(py, RecordId::TargetConfig, (), Some(&values))
 }
 
 /// Resolve the effective adapter name, allowing local override.
@@ -177,14 +176,15 @@ pub(crate) fn resolve_effective_scenario_config<'py>(
             Ok((
                 *field,
                 override_or(
-                    local_limits.getattr(*field)?,
-                    project_limits.getattr(*field)?,
+                    native_field(&local_limits, field)?,
+                    native_field(&project_limits, field)?,
                 ),
             ))
         })
         .collect::<PyResult<_>>()?;
-    call_with(
-        &registry::class(py, RecordId::ScenarioConfig)?,
+    new_record_with(
+        py,
+        RecordId::ScenarioConfig,
         &[
             (
                 "run_namespace",
@@ -196,10 +196,7 @@ pub(crate) fn resolve_effective_scenario_config<'py>(
             ("local_type_overrides", overrides.into_any()),
             (
                 "snapshot_limits",
-                call_with(
-                    &registry::class(py, RecordId::ScenarioSnapshotLimitsConfig)?,
-                    &limits,
-                )?,
+                new_record_with(py, RecordId::ScenarioSnapshotLimitsConfig, &limits)?,
             ),
         ],
     )
@@ -237,7 +234,7 @@ fn blank(text: &str) -> bool {
 /// Parse a one-, two-, or three-part loader destination.
 #[pyfunction]
 #[pyo3(signature = (*, destination, default_database, default_schema))]
-fn loader_destination_parts<'py>(
+pub(crate) fn loader_destination_parts<'py>(
     py: Python<'py>,
     destination: &str,
     default_database: Option<Bound<'py, PyAny>>,
@@ -282,7 +279,12 @@ pub(crate) fn loader_parts<'py>(
             ),
             _ => (text(parts[0]), text(parts[1]), text(parts[2])),
         };
-    registry::class(py, RecordId::LoaderDestinationParts)?.call1((database, schema, table))
+    new_record(
+        py,
+        RecordId::LoaderDestinationParts,
+        (database, schema, table),
+        None,
+    )
 }
 
 /// Whether a family's optional `name_pattern` accepts `column_name`.

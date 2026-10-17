@@ -1,6 +1,6 @@
 //! Planner scope assembly using native graph and selector operations.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::graph::views::lineage_graph_names;
@@ -12,9 +12,9 @@ use crate::bindings::_helpers::planner_scope::loaders::expand_selected_loader_de
 use crate::bindings::_helpers::planner_scope::values::{edges, keys};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
 use crate::bindings::_helpers::planner_selection::selectors::resolve_graph_selection;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::PyDictMethods;
 use pyo3::types::{PyDict, PyFrozenSet, PyTuple};
@@ -34,10 +34,7 @@ pub(crate) fn managed_source_upstream_keys<'py>(
     let mut managed: HashSet<String> = HashSet::new();
     for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        if !native_field(&source, "source_entry")?
-            .getattr("loader")?
-            .is_none()
-        {
+        if !native_field(&native_field(&source, "source_entry")?, "loader")?.is_none() {
             managed.insert(native_field(&source, "name")?.extract()?);
         }
     }
@@ -132,10 +129,11 @@ pub(crate) fn build_planner_scope<'py>(
     }
     let mut tests = args.value("sql_test_selection")?;
     if !tests.is_truthy()? {
-        tests = registry::class(py, RecordId::SqlTestSelection)?.call0()?;
+        tests = new_record(py, RecordId::SqlTestSelection, (), None)?;
     }
-    call_with(
-        &registry::class(py, RecordId::PlannerScope)?,
+    new_record_with(
+        py,
+        RecordId::PlannerScope,
         &[
             ("upstream_deps", upstream),
             ("downstream_deps", downstream),

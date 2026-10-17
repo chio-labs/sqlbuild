@@ -1,11 +1,10 @@
 //! Host SQL-test request preparation, native planning, and Python result conversion.
 
 use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timing;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -28,10 +27,11 @@ pub(super) fn chains<'py>(
     let request = ChainRequest {
         models: native_field(project, "models")?.extract()?,
         tests: tests.extract()?,
-        lexical_syntax: project
-            .getattr("sql_lexical_syntax")?
-            .getattr("native_mapping")?
-            .extract()?,
+        lexical_syntax: native_field(
+            &native_field(project, "sql_lexical_syntax")?,
+            "native_mapping",
+        )?
+        .extract()?,
     };
     let native =
         resolve_compiled_sql_test_chains(py, request).and_then(|chains| object(py, chains));
@@ -89,10 +89,11 @@ pub(crate) fn planned<'py>(
         requires_derived_table_aliases: adapter
             .call_method0("requires_derived_table_aliases")?
             .extract()?,
-        lexical_syntax: project
-            .getattr("sql_lexical_syntax")?
-            .getattr("native_mapping")?
-            .extract()?,
+        lexical_syntax: native_field(
+            &native_field(project, "sql_lexical_syntax")?,
+            "native_mapping",
+        )?
+        .extract()?,
         render_sql: artifact || options.render_sql,
         include_plan: !artifact && options.include_plan,
     };
@@ -130,8 +131,9 @@ pub(crate) fn planned<'py>(
                         .call1(("native SQL-test planning omitted rendered SQL",))?,
                 ));
             }
-            plans.push(call_with(
-                &registry::class(py, RecordId::NativeSqlTestArtifact)?,
+            plans.push(new_record_with(
+                py,
+                RecordId::NativeSqlTestArtifact,
                 &[
                     ("sql", sql),
                     ("model_names", native_field(&plan, "model_names")?),
@@ -215,10 +217,7 @@ pub(crate) fn sql_test_plan_error_messages<'py>(
     for warning in warnings.try_iter()? {
         let warning = warning?;
         let message: String = native_field(&warning, "message")?.extract()?;
-        if warning
-            .getattr("severity")?
-            .getattr("value")?
-            .extract::<String>()?
+        if native_field(&native_field(&warning, "severity")?, "value")?.extract::<String>()?
             == super::constants::ERROR_SEVERITY
             && seen.insert(message.clone())
         {

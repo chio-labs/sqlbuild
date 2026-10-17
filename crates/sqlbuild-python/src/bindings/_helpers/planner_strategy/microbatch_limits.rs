@@ -1,6 +1,7 @@
 //! Microbatch limits applied to planned model entries in CLI, project and model precedence.
 
 use crate::bindings::_helpers::planner_changes::results::native_enum;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction};
@@ -11,7 +12,6 @@ use sqlbuild_core::plan_display::errors::UnknownCursorGrain;
 use sqlbuild_core::plan_display::main::effective_timestamp_grain::effective_timestamp_grain;
 use sqlbuild_core::plan_display::models::TimestampGrainFacts;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::records::replace;
 use crate::bindings::_helpers::plan_output::display::resolve_effective_microbatch_batch_size;
 use crate::bindings::_helpers::planner_strategy::microbatches::{
@@ -20,7 +20,6 @@ use crate::bindings::_helpers::planner_strategy::microbatches::{
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const ERROR_ACTION: &str = "error";
 const SKIP_ACTION: &str = "skip";
@@ -33,7 +32,7 @@ type LimitedEntry<'py> = (Bound<'py, PyAny>, Option<Bound<'py, PyAny>>);
 
 /// `CursorGrain(grain)`'s error for a grain outside the known grains.
 pub(crate) fn unknown_grain(py: Python<'_>, error: UnknownCursorGrain) -> PyErr {
-    registry::class(py, RecordId::CursorGrain)
+    record_class(py, RecordId::CursorGrain)
         .and_then(|class| class.call1((error.0,)))
         .err()
         .unwrap_or_else(|| pyo3::exceptions::PyValueError::new_err("unknown cursor grain"))
@@ -151,8 +150,9 @@ fn limited<'py>(
     if action_text == ERROR_ACTION {
         return Err(input_error(py, ErrorId::CompileInput, &message, None));
     }
-    let plan_warning: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::PlanWarning)?,
+    let plan_warning: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::PlanWarning,
         &[
             ("model_name", name),
             (
@@ -204,9 +204,7 @@ fn default_limit<'py>(
     configured: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = entry.py();
-    if entry
-        .getattr("microbatch_strategy")?
-        .eq(ROLLING_WINDOW_STRATEGY)?
+    if native_field(entry, "microbatch_strategy")?.eq(ROLLING_WINDOW_STRATEGY)?
         && !native_field(entry, "reason")?.eq(FULL_REFRESH_REASON)?
         && native_field(entry, "start_cursor_override")?.is_none()
         && native_field(entry, "end_cursor_override")?.is_none()
@@ -231,12 +229,8 @@ pub(crate) fn apply_configured_microbatch_limits<'py>(
     let py: Python<'py> = entry.py();
     let configured: Bound<'py, PyAny> = native_field(inputs, "max_microbatches")?;
     let configured_action: Bound<'py, PyAny> = native_field(inputs, "microbatch_limit_action")?;
-    if inputs
-        .getattr("max_microbatches_is_override")?
-        .is_truthy()?
-    {
-        let error: Bound<'py, PyAny> =
-            registry::class(py, RecordId::MicrobatchLimitAction)?.getattr("ERROR")?;
+    if native_field(inputs, "max_microbatches_is_override")?.is_truthy()? {
+        let error: Bound<'py, PyAny> = enum_member(py, RecordId::MicrobatchLimitAction, "ERROR")?;
         return with_warnings(limited(entry, configured, error)?, Vec::new());
     }
     let declared: Bound<'py, PyAny> = native_field(entry, "declared_microbatch_limit_action")?;

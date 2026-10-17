@@ -5,9 +5,9 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::replace;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyBool;
 
@@ -25,7 +25,7 @@ fn migration_promotion<'py>(
     decision: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
-    let promotion = registry::class(runtime.py(), RecordId::MigrationPromotion)?;
+    let promotion = record_class(runtime.py(), RecordId::MigrationPromotion)?;
     if adapter
         .call_method0("supports_transactional_ddl")?
         .is_truthy()?
@@ -49,11 +49,11 @@ pub(super) fn migration_with_execution<'py>(
     let transient = if native_field(&adapter, "adapter_name")?.eq("snowflake")? {
         PyBool::new(
             py,
-            model
-                .getattr("config")?
-                .getattr("table_type")?
-                .getattr("value")?
-                .eq("transient")?,
+            native_field(
+                &native_field(&native_field(model, "config")?, "table_type")?,
+                "value",
+            )?
+            .eq("transient")?,
         )
         .to_owned()
         .into_any()

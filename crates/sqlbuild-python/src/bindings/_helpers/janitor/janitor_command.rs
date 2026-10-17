@@ -31,6 +31,7 @@ use crate::bindings::_helpers::janitor::janitor_phases::{
 use crate::bindings::_helpers::janitor::janitor_plan::{janitor_plan_text, janitor_result_counts};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -114,7 +115,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Bou
         ],
     )?;
     options.set_item("use_color", use_color)?;
-    registry::class(py, RecordId::JanitorInvocation)?.call((), Some(&options))
+    new_record(py, RecordId::JanitorInvocation, (), Some(&options))
 }
 
 /// Effective retention settings, validated.
@@ -153,7 +154,7 @@ fn settings<'py>(
             ),
         ],
     )?;
-    registry::class(py, RecordId::JanitorSettings)?.call((), Some(&options))
+    new_record(py, RecordId::JanitorSettings, (), Some(&options))
 }
 
 /// Ask for the exact confirmation phrase; an interrupt cancels.
@@ -215,7 +216,7 @@ fn clean(
 /// Run one `sqb janitor` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = invocation(py, request)?;
     let style: CliStyle = CliStyle {
         use_color: native_field(&invocation, "use_color")?.extract()?,

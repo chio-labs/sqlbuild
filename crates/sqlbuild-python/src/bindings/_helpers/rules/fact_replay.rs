@@ -21,10 +21,10 @@ use crate::bindings::_helpers::compiled_project::function_views::NativeCompiledF
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::seed_views::NativeCompiledSeed;
 use crate::bindings::_helpers::compiled_project::source_views::NativeCompiledSource;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as record_field_or_attribute;
 use crate::bindings::_helpers::records::fields::record_spec;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::fact_encoder::{
     Encoded, FactEncoder, FactFailure, error_digest, value_digest,
 };
@@ -806,7 +806,7 @@ fn item_fields<'py>(encoder: &FactEncoder, item: &Bound<'py, PyAny>) -> PyResult
                 .collect::<PyResult<_>>()?;
             return Ok((encoder.qualified_name(&class)?, names, values));
         };
-    let class: Bound<'py, PyAny> = registry::class(py, record)?;
+    let class: Bound<'py, PyAny> = record_class(py, record)?;
     let class: &Bound<'py, PyType> = class.downcast::<PyType>()?;
     let names: Vec<&'static str> = record_spec(class)?
         .fields

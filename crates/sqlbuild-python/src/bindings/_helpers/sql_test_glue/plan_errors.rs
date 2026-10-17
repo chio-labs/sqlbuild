@@ -1,6 +1,7 @@
 //! Project native planning failures into existing located diagnostic exceptions.
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -20,10 +21,7 @@ fn cte_call_location<'py>(
     let call: Option<String> = call.extract()?;
     let located: CteLocation = sql_test_cte_location(
         &native_field(&test_file, "contents")?.extract::<String>()?,
-        &test
-            .getattr("test_block")?
-            .getattr("sql_body")?
-            .extract::<String>()?,
+        &native_field(&native_field(test, "test_block")?, "sql_body")?.extract::<String>()?,
         &cte.extract::<String>()?,
         call.as_deref(),
     );
@@ -33,7 +31,7 @@ fn cte_call_location<'py>(
     arguments.set_item("column", located.column)?;
     arguments.set_item("end_line", located.end_line)?;
     arguments.set_item("end_column", located.end_column)?;
-    registry::class(py, RecordId::SourceLocation)?.call((), Some(&arguments))
+    new_record(py, RecordId::SourceLocation, (), Some(&arguments))
 }
 
 pub(super) fn planning_error(
@@ -48,9 +46,7 @@ pub(super) fn planning_error(
         for test in tests.try_iter()? {
             let test = test?;
             if native_field(&test, "name")?.eq(payload.get_item("testName")?)?
-                && test
-                    .getattr("test_file")?
-                    .getattr("relative_path")?
+                && native_field(&native_field(&test, "test_file")?, "relative_path")?
                     .str()?
                     .into_any()
                     .eq(payload.get_item("fileLabel")?)?

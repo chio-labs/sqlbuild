@@ -65,7 +65,7 @@ pub(crate) fn audit_check_id(result: &Bound<'_, PyAny>) -> PyResult<String> {
 
 /// The canonical resource name and identifier of an executor result.
 pub(crate) fn resource_identity(result: &Bound<'_, PyAny>) -> PyResult<Option<(String, String)>> {
-    let name = |field: &str| -> PyResult<String> { text(&result.getattr(field)?) };
+    let name = |field: &str| -> PyResult<String> { text(&native_field(result, field)?) };
     Ok(Some(match result_kind(result)? {
         ResultKind::Model => {
             let resource: String = name("model_name")?;
@@ -88,7 +88,7 @@ pub(crate) fn resource_identity(result: &Bound<'_, PyAny>) -> PyResult<Option<(S
         }
         ResultKind::PythonNode => {
             let resource: String = name("node_name")?;
-            let kind: String = text(&native_field(result, "kind")?.getattr("value")?)?;
+            let kind: String = text(&native_field(&native_field(result, "kind")?, "value")?)?;
             (resource.clone(), format!("{kind}:{resource}"))
         }
         ResultKind::PythonCheck => {
@@ -209,11 +209,7 @@ impl<'py> Projection<'py> {
         else {
             return Ok(None);
         };
-        number(
-            &terminal
-                .getattr("payload")?
-                .call_method1("get", ("duration_ms",))?,
-        )
+        number(&native_field(&terminal, "payload")?.call_method1("get", ("duration_ms",))?)
     }
 
     /// The rounded canonical duration of a result, else its own `duration_ms`.

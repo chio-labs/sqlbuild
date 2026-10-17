@@ -7,6 +7,7 @@ use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, compile_error};
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::present;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_fact;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MODEL_SCHEMA_KEY: &str = "model_schema";
 const NAME_FIELD: &str = "name";
@@ -74,11 +75,9 @@ pub(crate) fn model_schema<'py>(
 
 /// The schema's column names, which validation reads as the declared columns.
 pub(crate) fn schema_column_names(schema: &ModelSchema<'_>) -> PyResult<Vec<String>> {
-    schema
-        .declaration
-        .getattr(COLUMNS_FIELD)?
+    native_field(&schema.declaration, COLUMNS_FIELD)?
         .try_iter()?
-        .map(|column| column?.getattr(NAME_FIELD)?.extract())
+        .map(|column| native_field(&column?, NAME_FIELD)?.extract())
         .collect()
 }
 
@@ -89,8 +88,8 @@ pub(crate) fn schema_enums<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = schema.declaration.py();
     let enums: Bound<'py, PyDict> = PyDict::new(py);
-    for column in schema.declaration.getattr(COLUMNS_FIELD)?.try_iter()? {
-        let column_type: Bound<'py, PyAny> = column?.getattr(TYPE_FIELD)?;
+    for column in native_field(&schema.declaration, COLUMNS_FIELD)?.try_iter()? {
+        let column_type: Bound<'py, PyAny> = native_field(&column?, TYPE_FIELD)?;
         if column_type.is_none() {
             continue;
         }
@@ -119,7 +118,7 @@ pub(crate) fn merged_columns<'py>(
         specs: Vec::new(),
         facts: Vec::new(),
     };
-    for column in schema.declaration.getattr(COLUMNS_FIELD)?.try_iter()? {
+    for column in native_field(&schema.declaration, COLUMNS_FIELD)?.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
         merged
             .facts
@@ -167,13 +166,11 @@ fn augmented<'py>(
     (local, local_fact): (&Bound<'py, PyAny>, SchemaColumnFact),
 ) -> PyResult<(Bound<'py, PyAny>, SchemaColumnFact)> {
     let py: Python<'py> = named.py();
-    let mut audits: Vec<Bound<'py, PyAny>> = named
-        .getattr(AUDITS_FIELD)?
+    let mut audits: Vec<Bound<'py, PyAny>> = native_field(named, AUDITS_FIELD)?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let mut fact: SchemaColumnFact = named_fact.clone();
-    for (audit, definition) in local
-        .getattr(AUDITS_FIELD)?
+    for (audit, definition) in native_field(local, AUDITS_FIELD)?
         .try_iter()?
         .zip(local_fact.audit_definitions)
     {
@@ -192,7 +189,7 @@ fn augmented<'py>(
     }
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     for field in KEPT_NAMED_FIELDS {
-        fields.set_item(field, named.getattr(field)?)?;
+        fields.set_item(field, native_field(named, field)?)?;
     }
     fields.set_item(AUDITS_FIELD, PyTuple::new(py, audits)?)?;
     fields.set_item(MIGRATE_FROM_FIELD, &local_fact.migrate_from)?;
@@ -245,14 +242,14 @@ fn check_augmentation(
 
 /// Where a named-schema column is declared, as its `path:line` or the named schema.
 fn origin(named: &Bound<'_, PyAny>) -> PyResult<String> {
-    let location: Bound<'_, PyAny> = named.getattr(LOCATION_FIELD)?;
+    let location: Bound<'_, PyAny> = native_field(named, LOCATION_FIELD)?;
     if location.is_none() {
         return Ok("the named schema".to_owned());
     }
     Ok(format!(
         "{}:{}",
-        location.getattr(PATH_FIELD)?.str()?,
-        location.getattr(LINE_FIELD)?.str()?
+        native_field(&location, PATH_FIELD)?.str()?,
+        native_field(&location, LINE_FIELD)?.str()?
     ))
 }
 

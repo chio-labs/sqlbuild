@@ -5,9 +5,9 @@ use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::planner_resolution::cursor_safety::{
     horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
 };
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -115,20 +115,21 @@ pub(crate) fn resolve_future_cursor_safety<'py>(
     };
     let determining_field = |field: &str| -> PyResult<Bound<'py, PyAny>> {
         if let Some((item, _)) = &determining {
-            item.getattr(field)
+            native_field(item, field)
         } else {
             Ok(py.None().into_bound(py))
         }
     };
-    let safety = call_with(
-        &registry::class(py, RecordId::FutureCursorSafetyEvidence)?,
+    let safety = new_record_with(
+        py,
+        RecordId::FutureCursorSafetyEvidence,
         &[
             ("action", native_field(&config, "action")?),
             ("max_distance", distance),
             (
                 "invocation_time",
                 call_with(
-                    &registry::class(py, RecordId::TimestampValue)?,
+                    &record_class(py, RecordId::TimestampValue)?,
                     &[("value", utc_clock(&clock)?)],
                 )?,
             ),

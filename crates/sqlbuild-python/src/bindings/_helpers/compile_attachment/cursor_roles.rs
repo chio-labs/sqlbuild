@@ -4,11 +4,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const CURSOR_INPUTS_KEY: &str = "cursor_inputs";
 const FILTER_ROLE: &str = "filter";
@@ -95,8 +94,9 @@ pub(crate) fn resolve_cursor_input_roles<'py>(
             }
         }
     }
-    call_with(
-        &registry::class(py, RecordId::CursorInputRoles)?,
+    new_record_with(
+        py,
+        RecordId::CursorInputRoles,
         &[
             ("filter_inputs", filter.into_any()),
             ("watermark_inputs", watermark.into_any()),

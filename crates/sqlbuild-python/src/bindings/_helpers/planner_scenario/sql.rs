@@ -105,7 +105,7 @@ pub(super) fn required_target<'py>(
     name: &str,
     kind: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let target = relations.getattr(field)?.call_method1("get", (name,))?;
+    let target = native_field(relations, field)?.call_method1("get", (name,))?;
     if target.is_none() {
         return Err(error(
             relations.py(),

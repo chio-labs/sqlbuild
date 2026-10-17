@@ -11,6 +11,7 @@ use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_a
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 
 use crate::bindings::_helpers::project_assembly::resources::syntax_error_message;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -162,8 +163,8 @@ pub(crate) fn validate_hook_sql_syntax(
         model_name: &model_name,
         placeholders: &placeholders,
         dialect: &dialect,
-        sql_hook_entry: registry::class(py, RecordId::SqlHookEntry)?,
-        python_hook_entry: registry::class(py, RecordId::PythonHookEntry)?,
+        sql_hook_entry: record_class(py, RecordId::SqlHookEntry)?,
+        python_hook_entry: record_class(py, RecordId::PythonHookEntry)?,
     };
     check_hook_value(
         &context,
@@ -229,7 +230,7 @@ pub(crate) fn hook_statements(
 /// The hook SQL strings a hook value holds, in validation order.
 #[pyfunction]
 pub(crate) fn hook_sql_statements(value: Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    let sql_hook_entry: Bound<'_, PyAny> = registry::class(value.py(), RecordId::SqlHookEntry)?;
+    let sql_hook_entry: Bound<'_, PyAny> = record_class(value.py(), RecordId::SqlHookEntry)?;
     hook_statements(&value, &sql_hook_entry)
 }
 

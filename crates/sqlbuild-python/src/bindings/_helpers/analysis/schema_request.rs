@@ -8,8 +8,8 @@ use sqlbuild_analysis::semantic_validation::main::normalize::normalize_analysis_
 use sqlbuild_analysis::semantic_validation::models::NormalizationInput;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -61,5 +61,10 @@ pub(crate) fn schema_validation_request<'py>(
         parts.quoted_identifiers_ignore_case,
     )?;
     arguments.set_item("catalog", parts.catalog)?;
-    registry::class(py, RecordId::SqlSchemaValidationRequest)?.call((), Some(&arguments))
+    new_record(
+        py,
+        RecordId::SqlSchemaValidationRequest,
+        (),
+        Some(&arguments),
+    )
 }

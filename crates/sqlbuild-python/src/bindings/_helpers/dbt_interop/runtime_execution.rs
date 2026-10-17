@@ -1,10 +1,18 @@
 //! Execute dbt through the subprocess boundary and finalize results in artifact order.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::build_progress::transient_status::TransientStatusReporter;
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, keywords,
+};
+use crate::bindings::_helpers::dbt_events::stream::render_dbt_node_result;
+use crate::bindings::_helpers::dbt_interop::cli::parse_dbt_ls_json_lines;
+use crate::bindings::_helpers::dbt_interop::event_stream::execute_dbt_json_event_stream;
+use crate::bindings::_helpers::dbt_interop::execution::dbt_execution_ls_argv;
 use crate::bindings::_helpers::dbt_interop::runtime_results::{append_missing, result_ids};
+use crate::bindings::_helpers::presentation_text::style::PythonCliStyle;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyInt, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -39,20 +47,21 @@ fn expected_total<'py>(
     argv: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = argv.py();
-    let ls = call_with(
-        &registry::native(py, NativeAttr::DbtExecutionLsArgv)?,
-        &[("argv", argv.clone())],
+    let ls = pyo3::IntoPyObjectExt::into_bound_py_any(
+        dbt_execution_ls_argv(argv.clone().extract::<Vec<String>>()?),
+        py,
     )?;
     if ls.is_none() {
         return Ok(py.None().into_bound(py));
     }
-    let status = call_with(
-        &registry::native(py, NativeAttr::TransientStatusReporter)?,
-        &[
-            ("stream", arguments.value("progress_stream")?),
-            ("use_color", arguments.value("use_color")?),
-        ],
-    )?;
+    let status = TransientStatusReporter::new(
+        py,
+        &arguments.value("progress_stream")?,
+        arguments.value("use_color")?.extract::<bool>()?,
+        true,
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     status.call_method1("start", ("Resolving dbt execution selection...",))?;
     let start = Instant::now();
     let result = call_with(
@@ -83,10 +92,8 @@ fn expected_total<'py>(
     if native_field(&result, "returncode")?.extract::<i64>()? != 0 {
         return Ok(py.None().into_bound(py));
     }
-    let nodes = call_with(
-        &registry::native(py, NativeAttr::ParseDbtLsJsonLines)?,
-        &[("stdout", native_field(&result, "stdout")?)],
-    )?;
+    let nodes = parse_dbt_ls_json_lines(py, &native_field(&result, "stdout")?.extract::<String>()?)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(PyInt::new(py, nodes.len()?).into_any())
 }
 
@@ -101,18 +108,15 @@ fn progress(arguments: &KeywordArguments<'_>, message: &str) -> PyResult<()> {
 /// Execute selected dbt work and backfill results absent from its JSON event stream.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn execute_dbt_commands<'py>(
+pub(crate) fn execute_dbt_commands<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let arguments = KeywordArguments::read(py, "execute_dbt_commands", options, OPTIONS)?;
     let argv = arguments.value("merged_argv")?;
     let output = arguments.value("progress_stream")?;
-    let style = call_with(
-        &registry::native(py, NativeAttr::CliStyle)?,
-        &[("use_color", arguments.value("use_color")?)],
-    )?;
-    let result_type = registry::class(py, RecordId::DbtCommandExecutionResult)?;
+    let style = Bound::new(py, PythonCliStyle::new(&arguments.value("use_color")?)?)
+        .map(Bound::into_any)?;
     if argv.is_none() {
         let message = arguments.value("skip_message")?;
         let message = if message.is_none() {
@@ -129,8 +133,9 @@ fn execute_dbt_commands<'py>(
                     .extract::<String>()?
             ),
         )?;
-        return call_with(
-            &result_type,
+        return new_record_with(
+            py,
+            RecordId::DbtCommandExecutionResult,
             &[("returncode", PyInt::new(py, 0).into_any())],
         );
     }
@@ -174,19 +179,24 @@ fn execute_dbt_commands<'py>(
     if target.is_none() && !project_dir.is_none() {
         target = project_dir.call_method1("__truediv__", ("target",))?;
     }
-    let (returncode, streamed): (Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &registry::native(py, NativeAttr::ExecuteDbtJsonEventStream)?,
-        &[
-            ("argv", argv),
-            ("cwd", project_dir),
-            ("stream", arguments.value("stdout_stream")?),
-            ("use_color", arguments.value("use_color")?),
-            ("target_path", target.clone()),
-            ("display_total", total.clone()),
-            ("on_node_result", arguments.value("on_node_result")?),
-        ],
-    )?
-    .extract()?;
+    let (returncode, streamed): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
+        execute_dbt_json_event_stream(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("argv", argv),
+                    ("cwd", project_dir),
+                    ("stream", arguments.value("stdout_stream")?),
+                    ("use_color", arguments.value("use_color")?),
+                    ("target_path", target.clone()),
+                    ("display_total", total.clone()),
+                    ("on_node_result", arguments.value("on_node_result")?),
+                ],
+            )?),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
+        .extract()?;
     progress(&arguments, "Finalizing dbt run...")?;
     let streamed_ids = result_ids(&streamed)?;
     let mut filtered: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -211,25 +221,29 @@ fn execute_dbt_commands<'py>(
     }
     let count = results.len()? - appended.len();
     for (offset, result) in appended.into_iter().enumerate() {
-        let rendered = call_with(
-            &registry::native(py, NativeAttr::RenderDbtNodeResult)?,
-            &[
-                ("result", result.clone()),
-                ("use_color", native_field(&style, "use_color")?),
-                (
-                    "display_index",
-                    PyInt::new(py, count + offset + 1).into_any(),
-                ),
-                (
-                    "display_total",
-                    if total.is_none() {
-                        PyInt::new(py, results.len()?).into_any()
-                    } else {
-                        total.clone()
-                    },
-                ),
-            ],
-        )?;
+        let rendered = render_dbt_node_result(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("result", result.clone()),
+                    ("use_color", native_field(&style, "use_color")?),
+                    (
+                        "display_index",
+                        PyInt::new(py, count + offset + 1).into_any(),
+                    ),
+                    (
+                        "display_total",
+                        if total.is_none() {
+                            PyInt::new(py, results.len()?).into_any()
+                        } else {
+                            total.clone()
+                        },
+                    ),
+                ],
+            )?),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
         write(
             &arguments.value("stdout_stream")?,
             &rendered.extract::<String>()?,
@@ -240,8 +254,9 @@ fn execute_dbt_commands<'py>(
         }
     }
     progress(&arguments, "Finalized dbt run.")?;
-    call_with(
-        &result_type,
+    new_record_with(
+        py,
+        RecordId::DbtCommandExecutionResult,
         &[("returncode", returncode), ("node_results", results)],
     )
 }

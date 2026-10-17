@@ -2,9 +2,9 @@
 
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_analysis::lineage::models::{LineageColumn, LineageSource};
@@ -34,21 +34,21 @@ pub(crate) struct LineageClasses<'py> {
 
 impl<'py> LineageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
-        let resource_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledResourceType)?;
-        let nullability: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
+        let resource_type: Bound<'py, PyAny> = record_class(py, RecordId::CompiledResourceType)?;
+        let nullability: Bound<'py, PyAny> = record_class(py, RecordId::InferredNullability)?;
         Ok(Self {
-            qualified_column: registry::class(py, RecordId::QualifiedLineageColumn)?,
-            lineage_source: registry::class(py, RecordId::ColumnLineageSource)?,
-            lineage_edge: registry::class(py, RecordId::ColumnLineageEdge)?,
-            column_lineage: registry::class(py, RecordId::ColumnLineage)?,
-            model_lineage: registry::class(py, RecordId::ModelColumnLineage)?,
-            semantic_use: registry::class(py, RecordId::DirectSemanticColumnUse)?,
-            column_fact: registry::class(py, RecordId::CompiledLineageColumnFact)?,
-            source_fact: registry::class(py, RecordId::CompiledLineageSourceFact)?,
-            compact_facts: registry::class(py, RecordId::CompactLineageFacts)?,
-            transform_kind: registry::class(py, RecordId::ColumnTransformKind)?,
-            confidence: registry::class(py, RecordId::ColumnLineageConfidence)?,
-            analysis_dialect: registry::class(py, RecordId::PolyglotAnalysisDialect)?,
+            qualified_column: record_class(py, RecordId::QualifiedLineageColumn)?,
+            lineage_source: record_class(py, RecordId::ColumnLineageSource)?,
+            lineage_edge: record_class(py, RecordId::ColumnLineageEdge)?,
+            column_lineage: record_class(py, RecordId::ColumnLineage)?,
+            model_lineage: record_class(py, RecordId::ModelColumnLineage)?,
+            semantic_use: record_class(py, RecordId::DirectSemanticColumnUse)?,
+            column_fact: record_class(py, RecordId::CompiledLineageColumnFact)?,
+            source_fact: record_class(py, RecordId::CompiledLineageSourceFact)?,
+            compact_facts: record_class(py, RecordId::CompactLineageFacts)?,
+            transform_kind: record_class(py, RecordId::ColumnTransformKind)?,
+            confidence: record_class(py, RecordId::ColumnLineageConfidence)?,
+            analysis_dialect: record_class(py, RecordId::PolyglotAnalysisDialect)?,
             model_resource: native_field(&resource_type, "MODEL")?,
             unknown_nullability: native_field(&nullability, "UNKNOWN")?,
             nullability,

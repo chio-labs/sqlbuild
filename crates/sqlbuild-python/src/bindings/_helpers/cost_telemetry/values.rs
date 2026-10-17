@@ -9,6 +9,7 @@ use sqlbuild_core::cost_allocation::models::PyDecimal;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::timestamps::offset_aware;
 
 const DECIMAL_MODULE: &str = "decimal";
@@ -18,7 +19,7 @@ const COST_AWARE_METHODS: [&str; 2] = ["cost_capability", "collect_run_cost"];
 /// Whether `adapter` implements the cost telemetry methods.
 pub(crate) fn cost_aware(adapter: &Bound<'_, PyAny>) -> PyResult<bool> {
     for name in COST_AWARE_METHODS {
-        if !adapter.hasattr(name)? || adapter.getattr(name)?.is_none() {
+        if !adapter.hasattr(name)? || native_field(adapter, name)?.is_none() {
             return Ok(false);
         }
     }

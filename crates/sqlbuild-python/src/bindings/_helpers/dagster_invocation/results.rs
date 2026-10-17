@@ -470,7 +470,7 @@ fn envelope_fields<'py>(
 ) -> PyResult<Vec<(String, Bound<'py, PyAny>)>> {
     names
         .iter()
-        .map(|name| Ok(((*name).to_owned(), envelope.getattr(*name)?)))
+        .map(|name| Ok(((*name).to_owned(), native_field(envelope, name)?)))
         .collect()
 }
 

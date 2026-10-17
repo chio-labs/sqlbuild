@@ -15,7 +15,7 @@ use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, Assem
 use crate::bindings::_helpers::compile_driver::compile_timings::{
     record_compile_cpu_timing, record_compile_timing,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::{
     EXPRESSION_SHAPES, MODEL_ANALYSIS, count_stage,
 };
@@ -25,9 +25,10 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::project_assembly::declared_relations::{
     DeclaredRelations, declared_relations,
 };
+use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 
 const GENERIC_DIALECT: &str = "generic";
@@ -127,8 +128,7 @@ pub(crate) fn analysis_context<'py>(
 /// `_build_dynamic_families_by_table`: enforced contract models' dynamic column families.
 fn dynamic_families_by_table<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = inputs.py();
-    let enforced: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
+    let enforced: Bound<'py, PyAny> = enum_member(py, RecordId::ContractPolicy, "ENFORCED")?;
     let families: Bound<'py, PyDict> = PyDict::new(py);
     for model_input in native_field(inputs, "model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
@@ -169,7 +169,6 @@ fn profile_with_catalog<'py>(
     column_types: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
-    let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let profile: Bound<'py, PyAny> = if inference_profile.is_truthy()? {
         inference_profile.clone()
     } else {
@@ -193,21 +192,18 @@ fn profile_with_catalog<'py>(
         Some(native) if Some(native) != name.as_deref() => PyString::new(py, native).into_any(),
         _ => dialect,
     };
-    let profile: Bound<'py, PyAny> = replace.call(
-        (profile.clone(),),
-        Some(&keywords(
-            py,
-            &[
-                ("semantic_known_functions", known_functions),
-                ("semantic_known_types", known_types),
-                ("quoted_identifiers_ignore_case", ignore_case),
-                ("sql_analysis_dialect", native),
-                (
-                    "function_return_types",
-                    function_return_types(inputs, &profile)?.into_any(),
-                ),
-            ],
-        )?),
+    let profile: Bound<'py, PyAny> = replaced(
+        &profile.clone(),
+        &[
+            ("semantic_known_functions", known_functions),
+            ("semantic_known_types", known_types),
+            ("quoted_identifiers_ignore_case", ignore_case),
+            ("sql_analysis_dialect", native),
+            (
+                "function_return_types",
+                function_return_types(inputs, &profile)?.into_any(),
+            ),
+        ],
     )?;
     let dialect: Bound<'py, PyAny> = native_field(&profile, "sql_analysis_dialect")?;
     let dialect: String = if dialect.is_truthy()? {
@@ -231,10 +227,7 @@ fn profile_with_catalog<'py>(
         )?,
     )?
     .into_any();
-    replace.call(
-        (profile,),
-        Some(&keywords(py, &[("binding_catalog", catalog)])?),
-    )
+    replaced(&profile, &[("binding_catalog", catalog)])
 }
 
 /// The profile's function return types with each scalar project function's analysis name.
@@ -305,8 +298,7 @@ fn record_expression_shapes<'py>(
             "zip() argument 2 is {relation} than argument 1"
         )));
     }
-    let unknown: Bound<'py, PyAny> =
-        registry::class(py, RecordId::InferredNullability)?.getattr("UNKNOWN")?;
+    let unknown: Bound<'py, PyAny> = enum_member(py, RecordId::InferredNullability, "UNKNOWN")?;
     for (source_input, shape) in sources.iter().zip(shapes) {
         if shape.is_none() {
             continue;
@@ -351,7 +343,7 @@ fn model_analyses<'py>(
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let names: &Bound<'py, PyAny> = request.analysis_model_names.bind(py);
     let mode: &Bound<'py, PyAny> = request.column_lineage_mode.bind(py);
-    let lineage_mode: Bound<'py, PyAny> = registry::class(py, RecordId::ColumnLineageMode)?;
+    let lineage_mode: Bound<'py, PyAny> = record_class(py, RecordId::ColumnLineageMode)?;
     let rich: bool = mode.eq(native_field(&lineage_mode, "RICH")?)?;
     let allow_compact: bool = mode.eq(native_field(&lineage_mode, "FAST")?)? || rich;
     let flags: (Bound<'py, PyAny>, Bound<'py, PyAny>) = (

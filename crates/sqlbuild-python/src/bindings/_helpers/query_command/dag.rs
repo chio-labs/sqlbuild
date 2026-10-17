@@ -6,12 +6,14 @@ use pyo3::types::{PyBool, PyDict};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::query_command::main::render_dag_summary::render_dag_summary;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::project::build_project_graph;
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 fn array_length(document: &serde_json::Value, key: &str) -> PyResult<usize> {
     document
@@ -24,7 +26,10 @@ fn array_length(document: &serde_json::Value, key: &str) -> PyResult<usize> {
 /// Run one `sqb dag` invocation.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_dag_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_dag_command<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "run_dag_command",
@@ -43,39 +48,31 @@ fn run_dag_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) ->
         discovered,
         adapter,
     } = project_adapter(py, project_dir)?;
-    let resolver: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            ("project_dir", project_dir),
-            ("discovered_inputs", discovered.clone()),
-        ],
-    )?;
-    let graph: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildProjectGraph)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("adapter", adapter),
-            (
-                "no_sql_validation",
-                PyBool::new(py, no_sql_validation).to_owned().into_any(),
-            ),
-            ("cli_vars", cli_vars),
-            ("external_sql_reference_resolver", resolver),
-        ],
+    let resolver: Bound<'py, PyAny> =
+        resolve_external_sql_reference_resolver(project_dir, discovered.clone())?;
+    let graph: Bound<'py, PyAny> = build_project_graph(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("adapter", adapter),
+                (
+                    "no_sql_validation",
+                    PyBool::new(py, no_sql_validation).to_owned().into_any(),
+                ),
+                ("cli_vars", cli_vars),
+                ("external_sql_reference_resolver", resolver),
+            ],
+        )?),
     )?;
     let python_graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
-    let dag_json: String = call_with(
-        &registry::native(py, NativeAttr::BuildDagJson)?,
-        &[
-            ("graph", graph),
-            (
-                "project_name",
-                native_field(&discovered, "project_config")?.getattr("name")?,
-            ),
-            ("python_graph", python_graph),
-        ],
-    )?
-    .extract()?;
+    let dag_json: String = build_dag_json(
+        &graph,
+        &native_field(&native_field(&discovered, "project_config")?, "name")?
+            .extract::<String>()?,
+        Some(&python_graph),
+    )?;
     let rendered: String = if json_output {
         format!("{dag_json}\n")
     } else {

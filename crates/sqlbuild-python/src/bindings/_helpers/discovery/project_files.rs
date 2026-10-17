@@ -17,6 +17,7 @@ use crate::bindings::_helpers::discovery::header_declarations::{
 };
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileParts, NativeModelFile};
 use crate::bindings::_helpers::discovery::raised::failure_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{ModelTextRequest, NativeProjectTree};
 use crate::bindings::types::CompilerDetach;
@@ -60,7 +61,7 @@ pub(crate) fn model_record<'py>(
     let header_values: Bound<'py, PyDict> = map_to_python(py, model.header_values)?
         .into_bound(py)
         .downcast_into::<PyDict>()?;
-    let model_name: String = file_path.getattr(STEM_ATTRIBUTE)?.extract()?;
+    let model_name: String = native_field(&file_path, STEM_ATTRIBUTE)?.extract()?;
     let declarations: HeaderDeclarations<'py> = match model_header_declarations(
         py,
         (

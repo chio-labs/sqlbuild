@@ -55,11 +55,7 @@ pub(crate) fn metadata_diagnostics<'py>(
     catalog: &validation::ProjectCatalog,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = classes.py();
-    if !project
-        .getattr("settings")?
-        .getattr("sql_analysis")?
-        .is_truthy()?
-    {
+    if !native_field(&native_field(project, "settings")?, "sql_analysis")?.is_truthy()? {
         return Ok(Vec::new());
     }
     let (inputs, request) = metadata_request(classes, project, profile)?;
@@ -86,7 +82,7 @@ pub(crate) fn metadata_diagnostics<'py>(
     for (index, finding) in outcome.sources {
         let source: &Bound<'py, PyAny> = &inputs.sources[index];
         let path: Bound<'py, PyAny> =
-            native_field(source, "source_file")?.getattr("relative_path")?;
+            native_field(&native_field(source, "source_file")?, "relative_path")?;
         diagnostics.push(diagnostic(
             classes,
             finding,
@@ -119,10 +115,7 @@ fn metadata_request<'py>(
     let mut tests: Vec<Bound<'py, PyAny>> = Vec::new();
     for test in native_field(project, "sql_tests")?.try_iter()? {
         let test: Bound<'py, PyAny> = test?;
-        if test
-            .getattr("payload")?
-            .is_instance(&classes.model_test_payload)?
-        {
+        if native_field(&test, "payload")?.is_instance(&classes.model_test_payload)? {
             tests.push(test);
         }
     }
@@ -139,7 +132,7 @@ fn metadata_request<'py>(
     let mut metadata_sources: Vec<MetadataSource> = Vec::with_capacity(sources.len());
     for source in &sources {
         let cursor: Bound<'py, PyAny> =
-            native_field(source, "source_entry")?.getattr("cursor_column")?;
+            native_field(&native_field(source, "source_entry")?, "cursor_column")?;
         let index: usize = file_index(&files, &native_field(source, "source_file")?)?;
         metadata_sources.push(MetadataSource {
             name: native_field(source, "name")?.extract()?,
@@ -161,9 +154,7 @@ fn metadata_request<'py>(
     }
     let request = MetadataRequest {
         dialect: native_field(profile, "sql_analysis_dialect")?.extract()?,
-        quoted_ignore_case: profile
-            .getattr("quoted_identifiers_ignore_case")?
-            .extract()?,
+        quoted_ignore_case: native_field(profile, "quoted_identifiers_ignore_case")?.extract()?,
         return_types: pairs(&native_field(profile, "function_return_types")?)?,
         functions,
         shapes: shape_rows(&shapes)?,
@@ -248,8 +239,7 @@ fn test_ctes(
     columns_by_sql: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<NamesRow>> {
     let mut ctes: Vec<NamesRow> = Vec::new();
-    for cte in payload
-        .getattr("authored_ctes")?
+    for cte in native_field(payload, "authored_ctes")?
         .try_iter()?
         .chain(native_field(payload, "expected_ctes")?.try_iter()?)
     {
@@ -308,7 +298,7 @@ fn sql_test_diagnostic<'py>(
     end_column: i64,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
-    let path: Bound<'py, PyAny> = native_field(test, "test_file")?.getattr("relative_path")?;
+    let path: Bound<'py, PyAny> = native_field(&native_field(test, "test_file")?, "relative_path")?;
     let location: Bound<'py, PyAny> = classes.call(
         &classes.location,
         &[
@@ -406,9 +396,7 @@ fn diagnostic<'py>(
 
 /// Python's `config.get(sql_analysis) is not False and model.binding_validated`.
 fn checked(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let opted: Bound<'_, PyAny> = model
-        .getattr("config")?
-        .getattr("values")?
+    let opted: Bound<'_, PyAny> = native_field(&native_field(model, "config")?, "values")?
         .call_method1("get", (&classes.sql_analysis_key,))?;
     if opted.is(PyBool::new(model.py(), false)) {
         return Ok(false);
@@ -424,7 +412,7 @@ fn text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 }
 
 fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyResult<MetadataModel> {
-    let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(&native_field(model, "config")?, "values")?;
     let get = |key: &str| values.call_method1("get", (key,));
     let mut references: Vec<NamesRow> = Vec::new();
     for key in METADATA_CONFIG_KEYS {

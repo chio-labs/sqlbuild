@@ -11,9 +11,9 @@ use sqlbuild_analysis::semantic_validation::types::{BindingRequest, DiagnosticRo
 
 use crate::bindings::_helpers::analysis::conversions;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::{CatalogInput, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
 
@@ -323,9 +323,7 @@ pub(crate) fn schema_validations<'py>(
             None => groups.push((catalog, own, vec![index])),
         }
     }
-    let result_type: Bound<'py, PyAny> = registry::class(py, RecordId::SqlBindingResult)?;
-    let diagnostic_type: Bound<'py, PyAny> = registry::class(py, RecordId::SqlBindingDiagnostic)?;
-    let empty: Bound<'py, PyAny> = result_type.call0()?;
+    let empty: Bound<'py, PyAny> = new_record(py, RecordId::SqlBindingResult, (), None)?;
     let mut results: Vec<Bound<'py, PyAny>> = vec![empty; requests.len()];
     for (catalog, any_explicit, members) in groups {
         let catalog = catalog.borrow(py);
@@ -351,11 +349,11 @@ pub(crate) fn schema_validations<'py>(
         for (index, diagnostics) in members.into_iter().zip(rows) {
             let built: Vec<Bound<'py, PyAny>> = diagnostics
                 .into_iter()
-                .map(|row| diagnostic_type.call1(row))
+                .map(|row| new_record(py, RecordId::SqlBindingDiagnostic, row, None))
                 .collect::<PyResult<_>>()?;
             let keywords: Bound<'py, PyDict> = PyDict::new(py);
             keywords.set_item("diagnostics", PyTuple::new(py, built)?)?;
-            results[index] = result_type.call((), Some(&keywords))?;
+            results[index] = new_record(py, RecordId::SqlBindingResult, (), Some(&keywords))?;
         }
     }
     PyTuple::new(py, results)

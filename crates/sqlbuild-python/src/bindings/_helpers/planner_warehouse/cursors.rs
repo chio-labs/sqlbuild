@@ -28,9 +28,9 @@ use crate::bindings::_helpers::planner_warehouse::snapshot::{
     SnapshotRequest, inspection_concurrency,
 };
 use crate::bindings::_helpers::planner_warehouse::watermarks::validate_watermark_column;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use pyo3::IntoPyObject;
 use pyo3::exceptions::PyException;
@@ -195,10 +195,7 @@ fn runtime_producer_names(
     let mut loaded: HashSet<String> = HashSet::new();
     for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        if !native_field(&source, "source_entry")?
-            .getattr("loader")?
-            .is_none()
-        {
+        if !native_field(&native_field(&source, "source_entry")?, "loader")?.is_none() {
             loaded.insert(native_field(&source, "name")?.extract()?);
         }
     }
@@ -224,8 +221,9 @@ fn upstream_relation<'py>(
     let name = native_field(reference, "ref_name")?;
     let name_text: String = name.extract()?;
     let is_selected = selected.is_some_and(|names| names.contains(&name_text));
-    let qualified =
-        |node: Bound<'py, PyAny>| native_field(&node, "destination")?.getattr("qualified_name");
+    let qualified = |node: Bound<'py, PyAny>| {
+        native_field(&native_field(&node, "destination")?, "qualified_name")
+    };
     if (kind.eq("ref")? || kind.eq("seed")?)
         && !deferred.is_none()
         && deferred.contains(&name)?
@@ -285,7 +283,10 @@ fn terminal_bound<'py>(
     };
     let value = object(
         py,
-        config_cursor_bound(&native_field(&upstream, "config")?.getattr("values")?, key)?,
+        config_cursor_bound(
+            &native_field(&native_field(&upstream, "config")?, "values")?,
+            key,
+        )?,
     )?;
     if value.is_none() {
         return Ok(None);
@@ -870,7 +871,7 @@ fn eligible_target_maxes<'py>(
                 (
                     "is_date",
                     horizon
-                        .is_instance(&registry::class(py, DATE_VALUE)?)?
+                        .is_instance(&record_class(py, DATE_VALUE)?)?
                         .into_pyobject(py)?
                         .to_owned()
                         .into_any(),

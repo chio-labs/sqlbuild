@@ -1,9 +1,8 @@
 //! Fixture column inference computed once per fixture body and inference profile.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::analysis_session::fixture_columns::infer_fixture_column_facts;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyclass, pymethods};
@@ -33,13 +32,13 @@ impl FixtureColumnInferences {
     ) -> PyResult<Bound<'py, PyAny>> {
         let py = query_sql.py();
         let compute = || {
-            call_with(
-                &registry::native(py, NativeAttr::InferFixtureColumnFacts)?,
+            infer_fixture_column_facts(Some(&keywords(
+                py,
                 &[
                     ("query_sql", query_sql.clone()),
                     ("inference_profile", inference_profile.clone()),
                 ],
-            )
+            )?))
         };
         if !native_field(inference_profile, "binding_catalog")?.is_none() {
             return compute();

@@ -73,8 +73,7 @@ fn read_relation<'py>(
 
 fn declaration_location(source: &Bound<'_, PyAny>) -> PyResult<String> {
     let file = native_field(source, "source_file")?;
-    let path: String = file
-        .getattr("relative_path")?
+    let path: String = native_field(&file, "relative_path")?
         .call_method0("as_posix")?
         .extract()?;
     let line = yaml_entry_line(

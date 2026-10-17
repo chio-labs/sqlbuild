@@ -9,12 +9,12 @@ use sqlbuild_analysis::planner_strategy::main::effective_run_scope::effective_ru
 use sqlbuild_analysis::planner_strategy::main::singular_attachment::singular_attachment;
 use sqlbuild_analysis::planner_strategy::models::{AuditAttachmentKind, AuditRunScope};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const AUDITING_TYPES_MODULE: &str = "sqlbuild.compiler.auditing.types";
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
@@ -23,12 +23,13 @@ const FINAL_RUN_SCOPE: &str = "final";
 
 /// `CompiledObjectKey(resource_type=CompiledResourceType(kind), name=name)`.
 fn object_key<'py>(py: Python<'py>, kind: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(py, RecordId::CompiledObjectKey)?,
+    new_record_with(
+        py,
+        RecordId::CompiledObjectKey,
         &[
             (
                 "resource_type",
-                registry::class(py, RecordId::CompiledResourceType)?.call1((kind,))?,
+                enum_from_value(py, RecordId::CompiledResourceType, kind)?,
             ),
             ("name", PyString::new(py, name).into_any()),
         ],

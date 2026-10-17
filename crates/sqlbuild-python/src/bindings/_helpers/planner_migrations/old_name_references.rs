@@ -7,9 +7,9 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, text};
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::relations::match_project_relation;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
@@ -53,9 +53,10 @@ pub(super) fn errors<'py>(
     entries: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = runtime.py();
-    let literals = runtime
-        .getattr("project")?
-        .getattr("unmatched_literal_sql_relations")?;
+    let literals = native_field(
+        &native_field(runtime, "project")?,
+        "unmatched_literal_sql_relations",
+    )?;
     if !literals.is_truthy()? {
         return Ok(Vec::new());
     }
@@ -100,7 +101,7 @@ pub(super) fn errors<'py>(
         }
         let mut parts: Vec<String> = Vec::new();
         for field in ["database", "schema", "name"] {
-            let part = relation.getattr(field)?;
+            let part = native_field(&relation, field)?;
             if part.is_truthy()? {
                 parts.push(part.extract()?);
             }
@@ -120,8 +121,7 @@ pub(super) fn errors<'py>(
             &native_field(&matched, "ref")?,
             None,
         )?;
-        let path = literal
-            .getattr("relative_path")?
+        let path = native_field(&literal, "relative_path")?
             .str()?
             .to_str()?
             .to_owned();
@@ -133,7 +133,7 @@ pub(super) fn errors<'py>(
                 ("model_name", py.None().into_bound(py)),
                 (
                     "severity",
-                    registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?,
+                    enum_member(py, RecordId::WarningSeverity, "ERROR")?,
                 ),
                 (
                     "message",

@@ -68,7 +68,7 @@ fn reject_local_sql_analysis_opt_out(config: &ProjectConfiguration<'_, '_>) -> P
                 .getattr("setting_overrides")?
                 .contains(SQL_ANALYSIS_KEY)
                 .map(|overridden| PyBool::new(py, overridden).to_owned().into_any())?,
-            local_settings.getattr(SQL_ANALYSIS_KEY)?,
+            native_field(&local_settings, SQL_ANALYSIS_KEY)?,
         ],
     )?;
     validate_local_sql_analysis(py, config.project_dir, flags.extract()?)
@@ -82,7 +82,7 @@ fn first_configured_group(config: &Bound<'_, PyAny>) -> PyResult<Option<(String,
     for name in names {
         let warehouses: Bound<'_, PyAny> = native_field(&targets.get_item(&name)?, "warehouses")?;
         for group in WAREHOUSE_GROUPS {
-            let value: Bound<'_, PyAny> = warehouses.getattr(group)?;
+            let value: Bound<'_, PyAny> = native_field(&warehouses, group)?;
             if !value.is_none() {
                 return Ok(Some((name, group.to_owned(), value.extract()?)));
             }

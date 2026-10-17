@@ -24,12 +24,11 @@ use sqlbuild_core::dbt_process::models::DbtJsonProcess;
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
+use crate::bindings::_helpers::dbt_events::stream::DbtEventStream;
 use crate::bindings::_helpers::dbt_interop::runner::{
     dbt_command_lifecycle, launch_failure, launch_os_error, report_exit,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const STREAM_OPTIONS: (&[&str], &[&str]) = (
@@ -77,7 +76,7 @@ struct Output<'py> {
 /// Run dbt and render SQLBuild-styled rows from JSON events; returns the exit code and results.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn execute_dbt_json_event_stream<'py>(
+pub(crate) fn execute_dbt_json_event_stream<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
@@ -98,7 +97,9 @@ fn execute_dbt_json_event_stream<'py>(
             arguments.value("detail_by_unique_id")?,
         )?;
         keywords.set_item("use_color", output.use_color)?;
-        registry::native(py, NativeAttr::DbtEventStream)?.call((), Some(&keywords))?
+        DbtEventStream::new(py, Some(keywords.clone()))
+            .and_then(|value| pyo3::Bound::new(py, value))
+            .map(pyo3::Bound::into_any)?
     };
     let argv: Vec<String> = arguments.value("argv")?.extract()?;
     let cwd: Option<PathBuf> = arguments.value("cwd")?.extract()?;

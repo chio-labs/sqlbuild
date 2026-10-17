@@ -12,12 +12,12 @@ use sqlbuild_config::dbt_profile::models::{
     ConnectionKey, ConnectionSource, DbtInitConfig, NormalizedProfile, ProfileEntry, ProfileValue,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const INIT_TOML_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -81,8 +81,9 @@ fn normalized_connection<'py>(
         };
         connection.set_item(key, value)?;
     }
-    call_with(
-        &registry::class(py, RecordId::NormalizedDbtProfileConnection)?,
+    new_record_with(
+        py,
+        RecordId::NormalizedDbtProfileConnection,
         &[
             ("adapter", PyString::new(py, profile.adapter).into_any()),
             ("connection", connection.into_any()),
@@ -102,7 +103,7 @@ fn normalized_connection<'py>(
 /// Normalize rendered dbt profile output for SQLBuild.
 #[pyfunction]
 #[pyo3(signature = (*, resolved))]
-fn normalize_dbt_profile_connection<'py>(
+pub(crate) fn normalize_dbt_profile_connection<'py>(
     py: Python<'py>,
     resolved: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -131,7 +132,7 @@ fn text_argument(arguments: &KeywordArguments<'_>, name: &str) -> PyResult<Strin
 /// The `sqlbuild_project.toml` text `sqb dbt init` writes.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_dbt_init_project_toml(
+pub(crate) fn build_dbt_init_project_toml(
     py: Python<'_>,
     options: Option<Bound<'_, PyDict>>,
 ) -> PyResult<String> {

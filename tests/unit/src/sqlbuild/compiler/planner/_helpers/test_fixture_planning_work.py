@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from unittest.mock import Mock
 
 import pytest
 
-import sqlbuild._native as sql_test_assembly
 from sqlbuild import _native as fixture_completion
 from sqlbuild._native import (
     CompiledObjectKey,
@@ -21,6 +19,7 @@ from sqlbuild._native import (
     SqlTestSelection,
     build_selected_test_entries,
     compiled_model_record,
+    fixture_inference_count,
     project_with,
 )
 from sqlbuild.compiler.compile.types import (
@@ -186,7 +185,6 @@ def test_given_many_tests_when_building_entries_then_project_fixture_metadata_is
 )
 def test_given_complete_authoritative_fixture_when_completing_then_skips_column_analysis(
     test_case: CompleteFixturePlanningTestCase,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _, project = build_test_and_project(
         PlanTestChainTestCase(
@@ -218,12 +216,7 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
         },
     )
     fixture_completion.fixture_read_cache_info(reset=True)
-    fixture_inference: Mock = Mock(wraps=sql_test_assembly.infer_fixture_column_facts)
-    monkeypatch.setattr(
-        sql_test_assembly,
-        "infer_fixture_column_facts",
-        fixture_inference,
-    )
+    fixture_inference_count(reset=True)
 
     completed: RelationFixtureCompletion = fixture_completion.build_relation_fixture_completion(
         project=project_with(project=project, models=(model,)),
@@ -238,7 +231,7 @@ def test_given_complete_authoritative_fixture_when_completing_then_skips_column_
     assert completed.diagnostics == ()
     assert completed.fixture_sql_by_key[source_key] == test_case.expected_fixture_sql
     assert fixture_completion.fixture_read_cache_info()[0] == test_case.expected_analysis_calls
-    assert fixture_inference.call_count == test_case.expected_inference_calls
+    assert fixture_inference_count() == test_case.expected_inference_calls
 
 
 if __name__ == "__main__":

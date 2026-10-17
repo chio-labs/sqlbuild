@@ -12,7 +12,7 @@ use crate::bindings::types::CompilerDetach;
 
 /// The authored files' digest, or `None`; the flag is true where `rglob` raises mid-listing.
 #[pyfunction]
-fn relation_lineage_fingerprint(
+pub(crate) fn relation_lineage_fingerprint(
     py: Python<'_>,
     project_dir: PathBuf,
     prefix: Vec<u8>,

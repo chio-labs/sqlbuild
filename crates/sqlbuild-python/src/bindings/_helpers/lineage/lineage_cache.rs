@@ -4,9 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
+use crate::bindings::_helpers::lineage::relation_fingerprint::relation_lineage_fingerprint;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyResult, Python};
 use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyList, PyTuple};
 use sqlbuild_analysis::lineage_command::models::{LineageIndex, LineageKey, LineageNode};
@@ -141,9 +140,7 @@ pub(crate) fn lineage_fingerprint(
     prefix.extend(sqlbuild_version(py)?.as_bytes());
     prefix.extend(encoded.downcast::<PyBytes>()?.as_bytes());
     let uncacheable: bool = py.version_info() < FIRST_PYTHON_SKIPPING_INTERRUPTED_LISTINGS;
-    registry::native(py, NativeAttr::RelationLineageFingerprint)?
-        .call1((project_dir, PyBytes::new(py, &prefix), uncacheable))?
-        .extract()
+    relation_lineage_fingerprint(py, project_dir.extract()?, prefix, uncacheable)
 }
 
 fn rows<'py, T: pyo3::FromPyObject<'py>>(

@@ -119,7 +119,10 @@ fn render_diff_output(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyR
 /// Render a machine-readable incomplete or execution-failure outcome.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn render_diff_error_json(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn render_diff_error_json(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "render_diff_error_json", options, ERROR_OPTIONS)?;
     let size_guard: Bound<'_, PyAny> = arguments.value("size_guard")?;

@@ -125,7 +125,7 @@ fn planned_relation_refs<'py>(
         ("seed_locations", &kinds.seed),
         ("python_source_entries", &kinds.source),
     ] {
-        for name in plan_output.getattr(attribute)?.try_iter()? {
+        for name in native_field(plan_output, attribute)?.try_iter()? {
             refs.add(call_with(
                 &reference,
                 &[("kind", kind.clone()), ("name", name?)],

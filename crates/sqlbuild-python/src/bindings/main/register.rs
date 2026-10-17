@@ -18,6 +18,7 @@ use crate::bindings::models;
 pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     records::registration::register(module)?;
     records::registry::verify_tables()?;
+    records::construct::capture(module)?;
     native_host::registration::register(module)?;
     rules::registration::register(module)?;
     cli::registration::register(module)?;

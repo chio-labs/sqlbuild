@@ -12,6 +12,7 @@ use crate::bindings::_helpers::discovery::imported_modules::{
     module_functions, provider_by_name, provider_usages, shim, tuple_of,
 };
 use crate::bindings::_helpers::discovery::imported_providers;
+use crate::bindings::_helpers::records::construct::new_record;
 
 use crate::bindings::_helpers::discovery::python_hook_files::discover_python_hook_files;
 use crate::bindings::_helpers::graph::python_node_graph::node_identity;
@@ -19,7 +20,6 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PYTHON_NODE_ROOT;
 const NODE_ERROR: ErrorId = ErrorId::PythonNodeDiscovery;
@@ -135,7 +135,7 @@ impl<'py> Buckets<'py> {
                 ("function", function.clone()),
             ];
             for field in kind.fields {
-                pairs.push((field, read.getattr(*field)?));
+                pairs.push((field, native_field(&read, field)?));
             }
             pairs.push(("provider_usages", provider_usages(function, providers)?));
             let get = |name: &str| -> PyResult<Bound<'py, PyAny>> {
@@ -503,10 +503,12 @@ pub(crate) fn discover_hook_functions<'py>(
             ] {
                 arguments.set_item(field, value)?;
             }
-            hooks.push(
-                registry::class(py, RecordId::DiscoveredHookFunction)?
-                    .call((), Some(&arguments))?,
-            );
+            hooks.push(new_record(
+                py,
+                RecordId::DiscoveredHookFunction,
+                (),
+                Some(&arguments),
+            )?);
         }
     }
     tuple_of(py, hooks)

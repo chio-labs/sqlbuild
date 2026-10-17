@@ -8,6 +8,7 @@ use crate::bindings::_helpers::cursor::durations::{
     parse_cursor_duration, shift_by_cursor_duration,
 };
 use crate::bindings::_helpers::cursor::intervals::interval_validation;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// `(field, unit suffix)` of each duration part, in declaration order.
 const DURATION_UNITS: [(&str, &str); 6] = [
@@ -38,7 +39,7 @@ fn argument<'py>(
 }
 
 fn part(duration: &Bound<'_, PyAny>, name: &str) -> PyResult<i64> {
-    duration.getattr(name)?.extract()
+    native_field(duration, name)?.extract()
 }
 
 fn total_months(duration: &Bound<'_, PyAny>) -> PyResult<i64> {

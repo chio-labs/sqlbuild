@@ -8,7 +8,6 @@ from typing import cast
 
 import pytest
 
-import sqlbuild._native as event_module
 from sqlbuild import _native as execute_module
 from sqlbuild import _native as phases_module
 from sqlbuild import _native as plan_module
@@ -45,6 +44,8 @@ from tests.unit.src.sqlbuild.integrations.dbt._test_types import (
 from tests.unit.src.sqlbuild.integrations.dbt.helpers import (
     CompileOnlyDbtRunner,
     build_orders_dbt_graph,
+    dbt_result_line,
+    fake_dbt_argv,
 )
 
 
@@ -226,15 +227,17 @@ def test_given_ordinary_execution_when_compiling_then_never_uses_dbt_state(
 )
 def test_given_ordinary_dbt_events_when_executing_then_no_fingerprint_or_watermark_callback_is_used(
     test_case: DbtExecutionSummaryFooterTestCase,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    observed: dict[str, object] = {}
-
-    def execute_commands(**kwargs: object) -> DbtCommandExecutionResult:
-        observed.update(kwargs)
-        return DbtCommandExecutionResult(returncode=0)
-
-    monkeypatch.setattr(phases_module, "execute_dbt_commands", execute_commands)
+    streamed: DbtNodeExecutionResult = DbtNodeExecutionResult(
+        unique_id="model.analytics.orders",
+        resource_type="model",
+        node_name="orders",
+        status="success",
+        index=1,
+        total=1,
+        execution_time=0.1,
+    )
     command: DbtInteropCommand = DbtInteropCommand.RUN
     invocation: DbtInteropInvocation = DbtInteropInvocation(
         dbt_executable="dbt",
@@ -243,19 +246,20 @@ def test_given_ordinary_dbt_events_when_executing_then_no_fingerprint_or_waterma
         routed=DbtInteropRoutedArgs(command=command),
         discovered_inputs=cast(DiscoveredProjectInputs, SimpleNamespace()),
         effective_sqlbuild_args=(),
-        dbt_options=DbtCliOptions(project_dir=Path("/dbt")),
+        dbt_options=DbtCliOptions(project_dir=tmp_path),
         dbt_vars={},
-        runner=cast(object, SimpleNamespace()),
+        runner=SimpleNamespace(invoke=lambda **_: SimpleNamespace(returncode=1, stdout="")),
     )
 
     result: DbtCommandExecutionResult = phases_module.execute_dbt_without_state_tracking(
-        request=DbtInteropExecutionRequest(command=command, project_dir=Path("/project"), args=()),
+        request=DbtInteropExecutionRequest(command=command, project_dir=tmp_path, args=()),
         invocation=invocation,
-        merged_dbt_argv=("dbt", "run"),
+        merged_dbt_argv=fake_dbt_argv(tmp_path, lines=(dbt_result_line(streamed),)),
     )
 
     assert result.returncode == 0
-    assert "on_node_result" not in observed
+    assert [node.unique_id for node in result.node_results] == [streamed.unique_id]
+    assert not (tmp_path / ".sqlbuild").exists()
     assert test_case.expected_footer == "no-state-callback"
 
 
@@ -406,7 +410,7 @@ def test_given_dbt_native_state_when_building_execution_argv_then_preserves_nati
 )
 def test_given_planned_dbt_tests_when_executing_then_does_not_resolve_selection_again(
     test_case: DbtExecutionSelectionStatusTestCase,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     class NoSelectionRunner:
         def invoke(self, **kwargs: object) -> object:
@@ -437,17 +441,18 @@ def test_given_planned_dbt_tests_when_executing_then_does_not_resolve_selection_
             execution_time=0.1,
         ),
     )
-    monkeypatch.setattr(
-        event_module,
-        "execute_dbt_json_event_stream",
-        lambda **kwargs: (0, streamed_results),
-    )
+    lines: tuple[str, ...] = tuple(dbt_result_line(result) for result in streamed_results)
     progress_stream: StringIO = StringIO()
 
     result: DbtCommandExecutionResult = execute_dbt_commands(
         runner=cast(DbtRunner, NoSelectionRunner()),
-        options=DbtCliOptions(project_dir=Path("/dbt")),
-        merged_argv=("dbt", "test", "--select", planned_node.unique_id),
+        options=DbtCliOptions(project_dir=tmp_path),
+        merged_argv=(
+            *fake_dbt_argv(tmp_path, lines=lines),
+            "test",
+            "--select",
+            planned_node.unique_id,
+        ),
         progress_stream=progress_stream,
         stdout_stream=StringIO(),
         use_color=False,
@@ -479,7 +484,7 @@ def test_given_planned_dbt_tests_when_executing_then_does_not_resolve_selection_
     ids=lambda case: case.description,
 )
 def test_given_missing_streamed_nodes_when_finalizing_then_backfills_selected_artifact_results(
-    test_case: DbtResultBackfillTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    test_case: DbtResultBackfillTestCase, tmp_path: Path
 ) -> None:
     streamed: DbtNodeExecutionResult = DbtNodeExecutionResult(
         unique_id="model.analytics.orders",
@@ -507,9 +512,6 @@ def test_given_missing_streamed_nodes_when_finalizing_then_backfills_selected_ar
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        event_module, "execute_dbt_json_event_stream", lambda **kwargs: (1, (streamed,))
-    )
     output: StringIO = StringIO()
     callbacks: list[DbtNodeExecutionResult] = []
     progress: list[str] = []
@@ -517,7 +519,7 @@ def test_given_missing_streamed_nodes_when_finalizing_then_backfills_selected_ar
     result: DbtCommandExecutionResult = execute_dbt_commands(
         runner=DbtRunner(),
         options=DbtCliOptions(target_path=tmp_path),
-        merged_argv=("dbt", "build"),
+        merged_argv=fake_dbt_argv(tmp_path, lines=(dbt_result_line(streamed),), returncode=1),
         progress_stream=StringIO(),
         stdout_stream=output,
         use_color=False,
@@ -530,14 +532,15 @@ def test_given_missing_streamed_nodes_when_finalizing_then_backfills_selected_ar
     )
 
     assert result.returncode == 1
-    assert result.node_results[0] == streamed
+    assert result.node_results[0].unique_id == streamed.unique_id
+    assert result.node_results[0].status == streamed.status
     assert len(result.node_results) == 2
     appended: DbtNodeExecutionResult = result.node_results[1]
     assert appended.unique_id == "model.analytics.customers"
     assert appended.status == "skipped"
     assert (appended.index, appended.total) == (2, 3)
     assert appended.messages[0].message == test_case.expected_message
-    assert callbacks == [appended]
+    assert callbacks == [result.node_results[0], appended]
     assert progress == ["Finalizing dbt run...", "Finalized dbt run."]
     assert "customers" in output.getvalue()
     assert "inventory" not in output.getvalue()

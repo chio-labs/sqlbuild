@@ -16,10 +16,24 @@ use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::project::build_project_graph;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::compile_driver::python_calls::within;
+use crate::bindings::_helpers::contracts::project_config::load_local_config_file;
+use crate::bindings::_helpers::contracts::project_config::load_project_config_file;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::discovery::declaration_records::discover_model_schema_files;
+use crate::bindings::_helpers::discovery::model_records::discover_model_files;
+use crate::bindings::_helpers::discovery::snapshot::directory_snapshot_scope;
+use crate::bindings::_helpers::discovery::sql_test_records::discover_test_files;
+use crate::bindings::_helpers::discovery::yaml_records::{
+    discover_schema_files, discover_source_files,
+};
+use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const SELECTION_CODE: &str = "S007";
@@ -73,16 +87,9 @@ fn discovered_adapter<'py>(
     project_dir: &Bound<'py, PyAny>,
     discovered: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = project_dir.py();
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered, "project_config")?,
-            ),
-            ("local_config", native_field(discovered, "local_config")?),
-        ],
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
     )?;
     resolve_cli_adapter(&adapter_name, project_dir)
 }
@@ -156,23 +163,23 @@ fn model_paths(
     if let Some(paths) = exact_model_paths(py, scope, (select, exclude))? {
         return Ok(paths);
     }
-    let graph: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildProjectGraph)?,
-        &[
-            ("discovered_inputs", scope.discovered.clone()),
-            ("adapter", scope.adapter.clone()),
-        ],
+    let graph: Bound<'_, PyAny> = build_project_graph(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", scope.discovered.clone()),
+                ("adapter", scope.adapter.clone()),
+            ],
+        )?),
     )?;
-    let keys: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::SelectProjectGraph)?,
-        &[
-            ("graph", graph.clone()),
-            ("select", selectors(py, select)?),
-            ("exclude", selectors(py, exclude)?),
-        ],
-    )?;
-    let model_type: Bound<'_, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let keys: Bound<'_, PyAny> = select_project_graph(
+        &graph.clone(),
+        &selectors(py, select)?,
+        &selectors(py, exclude)?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    let model_type: Bound<'_, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let mut names: BTreeSet<String> = BTreeSet::new();
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
@@ -243,59 +250,59 @@ fn selected_contract_inputs<'py>(
     referenced_model_names: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
-    let native = |name: NativeAttr| registry::native(py, name);
-    let project_config: Bound<'py, PyAny> =
-        native(NativeAttr::LoadProjectConfigFile)?.call1((project_dir,))?;
-    let local_config: Bound<'py, PyAny> =
-        native(NativeAttr::LoadLocalConfigFile)?.call1((project_dir,))?;
+    let project_config: Bound<'py, PyAny> = load_project_config_file(py, project_dir)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    let local_config: Bound<'py, PyAny> = load_local_config_file(py, project_dir)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let disabled: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
-    let scope: Bound<'py, PyAny> = call_with(
-        &native(NativeAttr::DirectorySnapshotScope)?,
-        &[("project_dir", project_dir.clone())],
+    let scope: Bound<'py, PyAny> = pyo3::IntoPyObjectExt::into_bound_py_any(
+        directory_snapshot_scope(project_dir.clone()),
+        py,
     )?;
     within(&scope, |_| {
-        let project_only = |name: NativeAttr| -> PyResult<Bound<'py, PyAny>> {
-            call_with(&native(name)?, &[("project_dir", project_dir.clone())])
-        };
-        call_with(
-            &registry::class(py, RecordId::DiscoveredProjectInputs)?,
+        new_record_with(
+            py,
+            RecordId::DiscoveredProjectInputs,
             &[
                 ("project_config", project_config),
                 ("local_config", local_config),
                 ("project_dir", project_dir.clone()),
                 (
                     "model_files",
-                    call_with(
-                        &native(NativeAttr::DiscoverModelFiles)?,
-                        &[
-                            ("project_dir", project_dir.clone()),
-                            ("extract_implicit_alias_columns", disabled.clone()),
-                            ("extract_output_column_locations", disabled.clone()),
-                            ("selected_model_names", referenced_model_names),
-                        ],
-                    )?,
+                    discover_model_files(
+                        py,
+                        Some(keywords(
+                            py,
+                            &[
+                                ("project_dir", project_dir.clone()),
+                                ("extract_implicit_alias_columns", disabled.clone()),
+                                ("extract_output_column_locations", disabled.clone()),
+                                ("selected_model_names", referenced_model_names),
+                            ],
+                        )?),
+                    )
+                    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?,
                 ),
                 (
                     "model_schema_files",
-                    project_only(NativeAttr::DiscoverModelSchemaFiles)?,
+                    discover_model_schema_files(project_dir, None)?.into_any(),
                 ),
                 (
                     "schema_files",
-                    project_only(NativeAttr::DiscoverSchemaFiles)?,
+                    discover_schema_files(project_dir)?.into_any(),
                 ),
                 (
                     "source_files",
-                    project_only(NativeAttr::DiscoverSourceFiles)?,
+                    discover_source_files(project_dir, None)?.into_any(),
                 ),
                 (
                     "test_files",
-                    call_with(
-                        &native(NativeAttr::DiscoverTestFiles)?,
-                        &[
-                            ("project_dir", project_dir.clone()),
-                            ("selected_paths", selected_test_paths),
-                        ],
-                    )?,
+                    discover_test_files(
+                        &project_dir.clone(),
+                        Some(selected_test_paths).filter(|value| !value.is_none()),
+                        None,
+                    )
+                    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?,
                 ),
             ],
         )
@@ -346,13 +353,10 @@ pub(crate) fn resolve_lint_inputs<'py>(
             ],
         )?),
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", selectors(py, select)?),
-            ("exclude", selectors(py, exclude)?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    reject_unit_test_selectors(
+        &selectors(py, select)?,
+        &selectors(py, exclude)?,
+        &discovered.clone(),
     )?;
     let adapter: Bound<'py, PyAny> = discovered_adapter(project_dir, &discovered)?;
     if select.is_empty() && exclude.is_empty() {

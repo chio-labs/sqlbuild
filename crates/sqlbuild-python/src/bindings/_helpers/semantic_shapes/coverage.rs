@@ -20,16 +20,11 @@ const OPEN_KINDS: [&str; 3] = [SOURCE_KIND, "ref", "dbt_ref"];
 pub(crate) fn semantic_coverage<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project.py();
     let reasons: Bound<'py, PyDict> = PyDict::new(py);
-    if !project
-        .getattr("settings")?
-        .getattr("sql_analysis")?
-        .is_truthy()?
-    {
+    if !native_field(&native_field(project, "settings")?, "sql_analysis")?.is_truthy()? {
         return Ok(reasons);
     }
     let shapes: Bound<'py, PyDict> = project_shapes(project, None)?;
-    let models: Vec<Bound<'py, PyAny>> = project
-        .getattr("models")?
+    let models: Vec<Bound<'py, PyAny>> = native_field(project, "models")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let mut names: Vec<String> = Vec::with_capacity(models.len());
@@ -79,9 +74,7 @@ pub(crate) fn semantic_coverage<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bo
         "generic".to_owned()
     };
     for ((model, name), rows) in models.iter().zip(&names).zip(&references) {
-        let opted: Bound<'py, PyAny> = model
-            .getattr("config")?
-            .getattr("values")?
+        let opted: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?
             .call_method1("get", ("sql_analysis",))?;
         if opted.is(PyBool::new(py, false)) {
             reasons.set_item(name, PyTuple::new(py, ["SQL analysis disabled"])?)?;

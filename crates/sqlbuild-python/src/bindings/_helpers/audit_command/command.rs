@@ -11,13 +11,25 @@ use sqlbuild_core::audit_command::main::render_audit_summary::render_audit_summa
 use sqlbuild_core::audit_command::models::AuditCounts;
 use sqlbuild_core::cli_text::models::CliStyle;
 
+use crate::bindings::_helpers::build_progress::audit_progress::AuditProgressReporter;
+use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::cli::progress_text::write_execution_header;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords, within};
+use crate::bindings::_helpers::compile_driver::selection_phases::compile_static_command_context;
+use crate::bindings::_helpers::cost_telemetry::context::CostContext;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::command_plans::build_audit_command_plan;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::result_output::documents::format_audit_execution_json;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
+use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
 const EXECUTION_COMMAND: &str = "sqb audit";
 const PASS_OUTCOME: &str = "pass";
@@ -104,18 +116,13 @@ fn compile_audits<'py>(
     let py: Python<'py> = request.py();
     let discovered: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?;
     let adapter: Bound<'py, PyAny> = native_field(invocation, "adapter")?;
-    let resolver: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            (
-                "project_dir",
-                native_field(invocation, "effective_project_dir")?,
-            ),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
+        native_field(invocation, "effective_project_dir")?,
+        discovered.clone(),
     )?;
-    let options: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilePipelineOptions)?,
+    let options: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompilePipelineOptions,
         &[
             ("selected_target", native_field(request, "selected_target")?),
             (
@@ -133,8 +140,8 @@ fn compile_audits<'py>(
             ("external_sql_reference_resolver", resolver),
         ],
     )?;
-    let context: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::CompileStaticCommandContext)?,
+    let context: Bound<'py, PyAny> = compile_static_command_context(Some(&keywords(
+        py,
         &[
             ("discovered_inputs", discovered),
             ("adapter", adapter.clone()),
@@ -146,19 +153,19 @@ fn compile_audits<'py>(
                     .getattr("on_progress")?,
             ),
         ],
+    )?))?;
+    let plan_output: Bound<'py, PyAny> = build_audit_command_plan(
+        &native_field(&context, "project")?,
+        &adapter,
+        &native_field(&context, "scope")?,
+        &native_field(&context, "relations")?,
     )?;
-    let plan_output: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildAuditCommandPlan)?,
-        &[
-            ("project", native_field(&context, "project")?),
-            ("adapter", adapter),
-            ("scope", native_field(&context, "scope")?),
-            ("relations", native_field(&context, "relations")?),
-        ],
-    )?;
-    call_with(
-        &registry::native(py, NativeAttr::BuildStaticPipelineResult)?,
-        &[("context", context), ("plan_output", plan_output)],
+    build_static_pipeline_result(
+        py,
+        Some(keywords(
+            py,
+            &[("context", context), ("plan_output", plan_output)],
+        )?),
     )
 }
 
@@ -193,17 +200,21 @@ fn prepare_run<'py>(
     let worker_count: i64 = concurrency.min(i64::try_from(audit_count).unwrap_or(i64::MAX));
     let stream: Bound<'py, PyAny> = native_field(invocation, "progress_stream")?;
     let use_color: Bound<'py, PyAny> = native_field(invocation, "use_color")?;
-    let progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::AuditProgressReporter)?,
-        &[
-            ("entries", entries.clone()),
-            ("worker_limit", PyInt::new(py, worker_count).into_any()),
-            ("stream", stream.clone()),
-            ("use_color", use_color.clone()),
-        ],
-    )?;
-    let projector: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
+    let progress: Bound<'py, PyAny> = AuditProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("entries", entries.clone()),
+                ("worker_limit", PyInt::new(py, worker_count).into_any()),
+                ("stream", stream.clone()),
+                ("use_color", use_color.clone()),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
+    let projector: Bound<'py, PyAny> = current_native_progress_projector(py)?;
     if !projector.is_none() {
         for entry in entries.try_iter()? {
             call_with(
@@ -212,14 +223,19 @@ fn prepare_run<'py>(
             )?;
         }
     }
-    let connection: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", native_field(invocation, "adapter_name")?),
-            ("stream", stream),
-            ("use_color", use_color),
-        ],
-    )?;
+    let connection: Bound<'py, PyAny> = ConnectionProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter_name", native_field(invocation, "adapter_name")?),
+                ("stream", stream),
+                ("use_color", use_color),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     Ok(AuditRun {
         progress,
         connection,
@@ -244,7 +260,8 @@ fn write_headers(
     header.set_item("target", py.None())?;
     header.set_item("concurrency", concurrency)?;
     header.set_item("use_color", &use_color)?;
-    registry::native(py, NativeAttr::WriteExecutionHeader)?.call((), Some(&header))?;
+    write_execution_header(py, Some(header.clone()))
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let entries: Bound<'_, PyAny> =
         native_field(pipeline, "plan_output")?.getattr("audit_entries")?;
     let mut models: BTreeSet<String> = BTreeSet::new();
@@ -274,8 +291,9 @@ fn execute<'py>(
     let py: Python<'py> = invocation.py();
     let plan: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
     let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
-    let event_writer: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
+    let event_writer: Bound<'py, PyAny> = ExecutionEventWriter::new(py, None)
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?;
     let relay: Bound<'py, AuditCallbackRelay> = Bound::new(
         py,
         AuditCallbackRelay {
@@ -287,8 +305,7 @@ fn execute<'py>(
     let executed: PyResult<Vec<Bound<'py, PyAny>>> = (|| {
         run.progress
             .call_method1("set_result_callback", (native_field(&relay, "on_result")?,))?;
-        let projector: Bound<'py, PyAny> =
-            registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
+        let projector: Bound<'py, PyAny> = current_native_progress_projector(py)?;
         if !projector.is_none() {
             let ordinals: Bound<'py, PyDict> = PyDict::new(py);
             let mut total: usize = 0;
@@ -311,16 +328,21 @@ fn execute<'py>(
             .call_method1("__truediv__", ("executions",))?
             .call_method1("__truediv__", (&run_id,))?
             .call_method1("__truediv__", ("statements.jsonl",))?;
-        let scope: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::CostContext)?.getattr("scope")?,
-            &[
-                ("run_id", run_id.clone()),
-                ("resource_type", text(py, "run")),
-                ("resource_name", text(py, "audit")),
-                ("ledger_path", ledger_path),
-                ("phase", text(py, "audit")),
-            ],
-        )?;
+        let scope: Bound<'py, PyAny> = CostContext::scope(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("run_id", run_id.clone()),
+                    ("resource_type", text(py, "run")),
+                    ("resource_name", text(py, "audit")),
+                    ("ledger_path", ledger_path),
+                    ("phase", text(py, "audit")),
+                ],
+            )?),
+        )
+        .and_then(|scope| Bound::new(py, scope))?
+        .into_any();
         within(&scope, |_| {
             let callbacks: Bound<'py, PyAny> = call_with(
                 &host::entry(py, ExecutorHost::AuditPipelineCallbacks)?,
@@ -398,17 +420,13 @@ fn audit_payload<'py>(
     (concurrency, worker_count): (i64, i64),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = results.py();
-    let payload: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::FormatAuditExecutionJson)?,
-        &[
-            ("results", results.clone()),
-            (
-                "configured_concurrency",
-                PyInt::new(py, concurrency).into_any(),
-            ),
-            ("worker_count", PyInt::new(py, worker_count).into_any()),
-        ],
-    )?;
+    let payload: Bound<'py, PyAny> = format_audit_execution_json(
+        py,
+        results.clone(),
+        Some(PyInt::new(py, concurrency).into_any()).filter(|value| !value.is_none()),
+        Some(PyInt::new(py, worker_count).into_any()).filter(|value| !value.is_none()),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let projection: Bound<'py, PyAny> =
         host::entry(py, ExecutorHost::CurrentAuditResultProjection)?.call0()?;
     if projection.is_none() {
@@ -418,7 +436,7 @@ fn audit_payload<'py>(
     let document: Bound<'py, PyAny> = json.call_method1("loads", (payload,))?;
     let counts: Bound<'py, PyDict> = PyDict::new(py);
     for field in ["attempted_count", "written_count", "failed_count"] {
-        counts.set_item(field, projection.getattr(field)?)?;
+        counts.set_item(field, native_field(&projection, field)?)?;
     }
     document.set_item("audit_result_projection", &counts)?;
     if native_field(&projection, "degraded")?.is_truthy()? {
@@ -426,7 +444,7 @@ fn audit_payload<'py>(
         let reason: Bound<'py, PyDict> = PyDict::new(py);
         reason.set_item("reason", PROJECTION_FAILURE)?;
         for field in ["attempted_count", "written_count", "failed_count"] {
-            reason.set_item(field, projection.getattr(field)?)?;
+            reason.set_item(field, native_field(&projection, field)?)?;
         }
         let reasons: Bound<'py, PyList> = PyList::empty(py);
         reasons.append(reason)?;
@@ -476,27 +494,23 @@ fn complete(
         &PyTuple::new(py, results)?.into_any(),
         (run.concurrency, run.worker_count),
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
-        &[
-            ("payload", payload),
-            ("json_output", native_field(request, "json_output")?),
-            (
-                "json_output_path",
-                native_field(request, "json_output_path")?,
-            ),
-        ],
-    )?;
+    write_execution_json_output(
+        py,
+        payload,
+        native_field(request, "json_output")?.extract::<bool>()?,
+        native_field(request, "json_output_path")?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(audit_exit_code(counts.failed))
 }
 
 /// Run one `sqb audit` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_audit_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_audit_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &registry::class(py, RecordId::AuditInvocation)?,
+        &record_class(py, RecordId::AuditInvocation)?,
         true,
     )?;
     let pipeline: Bound<'_, PyAny> = compile_audits(request, &invocation)?;

@@ -161,10 +161,7 @@ fn model_dependencies(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let mut names: Vec<String> = Vec::new();
     for dependency in native_field(model, "deps")?.try_iter()? {
         let dependency = dependency?;
-        if dependency
-            .getattr("resource_type")?
-            .eq(MODEL_RESOURCE_TYPE)?
-        {
+        if native_field(&dependency, "resource_type")?.eq(MODEL_RESOURCE_TYPE)? {
             names.push(native_field(&dependency, "name")?.extract()?);
         }
     }
@@ -219,9 +216,7 @@ fn plan_test(
     };
     Ok(SqlTestPlanTest {
         name: native_field(test, "name")?.extract()?,
-        file_label: test
-            .getattr("test_file")?
-            .getattr("relative_path")?
+        file_label: native_field(&native_field(test, "test_file")?, "relative_path")?
             .str()?
             .extract()?,
         payload,

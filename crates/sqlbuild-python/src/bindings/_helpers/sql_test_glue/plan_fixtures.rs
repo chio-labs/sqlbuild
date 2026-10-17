@@ -3,9 +3,9 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
 use crate::bindings::_helpers::sql_test_glue::fixture_validation::validated_fixtures;
 use crate::bindings::_helpers::sql_test_glue::plan_driver::resolve_sql_test_model_chains;
@@ -38,7 +38,6 @@ pub(super) fn validated_test<'py>(
         Ok(completed) => completed,
         Err(diagnostics) => return Ok(Err(diagnostics)),
     };
-    let replace = imported(py, "dataclasses", "replace")?;
     let mut authored: Vec<Bound<'py, PyAny>> = Vec::new();
     for cte in ctes.try_iter()? {
         let cte = cte?;
@@ -50,7 +49,7 @@ pub(super) fn validated_test<'py>(
                     .call_method1("get", (name, native_field(&cte, "sql_body")?))?;
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("sql_body", sql)?;
-                replacement = replace.call((&cte,), Some(&kwargs))?;
+                replacement = replaced_keywords(&cte, &kwargs)?;
                 break;
             }
         }
@@ -66,15 +65,15 @@ pub(super) fn validated_test<'py>(
             "sql_body",
             completed[3].call_method1("get", (name, native_field(&cte, "sql_body")?))?,
         )?;
-        expected_ctes.push(replace.call((&cte,), Some(&kwargs))?);
+        expected_ctes.push(replaced_keywords(&cte, &kwargs)?);
     }
     let kwargs = PyDict::new(py);
     kwargs.set_item("authored_ctes", PyTuple::new(py, authored)?)?;
     kwargs.set_item("expected_ctes", PyTuple::new(py, expected_ctes)?)?;
-    let payload = replace.call((payload,), Some(&kwargs))?;
+    let payload = replaced_keywords(&payload, &kwargs)?;
     let kwargs = PyDict::new(py);
     kwargs.set_item("payload", payload)?;
-    replace.call((test,), Some(&kwargs)).map(Ok)
+    replaced_keywords(test, &kwargs).map(Ok)
 }
 
 pub(super) fn validate<'py>(

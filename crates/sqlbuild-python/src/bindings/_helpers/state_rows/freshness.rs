@@ -19,6 +19,7 @@ use sqlbuild_state::freshness::types::TimestampParser;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
+use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -213,7 +214,7 @@ pub(crate) fn age_policy<'py>(
     if policy.is_none() {
         return Ok(None);
     }
-    let statuses: Bound<'py, PyAny> = registry::class(py, RecordId::SourceFreshnessAgeStatus)?;
+    let statuses: Bound<'py, PyAny> = record_class(py, RecordId::SourceFreshnessAgeStatus)?;
     if !date_time_typed(data_version)? {
         return native_field(&statuses, "UNKNOWN").map(Some);
     }
@@ -232,7 +233,7 @@ pub(crate) fn age_policy<'py>(
         AgeStatus::Warn => "WARN",
         AgeStatus::Error => "ERROR",
     };
-    statuses.getattr(member).map(Some)
+    enum_member(py, RecordId::SourceFreshnessAgeStatus, member).map(Some)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

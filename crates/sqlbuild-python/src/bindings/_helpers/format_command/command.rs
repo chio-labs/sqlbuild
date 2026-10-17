@@ -142,10 +142,11 @@ fn fixture_inputs<'py>(resolved: &Resolved<'py>) -> PyResult<Option<Bound<'py, P
     } else {
         native_field(discovered, "project_config")?
     };
-    let enabled: bool = settings_owner
-        .getattr("settings")?
-        .getattr(SQL_ANALYSIS_SETTING_KEY)?
-        .is_truthy()?;
+    let enabled: bool = native_field(
+        &native_field(&settings_owner, "settings")?,
+        SQL_ANALYSIS_SETTING_KEY,
+    )?
+    .is_truthy()?;
     Ok(enabled.then(|| discovered.clone()))
 }
 
@@ -263,7 +264,10 @@ fn run_command(
 /// Run one `sqb format` invocation.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_format_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_format_command<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
         py,
         "run_format_command",

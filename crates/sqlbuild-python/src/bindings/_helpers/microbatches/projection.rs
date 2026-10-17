@@ -187,7 +187,7 @@ fn replay<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAn
         for interval in &expected_objects {
             expected.push(parser.interval(interval)?);
         }
-        for piece in request.get("coverage")?.getattr("intervals")?.try_iter()? {
+        for piece in native_field(&request.get("coverage")?, "intervals")?.try_iter()? {
             let piece: Bound<'py, PyAny> = piece?;
             pieces.push(CoveragePiece {
                 interval: parser.interval(&piece)?,

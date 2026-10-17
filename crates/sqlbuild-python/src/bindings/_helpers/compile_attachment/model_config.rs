@@ -5,13 +5,12 @@ use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_attachment::storage_policies::inherited_storage;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::loop_classes::table_backed;
 use crate::bindings::_helpers::model_config::model_config_builder::NativeModelConfigBuilder;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Capture the project inputs every model's native config build and validation read.
 #[pyfunction]
@@ -27,7 +26,7 @@ pub(crate) fn native_model_config_session<'py>(
     let materialization_defaults: Bound<'py, PyAny> = if declared.is_truthy()? {
         declared
     } else {
-        registry::class(py, RecordId::MaterializationDefaultsConfig)?.call0()?
+        new_record(py, RecordId::MaterializationDefaultsConfig, (), None)?
     };
     let hook_entries: Bound<'py, PyTuple> = PyTuple::new(
         py,
@@ -37,7 +36,7 @@ pub(crate) fn native_model_config_session<'py>(
             RecordId::PythonHookEntry,
         ]
         .iter()
-        .map(|class| registry::class(py, *class))
+        .map(|class| record_class(py, *class))
         .collect::<PyResult<Vec<_>>>()?,
     )?;
     let target_namespace: Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = if target.is_none() {
@@ -78,8 +77,9 @@ pub(crate) fn native_model_config_session<'py>(
             inherited_storage(&materialized, &materialization_defaults, &target)?;
         inherited.set_item(&materialized, storage)?;
     }
-    call_with(
-        &registry::class(py, RecordId::NativeModelConfigSession)?,
+    new_record_with(
+        py,
+        RecordId::NativeModelConfigSession,
         &[
             (
                 "path_defaults",

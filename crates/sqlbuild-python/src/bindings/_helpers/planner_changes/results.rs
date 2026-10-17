@@ -9,7 +9,7 @@ use sqlbuild_analysis::planner_changes::models::{
     Backfill, BackfillAction, ChangeKind, SchemaChangeKind, SchemaColumnSource, SchemaFindingRow,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -29,7 +29,7 @@ pub(crate) fn planner_enum<'py>(
     name: RecordId,
     value: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, name)?.call1((value,))
+    new_record(py, name, (value,), None)
 }
 
 /// A member of a natively declared planner enumeration, from its value.
@@ -38,7 +38,7 @@ pub(crate) fn native_enum<'py>(
     name: RecordId,
     value: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, name)?.call1((value,))
+    new_record(py, name, (value,), None)
 }
 
 /// `BackfillResult(action=..., duration=...)`.
@@ -51,8 +51,9 @@ pub(crate) fn backfill_result<'py>(
         BackfillAction::Bounded => "bounded",
         BackfillAction::ForwardOnly => "forward",
     };
-    call_with(
-        &registry::class(py, RecordId::BackfillResult)?,
+    new_record_with(
+        py,
+        RecordId::BackfillResult,
         &[
             (
                 "action",
@@ -83,7 +84,6 @@ pub(crate) fn schema_findings<'py>(
     py: Python<'py>,
     findings: &[SchemaFindingRow],
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::SchemaFinding)?;
     let mut items: Vec<Bound<'py, PyAny>> = Vec::with_capacity(findings.len());
     for finding in findings {
         let kind: &str = match finding.kind {
@@ -95,8 +95,9 @@ pub(crate) fn schema_findings<'py>(
             SchemaColumnSource::Yml => "yml",
             SchemaColumnSource::SqlAnalysis => "sql_analysis",
         };
-        items.push(call_with(
-            &class,
+        items.push(new_record_with(
+            py,
+            RecordId::SchemaFinding,
             &[
                 ("kind", native_enum(py, RecordId::SchemaChangeKind, kind)?),
                 (

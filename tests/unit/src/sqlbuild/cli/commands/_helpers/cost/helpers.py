@@ -34,3 +34,14 @@ def build_cost_finalization(
         render=render,
         had_executable_work=had_executable_work,
     )
+
+
+def write_snowflake_project(project_dir: Path) -> None:
+    """Write a Snowflake project with a `dev` target whose connection uses `ANALYTICS`."""
+
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "shop"\nadapter = "snowflake"\n\n'
+        '[connection]\naccount = "acct"\ndatabase = "ANALYTICS"\n\n'
+        "[targets.dev]\n",
+        encoding="utf-8",
+    )

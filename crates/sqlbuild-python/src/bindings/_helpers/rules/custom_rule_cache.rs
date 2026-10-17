@@ -30,7 +30,7 @@ use crate::bindings::_helpers::rules::findings::{FindingClasses, invalid_finding
 /// One custom rule's cache identity from its metadata, source fingerprint and settings.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn custom_rule_identity(request: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn custom_rule_identity(request: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
     let request = Request::new("custom_rule_identity", request)?;
     Ok(rule_identity(&RuleIdentityInput {
         code_identity: request.get("code_identity")?.extract()?,

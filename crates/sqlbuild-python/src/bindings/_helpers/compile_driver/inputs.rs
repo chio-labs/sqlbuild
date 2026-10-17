@@ -11,7 +11,7 @@ use crate::bindings::_helpers::compile_attachment::effective_config::{
 use crate::bindings::_helpers::compile_attachment::model_inputs::build_model_inputs;
 use crate::bindings::_helpers::compile_driver::diagnostic_collector::collect_compile_diagnostics;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords, within,
+    KeywordArguments, call_with, keywords, within,
 };
 use crate::bindings::_helpers::compiled_project::attachment::{attach_checks, attach_resources};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
@@ -20,9 +20,10 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::model_config::template_data::run_id;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_indexes::{
     public_declaration_indexes, public_model_schema_index,
 };
@@ -158,8 +159,9 @@ fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bou
         Some(target.compile_cache_dir.clone()),
     )?;
     let value_renderer: Bound<'py, PyAny> = native_field(&adapter_context, "value_renderer")?;
-    let model_context: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::ModelInputBuildContext)?,
+    let model_context: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::ModelInputBuildContext,
         &[
             ("effective_vars", target.vars.clone()),
             ("effective_settings", target.settings.clone()),
@@ -275,8 +277,9 @@ fn target_context<'py>(
         build_effective_settings(&project_config.clone(), &local_config.clone())?;
     let adapter_name: Bound<'py, PyAny> =
         resolve_effective_adapter_name(&project_config.clone(), &local_config)?;
-    let macro_context: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::MacroContext)?,
+    let macro_context: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::MacroContext,
         &[
             ("adapter_name", adapter_name),
             (
@@ -324,17 +327,13 @@ fn model_build<'py>(
     let schemas: Bound<'py, PyAny> = public_model_schema_index(discovered.clone())?.into_any();
     let native_project: Bound<'py, PyAny> =
         Bound::new(py, NativeCompiledProject::default())?.into_any();
-    let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
-    let model_context: Bound<'py, PyAny> = replace.call(
-        (context,),
-        Some(&keywords(
-            py,
-            &[
-                ("public_enums", enums.clone()),
-                ("public_constants", constants.clone()),
-                ("public_model_schemas", schemas),
-            ],
-        )?),
+    let model_context: Bound<'py, PyAny> = replaced(
+        context,
+        &[
+            ("public_enums", enums.clone()),
+            ("public_constants", constants.clone()),
+            ("public_model_schemas", schemas),
+        ],
     )?;
     let inputs: Bound<'py, PyAny> = build_model_inputs(
         py,
@@ -360,15 +359,12 @@ fn model_build<'py>(
         )?),
     )?
     .into_any();
-    let context: Bound<'py, PyAny> = replace.call(
-        (context,),
-        Some(&keywords(
-            py,
-            &[
-                ("public_enums", enums.clone()),
-                ("public_constants", constants.clone()),
-            ],
-        )?),
+    let context: Bound<'py, PyAny> = replaced(
+        context,
+        &[
+            ("public_enums", enums.clone()),
+            ("public_constants", constants.clone()),
+        ],
     )?;
     Ok(ModelBuild {
         inputs,

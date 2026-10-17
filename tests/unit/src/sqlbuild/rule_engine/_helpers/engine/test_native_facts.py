@@ -79,7 +79,6 @@ def test_given_compiled_sql_facts_when_evaluating_native_then_exact_safe_rows_ar
     )
 
     request: dict[str, Any] = captured_native_request(
-        monkeypatch=monkeypatch,
         project=project_with(project=project, sql_tests=sql_tests, sql_scenarios=(scenario,)),
         project_dir=tmp_path,
     )

@@ -4,6 +4,7 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -45,7 +46,6 @@ use crate::bindings::_helpers::planner_identity::metadata::{
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
 const CHANGES_LOGGER: &str = "sqlbuild.planner.changes";
@@ -100,14 +100,11 @@ pub(crate) fn detect_changes<'py>(
     let models: Bound<'py, PyDict> =
         scope_model_changes((project, scope, snapshot), None, expected)?;
     let functions: Bound<'py, PyDict> = PyDict::new(py);
-    let result_class: Bound<'py, PyAny> = registry::class(py, RecordId::FunctionChangeResult)?;
     let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
     let recorded: Bound<'py, PyAny> =
-        native_field(snapshot, "fingerprints")?.getattr("functions")?;
-    let query_change_tracking: bool = project
-        .getattr("settings")?
-        .getattr("query_change_tracking")?
-        .is_truthy()?;
+        native_field(&native_field(snapshot, "fingerprints")?, "functions")?;
+    let query_change_tracking: bool =
+        native_field(&native_field(project, "settings")?, "query_change_tracking")?.is_truthy()?;
     let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
     for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
@@ -135,9 +132,7 @@ pub(crate) fn detect_changes<'py>(
                                 .extract::<String>()?,
                             dialect.as_deref(),
                         ),
-                    )? != fingerprint
-                        .getattr("definition_hash")?
-                        .extract::<String>()?
+                    )? != native_field(&fingerprint, "definition_hash")?.extract::<String>()?
                 {
                     "query_changed"
                 } else {
@@ -146,10 +141,14 @@ pub(crate) fn detect_changes<'py>(
             };
             arguments.push(("reason", planner_enum(py, RecordId::PlanReason, reason)?));
         }
-        functions.set_item(name, call_with(&result_class, &arguments)?)?;
+        functions.set_item(
+            name,
+            new_record_with(py, RecordId::FunctionChangeResult, &arguments)?,
+        )?;
     }
-    call_with(
-        &registry::class(py, RecordId::PlannerChangeResults)?,
+    new_record_with(
+        py,
+        RecordId::PlannerChangeResults,
         &[
             ("models", models.into_any()),
             ("functions", functions.into_any()),
@@ -243,15 +242,13 @@ pub(crate) fn scope_model_changes<'py>(
     let py: Python<'py> = project.py();
     let tracking: bool = match query_change_tracking {
         Some(value) => value,
-        None => project
-            .getattr("settings")?
-            .getattr("query_change_tracking")?
-            .extract()?,
+        None => {
+            native_field(&native_field(project, "settings")?, "query_change_tracking")?.extract()?
+        }
     };
     let function_local_hashes: Bound<'py, PyAny> = function_local_hashes(
         &native_field(project, "functions")?,
-        project
-            .getattr("sql_analysis_dialect")?
+        native_field(project, "sql_analysis_dialect")?
             .extract::<Option<String>>()?
             .as_deref(),
     )?
@@ -273,8 +270,7 @@ pub(crate) fn scope_model_changes<'py>(
         function_local_hashes,
         hook_version_hashes: hook_version_hashes.into_any(),
     };
-    let model_kind: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let model_kind: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
     let models_by_name: Bound<'py, PyAny> = native_field(scope, "models_by_name")?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
@@ -338,13 +334,11 @@ pub(crate) fn model_change<'py>(
             "no_change",
         );
     }
-    let relation_exists: bool = snapshot
-        .getattr("existing_relations")?
-        .contains(&model_name)?;
-    let fingerprint: Bound<'py, PyAny> = snapshot
-        .getattr("fingerprints")?
-        .getattr("models")?
-        .call_method1("get", (&model_name,))?;
+    let relation_exists: bool =
+        native_field(snapshot, "existing_relations")?.contains(&model_name)?;
+    let fingerprint: Bound<'py, PyAny> =
+        native_field(&native_field(snapshot, "fingerprints")?, "models")?
+            .call_method1("get", (&model_name,))?;
     let recorded: Option<Recorded> = recorded_fingerprint(&fingerprint)?;
     let dialect: Bound<'py, PyAny> = native_field(snapshot, "column_dialect")?;
     let compiled_query_hash: Option<String> = if pass.query_change_tracking && recorded.is_some() {
@@ -444,7 +438,7 @@ pub(crate) fn model_change<'py>(
 fn replay_policy(model: &Bound<'_, PyAny>) -> PyResult<Backfill> {
     let py: Python<'_> = model.py();
     let raw: Option<String> = authored_config_str(
-        &native_field(model, "config")?.getattr("values")?,
+        &native_field(&native_field(model, "config")?, "values")?,
         REPLAY_CONFIG_KEY,
     )?
     .map(|value| value.extract())
@@ -531,9 +525,8 @@ fn model_schema_findings<'py>(
     model_name: &Bound<'py, PyAny>,
     dialect: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<SchemaFindingRow>> {
-    let warehouse: Bound<'py, PyAny> = snapshot
-        .getattr("existing_columns")?
-        .call_method1("get", (model_name,))?;
+    let warehouse: Bound<'py, PyAny> =
+        native_field(snapshot, "existing_columns")?.call_method1("get", (model_name,))?;
     if warehouse.is_none() {
         return Ok(Vec::new());
     }
@@ -548,8 +541,7 @@ fn model_schema_findings<'py>(
                 yml.push((native_field(&column, "name")?.extract()?, kind));
             }
         }
-        type_enforcement = schema_entry
-            .getattr("type_enforcement")?
+        type_enforcement = native_field(&schema_entry, "type_enforcement")?
             .extract::<Option<bool>>()?
             .unwrap_or(false);
         let families: Bound<'py, PyAny> = native_field(&schema_entry, "dynamic_columns")?;
@@ -746,8 +738,9 @@ impl<'py> ChangeResult<'py> {
                 .into_pyobject(py)
                 .map(|flag| flag.to_owned().into_any())
         };
-        call_with(
-            &registry::class(py, RecordId::ChangeDetectionResult)?,
+        new_record_with(
+            py,
+            RecordId::ChangeDetectionResult,
             &[
                 ("model_name", self.model_name),
                 ("change_kind", kind),

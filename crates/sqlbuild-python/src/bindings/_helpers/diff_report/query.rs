@@ -14,7 +14,11 @@ use sqlbuild_cli::diff_report::types::PhaseSeconds;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
+use crate::bindings::_helpers::compile_attachment::target::build_effective_target_namespace;
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::diff_report::support::{
     call, cli_error, error_text, none, object, progress_line,
 };
@@ -22,9 +26,9 @@ use crate::bindings::_helpers::diff_report::tolerances::cli_tolerance_overrides;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::types::CompilerDetach;
 use sqlbuild_analysis::diff_selection::main::raw_query_shape::raw_query_shape;
 use sqlbuild_analysis::diff_selection::models::RawQueryShape;
@@ -53,16 +57,9 @@ pub(crate) fn project_adapter<'py>(
     discovered: &Bound<'py, PyAny>,
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<(String, Bound<'py, PyAny>)> {
-    let py: Python<'py> = discovered.py();
-    let name: Bound<'py, PyAny> = call(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                &native_field(discovered, "project_config")?,
-            ),
-            ("local_config", &native_field(discovered, "local_config")?),
-        ],
+    let name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&name, project_dir)?;
     Ok((name.extract()?, adapter))
@@ -173,37 +170,44 @@ pub(crate) fn prepare_query_diff<'py>(
     let (adapter_name, adapter) = project_adapter(discovered, project_dir)?;
     let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
     let cli_vars: Bound<'py, PyAny> = native_field(request, "cli_vars")?;
-    let config: Bound<'py, PyAny> = call(
-        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
-        &[
-            ("discovered_inputs", discovered),
-            ("project_dir", project_dir),
-            ("selected_target", &selected_target),
-            ("cli_vars", &cli_vars),
-        ],
+    let config: Bound<'py, PyAny> = resolve_project_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("project_dir", project_dir.clone()),
+                ("selected_target", selected_target.clone()),
+                ("cli_vars", cli_vars.clone()),
+            ],
+        )?),
     )?;
     let database: Bound<'py, PyAny> = if NAMESPACELESS_ADAPTERS.contains(&adapter_name.as_str()) {
         none(py)
     } else {
         config.call_method1("get", ("database",))?
     };
-    let namespace: Bound<'py, PyAny> = call(
-        &registry::native(py, NativeAttr::BuildEffectiveTargetNamespace)?,
-        &[
-            ("discovered_inputs", discovered),
-            ("selected_target", &selected_target),
-            ("connection_database", &database),
-            (
-                "connection_schema",
-                &config.call_method1("get", ("schema",))?,
-            ),
-            (
-                "default_database",
-                &adapter.call_method0("default_database")?,
-            ),
-            ("default_schema", &adapter.call_method0("default_schema")?),
-        ],
-    )?;
+    let namespace: Bound<'py, PyAny> = build_effective_target_namespace(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("selected_target", selected_target.clone()),
+                ("connection_database", database.clone()),
+                (
+                    "connection_schema",
+                    config.call_method1("get", ("schema",))?,
+                ),
+                (
+                    "default_database",
+                    adapter.call_method0("default_database")?,
+                ),
+                ("default_schema", adapter.call_method0("default_schema")?),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let (target_name, _target, database, schema): (
         Bound<'py, PyAny>,
         Bound<'py, PyAny>,
@@ -232,17 +236,15 @@ pub(crate) fn prepare_query_diff<'py>(
     )?;
     let left_sql: String = read_only_query(py, &left_sql, "left", &adapter)?;
     let right_sql: String = read_only_query(py, &right_sql, "right", &adapter)?;
-    let runtime: Bound<'py, PyTuple> = call(
-        &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
-        &[
-            ("discovered_inputs", discovered),
-            ("selected_target", &selected_target),
-            ("cli_vars", &cli_vars),
-        ],
-    )?
+    let runtime: Bound<'py, PyTuple> = build_effective_runtime_config(
+        discovered,
+        Some(selected_target.clone()).filter(|value| !value.is_none()),
+        Some(cli_vars.clone()).filter(|value| !value.is_none()),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .downcast_into()?;
     let label = |name: &str, default: &str| -> PyResult<String> {
-        let value: Bound<'py, PyAny> = request.getattr(name)?;
+        let value: Bound<'py, PyAny> = native_field(request, name)?;
         let text: String = if value.is_truthy()? {
             value.extract()?
         } else {
@@ -254,11 +256,11 @@ pub(crate) fn prepare_query_diff<'py>(
     let examples = |name: &str| -> PyResult<Bound<'py, PyAny>> {
         object(
             py,
-            effective_max_examples(request.getattr(name)?.extract()?, verbose),
+            effective_max_examples(native_field(request, name)?.extract()?, verbose),
         )
     };
     call(
-        &registry::class(py, RecordId::QueryDiffPreparation)?,
+        &record_class(py, RecordId::QueryDiffPreparation)?,
         &[
             ("adapter", &adapter),
             ("connection_config", &config),
@@ -305,7 +307,7 @@ pub(crate) fn execution_options<'py>(
     extra: &[(&str, &Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let attribute = |name: &str| request.getattr(name);
+    let attribute = |name: &str| native_field(request, name);
     let sampling: Bound<'py, PyAny> = call(
         &host::entry(py, ExecutorHost::RowDiffSamplingOverride)?,
         &[
@@ -490,7 +492,7 @@ fn compare_artifacts<'py>(
                 ("adapter", &adapter),
                 ("connection", connection),
                 ("artifact", artifact),
-                ("sql", &preparation.getattr(sql)?),
+                ("sql", &native_field(preparation, sql)?),
                 ("expires_at", &expires_at),
             ],
         ) {
@@ -698,7 +700,7 @@ fn inspect_inputs<'py>(
             ));
         }
     }
-    let ttl: Bound<'py, PyAny> = registry::class(py, RecordId::Duration)?
+    let ttl: Bound<'py, PyAny> = record_class(py, RecordId::Duration)?
         .call_method1("parse", (native_field(preparation, "artifact_ttl")?,))?;
     if ttl.is_none() {
         return Err(failure(
@@ -714,11 +716,11 @@ fn inspect_inputs<'py>(
             &native_field(&adapter, "query_column_names")?,
             &[
                 ("connection", connection),
-                ("sql", &preparation.getattr(sql)?),
+                ("sql", &native_field(preparation, sql)?),
             ],
         )?
         .extract()?;
-        let label: String = preparation.getattr(label)?.extract()?;
+        let label: String = native_field(preparation, label)?.extract()?;
         query_column_problem(&label, &columns, max_columns)
             .map_err(|error| user_failure(py, error))?;
     }

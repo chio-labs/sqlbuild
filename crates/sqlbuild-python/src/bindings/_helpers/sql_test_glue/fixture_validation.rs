@@ -16,9 +16,9 @@ use crate::bindings::_helpers::planner_strategy::fixture_sql::{
 };
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::FIXTURE_PREFIXES;
 
 /// Report every statically provable fixture defect or return the completed fixture SQL groups.
@@ -31,7 +31,7 @@ pub(super) fn validated_fixtures<'py>(
     let py = test.py();
     let (chain, [refs, sources, seeds, expected]) = request;
     let adapter = inputs.1;
-    let resource_types = registry::class(py, RecordId::CompiledResourceType)?;
+    let resource_types = record_class(py, RecordId::CompiledResourceType)?;
     let model = native_field(&resource_types, "MODEL")?;
     let kinds = [
         model.clone(),
@@ -198,8 +198,7 @@ pub(super) fn fixture_location(
     .map_err(value_error)?;
     Ok(format!(
         "{}:{line}",
-        test_file
-            .getattr("relative_path")?
+        native_field(&test_file, "relative_path")?
             .call_method0("as_posix")?
             .extract::<String>()?
     ))

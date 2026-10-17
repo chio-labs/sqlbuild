@@ -33,7 +33,7 @@ pub(crate) fn enum_value<'py>(
     value: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    native_field(&value.getattr(name)?, "value")
+    native_field(&native_field(value, name)?, "value")
 }
 
 /// `value.value` when `value` is set, else `None`.

@@ -13,12 +13,12 @@ use sqlbuild_core::scenario_command::main::scenario_activity_message::scenario_a
 use sqlbuild_core::scenario_command::models::ScenarioNamespace;
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scenario_command::conversions::{
     capture_row, scenario_result_row, write_local_runtime_target, write_warehouse_runtime_target,
 };
@@ -161,15 +161,22 @@ pub(crate) fn connection_hooks<'py>(
     (adapter_name, style): (&str, CliStyle),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = stream.py();
-    let reporter: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", text(py, adapter_name)),
-            ("blank_line_after_complete", boolean(py, true)),
-            ("stream", stream.clone()),
-            ("use_color", boolean(py, style.use_color)),
-        ],
-    )?;
+    let reporter: Bound<'py, PyAny> = Bound::new(
+        py,
+        ConnectionProgressReporter::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter_name", text(py, adapter_name)),
+                    ("blank_line_after_complete", boolean(py, true)),
+                    ("stream", stream.clone()),
+                    ("use_color", boolean(py, style.use_color)),
+                ],
+            )?),
+        )?,
+    )?
+    .into_any();
     let relay: Bound<'py, ScenarioConnectionRelay> = Bound::new(
         py,
         ScenarioConnectionRelay {

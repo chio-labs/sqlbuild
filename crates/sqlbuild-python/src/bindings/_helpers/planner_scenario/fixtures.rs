@@ -1,15 +1,15 @@
 //! Materialize fixture SQL plans while preserving adapter and completion boundaries.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_MISSING_FIXTURE_SQL;
 use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext,
     sql::{required_target, resolve_sql, source_label},
     values::{error, string},
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
@@ -70,7 +70,7 @@ pub(super) fn fixture_plans<'py>(
         ),
     ] {
         let fixtures = extract_fixtures(scenario, &format!("__{kind}__"))?;
-        for name in graph.getattr(names)?.try_iter()? {
+        for name in native_field(graph, names)?.try_iter()? {
             let name: String = name?.extract()?;
             let target = required_target(&context.relations, locations, &name, kind)?;
             let Some(mut sql) = fixtures.get_item(&name)? else {
@@ -90,12 +90,13 @@ pub(super) fn fixture_plans<'py>(
             } else {
                 format!("WITH {} {sql}", helpers.join(", "))
             };
-            result.push(call_with(
-                &registry::class(py, RecordId::ScenarioFixturePlan)?,
+            result.push(new_record_with(
+                py,
+                RecordId::ScenarioFixturePlan,
                 &[
                     (
                         "kind",
-                        registry::class(py, RecordId::ScenarioArtifactKind)?.call1((kind,))?,
+                        enum_from_value(py, RecordId::ScenarioArtifactKind, kind)?,
                     ),
                     ("logical_name", string(py, &name)),
                     ("destination", target),

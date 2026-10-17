@@ -102,7 +102,7 @@ fn identity_status(entry: &Bound<'_, PyAny>) -> PyResult<&'static str> {
 fn evidence<'py>(entry: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
     let microbatch_range: Bound<'py, PyAny> = native_field(entry, "microbatch_range")?;
     if !microbatch_range.is_none() {
-        let found: Bound<'py, PyAny> = microbatch_range.getattr(field)?;
+        let found: Bound<'py, PyAny> = native_field(&microbatch_range, field)?;
         if !found.is_none() {
             return Ok(found);
         }
@@ -111,7 +111,7 @@ fn evidence<'py>(entry: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, 
     if bounds.is_none() {
         return Ok(bounds);
     }
-    bounds.getattr(field)
+    native_field(&bounds, field)
 }
 
 fn microbatch_state<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -176,7 +176,7 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         ],
     )?;
     for key in ["incremental_strategy", "incremental_mode"] {
-        let value: Bound<'py, PyAny> = entry.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(entry, key)?;
         if !value.is_none() {
             model.set_item(key, value)?;
         }
@@ -185,7 +185,7 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         model.set_item("microbatch_state", microbatch_state(entry)?)?;
     }
     for key in ["cursor_column", "cursor_type"] {
-        let value: Bound<'py, PyAny> = entry.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(entry, key)?;
         if !value.is_none() {
             model.set_item(key, value)?;
         }
@@ -227,7 +227,7 @@ fn model_json<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         model.set_item("changed_functions", list(&changed_functions)?)?;
     }
     let qualified: Bound<'py, PyAny> =
-        native_field(entry, "destination")?.getattr("qualified_name")?;
+        native_field(&native_field(entry, "destination")?, "qualified_name")?;
     if !qualified.is_none() {
         model.set_item("qualified_name", qualified)?;
     }
@@ -260,7 +260,7 @@ fn with_qualified_name<'py>(
     entry: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let qualified: Bound<'py, PyAny> =
-        native_field(entry, "destination")?.getattr("qualified_name")?;
+        native_field(&native_field(entry, "destination")?, "qualified_name")?;
     if !qualified.is_none() {
         item.set_item("qualified_name", qualified)?;
     }
@@ -362,7 +362,7 @@ fn warning_json<'py>(warning: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
         ],
     )?;
     for key in ["model_name", "code"] {
-        let value: Bound<'py, PyAny> = warning.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(warning, key)?;
         if !value.is_none() {
             item.set_item(key, value)?;
         }
@@ -706,7 +706,10 @@ fn table_type_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 /// The plan as one JSON document, `json.dumps(indent=2)`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_plan_json(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn format_plan_json(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
     let arguments: KeywordArguments<'_> = KeywordArguments::read(
         py,
         "format_plan_json",
@@ -719,7 +722,7 @@ fn format_plan_json(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRes
     } else {
         Vec::new()
     };
-    let length = |field: &str| -> PyResult<usize> { plan.getattr(field)?.len() };
+    let length = |field: &str| -> PyResult<usize> { native_field(&plan, field)?.len() };
     let python_nodes: Vec<Bound<'_, PyAny>> = python_entries
         .iter()
         .map(python_entry_json)

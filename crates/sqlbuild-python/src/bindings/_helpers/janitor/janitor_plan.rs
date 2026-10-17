@@ -181,7 +181,7 @@ pub(crate) fn janitor_plan_text(plan: &Bound<'_, PyAny>) -> PyResult<JanitorPlan
 
 /// How many items an executor `JanitorExecutionResult` changed.
 pub(crate) fn janitor_result_counts(result: &Bound<'_, PyAny>) -> PyResult<JanitorResultCounts> {
-    let count = |name: &str| -> PyResult<usize> { result.getattr(name)?.len() };
+    let count = |name: &str| -> PyResult<usize> { native_field(result, name)?.len() };
     Ok(JanitorResultCounts {
         archived: count("archived")?,
         deleted: count("deleted")?,

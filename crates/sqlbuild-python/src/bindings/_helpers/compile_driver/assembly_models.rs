@@ -13,16 +13,15 @@ use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
     AnalysisContext, model_stem, selected_for_analysis,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::hand_built::compiled_model::compiled_model as hand_built_model;
 use crate::bindings::_helpers::project_assembly::syntax_checks::model_placeholders;
 use crate::bindings::_helpers::project_assembly::syntax_validation::{
     ParseOptions, validate_hook_sql_syntax, validate_sql_syntax,
 };
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::macro_calls::top_level_macro_call_names;
 
 const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
@@ -183,8 +182,9 @@ fn compiled_model<'py>(
             ),),
         );
     }
-    let analysis: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::HandBuiltAnalysis)?,
+    let analysis: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::HandBuiltAnalysis,
         &[
             ("session", session_analysis),
             ("fallback", fallback),
@@ -209,8 +209,9 @@ fn fallback_columns<'py>(
     placeholders: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = analysis_query_sql.py();
-    let query: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::NativeColumnQuery)?,
+    let query: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::NativeColumnQuery,
         &[
             ("sql", analysis_query_sql.clone()),
             ("mode", PyString::new(py, "parse").into_any()),

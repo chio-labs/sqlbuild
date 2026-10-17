@@ -13,11 +13,13 @@ use crate::bindings::_helpers::clone::clone_progress::{
     CloneFingerprintReporter, CloneItemPrinter,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
 const DESTINATION_ENTRY_GROUPS: [&str; 4] = [
     "destination_source_entries",
@@ -35,7 +37,7 @@ const ORIGIN_ENTRY_GROUPS: [&str; 3] = [
 fn entries<'py>(pipeline: &Bound<'py, PyAny>, groups: &[&str]) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut found: Vec<Bound<'py, PyAny>> = Vec::new();
     for group in groups {
-        for entry in pipeline.getattr(*group)?.try_iter()? {
+        for entry in native_field(pipeline, group)?.try_iter()? {
             found.push(entry?);
         }
     }
@@ -120,11 +122,7 @@ fn dependency_locations<'py>(
     } else {
         native_field(&plan, "source_map")?
     };
-    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
-    let location_class: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledRelationLocation)?;
-    let source_type: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
+    let source_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
     for pair in source_map.call_method0("items")?.try_iter()? {
         let (name, source): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let table: Bound<'py, PyAny> = native_field(&source, "table")?;
@@ -144,33 +142,26 @@ fn dependency_locations<'py>(
             table
         };
         let [database, schema, table] = place;
-        let location: Bound<'py, PyAny> = call_with(
-            &location_class,
+        let location: Bound<'py, PyAny> = new_record_with(
+            py,
+            RecordId::CompiledRelationLocation,
             &[database, schema, table, ("qualified_name", qualified)],
         )?;
-        locations.set_item(key_class.call1((&source_type, name))?, location)?;
+        locations.set_item(
+            new_record(py, RecordId::CompiledObjectKey, (&source_type, name), None)?,
+            location,
+        )?;
     }
     Ok(locations)
 }
 
 fn target_config<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.adapter.py();
-    call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            (
-                "project_config",
-                native_field(&invocation.discovered, "project_config")?,
-            ),
-            (
-                "local_config",
-                native_field(&invocation.discovered, "local_config")?,
-            ),
-            (
-                "target_name",
-                PyString::new(py, &invocation.destination).into_any(),
-            ),
-        ],
+    resolve_target_config(
+        py,
+        &native_field(&invocation.discovered, "project_config")?,
+        &native_field(&invocation.discovered, "local_config")?,
+        &PyString::new(py, &invocation.destination).into_any(),
     )
 }
 
@@ -209,7 +200,7 @@ fn execution_input<'py>(
     )?;
     let allow_decrease: bool = config
         .getattr("time_travel_retention_decrease")?
-        .eq(registry::class(py, RecordId::RetentionDecreasePolicy)?.getattr("ALLOW")?)?;
+        .eq(enum_member(py, RecordId::RetentionDecreasePolicy, "ALLOW")?)?;
     let source_entries: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::CloneSourceEntries)?,
         &[
@@ -232,7 +223,7 @@ fn execution_input<'py>(
         "destination_seed_entries",
         "destination_function_entries",
     ] {
-        fields.push((group, pipeline.getattr(group)?));
+        fields.push((group, native_field(pipeline, group)?));
     }
     fields.extend([
         ("execution_order", native_field(&plan, "execution_order")?),
@@ -288,7 +279,7 @@ fn copy_fingerprints<'py>(
         "origin_seed_entries",
         "destination_seed_entries",
     ] {
-        fields.push((group, pipeline.getattr(group)?));
+        fields.push((group, native_field(pipeline, group)?));
     }
     fields.extend([
         ("adapter", invocation.adapter.clone()),
@@ -333,10 +324,12 @@ pub(crate) fn execute_clone_plan<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, f64)> {
     let py: Python<'py> = pipeline.py();
     let started: Instant = Instant::now();
-    let event_writer: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ExecutionEventWriter)?,
-        &[("path", native_field(request, "event_output_path")?)],
-    )?;
+    let event_writer: Bound<'py, PyAny> = ExecutionEventWriter::new(
+        py,
+        Some(native_field(request, "event_output_path")?).filter(|value| !value.is_none()),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let printer: Py<CloneItemPrinter> = Py::new(
         py,
         CloneItemPrinter {

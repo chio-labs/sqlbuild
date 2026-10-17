@@ -20,9 +20,11 @@ use crate::bindings::_helpers::cursor::values::{
 };
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, new_record_with, record_class,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Cursor grain names, finest first.
 pub(crate) const GRAIN_NAMES: [(&str, Grain); 6] = [
@@ -59,9 +61,9 @@ impl<'py> CursorSession<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
             py,
-            timestamp_class: registry::class(py, RecordId::TimestampValue)?,
-            date_class: registry::class(py, RecordId::DateValue)?,
-            integer_class: registry::class(py, RecordId::IntegerValue)?,
+            timestamp_class: record_class(py, RecordId::TimestampValue)?,
+            date_class: record_class(py, RecordId::DateValue)?,
+            integer_class: record_class(py, RecordId::IntegerValue)?,
             inputs: RefCell::new(Vec::new()),
             failure: RefCell::new(None),
         })
@@ -135,7 +137,7 @@ impl<'py> CursorSession<'py> {
                 return Ok(Some(*known));
             }
         }
-        registry::class(self.py, RecordId::CursorGrain)?.call1((grain,))?;
+        enum_from_value(self.py, RecordId::CursorGrain, grain)?;
         Err(PyTypeError::new_err("cursor grain must be a CursorGrain"))
     }
 
@@ -198,13 +200,14 @@ impl<'py> CursorSession<'py> {
             .iter()
             .find(|(_, known)| *known == grain)
             .map_or("", |(name, _)| name);
-        registry::class(self.py, RecordId::CursorGrain)?.call1((name,))
+        enum_from_value(self.py, RecordId::CursorGrain, name)
     }
 
     /// A new `AlignedInterval`, validated as its constructor validates.
     pub(crate) fn python_interval(&self, interval: &Interval) -> PyResult<Bound<'py, PyAny>> {
-        call_with(
-            &registry::class(self.py, RecordId::AlignedInterval)?,
+        new_record_with(
+            self.py,
+            RecordId::AlignedInterval,
             &[
                 ("start", self.python_scalar(&interval.start)?),
                 ("end", self.python_scalar(&interval.end)?),

@@ -2,10 +2,43 @@
 
 use std::path::PathBuf;
 
+use crate::bindings::_helpers::audit_command::command::run_audit_command;
+use crate::bindings::_helpers::build_command::command::run_build_command;
+use crate::bindings::_helpers::check::check_command::run_check_command;
 use crate::bindings::_helpers::cli::launch_state::withhold_launch_record;
+use crate::bindings::_helpers::clone::clone_command::run_clone_command;
 use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehouse_scope;
+use crate::bindings::_helpers::command_runtime::warehouses::validate_cli_warehouse;
+use crate::bindings::_helpers::compile_command::reuse_attempt::run_compile;
+use crate::bindings::_helpers::contract_command::command::run_contract_command;
+use crate::bindings::_helpers::cost_command::command::run_cost_command;
+use crate::bindings::_helpers::dbt_command::command::run_dbt_command;
+use crate::bindings::_helpers::dbt_command::init::run_dbt_init_command;
+use crate::bindings::_helpers::debug_command::run_debug::run_debug_command;
+use crate::bindings::_helpers::diff_report::command::run_diff_command;
 use crate::bindings::_helpers::diff_report::support::cli_error;
+use crate::bindings::_helpers::format_command::command::run_format_command;
+use crate::bindings::_helpers::freshness::freshness_command::run_freshness_command;
+use crate::bindings::_helpers::init_command::command::run_init_command;
+use crate::bindings::_helpers::janitor::janitor_command::run_janitor_command;
+use crate::bindings::_helpers::lineage::lineage_command::run_lineage_command;
+use crate::bindings::_helpers::load::load_command::run_load_command;
+use crate::bindings::_helpers::plan_command::plan::run_plan_command;
+use crate::bindings::_helpers::plan_command::rules::run_rules_command;
+use crate::bindings::_helpers::query_command::dag::run_dag_command;
+use crate::bindings::_helpers::query_command::query::run_query_command;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
+use crate::bindings::_helpers::refactor::refactor_command::run_refactor_command;
+use crate::bindings::_helpers::scenario_command::capture_command::run_scenario_capture_command;
+use crate::bindings::_helpers::scenario_command::test_command::run_scenario_test_command;
+use crate::bindings::_helpers::scopes::scope_command::run_scope_command;
+use crate::bindings::_helpers::seed_command::command::run_seed_command;
+use crate::bindings::_helpers::sql_test_command::test_command::run_test_command;
+use crate::bindings::_helpers::workspace_commands::commands::{
+    run_playground_command, run_skills_command,
+};
 use pyo3::IntoPyObjectExt;
+use pyo3::exceptions::{PyAttributeError, PyTypeError};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use sqlbuild_cli::diff_report::errors::DiffUserError;
@@ -18,9 +51,9 @@ use sqlbuild_cli::dispatch::models::{
 use sqlbuild_core::format_command::main::format_path_selectors::format_path_selectors;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const PATHLIB_MODULE: &str = "pathlib";
@@ -176,7 +209,7 @@ fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn class_object<'py>(py: Python<'py>, class: ClassRef) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, registry::record_named(class.name)?)
+    record_class(py, registry::record_named(class.name)?)
 }
 
 fn tuple_of<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -217,7 +250,6 @@ fn selector_inputs<'py>(
         .getattr("select")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    let summary_class: Bound<'py, PyAny> = registry::class(py, RecordId::SelectorFileSummary)?;
     let mut files: Vec<Bound<'py, PyAny>> = Vec::new();
     for raw_path in native_field(args, "select_file")?.try_iter()? {
         let path: Bound<'py, PyAny> = path_class(py)?.call1((raw_path?,))?;
@@ -236,8 +268,9 @@ fn selector_inputs<'py>(
             selectors.push(PyString::new(py, stripped).into_any());
             count += 1;
         }
-        files.push(call_with(
-            &summary_class,
+        files.push(new_record_with(
+            py,
+            RecordId::SelectorFileSummary,
             &[
                 ("path", path),
                 ("selector_count", count.into_bound_py_any(py)?),
@@ -256,19 +289,17 @@ fn call_route<'py>(
     let py: Python<'py> = invocation.py();
     let mut positional: Vec<Bound<'py, PyAny>> = Vec::new();
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
-    let (callable, positional_count) = match handler {
-        Some(handler) => (handler, route.shape.slot_positional),
+    let positional_count: usize = match &handler {
+        Some(_) => route.shape.slot_positional,
         None => {
-            let function: NativeAttr = registry::attribute_named(route.implementation)?;
             if let Some(extra) = route.implementation_extra {
                 keywords.set_item(extra.name, invocation.value(extra.source)?)?;
             }
-            let count: usize = if route.shape.implementation_keywords {
+            if route.shape.implementation_keywords {
                 0
             } else {
                 route.shape.slot_positional
-            };
-            (registry::native(py, function)?, count)
+            }
         }
     };
     for (index, field) in route.arguments.iter().enumerate() {
@@ -279,7 +310,79 @@ fn call_route<'py>(
             keywords.set_item(field.name, value)?;
         }
     }
-    callable.call(PyTuple::new(py, positional)?, Some(&keywords))
+    match handler {
+        Some(handler) => handler.call(PyTuple::new(py, positional)?, Some(&keywords)),
+        None => run_implementation(route.implementation, (positional, keywords)),
+    }
+}
+
+/// The argument passed first by position or under `name`, or `None`.
+fn argument<'py>(
+    (positional, keywords): &(Vec<Bound<'py, PyAny>>, Bound<'py, PyDict>),
+    name: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    match positional.first() {
+        Some(value) => Ok(Some(value.clone())),
+        None => keywords.get_item(name),
+    }
+}
+
+/// Run the native command implementation `name` with the route's arguments.
+fn run_implementation<'py>(
+    name: &str,
+    arguments: (Vec<Bound<'py, PyAny>>, Bound<'py, PyDict>),
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = arguments.1.py();
+    let request = || -> PyResult<Bound<'py, PyAny>> {
+        argument(&arguments, "request")?
+            .ok_or_else(|| PyTypeError::new_err(format!("{name}() missing argument 'request'")))
+    };
+    let options = || Some(arguments.1.clone());
+    let code: i32 = match name {
+        "run_audit_command" => run_audit_command(py, &request()?)?,
+        "run_build_command" => run_build_command(py, &request()?)?,
+        "run_check_command" => run_check_command(py, &request()?)?,
+        "run_clone_command" => run_clone_command(py, &request()?)?,
+        "run_compile" => return run_compile(&request()?),
+        "run_contract_command" => run_contract_command(py, &request()?)?,
+        "run_cost_command" => run_cost_command(py, &request()?)?,
+        "run_dag_command" => run_dag_command(py, options())?,
+        "run_dbt_command" => run_dbt_command(py, options())?,
+        "run_dbt_init_command" => run_dbt_init_command(py, &request()?)?,
+        "run_debug_command" => run_debug_command(py, options())?,
+        "run_diff_command" => run_diff_command(py, &request()?)?,
+        "run_format_command" => run_format_command(py, options())?,
+        "run_freshness_command" => run_freshness_command(py, &request()?)?,
+        "run_init_command" => run_init_command(
+            py,
+            argument(&arguments, "project_dir")?.filter(|value| !value.is_none()),
+        )?,
+        "run_janitor_command" => run_janitor_command(py, &request()?)?,
+        "run_lineage_command" => run_lineage_command(py, &request()?)?,
+        "run_load_command" => run_load_command(py, &request()?)?,
+        "run_plan_command" => run_plan_command(&request()?)?,
+        "run_playground_command" => run_playground_command(py, &request()?)?,
+        "run_query_command" => run_query_command(py, options())?,
+        "run_refactor_command" => run_refactor_command(py, &request()?)?,
+        "run_rules_command" => run_rules_command(&request()?)?,
+        "run_scenario_capture_command" => run_scenario_capture_command(py, &request()?)?,
+        "run_scenario_test_command" => run_scenario_test_command(py, &request()?)?,
+        "run_scope_command" => run_scope_command(
+            py,
+            &request()?,
+            arguments.1.get_item("load_scope_index")?,
+            arguments.1.get_item("output_stream")?,
+        )?,
+        "run_seed_command" => run_seed_command(py, &request()?)?,
+        "run_skills_command" => run_skills_command(py, options())?,
+        "run_test_command" => run_test_command(py, &request()?)?,
+        _ => {
+            return Err(PyAttributeError::new_err(format!(
+                "module 'sqlbuild._native' has no attribute '{name}'"
+            )));
+        }
+    };
+    code.into_bound_py_any(py)
 }
 
 fn routed_command<'py>(
@@ -345,13 +448,12 @@ pub(crate) fn dispatch_command<'py>(
                 .call1((raw_project_dir,))?
                 .call_method0("resolve")?
         };
-        call_with(
-            &registry::native(py, NativeAttr::ValidateCliWarehouse)?,
-            &[
-                ("cli_warehouse", warehouse.clone()),
-                ("project_dir", project_dir),
-            ],
-        )?;
+        validate_cli_warehouse(
+            py,
+            warehouse.clone().extract::<Option<String>>()?,
+            project_dir,
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     }
     let scope: Bound<'py, PyAny> = Bound::new(
         py,
@@ -367,7 +469,7 @@ pub(crate) fn dispatch_command<'py>(
 
 /// The parsed values that select a route, read from the namespace.
 pub(crate) fn command_facts(args: &Bound<'_, PyAny>) -> PyResult<CommandFacts> {
-    let attr = |name: &str| args.getattr(name);
+    let attr = |name: &str| native_field(args, name);
     let flag = |name: &str| -> PyResult<bool> { attr(name)?.is_truthy() };
     let present = |name: &str| -> PyResult<bool> { Ok(!attr(name)?.is_none()) };
     let command: Option<String> = optional_text(&attr("command")?)?;

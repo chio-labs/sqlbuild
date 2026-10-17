@@ -16,6 +16,7 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::graph::views::project_lineage_views;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::ids::RecordId;
@@ -63,7 +64,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
     let lineage: Bound<'py, PyAny> = project_lineage_views(py, project)?;
     let mut graph: DiffGraph = DiffGraph::default();
     for attribute in ["models", "sources", "seeds"] {
-        for resource in project.getattr(attribute)?.try_iter()? {
+        for resource in native_field(project, attribute)?.try_iter()? {
             let resource: Bound<'py, PyAny> = resource?;
             let name: String = native_field(&resource, "name")?.extract()?;
             graph
@@ -161,8 +162,7 @@ fn diff_model_names<'py>(
     let exclude: Vec<String> = exclude.extract()?;
     let selected: HashSet<usize> = resolve_diff_selection(&graph, (&select, &exclude))
         .map_err(|error| selector_error(py, error))?;
-    let model_type: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let model_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
@@ -181,7 +181,7 @@ fn diff_model_names<'py>(
 /// Compile both environments and resolve selected diffable model names.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_diff_pipeline<'py>(
+pub(crate) fn run_diff_pipeline<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

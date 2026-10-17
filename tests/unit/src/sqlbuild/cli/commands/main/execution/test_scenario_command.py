@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from contextvars import Token
 from pathlib import Path
-from typing import Any
-from unittest.mock import Mock
 
 import pytest
 
 from sqlbuild._native import (
-    CompilePipelineResult,
+    CompileInputError,
     NativeProgressProjector,
     ScenarioTestCommandRequest,
     run_scenario_test_command,
@@ -18,8 +16,9 @@ from tests.unit.src.sqlbuild.cli.commands.main.execution._test_types import (
     ScenarioCompilePresentationTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.execution.helpers import (
+    INVALID_SCENARIO_SQL,
+    VALID_SCENARIO_SQL,
     ScenarioProgressStream,
-    build_compiled_scenario_project,
     configure_native_scenario_command,
 )
 
@@ -50,18 +49,10 @@ def test_given_scenario_compile_when_running_then_presentation_has_one_owner(
     test_case: ScenarioCompilePresentationTestCase,
 ) -> None:
     stream: ScenarioProgressStream = ScenarioProgressStream(tty=test_case.tty)
-    pipeline_result: Mock = build_compiled_scenario_project(tmp_path)
-
-    def compile_project(**kwargs: Any) -> CompilePipelineResult:
-        on_progress: Any = kwargs["on_progress"]
-        on_progress("Compiling project...")
-        on_progress("Compiled project.")
-        return pipeline_result
-
     configure_native_scenario_command(
         monkeypatch=monkeypatch,
         stream=stream,
-        compile_project=compile_project,
+        scenario_sql=VALID_SCENARIO_SQL,
         project_dir=tmp_path,
     )
     events: list[LifecycleEvent] = []
@@ -115,16 +106,10 @@ def test_given_scenario_compile_failure_when_running_then_lifecycle_fails_and_pr
     test_case: ScenarioCompilePresentationTestCase,
 ) -> None:
     stream: ScenarioProgressStream = ScenarioProgressStream(tty=test_case.tty)
-
-    def fail_compile(**kwargs: Any) -> CompilePipelineResult:
-        on_progress: Any = kwargs["on_progress"]
-        on_progress("Compiling project...")
-        raise RuntimeError("compile failed")
-
     configure_native_scenario_command(
         monkeypatch=monkeypatch,
         stream=stream,
-        compile_project=fail_compile,
+        scenario_sql=INVALID_SCENARIO_SQL,
         project_dir=tmp_path,
     )
     events: list[LifecycleEvent] = []
@@ -136,7 +121,7 @@ def test_given_scenario_compile_failure_when_running_then_lifecycle_fails_and_pr
 
     try:
         with dispatcher_scope(dispatcher):
-            with pytest.raises(RuntimeError, match="compile failed"):
+            with pytest.raises(CompileInputError, match="must declare fixture CTEs"):
                 run_scenario_test_command(request=ScenarioTestCommandRequest(project_dir=tmp_path))
     finally:
         projector.restore(token)

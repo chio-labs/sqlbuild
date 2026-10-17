@@ -1,6 +1,7 @@
 //! Model renames that downstream `__ref` names may have been rewritten for.
 
 use crate::bindings::_helpers::fingerprints::query_hashes::compute_query_hash;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use std::collections::BTreeSet;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -19,7 +20,6 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const GENERIC_DIALECT: &str = "generic";
 const FINAL_NEWLINE: &str = "\n";
@@ -179,17 +179,16 @@ pub(crate) fn plan_reference_renames<'py>(
         &native_field(&state, "inspect_migration_events")?,
         &[("schemas", inspected.into_any())],
     )?;
-    let target_name: Bound<'py, PyAny> = runtime
-        .getattr("project")?
-        .getattr("effective_target_name")?;
-    let rename_class: Bound<'py, PyAny> = registry::class(py, RecordId::ReferenceRename)?;
+    let target_name: Bound<'py, PyAny> =
+        native_field(&native_field(runtime, "project")?, "effective_target_name")?;
     let mut renames: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in planned.call_method0("items")?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         let (new_name, origin_name) = (item.get_item(0)?, item.get_item(1)?);
         if new_name.ne(&origin_name)? {
-            renames.push(call_with(
-                &rename_class,
+            renames.push(new_record_with(
+                py,
+                RecordId::ReferenceRename,
                 &[("new_name", new_name), ("origin_name", origin_name)],
             )?);
         }
@@ -203,8 +202,9 @@ pub(crate) fn plan_reference_renames<'py>(
             && !origin.is_none()
             && origin.ne(&destination)?
         {
-            renames.push(call_with(
-                &rename_class,
+            renames.push(new_record_with(
+                py,
+                RecordId::ReferenceRename,
                 &[
                     ("new_name", destination),
                     ("origin_name", origin),
@@ -231,9 +231,8 @@ fn changed_referencing_query(
         }
     }
     let recorded_models: Bound<'_, PyAny> =
-        native_field(snapshot, "fingerprints")?.getattr("models")?;
-    let ref_kind: Bound<'_, PyAny> =
-        registry::class(py, RecordId::SqlReferenceKind)?.getattr("REF")?;
+        native_field(&native_field(snapshot, "fingerprints")?, "models")?;
+    let ref_kind: Bound<'_, PyAny> = enum_member(py, RecordId::SqlReferenceKind, "REF")?;
     let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
     for model in selected {
         let recorded: Bound<'_, PyAny> =

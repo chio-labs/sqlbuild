@@ -13,9 +13,9 @@ use crate::bindings::_helpers::graph::python_selection::resolve_python_sql_run_s
 use crate::bindings::_helpers::graph::views::compiled_graph_keys;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const NAME_KEY: &str = "name";
 
@@ -36,7 +36,7 @@ struct Vocabulary<'py> {
 }
 
 fn attribute_value<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    value.getattr(name)
+    native_field(value, name)
 }
 
 fn optional_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -115,7 +115,7 @@ fn kind_metadata<'py>(
             .iter()
             .map(|field| Ok((*field, get(field)?)))
             .collect::<PyResult<_>>()?;
-        call_with(&registry::class(py, class)?, &pairs)
+        new_record_with(py, class, &pairs)
     };
     Ok(match kind {
         "LOADER" => (
@@ -160,7 +160,7 @@ fn python_node<'py>(
     let py: Python<'py> = discovered.py();
     let get = |name: &str| attribute_value(discovered, name);
     let (metadata_field, metadata) = kind_metadata(py, kind, discovered)?;
-    let kind_member: Bound<'py, PyAny> = vocabulary.kinds.getattr(kind)?;
+    let kind_member: Bound<'py, PyAny> = native_field(&vocabulary.kinds, kind)?;
     let usages: Bound<'py, PyAny> = provider_usages(&get("function")?, &vocabulary.providers)?;
     let mut identity: Bound<'py, PyAny> = get("identity")?;
     if identity.is_none() {
@@ -255,14 +255,14 @@ pub(crate) fn python_node_graph<'py>(
         providers.set_item(native_field(&provider, "name")?, provider)?;
     }
     let vocabulary: Vocabulary<'py> = Vocabulary {
-        node: registry::class(py, RecordId::DiscoveredPythonNode)?,
+        node: record_class(py, RecordId::DiscoveredPythonNode)?,
         kinds: host::entry(py, UserCodeHost::PythonNodeKind)?,
         sql_ref: host::entry(py, UserCodeHost::SqlResourceRef)?,
         providers,
     };
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
     for (collection, kind, documented) in KINDS {
-        for discovered in discovered_inputs.getattr(collection)?.try_iter()? {
+        for discovered in native_field(discovered_inputs, collection)?.try_iter()? {
             nodes.push(python_node(&vocabulary, (kind, documented), &discovered?)?);
         }
     }
@@ -288,12 +288,12 @@ fn graph_record<'py>(
         tags,
         paths,
     } = indexes;
-    let edge_class: Bound<'py, PyAny> = registry::class(py, RecordId::PythonNodeDependencyEdge)?;
     let dependency_edges: Vec<Bound<'py, PyAny>> = edges
         .into_iter()
         .map(|(upstream_name, downstream_name)| {
-            call_with(
-                &edge_class,
+            new_record_with(
+                py,
+                RecordId::PythonNodeDependencyEdge,
                 &[
                     (
                         "upstream_name",
@@ -330,8 +330,9 @@ fn graph_record<'py>(
         by_name.set_item(&name, node)?;
         by_selector.set_item(format!("{kind}:{}", name.str()?), node)?;
     }
-    call_with(
-        &registry::class(py, RecordId::PythonNodeGraph)?,
+    new_record_with(
+        py,
+        RecordId::PythonNodeGraph,
         &[
             ("nodes", PyTuple::new(py, nodes)?.into_any()),
             (
@@ -358,8 +359,9 @@ pub(crate) fn run_selection_from_inputs<'py>(
     let python_graph: Bound<'py, PyAny> = python_node_graph(discovered_inputs)?;
     let (sql_keys, python_node_names) =
         resolve_python_sql_run_selection(project_graph, &python_graph, select, exclude)?;
-    call_with(
-        &registry::class(py, RecordId::PythonSqlRunSelection)?,
+    new_record_with(
+        py,
+        RecordId::PythonSqlRunSelection,
         &[
             ("sql_keys", compiled_graph_keys(py, sql_keys)?.into_any()),
             (

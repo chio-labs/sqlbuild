@@ -23,6 +23,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -100,7 +101,7 @@ fn skill_request(py: Python<'_>, project_dir: PathBuf) -> PyResult<SkillInstallR
 /// Write packaged SQLBuild skill content to configured agent locations.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn update_sqlbuild_skills<'py>(
+pub(crate) fn update_sqlbuild_skills<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -120,18 +121,21 @@ fn update_sqlbuild_skills<'py>(
     let written: Vec<PathBuf> = install(py, &request)?;
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("written_paths", PyTuple::new(py, written)?)?;
-    registry::class(py, RecordId::SkillUpdateResult)?.call((), Some(&keywords))
+    new_record(py, RecordId::SkillUpdateResult, (), Some(&keywords))
 }
 
 /// Check or refresh generated project skills without changing command success.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir))]
-fn maintain_sqlbuild_skills(py: Python<'_>, project_dir: PathBuf) -> PyResult<Bound<'_, PyAny>> {
+pub(crate) fn maintain_sqlbuild_skills(
+    py: Python<'_>,
+    project_dir: PathBuf,
+) -> PyResult<Bound<'_, PyAny>> {
     let message: String = maintain_skills(&project_dir, &package_dir(py)?.join(SKILLS_DIRECTORY))
         .map_err(|error| raised(py, error))?;
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("message", message)?;
-    registry::class(py, RecordId::SkillMaintenanceResult)?.call((), Some(&keywords))
+    new_record(py, RecordId::SkillMaintenanceResult, (), Some(&keywords))
 }
 
 /// Return every packaged skill file keyed by skill-relative path, with generated markers.
@@ -150,7 +154,10 @@ fn print(py: Python<'_>, text: &str) -> PyResult<()> {
 /// `sqb skills`: install or update SQLBuild skill files.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_skills_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_skills_command(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "run_skills_command", options, SKILLS_OPTIONS)?;
     let project_dir: Bound<'_, PyAny> = arguments.value("project_dir")?;
@@ -176,7 +183,7 @@ fn run_skills_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyR
 
 /// `sqb playground`: create a self-contained playground project.
 #[pyfunction]
-fn run_playground_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_playground_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let project_dir: Bound<'_, PyAny> = native_field(request, "project_dir")?;
     let base: PathBuf = if project_dir.is_none() {
         current_dir(py)?

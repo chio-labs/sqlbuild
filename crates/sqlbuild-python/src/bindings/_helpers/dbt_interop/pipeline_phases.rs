@@ -5,14 +5,20 @@ use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_command::support::{boolean, emit, none, text, tuple};
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
-};
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::dbt_interop::execution::render_dbt_execution_summary_footer;
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
+use crate::bindings::_helpers::dbt_interop::plan::render_dbt_interop_plan;
+use crate::bindings::_helpers::dbt_interop::plan_output::build_sqlbuild_plan_output;
 use crate::bindings::_helpers::dbt_interop::plan_output::{connection_config, connection_hooks};
+use crate::bindings::_helpers::dbt_interop::runtime_execution::execute_dbt_commands;
+use crate::bindings::_helpers::dbt_interop::sqlbuild_work::execute_dbt_sqlbuild_work;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::replaced;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const OPTIONS: (&[&str], &[&str]) = (
     &["request", "invocation"],
@@ -32,8 +38,9 @@ const OPTIONS: (&[&str], &[&str]) = (
 fn environment<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>> {
     let request = args.value("request")?;
     let compiled = args.value("compiled")?;
-    call_with(
-        &registry::class(request.py(), RecordId::DbtPlanEnvironment)?,
+    new_record_with(
+        request.py(),
+        RecordId::DbtPlanEnvironment,
         &[
             ("project_dir", native_field(&request, "project_dir")?),
             (
@@ -50,7 +57,7 @@ fn environment<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
 /// Resolve the selected SQLBuild work's effective connection configuration.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_dbt_connection_config<'py>(
+pub(crate) fn resolve_dbt_connection_config<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -61,7 +68,7 @@ fn resolve_dbt_connection_config<'py>(
 /// Render the merged selection unless the command is producing JSON.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn write_dbt_execution_plan_text(
+pub(crate) fn write_dbt_execution_plan_text(
     py: Python<'_>,
     options: Option<Bound<'_, PyDict>>,
 ) -> PyResult<()> {
@@ -75,15 +82,12 @@ fn write_dbt_execution_plan_text(
     let display = if merged.is_none() {
         plan
     } else {
-        imported(py, "dataclasses", "replace")?.call(
-            (plan,),
-            Some(&keywords(
-                py,
-                &[
-                    ("dbt_command_argv", merged),
-                    ("supplemental_dbt_command_argvs", tuple(py, &[])?),
-                ],
-            )?),
+        replaced(
+            &plan,
+            &[
+                ("dbt_command_argv", merged),
+                ("supplemental_dbt_command_argvs", tuple(py, &[])?),
+            ],
         )?
     };
     let limit = if native_field(&request, "verbose")?.is_truthy()? {
@@ -91,21 +95,26 @@ fn write_dbt_execution_plan_text(
     } else {
         pyo3::types::PyInt::new(py, super::constants::PLAN_DISPLAY_LIMIT).into_any()
     };
-    let rendered = call_with(
-        &registry::native(py, NativeAttr::RenderDbtInteropPlan)?,
-        &[
-            ("plan", display),
-            ("json_output", boolean(py, false)),
-            ("use_color", native_field(&request, "use_color")?),
-            (
-                "display_options",
-                call_with(
-                    &registry::class(py, RecordId::DisplayOptions)?,
-                    &[("max_entries_per_section", limit)],
-                )?,
-            ),
-        ],
-    )?;
+    let rendered = render_dbt_interop_plan(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", display),
+                ("json_output", boolean(py, false)),
+                ("use_color", native_field(&request, "use_color")?),
+                (
+                    "display_options",
+                    new_record_with(
+                        py,
+                        RecordId::DisplayOptions,
+                        &[("max_entries_per_section", limit)],
+                    )?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     emit(
         &args.value("invocation")?.getattr("output_stream")?,
         &format!("{}\n\n", rendered.extract::<String>()?),
@@ -115,52 +124,55 @@ fn write_dbt_execution_plan_text(
 /// Execute dbt without introducing any SQLBuild state callbacks.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn execute_dbt_without_state_tracking<'py>(
+pub(crate) fn execute_dbt_without_state_tracking<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let args = KeywordArguments::read(py, "execute_dbt_without_state_tracking", options, OPTIONS)?;
     let request = args.value("request")?;
     let invocation = args.value("invocation")?;
-    call_with(
-        &registry::native(py, NativeAttr::ExecuteDbtCommands)?,
-        &[
-            ("runner", native_field(&invocation, "runner")?),
-            ("options", native_field(&invocation, "dbt_options")?),
-            ("merged_argv", args.value("merged_dbt_argv")?),
-            (
-                "progress_stream",
-                native_field(&invocation, "output_stream")?,
-            ),
-            (
-                "stdout_stream",
-                native_field(&invocation, "dbt_output_stream")?,
-            ),
-            ("use_color", native_field(&request, "use_color")?),
-            (
-                "skip_message",
-                text(py, "Skipping dbt: no dbt work selected."),
-            ),
-            ("on_progress", native_field(&request, "on_progress")?),
-        ],
+    execute_dbt_commands(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("runner", native_field(&invocation, "runner")?),
+                ("options", native_field(&invocation, "dbt_options")?),
+                ("merged_argv", args.value("merged_dbt_argv")?),
+                (
+                    "progress_stream",
+                    native_field(&invocation, "output_stream")?,
+                ),
+                (
+                    "stdout_stream",
+                    native_field(&invocation, "dbt_output_stream")?,
+                ),
+                ("use_color", native_field(&request, "use_color")?),
+                (
+                    "skip_message",
+                    text(py, "Skipping dbt: no dbt work selected."),
+                ),
+                ("on_progress", native_field(&request, "on_progress")?),
+            ],
+        )?),
     )
 }
 
 /// Write the summary of actual dbt execution events.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn write_dbt_execution_summary(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<()> {
+pub(crate) fn write_dbt_execution_summary(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<()> {
     let args = KeywordArguments::read(py, "write_dbt_execution_summary", options, OPTIONS)?;
-    let footer = call_with(
-        &registry::native(py, NativeAttr::RenderDbtExecutionSummaryFooter)?,
-        &[
-            (
-                "node_results",
-                args.value("execution")?.getattr("node_results")?,
-            ),
-            ("use_color", args.value("request")?.getattr("use_color")?),
-        ],
-    )?;
+    let footer = render_dbt_execution_summary_footer(
+        &args.value("execution")?.getattr("node_results")?,
+        args.value("request")?
+            .getattr("use_color")?
+            .extract::<bool>()?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     if !footer.is_none() {
         emit(
             &args.value("invocation")?.getattr("output_stream")?,
@@ -173,7 +185,7 @@ fn write_dbt_execution_summary(py: Python<'_>, options: Option<Bound<'_, PyDict>
 /// Plan SQLBuild work after dbt using actual dbt failures as external blockers.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_sqlbuild_execution_plan_output<'py>(
+pub(crate) fn resolve_sqlbuild_execution_plan_output<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -194,20 +206,26 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
     let invocation = args.value("invocation")?;
     let stream = native_field(&invocation, "output_stream")?;
     emit(&stream, "\n")?;
-    let reporter = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            (
-                "adapter_name",
-                args.value("compiled")?.getattr("adapter_name")?,
-            ),
-            ("stream", stream),
-            ("blank_line_after_complete", boolean(py, true)),
-            ("use_color", args.value("request")?.getattr("use_color")?),
-        ],
-    )?;
-    let request = call_with(
-        &registry::class(py, RecordId::DbtSqlbuildPlanRequest)?,
+    let reporter = ConnectionProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                (
+                    "adapter_name",
+                    args.value("compiled")?.getattr("adapter_name")?,
+                ),
+                ("stream", stream),
+                ("blank_line_after_complete", boolean(py, true)),
+                ("use_color", args.value("request")?.getattr("use_color")?),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
+    let request = new_record_with(
+        py,
+        RecordId::DbtSqlbuildPlanRequest,
         &[
             ("selected_model_names", selected),
             (
@@ -220,13 +238,16 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
             ),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::BuildSqlbuildPlanOutput)?,
-        &[
-            ("environment", environment(&args)?),
-            ("request", request),
-            ("hooks", connection_hooks(&reporter, none(py))?),
-        ],
+    build_sqlbuild_plan_output(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("environment", environment(&args)?),
+                ("request", request),
+                ("hooks", connection_hooks(&reporter, none(py))?),
+            ],
+        )?),
     )
 }
 
@@ -236,18 +257,13 @@ fn execution_limits<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = discovered.py();
     if target.is_none() {
-        return registry::class(py, RecordId::ExecutionLimitsConfig)?.call0();
+        return new_record(py, RecordId::ExecutionLimitsConfig, (), None);
     }
-    call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered, "project_config")?,
-            ),
-            ("local_config", native_field(discovered, "local_config")?),
-            ("target_name", target),
-        ],
+    resolve_target_config(
+        py,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
+        &target,
     )?
     .getattr("execution_limits")
 }
@@ -255,7 +271,7 @@ fn execution_limits<'py>(
 /// Execute the planned SQLBuild phase with the selected target's execution limits.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_dbt_sqlbuild_work<'py>(
+pub(crate) fn run_dbt_sqlbuild_work<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -265,8 +281,9 @@ fn run_dbt_sqlbuild_work<'py>(
     let compiled = args.value("compiled")?;
     let project = native_field(&compiled, "project")?;
     let discovered = native_field(&invocation, "discovered_inputs")?;
-    let context = call_with(
-        &registry::class(py, RecordId::DbtSqlbuildWorkContext)?,
+    let context = new_record_with(
+        py,
+        RecordId::DbtSqlbuildWorkContext,
         &[
             ("plan_output", args.value("plan_output")?),
             ("connection_config", args.value("connection_config")?),
@@ -287,23 +304,30 @@ fn run_dbt_sqlbuild_work<'py>(
             ),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::ExecuteDbtSqlbuildWork)?,
-        &[
-            ("context", context),
-            ("command", native_field(&request, "command")?),
-            ("project", project),
-            ("project_dir", native_field(&request, "project_dir")?),
-            ("fail_fast", native_field(&request, "fail_fast")?),
-            ("verbose", native_field(&request, "verbose")?),
-        ],
+    execute_dbt_sqlbuild_work(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("context", context),
+                ("command", native_field(&request, "command")?),
+                ("project", project),
+                ("project_dir", native_field(&request, "project_dir")?),
+                ("fail_fast", native_field(&request, "fail_fast")?),
+                ("verbose", native_field(&request, "verbose")?),
+            ],
+        )?),
     )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
 
 /// Report a SQLBuild skip transition without writing machine output to stdout.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn write_sqlbuild_skip_notice(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<()> {
+pub(crate) fn write_sqlbuild_skip_notice(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<()> {
     let args = KeywordArguments::read(py, "write_sqlbuild_skip_notice", options, OPTIONS)?;
     emit(&args.value("invocation")?.getattr("output_stream")?, "\n")?;
     progress(

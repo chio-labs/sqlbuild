@@ -83,8 +83,7 @@ impl LookupReports {
 fn lookup_reports(lookup: &Bound<'_, PyAny>) -> PyResult<LookupReports> {
     let index: Bound<'_, PyAny> = native_field(lookup, "index")?;
     let native: Py<NativeScopeLookup> = native_field(lookup, "native")?.extract()?;
-    let rows: Vec<DeclarationValues> = index
-        .getattr("declarations")?
+    let rows: Vec<DeclarationValues> = native_field(&index, "declarations")?
         .try_iter()?
         .map(|record| Ok(declaration_values(&read_declaration(&record?)?)))
         .collect::<PyResult<_>>()?;
@@ -166,7 +165,7 @@ pub(crate) fn scope_report(
     match build_scope_report(reports.source(native), &request) {
         Ok(report) => {
             let diagnostics: Bound<'_, PyAny> =
-                native_field(lookup, "index")?.getattr("diagnostics")?;
+                native_field(&native_field(lookup, "index")?, "diagnostics")?;
             Ok(report_object(&classes, report, (&selected, &diagnostics))?.unbind())
         }
         Err(failure) => Err(failure_error(py, &failure)?),
@@ -192,7 +191,7 @@ pub(crate) fn scope_explain(
     match explain_scope_declaration(reports.source(native), &request) {
         Ok((explanation, diagnostics)) => {
             let index_diagnostics: Bound<'_, PyAny> =
-                native_field(lookup, "index")?.getattr("diagnostics")?;
+                native_field(&native_field(lookup, "index")?, "diagnostics")?;
             Ok((
                 explanation_object(&classes, explanation)?.unbind(),
                 diagnostics_object(&classes, &index_diagnostics, raised(diagnostics))?.unbind(),
@@ -230,7 +229,8 @@ pub(crate) fn scope_browse(
     let request: FolderRequest = folder_request(&classes, request, None)?;
     let native: &NativeScopeLookup = reports.lookup.get();
     let result = browse_scope_folders(reports.source(native), &request);
-    let diagnostics: Bound<'_, PyAny> = native_field(lookup, "index")?.getattr("diagnostics")?;
+    let diagnostics: Bound<'_, PyAny> =
+        native_field(&native_field(lookup, "index")?, "diagnostics")?;
     Ok(browse_object(&classes, result, &diagnostics)?.unbind())
 }
 
@@ -249,7 +249,7 @@ pub(crate) fn scope_list(
     match list_scope_declarations(reports.source(native), &request) {
         Ok(result) => {
             let diagnostics: Bound<'_, PyAny> =
-                native_field(lookup, "index")?.getattr("diagnostics")?;
+                native_field(&native_field(lookup, "index")?, "diagnostics")?;
             Ok(list_object(&classes, result, &diagnostics)?.unbind())
         }
         Err(failure) => Err(failure_error(py, &failure)?),
@@ -275,7 +275,7 @@ pub(crate) fn scope_move_preview(
     match preview_scope_move(reports.source(native), &request) {
         Ok((preview, diagnostics)) => {
             let index_diagnostics: Bound<'_, PyAny> =
-                native_field(lookup, "index")?.getattr("diagnostics")?;
+                native_field(&native_field(lookup, "index")?, "diagnostics")?;
             Ok((
                 preview
                     .map(|preview| Ok::<_, PyErr>(move_object(&classes, preview)?.unbind()))
@@ -317,7 +317,7 @@ pub(crate) fn serialize_scope_report(
 /// `scope_metadata_projection` of one `ScopeIndex`, as the dictionary Python builds.
 #[pyfunction]
 #[pyo3(name = "scope_metadata_projection", signature = (*, index))]
-fn metadata_projection(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+pub(crate) fn metadata_projection(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<PyObject> {
     let index: ProjectionIndex = projection_index(read_index(index)?);
     let projection: JsonValue = scope_metadata_projection(&index);
     json_to_python(py, projection, false)

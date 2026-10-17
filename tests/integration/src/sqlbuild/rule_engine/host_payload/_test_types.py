@@ -5,4 +5,5 @@ from dataclasses import dataclass
 class HostPayloadFactsTestCase:
     description: str
     project_files: dict[str, str]
-    expected_unpopulated_trimmed_fields: frozenset[str]
+    expected_dropped_project_fields: frozenset[str]
+    expected_dropped_model_fields: frozenset[str]

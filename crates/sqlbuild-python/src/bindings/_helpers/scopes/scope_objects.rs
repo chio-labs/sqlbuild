@@ -17,9 +17,9 @@ use sqlbuild_scopes::scope_report::models::{
     ProjectionGrant, ProjectionIndex, ProjectionStanding, ProjectionUsage, ReportValues,
 };
 
+use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::placement::{
     IdentityRow, QualifiedRow, RootRow, declaration_identity, declaration_record, ownership_root,
     qualified_identity, resource_identity,
@@ -41,12 +41,12 @@ impl<'py> ScopeClasses<'py> {
 
     /// One scope model class.
     pub(crate) fn model(&self, name: RecordId) -> PyResult<Bound<'py, PyAny>> {
-        registry::class(self.py, name)
+        record_class(self.py, name)
     }
 
     /// The member of scope enum `name` with `value`; an unknown value raises `ValueError`.
     pub(crate) fn member(&self, name: RecordId, value: &str) -> PyResult<Bound<'py, PyAny>> {
-        registry::class(self.py, name)?.call1((value,))
+        new_record(self.py, name, (value,), None)
     }
 
     /// The interpreter the classes belong to.
@@ -65,26 +65,26 @@ pub(crate) fn enum_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 pub(crate) fn value_of(item: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    native_field(&item.getattr(name)?, "value")?.extract()
+    native_field(&native_field(item, name)?, "value")?.extract()
 }
 
 pub(crate) fn field<'py, T: pyo3::FromPyObject<'py>>(
     item: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<T> {
-    item.getattr(name)?.extract()
+    native_field(item, name)?.extract()
 }
 
 pub(crate) fn optional_item<'py>(
     item: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let value: Bound<'py, PyAny> = item.getattr(name)?;
+    let value: Bound<'py, PyAny> = native_field(item, name)?;
     Ok(if value.is_none() { None } else { Some(value) })
 }
 
 fn items<'py>(item: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    item.getattr(name)?.try_iter()?.collect()
+    native_field(item, name)?.try_iter()?.collect()
 }
 
 /// A resource identity's `(kind, name)` row.
@@ -726,5 +726,5 @@ pub(crate) fn tuple_attribute<'py>(
     item: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    Ok(item.getattr(name)?.downcast_into::<PyTuple>()?)
+    Ok(native_field(item, name)?.downcast_into::<PyTuple>()?)
 }

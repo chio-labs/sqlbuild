@@ -9,9 +9,9 @@ use pyo3::types::PyString;
 use sqlbuild_rules::lint_text::main::resolve_format_settings::resolve_format_settings;
 use sqlbuild_rules::lint_text::models::FormatSettings;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::construct::new_record_with;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::rules::rules_config::load_rules_config;
 
 /// Format settings and whether lint suppressions are allowed.
 pub(crate) struct FormatConfig {
@@ -28,10 +28,13 @@ pub(crate) fn format_config(
     let settings: FormatSettings =
         resolve_format_settings(Path::new(&directory)).map_err(PyValueError::new_err)?;
     let allow_suppressions: bool = if settings.has_project_config {
-        call_with(
-            &registry::native(py, NativeAttr::LoadRulesConfig)?,
-            &[("project_dir", project_dir.call_method0("resolve")?)],
-        )?
+        load_rules_config(
+            py,
+            project_dir
+                .call_method0("resolve")?
+                .extract::<std::path::PathBuf>()?,
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .getattr("allow_exceptions")?
         .extract()?
     } else {
@@ -50,8 +53,9 @@ pub(crate) fn lint_config<'py>(
     dialect: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let settings: &FormatSettings = &config.settings;
-    call_with(
-        &registry::class(py, RecordId::LintConfig)?,
+    new_record_with(
+        py,
+        RecordId::LintConfig,
         &[
             (
                 "line_width",

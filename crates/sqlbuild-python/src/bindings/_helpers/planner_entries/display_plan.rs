@@ -41,10 +41,11 @@ fn display_action(
 }
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    Ok(
-        authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
-            .unwrap_or_else(|| model.py().None().into_bound(model.py())),
-    )
+    Ok(authored_config_str(
+        &native_field(&native_field(model, "config")?, "values")?,
+        key,
+    )?
+    .unwrap_or_else(|| model.py().None().into_bound(model.py())))
 }
 
 fn display_entry<'py>(
@@ -126,7 +127,7 @@ fn display_entry<'py>(
 /// Build a display-only plan when warehouse planning cannot fully resolve.
 #[pyfunction]
 #[pyo3(signature = (*, project, selected_model_names, full_refresh))]
-fn build_display_only_sqlbuild_plan<'py>(
+pub(crate) fn build_display_only_sqlbuild_plan<'py>(
     project: &Bound<'py, PyAny>,
     selected_model_names: &Bound<'py, PyAny>,
     full_refresh: bool,

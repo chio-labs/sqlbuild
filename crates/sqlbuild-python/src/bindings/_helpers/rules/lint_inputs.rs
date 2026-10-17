@@ -83,8 +83,7 @@ pub(crate) fn model_lint_expansion(
     if record.is_none() {
         return Ok(None);
     }
-    let path: PathBuf = model
-        .getattr("model_file")?
+    let path: PathBuf = native_field(model, "model_file")?
         .getattr(FILE_PATH_ATTRIBUTE)?
         .extract()?;
     Ok(Some((

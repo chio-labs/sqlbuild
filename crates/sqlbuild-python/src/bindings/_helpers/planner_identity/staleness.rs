@@ -1,6 +1,7 @@
 //! Warnings for selected models stale through changed upstreams outside the run set.
 
 use crate::bindings::_helpers::planner_changes::results::native_enum;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use std::collections::{HashMap, HashSet};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -16,12 +17,11 @@ use sqlbuild_analysis::planner_identity::models::{
     GraphKey, StaleWarning, StalenessGraph, StalenessNames,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_changes::detect::{ModelPass, model_change};
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Change kinds that mean the model's own identity changed.
 const OWN_CHANGE_KINDS: [&str; 5] = [
@@ -123,11 +123,9 @@ fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>
 
 fn changed_seed_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>> {
     let recorded: Bound<'_, PyAny> =
-        native_field(&inputs.snapshot, "fingerprints")?.getattr("seeds")?;
+        native_field(&native_field(&inputs.snapshot, "fingerprints")?, "seeds")?;
     let mut changed: HashSet<String> = HashSet::new();
-    for item in inputs
-        .identities
-        .getattr("seed_version_hashes")?
+    for item in native_field(&inputs.identities, "seed_version_hashes")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -147,7 +145,6 @@ fn plan_warnings<'py>(
     py: Python<'py>,
     warnings: Vec<StaleWarning>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let warning_class: Bound<'py, PyAny> = registry::class(py, RecordId::PlanWarning)?;
     let severity: Bound<'py, PyAny> = native_enum(py, RecordId::WarningSeverity, "warning")?;
     let mut rendered: Vec<Bound<'py, PyAny>> = Vec::with_capacity(warnings.len());
     for warning in warnings {
@@ -156,8 +153,9 @@ fn plan_warnings<'py>(
             "upstream(s)",
             &warning.trigger_names,
         );
-        rendered.push(call_with(
-            &warning_class,
+        rendered.push(new_record_with(
+            py,
+            RecordId::PlanWarning,
             &[
                 (
                     "model_name",
@@ -261,12 +259,11 @@ fn classify_selection_staleness_warnings<'py>(
             sources: name_set(&native_field(graph, "changed_source_names")?)?,
         },
     };
-    let warning_class: Bound<'py, PyAny> =
-        registry::class(py, RecordId::SelectionStalenessWarning)?;
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for warning in classify_selection_staleness(&staleness) {
-        warnings.push(call_with(
-            &warning_class,
+        warnings.push(new_record_with(
+            py,
+            RecordId::SelectionStalenessWarning,
             &[
                 (
                     "model_name",

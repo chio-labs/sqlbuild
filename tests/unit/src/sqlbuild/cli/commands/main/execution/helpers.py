@@ -4,19 +4,10 @@ import sys
 from contextlib import nullcontext
 from io import StringIO
 from pathlib import Path
-from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild import _native as native
-from sqlbuild._native import (
-    CompiledObjectKey,
-    CompiledResourceType,
-    CompiledSqlScenario,
-    DiscoveredSqlScenarioFile,
-)
-from sqlbuild.adapter.discovery.main import resolve_adapter as adapters_module
 from sqlbuild.diagnostics.main import process_resource_reporting as resource_reporting_module
 from sqlbuild.executor.pipeline.main import run as executor_run_module
 from tests.unit.src.sqlbuild.presentation.helpers import use_plain_terminal
@@ -49,45 +40,49 @@ class ScenarioProgressStream(StringIO):
         return self._tty
 
 
+_SCENARIO_PROJECT_TOML: str = (
+    'name = "project"\nadapter = "duckdb"\n\n[connection]\ndatabase = "project.duckdb"\n'
+)
+_SCENARIO_SOURCES_YAML: str = (
+    "sources:\n"
+    "  - name: raw_orders\n    description: Test source raw_orders.\n"
+    "    schema: main\n"
+    "    table: raw_orders\n"
+    "    columns:\n"
+    "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
+)
+_SCENARIO_MODEL_SQL: str = (
+    'MODEL (description "Test model orders.");\n\nSELECT order_id FROM __source("raw_orders")\n'
+)
+VALID_SCENARIO_SQL: str = (
+    "SCENARIO (description 'Test scenario orders_paid.');\n\n"
+    "WITH\n"
+    "__source__raw_orders AS (SELECT 1 AS order_id),\n"
+    "__expected__orders AS (SELECT 1 AS order_id)\n"
+    "SELECT 1\n"
+)
+INVALID_SCENARIO_SQL: str = "SCENARIO(description 'Test scenario.');\n\nSELECT 1\n"
+
+
 def configure_native_scenario_command(
     *,
     monkeypatch: pytest.MonkeyPatch,
     stream: ScenarioProgressStream,
-    compile_project: Any,
+    scenario_sql: str,
     project_dir: Path,
 ) -> None:
-    """Isolate the native scenario command from adapters and the warehouse in an empty project."""
+    """Write a one-scenario DuckDB project and isolate the command from scenario execution."""
 
-    _ = (project_dir / "sqlbuild_project.toml").write_text(
-        'name = "project"\nadapter = "duckdb"\n', encoding="utf-8"
-    )
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": _SCENARIO_PROJECT_TOML,
+        "sources/raw.yml": _SCENARIO_SOURCES_YAML,
+        "models/orders.sql": _SCENARIO_MODEL_SQL,
+        "tests/scenarios/orders_paid.sql": scenario_sql,
+    }
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
     monkeypatch.setattr(sys, "stdout", stream)
     use_plain_terminal(monkeypatch)
-    monkeypatch.setattr(native, "resolve_project_connection_config", lambda **_: {})
-    monkeypatch.setattr(native, "run_compile_only_pipeline", compile_project)
-    monkeypatch.setattr(adapters_module, "resolve_adapter", lambda **_: Mock())
-    monkeypatch.setattr(native, "resolve_external_sql_reference_resolver", lambda **_: None)
     monkeypatch.setattr(executor_run_module, "run_scenario_test_pipeline", lambda **_: ())
-
-
-def build_compiled_scenario_project(project_dir: Path) -> Mock:
-    """A compile result with one scenario under tests/scenarios."""
-
-    scenario_file: DiscoveredSqlScenarioFile = DiscoveredSqlScenarioFile(
-        file_path=project_dir / "tests/scenarios/orders_paid.sql",
-        relative_path=Path("tests/scenarios/orders_paid.sql"),
-        contents="SCENARIO(description 'Test scenario.');\n\nSELECT 1\n",
-        header_values={},
-        sql_body="SELECT 1",
-        name="orders_paid",
-    )
-    pipeline_result: Mock = Mock()
-    pipeline_result.project.sql_scenarios = (
-        CompiledSqlScenario(
-            key=CompiledObjectKey(CompiledResourceType.SQL_SCENARIO, "orders_paid"),
-            name="orders_paid",
-            scenario_file=scenario_file,
-            sql_body="SELECT 1",
-        ),
-    )
-    return pipeline_result

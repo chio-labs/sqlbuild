@@ -37,7 +37,7 @@ fn row_facts(facts: Option<&ModelLabelFacts>, logical_ddl: Option<String>) -> Mo
 }
 
 fn names(plan: &Bound<'_, PyAny>, field: &str) -> PyResult<Vec<String>> {
-    plan.getattr(field)?
+    native_field(plan, field)?
         .try_iter()?
         .map(|entry| text(&entry?, "name"))
         .collect()

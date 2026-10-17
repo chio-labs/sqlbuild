@@ -47,10 +47,7 @@ pub(super) fn overlay<'py>(
                 native_field(entry, "origin_column")?,
                 native_field(entry, "destination_column")?,
             )?;
-            if native_field(entry, "decision")?
-                .getattr("renames")?
-                .is_truthy()?
-            {
+            if native_field(&native_field(entry, "decision")?, "renames")?.is_truthy()? {
                 pending.set_item(
                     lower(&native_field(entry, "origin_column")?)?,
                     native_field(entry, "destination_column")?,
@@ -61,8 +58,7 @@ pub(super) fn overlay<'py>(
             continue;
         }
         let mut renamed: Vec<Bound<'py, PyAny>> = Vec::new();
-        for column in snapshot
-            .getattr("existing_columns")?
+        for column in native_field(snapshot, "existing_columns")?
             .call_method1("get", (&name, PyTuple::empty(py)))?
             .try_iter()?
         {
@@ -145,9 +141,7 @@ pub(super) fn cursors<'py>(
         } else {
             py.None().into_bound(py)
         };
-        if native_field(entry, "decision")?
-            .getattr("renames")?
-            .is_truthy()?
+        if native_field(&native_field(entry, "decision")?, "renames")?.is_truthy()?
             && !cursor.is_none()
             && lower(&cursor)? == lower(&native_field(entry, "destination_column")?)?
         {
@@ -163,10 +157,10 @@ pub(super) fn cursors<'py>(
         let target = if physical.is_truthy()? {
             physical
         } else {
-            let qualified = models
-                .get_item(&name)?
-                .getattr("destination")?
-                .getattr("qualified_name")?;
+            let qualified = native_field(
+                &native_field(&models.get_item(&name)?, "destination")?,
+                "qualified_name",
+            )?;
             if qualified.is_truthy()? {
                 qualified
             } else {

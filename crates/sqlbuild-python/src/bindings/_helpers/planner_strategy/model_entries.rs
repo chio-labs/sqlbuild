@@ -32,9 +32,9 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
     model_warning_records, resolve_schema_actions, warning_inputs,
 };
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 /// Model config keys copied to the plan entry as optional strings, with their entry fields.
 const STRING_FIELDS: [(&str, &str); 15] = [
@@ -146,7 +146,7 @@ fn on_schema_change<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
         return Ok(raw);
     }
     if raw.is_instance_of::<PyString>() {
-        match registry::class(py, RecordId::OnSchemaChange)?.call1((&raw,)) {
+        match enum_from_value(py, RecordId::OnSchemaChange, &raw) {
             Ok(policy) => return Ok(policy),
             Err(error) if !error.is_instance_of::<PyValueError>(py) => return Err(error),
             Err(_) => {}
@@ -355,8 +355,9 @@ fn ddl_cursor_bounds<'py>(request: &ModelEntryDecisions<'py>) -> PyResult<Bound<
     Ok(
         if request.runtime_owned_cursor_bounds && !request.cursor_column.is_none() {
             let sentinel: Bound<'py, PyAny> = host::entry(py, ExecutorHost::BoundSentinel)?;
-            call_with(
-                &registry::class(py, RecordId::CursorBounds)?,
+            new_record_with(
+                py,
+                RecordId::CursorBounds,
                 &[
                     ("start", native_field(&sentinel, "START")?),
                     ("end", native_field(&sentinel, "END")?),
@@ -510,8 +511,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     let schema_actions: Bound<'py, PyAny> =
         resolve_schema_actions(&native_field(change, "schema_findings")?, &policy)?.into_any();
     let enforcement: Bound<'py, PyAny> = type_enforcement(model)?;
-    let warehouse_columns: Bound<'py, PyAny> = snapshot
-        .getattr("existing_columns")?
+    let warehouse_columns: Bound<'py, PyAny> = native_field(snapshot, "existing_columns")?
         .call_method1("get", (&name, PyTuple::empty(py)))?;
     let warnings: Bound<'py, PyTuple> = model_warnings(
         request,
@@ -521,11 +521,13 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     let unique_key: Bound<'py, PyTuple> = string_list(&values, "unique_key")?;
     let merge_exclude: Bound<'py, PyTuple> = config_string_tuple(&values, "merge_exclude_columns")?
         .unwrap_or_else(|| PyTuple::empty(py));
-    let table_type: Bound<'py, PyAny> = model
-        .getattr("config")?
-        .getattr("table_type")?
-        .getattr("value")?
-        .getattr("value")?;
+    let table_type: Bound<'py, PyAny> = native_field(
+        &native_field(
+            &native_field(&native_field(model, "config")?, "table_type")?,
+            "value",
+        )?,
+        "value",
+    )?;
     let ddl: String = logical_ddl(
         request,
         (&unique_key, &merge_exclude),
@@ -540,7 +542,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     entry.set_item("logical_ddl", table_type_ddl(&ddl, &text(&table_type)?))?;
     passed_fields(request, &entry)?;
     for field in CHANGE_FIELDS {
-        entry.set_item(field, change.getattr(field)?)?;
+        entry.set_item(field, native_field(change, field)?)?;
     }
     config_fields(request, &values, &entry)?;
     entry.set_item("unique_key", unique_key)?;
@@ -551,10 +553,9 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     contract_fields(model, &values, &entry)?;
     entry.set_item("pre_hooks", &request.hooks.0)?;
     entry.set_item("post_hooks", &request.hooks.1)?;
-    let fingerprint: Bound<'py, PyAny> = snapshot
-        .getattr("fingerprints")?
-        .getattr("models")?
-        .call_method1("get", (&name,))?;
+    let fingerprint: Bound<'py, PyAny> =
+        native_field(&native_field(snapshot, "fingerprints")?, "models")?
+            .call_method1("get", (&name,))?;
     entry.set_item(
         "previous_query_sql",
         if fingerprint.is_none() {
@@ -569,7 +570,6 @@ pub(crate) fn assemble_model_plan_entry<'py>(
         text(&request.materialization_type)? == CUSTOM_MATERIALIZATION,
         &entry,
     )?;
-    let plan_entry: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ModelPlanEntry)?.call((), Some(&entry))?;
+    let plan_entry: Bound<'py, PyAny> = new_record(py, RecordId::ModelPlanEntry, (), Some(&entry))?;
     Ok((plan_entry, warnings))
 }

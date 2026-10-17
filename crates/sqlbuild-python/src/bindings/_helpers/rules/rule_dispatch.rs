@@ -18,14 +18,16 @@ use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, keywords,
 };
+use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::catalogue::{
     resolved_ignore_selectors, rule_catalogue, select_rules,
 };
+use crate::bindings::_helpers::rules::constants::RULES_MEMO_REUSES;
 use crate::bindings::_helpers::rules::constants::TYPE_PROOF_RULE_CODES;
 use crate::bindings::_helpers::rules::custom_evaluation::{
     CustomRun, evaluate_custom_rules_cached, outcome,
@@ -33,6 +35,9 @@ use crate::bindings::_helpers::rules::custom_evaluation::{
 use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
 use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules;
 use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
+use crate::bindings::_helpers::rules::rows::{
+    NativeRulesRequest, build_rules_request, evaluate_rules_request,
+};
 use crate::bindings::_helpers::rules::rule_plan::plan_rule_run;
 use crate::bindings::_helpers::rules::rule_run::finish_rule_run;
 use crate::bindings::_helpers::rules::selection::{rule_selected, selected_rule_codes};
@@ -308,7 +313,7 @@ fn evaluate_native<'py>(
     custom: CustomSource,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = run.project.py();
-    let prepared: PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> =
+    let prepared: PyResult<(Bound<'py, PyAny>, Bound<'py, NativeRulesRequest>)> =
         native_request(run, custom_payloads);
     let custom: Option<CustomHandle> = match (custom, &prepared) {
         (CustomSource::Started(handle), Ok(_)) => handle,
@@ -321,9 +326,8 @@ fn evaluate_native<'py>(
         (CustomSource::Deferred, Ok((payloads, _))) => start_custom_rules(run, payloads)?,
         (CustomSource::Deferred, Err(_)) => None,
     };
-    let (_, request): (Bound<'py, PyAny>, Bound<'py, PyAny>) = prepared?;
-    let evaluated: PyResult<Bound<'py, PyAny>> = native(py, NativeAttr::EvaluateRulesRequest)
-        .and_then(|evaluate| evaluate.call1((request,)));
+    let (_, request): (Bound<'py, PyAny>, Bound<'py, NativeRulesRequest>) = prepared?;
+    let evaluated: PyResult<Bound<'py, PyAny>> = evaluate_rules_request(py, &request);
     cancel_on_interrupt(py, &evaluated, &run.cancel);
     let custom: PyResult<Bound<'py, PyAny>> = match custom {
         Some(handle) => joined(py, handle, &run.cancel),
@@ -347,12 +351,16 @@ fn evaluate_native<'py>(
         .into_any()
     };
     let reused: bool = field(&native_result, "reused")?.is_truthy()?;
+    if reused {
+        count_stage(py, RULES_MEMO_REUSES, 1)?;
+    }
     let native_hits: i64 = field(&native_result, "cache_hits")?.extract()?;
     let native_misses: i64 = field(&native_result, "cache_misses")?.extract()?;
     let custom_hits: i64 = field(&custom, "cache_hits")?.extract()?;
     let custom_misses: i64 = field(&custom, "cache_misses")?.extract()?;
-    call_with(
-        &registry::class(py, RecordId::RulesResult)?,
+    new_record_with(
+        py,
+        RecordId::RulesResult,
         &[
             ("findings", findings),
             (
@@ -390,7 +398,7 @@ fn evaluate_native<'py>(
 fn native_request<'py>(
     run: &NativeRun<'py>,
     custom_payloads: Option<Bound<'py, PyAny>>,
-) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+) -> PyResult<(Bound<'py, PyAny>, Bound<'py, NativeRulesRequest>)> {
     let py: Python<'py> = run.project.py();
     let payloads: Bound<'py, PyAny> = match custom_payloads {
         Some(payloads) => payloads,
@@ -406,25 +414,28 @@ fn native_request<'py>(
     for code in TYPE_PROOF_RULE_CODES {
         include_type_proof = include_type_proof || rule_selected(&run.config, code)?;
     }
-    let request: Bound<'py, PyAny> = call_with(
-        &native(py, NativeAttr::BuildRulesRequest)?,
-        &[
-            ("project", run.project.clone()),
-            ("config", run.config.clone()),
-            ("project_dir", run.project_dir.clone()),
-            ("dialect", run.dialect.clone().into_bound_py_any(py)?),
-            (
-                "initial_findings",
-                run.initial_findings
-                    .clone()
-                    .unwrap_or_else(|| PyTuple::empty(py).into_any()),
-            ),
-            ("custom_payloads", payloads.clone()),
-            (
-                "include_type_proof",
-                include_type_proof.into_bound_py_any(py)?,
-            ),
-        ],
+    let request: Bound<'py, NativeRulesRequest> = Bound::new(
+        py,
+        build_rules_request(Some(&keywords(
+            py,
+            &[
+                ("project", run.project.clone()),
+                ("config", run.config.clone()),
+                ("project_dir", run.project_dir.clone()),
+                ("dialect", run.dialect.clone().into_bound_py_any(py)?),
+                (
+                    "initial_findings",
+                    run.initial_findings
+                        .clone()
+                        .unwrap_or_else(|| PyTuple::empty(py).into_any()),
+                ),
+                ("custom_payloads", payloads.clone()),
+                (
+                    "include_type_proof",
+                    include_type_proof.into_bound_py_any(py)?,
+                ),
+            ],
+        )?))?,
     )?;
     Ok((payloads, request))
 }
@@ -535,10 +546,6 @@ fn cancel_on_interrupt(py: Python<'_>, result: &PyResult<Bound<'_, PyAny>>, canc
     {
         cancel.store(true, Ordering::Release);
     }
-}
-
-fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
-    registry::native(py, name)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -29,11 +29,7 @@ pub(crate) fn sql_analysis_guidance(
     } else {
         native_field(discovered_inputs, "project_config")?
     };
-    if owner
-        .getattr("settings")?
-        .getattr(SQL_ANALYSIS_KEY)?
-        .is_truthy()?
-    {
+    if native_field(&native_field(&owner, "settings")?, SQL_ANALYSIS_KEY)?.is_truthy()? {
         return Ok(None);
     }
     Ok(Some(analysis_off(local_override, purpose)))
@@ -55,7 +51,7 @@ pub(crate) fn microbatch_guidance() -> (String, String) {
 
 #[pyfunction]
 #[pyo3(signature = (*, allowed))]
-fn explicit_references_help(allowed: &str) -> String {
+pub(crate) fn explicit_references_help(allowed: &str) -> String {
     references_help(allowed)
 }
 

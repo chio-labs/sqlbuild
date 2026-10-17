@@ -11,10 +11,14 @@ use sqlbuild_core::dbt_command::main::render_dbt_init_preview::render_dbt_init_p
 use sqlbuild_core::dbt_command::main::render_dbt_init_summary::render_dbt_init_summary;
 use sqlbuild_core::dbt_command::models::DbtInitSummary;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::cli::progress_reporters::DbtInitProgressReporter;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::dbt_command::init_project::build_dbt_init_project;
+use crate::bindings::_helpers::dbt_command::init_project::validate_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 fn missing_project(py: Python<'_>) -> PyErr {
@@ -59,7 +63,7 @@ fn dbt_project_dir<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
 }
 
 fn text(result: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    Ok(result.getattr(name)?.str()?.to_string())
+    Ok(native_field(result, name)?.str()?.to_string())
 }
 
 fn summary(result: &Bound<'_, PyAny>) -> PyResult<DbtInitSummary> {
@@ -77,25 +81,26 @@ fn summary(result: &Bound<'_, PyAny>) -> PyResult<DbtInitSummary> {
 /// Execute SQLBuild-owned `sqb dbt init`.
 #[pyfunction]
 #[pyo3(signature = (request))]
-fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let project_dir: Bound<'_, PyAny> = dbt_project_dir(request)?;
     let use_color: bool = color_enabled(py)?;
-    let progress: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DbtInitProgressReporter)?,
-        &[
-            ("stream", stream(py, "stdout")?),
-            ("use_color", flag(py, use_color)),
-        ],
-    )?;
-    let callbacks: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::DbtInitProgressCallbacks)?,
+    let progress: Bound<'_, PyAny> = DbtInitProgressReporter::new(
+        &stream(py, "stdout")?,
+        flag(py, use_color).extract::<bool>()?,
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
+    let callbacks: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::DbtInitProgressCallbacks,
         &[
             ("start", native_field(&progress, "start")?),
             ("complete", native_field(&progress, "complete")?),
         ],
     )?;
-    let init_request: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::DbtInitRequest)?,
+    let init_request: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::DbtInitRequest,
         &[
             ("cwd", native_field(request, "cwd")?),
             ("dbt_project_dir", project_dir),
@@ -115,14 +120,9 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
             ("progress_callbacks", callbacks),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::ValidateDbtInitProject)?,
-        &[("request", init_request.clone())],
-    )?;
-    let result: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildDbtInitProject)?,
-        &[("request", init_request)],
-    )?;
+    validate_dbt_init_project(&init_request.clone())
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    let result: Bound<'_, PyAny> = build_dbt_init_project(&init_request)?;
     let style: CliStyle = CliStyle { use_color };
     let stdout: Bound<'_, PyAny> = stream(py, "stdout")?;
     if native_field(request, "dry_run")?.is_truthy()? {

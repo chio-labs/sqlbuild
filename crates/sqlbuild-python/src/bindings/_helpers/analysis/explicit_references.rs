@@ -26,10 +26,12 @@ use sqlbuild_pysource::literal_sql::models::FunctionSource;
 use crate::bindings::_helpers::analysis::reference_facts::{ProjectFacts, project_facts};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::graph::execution_gates::model_python_hook_names;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
@@ -157,7 +159,7 @@ fn python_sql_owners<'py>(
     let py: Python<'py> = project.py();
     let mut owners: Vec<PythonSqlOwner<'py>> = Vec::new();
     for (label, attribute) in NODE_OWNERS {
-        for node in discovered_inputs.getattr(attribute)?.try_iter()? {
+        for node in native_field(discovered_inputs, attribute)?.try_iter()? {
             let node: Bound<'py, PyAny> = node?;
             let name: String = native_field(&node, "name")?.extract()?;
             owners.push(PythonSqlOwner::new(
@@ -168,14 +170,11 @@ fn python_sql_owners<'py>(
         }
     }
     owners.extend(loader_owners(project, discovered_inputs)?);
-    let hook_names = registry::native(py, NativeAttr::ModelPythonHookNames)?;
     let mut attached: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        let keywords: Bound<'py, PyDict> = PyDict::new(py);
-        keywords.set_item("model", &model)?;
         let model_name: String = native_field(&model, "name")?.extract()?;
-        for hook_name in hook_names.call((), Some(&keywords))?.try_iter()? {
+        for hook_name in model_python_hook_names(py, &model)?.try_iter()? {
             attached
                 .entry(hook_name?.extract()?)
                 .or_default()
@@ -309,11 +308,8 @@ fn python_report<'py>(
     report: &ReferenceReport,
     owners: &[PythonSqlOwner<'py>],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let owner_kind: Bound<'py, PyAny> = registry::class(py, RecordId::HardCodedRelationOwnerKind)?;
     let reference_models = py.import(REFERENCE_MODELS_MODULE)?;
-    let source_location: Bound<'py, PyAny> = registry::class(py, RecordId::SourceLocation)?;
     let path_class: Bound<'py, PyAny> = py.import("pathlib")?.getattr("Path")?;
-    let compiler_diagnostic: Bound<'py, PyAny> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::with_capacity(report.diagnostics.len());
     for row in &report.diagnostics {
         let fields: Bound<'py, PyDict> = PyDict::new(py);
@@ -333,15 +329,23 @@ fn python_report<'py>(
                 location.set_item("path", &owners[owner].relative_path)?;
                 location.set_item("line", row.line)?;
                 location.set_item("column", 1)?;
-                fields.set_item("location", source_location.call((), Some(&location))?)?;
+                fields.set_item(
+                    "location",
+                    new_record(py, RecordId::SourceLocation, (), Some(&location))?,
+                )?;
             }
             None => fields.set_item("location", py.None())?,
         }
         fields.set_item("help", &row.help)?;
-        diagnostics.push(compiler_diagnostic.call((), Some(&fields))?);
+        diagnostics.push(new_record(
+            py,
+            RecordId::CompilerDiagnostic,
+            (),
+            Some(&fields),
+        )?);
     }
     let literal_relation: Bound<'py, PyAny> =
-        registry::class(reference_models.py(), RecordId::LiteralSqlRelation)?;
+        record_class(reference_models.py(), RecordId::LiteralSqlRelation)?;
     let relation_name: Bound<'py, PyAny> = native_field(&reference_models, "RelationName")?;
     let mut unmatched: Vec<Bound<'py, PyAny>> = Vec::with_capacity(report.unmatched.len());
     for row in &report.unmatched {
@@ -352,7 +356,10 @@ fn python_report<'py>(
         relation.set_item("database", &row.relation.database)?;
         let fields: Bound<'py, PyDict> = PyDict::new(py);
         fields.set_item("owner_label", &owner.label)?;
-        fields.set_item("owner_kind", owner_kind.call1((owner.kind,))?)?;
+        fields.set_item(
+            "owner_kind",
+            enum_from_value(py, RecordId::HardCodedRelationOwnerKind, owner.kind)?,
+        )?;
         fields.set_item("relative_path", &owner.relative_path)?;
         fields.set_item("line", row.line)?;
         fields.set_item("method", &row.method)?;
@@ -362,7 +369,7 @@ fn python_report<'py>(
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item("diagnostics", PyTuple::new(py, diagnostics)?)?;
     fields.set_item("unmatched", PyTuple::new(py, unmatched)?)?;
-    registry::class(py, RecordId::PythonSqlReferenceReport)?.call((), Some(&fields))
+    new_record(py, RecordId::PythonSqlReferenceReport, (), Some(&fields))
 }
 
 /// `(method, sql, line)` for each literal SQL call to the context in a dedented function source.

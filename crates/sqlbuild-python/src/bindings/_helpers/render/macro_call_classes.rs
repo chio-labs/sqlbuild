@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 
-use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 
 use sqlbuild_render::macro_calls::main::call_class_store_text::call_class_store_text;
 
+use crate::bindings::_helpers::macro_bridge::store_keys::{context_store_token, macro_store_token};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::macro_expansion_facts::ResourceRef;
 
@@ -30,14 +30,6 @@ pub(crate) struct CallClass {
     macro_store_tokens: Vec<String>,
     context_store_token: Option<String>,
     persistent: bool,
-}
-
-/// `macro_store_token` and `context_store_token`, the value text of a stored call's inputs.
-#[derive(FromPyObject)]
-#[pyo3(from_item_all)]
-pub(crate) struct StoreTokenClasses<'py> {
-    macro_token: Bound<'py, PyAny>,
-    context_token: Bound<'py, PyAny>,
 }
 
 /// The call classes, class ids and tokens one compile's memo has seen.
@@ -67,7 +59,6 @@ pub(crate) struct ClassInputs<'a, 'py> {
     pub(crate) declarations: &'a Bound<'py, PyAny>,
     pub(crate) loaded_macros: &'a Bound<'py, PyDict>,
     pub(crate) macro_context: &'a Bound<'py, PyAny>,
-    pub(crate) store: &'a StoreTokenClasses<'py>,
 }
 
 impl CallClassState {
@@ -108,11 +99,7 @@ impl CallClassState {
         }
         let mut injects_context: bool = false;
         for name in tree_names {
-            if macros
-                .get_item(name)?
-                .getattr("injects_context")?
-                .is_truthy()?
-            {
+            if native_field(&macros.get_item(name)?, "injects_context")?.is_truthy()? {
                 injects_context = true;
                 break;
             }
@@ -175,15 +162,12 @@ impl CallClassState {
         let declarations: &Bound<'_, PyAny> = inputs.declarations;
         let visible: bool = !loaded.is_none()
             && (declarations.is_none()
-                || !declarations
-                    .getattr("inaccessible_macros")?
-                    .contains(name)?);
+                || !native_field(declarations, "inaccessible_macros")?.contains(name)?);
         let token: NameToken = if visible {
             let identity: Bound<'_, PyAny> = if declarations.is_none() {
                 py.None().into_bound(py)
             } else {
-                declarations
-                    .getattr("macro_records")?
+                native_field(declarations, "macro_records")?
                     .get_item(name)?
                     .getattr("identity")?
             };
@@ -191,11 +175,7 @@ impl CallClassState {
                 let arguments: Bound<'_, PyDict> = PyDict::new(py);
                 arguments.set_item("loaded", &loaded)?;
                 arguments.set_item("identity", &identity)?;
-                inputs
-                    .store
-                    .macro_token
-                    .call((), Some(&arguments))?
-                    .extract()?
+                macro_store_token(py, Some(arguments))?
             } else {
                 None
             };
@@ -239,11 +219,7 @@ impl CallClassState {
             let arguments: Bound<'_, PyDict> = PyDict::new(owner.py());
             arguments.set_item("macro_context", inputs.macro_context)?;
             arguments.set_item("declarations", declarations)?;
-            inputs
-                .store
-                .context_token
-                .call((), Some(&arguments))?
-                .extract()?
+            context_store_token(owner.py(), Some(arguments))?
         } else {
             None
         };
@@ -270,14 +246,12 @@ fn identity_key(identity: &Bound<'_, PyAny>) -> PyResult<Option<IdentityKey>> {
         None
     } else {
         Some((
-            native_field(&owner, "kind")?.getattr("value")?.extract()?,
+            native_field(&native_field(&owner, "kind")?, "value")?.extract()?,
             native_field(&owner, "name")?.extract()?,
         ))
     };
     Ok(Some((
-        native_field(identity, "kind")?
-            .getattr("value")?
-            .extract()?,
+        native_field(&native_field(identity, "kind")?, "value")?.extract()?,
         native_field(identity, "name")?.extract()?,
         owner_key,
     )))

@@ -28,20 +28,21 @@ use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_pa
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compiled_project::audit_views::NativeCompiledAudit;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::records::compiled_project_facts;
 use crate::bindings::_helpers::compiled_project::records::declaration_rows;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::config_json::asdict_json;
 use crate::bindings::_helpers::rules::fact_replay::{project_attribute, project_models};
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
 use crate::bindings::_helpers::rules::selection::rules_error;
 use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test_fact};
+use crate::bindings::_helpers::scopes::scope_reports::metadata_projection;
 use crate::bindings::_helpers::type_system::equality::types_equal;
 use crate::bindings::types::CompilerDetach;
 
@@ -74,13 +75,13 @@ struct ProjectRows<'py> {
 
 /// A natively built rules request held until it is evaluated once.
 #[pyclass(module = "sqlbuild._native")]
-struct NativeRulesRequest {
+pub(crate) struct NativeRulesRequest {
     request: Mutex<Option<RowsRequest>>,
 }
 
 #[pymethods]
 impl NativeRulesRequest {
-    /// The SQL test and scenario facts this request carries, as `{"sql_tests", "sql_scenarios"}` JSON.
+    /// The SQL test, scenario and scope facts this request carries, as `{"sql_tests", "sql_scenarios", "scope_index"}` JSON.
     fn sql_facts_json(&self) -> PyResult<String> {
         let guard = self
             .request
@@ -92,6 +93,7 @@ impl NativeRulesRequest {
         serde_json::to_string(&serde_json::json!({
             "sql_tests": rows.request.sql_tests,
             "sql_scenarios": rows.request.sql_scenarios,
+            "scope_index": rows.request.scope_index,
         }))
         .map_err(value_error)
     }
@@ -100,7 +102,9 @@ impl NativeRulesRequest {
 /// Build the built-in rules request natively from the compiled project's rows.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_rules_request(options: Option<&Bound<'_, PyDict>>) -> PyResult<NativeRulesRequest> {
+pub(crate) fn build_rules_request(
+    options: Option<&Bound<'_, PyDict>>,
+) -> PyResult<NativeRulesRequest> {
     let request = Request::new("build_rules_request", options)?;
     let py: Python<'_> = request.py();
     as_rules_error(py, built_request(&request))
@@ -119,10 +123,9 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
         "project_dir": resolved.str()?.to_str()?,
         "dialect": dialect.extract::<String>()?,
         "config": config_value(&config)?,
-        "scope_index": plain_value(&call_with(
-            &registry::native(py, NativeAttr::ScopeMetadataProjection)?,
-            &[("index", project_attribute(&project, "scope_index")?)],
-        )?)?,
+        "scope_index": plain_value(
+            metadata_projection(py, &project_attribute(&project, "scope_index")?)?.bind(py),
+        )?,
         "defer_suppressions": true,
         "custom_rules": plain_value(&options.get("custom_payloads")?)?,
         "rules_cache_path": path_text(py, rules_bulk_cache_path(&resolved_path, NATIVE_RULES_CACHE_FILE))?,
@@ -218,7 +221,7 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
 
 /// Answer the request from the response memo or evaluate it, decoding findings natively.
 #[pyfunction]
-fn evaluate_rules_request<'py>(
+pub(crate) fn evaluate_rules_request<'py>(
     py: Python<'py>,
     request: &Bound<'py, NativeRulesRequest>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -249,8 +252,9 @@ fn evaluated<'py>(
         .into_iter()
         .map(|fault| classes.finding_of_fault(fault, false))
         .collect::<PyResult<_>>()?;
-    call_with(
-        &registry::class(py, RecordId::NativeRulesEvaluation)?,
+    new_record_with(
+        py,
+        RecordId::NativeRulesEvaluation,
         &[
             ("findings", PyTuple::new(py, findings)?.into_any()),
             (

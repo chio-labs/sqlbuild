@@ -1,8 +1,8 @@
 //! Map offsets in expanded SQL back onto the authored text that produced them.
 
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -35,7 +35,7 @@ fn map_expanded_offset<'py>(
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("offset", offset)?;
     arguments.set_item("generated", generated)?;
-    registry::class(py, RecordId::MappedOffset)?.call((), Some(&arguments))
+    new_record(py, RecordId::MappedOffset, (), Some(&arguments))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -87,7 +87,7 @@ fn text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 /// Freeze a JSON object field of a frozen dataclass in place.
 fn freeze_object_field(owner: &Bound<'_, PyAny>, field: &str, path: &str) -> PyResult<()> {
     let py: Python<'_> = owner.py();
-    let frozen: Bound<'_, PyAny> = frozen_json(&owner.getattr(field)?, path)?;
+    let frozen: Bound<'_, PyAny> = frozen_json(&native_field(owner, field)?, path)?;
     if !frozen.is_instance(&imported(py, "collections.abc", "Mapping")?)? {
         return Err(validation_error(
             py,
@@ -106,7 +106,7 @@ fn freeze_object_field(owner: &Bound<'_, PyAny>, field: &str, path: &str) -> PyR
 fn lifecycle_event_check(event: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = event.py();
     for field in EVENT_REQUIRED_TEXT {
-        required_text_check(&event.getattr(field)?, field)?;
+        required_text_check(&native_field(event, field)?, field)?;
     }
     let schema_version: Bound<'_, PyAny> = native_field(event, "schema_version")?;
     schema_version_check(&schema_version)?;
@@ -126,7 +126,7 @@ fn lifecycle_event_check(event: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     timestamp_check(&native_field(event, "occurred_at")?)?;
     for field in EVENT_OPTIONAL_TEXT {
-        optional_text_check(&event.getattr(field)?, field)?;
+        optional_text_check(&native_field(event, field)?, field)?;
     }
     freeze_object_field(event, "external_context", "external_context")?;
     freeze_object_field(event, "payload", "payload")?;
@@ -154,7 +154,7 @@ fn diagnostic_log_check(record: &Bound<'_, PyAny>) -> PyResult<()> {
         return Err(validation_error(py, &problem));
     }
     for field in DIAGNOSTIC_REQUIRED_TEXT {
-        required_text_check(&record.getattr(field)?, field)?;
+        required_text_check(&native_field(record, field)?, field)?;
     }
     let severity: String = native_field(record, "severity")?.extract()?;
     if let Some(problem) = diagnostic_severity_problem(&severity) {
@@ -162,7 +162,7 @@ fn diagnostic_log_check(record: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     timestamp_check(&native_field(record, "occurred_at")?)?;
     for field in DIAGNOSTIC_OPTIONAL_TEXT {
-        optional_text_check(&record.getattr(field)?, field)?;
+        optional_text_check(&native_field(record, field)?, field)?;
     }
     freeze_object_field(record, "fields", "fields")
 }

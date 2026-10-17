@@ -12,12 +12,12 @@ use sqlbuild_core::load_command::main::render_load_spinner_line::render_load_spi
 use sqlbuild_core::load_command::models::{LoadResultText, LoadSpinnerRow, LoadStatus};
 
 use crate::bindings::_helpers::build_progress::terminal::start_spinner;
+use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
+use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
 const SPINNER_TICK_SECONDS: f64 = 0.1;
@@ -190,7 +190,7 @@ impl LoadProgressReporter {
 impl LoadProgressReporter {
     #[new]
     #[pyo3(signature = (**options))]
-    fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
         let arguments: KeywordArguments<'_> = KeywordArguments::read(
             py,
             "LoadProgressReporter",
@@ -200,10 +200,9 @@ impl LoadProgressReporter {
         let stream: Bound<'_, PyAny> = arguments.value("stream")?;
         let source_order: HashMap<String, i64> = arguments.value("source_order")?.extract()?;
         let total_count: i64 = arguments.value("total_count")?.extract()?;
-        let lines: Bound<'_, PyAny> =
-            registry::native(py, NativeAttr::SharedTransientLineCoordinator)?.call0()?;
-        let projector: Bound<'_, PyAny> =
-            registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
+        let lines: Bound<'_, PyAny> = shared_transient_line_coordinator(py)
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+        let projector: Bound<'_, PyAny> = current_native_progress_projector(py)?;
         if !projector.is_none() {
             let options: Bound<'_, PyDict> = PyDict::new(py);
             options.set_item("ordinals", source_order.clone())?;

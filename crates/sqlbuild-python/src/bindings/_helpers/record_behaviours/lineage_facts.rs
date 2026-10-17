@@ -6,9 +6,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PySlice, PyTuple, PyTupleMethods};
 
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// `ColumnTransformKind` members by native transform code.
 const TRANSFORM_KINDS: [&str; 6] = [
@@ -41,7 +41,7 @@ fn coded_member(
     let Some(member) = members.get(code) else {
         return Err(PyIndexError::new_err("tuple index out of range"));
     };
-    Ok(registry::member(py, class, member)?.unbind())
+    Ok(enum_member(py, class, member)?.unbind())
 }
 
 /// `CompactLineageFacts.resource_name(index)`: the model's name for a native relation index.
@@ -54,9 +54,8 @@ fn resource_name<'py>(
     if !name.is_none() {
         return Ok(name);
     }
-    let pooled: Bound<'py, PyAny> = facts
-        .getattr("resource_name_indexes")?
-        .call_method1("get", (index, index))?;
+    let pooled: Bound<'py, PyAny> =
+        native_field(facts, "resource_name_indexes")?.call_method1("get", (index, index))?;
     native_field(facts, "string_pool")?.get_item(pooled)
 }
 
@@ -80,7 +79,6 @@ fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<
         usize,
         Bound<'_, PyAny>,
     ) = row.extract()?;
-    let source_class: Bound<'_, PyAny> = registry::class(py, RecordId::CompiledLineageSourceFact)?;
     let mut upstream: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in sources.try_iter()? {
         let source: Bound<'_, PyTuple> = source?.cast_into::<PyTuple>()?;
@@ -88,7 +86,12 @@ fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<
         keywords.set_item("resource_type", pool.get_item(source.get_item(0)?)?)?;
         keywords.set_item("resource_name", resource_name(facts, &source.get_item(1)?)?)?;
         keywords.set_item("column_name", pool.get_item(source.get_item(2)?)?)?;
-        upstream.push(source_class.call((), Some(&keywords))?);
+        upstream.push(new_record(
+            py,
+            RecordId::CompiledLineageSourceFact,
+            (),
+            Some(&keywords),
+        )?);
     }
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("output_column", pool.get_item(name_index)?)?;
@@ -109,15 +112,12 @@ fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<
             confidence_code,
         )?,
     )?;
-    Ok(registry::class(py, RecordId::CompiledLineageColumnFact)?
-        .call((), Some(&keywords))?
-        .unbind())
+    Ok(new_record(py, RecordId::CompiledLineageColumnFact, (), Some(&keywords))?.unbind())
 }
 
 /// `CompactLineageFacts.facts`: every row projected once, in order.
 pub(crate) fn facts_projected(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let projected: Vec<Py<PyAny>> = instance
-        .getattr("rows")?
+    let projected: Vec<Py<PyAny>> = native_field(instance, "rows")?
         .try_iter()?
         .map(|row| project_row(instance, &row?))
         .collect::<PyResult<_>>()?;

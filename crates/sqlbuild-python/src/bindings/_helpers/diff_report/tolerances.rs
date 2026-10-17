@@ -281,7 +281,7 @@ fn resolve_row_diff_sampling<'py>(
     }
     let label: String = request.get("label")?.extract()?;
     let overridden = |field: &str, raw: &str| -> PyResult<Bound<'py, PyAny>> {
-        let value: Bound<'py, PyAny> = override_values.getattr(field)?;
+        let value: Bound<'py, PyAny> = native_field(&override_values, field)?;
         if value.is_none() {
             request.get(raw)
         } else {
@@ -330,8 +330,8 @@ fn merge_row_diff_tolerances<'py>(
     }
     let merged = |field: &str| -> PyResult<Bound<'py, PyAny>> {
         let combined: Bound<'py, PyDict> = PyDict::new(py);
-        combined.update(base.getattr(field)?.downcast()?.as_mapping())?;
-        combined.update(overlay.getattr(field)?.downcast()?.as_mapping())?;
+        combined.update(native_field(&base, field)?.downcast()?.as_mapping())?;
+        combined.update(native_field(&overlay, field)?.downcast()?.as_mapping())?;
         Ok(combined.into_any())
     };
     call_with(

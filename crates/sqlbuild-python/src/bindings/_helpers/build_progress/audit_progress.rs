@@ -175,7 +175,7 @@ impl AuditProgressReporter {
 impl AuditProgressReporter {
     #[new]
     #[pyo3(signature = (**options))]
-    fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
         let arguments = KeywordArguments::read(
             py,
             "AuditProgressReporter",

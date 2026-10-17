@@ -6,14 +6,14 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::nullability_rules::main::conditional_result_nullability::conditional_result_nullability;
 use sqlbuild_analysis::nullability_rules::main::safe_cast_nullability::safe_cast_nullability;
 
+use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member};
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const UNKNOWN_MEMBER: &str = "UNKNOWN";
 
 /// The `InferredNullability` member whose value is `value`.
 fn member<'py>(args: &Bound<'py, PyAny>, value: &str) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(args.py(), RecordId::InferredNullability)?.call1((value,))
+    enum_from_value(args.py(), RecordId::InferredNullability, value)
 }
 
 /// The text of one argument; an argument that is not a string matches no state.
@@ -35,7 +35,7 @@ fn argument_values(args: &Bound<'_, PyAny>, count: usize) -> PyResult<Vec<String
 #[pyfunction]
 fn infer_first_arg_nullability<'py>(args: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     if !args.is_truthy()? {
-        return registry::class(args.py(), RecordId::InferredNullability)?.getattr(UNKNOWN_MEMBER);
+        return enum_member(args.py(), RecordId::InferredNullability, UNKNOWN_MEMBER);
     }
     args.get_item(0)
 }

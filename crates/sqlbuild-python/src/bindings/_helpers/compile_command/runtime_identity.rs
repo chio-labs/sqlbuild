@@ -82,7 +82,7 @@ pub(crate) fn invocation_identity<'py>(
     };
     payload.set_item("requested_project_dir", requested)?;
     for field in REQUEST_CHOICES {
-        payload.set_item(field, request.getattr(field)?)?;
+        payload.set_item(field, native_field(request, field)?)?;
     }
     payload.set_item("cwd", py.import("os")?.getattr("getcwd")?.call0()?)?;
     payload.set_item("use_color", use_color)?;

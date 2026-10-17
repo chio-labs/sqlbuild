@@ -19,12 +19,12 @@ use crate::bindings::_helpers::fingerprints::latest_rows::{
 use crate::bindings::_helpers::fingerprints::storage_sql::{
     fingerprint_insert_batches, fingerprint_insert_sql,
 };
+use crate::bindings::_helpers::records::construct::new_record;
 
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
 const TIME_MODULE: &str = "time";
 const LOGGING_MODULE: &str = "logging";
@@ -272,7 +272,7 @@ fn empty_set<'py>(py: Python<'py>, schema: &str) -> PyResult<Bound<'py, PyAny>> 
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("schema", schema)?;
     keywords.set_item("fingerprints", PyDict::new(py))?;
-    registry::class(py, RecordId::FingerprintSet)?.call((), Some(&keywords))
+    new_record(py, RecordId::FingerprintSet, (), Some(&keywords))
 }
 
 /// `FingerprintInputError` for an unreadable table, caused by the warehouse error.

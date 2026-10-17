@@ -130,7 +130,7 @@ fn emitted<'py>(
 fn count_status(results: &[Bound<'_, PyAny>], field: &str, status: &str) -> PyResult<usize> {
     let mut count: usize = 0;
     for result in results {
-        if native_field(&result.getattr(field)?, "value")?.eq(status)? {
+        if native_field(&native_field(result, field)?, "value")?.eq(status)? {
             count += 1;
         }
     }
@@ -140,7 +140,7 @@ fn count_status(results: &[Bound<'_, PyAny>], field: &str, status: &str) -> PyRe
 fn count_truthy(results: &[Bound<'_, PyAny>], field: &str) -> PyResult<usize> {
     let mut count: usize = 0;
     for result in results {
-        if result.getattr(field)?.is_truthy()? {
+        if native_field(result, field)?.is_truthy()? {
             count += 1;
         }
     }
@@ -176,13 +176,13 @@ fn sequence<'py>(py: Python<'py>, value: Option<Bound<'py, PyAny>>) -> Bound<'py
 }
 
 fn count(result: &Bound<'_, PyAny>, field: &str) -> PyResult<usize> {
-    result.getattr(field)?.extract()
+    native_field(result, field)?.extract()
 }
 
 /// Format build command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_build_execution_json<'py>(
+pub(crate) fn format_build_execution_json<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {
@@ -202,7 +202,7 @@ fn audit_projection<'py>(
         ("failed_count", "audit_result_projection_failed_count"),
     ]
     .into_iter()
-    .map(|(key, field)| Ok((key, result.getattr(field)?)))
+    .map(|(key, field)| Ok((key, native_field(result, field)?)))
     .collect::<PyResult<_>>()?;
     let failed: bool = counts[2].1.is_truthy()?;
     let mut entries: Vec<(&'static str, Bound<'py, PyAny>)> = vec![(
@@ -225,7 +225,7 @@ fn audit_projection<'py>(
 /// The build document with its audit-history projection, or a minimal degraded document.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_degradable_build_execution_json<'py>(
+pub(crate) fn format_degradable_build_execution_json<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {
@@ -284,7 +284,7 @@ fn build_json<'py>(
     let mut retained: Vec<Vec<Bound<'py, PyAny>>> = Vec::new();
     let mut partial: bool = false;
     for field in BUILD_RESULT_FIELDS {
-        let all: Bound<'py, PyAny> = result.getattr(field)?;
+        let all: Bound<'py, PyAny> = native_field(&result, field)?;
         let kept: Vec<Bound<'py, PyAny>> = projection.terminal_results(&all)?;
         partial = partial || kept.len() != all.len()?;
         retained.push(kept);
@@ -304,7 +304,7 @@ fn build_json<'py>(
     for warned in nodes.iter().chain(&checks_run).chain(&retained[3]) {
         python_warnings += native_field(warned, "warning_messages")?.len()?;
     }
-    let result_status: String = text(&native_field(&result, "status")?.getattr("value")?)?;
+    let result_status: String = text(&native_field(&native_field(&result, "status")?, "value")?)?;
     let status: String = if result_status == FAILED || python_fail > 0 || check_fail > 0 {
         FAILED.to_owned()
     } else {
@@ -381,7 +381,7 @@ fn build_json<'py>(
 /// Format seed command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, results, plan))]
-fn format_seed_execution_json<'py>(
+pub(crate) fn format_seed_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
     plan: Bound<'py, PyAny>,
@@ -412,7 +412,7 @@ fn format_seed_execution_json<'py>(
 /// Format load command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, results))]
-fn format_load_execution_json<'py>(
+pub(crate) fn format_load_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
 ) -> PyResult<String> {
@@ -443,7 +443,7 @@ fn format_load_execution_json<'py>(
 /// Format direct clone command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, result, resource_types_by_name))]
-fn format_clone_execution_json<'py>(
+pub(crate) fn format_clone_execution_json<'py>(
     py: Python<'py>,
     result: Bound<'py, PyAny>,
     resource_types_by_name: Bound<'py, PyAny>,
@@ -457,7 +457,7 @@ fn format_clone_execution_json<'py>(
         if !projection.resource_terminal_recorded(&name, &format!("{resource_type}:{name}"))? {
             continue;
         }
-        let status: Bound<'py, PyAny> = native_field(&item, "status")?.getattr("value")?;
+        let status: Bound<'py, PyAny> = native_field(&native_field(&item, "status")?, "value")?;
         failure_count += usize::from(status.eq(FAILED)?);
         warning_count += usize::from(status.eq("warning")?);
         assets.push(clone_asset(&projection, &item, &resource_type)?);
@@ -487,7 +487,7 @@ fn format_clone_execution_json<'py>(
 /// Format test command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, results))]
-fn format_test_execution_json<'py>(
+pub(crate) fn format_test_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
 ) -> PyResult<String> {
@@ -518,7 +518,7 @@ fn format_test_execution_json<'py>(
 /// Format audit command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, results, configured_concurrency = None, worker_count = None))]
-fn format_audit_execution_json<'py>(
+pub(crate) fn format_audit_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
     configured_concurrency: Option<Bound<'py, PyAny>>,
@@ -591,7 +591,7 @@ fn namespace_execution<'py>(
 
 fn scenario_failed(result: &Bound<'_, PyAny>, local: bool) -> PyResult<bool> {
     if !local {
-        return native_field(result, "status")?.getattr("value")?.eq(FAILED);
+        return native_field(&native_field(result, "status")?, "value")?.eq(FAILED);
     }
     let local_status: Bound<'_, PyAny> = native_field(result, "local_status")?;
     if local_status.is_none() {
@@ -604,7 +604,7 @@ fn scenario_failed(result: &Bound<'_, PyAny>, local: bool) -> PyResult<bool> {
 /// Format scenario test command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_scenario_execution_json<'py>(
+pub(crate) fn format_scenario_execution_json<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {
@@ -694,7 +694,7 @@ fn format_scenario_execution_json<'py>(
 /// Format scenario snapshot sync/refresh execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_scenario_snapshot_execution_json<'py>(
+pub(crate) fn format_scenario_snapshot_execution_json<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {

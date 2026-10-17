@@ -13,6 +13,7 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, dedupe_schema_keys, folded_schema, integer, optional, record,
     sorted_schemas, text, tuple,
 };
+use crate::bindings::_helpers::records::fields::replaced;
 
 const QUERY_ARTIFACT_LIFECYCLE: ExecutorHost = ExecutorHost::QueryDiffArtifactLifecycle;
 const RELATION_LOOKUP: AdapterHost = AdapterHost::BuildRelationLookup;
@@ -45,7 +46,7 @@ impl<'py> Warehouse<'py> {
         let mut arguments: Vec<(&str, Bound<'py, PyAny>)> =
             vec![("connection", self.connection.clone())];
         arguments.extend(pairs.iter().cloned());
-        call_with(&self.adapter.getattr(method)?, &arguments)
+        call_with(&native_field(&self.adapter, method)?, &arguments)
     }
 
     pub(crate) fn age_metadata_support(&self) -> PyResult<bool> {
@@ -91,7 +92,7 @@ fn destination_keys<'py>(
     field: &str,
 ) -> PyResult<Vec<(Key, Bound<'py, PyAny>)>> {
     let mut keys: Vec<(Key, Bound<'py, PyAny>)> = Vec::new();
-    for node in project.getattr(field)?.try_iter()? {
+    for node in native_field(project, field)?.try_iter()? {
         let node: Bound<'py, PyAny> = node?;
         keys.push((Key::of(&native_field(&node, "destination")?)?, node));
     }
@@ -163,7 +164,6 @@ fn list_target_schema_relations<'py>(
     target_schemas: &[SchemaKey],
 ) -> PyResult<SchemaRelations<'py>> {
     let py: Python<'py> = warehouse.py();
-    let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let mut databases: Vec<Option<String>> = Vec::new();
     for (database, _) in sorted_schemas(target_schemas) {
         if !databases.contains(&database) {
@@ -203,15 +203,12 @@ fn list_target_schema_relations<'py>(
             else {
                 continue;
             };
-            let respelled: Bound<'py, PyAny> = replace.call(
-                (relation,),
-                Some(&keywords(
-                    py,
-                    &[
-                        ("database", optional(py, target.0.as_deref())?),
-                        ("schema", optional(py, target.1.as_deref())?),
-                    ],
-                )?),
+            let respelled: Bound<'py, PyAny> = replaced(
+                &relation,
+                &[
+                    ("database", optional(py, target.0.as_deref())?),
+                    ("schema", optional(py, target.1.as_deref())?),
+                ],
             )?;
             match result.iter_mut().find(|(listed, _)| listed == target) {
                 Some((_, relations)) => relations.push(respelled),
@@ -436,7 +433,7 @@ pub(crate) fn direct_state_prune_candidates<'py>(
                 continue;
             }
             let prune_sql: Bound<'py, PyAny> = call_with(
-                &warehouse.adapter.getattr(render)?,
+                &native_field(&warehouse.adapter, render)?,
                 &[
                     ("database", optional(py, database.as_deref())?),
                     ("schema", text(py, schema)),

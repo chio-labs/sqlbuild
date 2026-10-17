@@ -11,6 +11,7 @@ use crate::bindings::_helpers::planner_migrations::model_handover::{
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationDecisionRequest,
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -40,7 +41,7 @@ pub(super) fn decision<'py>(entry: &Bound<'py, PyAny>, name: &str) -> PyResult<B
         entry,
         &[(
             "decision",
-            registry::class(entry.py(), RecordId::MigrationDecision)?.call1((name,))?,
+            enum_from_value(entry.py(), RecordId::MigrationDecision, name)?,
         )],
     )
 }
@@ -101,20 +102,18 @@ pub(super) fn decide<'py>(
             ("discovery", request.discovery.clone()),
             (
                 "decision",
-                registry::class(py, RecordId::MigrationDecision)?.getattr("MIGRATE")?,
+                enum_member(py, RecordId::MigrationDecision, "MIGRATE")?,
             ),
             (
                 "compatibility",
-                registry::class(py, RecordId::MigrationCompatibility)?.getattr("NOT_CHECKED")?,
+                enum_member(py, RecordId::MigrationCompatibility, "NOT_CHECKED")?,
             ),
             ("origin_model", origin_model),
             ("origin", origin.clone()),
             ("destination", destination.clone()),
             (
                 "target_name",
-                runtime
-                    .getattr("project")?
-                    .getattr("effective_target_name")?,
+                native_field(&native_field(&runtime, "project")?, "effective_target_name")?,
             ),
             (
                 "origin_version_hash",
@@ -143,12 +142,10 @@ pub(super) fn decide<'py>(
         ],
     )?;
     let recorded = !newest.is_none()
-        && newest
-            .getattr("destination")?
+        && native_field(&newest, "destination")?
             .call_method1("matches", (relation(&destination)?,))?
             .is_truthy()?
-        && newest
-            .getattr("origin")?
+        && native_field(&newest, "origin")?
             .call_method1("matches", (relation(&origin)?,))?
             .is_truthy()?;
     if request.identity_only {
@@ -161,9 +158,7 @@ pub(super) fn decide<'py>(
             );
         }
         let inherited = if recorded && !applies(&item, &newest, &snapshot)? {
-            snapshot
-                .getattr("fingerprints")?
-                .getattr("models")?
+            native_field(&native_field(&snapshot, "fingerprints")?, "models")?
                 .call_method1("get", (native_field(&item, "name")?,))?
         } else {
             empty_version(&item, &fingerprint)?
@@ -193,9 +188,7 @@ pub(super) fn decide<'py>(
                 &native_field(&newest, "origin_version_hash")?,
             )?
         } else {
-            snapshot
-                .getattr("fingerprints")?
-                .getattr("models")?
+            native_field(&native_field(&snapshot, "fingerprints")?, "models")?
                 .call_method1("get", (native_field(&item, "name")?,))?
         };
         return result(
@@ -225,27 +218,22 @@ pub(super) fn decide<'py>(
         model: item.clone(),
         origin_relation,
         origin_columns: state.call_method1("relation_columns", (&origin,))?,
-        sql_analysis_enabled: runtime
-            .getattr("project")?
-            .getattr("settings")?
-            .getattr("sql_analysis")?,
+        sql_analysis_enabled: native_field(
+            &native_field(&native_field(&runtime, "project")?, "settings")?,
+            "sql_analysis",
+        )?,
         column_dialect: native_field(&snapshot, "column_dialect")?,
         snapshots_config: decision_request.snapshots_config.clone(),
     })?;
     let name = model_decision(
-        snapshot
-            .getattr("existing_relations")?
-            .contains(native_field(&item, "name")?)?,
+        native_field(&snapshot, "existing_relations")?.contains(native_field(&item, "name")?)?,
         (
             !newest.is_none(),
             !newest.is_none()
-                && newest
-                    .getattr("origin")?
+                && native_field(&newest, "origin")?
                     .call_method1("matches", (relation(&destination)?,))?
                     .is_truthy()?,
-            snapshot
-                .getattr("fingerprints")?
-                .getattr("models")?
+            native_field(&native_field(&snapshot, "fingerprints")?, "models")?
                 .contains(native_field(&item, "name")?)?,
         ),
         request.force,
@@ -257,10 +245,7 @@ pub(super) fn decide<'py>(
             ("compatibility_findings", compatibility.findings),
         ],
     )?;
-    if !entry
-        .getattr("decision")?
-        .getattr("moves_data")?
-        .is_truthy()?
+    if !native_field(&native_field(&entry, "decision")?, "moves_data")?.is_truthy()?
         || native_field(&entry, "blocks_build")?.is_truthy()?
     {
         return result(entry, py.None().into_bound(py), false);

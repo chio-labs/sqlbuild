@@ -1,17 +1,17 @@
 //! Materialize native plan rows as the existing executor-facing dataclasses.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::planning::{AssertionRow, ChainRow, PlanRow};
 use pyo3::IntoPyObjectExt;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyResult, Python};
 use pyo3::types::PyTuple;
 
 fn chain_step<'py>(py: Python<'py>, row: ChainRow) -> PyResult<Bound<'py, PyAny>> {
     let (model, sql, expected_sql, lifted, body, expected_columns, expected_lifted) = row;
-    call_with(
-        &registry::class(py, RecordId::ChainStep)?,
+    new_record_with(
+        py,
+        RecordId::ChainStep,
         &[
             ("model_name", model.into_bound_py_any(py)?),
             ("resolved_sql", sql.into_bound_py_any(py)?),
@@ -35,8 +35,9 @@ fn chain_step<'py>(py: Python<'py>, row: ChainRow) -> PyResult<Bound<'py, PyAny>
 
 fn assertion_step<'py>(py: Python<'py>, row: AssertionRow) -> PyResult<Bound<'py, PyAny>> {
     let (name, sql, lifted, body) = row;
-    call_with(
-        &registry::class(py, RecordId::SqlTestAssertionStep)?,
+    new_record_with(
+        py,
+        RecordId::SqlTestAssertionStep,
         &[
             ("name", name.into_bound_py_any(py)?),
             ("resolved_sql", sql.into_bound_py_any(py)?),
@@ -57,19 +58,23 @@ pub(super) fn plan(py: Python<'_>, row: PlanRow) -> PyResult<Bound<'_, PyAny>> {
         assertions.push(assertion_step(py, value)?);
     }
     let mut warnings: Vec<Bound<'_, PyAny>> = Vec::new();
-    let severity = registry::class(py, RecordId::WarningSeverity)?;
     for (model_name, level, message) in warning_rows {
-        warnings.push(call_with(
-            &registry::class(py, RecordId::PlanWarning)?,
+        warnings.push(new_record_with(
+            py,
+            RecordId::PlanWarning,
             &[
                 ("model_name", model_name.into_bound_py_any(py)?),
-                ("severity", severity.call1((level,))?),
+                (
+                    "severity",
+                    enum_from_value(py, RecordId::WarningSeverity, level)?,
+                ),
                 ("message", message.into_bound_py_any(py)?),
             ],
         )?);
     }
-    call_with(
-        &registry::class(py, RecordId::NativeSqlTestPlan)?,
+    new_record_with(
+        py,
+        RecordId::NativeSqlTestPlan,
         &[
             ("chain", PyTuple::new(py, chain)?.into_any()),
             ("assertions", PyTuple::new(py, assertions)?.into_any()),

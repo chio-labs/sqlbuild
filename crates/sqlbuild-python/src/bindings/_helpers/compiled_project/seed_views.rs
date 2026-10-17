@@ -15,6 +15,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SEED_RESOURCE: &str = "seed";
 const TAGS_ATTRIBUTE: &str = "tags";
@@ -54,27 +55,26 @@ pub(crate) fn paired_seeds(
     let py: Python<'_> = compile_error.py();
     let mut names: Vec<String> = Vec::with_capacity(declarations.len());
     for (entry, _) in &declarations {
-        names.push(entry.bind(py).getattr(NAME_ATTRIBUTE)?.extract()?);
+        names.push(native_field(entry.bind(py), NAME_ATTRIBUTE)?.extract()?);
     }
     let mut stems: Vec<String> = Vec::with_capacity(seed_files.len());
     for seed_file in seed_files {
         stems.push(
-            seed_file
-                .bind(py)
-                .getattr(FILE_PATH_ATTRIBUTE)?
-                .getattr(STEM_ATTRIBUTE)?
-                .extract()?,
+            native_field(
+                &native_field(seed_file.bind(py), FILE_PATH_ATTRIBUTE)?,
+                STEM_ATTRIBUTE,
+            )?
+            .extract()?,
         );
     }
     let pairs: Vec<usize> = match pair_seed_declarations(&names, &stems) {
         Ok(pairs) => pairs,
         Err(missing) => {
             let schema_file: &Py<PyAny> = &declarations[missing].1;
-            let relative_path: String = schema_file
-                .bind(py)
-                .getattr(RELATIVE_PATH_ATTRIBUTE)?
-                .str()?
-                .extract()?;
+            let relative_path: String =
+                native_field(schema_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
+                    .str()?
+                    .extract()?;
             let message: String = format!(
                 "Seed declaration '{}' in {relative_path} has no matching CSV file under seeds/",
                 names[missing]
@@ -198,12 +198,7 @@ impl NativeCompiledSeed {
     pub(crate) fn graph_row(&self, py: Python<'_>) -> PyResult<ResourceRow> {
         read_seed(&self.owner, self.index, py, |seed, py| {
             let mut tags: Vec<String> = Vec::new();
-            for tag in seed
-                .schema_entry
-                .bind(py)
-                .getattr(TAGS_ATTRIBUTE)?
-                .try_iter()?
-            {
+            for tag in native_field(seed.schema_entry.bind(py), TAGS_ATTRIBUTE)?.try_iter()? {
                 tags.push(tag?.str()?.extract()?);
             }
             Ok((

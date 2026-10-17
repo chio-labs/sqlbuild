@@ -4,18 +4,20 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
+use crate::bindings::_helpers::compile_attachment::declaration_scope::build_declaration_scope;
 use crate::bindings::_helpers::compile_attachment::declaration_scope::rebind_declaration_scope;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_vars;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::render::declaration_indexes::public_declaration_indexes;
 use pyo3::IntoPyObjectExt;
 
 /// Build the declaration scope of `discovered`; a static scope lends only its index to macros.
@@ -35,20 +37,17 @@ fn declaration_scope<'py>(
             return Ok(rebound);
         }
     }
-    call_with(
-        &registry::native(py, NativeAttr::BuildDeclarationScope)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("loaded_macros", loaded_macros),
-            ("sql_lexical_syntax", sql_lexical_syntax),
-        ],
+    build_declaration_scope(
+        &discovered.clone(),
+        &loaded_macros,
+        &sql_lexical_syntax,
+        None,
     )
 }
 
 /// Each model file's own enum and constant declarations, by file path.
 fn local_declarations<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = discovered.py();
-    let context: Bound<'py, PyAny> = registry::class(py, RecordId::DeclarationResolutionContext)?;
     let by_name = |declarations: Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
         let named: Bound<'py, PyDict> = PyDict::new(py);
         for declaration in declarations.try_iter()? {
@@ -62,8 +61,9 @@ fn local_declarations<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         let model_file: Bound<'py, PyAny> = model_file?;
         local.set_item(
             native_field(&model_file, "file_path")?,
-            call_with(
-                &context,
+            new_record_with(
+                py,
+                RecordId::DeclarationResolutionContext,
                 &[
                     (
                         "enums",
@@ -97,7 +97,8 @@ pub(crate) struct SqlExpansionInputs {
 impl SqlExpansionInputs {
     /// The inputs a `SqlExpansionContext` record holds.
     pub(crate) fn from_record(record: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let field = |name: &str| -> PyResult<Py<PyAny>> { Ok(record.getattr(name)?.unbind()) };
+        let field =
+            |name: &str| -> PyResult<Py<PyAny>> { Ok(native_field(record, name)?.unbind()) };
         Ok(Self {
             effective_vars: field("effective_vars")?,
             loaded_macros: field("loaded_macros")?,
@@ -116,8 +117,9 @@ impl SqlExpansionInputs {
 
     /// These inputs as a `SqlExpansionContext` record.
     pub(crate) fn record<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        call_with(
-            &registry::class(py, RecordId::SqlExpansionContext)?,
+        new_record_with(
+            py,
+            RecordId::SqlExpansionContext,
             &[
                 ("effective_vars", self.effective_vars.bind(py).clone()),
                 ("loaded_macros", self.loaded_macros.bind(py).clone()),
@@ -195,14 +197,15 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
         )?,
     };
     let (enums, constants): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
-        registry::native(py, NativeAttr::PublicDeclarationIndexes)?
-            .call1((&discovered,))?
+        public_declaration_indexes(discovered.clone())
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
             .extract()?;
     let collection_rendering: Bound<'_, PyAny> =
         resolve_effective_collection_rendering(&project_config.clone(), &py.None().into_bound(py))
             .and_then(|value| value.into_bound_py_any(py))?;
-    let macro_context: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::MacroContext)?,
+    let macro_context: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::MacroContext,
         &[
             (
                 "adapter_name",

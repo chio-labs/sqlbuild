@@ -17,9 +17,9 @@ use crate::bindings::_helpers::cost_report::store;
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const LOGGER_NAME: &str = "sqlbuild.cli.commands._helpers.cost.collection";
 const COLLECTION_LOGGER_NAME: &str = "sqlbuild.cost";
@@ -157,14 +157,14 @@ fn cost_record<'py>(
         "started_at",
         "completed_at",
     ] {
-        fields.push((name, finalization.getattr(name)?));
+        fields.push((name, native_field(finalization, name)?));
     }
     fields.push(("cost", summary));
     fields.push((
         "had_executable_work",
         native_field(finalization, "had_executable_work")?,
     ));
-    call_with(&registry::class(py, RecordId::CostRunRecord)?, &fields)
+    new_record_with(py, RecordId::CostRunRecord, &fields)
 }
 
 fn summary<'py>(

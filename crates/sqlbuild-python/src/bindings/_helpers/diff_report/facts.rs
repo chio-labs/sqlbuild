@@ -172,7 +172,7 @@ fn row_facts(rows: Bound<'_, PyAny>) -> PyResult<Option<DiffRowFacts>> {
     if rows.is_none() {
         return Ok(None);
     }
-    let count = |name: &str| -> PyResult<i64> { rows.getattr(name)?.extract() };
+    let count = |name: &str| -> PyResult<i64> { native_field(&rows, name)?.extract() };
     let mut columns: Vec<DiffColumnFacts> = Vec::new();
     for item in native_field(&rows, "column_results")?.try_iter()? {
         columns.push(column(&item?)?);
@@ -227,7 +227,7 @@ fn model_facts(model: &Bound<'_, PyAny>) -> PyResult<DiffModelFacts> {
     let schema: Bound<'_, PyAny> = native_field(model, "schema_result")?;
     let names = |attribute: &str| -> PyResult<Vec<String>> {
         let mut names: Vec<String> = Vec::new();
-        for column in schema.getattr(attribute)?.try_iter()? {
+        for column in native_field(&schema, attribute)?.try_iter()? {
             names.push(text_of(&native_field(&column?, "name")?)?);
         }
         Ok(names)

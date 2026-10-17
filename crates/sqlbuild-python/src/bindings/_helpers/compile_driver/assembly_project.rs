@@ -26,9 +26,9 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 use crate::bindings::_helpers::semantic_checks::stage::{
@@ -162,7 +162,7 @@ fn target_field<'py>(inputs: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<
     if target.is_none() {
         return Ok(target);
     }
-    target.getattr(field)
+    native_field(&target, field)
 }
 
 /// The target database and schema, with connection fallbacks, resolved as early model templates.
@@ -281,7 +281,7 @@ fn project_fields<'py>(
     fields.set_item("sql_tests", assembled_sql_tests(inputs)?)?;
     fields.set_item("sql_scenarios", compiled_sql_scenarios(inputs)?)?;
     for name in ["loader_functions", "hook_functions"] {
-        fields.set_item(name, discovered.getattr(name)?)?;
+        fields.set_item(name, native_field(&discovered, name)?)?;
     }
     fields.set_item(
         "enforce_explicit_references",
@@ -290,10 +290,10 @@ fn project_fields<'py>(
             .getattr("enforce_explicit")?,
     )?;
     for name in ["sql_hook_files", "materialization_files"] {
-        fields.set_item(name, discovered.getattr(name)?)?;
+        fields.set_item(name, native_field(&discovered, name)?)?;
     }
     for name in ["public_enums", "public_constants", "loaded_macros"] {
-        fields.set_item(name, inputs.getattr(name)?)?;
+        fields.set_item(name, native_field(inputs, name)?)?;
     }
     let mut diagnostics: Vec<Bound<'py, PyAny>> = inputs
         .getattr("diagnostics")?
@@ -319,12 +319,12 @@ fn compiled_resources<'py>(
     kind: &ResourceKind<'_>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = inputs.py();
-    let count: usize = inputs.getattr(kind.inputs)?.len()?;
+    let count: usize = native_field(inputs, kind.inputs)?.len()?;
     if count == 0 {
         return Ok(PyTuple::empty(py));
     }
     let owner: Bound<'py, PyAny> = native_field(inputs, "native_project")?;
-    let facts: Bound<'py, PyAny> = resources.getattr(kind.facts)?;
+    let facts: Bound<'py, PyAny> = native_field(resources, kind.facts)?;
     owner.call_method1(
         kind.record,
         (PyList::new(
@@ -392,5 +392,5 @@ fn project_view<'py>(
     }
     let arguments: Bound<'py, PyDict> = fields.copy()?;
     arguments.set_item("sql_expansions", sql_expansions)?;
-    registry::class(py, RecordId::CompiledProject)?.call((), Some(&arguments))
+    new_record(py, RecordId::CompiledProject, (), Some(&arguments))
 }

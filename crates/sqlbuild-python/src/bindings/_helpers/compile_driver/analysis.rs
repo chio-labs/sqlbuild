@@ -22,9 +22,10 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::RULE_FIX_AVAILABLE_NOTE;
 use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
 use crate::bindings::_helpers::rules::results::rules_progress;
@@ -41,7 +42,7 @@ const TARGET_DIRECTORY: &str = "target";
 
 /// `ColumnLineageMode.<member>`.
 fn column_lineage_mode<'py>(py: Python<'py>, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, RecordId::ColumnLineageMode)?.getattr(member)
+    enum_member(py, RecordId::ColumnLineageMode, member)
 }
 
 /// Column lineage in the compile's mode; `none` skips the analyzer.
@@ -132,7 +133,7 @@ fn any_error(diagnostics: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// Discover, compile and validate the project into one `CompileAnalysis`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn analyze_compile_project<'py>(
+pub(crate) fn analyze_compile_project<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -226,8 +227,9 @@ fn analyzed<'py>(
     };
     let diagnostics: Bound<'py, PyTuple> =
         with_rule_diagnostics(py, &core_diagnostics, &rules_result)?;
-    call_with(
-        &registry::class(py, RecordId::CompileAnalysis)?,
+    new_record_with(
+        py,
+        RecordId::CompileAnalysis,
         &[
             ("discovered_inputs", discovered),
             ("adapter", adapter),
@@ -275,8 +277,9 @@ fn analyzed<'py>(
 /// `RulesRunResult` of a compile whose rules did not run.
 fn empty_rules_result(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     let zero: Bound<'_, PyAny> = 0_i64.into_pyobject(py)?.into_any();
-    call_with(
-        &registry::class(py, RecordId::RulesRunResult)?,
+    new_record_with(
+        py,
+        RecordId::RulesRunResult,
         &[
             ("findings", PyTuple::empty(py).into_any()),
             ("evaluated_models", zero.clone()),
@@ -354,9 +357,9 @@ impl<'py> Driver<'_, 'py> {
             (self.early_lint.getattr("start")?,),
             Some(&keywords(py, &[("dialect", lint_dialect.clone())])?),
         )?;
-        let analysis_selection: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?.call(
-            (options.analysis_selection.clone(),),
-            Some(&keywords(py, &[("on_inputs_ready", on_inputs_ready)])?),
+        let analysis_selection: Bound<'py, PyAny> = replaced(
+            &options.analysis_selection.clone(),
+            &[("on_inputs_ready", on_inputs_ready)],
         )?;
         let lineage_mode: Bound<'py, PyAny> = column_lineage_mode(
             py,
@@ -427,8 +430,9 @@ impl<'py> Driver<'_, 'py> {
             .getattr("skip_contracts")?
             .is_truthy()?;
         let result: Bound<'py, PyAny> = if skip {
-            call_with(
-                &registry::class(py, RecordId::ContractValidationResult)?,
+            new_record_with(
+                py,
+                RecordId::ContractValidationResult,
                 &[("diagnostics", PyTuple::empty(py).into_any())],
             )?
         } else {
@@ -519,11 +523,8 @@ fn with_rule_diagnostics<'py>(
     core: &Bound<'py, PyTuple>,
     rules_result: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let diagnostic_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompilerDiagnostic)?;
-    let phase: Bound<'py, PyAny> =
-        registry::class(py, RecordId::DiagnosticPhase)?.getattr("RULE")?;
-    let severity: Bound<'py, PyAny> =
-        registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?;
+    let phase: Bound<'py, PyAny> = enum_member(py, RecordId::DiagnosticPhase, "RULE")?;
+    let severity: Bound<'py, PyAny> = enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?;
     let fix_note: Bound<'py, PyAny> = PyString::new(py, RULE_FIX_AVAILABLE_NOTE).into_any();
     let mut diagnostics: Vec<Bound<'py, PyAny>> = core.iter().collect();
     for fault in native_field(rules_result, "findings")?.try_iter()? {
@@ -533,8 +534,9 @@ fn with_rule_diagnostics<'py>(
         } else {
             PyTuple::empty(py)
         };
-        diagnostics.push(call_with(
-            &diagnostic_class,
+        diagnostics.push(new_record_with(
+            py,
+            RecordId::CompilerDiagnostic,
             &[
                 ("phase", phase.clone()),
                 ("severity", severity.clone()),

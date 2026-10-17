@@ -144,7 +144,7 @@ impl TransientStatusReporter {
 impl TransientStatusReporter {
     #[new]
     #[pyo3(signature = (*, stream, use_color = false, enabled = true))]
-    fn new(
+    pub(crate) fn new(
         py: Python<'_>,
         stream: &Bound<'_, PyAny>,
         use_color: bool,

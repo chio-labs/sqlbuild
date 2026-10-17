@@ -201,7 +201,7 @@ struct LoopModel<'a, 'py> {
 #[pymethods]
 impl NativeModelLoop {
     #[new]
-    fn new(
+    pub(crate) fn new(
         checks: LoopChecks,
         syntax: LexicalSyntaxInput,
         reserved_markers: Vec<String>,
@@ -543,7 +543,8 @@ impl NativeModelLoop {
             interpolation,
             model_file,
         } = row;
-        let values: Bound<'py, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
+        let values: Bound<'py, PyDict> =
+            native_field(&config, VALUES_ATTRIBUTE)?.downcast_into()?;
         let schema: Option<ModelSchema<'py>> = model_schema(context, &values, name)?;
         let hooked: bool = hook_presence(&values)?;
         let python_hooks: Vec<Bound<'py, PyAny>> = if hooked {
@@ -788,12 +789,14 @@ impl NativeModelLoop {
             .zip(&external)
             .map(|((kind, name, _, _), error)| (kind.as_str(), name.as_str(), error.is_some()))
             .collect();
-        let unmanaged: Bound<'_, PyAny> = config
-            .getattr(RETENTION_ATTRIBUTE)?
-            .getattr(UNMANAGED_ATTRIBUTE)?;
-        let declared: Bound<'_, PyAny> = config
-            .getattr(TABLE_TYPE_ATTRIBUTE)?
-            .getattr(DECLARED_ATTRIBUTE)?;
+        let unmanaged: Bound<'_, PyAny> = native_field(
+            &native_field(config, RETENTION_ATTRIBUTE)?,
+            UNMANAGED_ATTRIBUTE,
+        )?;
+        let declared: Bound<'_, PyAny> = native_field(
+            &native_field(config, TABLE_TYPE_ATTRIBUTE)?,
+            DECLARED_ATTRIBUTE,
+        )?;
         let outcome: Bound<'_, PyAny> = self.validator.bind(py).call_method1(
             VALIDATE_METHOD,
             (

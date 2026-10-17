@@ -7,7 +7,6 @@ from io import StringIO
 
 import pytest
 
-from sqlbuild import _native as native
 from sqlbuild._native import ScopeCommandRequest, ScopeCompleteness, ScopeIndex, run_scope_command
 from sqlbuild.adapter.discovery.main import resolve_adapter as adapter_registry
 from tests.unit.src.sqlbuild.cli.commands.main.scope._test_types import ScopeCommandCase
@@ -25,7 +24,6 @@ def test_given_offline_index_loader_when_running_then_connection_runtime_is_not_
         pytest.fail("scope must not resolve adapters or warehouse credentials")
 
     monkeypatch.setattr(adapter_registry, "resolve_adapter", fail)
-    monkeypatch.setattr(native, "resolve_project_connection_config", fail)
     exit_code: int = run_scope_command(
         request=ScopeCommandRequest(target="model:orders", json_output=True),
         load_scope_index=lambda **_kwargs: report_scope_lookup().index,

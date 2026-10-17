@@ -13,18 +13,15 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 const HOOK_NAMES: [&str; 2] = ["pre_hooks", "post_hooks"];
 
 fn config_value<'py>(model_input: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    model_input
-        .getattr("config")?
-        .getattr("values")?
-        .call_method1("get", (key,))
+    native_field(&native_field(model_input, "config")?, "values")?.call_method1("get", (key,))
 }
 
 fn model_name(model_input: &Bound<'_, PyAny>) -> PyResult<String> {
-    model_input
-        .getattr("model_file")?
-        .getattr("file_path")?
-        .getattr("stem")?
-        .extract()
+    native_field(
+        &native_field(&native_field(model_input, "model_file")?, "file_path")?,
+        "stem",
+    )?
+    .extract()
 }
 
 /// The model's `@@@name` placeholder defaults as strings, or `None`.

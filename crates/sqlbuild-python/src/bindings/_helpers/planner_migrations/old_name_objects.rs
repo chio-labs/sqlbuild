@@ -4,9 +4,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, model};
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::old_name_retention;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 
@@ -24,16 +24,11 @@ pub(super) fn location<'py>(
         ("name", native_field(relation, "name")?),
     ];
     let qualified = call_with(
-        &runtime
-            .getattr("adapter")?
-            .getattr("render_qualified_name")?,
+        &native_field(&native_field(runtime, "adapter")?, "render_qualified_name")?,
         &fields,
     )?;
     fields.push(("qualified_name", qualified));
-    call_with(
-        &registry::class(runtime.py(), RecordId::CompiledRelationLocation)?,
-        &fields,
-    )
+    new_record_with(runtime.py(), RecordId::CompiledRelationLocation, &fields)
 }
 
 pub(super) fn stores_history(item: &Bound<'_, PyAny>) -> PyResult<bool> {
@@ -45,7 +40,10 @@ pub(super) fn retention<'py>(
     item: &Bound<'py, PyAny>,
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    old_name_retention(&native_field(item, "config")?.getattr("values")?, project)
+    old_name_retention(
+        &native_field(&native_field(item, "config")?, "values")?,
+        project,
+    )
 }
 
 pub(super) fn expires<'py>(
@@ -53,7 +51,7 @@ pub(super) fn expires<'py>(
     now: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let duration =
-        registry::class(now.py(), RecordId::Duration)?.call_method1("parse", (retention,))?;
+        record_class(now.py(), RecordId::Duration)?.call_method1("parse", (retention,))?;
     if duration.is_none() {
         Ok(now.py().None().into_bound(now.py()))
     } else {

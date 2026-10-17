@@ -1,8 +1,8 @@
 //! Fixture boundary records and adapter callbacks.
 
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
@@ -36,7 +36,7 @@ pub(crate) fn record<'py>(
     name: RecordId,
     kwargs: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, name)?.call((), Some(kwargs))
+    new_record(py, name, (), Some(kwargs))
 }
 
 pub(crate) fn label(key: &Bound<'_, PyAny>) -> PyResult<String> {

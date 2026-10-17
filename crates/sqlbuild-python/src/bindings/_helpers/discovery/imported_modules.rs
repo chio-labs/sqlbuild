@@ -10,6 +10,7 @@ use crate::bindings::_helpers::discovery::python_module_files::discover_python_m
 use crate::bindings::_helpers::event_exporting::scope::current_scope;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -105,7 +106,7 @@ pub(crate) fn discovered<'py>(
     class_name: RecordId,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::class(py, class_name)?, pairs)
+    new_record_with(py, class_name, pairs)
 }
 
 /// `sqlbuild._native.<class_name>(message)`.

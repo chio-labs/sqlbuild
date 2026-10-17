@@ -7,9 +7,9 @@ use pyo3::types::{PyDict, PyDictMethods};
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const CONTRACT_CLASSES: [(&str, RecordId); 6] = [
     ("schema_column", RecordId::SchemaColumn),
@@ -75,7 +75,7 @@ pub(crate) fn yaml_entry_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> 
 fn built_contract_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let classes: Bound<'_, PyDict> = PyDict::new(py);
     for (key, class) in CONTRACT_CLASSES {
-        classes.set_item(key, registry::class(py, class)?)?;
+        classes.set_item(key, record_class(py, class)?)?;
     }
     classes.set_item(
         "severities",
@@ -92,7 +92,7 @@ fn built_yaml_entry_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let classes: Bound<'_, PyDict> = PyDict::new(py);
     classes.set_item("contracts", contract_classes(py)?)?;
     for (key, class) in YAML_ENTRY_CLASSES {
-        classes.set_item(key, registry::class(py, class)?)?;
+        classes.set_item(key, record_class(py, class)?)?;
     }
     for (key, class) in INTEGRATION_ENTRY_CLASSES {
         classes.set_item(key, host::entry(py, class)?)?;

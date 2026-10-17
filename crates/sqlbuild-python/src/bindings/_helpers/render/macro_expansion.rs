@@ -17,9 +17,7 @@ use sqlbuild_render::macro_calls::models::{
 
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::usage_visibility;
-use crate::bindings::_helpers::render::macro_call_classes::{
-    CallClass, ClassInputs, StoreTokenClasses,
-};
+use crate::bindings::_helpers::render::macro_call_classes::{CallClass, ClassInputs};
 use crate::bindings::_helpers::render::macro_call_memo::{MacroCallMemo, poisoned};
 use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
 use crate::bindings::_helpers::render::macro_evaluation::{CallText, Evaluation, evaluate_call};
@@ -63,8 +61,6 @@ pub(crate) struct ExpansionClasses<'py> {
     pub(crate) ref_kinds: Bound<'py, PyDict>,
     /// Typed reference function by `SqlResourceRefKind` value.
     ref_functions: Bound<'py, PyDict>,
-    /// `macro_store_token` and `context_store_token`.
-    store_tokens: StoreTokenClasses<'py>,
     pub(crate) relation_renderer: Bound<'py, PyAny>,
     /// Builds the `MacroContext` a macro is called with from the visible declarations.
     pub(crate) invocation_context: Bound<'py, PyAny>,
@@ -180,7 +176,6 @@ impl NativeMacroExpansion {
             declarations: self.declarations.bind(py),
             loaded_macros: self.loaded_macros.bind(py),
             macro_context: self.macro_context.bind(py),
-            store: &classes.store_tokens,
         };
         let mut state = memo.classes.lock().map_err(poisoned)?;
         let mut found: Vec<CallClass> = Vec::with_capacity(scan.sites.len());
@@ -382,8 +377,7 @@ impl NativeMacroExpansion {
         let visibility: Bound<'py, PyAny> = if declarations.is_none() {
             PyTuple::empty(py).into_any()
         } else {
-            declarations
-                .getattr("macro_visibility")?
+            native_field(declarations, "macro_visibility")?
                 .call_method1("get", (name, PyTuple::empty(py)))?
         };
         let usages: Vec<Bound<'py, PyAny>> = if visibility.is_truthy()? {
@@ -552,8 +546,7 @@ impl NativeMacroExpansion {
     ) -> PyResult<Bound<'py, PyAny>> {
         let declarations: &Bound<'py, PyAny> = self.declarations.bind(py);
         if !declarations.is_none() {
-            return declarations
-                .getattr("macro_records")?
+            return native_field(declarations, "macro_records")?
                 .get_item(name)?
                 .getattr("identity");
         }
@@ -682,9 +675,7 @@ fn top_level_output(
 /// A `SqlResourceRef`'s kind value and name.
 pub(crate) fn resource_key(reference: &Bound<'_, PyAny>) -> PyResult<ResourceRef> {
     Ok((
-        native_field(reference, "kind")?
-            .getattr("value")?
-            .extract()?,
+        native_field(&native_field(reference, "kind")?, "value")?.extract()?,
         native_field(reference, "name")?.extract()?,
     ))
 }
@@ -711,9 +702,7 @@ fn relationship_consumer(
     if !consumer.is_instance(&classes.resource_identity)? {
         return Ok(false);
     }
-    let kind: String = native_field(consumer, "kind")?
-        .getattr("value")?
-        .extract()?;
+    let kind: String = native_field(&native_field(consumer, "kind")?, "value")?.extract()?;
     Ok(RELATIONSHIP_CONSUMER_KINDS.contains(&kind.as_str()))
 }
 

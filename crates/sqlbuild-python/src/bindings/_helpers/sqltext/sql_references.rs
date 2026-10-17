@@ -3,7 +3,7 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::PyTuple;
 use pyo3::{IntoPyObject, IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::{
@@ -12,9 +12,12 @@ use sqlbuild_sqltext::sql_references::models::{
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, enum_member, new_record_with,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
@@ -109,17 +112,18 @@ fn scanned<'py>(
             return Err(PyErr::from_value(error));
         }
     };
-    let kind_type: Bound<'py, PyAny> = registry::class(py, RecordId::SqlReferenceKind)?;
-    let reference_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompileSqlReference)?;
-    let invalid_type: Bound<'py, PyAny> = registry::class(py, RecordId::InvalidSqlReferenceCall)?;
     let references: Vec<Bound<'py, PyAny>> = scan
         .references
         .into_iter()
         .map(|reference| {
-            call_with(
-                &reference_type,
+            new_record_with(
+                py,
+                RecordId::CompileSqlReference,
                 &[
-                    ("ref_kind", kind_type.call1((reference.kind,))?),
+                    (
+                        "ref_kind",
+                        enum_from_value(py, RecordId::SqlReferenceKind, reference.kind)?,
+                    ),
                     ("ref_name", text(py, reference.name)?),
                     ("ref_package", text(py, reference.package)?),
                     (
@@ -134,10 +138,14 @@ fn scanned<'py>(
         .invalid_calls
         .into_iter()
         .map(|call| {
-            call_with(
-                &invalid_type,
+            new_record_with(
+                py,
+                RecordId::InvalidSqlReferenceCall,
                 &[
-                    ("ref_kind", kind_type.call1((call.kind,))?),
+                    (
+                        "ref_kind",
+                        enum_from_value(py, RecordId::SqlReferenceKind, call.kind)?,
+                    ),
                     ("call", text(py, call.call)?),
                     ("start", text(py, call.start)?),
                     ("message", text(py, call.message)?),
@@ -159,8 +167,9 @@ fn scan_sql_reference_calls<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = syntax.py();
     let (references, invalid_calls) = scanned(py, sql, syntax)?;
-    call_with(
-        &registry::class(py, RecordId::SqlReferenceScan)?,
+    new_record_with(
+        py,
+        RecordId::SqlReferenceScan,
         &[
             ("references", PyTuple::new(py, references)?.into_any()),
             ("invalid_calls", PyTuple::new(py, invalid_calls)?.into_any()),
@@ -177,32 +186,30 @@ pub(crate) fn extract_references<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = syntax.py();
     let (references, invalid_calls) = scanned(py, sql, syntax)?;
-    let report: Bound<'py, PyAny> = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
-    let diagnostic_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompilerDiagnostic)?;
     for call in invalid_calls {
-        let diagnostic: Bound<'py, PyAny> = call_with(
-            &diagnostic_type,
+        let diagnostic: Bound<'py, PyAny> = new_record_with(
+            py,
+            RecordId::CompilerDiagnostic,
             &[
                 (
                     "phase",
-                    registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?,
+                    enum_member(py, RecordId::DiagnosticPhase, "COMPILE")?,
                 ),
                 (
                     "severity",
-                    registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
+                    enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?,
                 ),
                 ("code", text(py, REFERENCE_CALL_SYNTAX_CODE)?),
                 ("message", native_field(&call, "message")?),
                 ("help", native_field(&call, "help")?),
             ],
         )?;
-        let keywords: Bound<'py, PyDict> = PyDict::new(py);
-        keywords.set_item(
-            "key",
-            (REFERENCE_CALL_SYNTAX_CODE, "", native_field(&call, "call")?),
+        report_compile_diagnostic(
+            (REFERENCE_CALL_SYNTAX_CODE, "", native_field(&call, "call")?)
+                .into_pyobject(py)?
+                .as_any(),
+            &diagnostic,
         )?;
-        keywords.set_item("diagnostic", diagnostic)?;
-        report.call((), Some(&keywords))?;
     }
     PyTuple::new(py, references)
 }

@@ -19,16 +19,22 @@ use sqlbuild_core::contract_command::models::{
 };
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_graph_from_compiled_project;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
+use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::refactor::contract_compare::compare_contracts;
 
 const GENERATE_ACTION: &str = "generate";
 
@@ -79,8 +85,9 @@ fn select_resources<'py>(
     context: &Bound<'py, PyAny>,
 ) -> PyResult<Selection<'py>> {
     let py: Python<'py> = request.py();
-    let analysis: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+    let analysis: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompileAnalysisSelection,
         &[("no_cache", PyBool::new(py, true).to_owned().into_any())],
     )?;
     let project: Bound<'py, PyAny> = build_compiled_project(
@@ -100,18 +107,16 @@ fn select_resources<'py>(
             ],
         )?),
     )?;
-    let graph: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildProjectGraphFromCompiledProject)?,
-        &[("project", project)],
+    let graph: Bound<'py, PyAny> = build_project_graph_from_compiled_project(
+        py,
+        Some(keywords(py, &[("project", project)])?),
     )?;
-    let selected: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::SelectProjectGraph)?,
-        &[
-            ("graph", graph.clone()),
-            ("select", native_field(request, "select")?),
-            ("exclude", native_field(request, "exclude")?),
-        ],
-    )?;
+    let selected: Bound<'py, PyAny> = select_project_graph(
+        &graph.clone(),
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let compiled: Bound<'py, PyAny> = native_field(&graph, "project")?;
     let models: Bound<'py, PyTuple> = selected_of(native_field(&compiled, "models")?, &selected)?;
     let sources: Bound<'py, PyTuple> = selected_of(native_field(&compiled, "sources")?, &selected)?;
@@ -148,7 +153,7 @@ fn exception(py: Python<'_>, error: &PyErr) -> bool {
 fn connection_timing(reporter: &Bound<'_, PyAny>, method: &str, started: Instant) -> PyResult<()> {
     let py: Python<'_> = reporter.py();
     call_with(
-        &reporter.getattr(method)?,
+        &native_field(reporter, method)?,
         &[
             ("connection_count", PyInt::new(py, 1).into_any()),
             (
@@ -169,17 +174,22 @@ fn compare<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let adapter: Bound<'py, PyAny> = native_field(context, "adapter")?;
-    let reporter: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", native_field(context, "adapter_name")?),
-            ("stream", progress.stream.clone()),
-            (
-                "use_color",
-                PyBool::new(py, progress.use_color).to_owned().into_any(),
-            ),
-        ],
-    )?;
+    let reporter: Bound<'py, PyAny> = ConnectionProgressReporter::new(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("adapter_name", native_field(context, "adapter_name")?),
+                ("stream", progress.stream.clone()),
+                (
+                    "use_color",
+                    PyBool::new(py, progress.use_color).to_owned().into_any(),
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::Bound::new(py, value))
+    .map(pyo3::Bound::into_any)?;
     let connection_started: Instant = Instant::now();
     reporter.call_method1("on_connection_start", (1,))?;
     let connection: Bound<'py, PyAny> =
@@ -207,15 +217,17 @@ fn compare<'py>(
                 },
             ),),
         )?;
-        let evidence: Bound<'py, PyAny> = match call_with(
-            &registry::native(py, NativeAttr::CompareContracts)?,
+        let evidence: Bound<'py, PyAny> = match compare_contracts(Some(&keywords(
+            py,
             &[
                 ("adapter", adapter.clone()),
                 ("connection", connection.clone()),
                 ("models", selection.models.clone().into_any()),
                 ("sources", selection.sources.clone().into_any()),
             ],
-        ) {
+        )?))
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
+        {
             Ok(evidence) => evidence,
             Err(error) => {
                 if exception(py, &error) {
@@ -307,7 +319,7 @@ fn finding_text(finding: Bound<'_, PyAny>) -> PyResult<ContractFindingText> {
 fn resource_text(item: Bound<'_, PyAny>) -> PyResult<ContractResourceText> {
     let mut parts: Vec<String> = Vec::new();
     for field in ["database", "schema", "relation"] {
-        let value: Bound<'_, PyAny> = item.getattr(field)?;
+        let value: Bound<'_, PyAny> = native_field(&item, field)?;
         if value.is_truthy()? {
             parts.push(value.str()?.to_string());
         }
@@ -355,7 +367,7 @@ fn progress_for<'py>(request: &Bound<'py, PyAny>) -> PyResult<Progress<'py>> {
 /// Compare or adopt selected contracts from one read-only target.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let action: String = native_field(request, "action")?.str()?.to_string();
     let generate_write: bool =
         action == GENERATE_ACTION && native_field(request, "write")?.is_truthy()?;
@@ -376,13 +388,10 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
         py,
         Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", native_field(request, "select")?),
-            ("exclude", native_field(request, "exclude")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    reject_unit_test_selectors(
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
+        &discovered.clone(),
     )?;
     let from_target: Bound<'_, PyAny> = native_field(request, "from_target")?;
     if !discovered
@@ -405,8 +414,9 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     let selection: Selection<'_> = select_resources(request, &discovered, &context)?;
     let progress: Progress<'_> = progress_for(request)?;
     let evidence: Bound<'_, PyAny> = compare(request, &context, &selection, &progress)?;
-    let mut result: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::ContractAdoptionResult)?,
+    let mut result: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::ContractAdoptionResult,
         &[("from_target", from_target), ("evidence", evidence)],
     )?;
     if generate_write {

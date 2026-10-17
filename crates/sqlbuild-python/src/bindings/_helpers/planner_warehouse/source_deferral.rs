@@ -13,8 +13,8 @@ use crate::bindings::_helpers::planner_phases::objects::{
 use crate::bindings::_helpers::planner_warehouse::constants::{
     MODEL_HOOK_CONFIG_KEYS, SQL_HOOK_ENTRY,
 };
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
@@ -50,9 +50,9 @@ fn hook_source_reads(
 ) -> PyResult<Vec<String>> {
     let mut names: Vec<String> = Vec::new();
     let py = model.py();
-    let hook_entry = registry::class(py, SQL_HOOK_ENTRY)?;
+    let hook_entry = record_class(py, SQL_HOOK_ENTRY)?;
     let source_kind = host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
-    let values = native_field(model, "config")?.getattr("values")?;
+    let values = native_field(&native_field(model, "config")?, "values")?;
     for key in MODEL_HOOK_CONFIG_KEYS {
         let value = values.call_method1("get", (key,))?;
         let entries: Vec<Bound<'_, PyAny>> =
@@ -158,8 +158,10 @@ fn source_target_name<'py>(
     if active.is_none() || project_config.is_none() || local_config.is_none() {
         return Ok(py.None().into_bound(py));
     }
-    let deferred = resolve_target(project_config, local_config, active.clone())?
-        .getattr("defer_sources_to")?;
+    let deferred = native_field(
+        &resolve_target(project_config, local_config, active.clone())?,
+        "defer_sources_to",
+    )?;
     Ok(if deferred.is_truthy()? {
         deferred
     } else {
@@ -170,10 +172,8 @@ fn source_target_name<'py>(
 fn raw_source_entry<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let declared = native_field(source, "source_entry")?;
     let name = native_field(&declared, "name")?;
-    for entry in source
-        .getattr("source_file")?
-        .getattr("source_entries")?
-        .try_iter()?
+    for entry in
+        native_field(&native_field(source, "source_file")?, "source_entries")?.try_iter()?
     {
         let entry = entry?;
         if native_field(&entry, "name")?.eq(&name)? {
@@ -309,9 +309,8 @@ pub(crate) fn build_source_read_map<'py>(
     let result = source_map.copy()?;
     for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        let name: String = native_field(&source, "source_entry")?
-            .getattr("name")?
-            .extract()?;
+        let name: String =
+            native_field(&native_field(&source, "source_entry")?, "name")?.extract()?;
         if !selected.contains(&name) {
             continue;
         }

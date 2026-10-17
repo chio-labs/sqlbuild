@@ -1,8 +1,8 @@
 //! Audit gate identities of planned audits, built as `AuditGateIdentity` objects.
 
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -95,7 +95,7 @@ fn build_audit_gate_identity<'py>(
     let entries: Vec<Bound<'py, PyAny>> = audits.try_iter()?.collect::<PyResult<_>>()?;
     let planned: Vec<PlannedAudit> = entries.iter().map(planned_audit).collect::<PyResult<_>>()?;
     let gate: GateIdentity = audit_gate_identity(&planned);
-    let identity_type: Bound<'py, PyAny> = registry::class(py, RecordId::AuditIdentity)?;
+    let identity_type: Bound<'py, PyAny> = record_class(py, RecordId::AuditIdentity)?;
     let mut identities: Vec<Bound<'py, PyAny>> = Vec::with_capacity(gate.audits.len());
     for identity in gate.audits {
         let entry: &Bound<'py, PyAny> = &entries[identity.index];
@@ -140,7 +140,7 @@ fn build_audit_gate_identity<'py>(
         )?);
     }
     keyword_call(
-        &registry::class(py, RecordId::AuditGateIdentity)?,
+        &record_class(py, RecordId::AuditGateIdentity)?,
         vec![
             (
                 "binding_set_hash",

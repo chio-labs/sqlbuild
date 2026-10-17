@@ -5,13 +5,11 @@ use pyo3::types::{PyDict, PyFloat};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::pipeline::compile_project_phase;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Discovered Python node functions whose selectors need the Python graph.
 const PYTHON_NODE_FUNCTIONS: [&str; 4] = [
@@ -57,12 +55,11 @@ pub(crate) fn compile_analysis_selection<'py>(
     let py: Python<'py> = options.py();
     let mut has_python_nodes: bool = false;
     for name in PYTHON_NODE_FUNCTIONS {
-        if discovered.getattr(name)?.is_truthy()? {
+        if native_field(discovered, name)?.is_truthy()? {
             has_python_nodes = true;
             break;
         }
     }
-    let selection: Bound<'py, PyAny> = registry::class(py, RecordId::CompileAnalysisSelection)?;
     let no_cache: Bound<'py, PyAny> = native_field(options, "no_cache")?;
     if (options
         .getattr("resolve_python_run_selectors")?
@@ -73,10 +70,15 @@ pub(crate) fn compile_analysis_selection<'py>(
             .getattr("names")?
             .is_truthy()?
     {
-        return call_with(&selection, &[("no_cache", no_cache)]);
+        return new_record_with(
+            py,
+            RecordId::CompileAnalysisSelection,
+            &[("no_cache", no_cache)],
+        );
     }
-    call_with(
-        &selection,
+    new_record_with(
+        py,
+        RecordId::CompileAnalysisSelection,
         &[
             ("select", native_field(options, "select")?),
             ("exclude", native_field(options, "exclude")?),
@@ -119,7 +121,7 @@ pub(crate) fn project_graph<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<
 /// Return whether a planned build has runtime work to execute.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_has_executable_work<'py>(
+pub(crate) fn plan_has_executable_work<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<bool> {
@@ -131,7 +133,7 @@ fn plan_has_executable_work<'py>(
     )?;
     let plan: Bound<'py, PyAny> = arguments.value("plan")?;
     for name in PLAN_WORK_ENTRIES {
-        if plan.getattr(name)?.is_truthy()? {
+        if native_field(&plan, name)?.is_truthy()? {
             return Ok(true);
         }
     }
@@ -155,8 +157,9 @@ pub(crate) fn build_static_pipeline_result<'py>(
         (&["context", "plan_output"], &[]),
     )?;
     let context: Bound<'py, PyAny> = arguments.value("context")?;
-    call_with(
-        &registry::class(py, RecordId::CompilePipelineResult)?,
+    new_record_with(
+        py,
+        RecordId::CompilePipelineResult,
         &[
             ("project", native_field(&context, "project")?),
             ("plan_output", arguments.value("plan_output")?),
@@ -172,7 +175,7 @@ pub(crate) fn build_static_pipeline_result<'py>(
 /// Compile a project for consumers that construct their own focused plans.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_compile_only_pipeline<'py>(
+pub(crate) fn run_compile_only_pipeline<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -197,13 +200,14 @@ fn run_compile_only_pipeline<'py>(
             ],
         )?),
     )?;
-    call_with(
-        &registry::class(py, RecordId::CompilePipelineResult)?,
+    new_record_with(
+        py,
+        RecordId::CompilePipelineResult,
         &[
             ("project", native_field(&compiled, "project")?),
             (
                 "plan_output",
-                registry::class(py, RecordId::PlanOutput)?.call0()?,
+                new_record(py, RecordId::PlanOutput, (), None)?,
             ),
             (
                 "compile_seconds",

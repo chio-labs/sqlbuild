@@ -126,10 +126,7 @@ fn model_stars(
         return Ok(Vec::new());
     }
     let mut deps: Vec<(String, String)> = Vec::new();
-    for key in model
-        .getattr("dep_rows")?
-        .extract::<Vec<(String, String)>>()?
-    {
+    for key in native_field(model, "dep_rows")?.extract::<Vec<(String, String)>>()? {
         if schema.iter().any(|relation| relation.key == key) {
             deps.push(key);
         }

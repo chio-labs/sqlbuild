@@ -16,12 +16,11 @@ use sqlbuild_rules::fix_verification::models::{FixEdit, FixEligibility};
 
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::{field, replaced};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
@@ -657,8 +656,9 @@ fn report<'py>(
     reason: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = source.py();
-    call_with(
-        &registry::class(py, RecordId::RuleFixResult)?,
+    new_record_with(
+        py,
+        RecordId::RuleFixResult,
         &[
             ("file_path", field(source, "file_path")?),
             ("code", field(source, "code")?),
@@ -687,8 +687,9 @@ fn violation<'py>(
     details: (&str, &str, &str, &str),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = path.py();
-    call_with(
-        &registry::class(py, RecordId::LintViolation)?,
+    new_record_with(
+        py,
+        RecordId::LintViolation,
         &[
             ("file_path", path.clone()),
             ("line", 1_i64.into_pyobject(py)?.into_any()),

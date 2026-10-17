@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
@@ -90,7 +91,7 @@ pub(crate) fn with_migration_fingerprints<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+    use crate::bindings::_helpers::compile_driver::python_calls::call_with;
     let arguments = KeywordArguments::read(
         py,
         "with_migration_fingerprints",
@@ -123,7 +124,7 @@ pub(crate) fn with_migration_fingerprints<'py>(
         )?;
         let kwargs = PyDict::new(py);
         kwargs.set_item("migration_fingerprint", fingerprint)?;
-        attached.push(imported(py, "dataclasses", "replace")?.call((entry,), Some(&kwargs))?);
+        attached.push(replaced_keywords(&entry, &kwargs)?);
     }
     cache.call_method0("persist")?;
     PyTuple::new(py, attached)

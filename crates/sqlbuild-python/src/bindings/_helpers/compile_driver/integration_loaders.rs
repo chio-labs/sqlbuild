@@ -8,9 +8,9 @@ use sqlbuild_discovery::yaml_entries::main::integration_loader_name::integration
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// One integration: its kind constant and the runtime module building its loader functions.
 struct Integration {
@@ -35,9 +35,7 @@ pub(crate) fn integration_loader_functions<'py>(
     py: Python<'py>,
     source_files: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let record_class: Bound<'py, PyAny> = registry::class(py, RecordId::DiscoveredLoaderFunction)?;
-    let external: Bound<'py, PyAny> =
-        registry::class(py, RecordId::LoaderConnectionMode)?.getattr("EXTERNAL")?;
+    let external: Bound<'py, PyAny> = enum_member(py, RecordId::LoaderConnectionMode, "EXTERNAL")?;
     let mut loaders: Vec<Bound<'py, PyAny>> = Vec::new();
     for integration in &INTEGRATIONS {
         let kind: String = host::entry(py, integration.kind_constant)?.extract()?;
@@ -64,8 +62,9 @@ pub(crate) fn integration_loader_functions<'py>(
                         ("name", name.clone().into_pyobject(py)?.into_any()),
                     ],
                 )?;
-                loaders.push(call_with(
-                    &record_class,
+                loaders.push(new_record_with(
+                    py,
+                    RecordId::DiscoveredLoaderFunction,
                     &[
                         ("file_path", native_field(&source_file, "file_path")?),
                         (

@@ -30,15 +30,17 @@ use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehou
 use crate::bindings::_helpers::command_runtime::warehouses::{
     CommandScope, WarehouseInputs, apply_warehouse, command_scope, find_authored, resolve_warehouse,
 };
+use crate::bindings::_helpers::compile_attachment::target::build_effective_target_namespace;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const DEBUG_OPTIONS: (&[&str], &[&str]) = (
     &[],
@@ -123,7 +125,7 @@ fn warehouse_checks(
         selected_target: &context.selected_target,
     };
     let mut checks: Vec<WarehouseCheck> = Vec::new();
-    for group in registry::class(py, RecordId::WarehouseGroup)?.try_iter()? {
+    for group in record_class(py, RecordId::WarehouseGroup)?.try_iter()? {
         let group: Bound<'_, PyAny> = group?;
         let group_name: String = native_field(&group, "value")?.str()?.extract()?;
         if !supports_session_warehouse {
@@ -269,18 +271,9 @@ fn build_report(
         )?),
     )?;
     let files: DebugConfigFiles = debug_config_files(project_dir);
-    let adapter_name: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered_inputs, "project_config")?,
-            ),
-            (
-                "local_config",
-                native_field(&discovered_inputs, "local_config")?,
-            ),
-        ],
+    let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
+        &native_field(&discovered_inputs, "project_config")?,
+        &native_field(&discovered_inputs, "local_config")?,
     )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir_object)?;
     let context: DebugContext<'_> = DebugContext {
@@ -302,33 +295,37 @@ fn build_report(
     })?;
     let connection_config: Bound<'_, PyDict> =
         effective_connection(&context, (&adapter_name, &base_connection))?.cast_into()?;
-    let namespace: Bound<'_, PyTuple> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveTargetNamespace)?,
-        &[
-            ("discovered_inputs", context.discovered_inputs.clone()),
-            ("selected_target", context.selected_target.clone()),
-            (
-                "connection_database",
-                connection_config
-                    .get_item("database")?
-                    .unwrap_or_else(|| py.None().into_bound(py)),
-            ),
-            (
-                "connection_schema",
-                connection_config
-                    .get_item("schema")?
-                    .unwrap_or_else(|| py.None().into_bound(py)),
-            ),
-            (
-                "default_database",
-                context.adapter.call_method0("default_database")?,
-            ),
-            (
-                "default_schema",
-                context.adapter.call_method0("default_schema")?,
-            ),
-        ],
-    )?
+    let namespace: Bound<'_, PyTuple> = build_effective_target_namespace(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", context.discovered_inputs.clone()),
+                ("selected_target", context.selected_target.clone()),
+                (
+                    "connection_database",
+                    connection_config
+                        .get_item("database")?
+                        .unwrap_or_else(|| py.None().into_bound(py)),
+                ),
+                (
+                    "connection_schema",
+                    connection_config
+                        .get_item("schema")?
+                        .unwrap_or_else(|| py.None().into_bound(py)),
+                ),
+                (
+                    "default_database",
+                    context.adapter.call_method0("default_database")?,
+                ),
+                (
+                    "default_schema",
+                    context.adapter.call_method0("default_schema")?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .cast_into()?;
     let target_config: Bound<'_, PyAny> = namespace.get_item(1)?;
     let connection_name: Option<String> = if target_config.is_none() {
@@ -373,7 +370,10 @@ fn build_report(
 /// `sqb debug`: validate project config and the active connection; `1` when a check failed.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_debug_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_debug_command(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "run_debug_command", options, DEBUG_OPTIONS)?;
     let project_dir: Bound<'_, PyAny> = arguments.value("project_dir")?;

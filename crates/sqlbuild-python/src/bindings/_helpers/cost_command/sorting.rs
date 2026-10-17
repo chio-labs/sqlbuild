@@ -33,7 +33,7 @@ fn sorted_with<'py>(
 fn attribute(item: &Bound<'_, PyAny>, path: &str) -> PyResult<Py<PyAny>> {
     let mut value: Bound<'_, PyAny> = item.clone();
     for name in path.split('.') {
-        value = value.getattr(name)?;
+        value = native_field(&value, name)?;
     }
     Ok(value.unbind())
 }

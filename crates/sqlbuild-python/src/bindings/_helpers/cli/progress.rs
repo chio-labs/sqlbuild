@@ -4,6 +4,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyMapping, PyString};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_core::progress::main::claim_progress_terminal::claim_progress_terminal;
@@ -16,14 +17,16 @@ use sqlbuild_core::progress::models::{
 };
 use sqlbuild_core::terminal_events::models::TerminalRequest;
 
+use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 /// The module attribute holding the `ContextVar` of the installed projector.
 const CONTEXT_ATTRIBUTE: &str = "_native_progress_projector_context";
 const CONTEXT_NAME: &str = "sqlbuild_native_progress_projector";
+
+/// The `ContextVar` holding the installed projector.
+static CONTEXT: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 const CLAIM_OPTIONS: (&[&str], &[&str]) = (
     &["resource_name"],
     &["resource_id", "resource_attempt_id", "attempt_number"],
@@ -116,7 +119,7 @@ fn progress_payload(payload: &Bound<'_, PyAny>) -> PyResult<ProgressPayload> {
 }
 
 fn optional_text(event: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
-    event.getattr(name)?.extract()
+    native_field(event, name)?.extract()
 }
 
 /// The facts of one lifecycle event that progress projection reads.
@@ -134,7 +137,8 @@ fn progress_event(event: &Bound<'_, PyAny>) -> PyResult<ProgressEvent> {
 
 /// The coordinator shared by every terminal writer in this process.
 pub(crate) fn shared_coordinator(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    registry::native(py, NativeAttr::SharedTransientLineCoordinator)?.call0()
+    shared_transient_line_coordinator(py)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
 
 fn persist(coordinator: &Bound<'_, PyAny>, stream: &Bound<'_, PyAny>, text: &str) -> PyResult<()> {
@@ -214,7 +218,7 @@ fn terminal_request(
 impl NativeProgressProjector {
     #[new]
     #[pyo3(signature = (*, stream, use_color, debug = false))]
-    fn new(
+    pub(crate) fn new(
         py: Python<'_>,
         stream: Bound<'_, PyAny>,
         use_color: bool,
@@ -310,7 +314,19 @@ impl NativeProgressProjector {
 }
 
 fn context_variable(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    registry::native(py, NativeAttr::NativeProgressProjectorContext)
+    Ok(CONTEXT
+        .get_or_try_init(py, || {
+            let keywords: Bound<'_, PyDict> = PyDict::new(py);
+            keywords.set_item("default", py.None())?;
+            Ok::<_, pyo3::PyErr>(
+                py.import("contextvars")?
+                    .getattr("ContextVar")?
+                    .call((CONTEXT_NAME,), Some(&keywords))?
+                    .unbind(),
+            )
+        })?
+        .bind(py)
+        .clone())
 }
 
 /// Return the projector installed for the current CLI invocation.
@@ -321,7 +337,7 @@ pub(crate) fn current_native_progress_projector(py: Python<'_>) -> PyResult<Boun
 
 /// Whether the parsed command writes machine output to stdout, so progress must use stderr.
 #[pyfunction]
-fn machine_output_mode(args: &Bound<'_, PyAny>) -> PyResult<bool> {
+pub(crate) fn machine_output_mode(args: &Bound<'_, PyAny>) -> PyResult<bool> {
     let mut dbt_args: Vec<String> = Vec::new();
     for arg in native_field(args, "dbt_args")?.try_iter()? {
         dbt_args.push(arg?.str()?.extract()?);
@@ -337,14 +353,7 @@ fn machine_output_mode(args: &Bound<'_, PyAny>) -> PyResult<bool> {
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py: Python<'_> = module.py();
-    let keywords: Bound<'_, PyDict> = PyDict::new(py);
-    keywords.set_item("default", py.None())?;
-    module.add(
-        CONTEXT_ATTRIBUTE,
-        py.import("contextvars")?
-            .getattr("ContextVar")?
-            .call((CONTEXT_NAME,), Some(&keywords))?,
-    )?;
+    module.add(CONTEXT_ATTRIBUTE, context_variable(py)?)?;
     module.add_class::<NativeProgressProjector>()?;
     module.add_function(wrap_pyfunction!(machine_output_mode, module)?)?;
     module.add_function(wrap_pyfunction!(current_native_progress_projector, module)?)

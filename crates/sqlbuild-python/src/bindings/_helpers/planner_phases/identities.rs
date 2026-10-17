@@ -108,7 +108,7 @@ fn reusable_model_names(
             execution
                 .getattr(field)?
                 .call_method1("get", (&name,))?
-                .eq(stale.getattr(field)?.call_method1("get", (&name,))?)
+                .eq(native_field(&stale, field)?.call_method1("get", (&name,))?)
         };
         if same("model_version_hashes")? && same("model_metadata_jsons")? {
             names.insert(name.extract()?);
@@ -158,15 +158,11 @@ pub(crate) fn detect_stale_warning_changes<'py>(
     let reusable = reusable_model_names(
         identities,
         execution_changes,
-        project
-            .getattr("settings")?
-            .getattr("query_change_tracking")?
-            .is_truthy()?,
+        native_field(&native_field(project, "settings")?, "query_change_tracking")?.is_truthy()?,
     )?;
     let stale_scope = class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?;
     let mut remaining: Vec<_> = Vec::new();
-    for key in stale_scope
-        .getattr("all_keys")?
+    for key in native_field(&stale_scope, "all_keys")?
         .call_method0("values")?
         .try_iter()?
     {
@@ -205,8 +201,7 @@ pub(crate) fn detect_stale_warning_changes<'py>(
         ),
     )?;
     let models = PyDict::new(py);
-    for (name, change) in execution_changes
-        .getattr("models")?
+    for (name, change) in native_field(execution_changes, "models")?
         .downcast::<PyDict>()?
         .iter()
     {

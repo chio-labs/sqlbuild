@@ -305,8 +305,10 @@ fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<O
         "Compiled project. ({:.2}s)",
         started.elapsed().as_secs_f64()
     ))?;
-    let names: HashMap<String, LineageKey> =
-        target_lookup(&native_field(&before.project, "graph")?.getattr("all_keys")?)?;
+    let names: HashMap<String, LineageKey> = target_lookup(&native_field(
+        &native_field(&before.project, "graph")?,
+        "all_keys",
+    )?)?;
     let lookup = |name: &str| names.get(name).cloned();
     let request: RefactorRequest =
         refactor_request_for_target(&target_request(&command.request)?, &lookup)
@@ -406,7 +408,7 @@ fn finish(py: Python<'_>, command: &Command<'_>, outcome: &Outcome) -> PyResult<
 /// Plan, verify in a scratch copy, and write one rename or move.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_refactor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_refactor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let project_dir: Bound<'_, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,

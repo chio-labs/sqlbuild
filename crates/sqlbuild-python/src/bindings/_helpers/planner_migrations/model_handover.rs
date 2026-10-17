@@ -16,9 +16,7 @@ pub(super) fn applies(
     event: &Bound<'_, PyAny>,
     snapshot: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
-    let own = snapshot
-        .getattr("fingerprints")?
-        .getattr("models")?
+    let own = native_field(&native_field(snapshot, "fingerprints")?, "models")?
         .call_method1("get", (model_reads::name_object(model)?,))?;
     Ok(own.is_none()
         || presumed_utc(&native_field(&own, "ts")?)?

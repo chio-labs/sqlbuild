@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::main::format_summary_footer::format_summary_footer;
 use sqlbuild_core::cli_text::models::{CliStyle, SummaryCount};
@@ -13,11 +13,14 @@ use sqlbuild_core::scenario_command::models::{
     ScenarioNamespace, ScenarioTestFlags, SqlAnalysisCommand,
 };
 
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::result_output::documents::format_scenario_execution_json;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
 use crate::bindings::_helpers::scenario_command::presentation::{
     CompletionKind, SectionStatus, activity, begin_section, connection_hooks, progress_relay,
@@ -50,7 +53,7 @@ pub(crate) struct TestRun<'py> {
 }
 
 fn flag(request: &Bound<'_, PyAny>, name: &str) -> PyResult<bool> {
-    request.getattr(name)?.is_truthy()
+    native_field(request, name)?.is_truthy()
 }
 
 fn prepare<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<TestRun<'py>> {
@@ -95,11 +98,10 @@ fn prepare<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<TestRu
     let style: CliStyle = style(request)?;
     let requested: Bound<'py, PyAny> = request.getattr("concurrency")?;
     let concurrency: i64 = if requested.is_none() {
-        call_with(
-            &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
-            &[("discovered_inputs", project.discovered.clone())],
+        native_field(
+            &build_effective_settings_config(&project.discovered.clone())?,
+            "concurrency",
         )?
-        .getattr("concurrency")?
         .extract()?
     } else {
         requested.extract()?
@@ -145,29 +147,34 @@ fn finish(
     flush(&run.stream)?;
     write_completion(&run.stream, (&run.project.namespace, succeeded))?;
     let namespace: &ScenarioNamespace = &run.project.namespace;
-    let payload: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::FormatScenarioExecutionJson)?,
-        &[
-            ("results", results.clone().into_any()),
-            ("local", boolean(py, run.local)),
-            (
-                "run_namespace",
-                optional_text(py, namespace.value.as_deref()),
-            ),
-            ("namespace_source", text(py, &namespace.source)),
-            (
-                "duration_ms",
-                pyo3::types::PyFloat::new(py, elapsed_seconds * 1000.0).into_any(),
-            ),
-        ],
-    )?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
-        &[
-            ("payload", payload),
-            ("json_output", request.getattr("json_output")?),
-            ("json_output_path", request.getattr("json_output_path")?),
-        ],
+    let payload: Bound<'_, PyAny> = PyString::new(
+        py,
+        &format_scenario_execution_json(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("results", results.clone().into_any()),
+                    ("local", boolean(py, run.local)),
+                    (
+                        "run_namespace",
+                        optional_text(py, namespace.value.as_deref()),
+                    ),
+                    ("namespace_source", text(py, &namespace.source)),
+                    (
+                        "duration_ms",
+                        pyo3::types::PyFloat::new(py, elapsed_seconds * 1000.0).into_any(),
+                    ),
+                ],
+            )?),
+        )?,
+    )
+    .into_any();
+    write_execution_json_output(
+        py,
+        payload,
+        request.getattr("json_output")?.extract()?,
+        request.getattr("json_output_path")?,
     )?;
     Ok(())
 }
@@ -211,11 +218,10 @@ fn run_scenarios(
             run.style,
         ),
     )?;
-    let project_name: Bound<'_, PyAny> = run
-        .project
-        .discovered
-        .getattr("project_config")?
-        .getattr("name")?;
+    let project_name: Bound<'_, PyAny> = native_field(
+        &native_field(&run.project.discovered, "project_config")?,
+        "name",
+    )?;
     let mut arguments: Vec<(&str, Bound<'_, PyAny>)> = vec![
         ("pipeline_result", pipeline.clone()),
         ("scenarios", scenarios.clone().into_any()),
@@ -306,7 +312,10 @@ fn run_scenarios(
 /// Run one `sqb scenario test` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_scenario_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_scenario_test_command(
+    py: Python<'_>,
+    request: &Bound<'_, PyAny>,
+) -> PyResult<i32> {
     let run: TestRun<'_> = prepare(py, request)?;
     let planning: Bound<'_, PyAny> = write_headers(
         &run.stream,

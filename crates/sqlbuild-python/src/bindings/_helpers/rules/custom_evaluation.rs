@@ -16,10 +16,13 @@ use sqlbuild_rules::custom_rule_cache::models::CustomEvaluation;
 use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compiled_project::records::compiled_project_record;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULES_CACHE_FILE,
 };
@@ -27,8 +30,12 @@ use crate::bindings::_helpers::rules::custom_hosts::{
     HostCancel, HostRequest, host_payload_project, run_custom_hosts,
 };
 use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
+use crate::bindings::_helpers::rules::custom_rule_cache::custom_rule_identity;
+use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_implementation_fingerprint;
+use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_import_closure;
 use crate::bindings::_helpers::rules::fact_encoder::{Encoded, reproducible};
 use crate::bindings::_helpers::rules::fact_replay::{FactReplay, is_tree_fact};
+use crate::bindings::_helpers::rules::rule_run::rules_bulk_cache_path;
 
 const PROJECT_SUBJECT: &str = "project";
 const MODEL_SUBJECT: &str = "model";
@@ -88,11 +95,8 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     if custom.is_empty() {
         return outcome(py, (Vec::new(), 0, 0), (0, 0));
     }
-    let enabled: bool = run
-        .config
-        .getattr("cache")?
-        .getattr("enabled")?
-        .is_truthy()?;
+    let enabled: bool =
+        native_field(&native_field(run.config, "cache")?, "enabled")?.is_truthy()?;
     let mut rows: Vec<(String, Option<String>, Option<String>)> = Vec::new();
     for (code, rule) in &custom {
         let identity: Option<String> = if enabled {
@@ -107,19 +111,10 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         rows.push((code.clone(), identity, subject_value(rule)?));
     }
     let cache_path: Option<PathBuf> = if enabled {
-        Some(
-            call_with(
-                &registry::native(py, NativeAttr::RulesBulkCachePath)?,
-                &[
-                    ("project_dir", run.project_dir.clone()),
-                    (
-                        "file_name",
-                        pyo3::types::PyString::new(py, CUSTOM_RULES_CACHE_FILE).into_any(),
-                    ),
-                ],
-            )?
-            .extract()?,
-        )
+        Some(rules_bulk_cache_path(
+            run.project_dir.extract()?,
+            CUSTOM_RULES_CACHE_FILE,
+        ))
     } else {
         None
     };
@@ -179,8 +174,9 @@ pub(crate) fn outcome<'py>(
     (findings, hits, misses): (Vec<Bound<'py, PyAny>>, usize, usize),
     (custom_ms, custom_cpu_ms): (i64, i64),
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(py, RecordId::CustomRulesOutcome)?,
+    new_record_with(
+        py,
+        RecordId::CustomRulesOutcome,
         &[
             ("findings", PyTuple::new(py, findings)?.into_any()),
             ("cache_hits", hits.into_bound_py_any(py)?),
@@ -308,10 +304,7 @@ fn orjson_key(key: &FactKey) -> String {
 /// The project without state no rule fact reads, before digests and host payloads use it.
 fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item("include_sql_expansions", false)?;
-    let record: Bound<'py, PyAny> = registry::native(py, NativeAttr::CompiledProjectRecord)?
-        .call((project,), Some(&options))?;
+    let record: Bound<'py, PyAny> = compiled_project_record(project, false)?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
     for (name, cleared) in HOST_PROJECT_CLEARED {
         match cleared {
@@ -322,9 +315,9 @@ fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     }
     changes.set_item(
         "scope_index",
-        registry::class(py, RecordId::ScopeIndex)?.call0()?,
+        new_record(py, RecordId::ScopeIndex, (), None)?,
     )?;
-    imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))
+    replaced_keywords(&record, &changes)
 }
 
 fn subject_value(rule: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
@@ -352,26 +345,15 @@ fn rule_identity(
     let fingerprint: Bound<'_, PyAny> = match fingerprint {
         Some(fingerprint) => fingerprint.into_bound_py_any(py)?,
         None => {
-            let closure: Bound<'_, PyAny> = call_with(
-                &registry::native(py, NativeAttr::CustomRuleImportClosure)?,
-                &[
-                    ("rule", rule.clone()),
-                    ("project_dir", run.project_dir.clone()),
-                ],
-            )?;
-            call_with(
-                &registry::native(py, NativeAttr::CustomRuleImplementationFingerprint)?,
-                &[
-                    ("rule", rule.clone()),
-                    ("project_dir", run.project_dir.clone()),
-                    ("import_closure", closure),
-                ],
-            )?
+            let closure: Bound<'_, PyAny> =
+                custom_rule_import_closure(rule, run.project_dir)?.into_any();
+            custom_rule_implementation_fingerprint(rule, run.project_dir, Some(&closure))?
+                .into_bound_py_any(py)?
         }
     };
     let subject: Option<String> = subject_value(rule)?;
-    call_with(
-        &registry::native(py, NativeAttr::CustomRuleIdentity)?,
+    custom_rule_identity(Some(&keywords(
+        py,
         &[
             (
                 "code_identity",
@@ -395,8 +377,7 @@ fn rule_identity(
                 run.project_dir.call_method0("resolve")?.str()?.into_any(),
             ),
         ],
-    )?
-    .extract()
+    )?))
 }
 
 /// This thread's CPU plus that of finished child processes, which run the rule hosts.

@@ -1,6 +1,8 @@
 //! Display-ready Python plan entries and Python-aware selection warnings of a plan.
 
 use crate::bindings::_helpers::graph::python_lifecycle::build_python_sql_run_lifecycle;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
+use crate::bindings::_helpers::records::fields::replaced;
 use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -11,14 +13,13 @@ use sqlbuild_analysis::python_plan::main::ordered_python_names::ordered_python_n
 use sqlbuild_analysis::python_plan::main::upstream_closure::upstream_closure;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const SKIPPED_UPSTREAM_CODE: &str = "P501";
 
@@ -124,13 +125,13 @@ pub(crate) fn build_python_run_plan_outputs<'py>(
             &[],
         ),
     )?;
-    let outputs: Bound<'py, PyAny> = registry::class(py, RecordId::PythonRunPlanOutputs)?;
     let plan_output: Bound<'py, PyAny> = arguments.value("plan_output")?;
     let run_selection: Bound<'py, PyAny> = arguments.value("run_selection")?;
     let selected: Bound<'py, PyAny> = arguments.value("selected_python_node_names")?;
     if run_selection.is_none() {
-        return call_with(
-            &outputs,
+        return new_record_with(
+            py,
+            RecordId::PythonRunPlanOutputs,
             &[
                 ("plan_output", plan_output),
                 ("python_plan_entries", PyTuple::empty(py).into_any()),
@@ -149,15 +150,13 @@ pub(crate) fn build_python_run_plan_outputs<'py>(
         &run_selection,
         (&graph, &kinds),
     )?);
-    let plan_output: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?.call(
-        (plan_output,),
-        Some(&keywords(
-            py,
-            &[("warnings", PyTuple::new(py, warnings)?.into_any())],
-        )?),
+    let plan_output: Bound<'py, PyAny> = replaced(
+        &plan_output,
+        &[("warnings", PyTuple::new(py, warnings)?.into_any())],
     )?;
-    let selection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::PythonSqlRunSelection)?,
+    let selection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::PythonSqlRunSelection,
         &[
             ("sql_keys", native_field(&plan_output, "selected_keys")?),
             ("python_node_names", selected.clone()),
@@ -169,8 +168,9 @@ pub(crate) fn build_python_run_plan_outputs<'py>(
         (&graph, &kinds),
         &native_field(&plan_output, "python_identity_fingerprints")?,
     )?;
-    call_with(
-        &outputs,
+    new_record_with(
+        py,
+        RecordId::PythonRunPlanOutputs,
         &[
             ("plan_output", plan_output),
             ("python_plan_entries", entries.into_any()),
@@ -215,8 +215,6 @@ fn plan_entries<'py>(
     previous_identities: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = lifecycle.py();
-    let phases: Bound<'py, PyAny> = registry::class(py, RecordId::PythonRunPhase)?;
-    let entry_class: Bound<'py, PyAny> = registry::class(py, RecordId::PythonPlanEntry)?;
     let upstream: HashMap<String, Vec<String>> = upstream_names(graph)?;
     let nodes: Bound<'py, PyAny> = native_field(graph, "nodes_by_name")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -224,8 +222,7 @@ fn plan_entries<'py>(
         ("ingress_python_node_names", "PRE_SQL_INGRESS"),
         ("read_side_python_node_names", "READ_SIDE"),
     ] {
-        let selected: Vec<String> = lifecycle
-            .getattr(attribute)?
+        let selected: Vec<String> = native_field(lifecycle, attribute)?
             .try_iter()?
             .map(|name| name?.extract())
             .collect::<PyResult<_>>()?;
@@ -241,15 +238,16 @@ fn plan_entries<'py>(
                 if value.is_none() {
                     Ok(py.None().into_bound(py))
                 } else {
-                    value.getattr(name)
+                    native_field(value, name)
                 }
             };
-            entries.push(call_with(
-                &entry_class,
+            entries.push(new_record_with(
+                py,
+                RecordId::PythonPlanEntry,
                 &[
                     ("name", native_field(&node, "name")?),
                     ("kind", kind),
-                    ("phase", phases.getattr(phase)?),
+                    ("phase", enum_member(py, RecordId::PythonRunPhase, phase)?),
                     (
                         "identity_status",
                         identity_status(&identity, previous_identities)?,
@@ -301,8 +299,7 @@ fn identity_status<'py>(
     identity: &Bound<'py, PyAny>,
     previous_identities: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let statuses: Bound<'py, PyAny> =
-        registry::class(identity.py(), RecordId::PythonIdentityStatus)?;
+    let statuses: Bound<'py, PyAny> = record_class(identity.py(), RecordId::PythonIdentityStatus)?;
     if identity.is_none() {
         return native_field(&statuses, "UNKNOWN");
     }
@@ -337,9 +334,7 @@ fn skipped_ingress_warnings<'py>(
     let nodes: Bound<'py, PyAny> = native_field(graph, "nodes_by_name")?;
     let selected: Bound<'py, PyAny> = native_field(run_selection, "python_node_names")?;
     let upstream: HashMap<String, Vec<String>> = upstream_names(graph)?;
-    let warning_class: Bound<'py, PyAny> = registry::class(py, RecordId::PlanWarning)?;
-    let severity: Bound<'py, PyAny> =
-        registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?;
+    let severity: Bound<'py, PyAny> = enum_member(py, RecordId::WarningSeverity, "WARNING")?;
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for loader in loaders {
         if !nodes.contains(loader.as_str())? {
@@ -360,8 +355,9 @@ fn skipped_ingress_warnings<'py>(
                  +source:{loader} to refresh upstream ingress dependencies.",
                 native_field(&kind, "value")?.str()?
             );
-            warnings.push(call_with(
-                &warning_class,
+            warnings.push(new_record_with(
+                py,
+                RecordId::PlanWarning,
                 &[
                     ("model_name", py.None().into_bound(py)),
                     ("severity", severity.clone()),

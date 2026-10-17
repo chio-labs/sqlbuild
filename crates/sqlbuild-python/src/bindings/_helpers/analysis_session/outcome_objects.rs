@@ -9,8 +9,8 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::record_behaviours::lineage_facts::{
     confidence_member, transform_kind_member,
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, record_class};
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const LINEAGE_NATIVE: &str = "native";
 
@@ -40,7 +40,7 @@ type ProofObjects<'py> = (
 /// The outcome at `position` of a finished session as `ModelSqlAnalysis`, for hand-built inputs.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn session_outcome_analysis<'py>(
+pub(crate) fn session_outcome_analysis<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let request = Request::new("session_outcome_analysis", request)?;
@@ -57,15 +57,14 @@ fn session_outcome_analysis<'py>(
     } else {
         PyTuple::empty(py).into_any()
     };
-    let binding_class: Bound<'py, PyAny> = registry::class(py, RecordId::SqlBindingDiagnostic)?;
     let mut bindings: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in raw.try_iter()? {
         let row: Bound<'py, PyTuple> =
             PyTuple::new(py, row?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
-        bindings.push(binding_class.call1(row)?);
+        bindings.push(new_record(py, RecordId::SqlBindingDiagnostic, row, None)?);
     }
     let result: Bound<'py, PyAny> = call(
-        &registry::class(py, RecordId::PolyglotAnalysisResult)?,
+        &record_class(py, RecordId::PolyglotAnalysisResult)?,
         &[
             ("analysis_succeeded", succeeded),
             ("columns", inferred_columns(&columns)?),
@@ -80,7 +79,7 @@ fn session_outcome_analysis<'py>(
         ],
     )?;
     call(
-        &registry::class(py, RecordId::ModelSqlAnalysis)?,
+        &record_class(py, RecordId::ModelSqlAnalysis)?,
         &[
             ("polyglot_analysis", result),
             ("placeholders", request.get("placeholders")?),
@@ -93,7 +92,7 @@ fn session_outcome_analysis<'py>(
 
 /// A native dynamic pivot proof row as Python's proof, None when absent.
 #[pyfunction]
-fn dynamic_contract_proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn dynamic_contract_proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     proof(row)
 }
 
@@ -104,7 +103,7 @@ fn proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     }
     let (output_proven, columns, families, inputs, failure_reason, bare): ProofObjects<'py> =
         row.extract()?;
-    let family_class: Bound<'py, PyAny> = registry::class(py, RecordId::DynamicColumnFamilyProof)?;
+    let family_class: Bound<'py, PyAny> = record_class(py, RecordId::DynamicColumnFamilyProof)?;
     let mut proofs: Vec<Bound<'py, PyAny>> = Vec::new();
     for family in families.try_iter()? {
         let (name, inferred_type): (Bound<'py, PyAny>, Bound<'py, PyAny>) = family?.extract()?;
@@ -120,7 +119,7 @@ fn proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         PyTuple::empty(py).into_any()
     };
     call(
-        &registry::class(py, RecordId::DynamicColumnContractProof)?,
+        &record_class(py, RecordId::DynamicColumnContractProof)?,
         &[
             ("output_proven", output_proven),
             ("fixed_columns", fixed),
@@ -138,8 +137,7 @@ fn inferred_columns<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
     if rows.is_none() {
         return Ok(rows.clone());
     }
-    let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
+    let column_class: Bound<'py, PyAny> = record_class(py, RecordId::InferredColumn)?;
     let mut columns: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in rows.try_iter()? {
         let (name, data_type, nullability): (
@@ -152,7 +150,10 @@ fn inferred_columns<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
             &[
                 ("name", name),
                 ("type", data_type),
-                ("nullability", nullability_class.call1((nullability,))?),
+                (
+                    "nullability",
+                    enum_from_value(py, RecordId::InferredNullability, nullability)?,
+                ),
             ],
         )?);
     }
@@ -209,7 +210,7 @@ fn compact_lineage<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     }
     let keys: Bound<'py, PyAny> = PyTuple::new(py, pool.keys())?.into_any();
     call(
-        &registry::class(py, RecordId::CompactLineageFacts)?,
+        &record_class(py, RecordId::CompactLineageFacts)?,
         &[
             ("string_pool", keys),
             ("rows", PyTuple::new(py, compact)?.into_any()),
@@ -220,8 +221,8 @@ fn compact_lineage<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 /// Native lineage rows as the plain facts Python's re-analysis returns.
 fn lineage_facts<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = rows.py();
-    let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledLineageColumnFact)?;
-    let source_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledLineageSourceFact)?;
+    let column_class: Bound<'py, PyAny> = record_class(py, RecordId::CompiledLineageColumnFact)?;
+    let source_class: Bound<'py, PyAny> = record_class(py, RecordId::CompiledLineageSourceFact)?;
     let mut facts: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in rows.try_iter()? {
         let (output_column, transform_code, confidence_code, sources): (

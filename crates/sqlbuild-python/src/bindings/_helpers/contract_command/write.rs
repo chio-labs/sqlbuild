@@ -6,11 +6,16 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::format_command::files::write_file_atomically;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::refactor::contract_edits::edit_contract_model;
+use crate::bindings::_helpers::refactor::contract_edits::edit_contract_source;
+use crate::bindings::_helpers::refactor::contract_edits::remaining_contract_findings;
 
 const UTF8: &str = "utf-8";
 
@@ -33,8 +38,7 @@ pub(crate) fn write_contracts<'py>(
     let project: Bound<'py, PyAny> = native_field(graph, "project")?;
     let models: Bound<'py, PyDict> = by_name(&native_field(&project, "models")?)?;
     let sources: Bound<'py, PyDict> = by_name(&native_field(&project, "sources")?)?;
-    let model_type: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let model_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let updates: Bound<'py, PyDict> = PyDict::new(py);
     let updated_evidence: Bound<'py, PyList> = PyList::empty(py);
     for evidence in native_field(result, "evidence")?.try_iter()? {
@@ -49,14 +53,13 @@ pub(crate) fn write_contracts<'py>(
         let (path, edited): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
             if native_field(&evidence, "resource_type")?.eq(&model_type)? {
                 let model: Bound<'py, PyAny> = models.as_any().get_item(&name)?;
-                let edited: Bound<'py, PyAny> = call_with(
-                    &registry::native(py, NativeAttr::EditContractModel)?,
-                    &[
-                        ("model", model.clone()),
-                        ("physical_columns", physical_columns),
-                        ("overwrite", write.overwrite.clone()),
-                    ],
-                )?;
+                let edited: Bound<'py, PyAny> = edit_contract_model(
+                    py,
+                    &model.clone(),
+                    &physical_columns,
+                    write.overwrite.clone().extract::<bool>()?,
+                )
+                .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
                 (
                     write
                         .project_dir
@@ -67,29 +70,29 @@ pub(crate) fn write_contracts<'py>(
                 let source: Bound<'py, PyAny> = sources.as_any().get_item(&name)?;
                 let path: Bound<'py, PyAny> =
                     native_field(&source, "source_file")?.getattr("file_path")?;
-                let edited: Bound<'py, PyAny> = call_with(
-                    &registry::native(py, NativeAttr::EditContractSource)?,
-                    &[
-                        ("source", source),
-                        ("physical_columns", physical_columns),
-                        ("overwrite", write.overwrite.clone()),
-                        ("contents", updates.as_any().call_method1("get", (&path,))?),
-                    ],
-                )?;
+                let edited: Bound<'py, PyAny> = edit_contract_source(
+                    &source,
+                    &physical_columns,
+                    write.overwrite.clone().extract::<bool>()?,
+                    updates
+                        .as_any()
+                        .call_method1("get", (&path,))?
+                        .extract::<Option<String>>()?,
+                )
+                .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
                 (path, edited)
             };
         let (contents, conflict): (Bound<'py, PyAny>, Bound<'py, PyAny>) = edited.extract()?;
         if !contents.is_none() && contents.ne(read_text(&path)?)? {
             updates.set_item(&path, contents)?;
         }
-        let remaining: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::RemainingContractFindings)?,
-            &[
-                ("findings", findings),
-                ("overwrite", write.overwrite.clone()),
-                ("conflict", conflict),
-            ],
-        )?;
+        let remaining: Bound<'py, PyAny> = remaining_contract_findings(
+            py,
+            &findings,
+            write.overwrite.clone().extract::<bool>()?,
+            conflict.extract::<Option<String>>()?,
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
         updated_evidence.append(replaced(&evidence, &[("findings", remaining)])?)?;
     }
     let evidence: Bound<'py, PyAny> = PyTuple::new(py, updated_evidence)?.into_any();
@@ -141,8 +144,12 @@ fn applied<'py>(
     }
     let selection_keywords: Bound<'py, PyDict> = PyDict::new(py);
     selection_keywords.set_item("no_cache", true)?;
-    let selection: Bound<'py, PyAny> = registry::class(py, RecordId::CompileAnalysisSelection)?
-        .call((), Some(&selection_keywords))?;
+    let selection: Bound<'py, PyAny> = new_record(
+        py,
+        RecordId::CompileAnalysisSelection,
+        (),
+        Some(&selection_keywords),
+    )?;
     build_compiled_project(
         py,
         Some(keywords(
@@ -162,10 +169,8 @@ fn applied<'py>(
 
 /// Write each `path: contents` pair atomically, in order.
 fn write_all(contents_by_path: &Bound<'_, PyDict>) -> PyResult<()> {
-    let py: Python<'_> = contents_by_path.py();
-    let write_atomically: Bound<'_, PyAny> = registry::native(py, NativeAttr::WriteAtomically)?;
     for (path, contents) in contents_by_path.iter() {
-        call_with(&write_atomically, &[("path", path), ("contents", contents)])?;
+        write_file_atomically(path.extract()?, &contents.extract::<String>()?)?;
     }
     Ok(())
 }
@@ -196,5 +201,5 @@ fn replaced<'py>(
     for (name, field) in fields {
         keywords.set_item(*name, field)?;
     }
-    imported(py, "dataclasses", "replace")?.call((value,), Some(&keywords))
+    replaced_keywords(value, &keywords)
 }

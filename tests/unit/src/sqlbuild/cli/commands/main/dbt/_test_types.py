@@ -58,7 +58,7 @@ class DbtInitOutputTestCase:
 class DbtInitProjectDirDefaultTestCase:
     description: str
     dbt_project_text: str
-    expected_dbt_project_dir: str
+    expected_config_line: str
 
 
 @dataclass(frozen=True)

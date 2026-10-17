@@ -126,7 +126,7 @@ pub(crate) struct SqlTestScanCache {
 impl SqlTestScanCache {
     #[new]
     #[pyo3(signature = (*, cache_dir))]
-    fn new(cache_dir: Option<PathBuf>) -> Self {
+    pub(crate) fn new(cache_dir: Option<PathBuf>) -> Self {
         Self {
             state: Mutex::new((cache_dir, None)),
         }

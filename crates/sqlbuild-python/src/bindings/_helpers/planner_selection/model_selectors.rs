@@ -12,11 +12,11 @@ use sqlbuild_analysis::planner_selection::models::{
     ModelSelectorNames, SelectableModel, SelectorExpansion,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
 
@@ -31,13 +31,16 @@ fn shared_input_error(carrier: &Carrier<'_>, message: &str) -> PyErr {
 
 /// Split `+selector+` marker syntax from the selector core without resolving the core.
 #[pyfunction]
-fn split_selector_expansion<'py>(raw: &Bound<'py, PyString>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn split_selector_expansion<'py>(
+    raw: &Bound<'py, PyString>,
+) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     let carrier: Carrier<'py> = Carrier::single(raw)?;
     let expansion: SelectorExpansion =
         split(&carrier.send(raw)?).map_err(|message| shared_input_error(&carrier, &message))?;
-    call_with(
-        &registry::class(py, RecordId::SelectorExpansion)?,
+    new_record_with(
+        py,
+        RecordId::SelectorExpansion,
         &[
             ("core", carrier.back(&expansion.core)?.into_any()),
             (
@@ -57,10 +60,8 @@ fn split_selector_expansion<'py>(raw: &Bound<'py, PyString>) -> PyResult<Bound<'
 }
 
 fn model_tags(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    let tags: Bound<'_, PyAny> = model
-        .getattr("config")?
-        .getattr("values")?
-        .call_method1("get", ("tags",))?;
+    let tags: Bound<'_, PyAny> =
+        native_field(&native_field(model, "config")?, "values")?.call_method1("get", ("tags",))?;
     if !tags.is_instance_of::<PyTuple>() && !tags.is_instance_of::<PyList>() {
         return Ok(Vec::new());
     }
@@ -71,9 +72,7 @@ fn selectable_model(model: &Bound<'_, PyAny>) -> PyResult<SelectableModel> {
     Ok(SelectableModel {
         name: native_field(model, "name")?.extract()?,
         tags: model_tags(model)?,
-        folder: model
-            .getattr("relative_path")?
-            .getattr("parent")?
+        folder: native_field(&native_field(model, "relative_path")?, "parent")?
             .call_method0("as_posix")?
             .extract()?,
     })
@@ -82,13 +81,12 @@ fn selectable_model(model: &Bound<'_, PyAny>) -> PyResult<SelectableModel> {
 /// One SQLBuild-owned model selector core's model names, and its path selector when translated.
 #[pyfunction]
 #[pyo3(signature = (*, project, term))]
-fn resolve_sqlbuild_model_selector_names<'py>(
+pub(crate) fn resolve_sqlbuild_model_selector_names<'py>(
     project: &Bound<'py, PyAny>,
     term: &Bound<'py, PyString>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = project.py();
-    let models: Vec<SelectableModel> = project
-        .getattr("models")?
+    let models: Vec<SelectableModel> = native_field(project, "models")?
         .try_iter()?
         .map(|model| selectable_model(&model?))
         .collect::<PyResult<_>>()?;

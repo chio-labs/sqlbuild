@@ -29,7 +29,11 @@ const HEADER_OPTIONS: (&[&str], &[&str]) = (
 /// Format command and execution context for a progress header.
 #[pyfunction]
 #[pyo3(signature = (*, command, target, concurrency))]
-fn format_execution_header(command: &str, target: Option<&str>, concurrency: i64) -> String {
+pub(crate) fn format_execution_header(
+    command: &str,
+    target: Option<&str>,
+    concurrency: i64,
+) -> String {
     format_header(command, target, concurrency)
 }
 
@@ -57,7 +61,7 @@ pub(crate) fn write_execution_header(
 
 /// Format a comparison result name as a user-facing expectation name.
 #[pyfunction]
-fn format_expectation_name(model_name: &str) -> String {
+pub(crate) fn format_expectation_name(model_name: &str) -> String {
     format_name(model_name)
 }
 
@@ -95,7 +99,7 @@ pub(crate) fn expectation_step(step: &Bound<'_, PyAny>) -> PyResult<ExpectationS
 
 /// Format failing row count detail for an expectation row.
 #[pyfunction]
-fn format_expectation_detail(step_result: &Bound<'_, PyAny>) -> PyResult<String> {
+pub(crate) fn format_expectation_detail(step_result: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(format_detail(&expectation_step(step_result)?))
 }
 

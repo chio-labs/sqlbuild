@@ -1,17 +1,16 @@
 //! Build scenario relation locations through adapter qualification callbacks.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_scenario::constants::{REF, SOURCE};
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_INTERNAL, SCENARIO_PLAN_MISSING_RELATION_TARGET,
 };
 use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::values::error;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods};
 
@@ -85,7 +84,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
         ("dbt_ref_fixture_names", "dbt_ref", &dbt_refs),
         ("seed_names", "seed", &seeds),
     ] {
-        for name in graph.getattr(field)?.try_iter()? {
+        for name in native_field(graph, field)?.try_iter()? {
             let name: String = name?.extract()?;
             let target = target_for_artifact(args, &artifacts, kind, &name)?;
             locations.set_item(&name, &target)?;
@@ -97,13 +96,12 @@ pub(crate) fn build_scenario_relation_plan<'py>(
                     .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(name.clone()))?;
                 let changes = PyDict::new(py);
                 for field in ["database", "schema"] {
-                    changes.set_item(field, target.getattr(field)?)?;
+                    changes.set_item(field, native_field(&target, field)?)?;
                 }
                 changes.set_item("table", native_field(&target, "name")?)?;
                 changes.set_item("expression", py.None())?;
                 changes.set_item("type_enforcement", false)?;
-                let replacement =
-                    imported(py, "dataclasses", "replace")?.call((entry,), Some(&changes))?;
+                let replacement = replaced_keywords(&entry, &changes)?;
                 source_map.set_item(&name, replacement)?;
             }
         }
@@ -120,8 +118,9 @@ pub(crate) fn build_scenario_relation_plan<'py>(
         };
         seed_fixtures.set_item(name, target)?;
     }
-    call_with(
-        &registry::class(py, RecordId::ScenarioRelationPlan)?,
+    new_record_with(
+        py,
+        RecordId::ScenarioRelationPlan,
         &[
             ("scenario_name", native_field(graph, "name")?),
             ("relation_map", args.relation_map.clone()),
@@ -162,8 +161,9 @@ fn target_for_artifact<'py>(
             ("name", physical.clone()),
         ],
     )?;
-    call_with(
-        &registry::class(py, RecordId::CompiledRelationLocation)?,
+    new_record_with(
+        py,
+        RecordId::CompiledRelationLocation,
         &[
             ("database", database),
             ("schema", schema),

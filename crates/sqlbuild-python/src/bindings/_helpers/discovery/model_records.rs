@@ -14,6 +14,7 @@ use crate::bindings::_helpers::discovery::project_files::{model_record, path_obj
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
 use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::models::NativeProjectTree;
 
 const PATHLIB_MODULE: &str = "pathlib";
@@ -91,7 +92,7 @@ pub(crate) fn discovered_model_files<'py>(
     let mut records: Vec<Bound<'py, PyAny>> = Vec::with_capacity(items.len());
     for (relative_path, built) in items {
         if let Some(selected) = &selected
-            && !selected.contains(relative_path.getattr(STEM_ATTRIBUTE)?)?
+            && !selected.contains(native_field(&relative_path, STEM_ATTRIBUTE)?)?
         {
             continue;
         }
@@ -103,7 +104,7 @@ pub(crate) fn discovered_model_files<'py>(
 /// Discover the (selected) model files natively, reporting failing files to `on_fault`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn discover_model_files<'py>(
+pub(crate) fn discover_model_files<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

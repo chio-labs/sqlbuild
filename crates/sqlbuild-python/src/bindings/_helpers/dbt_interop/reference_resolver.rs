@@ -10,10 +10,15 @@ use std::collections::HashSet;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::dbt_interop::manifest::build_compile_dbt_manifest_index;
+use crate::bindings::_helpers::dbt_interop::manifest::resolve_dbt_reference_relation;
+use crate::bindings::_helpers::dbt_interop::manifest::validate_compile_dbt_model_names;
+use crate::bindings::_helpers::dbt_interop::manifest::validate_compile_dbt_model_reference;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const VALIDATE_OPTIONS: (&[&str], &[&str]) = (
@@ -45,7 +50,7 @@ fn compile_input_error(py: Python<'_>, message: String, code: &str) -> PyErr {
 }
 
 fn text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    value.getattr(name)?.extract()
+    native_field(value, name)?.extract()
 }
 
 /// External reference resolver backed by a dbt manifest index.
@@ -106,13 +111,8 @@ impl DbtCompileReferenceResolver {
         py: Python<'_>,
         known_model_names: Bound<'_, PyAny>,
     ) -> Result<(), PyErr> {
-        call_with(
-            &registry::native(py, NativeAttr::ValidateCompileDbtModelNames)?,
-            &[
-                ("known_model_names", known_model_names),
-                ("dbt_manifest", self.manifest_or_none(py)),
-            ],
-        )?;
+        validate_compile_dbt_model_names(py, known_model_names, self.manifest_or_none(py))
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
         Ok(())
     }
 
@@ -257,25 +257,22 @@ impl DbtCompileReferenceResolver {
     ) -> Result<(), PyErr> {
         let arguments: KeywordArguments<'_> =
             KeywordArguments::read(py, "validate_reference", options, VALIDATE_OPTIONS)?;
-        let reference: Bound<'_, PyAny> = call_with(
-            &registry::class(py, RecordId::CompileSqlReference)?,
+        let reference: Bound<'_, PyAny> = new_record_with(
+            py,
+            RecordId::CompileSqlReference,
             &[
                 ("ref_kind", arguments.value("ref_kind")?),
                 ("ref_name", arguments.value("ref_name")?),
                 ("ref_package", arguments.value("ref_package")?),
             ],
         )?;
-        call_with(
-            &registry::native(py, NativeAttr::ValidateCompileDbtModelReference)?,
-            &[
-                ("reference", reference),
-                (
-                    "model_relative_path",
-                    arguments.value("owner_relative_sql_path")?,
-                ),
-                ("dbt_manifest", self.manifest_or_none(py)),
-            ],
-        )?;
+        validate_compile_dbt_model_reference(
+            py,
+            reference,
+            arguments.value("owner_relative_sql_path")?,
+            self.manifest_or_none(py),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
         Ok(())
     }
 
@@ -287,14 +284,17 @@ impl DbtCompileReferenceResolver {
         ref_name: Bound<'py, PyAny>,
         ref_package: Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        call_with(
-            &registry::native(py, NativeAttr::ResolveDbtReferenceRelation)?,
-            &[
-                ("manifest", self.manifest_or_none(py)),
-                ("ref_kind", ref_kind),
-                ("ref_name", ref_name),
-                ("ref_package", ref_package),
-            ],
+        resolve_dbt_reference_relation(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("manifest", self.manifest_or_none(py)),
+                    ("ref_kind", ref_kind),
+                    ("ref_name", ref_name),
+                    ("ref_package", ref_package),
+                ],
+            )?),
         )
     }
 }
@@ -309,10 +309,7 @@ pub(crate) fn build_compile_reference_resolver<'py>(
     if manifest_contents.is_none() {
         return Ok(py.None().into_bound(py));
     }
-    let manifest: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildCompileDbtManifestIndex)?,
-        &[("manifest_contents", manifest_contents)],
-    )?;
+    let manifest: Bound<'py, PyAny> = build_compile_dbt_manifest_index(py, manifest_contents)?;
     Ok(Bound::new(
         py,
         DbtCompileReferenceResolver::new(Some(manifest.unbind())),

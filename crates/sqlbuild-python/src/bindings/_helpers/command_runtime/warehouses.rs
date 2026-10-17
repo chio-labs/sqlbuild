@@ -22,14 +22,17 @@ use crate::bindings::_helpers::command_runtime::runtime_errors::{
     expected_resolution_error, raised,
 };
 use crate::bindings::_helpers::command_runtime::warehouse_scope::current_command_warehouse_scope;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The `WarehouseGroup` whose warehouse is a target's `warehouses.build`; any other reads `query`.
 const BUILD_GROUP: &str = "build";
@@ -102,8 +105,9 @@ fn resolved_warehouse<'py>(
     warehouse: Option<&str>,
     source: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(py, RecordId::ResolvedWarehouse)?,
+    new_record_with(
+        py,
+        RecordId::ResolvedWarehouse,
         &[
             (
                 "warehouse",
@@ -126,7 +130,10 @@ fn group_value(target: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<
     } else {
         QUERY_GROUP
     };
-    optional_text(&native_field(target, "warehouses")?.getattr(attribute)?)
+    optional_text(&native_field(
+        &native_field(target, "warehouses")?,
+        attribute,
+    )?)
 }
 
 /// The active target's authored, unexpanded warehouse for one command group.
@@ -138,14 +145,13 @@ pub(crate) fn find_authored<'py>(
     let project_config: Bound<'py, PyAny> =
         native_field(inputs.discovered_inputs, "project_config")?;
     let local_config: Bound<'py, PyAny> = native_field(inputs.discovered_inputs, "local_config")?;
-    let target_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveTargetName)?,
-        &[
-            ("project_config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("selected_target", inputs.selected_target.clone()),
-        ],
-    )?;
+    let target_name: Bound<'py, PyAny> = resolve_target_name(
+        py,
+        &project_config.clone(),
+        &local_config.clone(),
+        &inputs.selected_target.clone(),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     if target_name.is_none() {
         return Ok(None);
     }
@@ -175,14 +181,12 @@ fn expand_authored(
     cli_vars: &Bound<'_, PyAny>,
 ) -> PyResult<String> {
     let py: Python<'_> = found.group.py();
-    let runtime: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
-        &[
-            ("discovered_inputs", inputs.discovered_inputs.clone()),
-            ("selected_target", inputs.selected_target.clone()),
-            ("cli_vars", cli_vars.clone()),
-        ],
-    )?;
+    let runtime: Bound<'_, PyAny> = build_effective_runtime_config(
+        &inputs.discovered_inputs.clone(),
+        Some(inputs.selected_target.clone()).filter(|value| !value.is_none()),
+        Some(cli_vars.clone()).filter(|value| !value.is_none()),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let expanded: Bound<'_, PyAny> = expanded_template_data(
         PyString::new(py, &found.authored.warehouse).as_any(),
         (runtime.get_item(1)?.downcast()?, &PyDict::new(py)),
@@ -276,7 +280,7 @@ fn optional_inputs<'a, 'py>(
 /// Reject an empty, malformed, or unsupported `--warehouse` before the command runs.
 #[pyfunction]
 #[pyo3(signature = (*, cli_warehouse, project_dir))]
-fn validate_cli_warehouse(
+pub(crate) fn validate_cli_warehouse(
     py: Python<'_>,
     cli_warehouse: Option<String>,
     project_dir: Bound<'_, PyAny>,
@@ -286,15 +290,9 @@ fn validate_cli_warehouse(
     };
     checked_cli_warehouse(py, &cli_warehouse)?;
     let discovered: Bound<'_, PyAny> = discover_project_configuration(py, &project_dir)?;
-    let adapter_name: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered, "project_config")?,
-            ),
-            ("local_config", native_field(&discovered, "local_config")?),
-        ],
+    let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
     )?;
     if !session_warehouse_support(py, &adapter_name, &project_dir)? {
         return Err(unsupported(py, &cli_warehouse, &adapter_name));
@@ -363,7 +361,7 @@ pub(crate) fn apply_warehouse<'py>(
 /// Return connection config whose warehouse follows the active command's group.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn apply_command_warehouse<'py>(
+pub(crate) fn apply_command_warehouse<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -384,7 +382,7 @@ fn apply_command_warehouse<'py>(
 /// Describe the warehouse an already resolved connection uses and where it came from.
 #[pyfunction]
 #[pyo3(signature = (*, discovered_inputs, selected_target, connection_config))]
-fn describe_connection_warehouse<'py>(
+pub(crate) fn describe_connection_warehouse<'py>(
     py: Python<'py>,
     discovered_inputs: Bound<'py, PyAny>,
     selected_target: Bound<'py, PyAny>,

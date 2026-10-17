@@ -43,7 +43,7 @@ fn path_object<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyAny>> 
 
 fn test_key(value: &Bound<'_, PyAny>, name_field: &str) -> PyResult<TestKey> {
     Ok((
-        value.getattr(name_field)?.extract()?,
+        native_field(value, name_field)?.extract()?,
         posix(&native_field(value, "source_path")?)?,
         native_field(value, "block_index")?.extract()?,
         native_field(value, "case_name")?.extract()?,
@@ -153,13 +153,13 @@ pub(crate) fn write_runtime_target(
         ("model_results", "model_name", &models),
         ("function_results", "function_name", &functions),
     ] {
-        for item in result.getattr(results)?.try_iter()? {
+        for item in native_field(result, results)?.try_iter()? {
             let item: Bound<'_, PyAny> = item?;
             let statements: Vec<String> = sql_statements(&item)?;
             if statements.is_empty() {
                 continue;
             }
-            let name: String = item.getattr(name_field)?.extract()?;
+            let name: String = native_field(&item, name_field)?.extract()?;
             if let Some(path) = paths.get(&name) {
                 write_text(&run_dir.div(path)?, &runtime_sql_text(&statements))?;
             }

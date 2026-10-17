@@ -1,5 +1,6 @@
 //! Native facts of declared schema columns and families, read once from their Python specs.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use sqlbuild_analysis::compiled_project::models::{
     DynamicFamilyFact, ModelSchemaFact, SchemaColumnFact,
@@ -33,12 +34,12 @@ pub(crate) fn python_column_fact(
     let mut audit_definitions: Vec<String> = Vec::new();
     if let Some(audits) = present(column, AUDITS_FIELD)? {
         for audit in audits.try_iter()? {
-            audit_definitions.push(audit?.getattr(DEFINITION_NAME_FIELD)?.extract()?);
+            audit_definitions.push(native_field(&audit?, DEFINITION_NAME_FIELD)?.extract()?);
         }
     }
     let location_path: Option<String> = match present(column, LOCATION_FIELD)? {
         Some(location) => {
-            let path: Bound<'_, PyAny> = location.getattr(PATH_FIELD)?;
+            let path: Bound<'_, PyAny> = native_field(&location, PATH_FIELD)?;
             let outside: bool = match model_path {
                 Some(model_path) => !path.is(model_path) && path.ne(model_path)?,
                 None => true,
@@ -50,7 +51,7 @@ pub(crate) fn python_column_fact(
         None => None,
     };
     Ok(SchemaColumnFact {
-        name: column.getattr(NAME_FIELD)?.str()?.extract()?,
+        name: native_field(column, NAME_FIELD)?.str()?.extract()?,
         data_type: optional(column, TYPE_FIELD)?,
         nullable: optional(column, NULLABLE_FIELD)?,
         described: present(column, DESCRIPTION_FIELD)?.is_some(),
@@ -80,23 +81,23 @@ pub(crate) fn entry_schema_fact(
         return Ok(None);
     }
     let mut dynamic_columns: Vec<DynamicFamilyFact> = Vec::new();
-    for family in entry.getattr(DYNAMIC_COLUMNS_FIELD)?.try_iter()? {
+    for family in native_field(entry, DYNAMIC_COLUMNS_FIELD)?.try_iter()? {
         let family: Bound<'_, PyAny> = family?;
         dynamic_columns.push(family_fact(&DynamicFamily {
-            name: family.getattr(NAME_FIELD)?.extract()?,
-            pivot_column: family.getattr(PIVOT_COLUMN_FIELD)?.extract()?,
-            value_column: family.getattr(VALUE_COLUMN_FIELD)?.extract()?,
-            aggregate: family.getattr(AGGREGATE_FIELD)?.extract()?,
-            data_type: family.getattr(TYPE_FIELD)?.extract()?,
-            name_pattern: family.getattr(NAME_PATTERN_FIELD)?.extract()?,
+            name: native_field(&family, NAME_FIELD)?.extract()?,
+            pivot_column: native_field(&family, PIVOT_COLUMN_FIELD)?.extract()?,
+            value_column: native_field(&family, VALUE_COLUMN_FIELD)?.extract()?,
+            aggregate: native_field(&family, AGGREGATE_FIELD)?.extract()?,
+            data_type: native_field(&family, TYPE_FIELD)?.extract()?,
+            name_pattern: native_field(&family, NAME_PATTERN_FIELD)?.extract()?,
         }));
     }
     Ok(Some(ModelSchemaFact {
-        audit_count: u32::try_from(entry.getattr(AUDITS_FIELD)?.len()?).unwrap_or(u32::MAX),
-        columns: python_column_facts(&entry.getattr(COLUMNS_FIELD)?, Some(model_path))?,
+        audit_count: u32::try_from(native_field(entry, AUDITS_FIELD)?.len()?).unwrap_or(u32::MAX),
+        columns: python_column_facts(&native_field(entry, COLUMNS_FIELD)?, Some(model_path))?,
         dynamic_columns,
-        type_enforcement: entry.getattr(TYPE_ENFORCEMENT_FIELD)?.is_truthy()?,
-        named_schema: !entry.getattr(MODEL_SCHEMA_FIELD)?.is_none(),
+        type_enforcement: native_field(entry, TYPE_ENFORCEMENT_FIELD)?.is_truthy()?,
+        named_schema: !native_field(entry, MODEL_SCHEMA_FIELD)?.is_none(),
     }))
 }
 

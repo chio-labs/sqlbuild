@@ -15,6 +15,7 @@ use sqlbuild_refactor::refactoring::models::{
 use sqlbuild_refactor::refactoring::types::PhysicalColumn;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -70,7 +71,7 @@ fn physical_rows(columns: &Bound<'_, PyAny>) -> PyResult<Vec<PhysicalColumn>> {
 /// The model's MODEL header with physical columns adopted, or the ownership conflict.
 #[pyfunction]
 #[pyo3(signature = (*, model, physical_columns, overwrite))]
-fn edit_contract_model(
+pub(crate) fn edit_contract_model(
     py: Python<'_>,
     model: &Bound<'_, PyAny>,
     physical_columns: &Bound<'_, PyAny>,
@@ -116,22 +117,16 @@ fn edit_contract_model(
 /// The source's YAML declaration with physical columns adopted, or the ownership conflict.
 #[pyfunction]
 #[pyo3(signature = (*, source, physical_columns, overwrite, contents = None))]
-fn edit_contract_source(
+pub(crate) fn edit_contract_source(
     source: &Bound<'_, PyAny>,
     physical_columns: &Bound<'_, PyAny>,
     overwrite: bool,
     contents: Option<String>,
 ) -> PyResult<(Option<String>, Option<String>)> {
-    let discovered_contents: String = source
-        .getattr("source_file")?
-        .getattr("contents")?
-        .extract()?;
+    let discovered_contents: String =
+        native_field(&native_field(source, "source_file")?, "contents")?.extract()?;
     let mut columns: Vec<(String, Option<String>)> = Vec::new();
-    for column in source
-        .getattr("source_entry")?
-        .getattr("columns")?
-        .try_iter()?
-    {
+    for column in native_field(&native_field(source, "source_entry")?, "columns")?.try_iter()? {
         let column: Bound<'_, PyAny> = column?;
         columns.push((
             native_field(&column, "name")?.extract()?,
@@ -153,7 +148,7 @@ fn edit_contract_source(
 /// The findings an edit leaves, plus an ownership-conflict finding when the edit was refused.
 #[pyfunction]
 #[pyo3(signature = (*, findings, overwrite, conflict))]
-fn remaining_contract_findings<'py>(
+pub(crate) fn remaining_contract_findings<'py>(
     py: Python<'py>,
     findings: &Bound<'py, PyAny>,
     overwrite: bool,
@@ -172,11 +167,11 @@ fn remaining_contract_findings<'py>(
         keywords.set_item("resource_name", native_field(first, "resource_name")?)?;
         keywords.set_item(
             "kind",
-            registry::class(py, RecordId::ContractFindingKind)?.getattr("OWNERSHIP_CONFLICT")?,
+            enum_member(py, RecordId::ContractFindingKind, "OWNERSHIP_CONFLICT")?,
         )?;
         keywords.set_item("message", conflict)?;
         let ownership: Bound<'py, PyAny> =
-            registry::class(py, RecordId::ContractFinding)?.call((), Some(&keywords))?;
+            new_record(py, RecordId::ContractFinding, (), Some(&keywords))?;
         let mut remaining: Vec<Bound<'py, PyAny>> = findings.clone();
         remaining.push(ownership);
         return PyTuple::new(py, remaining);

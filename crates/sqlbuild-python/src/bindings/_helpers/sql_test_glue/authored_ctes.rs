@@ -54,8 +54,7 @@ impl AuthoredBody {
         Ok(Self {
             sql: sql.extract()?,
             contents: native_field(file, "contents")?.extract()?,
-            relative_path: file
-                .getattr("relative_path")?
+            relative_path: native_field(file, "relative_path")?
                 .call_method0("as_posix")?
                 .extract()?,
             file_label: native_field(file, "relative_path")?.str()?.extract()?,
@@ -118,7 +117,7 @@ fn check_bodies(
 
 /// Reject the first authored test block, then scenario, whose CTE names cannot be read.
 #[pyfunction]
-fn validate_authored_sql_test_ctes(
+pub(crate) fn validate_authored_sql_test_ctes(
     py: Python<'_>,
     test_files: Bound<'_, PyAny>,
     scenario_files: Bound<'_, PyAny>,

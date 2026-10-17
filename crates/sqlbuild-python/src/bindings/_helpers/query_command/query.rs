@@ -13,6 +13,8 @@ use sqlbuild_core::query_command::main::render_query_long::render_query_long;
 use sqlbuild_core::query_command::main::render_query_table::render_query_table;
 use sqlbuild_core::query_command::models::QueryDisplay;
 
+use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -21,7 +23,7 @@ use crate::bindings::_helpers::query_command::query_values::{
     csv_text, display_text, json_cell, python_json_rows, strict_width,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
 const LONG_FORMAT: &str = "long";
@@ -146,16 +148,19 @@ fn run_sql<'py>(
     limit: Option<i64>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = sql.py();
-    let connection_config: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
-        &[
-            ("discovered_inputs", project.discovered.clone()),
-            ("project_dir", project.project_dir.clone()),
-            (
-                "selected_target",
-                selected_target.unwrap_or_else(|| py.None().into_bound(py)),
-            ),
-        ],
+    let connection_config: Bound<'py, PyAny> = resolve_project_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", project.discovered.clone()),
+                ("project_dir", project.project_dir.clone()),
+                (
+                    "selected_target",
+                    selected_target.unwrap_or_else(|| py.None().into_bound(py)),
+                ),
+            ],
+        )?),
     )?;
     let connection: Bound<'py, PyAny> = project
         .adapter
@@ -199,8 +204,7 @@ fn run_sql<'py>(
 }
 
 fn rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Vec<Vec<Bound<'py, PyAny>>>> {
-    result
-        .getattr("rows")?
+    native_field(result, "rows")?
         .try_iter()?
         .map(|row| row?.try_iter()?.collect::<PyResult<Vec<_>>>())
         .collect()
@@ -243,8 +247,7 @@ fn render_json(
 /// The result in the requested format; a statement without columns prints `OK`.
 fn render(result: &Bound<'_, PyAny>, output_format: &str, limit: Option<i64>) -> PyResult<String> {
     let py: Python<'_> = result.py();
-    let columns: Vec<String> = result
-        .getattr("columns")?
+    let columns: Vec<String> = native_field(result, "columns")?
         .try_iter()?
         .map(|column| column?.extract())
         .collect::<PyResult<_>>()?;
@@ -282,7 +285,10 @@ fn render(result: &Bound<'_, PyAny>, output_format: &str, limit: Option<i64>) ->
 /// Execute ad hoc SQL against the active project connection.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_query_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_query_command(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'_> = KeywordArguments::read(
         py,
         "run_query_command",

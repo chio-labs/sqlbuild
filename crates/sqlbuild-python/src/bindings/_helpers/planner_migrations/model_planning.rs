@@ -14,9 +14,9 @@ use crate::bindings::_helpers::planner_migrations::planning_origin::{
 };
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyString, PyTuple,
@@ -24,7 +24,7 @@ use pyo3::types::{
 
 fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<ModelMigrationRequest<'py>>> {
     let py = item.py();
-    let values = native_field(item, "config")?.getattr("values")?;
+    let values = native_field(&native_field(item, "config")?, "values")?;
     let origin = values.call_method1("get", ("migrate_from",))?;
     if !origin.is_instance_of::<PyString>() {
         return Ok(None);
@@ -32,7 +32,7 @@ fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<ModelMigrationRequ
     let materialization = config(item, "materialized")?;
     Ok(Some(ModelMigrationRequest {
         model: item.clone(),
-        discovery: registry::class(py, RecordId::MigrationDiscovery)?.getattr("MANUAL")?,
+        discovery: enum_member(py, RecordId::MigrationDiscovery, "MANUAL")?,
         raw_origin: Some(origin.call_method0("strip")?),
         origin_location: None,
         origin_model: py.None().into_bound(py),
@@ -54,8 +54,7 @@ fn manual_migration_requests<'py>(
         {
             continue;
         }
-        let item = scope
-            .getattr("models_by_name")?
+        let item = native_field(scope, "models_by_name")?
             .call_method1("get", (native_field(&key, "name")?,))?;
         if !item.is_none()
             && let Some(request) = declared(&item)?
@@ -91,9 +90,11 @@ fn discover<'py>(
     let scope = phase.scope.clone();
     let snapshot = phase.snapshot.clone();
     let mut declared_requests: Vec<ModelMigrationRequest<'py>> = Vec::new();
-    for item in runtime_field(&runtime, |runtime| &runtime.project)?
-        .getattr("models")?
-        .try_iter()?
+    for item in native_field(
+        &runtime_field(&runtime, |runtime| &runtime.project)?,
+        "models",
+    )?
+    .try_iter()?
     {
         if let Some(request) = declared(&item?)? {
             declared_requests.push(request);
@@ -168,7 +169,7 @@ fn finish<'py>(
         )?;
         let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
         let snapshots_config = if project_config.is_none() {
-            registry::class(py, RecordId::SnapshotsConfig)?.call0()?
+            new_record(py, RecordId::SnapshotsConfig, (), None)?
         } else {
             native_field(&project_config, "snapshots")?
         };

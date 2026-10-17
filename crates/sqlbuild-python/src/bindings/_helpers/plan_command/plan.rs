@@ -7,17 +7,26 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::wrap_pyfunction;
 
 use crate::bindings::_helpers::build_command::support::keyword_relay;
+use crate::bindings::_helpers::cli::progress_reporters::{
+    ConnectionProgressReporter, PlanningProgressReporter,
+};
 use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
+use crate::bindings::_helpers::command_runtime::preview_target::validate_preview_target;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::pipeline::run_compile_pipeline;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::plan_output::plan_json::format_plan_json;
+use crate::bindings::_helpers::plan_output::plan_text::format_plan;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const COMMAND_NAME: &str = "plan";
 const DEFAULT_SECTION_ENTRIES: i64 = 50;
@@ -76,11 +85,12 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
             ],
         )?),
     )?;
-    let preview: Bound<'py, PyDict> = PyDict::new(py);
-    preview.set_item("discovered_inputs", &discovered)?;
-    preview.set_item("as_target", native_field(request, "as_target")?)?;
-    preview.set_item("command_name", COMMAND_NAME)?;
-    registry::native(py, NativeAttr::ValidatePreviewTarget)?.call((), Some(&preview))?;
+    validate_preview_target(
+        py,
+        discovered.clone(),
+        native_field(request, "as_target")?.extract()?,
+        COMMAND_NAME.to_owned(),
+    )?;
     let context: Bound<'py, PyAny> = resolve_adapter_connection_context(
         &discovered,
         &project_dir,
@@ -97,28 +107,29 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
     let stream: Bound<'py, PyAny> =
         py.import("sys")?
             .getattr(if json_output { "stderr" } else { "stdout" })?;
-    let connection_progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", native_field(&context, "adapter_name")?),
-            ("stream", stream.clone()),
-            ("use_color", flag(py, use_color)),
-        ],
-    )?;
-    let planning_progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
-        &[
-            ("stream", stream.clone()),
-            ("use_color", flag(py, use_color)),
-        ],
-    )?;
+    let connection_progress: Bound<'py, PyAny> = Bound::new(
+        py,
+        ConnectionProgressReporter::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter_name", native_field(&context, "adapter_name")?),
+                    ("stream", stream.clone()),
+                    ("use_color", flag(py, use_color)),
+                ],
+            )?),
+        )?,
+    )?
+    .into_any();
+    let planning_progress: Bound<'py, PyAny> =
+        Bound::new(py, PlanningProgressReporter::new(py, &stream, use_color)?)?.into_any();
     let requested_load: Bound<'py, PyAny> = native_field(request, "load_sources")?;
     let load_sources: Bound<'py, PyAny> = if requested_load.is_none() {
-        call_with(
-            &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
-            &[("discovered_inputs", discovered.clone())],
+        native_field(
+            &build_effective_settings_config(&discovered)?,
+            "auto_load_sources",
         )?
-        .getattr("auto_load_sources")?
     } else {
         requested_load
     };
@@ -172,12 +183,9 @@ fn compile_pipeline<'py>(
     invocation: &PlanInvocation<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let resolver: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            ("project_dir", invocation.project_dir.clone()),
-            ("discovered_inputs", invocation.discovered.clone()),
-        ],
+    let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
+        invocation.project_dir.clone(),
+        invocation.discovered.clone(),
     )?;
     let as_target: Bound<'py, PyAny> = native_field(request, "as_target")?;
     if !as_target.is_none() {
@@ -200,7 +208,7 @@ fn compile_pipeline<'py>(
         },
     )?;
     for field in PIPELINE_FIELDS {
-        options.set_item(field, request.getattr(field)?)?;
+        options.set_item(field, native_field(request, field)?)?;
     }
     options.set_item("auto_load_sources", &invocation.load_sources)?;
     options.set_item(
@@ -214,15 +222,18 @@ fn compile_pipeline<'py>(
     )?;
     options.set_item("record_migration_fingerprints", false)?;
     let pipeline_options: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompilePipelineOptions)?.call((), Some(&options))?;
-    call_with(
-        &registry::native(py, NativeAttr::RunCompilePipeline)?,
-        &[
-            ("discovered_inputs", invocation.discovered.clone()),
-            ("adapter", native_field(&invocation.context, "adapter")?),
-            ("options", pipeline_options),
-            ("hooks", connection_hooks(invocation)?),
-        ],
+        new_record(py, RecordId::CompilePipelineOptions, (), Some(&options))?;
+    run_compile_pipeline(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", invocation.discovered.clone()),
+                ("adapter", native_field(&invocation.context, "adapter")?),
+                ("options", pipeline_options),
+                ("hooks", connection_hooks(invocation)?),
+            ],
+        )?),
     )
 }
 
@@ -235,9 +246,12 @@ fn write_output(
     let plan: Bound<'_, PyAny> = native_field(pipeline, "plan_output")?;
     let python_entries: Bound<'_, PyAny> = native_field(pipeline, "python_plan_entries")?;
     if native_field(request, "json_output")?.is_truthy()? {
-        let text: Bound<'_, PyAny> = call_with(
-            &registry::native(py, NativeAttr::FormatPlanJson)?,
-            &[("plan", plan), ("python_plan_entries", python_entries)],
+        let text: String = format_plan_json(
+            py,
+            Some(keywords(
+                py,
+                &[("plan", plan), ("python_plan_entries", python_entries)],
+            )?),
         )?;
         imported(py, "builtins", "print")?.call1((text,))?;
         return Ok(());
@@ -251,29 +265,31 @@ fn write_output(
             Some(DEFAULT_SECTION_ENTRIES)
         },
     )?;
-    let text: String = call_with(
-        &registry::native(py, NativeAttr::FormatPlan)?,
-        &[
-            ("plan", plan),
-            ("full_refresh", native_field(request, "full_refresh")?),
-            ("use_color", flag(py, invocation.use_color)),
-            (
-                "display_options",
-                registry::class(py, RecordId::DisplayOptions)?.call((), Some(&display))?,
-            ),
-            ("python_plan_entries", python_entries),
-            ("include_direct_freshness_diagnostics", flag(py, false)),
-            ("include_completion", flag(py, true)),
-        ],
-    )?
-    .extract()?;
+    let text: String = format_plan(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", plan),
+                ("full_refresh", native_field(request, "full_refresh")?),
+                ("use_color", flag(py, invocation.use_color)),
+                (
+                    "display_options",
+                    new_record(py, RecordId::DisplayOptions, (), Some(&display))?,
+                ),
+                ("python_plan_entries", python_entries),
+                ("include_direct_freshness_diagnostics", flag(py, false)),
+                ("include_completion", flag(py, true)),
+            ],
+        )?),
+    )?;
     print_line(py, &format!("\n{text}"))
 }
 
 /// Run one `sqb plan` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_plan_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_plan_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let py: Python<'_> = request.py();
     let invocation: PlanInvocation<'_> = resolve_invocation(request)?;
     if !native_field(request, "json_output")?.is_truthy()? {

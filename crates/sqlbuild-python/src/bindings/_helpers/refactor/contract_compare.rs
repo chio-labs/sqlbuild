@@ -7,14 +7,15 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::replaced;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
-const DATACLASSES_MODULE: &str = "dataclasses";
 const MODEL_RESOURCE: &str = "model";
 const SOURCE_RESOURCE: &str = "source";
 
@@ -22,15 +23,13 @@ const SOURCE_RESOURCE: &str = "source";
 struct Vocabulary<'py> {
     finding: Bound<'py, PyAny>,
     kinds: Bound<'py, PyAny>,
-    replace: Bound<'py, PyAny>,
 }
 
 impl<'py> Vocabulary<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            finding: registry::class(py, RecordId::ContractFinding)?,
-            kinds: registry::class(py, RecordId::ContractFindingKind)?,
-            replace: py.import(DATACLASSES_MODULE)?.getattr("replace")?,
+            finding: record_class(py, RecordId::ContractFinding)?,
+            kinds: record_class(py, RecordId::ContractFindingKind)?,
         })
     }
 
@@ -61,11 +60,7 @@ impl<'py> Vocabulary<'py> {
         item: &Bound<'py, PyAny>,
         fields: Vec<(&str, Bound<'py, PyAny>)>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let keywords: Bound<'py, PyDict> = PyDict::new(self.py());
-        for (name, value) in fields {
-            keywords.set_item(name, value)?;
-        }
-        self.replace.call((item,), Some(&keywords))
+        replaced(item, &fields)
     }
 }
 
@@ -88,7 +83,7 @@ fn keyword_call<'py>(
 fn qualified(item: &Bound<'_, PyAny>) -> PyResult<String> {
     let mut parts: Vec<String> = Vec::new();
     for name in ["database", "schema", "relation"] {
-        let part: Option<String> = item.getattr(name)?.extract()?;
+        let part: Option<String> = native_field(item, name)?.extract()?;
         if let Some(part) = part.filter(|part| !part.is_empty()) {
             parts.push(part);
         }
@@ -117,7 +112,7 @@ fn column_infos<'py>(
 }
 
 fn resource_type<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, RecordId::CompiledResourceType)?.call1((value,))
+    enum_from_value(py, RecordId::CompiledResourceType, value)
 }
 
 /// The evidence a model's authored contract offers, before inspection.
@@ -134,7 +129,7 @@ fn model_evidence<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
         )
     };
     keyword_call(
-        &registry::class(py, RecordId::ContractEvidence)?,
+        &record_class(py, RecordId::ContractEvidence)?,
         vec![
             ("resource_type", resource_type(py, MODEL_RESOURCE)?),
             ("resource_name", native_field(model, "name")?),
@@ -185,7 +180,7 @@ fn source_evidence<'py>(
         text(py, &relation)
     };
     keyword_call(
-        &registry::class(py, RecordId::ContractEvidence)?,
+        &record_class(py, RecordId::ContractEvidence)?,
         vec![
             ("resource_type", resource),
             ("resource_name", name),
@@ -199,7 +194,7 @@ fn source_evidence<'py>(
             ("physical_columns", py.None().into_bound(py)),
             (
                 "source_path",
-                native_field(source, "source_file")?.getattr("relative_path")?,
+                native_field(&native_field(source, "source_file")?, "relative_path")?,
             ),
             ("findings", PyTuple::new(py, findings)?.into_any()),
         ],
@@ -252,13 +247,8 @@ fn undeclared_finding<'py>(
     let py: Python<'py> = vocabulary.py();
     let name: String = native_field(physical, "name")?.extract()?;
     let physical_type: Bound<'py, PyAny> = native_field(physical, "type")?;
-    let matching: Bound<'py, PyAny> = keyword_call(
-        &registry::native(py, NativeAttr::MatchingDynamicFamilies)?,
-        vec![
-            ("families", native_field(item, "dynamic_columns")?),
-            ("column_name", text(py, &name)),
-        ],
-    )?;
+    let matching: Bound<'py, PyAny> =
+        matching_dynamic_families(&native_field(item, "dynamic_columns")?, &name)?.into_any();
     if matching.len()? == 1 {
         let family: Bound<'py, PyAny> = matching.get_item(0)?;
         let family_type: Bound<'py, PyAny> = native_field(&family, "type")?;
@@ -376,8 +366,7 @@ fn compared<'py>(
             vec![("findings", PyTuple::new(py, [finding])?.into_any())],
         );
     }
-    let declared: Vec<Bound<'py, PyAny>> = item
-        .getattr("declared_columns")?
+    let declared: Vec<Bound<'py, PyAny>> = native_field(item, "declared_columns")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let physical: Vec<Bound<'py, PyAny>> = physical_columns.try_iter()?.collect::<PyResult<_>>()?;
@@ -469,7 +458,9 @@ fn relation_info<'py>(item: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// Selected declarations compared with one bulk read of physical columns.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn compare_contracts<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyTuple>> {
+pub(crate) fn compare_contracts<'py>(
+    request: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("compare_contracts", request)?;
     let py: Python<'py> = request.py();
     let adapter: &Bound<'py, PyAny> = &request.get("adapter")?;

@@ -18,10 +18,11 @@ use sqlbuild_rules::rule_results::models::RuleFinding;
 
 use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     NativeCompiledModel, SqlRuleInputs, SqlRuleKey,
 };
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
@@ -156,8 +157,9 @@ pub(crate) fn run_planned_sql_rules<'py>(
     let (findings, hits, misses) =
         evaluated_sql_rules(&run, (&lint_key, identities), project_files)?;
     let sql_ms: i64 = (started.elapsed().as_secs_f64() * 1000.0).round_ties_even() as i64;
-    call_with(
-        &registry::class(py, RecordId::SqlRulesEvaluation)?,
+    new_record_with(
+        py,
+        RecordId::SqlRulesEvaluation,
         &[
             ("findings", finding_objects(py, findings)?.into_any()),
             ("cache_hits", hits.into_bound_py_any(py)?),
@@ -169,13 +171,13 @@ pub(crate) fn run_planned_sql_rules<'py>(
 
 /// Finding rows as `Finding` records.
 fn finding_objects(py: Python<'_>, findings: Vec<RuleFinding>) -> PyResult<Bound<'_, PyTuple>> {
-    let class: Bound<'_, PyAny> = registry::class(py, RecordId::Finding)?;
     let path_class: Bound<'_, PyAny> = imported(py, PATHLIB_MODULE, "Path")?;
     let objects: Vec<Bound<'_, PyAny>> = findings
         .into_iter()
         .map(|finding| {
-            call_with(
-                &class,
+            new_record_with(
+                py,
+                RecordId::Finding,
                 &[
                     ("code", PyString::new(py, &finding.code).into_any()),
                     ("path", path_class.call1((finding.path,))?),
@@ -266,8 +268,7 @@ fn model_posix_path(model: &Bound<'_, PyAny>) -> PyResult<String> {
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return Ok(view.get().sql_rule_inputs(model.py(), false)?.posix_path);
     }
-    model
-        .getattr("relative_path")?
+    native_field(model, "relative_path")?
         .call_method0("as_posix")?
         .extract()
 }
@@ -275,9 +276,7 @@ fn model_posix_path(model: &Bound<'_, PyAny>) -> PyResult<String> {
 /// Whether the model's config values set `sql_analysis` to `False`.
 fn python_excluded(model: &Bound<'_, PyAny>) -> PyResult<bool> {
     let excluded: Bound<'_, PyAny> = false.into_bound_py_any(model.py())?;
-    Ok(model
-        .getattr("config")?
-        .getattr("values")?
+    Ok(native_field(&native_field(model, "config")?, "values")?
         .call_method1("get", ("sql_analysis",))?
         .is(&excluded))
 }

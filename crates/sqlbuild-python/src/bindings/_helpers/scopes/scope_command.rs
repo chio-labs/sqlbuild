@@ -14,9 +14,12 @@ use sqlbuild_scopes::scope_text::main::scope_result_failed::scope_result_failed;
 use sqlbuild_scopes::scope_text::models::ScopeTextRequest;
 
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::fields::replaced_keywords;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::scopes::scope_loading::load_or_build_scope_index;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_objects::ScopeClasses;
 use crate::bindings::_helpers::scopes::scope_report_objects::read_result;
@@ -160,10 +163,9 @@ fn report_filters<'py>(
     py: Python<'py>,
     request: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let kind_class: Bound<'_, PyAny> = registry::class(py, RecordId::DeclarationKind)?;
     let mut kinds: Vec<Bound<'_, PyAny>> = Vec::new();
     for kind in native_field(request, "kinds")?.try_iter()? {
-        kinds.push(kind_class.call1((kind?,))?);
+        kinds.push(enum_from_value(py, RecordId::DeclarationKind, kind?)?);
     }
     let options: Bound<'_, PyDict> = keywords(
         py,
@@ -183,7 +185,7 @@ fn report_filters<'py>(
             ("globals", native_field(request, "globals")?),
         ],
     )?;
-    registry::class(py, RecordId::ScopeReportFilters)?.call((), Some(&options))
+    new_record(py, RecordId::ScopeReportFilters, (), Some(&options))
 }
 
 /// `dataclasses.replace(report, **changes)`.
@@ -191,11 +193,7 @@ fn replaced<'py>(
     report: &Bound<'py, PyAny>,
     changes: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    report
-        .py()
-        .import("dataclasses")?
-        .getattr("replace")?
-        .call((report,), Some(changes))
+    replaced_keywords(report, changes)
 }
 
 /// The report with extra diagnostics and a part of the result merged in.
@@ -333,7 +331,7 @@ fn use_color(
 /// Load offline compiler facts, run one pure query, and present its result.
 #[pyfunction]
 #[pyo3(signature = (*, request, load_scope_index = None, output_stream = None))]
-fn run_scope_command(
+pub(crate) fn run_scope_command(
     py: Python<'_>,
     request: &Bound<'_, PyAny>,
     load_scope_index: Option<Bound<'_, PyAny>>,
@@ -343,18 +341,23 @@ fn run_scope_command(
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let loader: Bound<'_, PyAny> = match load_scope_index {
-        Some(loader) => loader,
-        None => registry::native(py, NativeAttr::LoadOrBuildScopeIndex)?,
+    let index: Bound<'_, PyAny> = match load_scope_index {
+        Some(loader) => {
+            let options: Bound<'_, PyDict> = keywords(
+                py,
+                &[
+                    ("project_dir", project_dir),
+                    ("no_cache", native_field(request, "no_cache")?),
+                ],
+            )?;
+            loader.call((), Some(&options))?
+        }
+        None => load_or_build_scope_index(
+            &project_dir,
+            native_field(request, "no_cache")?.is_truthy()?,
+        )?
+        .into_any(),
     };
-    let options: Bound<'_, PyDict> = keywords(
-        py,
-        &[
-            ("project_dir", project_dir),
-            ("no_cache", native_field(request, "no_cache")?),
-        ],
-    )?;
-    let index: Bound<'_, PyAny> = loader.call((), Some(&options))?;
     let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
     let target: Option<String> =
         qualify_target(py, &lookup, native_field(request, "target")?.extract()?)?;

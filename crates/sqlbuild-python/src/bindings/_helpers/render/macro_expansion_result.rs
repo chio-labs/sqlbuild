@@ -7,12 +7,16 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTu
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, imported, keywords,
 };
+use crate::bindings::_helpers::discovery::guidance::explicit_references_help;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::{
+    enum_member, new_record, new_record_with, record_class,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
@@ -54,38 +58,27 @@ pub(crate) struct ExpansionRequest<'py> {
 }
 
 fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    let help: Bound<'_, PyAny> = registry::native(py, NativeAttr::ExplicitReferencesHelp)?.call(
-        (),
-        Some(&keywords(
-            py,
-            &[("allowed", PyString::new(py, GENERATED_ALLOWED).into_any())],
-        )?),
-    )?;
+    let help: Bound<'_, PyAny> =
+        PyString::new(py, &explicit_references_help(GENERATED_ALLOWED)).into_any();
     let markers: Bound<'_, PyAny> = PyList::new(py, GENERATED_REFERENCE_MARKERS)?.into_any();
     keywords(
         py,
         &[
             (
                 "compiler_diagnostic",
-                registry::class(py, RecordId::CompilerDiagnostic)?,
-            ),
-            (
-                "report_diagnostic",
-                registry::native(py, NativeAttr::ReportCompileDiagnostic)?,
+                record_class(py, RecordId::CompilerDiagnostic)?,
             ),
             (
                 "source_location",
-                registry::class(py, RecordId::SourceLocation)?,
+                record_class(py, RecordId::SourceLocation)?,
             ),
             (
                 "resource_identity",
-                registry::class(py, RecordId::ResourceIdentity)?,
+                record_class(py, RecordId::ResourceIdentity)?,
             ),
             (
                 "generic_syntax",
-                registry::class(py, RecordId::SqlLexicalSyntax)?
-                    .call0()?
-                    .getattr("native_mapping")?,
+                new_record(py, RecordId::SqlLexicalSyntax, (), None)?.getattr("native_mapping")?,
             ),
             ("generated_help", help),
             ("all_markers", markers),
@@ -94,7 +87,7 @@ fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 }
 
 fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
-    let declaration_kind: Bound<'_, PyAny> = registry::class(py, RecordId::DeclarationKind)?;
+    let declaration_kind: Bound<'_, PyAny> = record_class(py, RecordId::DeclarationKind)?;
     let ref_kind: Bound<'_, PyAny> = host::entry(py, UserCodeHost::SqlResourceRefKind)?;
     let ref_kinds: Bound<'_, PyDict> = PyDict::new(py);
     let ref_functions: Bound<'_, PyDict> = PyDict::new(py);
@@ -102,19 +95,6 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         ref_kinds.set_item(function, ref_kind.call1((kind,))?)?;
         ref_functions.set_item(kind, function)?;
     }
-    let store_tokens: Bound<'_, PyDict> = keywords(
-        py,
-        &[
-            (
-                "macro_token",
-                registry::native(py, NativeAttr::MacroStoreToken)?,
-            ),
-            (
-                "context_token",
-                registry::native(py, NativeAttr::ContextStoreToken)?,
-            ),
-        ],
-    )?;
     keywords(
         py,
         &[
@@ -129,22 +109,22 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
             ),
             (
                 "declaration_identity",
-                registry::class(py, RecordId::DeclarationIdentity)?,
+                record_class(py, RecordId::DeclarationIdentity)?,
             ),
             ("macro_kind", native_field(&declaration_kind, "MACRO")?),
             ("declaration_kind", declaration_kind),
-            ("usage_record", registry::class(py, RecordId::UsageRecord)?),
+            ("usage_record", record_class(py, RecordId::UsageRecord)?),
             (
                 "runtime_usage",
-                registry::class(py, RecordId::UsageKind)?.getattr("RUNTIME")?,
+                enum_member(py, RecordId::UsageKind, "RUNTIME")?,
             ),
             (
                 "resource_identity",
-                registry::class(py, RecordId::ResourceIdentity)?,
+                record_class(py, RecordId::ResourceIdentity)?,
             ),
             (
                 "model_kind",
-                registry::class(py, RecordId::ResourceKind)?.getattr("MODEL")?,
+                enum_member(py, RecordId::ResourceKind, "MODEL")?,
             ),
             (
                 "resource_ref",
@@ -152,7 +132,6 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
             ),
             ("ref_kinds", ref_kinds.into_any()),
             ("ref_functions", ref_functions.into_any()),
-            ("store_tokens", store_tokens.into_any()),
             (
                 "relation_renderer",
                 host::entry(py, UserCodeHost::RelationRenderer)?,
@@ -188,7 +167,7 @@ fn result_model<'py>(
     py: Python<'py>,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::class(py, RecordId::MacroExpansionResult)?, pairs)
+    new_record_with(py, RecordId::MacroExpansionResult, pairs)
 }
 
 /// The macro expansion of `request`'s SQL, or `None` when it calls no macro.
@@ -217,10 +196,7 @@ pub(crate) fn macro_output(request: ExpansionRequest<'_>) -> PyResult<Option<Exp
             declarations.unbind(),
             request.consumer.map_or_else(|| py.None(), Bound::unbind),
         ),
-        request
-            .macro_context
-            .getattr("_enforce_explicit_references")?
-            .is_truthy()?,
+        native_field(&request.macro_context, "_enforce_explicit_references")?.is_truthy()?,
         macro_expansion_classes(py)?.unbind(),
     )?;
     let expansion: Bound<'_, NativeMacroExpansion> = Bound::new(py, expansion)?;
@@ -234,12 +210,12 @@ pub(crate) fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<
     let Some(output) = macro_output(request)? else {
         return result_model(py, &[("sql", sql.into_any())]);
     };
-    let span_class: Bound<'py, PyAny> = registry::class(py, RecordId::ExpansionSpan)?;
     let mut spans: Vec<Bound<'py, PyAny>> = Vec::with_capacity(output.spans.len());
     for span in output.spans {
         let (source_start, source_end, output_start, output_end) = span_row(span);
-        spans.push(call_with(
-            &span_class,
+        spans.push(new_record_with(
+            py,
+            RecordId::ExpansionSpan,
             &[
                 ("source_start", source_start.into_pyobject(py)?.into_any()),
                 ("source_end", source_end.into_pyobject(py)?.into_any()),
@@ -256,7 +232,7 @@ pub(crate) fn expansion_result<'py>(request: ExpansionRequest<'py>) -> PyResult<
             .iter()
             .map(|(kind, name)| format!("{}(\"{name}\")", typed_reference_function(kind)))
             .collect();
-        let syntax: Bound<'py, PyAny> = registry::class(py, RecordId::SqlLexicalSyntax)?.call0()?;
+        let syntax: Bound<'py, PyAny> = new_record(py, RecordId::SqlLexicalSyntax, (), None)?;
         extract_references(&calls.join(" "), &syntax)?.into_any()
     };
     result_model(

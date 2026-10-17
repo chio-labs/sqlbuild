@@ -16,6 +16,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::audit_views::audit_reference_rows;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -55,8 +56,8 @@ pub(crate) fn resource_sql_diagnostics_of<'py>(
         Err(failure) => return Err(failure_error(py, failure)?),
     };
     let classes = DiagnosticClasses {
-        compiler_diagnostic: registry::class(py, RecordId::CompilerDiagnostic)?,
-        source_location: registry::class(py, RecordId::SourceLocation)?,
+        compiler_diagnostic: record_class(py, RecordId::CompilerDiagnostic)?,
+        source_location: record_class(py, RecordId::SourceLocation)?,
         path: py.import("pathlib")?.getattr("Path")?,
     };
     let built: Vec<Bound<'py, PyAny>> = diagnostics
@@ -72,7 +73,7 @@ fn request(
     profile: &Bound<'_, PyAny>,
 ) -> PyResult<ResourceSqlRequest> {
     let py: Python<'_> = project.py();
-    let reference_class: Bound<'_, PyAny> = registry::class(py, RecordId::CompileSqlReference)?;
+    let reference_class: Bound<'_, PyAny> = record_class(py, RecordId::CompileSqlReference)?;
     let mut audits: Vec<AuditSqlInput> = Vec::new();
     for audit in native_field(project, "audits")?.try_iter()? {
         audits.push(audit_input(&audit?, &reference_class)?);
@@ -95,13 +96,12 @@ fn request(
     }
     Ok(ResourceSqlRequest {
         dialect: native_field(profile, "sql_analysis_dialect")?.extract()?,
-        quoted_ignore_case: profile
-            .getattr("quoted_identifiers_ignore_case")?
-            .extract()?,
-        require_sql_analysis: project
-            .getattr("settings")?
-            .getattr("require_sql_analysis")?
-            .extract()?,
+        quoted_ignore_case: native_field(profile, "quoted_identifiers_ignore_case")?.extract()?,
+        require_sql_analysis: native_field(
+            &native_field(project, "settings")?,
+            "require_sql_analysis",
+        )?
+        .extract()?,
         shapes: shapes
             .iter()
             .map(|(name, columns)| shape(&name, &columns))
@@ -142,9 +142,7 @@ fn audit_input(
             target_name.extract()?,
         ))
     };
-    let first_part: Option<String> = file
-        .getattr("file_path")?
-        .getattr("parts")?
+    let first_part: Option<String> = native_field(&native_field(&file, "file_path")?, "parts")?
         .try_iter()?
         .next()
         .transpose()?
@@ -153,8 +151,8 @@ fn audit_input(
     let mut bodies: Vec<(Option<String>, Option<String>)> = Vec::new();
     for attribute in ["sql_body", "measure_sql", "evidence_sql"] {
         bodies.push((
-            audit.getattr(attribute)?.extract()?,
-            block.getattr(attribute)?.extract()?,
+            native_field(audit, attribute)?.extract()?,
+            native_field(&block, attribute)?.extract()?,
         ));
     }
     Ok(AuditSqlInput {
@@ -179,8 +177,7 @@ fn sql_test_input(test: &Bound<'_, PyAny>) -> PyResult<SqlTestSqlInput> {
     let block: Bound<'_, PyAny> = native_field(test, "test_block")?;
     Ok(SqlTestSqlInput {
         name: native_field(test, "name")?.extract()?,
-        expected_model_names: test
-            .getattr("expected_model_names")?
+        expected_model_names: native_field(test, "expected_model_names")?
             .try_iter()?
             .map(|name| name?.extract())
             .collect::<PyResult<_>>()?,
@@ -196,7 +193,7 @@ fn model_input(
     model: &Bound<'_, PyAny>,
     reference_class: &Bound<'_, PyAny>,
 ) -> PyResult<HookModelInput> {
-    let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(&native_field(model, "config")?, "values")?;
     let mut hooks: Vec<HookSqlInput> = Vec::new();
     for key in MODEL_HOOK_KEYS {
         let entries: Bound<'_, PyAny> = values.call_method1("get", (key,))?;
@@ -248,7 +245,7 @@ fn text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 /// `getattr(value, name, None)`.
 fn optional_attribute<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
     if value.hasattr(name)? {
-        value.getattr(name)
+        native_field(value, name)
     } else {
         Ok(value.py().None().into_bound(value.py()))
     }

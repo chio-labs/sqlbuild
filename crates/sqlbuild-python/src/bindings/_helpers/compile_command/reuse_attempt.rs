@@ -30,9 +30,11 @@ use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::runtime_identity::{
     invocation_identity, redirected_output_files, runtime_identity,
 };
+use crate::bindings::_helpers::compile_driver::command::run_compile_command;
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
+use crate::bindings::_helpers::compile_outputs::reuse::{ReuseCheckPy, check_compile_reuse};
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
@@ -261,7 +263,7 @@ fn reuse_check<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = request.py();
-    let flag = |name: &str| -> PyResult<bool> { request.getattr(name)?.is_truthy() };
+    let flag = |name: &str| -> PyResult<bool> { native_field(request, name)?.is_truthy() };
     let use_color: bool = !flag("no_color")? && stdout_supports_color(py)?;
     let check: Bound<'py, PyDict> = PyDict::new(py);
     check.set_item("project_dir", project_dir)?;
@@ -382,8 +384,11 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         } else {
             requested
         },))?;
-    let native: Bound<'py, PyAny> = registry::native(py, NativeAttr::CheckCompileReuse)?
-        .call1((reuse_check(request, &project_dir)?,))?;
+    let native: Bound<'py, PyAny> = check_compile_reuse(
+        py,
+        reuse_check(request, &project_dir)?.extract::<ReuseCheckPy>()?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let checked: String = native.call_method0("outcome")?.extract()?;
     let json_output: Bound<'py, PyAny> = native_field(request, "json_output")?;
     let mut base: Vec<(&'static str, Bound<'py, PyAny>)> = vec![
@@ -441,7 +446,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
         "skip_contracts",
         "skip_write",
     ] {
-        profiling = profiling || flags.getattr(name)?.is_truthy()?;
+        profiling = profiling || native_field(&flags, name)?.is_truthy()?;
     }
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = Vec::new();
     for name in [
@@ -455,7 +460,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
         "no_cache",
         "no_sql_validation",
     ] {
-        fields.push((name, request.getattr(name)?));
+        fields.push((name, native_field(request, name)?));
     }
     fields.push((
         "lineage_mode",
@@ -466,7 +471,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
             .into_any(),
     ));
     for name in ["select", "exclude", "cli_vars", "debug"] {
-        fields.push((name, request.getattr(name)?));
+        fields.push((name, native_field(request, name)?));
     }
     fields.push(("profiling", profiling.into_bound_py_any(py)?));
     call_with(&host::entry(py, REUSE_REQUEST)?, &fields)
@@ -474,14 +479,19 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
 
 /// Run one compile command request, replaying the previous compile when nothing changed.
 #[pyfunction]
-fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let attempt: Bound<'py, PyAny> = attempt_compile_reuse(&reuse_request(request)?)?;
     let exit_code: Bound<'py, PyAny> = native_field(&attempt, "exit_code")?;
     if native_field(&attempt, "outcome")?.eq(outcome(py, HIT)?)? && !exit_code.is_none() {
         return Ok(exit_code);
     }
-    registry::native(py, NativeAttr::RunCompileCommand)?.call1((request, attempt))
+    run_compile_command(
+        py,
+        request.clone(),
+        Some(attempt).filter(|value| !value.is_none()),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

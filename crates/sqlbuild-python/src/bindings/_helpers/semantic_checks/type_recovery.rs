@@ -12,11 +12,15 @@ use sqlbuild_analysis::semantic_checks::models::{
 use sqlbuild_analysis::semantic_checks::types::RevisedBinding;
 use sqlbuild_analysis::semantic_validation::models as validation;
 
+use crate::bindings::_helpers::analysis::binding_catalog::schema_validations;
 use crate::bindings::_helpers::analysis::model_reads::{inferred_names, lineage_inputs};
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
+use crate::bindings::_helpers::compiled_project::records::with_type_recovery;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::semantic_checks::constants::SCHEMA_REVALIDATIONS;
 use crate::bindings::_helpers::semantic_checks::failures::{internal_error, semantic_error};
 use crate::bindings::_helpers::semantic_checks::inputs::revalidation_request;
 use crate::bindings::_helpers::semantic_checks::session_facts::{
@@ -107,20 +111,17 @@ pub(crate) fn recovered_types<'py>(
         }
         kept.push(classes.replaced(original, &[("notes", &PyTuple::new(py, notes)?.into_any())])?);
     }
-    let poisoned_outputs: Bound<'py, PyAny> = PyFrozenSet::new(py, &poisoned)?.into_any();
+    let poisoned_outputs: Bound<'py, PyFrozenSet> = PyFrozenSet::new(py, &poisoned)?;
     let mut recovered: Vec<Bound<'py, PyAny>> = Vec::with_capacity(models.len());
     for (model, positions) in models.iter().zip(outcome.model_bindings) {
         let selected: Vec<Bound<'py, PyAny>> = positions
             .into_iter()
             .map(|position| kept[position].clone())
             .collect();
-        recovered.push(classes.call(
-            &classes.with_type_recovery,
-            &[
-                ("model", model),
-                ("diagnostics", &PyTuple::new(py, selected)?.into_any()),
-                ("poisoned", &poisoned_outputs),
-            ],
+        recovered.push(with_type_recovery(
+            model,
+            &PyTuple::new(py, selected)?.into_any(),
+            &poisoned_outputs,
         )?);
     }
     classes.project_with(
@@ -270,12 +271,9 @@ fn revalidated<'py>(
     for index in models {
         let request: Bound<'py, PyAny> =
             revalidation_request(project, &project_models.get_item(*index)?, &unknown)?;
-        let result: Bound<'py, PyAny> = classes
-            .call(
-                &classes.schema_validations,
-                &[("requests", &PyTuple::new(py, [request])?.into_any())],
-            )?
-            .get_item(0)?;
+        count_stage(py, SCHEMA_REVALIDATIONS, 1)?;
+        let result: Bound<'py, PyAny> =
+            schema_validations(py, &PyTuple::new(py, [request])?.into_any())?.get_item(0)?;
         let mut rows: Vec<RevisedBinding> = Vec::new();
         for item in native_field(&result, "diagnostics")?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;

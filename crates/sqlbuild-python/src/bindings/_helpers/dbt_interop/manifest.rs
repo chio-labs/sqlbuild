@@ -19,9 +19,8 @@ use sqlbuild_config::dbt_manifest::models::{
     ManifestNode, NodeChecksum, ParsedModel, ParsedSeed, ParsedSource,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -139,8 +138,9 @@ fn model_object<'py>(
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
-    call_with(
-        &registry::class(py, RecordId::DbtManifestModel)?,
+    new_record_with(
+        py,
+        RecordId::DbtManifestModel,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &model.package_name)),
@@ -170,8 +170,9 @@ fn seed_object<'py>(
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
-    call_with(
-        &registry::class(py, RecordId::DbtManifestSeed)?,
+    new_record_with(
+        py,
+        RecordId::DbtManifestSeed,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &seed.package_name)),
@@ -191,8 +192,9 @@ fn source_object<'py>(
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
-    call_with(
-        &registry::class(py, RecordId::DbtManifestSource)?,
+    new_record_with(
+        py,
+        RecordId::DbtManifestSource,
         &[
             ("unique_id", unique_id.clone()),
             ("package_name", text(py, &source.package_name)),
@@ -337,8 +339,9 @@ fn manifest_index<'py>(raw_data: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
             parse_manifest_source(&manifest_node(&raw)?).map_err(|error| raised(py, error))?;
         sources_by_unique_id.set_item(&unique_id, source_object(&unique_id, &source, &raw)?)?;
     }
-    call_with(
-        &registry::class(py, RecordId::DbtManifestIndex)?,
+    new_record_with(
+        py,
+        RecordId::DbtManifestIndex,
         &[
             ("models_by_unique_id", indexes.by_unique_id.into_any()),
             ("models_by_name", indexes.by_name.into_any()),
@@ -375,7 +378,7 @@ fn decoded<'py>(contents: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// Load and index dbt model nodes from a manifest.json file.
 #[pyfunction]
 #[pyo3(signature = (*, manifest_path))]
-fn load_dbt_manifest_index<'py>(
+pub(crate) fn load_dbt_manifest_index<'py>(
     py: Python<'py>,
     manifest_path: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -393,7 +396,7 @@ fn load_dbt_manifest_index<'py>(
 /// Build a dbt manifest index from discovered manifest contents.
 #[pyfunction]
 #[pyo3(signature = (*, manifest_contents))]
-fn build_compile_dbt_manifest_index<'py>(
+pub(crate) fn build_compile_dbt_manifest_index<'py>(
     py: Python<'py>,
     manifest_contents: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -460,7 +463,7 @@ fn resolve_dbt_manifest_model<'py>(
 /// Reject ambiguous ownership between dbt and SQLBuild models.
 #[pyfunction]
 #[pyo3(signature = (*, known_model_names, dbt_manifest))]
-fn validate_compile_dbt_model_names(
+pub(crate) fn validate_compile_dbt_model_names(
     py: Python<'_>,
     known_model_names: Bound<'_, PyAny>,
     dbt_manifest: Bound<'_, PyAny>,
@@ -496,7 +499,7 @@ fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 /// Validate one compile-time dbt ref against a dbt manifest.
 #[pyfunction]
 #[pyo3(signature = (*, reference, model_relative_path, dbt_manifest))]
-fn validate_compile_dbt_model_reference(
+pub(crate) fn validate_compile_dbt_model_reference(
     py: Python<'_>,
     reference: Bound<'_, PyAny>,
     model_relative_path: Bound<'_, PyAny>,
@@ -561,7 +564,7 @@ pub(crate) fn resolve_sqlbuild_model_dbt_refs<'py>(
 /// Resolve one external dbt reference to its manifest relation.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_dbt_reference_relation<'py>(
+pub(crate) fn resolve_dbt_reference_relation<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

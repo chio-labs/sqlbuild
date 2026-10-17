@@ -41,9 +41,9 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
     materialization_of, resolve_model_plan_action,
 };
 use crate::bindings::_helpers::planner_strategy::values::text;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::source_bindings::source_binding_diagnostics;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -224,7 +224,7 @@ fn check_binding_diagnostics<'py>(
     selected_keys: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     let py = project.py();
-    let sql_test = registry::class(py, RecordId::CompiledResourceType)?.getattr("SQL_TEST")?;
+    let sql_test = enum_member(py, RecordId::CompiledResourceType, "SQL_TEST")?;
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
     for diagnostic in native_field(project, "diagnostics")?.try_iter()? {
         let diagnostic = diagnostic?;
@@ -266,7 +266,7 @@ fn check_binding_diagnostics<'py>(
     let mut lines: Vec<String> = Vec::new();
     for diagnostic in &errors {
         let position = |field: &str| -> PyResult<String> {
-            let value = diagnostic.getattr(field)?;
+            let value = native_field(diagnostic, field)?;
             Ok(if value.is_truthy()? {
                 value.str()?.to_string()
             } else {
@@ -363,7 +363,7 @@ fn check_microbatch_concurrency<'py>(
             ("model_name", none(py)),
             (
                 "severity",
-                registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?,
+                enum_member(py, RecordId::WarningSeverity, "WARNING")?,
             ),
             ("code", string(py, MICROBATCH_COMPLEXITY_CODE)),
             (
@@ -454,7 +454,7 @@ pub(crate) fn plan_entries<'py>(
     )?;
     let sql_analysis_enabled = native_field(&settings, "sql_analysis")?.is_truthy()?;
     let skip = planner_type(py, RecordId::PlanAction, "SKIP")?;
-    let microbatch = registry::class(py, RecordId::IncrementalMode)?.getattr("MICROBATCH")?;
+    let microbatch = enum_member(py, RecordId::IncrementalMode, "MICROBATCH")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in native_field(&scope, "execution_order")?.try_iter()? {

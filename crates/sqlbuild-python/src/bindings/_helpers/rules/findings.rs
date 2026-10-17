@@ -1,5 +1,6 @@
 //! Rule findings converted between the Python `Finding` model and native rows and payloads.
 
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -21,7 +22,7 @@ pub(crate) struct FindingClasses<'py> {
 impl<'py> FindingClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            finding: registry::class(py, RecordId::Finding)?,
+            finding: record_class(py, RecordId::Finding)?,
             path: py.import(PATHLIB_MODULE)?.getattr(PATH_CLASS)?,
         })
     }
@@ -83,8 +84,7 @@ pub(crate) fn finding_fault(finding: &Bound<'_, PyAny>) -> PyResult<Fault> {
     Ok(Fault {
         unevaluated: native_field(finding, "unevaluated")?.extract()?,
         code: native_field(finding, "code")?.extract()?,
-        path: finding
-            .getattr("path")?
+        path: native_field(finding, "path")?
             .call_method0("as_posix")?
             .extract()?,
         line: native_field(finding, "line")?.extract()?,

@@ -336,7 +336,7 @@ pub(crate) fn bind_event_exporter_declarations<'py>(
             "event_kinds",
             "min_severity",
         ] {
-            pairs.push((field, declaration.getattr(field)?));
+            pairs.push((field, native_field(&declaration, field)?));
         }
         pairs.push(("provider_usages", usages));
         bound.push(discovered(py, RecordId::DiscoveredEventExporter, &pairs)?);

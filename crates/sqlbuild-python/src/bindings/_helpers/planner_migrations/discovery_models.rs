@@ -17,9 +17,11 @@ use std::collections::BTreeMap;
 pub(super) fn ordered<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut models: BTreeMap<String, Bound<'py, PyAny>> = BTreeMap::new();
     let mut dependencies: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for item in runtime_field(runtime, |runtime| &runtime.project)?
-        .getattr("models")?
-        .try_iter()?
+    for item in native_field(
+        &runtime_field(runtime, |runtime| &runtime.project)?,
+        "models",
+    )?
+    .try_iter()?
     {
         let item = item?;
         let name: String = native_field(&item, "name")?.extract()?;
@@ -46,20 +48,18 @@ pub(super) fn triggered(
     declared: &Bound<'_, PyDict>,
 ) -> PyResult<bool> {
     let py = scope.py();
-    let selected: Vec<Bound<'_, PyAny>> = scope
-        .getattr("selected_keys")?
+    let selected: Vec<Bound<'_, PyAny>> = native_field(scope, "selected_keys")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let mut relevant = PyNodeSet(PySet::new(py, &selected)?);
     breadth_first_reach(selected, None, &mut relevant, |key| {
-        scope
-            .getattr("upstream_deps")?
+        native_field(scope, "upstream_deps")?
             .call_method1("get", (key, pyo3::types::PyTuple::empty(py)))?
             .try_iter()?
             .collect::<PyResult<Vec<Bound<'_, PyAny>>>>()
     })?;
     let relevant = relevant.0;
-    let fingerprints = native_field(snapshot, "fingerprints")?.getattr("models")?;
+    let fingerprints = native_field(&native_field(snapshot, "fingerprints")?, "models")?;
     for item in models {
         let name = native_field(item, "name")?;
         if relevant.contains(native_field(item, "key")?)?
@@ -82,8 +82,7 @@ pub(super) fn metadata<'py>(
         py,
         build_function_local_hashes(
             &native_field(&project, "functions")?,
-            project
-                .getattr("sql_analysis_dialect")?
+            native_field(&project, "sql_analysis_dialect")?
                 .extract::<Option<String>>()?
                 .as_deref(),
         )?,

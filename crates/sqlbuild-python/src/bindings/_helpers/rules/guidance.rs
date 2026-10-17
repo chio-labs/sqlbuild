@@ -92,7 +92,10 @@ fn rule_text(rule: &Bound<'_, PyAny>, config: Option<&Bound<'_, PyAny>>) -> PyRe
 /// `sqb rules show` text for one rule, with effective thresholds when a config is given.
 #[pyfunction]
 #[pyo3(signature = (*, rule, config = None))]
-fn format_rule(rule: &Bound<'_, PyAny>, config: Option<Bound<'_, PyAny>>) -> PyResult<String> {
+pub(crate) fn format_rule(
+    rule: &Bound<'_, PyAny>,
+    config: Option<Bound<'_, PyAny>>,
+) -> PyResult<String> {
     let config: Option<Bound<'_, PyAny>> = config.filter(|config| !config.is_none());
     let native: Option<RulesConfig> = config.as_ref().map(native_rules_config).transpose()?;
     let text: RuleText = rule_text(rule, config.as_ref())?;
@@ -186,7 +189,7 @@ fn lock_path(project_dir: &Path) -> PyResult<PathBuf> {
 /// Install every owned rules skill target, or with `check` report whether all are fresh.
 #[pyfunction]
 #[pyo3(signature = (*, config, project_dir, check))]
-fn install_rules_skills(
+pub(crate) fn install_rules_skills(
     config: &Bound<'_, PyAny>,
     project_dir: &Bound<'_, PyAny>,
     check: bool,

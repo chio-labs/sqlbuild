@@ -46,8 +46,11 @@ fn migration(entry: &Bound<'_, PyAny>, materialization: Option<String>) -> PyRes
         origin: text(&relation_name(&native_field(entry, "origin")?)?)?,
         destination: text(&relation_name(&native_field(entry, "destination")?)?)?,
         decision,
-        compatibility: text(&native_field(entry, "compatibility")?.getattr("value")?)?,
-        discovery: text(&native_field(entry, "discovery")?.getattr("value")?)?,
+        compatibility: text(&native_field(
+            &native_field(entry, "compatibility")?,
+            "value",
+        )?)?,
+        discovery: text(&native_field(&native_field(entry, "discovery")?, "value")?)?,
         completed_at: optional_text(&iso(&native_field(entry, "completed_at")?)?)?,
         target_label: text(&native_field(entry, "target_label")?)?,
         transfer: label(&native_field(entry, "transfer")?)?,
@@ -85,7 +88,7 @@ fn column(entry: &Bound<'_, PyAny>) -> PyResult<ColumnMigrationText> {
         origin_column: text(&native_field(entry, "origin_column")?)?,
         destination_column: text(&native_field(entry, "destination_column")?)?,
         decision: decision(entry)?,
-        discovery: text(&native_field(entry, "discovery")?.getattr("value")?)?,
+        discovery: text(&native_field(&native_field(entry, "discovery")?, "value")?)?,
         completed_at: optional_text(&iso(&native_field(entry, "completed_at")?)?)?,
     })
 }
@@ -161,7 +164,7 @@ pub(crate) fn pre_build_lines(
         let request = native_field(&entry, "request")?;
         let mut parts: Vec<String> = Vec::new();
         for field in ["database", "schema", "name"] {
-            let part = request.getattr(field)?;
+            let part = native_field(&request, field)?;
             if part.is_truthy()? {
                 parts.push(text(&part)?);
             }
@@ -172,8 +175,8 @@ pub(crate) fn pre_build_lines(
             actual_days: days(&native_field(&entry, "actual_days")?)?,
             effective_days: days(&native_field(&entry, "effective_days")?)?,
             source: text(&native_field(&entry, "source")?)?,
-            direction: text(&native_field(&entry, "direction")?.getattr("value")?)?,
-            phase: text(&native_field(&entry, "phase")?.getattr("value")?)?,
+            direction: text(&native_field(&native_field(&entry, "direction")?, "value")?)?,
+            phase: text(&native_field(&native_field(&entry, "phase")?, "value")?)?,
             irreversible_warning: optional_text(&native_field(&entry, "irreversible_warning")?)?,
         });
     }

@@ -22,6 +22,7 @@ use crate::bindings::_helpers::compiled_project::project::{
     DeclarationPy, config_values, declarations,
 };
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::{
     ExpandedDeclarations, ScannedReference, span_rows,
 };
@@ -76,7 +77,7 @@ impl ModelLoopRow {
         let (query_sql, contents) = record.texts(py);
         Ok(Self {
             paths: ModelPaths {
-                name: file_path.getattr(STEM_ATTRIBUTE)?.extract()?,
+                name: native_field(file_path, STEM_ATTRIBUTE)?.extract()?,
                 posix_path: relative_path.call_method0(AS_POSIX_METHOD)?.extract()?,
                 relative_path: relative_path.str()?.to_str()?.to_owned(),
                 file_path: file_path.str()?.to_str()?.to_owned(),
@@ -158,9 +159,9 @@ pub(crate) fn finished_record<'py>(
         None => Vec::new(),
     };
     let local_enums: Bound<'py, PyTuple> =
-        dict_values(&inputs.visible.getattr(LOCAL_ENUMS_ATTRIBUTE)?)?;
+        dict_values(&native_field(inputs.visible, LOCAL_ENUMS_ATTRIBUTE)?)?;
     let local_constants: Bound<'py, PyTuple> =
-        dict_values(&inputs.visible.getattr(LOCAL_CONSTANTS_ATTRIBUTE)?)?;
+        dict_values(&native_field(inputs.visible, LOCAL_CONSTANTS_ATTRIBUTE)?)?;
     let rows_arguments: Bound<'py, PyDict> = PyDict::new(py);
     rows_arguments.set_item(ENUMS_ARGUMENT, &local_enums)?;
     rows_arguments.set_item(CONSTANTS_ARGUMENT, &local_constants)?;
@@ -188,7 +189,7 @@ pub(crate) fn finished_record<'py>(
                     .map(|item| item.into_bound(py))
                     .collect(),
             )? {
-                names.push(dependency.getattr(NAME_ATTRIBUTE)?.extract()?);
+                names.push(native_field(&dependency, NAME_ATTRIBUTE)?.extract()?);
             }
             (
                 macros.sql,
@@ -275,8 +276,8 @@ pub(crate) fn finished_record<'py>(
         config: ModelConfigFacts {
             values,
             encoding_error,
-            header_keys: finished.config.getattr(HEADER_KEYS_ATTRIBUTE)?.extract()?,
-            layer_schema: finished.config.getattr(LAYER_SCHEMA_ATTRIBUTE)?.extract()?,
+            header_keys: native_field(&finished.config, HEADER_KEYS_ATTRIBUTE)?.extract()?,
+            layer_schema: native_field(&finished.config, LAYER_SCHEMA_ATTRIBUTE)?.extract()?,
             contract: text_value(&stripped, CONTRACT_KEY)?,
             materialized: materialization(&stripped)?,
             incremental_mode: text_value(&stripped, INCREMENTAL_MODE_KEY)?,

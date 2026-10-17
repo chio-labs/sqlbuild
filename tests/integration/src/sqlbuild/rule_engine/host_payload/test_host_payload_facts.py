@@ -5,8 +5,6 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
-    CompiledModel,
-    CompiledProject,
     compiled_project_record,
     custom_host_payload,
 )
@@ -20,7 +18,6 @@ from tests.integration.src.sqlbuild.rule_engine.host_payload.helpers import (
     compile_files,
     dropped_fields,
     fact_digests,
-    record_trimmed_fields,
 )
 
 
@@ -104,18 +101,45 @@ from tests.integration.src.sqlbuild.rule_engine.host_payload.helpers import (
                     "SELECT 1\n"
                 ),
             },
-            expected_unpopulated_trimmed_fields=frozenset(),
+            expected_dropped_project_fields=frozenset(
+                {
+                    "binding_catalog",
+                    "diagnostics",
+                    "external_sql_reference_resolver",
+                    "hook_functions",
+                    "loaded_macros",
+                    "loader_functions",
+                    "materialization_files",
+                    "models",
+                    "native_project",
+                    "scope_index",
+                    "sql_expansions",
+                    "sql_hook_files",
+                    "sql_scenarios",
+                    "unmatched_literal_sql_relations",
+                }
+            ),
+            expected_dropped_model_fields=frozenset(
+                {
+                    "authored_query_sql",
+                    "binding_diagnostics",
+                    "enum_columns",
+                    "fast_lineage_columns",
+                    "macro_deps",
+                    "output_column_locations",
+                    "references",
+                    "unchecked_output_columns",
+                }
+            ),
         ),
     ),
     ids=lambda case: case.description,
 )
 def test_given_compiled_project_when_trimming_host_payload_then_every_fact_is_unchanged(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, test_case: HostPayloadFactsTestCase
+    tmp_path: Path, test_case: HostPayloadFactsTestCase
 ) -> None:
     project: CompiledProjectView = compile_files(root=tmp_path, files=test_case.project_files)
-    trimmed_fields: dict[type[object], set[str]] = record_trimmed_fields(monkeypatch)
     trimmed: CompiledProjectView = custom_host_payload(project)
-    monkeypatch.undo()
 
     full_digests: dict[FactKey, str | None] = fact_digests(project=project, root=tmp_path)
     trimmed_digests: dict[FactKey, str | None] = fact_digests(project=trimmed, root=tmp_path)
@@ -124,7 +148,7 @@ def test_given_compiled_project_when_trimming_host_payload_then_every_fact_is_un
     assert tuple(map(public_model, trimmed.models)) == tuple(map(public_model, project.models))
     assert (
         dropped_fields(before=compiled_project_record(project), after=trimmed)
-        == trimmed_fields[CompiledProject] - test_case.expected_unpopulated_trimmed_fields
+        == test_case.expected_dropped_project_fields
     )
     assert (
         frozenset().union(
@@ -133,5 +157,5 @@ def test_given_compiled_project_when_trimming_host_payload_then_every_fact_is_un
                 for model, trimmed_model in zip(project.models, trimmed.models, strict=True)
             )
         )
-        == trimmed_fields[CompiledModel] - test_case.expected_unpopulated_trimmed_fields
+        == test_case.expected_dropped_model_fields
     )

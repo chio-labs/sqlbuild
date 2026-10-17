@@ -30,9 +30,7 @@ pub(crate) fn model_fixture_relation(model: &Bound<'_, PyAny>) -> PyResult<Fixtu
         });
     }
     let authoritative = !star_flags(model)?.0
-        && (model
-            .getattr("config")?
-            .getattr("values")?
+        && (native_field(&native_field(model, "config")?, "values")?
             .call_method1("get", ("contract",))?
             .eq("enforced")?
             || inferred.is_some());

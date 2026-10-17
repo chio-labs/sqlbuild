@@ -80,23 +80,23 @@ pub(crate) fn each<T>(
     read: impl Fn(&Bound<'_, PyAny>) -> PyResult<T>,
 ) -> PyResult<Vec<T>> {
     let mut items: Vec<T> = Vec::new();
-    for item in owner.getattr(name)?.try_iter()? {
+    for item in native_field(owner, name)?.try_iter()? {
         items.push(read(&item?)?);
     }
     Ok(items)
 }
 
 fn text(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    Ok(owner.getattr(name)?.str()?.to_string())
+    Ok(native_field(owner, name)?.str()?.to_string())
 }
 
 fn optional_text(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
-    owner.getattr(name)?.extract()
+    native_field(owner, name)?.extract()
 }
 
 /// `str(Path(...).stem)` of the path attribute `name`.
 pub(crate) fn stem(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    native_field(&owner.getattr(name)?, "stem")?.extract()
+    native_field(&native_field(owner, name)?, "stem")?.extract()
 }
 
 /// `(resource.name, str(resource.relative_path))`.
@@ -124,7 +124,7 @@ fn relative_stem_named(file: &Bound<'_, PyAny>) -> PyResult<NamedPath> {
 }
 
 fn enum_value(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    native_field(&owner.getattr(name)?, "value")?.extract()
+    native_field(&native_field(owner, name)?, "value")?.extract()
 }
 
 fn model_fact(model: &Bound<'_, PyAny>) -> PyResult<ModelFact> {

@@ -1,5 +1,6 @@
 //! Typed SQL value normalization between Python authored values and native `SqlValue`s.
 
+use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -30,11 +31,11 @@ impl<'py> SqlValueClasses<'py> {
     pub(crate) fn load(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
             decimal: py.import("decimal")?.getattr("Decimal")?,
-            authored_set: registry::class(py, RecordId::AuthoredSqlSet)?,
-            value_call: registry::class(py, RecordId::AuthoredSqlValueCall)?,
-            sql_value: registry::class(py, RecordId::SqlValue)?,
-            logical_type: registry::class(py, RecordId::SqlLogicalType)?,
-            kind: registry::class(py, RecordId::SqlValueKind)?,
+            authored_set: record_class(py, RecordId::AuthoredSqlSet)?,
+            value_call: record_class(py, RecordId::AuthoredSqlValueCall)?,
+            sql_value: record_class(py, RecordId::SqlValue)?,
+            logical_type: record_class(py, RecordId::SqlLogicalType)?,
+            kind: record_class(py, RecordId::SqlValueKind)?,
         })
     }
 }
@@ -199,7 +200,7 @@ fn normalize_sql_value<'py>(
     let raw = self::raw_value(raw_value, &classes)?;
     let applied: Bound<'py, PyAny> = match limits {
         Some(limits) if !limits.is_none() => limits.clone(),
-        _ => registry::class(py, RecordId::SqlValueLimits)?.call0()?,
+        _ => new_record(py, RecordId::SqlValueLimits, (), None)?,
     };
     let limits = SqlValueLimits {
         max_depth: native_field(&applied, "max_depth")?.extract()?,

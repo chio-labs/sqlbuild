@@ -136,7 +136,7 @@ pub(crate) fn freeze_command_output_record<'py>(
 pub(crate) fn command_output_to_json(record: &Bound<'_, PyAny>) -> PyResult<String> {
     let field = |name: &str| record.getattr(name);
     let occurred_at: String = call_with(
-        &field("occurred_at")?.getattr("isoformat")?,
+        &native_field(&field("occurred_at")?, "isoformat")?,
         &[("timespec", object(record.py(), "microseconds")?)],
     )?
     .extract()?;

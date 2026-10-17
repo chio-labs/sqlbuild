@@ -12,9 +12,9 @@ use crate::bindings::_helpers::planner_migrations::old_names::declared_column_al
 use crate::bindings::_helpers::planner_migrations::old_names::old_name_view_skip_reason;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyBool, PyList, PyTuple};
 
@@ -29,7 +29,7 @@ impl<'py> OldNamePlanner<'py> {
         let py = runtime.py();
         let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
         let config = if project_config.is_none() {
-            registry::class(py, RecordId::MigrationsConfig)?.call0()?
+            new_record(py, RecordId::MigrationsConfig, (), None)?
         } else {
             native_field(&project_config, "migrations")?
         };
@@ -52,16 +52,14 @@ impl<'py> OldNamePlanner<'py> {
         let mut newest: Option<(Bound<'py, PyTuple>, Bound<'py, PyAny>)> = None;
         for history in &self.histories {
             let movement = native_field(history, "move")?;
-            if !movement
-                .getattr("destination")?
+            if !native_field(&movement, "destination")?
                 .call_method1("matches", (destination,))?
                 .is_truthy()?
             {
                 continue;
             }
             if let Some(origin) = origin
-                && !movement
-                    .getattr("origin")?
+                && !native_field(&movement, "origin")?
                     .call_method1("matches", (origin,))?
                     .is_truthy()?
             {
@@ -119,9 +117,7 @@ impl<'py> OldNamePlanner<'py> {
         else {
             return Ok(None);
         };
-        if !history
-            .getattr("move")?
-            .getattr("destination_model")?
+        if !native_field(&native_field(&history, "move")?, "destination_model")?
             .eq(native_field(item, "name")?)?
         {
             return Ok(None);
@@ -277,7 +273,7 @@ impl<'py> OldNamePlanner<'py> {
                     &[
                         (
                             "model_name",
-                            native_field(history, "move")?.getattr("destination_model")?,
+                            native_field(&native_field(history, "move")?, "destination_model")?,
                         ),
                         (
                             "origin",
@@ -290,11 +286,11 @@ impl<'py> OldNamePlanner<'py> {
                         ("action", action(&self.runtime, "NONE")?),
                         (
                             "target_name",
-                            native_field(history, "move")?.getattr("target_name")?,
+                            native_field(&native_field(history, "move")?, "target_name")?,
                         ),
                         (
                             "migration_event_id",
-                            native_field(history, "move")?.getattr("event_id")?,
+                            native_field(&native_field(history, "move")?, "event_id")?,
                         ),
                         ("reason", reason),
                     ],
@@ -302,8 +298,8 @@ impl<'py> OldNamePlanner<'py> {
                 .map(Some);
             }
         }
-        let retention = native_field(history, "required")?.getattr("view_retention")?;
-        let duration = registry::class(py, RecordId::Duration)?.call_method1(
+        let retention = native_field(&native_field(history, "required")?, "view_retention")?;
+        let duration = record_class(py, RecordId::Duration)?.call_method1(
             "parse",
             (if retention.is_truthy()? {
                 retention.clone()
@@ -340,7 +336,7 @@ impl<'py> OldNamePlanner<'py> {
                 ("action", action(&self.runtime, action_name)?),
                 (
                     "target_name",
-                    native_field(history, "move")?.getattr("target_name")?,
+                    native_field(&native_field(history, "move")?, "target_name")?,
                 ),
                 ("retention", retention),
                 ("expires_at", expires_at),
@@ -358,7 +354,7 @@ impl<'py> OldNamePlanner<'py> {
                 ),
                 (
                     "migration_event_id",
-                    native_field(history, "move")?.getattr("event_id")?,
+                    native_field(&native_field(history, "move")?, "event_id")?,
                 ),
                 (
                     "grants_copied",
@@ -387,5 +383,5 @@ impl<'py> OldNamePlanner<'py> {
 }
 
 fn action<'py>(runtime: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(runtime.py(), RecordId::OldNameViewAction)?.getattr(name)
+    enum_member(runtime.py(), RecordId::OldNameViewAction, name)
 }

@@ -98,7 +98,7 @@ fn resolved_source(
     let py: Python<'_> = config.py();
     let value: Bound<'_, PyDict> = PyDict::new(py);
     for field in TEMPLATE_FIELDS {
-        let raw: Bound<'_, PyAny> = config.getattr(field)?;
+        let raw: Bound<'_, PyAny> = native_field(config, field)?;
         if LIST_FIELDS.contains(&field) {
             value.set_item(
                 field,

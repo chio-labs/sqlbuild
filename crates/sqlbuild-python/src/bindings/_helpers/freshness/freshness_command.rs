@@ -27,6 +27,7 @@ use crate::bindings::_helpers::planner_selection::selectors::{
 };
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 
@@ -80,8 +81,7 @@ fn source_names_for_keys(
 ) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     let py: Python<'_> = graph.py();
-    let source_type: Bound<'_, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
+    let source_type: Bound<'_, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
     let upstream_deps: Bound<'_, PyAny> = native_field(graph, "upstream_deps")?;
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
@@ -135,7 +135,7 @@ fn previous_records<'py>(
     let mut database: Option<Bound<'py, PyAny>> = None;
     let mut schemas: BTreeSet<String> = BTreeSet::new();
     for collection in ["models", "seeds", "functions"] {
-        for item in project.getattr(collection)?.try_iter()? {
+        for item in native_field(project, collection)?.try_iter()? {
             let destination: Bound<'py, PyAny> = native_field(&item?, "destination")?;
             let destination_database: Bound<'py, PyAny> = native_field(&destination, "database")?;
             if database.is_none() && !destination_database.is_none() {
@@ -269,7 +269,7 @@ fn write_json_output(
 /// Run one `sqb freshness` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+pub(crate) fn run_freshness_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let fail_on_stale: bool = native_field(request, "fail_on_stale")?.extract()?;
     let fail_on_error: bool = native_field(request, "fail_on_error")?.extract()?;
     if fail_on_stale && !native_field(request, "compare_state")?.extract::<bool>()? {

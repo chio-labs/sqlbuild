@@ -502,7 +502,6 @@ def test_given_test_path_selector_when_formatting_then_work_is_bounded_to_select
     test_case: FormatSelectionWorkTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         PROJECT_TOML + '\n[defaults]\ncontract = "enforced"\n',
@@ -548,11 +547,7 @@ def test_given_test_path_selector_when_formatting_then_work_is_bounded_to_select
     unselected_file: Path = tmp_path / "tests" / "unit" / "customers" / "test_other.sql"
     unselected_file.parent.mkdir()
     unselected_file.write_text(fixture_sql, encoding="utf-8")
-    native_format: Mock = Mock(wraps=native_module.format_lint_sql_bodies)
-    project_graph: Mock = Mock(side_effect=AssertionError("project graph must not build"))
-    monkeypatch.setattr(native_module, "format_lint_sql_bodies", native_format)
     _ = native_module.compile_stage_work_info(reset=True)
-    monkeypatch.setattr(native_module, "build_project_graph", project_graph)
 
     exit_code: int = main(
         [
@@ -567,10 +562,11 @@ def test_given_test_path_selector_when_formatting_then_work_is_bounded_to_select
     captured: CaptureResult[str] = capsys.readouterr()
     assert exit_code == 0
     assert f"{test_case.selected_file_count} files checked" in captured.err
-    assert native_format.call_count == test_case.expected_native_batch_count
-    assert len(native_format.call_args.args[0]) == test_case.expected_native_file_count
-    assert native_module.compile_stage_work_info().get("discover_project_inputs", 0) == 0
-    assert project_graph.call_count == 0
+    stage_work: dict[str, int] = native_module.compile_stage_work_info()
+    assert stage_work.get("format_lint_batches", 0) == test_case.expected_native_batch_count
+    assert stage_work.get("format_lint_files", 0) == test_case.expected_native_file_count
+    assert stage_work.get("discover_project_inputs", 0) == 0
+    assert stage_work.get("build_project_graph", 0) == 0
     assert all(
         "CAST(NULL AS VARCHAR)" not in path.read_text(encoding="utf-8") for path in selected_files
     )

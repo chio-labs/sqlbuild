@@ -1,14 +1,14 @@
 //! Scenario artifact dataclasses and adapter identifier callbacks.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_HASH_COLLISION, SCENARIO_PLAN_INVALID_HASH_PREFIX,
     SCENARIO_PLAN_RELATION_COLLISION,
 };
 use crate::bindings::_helpers::planner_scenario::values::{error, string};
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::relation_naming::fitting::fitted_logical_name;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -152,10 +152,11 @@ pub(crate) fn build_scenario_artifact_name(
     identifier_limit: i64,
 ) -> PyResult<String> {
     let py = kind.py();
-    let kind: String = registry::class(py, RecordId::ScenarioArtifactKind)?
-        .call1((kind,))?
-        .getattr("value")?
-        .extract()?;
+    let kind: String = native_field(
+        &enum_from_value(py, RecordId::ScenarioArtifactKind, kind)?,
+        "value",
+    )?
+    .extract()?;
     build_scenario_artifact_physical_name(hash_prefix, &kind, logical_name, identifier_limit)
 }
 
@@ -167,8 +168,9 @@ pub(crate) fn parse_scenario_artifact_physical_name<'py>(
     let Some((hash, kind, logical)) = parse_artifact_name::parse_artifact_name(name) else {
         return Ok(py.None().into_bound(py));
     };
-    call_with(
-        &registry::class(py, RecordId::ParsedScenarioArtifactName)?,
+    new_record_with(
+        py,
+        RecordId::ParsedScenarioArtifactName,
         &[
             ("hash_prefix", string(py, hash)),
             ("kind", string(py, kind)),
@@ -222,15 +224,20 @@ pub(crate) fn build_scenario_relation_map<'py>(
             normalize.call1((&physical,))?
         };
         if let Some(existing) = seen.get_item(&normalized)? {
-            let kind = registry::class(py, RecordId::ScenarioArtifactKind)?;
-            let old_kind: String = kind
-                .call1((native_field(&existing, "kind")?,))?
-                .getattr("value")?
-                .extract()?;
-            let new_kind: String = kind
-                .call1((native_field(&artifact, "kind")?,))?
-                .getattr("value")?
-                .extract()?;
+            let old_kind: String = enum_from_value(
+                py,
+                RecordId::ScenarioArtifactKind,
+                native_field(&existing, "kind")?,
+            )?
+            .getattr("value")?
+            .extract()?;
+            let new_kind: String = enum_from_value(
+                py,
+                RecordId::ScenarioArtifactKind,
+                native_field(&artifact, "kind")?,
+            )?
+            .getattr("value")?
+            .extract()?;
             let old_name: String = native_field(&existing, "logical_name")?.extract()?;
             let new_name: String = native_field(&artifact, "logical_name")?.extract()?;
             return Err(error(
@@ -243,16 +250,18 @@ pub(crate) fn build_scenario_relation_map<'py>(
             )?);
         }
         seen.set_item(normalized, &artifact)?;
-        artifacts.push(call_with(
-            &registry::class(py, RecordId::ScenarioArtifactName)?,
+        artifacts.push(new_record_with(
+            py,
+            RecordId::ScenarioArtifactName,
             &[
                 ("identity", artifact),
                 ("physical_name", string(py, &physical)),
             ],
         )?);
     }
-    call_with(
-        &registry::class(py, RecordId::ScenarioRelationMap)?,
+    new_record_with(
+        py,
+        RecordId::ScenarioRelationMap,
         &[
             ("scenario_name", args.value("scenario_name")?),
             ("hash_prefix", args.value("hash_prefix")?),

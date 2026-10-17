@@ -11,9 +11,11 @@ use sqlbuild_refactor::refactoring::models::{
     SchemaColumnFacts, SqlFileRole,
 };
 
+use crate::bindings::_helpers::model_config::config_values::config_str;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::refactor::python_strings::find_python_string_locations;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_reports::scope_move_preview;
 use crate::bindings::_helpers::scopes::scope_validation::scope_relocated_declarations;
@@ -25,10 +27,6 @@ const MODEL_KIND_PREFIX: &str = "model:";
 
 fn posix(path: &Bound<'_, PyAny>) -> PyResult<String> {
     path.call_method0("as_posix")?.extract()
-}
-
-fn native<'py>(py: Python<'py>, name: NativeAttr) -> PyResult<Bound<'py, PyAny>> {
-    registry::native(py, name)
 }
 
 fn discovered_files(files: &Bound<'_, PyAny>) -> PyResult<Vec<DiscoveredFile>> {
@@ -59,7 +57,7 @@ fn resource_columns(
         let resource: Bound<'_, PyAny> = resource?;
         facts.push(ResourceColumnsFacts {
             name: native_field(&resource, "name")?.extract()?,
-            columns: column_names(&native_field(&resource.getattr(entry)?, "columns")?)?,
+            columns: column_names(&native_field(&native_field(&resource, entry)?, "columns")?)?,
         });
     }
     Ok(facts)
@@ -82,8 +80,7 @@ fn spans(spans: &Bound<'_, PyAny>) -> PyResult<Vec<ExpansionSpan>> {
 fn expansion_facts(expansion: &Bound<'_, PyAny>) -> PyResult<ExpansionFacts> {
     Ok(ExpansionFacts {
         expanded_sql: native_field(expansion, "expanded_sql")?.extract()?,
-        passes: expansion
-            .getattr("passes")?
+        passes: native_field(expansion, "passes")?
             .try_iter()?
             .map(|pass| spans(&pass?))
             .collect::<PyResult<_>>()?,
@@ -120,14 +117,11 @@ fn model(model: &Bound<'_, PyAny>, expansion: Option<&Bound<'_, PyAny>>) -> PyRe
     let values: Bound<'_, PyDict> = PyDict::new(py);
     values.call_method1(
         "update",
-        (native_field(model, "config")?.getattr("values")?,),
+        (native_field(&native_field(model, "config")?, "values")?,),
     )?;
-    let options: Bound<'_, PyDict> = PyDict::new(py);
-    options.set_item("values", &values)?;
-    options.set_item("key", MATERIALIZED_KEY)?;
-    let materialized: Option<String> = registry::native(py, NativeAttr::GetConfigStr)?
-        .call((), Some(&options))?
-        .extract()?;
+    let materialized: Option<String> = config_str(&values, MATERIALIZED_KEY)?
+        .map(|value| value.extract())
+        .transpose()?;
     let migrate_from: Option<Bound<'_, PyAny>> = values.get_item(MIGRATE_FROM_KEY)?;
     let mut deps: Vec<DependencyFacts> = Vec::new();
     for dep in native_field(model, "deps")?.try_iter()? {
@@ -170,11 +164,11 @@ pub(crate) fn model_facts(
     if refactor_project.is_none() {
         return Ok(None);
     }
-    let project: Bound<'_, PyAny> = native_field(refactor_project, "graph")?.getattr("project")?;
+    let project: Bound<'_, PyAny> =
+        native_field(&native_field(refactor_project, "graph")?, "project")?;
     let project_dir: Bound<'_, PyAny> = native_field(refactor_project, "project_dir")?;
     let mut expansions: HashMap<String, Bound<'_, PyAny>> = HashMap::new();
-    let items: Vec<Bound<'_, PyAny>> = project
-        .getattr("sql_expansions")?
+    let items: Vec<Bound<'_, PyAny>> = native_field(&project, "sql_expansions")?
         .call_method0("items")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
@@ -223,10 +217,10 @@ fn authored_files(discovered: &Bound<'_, PyAny>) -> PyResult<Vec<AuthoredFile>> 
     ];
     let mut files: Vec<AuthoredFile> = Vec::new();
     for (role, attribute, body, blocks) in groups {
-        for item in discovered.getattr(attribute)?.try_iter()? {
+        for item in native_field(discovered, attribute)?.try_iter()? {
             let item: Bound<'_, PyAny> = item?;
             let texts: Vec<String> = match (body, blocks) {
-                (Some(body), _) => vec![item.getattr(body)?.extract()?],
+                (Some(body), _) => vec![native_field(&item, body)?.extract()?],
                 (None, true) => block_bodies(&native_field(&item, "blocks")?)?,
                 (None, false) => Vec::new(),
             };
@@ -266,10 +260,7 @@ fn python_locations(
         )?;
     }
     let mut locations: Vec<ManualLocation> = Vec::new();
-    for location in native(py, NativeAttr::FindPythonStringLocations)?
-        .call((), Some(&options))?
-        .try_iter()?
-    {
+    for location in find_python_string_locations(Some(&options))?.try_iter()? {
         let location: Bound<'_, PyAny> = location?;
         locations.push(ManualLocation {
             path: native_field(&location, "path")?.extract()?,
@@ -286,7 +277,7 @@ pub(crate) fn refactor_facts(
     project: &Bound<'_, PyAny>,
     request: &RefactorRequest,
 ) -> PyResult<RefactorFacts> {
-    let compiled: Bound<'_, PyAny> = native_field(project, "graph")?.getattr("project")?;
+    let compiled: Bound<'_, PyAny> = native_field(&native_field(project, "graph")?, "project")?;
     let discovered: Bound<'_, PyAny> = native_field(project, "discovered")?;
     let dialect: Option<String> = native_field(&compiled, "sql_analysis_dialect")?.extract()?;
     let mut yaml_files: Vec<DiscoveredFile> =
@@ -320,10 +311,10 @@ pub(crate) fn declaration_placement(
     (model, destination): (&str, &str),
 ) -> PyResult<DeclarationPlacement> {
     let py: Python<'_> = project.py();
-    let index: Bound<'_, PyAny> = project
-        .getattr("graph")?
-        .getattr("project")?
-        .getattr("scope_index")?;
+    let index: Bound<'_, PyAny> = native_field(
+        &native_field(&native_field(project, "graph")?, "project")?,
+        "scope_index",
+    )?;
     let lookup: Bound<'_, PyAny> = build_scope_lookup(py, &index)?.into_bound(py);
     let (preview, diagnostics) = scope_move_preview(
         py,
@@ -336,13 +327,10 @@ pub(crate) fn declaration_placement(
         None
     } else {
         let options: Bound<'_, PyDict> = PyDict::new(py);
-        options.set_item(
-            "kind",
-            registry::class(py, RecordId::ResourceKind)?.getattr("MODEL")?,
-        )?;
+        options.set_item("kind", enum_member(py, RecordId::ResourceKind, "MODEL")?)?;
         options.set_item("name", model)?;
         let resource: Bound<'_, PyAny> =
-            registry::class(py, RecordId::ResourceIdentity)?.call((), Some(&options))?;
+            new_record(py, RecordId::ResourceIdentity, (), Some(&options))?;
         let records: Option<Py<PyTuple>> =
             scope_relocated_declarations(py, &index, &resource, destination)?;
         if let Some(records) = records {
@@ -376,9 +364,7 @@ pub(crate) fn declaration_placement(
     for record in native_field(&index, "declarations")?.try_iter()? {
         let record: Bound<'_, PyAny> = record?;
         let identity: Bound<'_, PyAny> = native_field(&record, "identity")?;
-        let kind: String = native_field(&identity, "kind")?
-            .getattr("value")?
-            .extract()?;
+        let kind: String = native_field(&native_field(&identity, "kind")?, "value")?.extract()?;
         let name: String = native_field(&identity, "name")?.extract()?;
         declarations.push(PlacedDeclaration {
             key: identity_key(&identity)?,

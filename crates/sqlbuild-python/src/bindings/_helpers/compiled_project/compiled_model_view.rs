@@ -178,7 +178,7 @@ pub(crate) fn compiled_record(
     let analysis: AnalysisRecord =
         analysis_record(py, input, session, (fallback, standalone_proof))?;
     let config: &Bound<'_, PyAny> = input.config.bind(py);
-    let values: Bound<'_, PyDict> = config.getattr(VALUES_ATTRIBUTE)?.downcast_into()?;
+    let values: Bound<'_, PyDict> = native_field(config, VALUES_ATTRIBUTE)?.downcast_into()?;
     Ok(CompiledRecord {
         deps,
         destination: DestinationFact {
@@ -186,8 +186,8 @@ pub(crate) fn compiled_record(
             schema: text_value(&values, SCHEMA_KEY)?,
             name: text_value(&values, ALIAS_KEY)?.unwrap_or_else(|| name.to_owned()),
             qualified_name: None,
-            logical_schema: config.getattr(LOGICAL_SCHEMA_ATTRIBUTE)?.extract()?,
-            logical_database: config.getattr(LOGICAL_DATABASE_ATTRIBUTE)?.extract()?,
+            logical_schema: native_field(config, LOGICAL_SCHEMA_ATTRIBUTE)?.extract()?,
+            logical_database: native_field(config, LOGICAL_DATABASE_ATTRIBUTE)?.extract()?,
         },
         analysis,
         macro_deps,
@@ -434,7 +434,7 @@ impl NativeCompiledModel {
 
     fn model_file_attribute(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| {
-            Ok(record.model_file.bind(py).getattr(name)?.unbind())
+            Ok(native_field(record.model_file.bind(py), name)?.unbind())
         })
     }
 }
@@ -831,7 +831,7 @@ pub(crate) fn model_graph_row(
 ) -> PyResult<ResourceRow> {
     model.read(py, |record, py| {
         let compiled: &CompiledRecord = compiled_of(record)?;
-        let values: Bound<'_, PyAny> = record.config.bind(py).getattr(VALUES_ATTRIBUTE)?;
+        let values: Bound<'_, PyAny> = native_field(record.config.bind(py), VALUES_ATTRIBUTE)?;
         let mut tags: Vec<String> = Vec::new();
         if let Some(value) = values.downcast::<PyDict>()?.get_item(TAGS_KEY)?
             && (value.is_instance_of::<pyo3::types::PyList>()

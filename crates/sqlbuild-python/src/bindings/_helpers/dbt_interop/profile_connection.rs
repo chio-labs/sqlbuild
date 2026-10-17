@@ -9,14 +9,13 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::cli::resolved_path;
+use crate::bindings::_helpers::dbt_interop::profile::normalize_dbt_profile_connection;
 use crate::bindings::_helpers::dbt_interop::profile_load::{
     default_profiles_dir, load_dbt_project_metadata, load_selected_dbt_profile_output,
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 const DBT_PROFILE_SOURCE: &str = "dbt_profile";
 const PROFILE_CONNECTION_OPTIONS: (&[&str], &[&str]) = (
@@ -98,16 +97,13 @@ fn profile_connection<'py>(
             ("cli_vars", cli_vars),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::NormalizeDbtProfileConnection)?,
-        &[("resolved", resolved)],
-    )
+    normalize_dbt_profile_connection(py, resolved)
 }
 
 /// Resolve a raw connection config if it references a dbt profile.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_raw_dbt_profile_connection<'py>(
+pub(crate) fn resolve_raw_dbt_profile_connection<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

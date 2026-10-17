@@ -9,9 +9,9 @@ use sqlbuild_pysource::string_literals::main::string_literal_locations::string_l
 use sqlbuild_pysource::string_literals::models::StringQuery;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// The discovered Python declarations whose files a refactoring searches.
 const PYTHON_DECLARATIONS: [&str; 8] = [
@@ -31,7 +31,7 @@ fn python_paths<'py>(
 ) -> PyResult<Vec<(Vec<String>, Bound<'py, PyAny>)>> {
     let mut paths: Vec<(Vec<String>, Bound<'py, PyAny>)> = Vec::new();
     for declarations in PYTHON_DECLARATIONS {
-        for item in discovered.getattr(declarations)?.try_iter()? {
+        for item in native_field(discovered, declarations)?.try_iter()? {
             let path: Bound<'py, PyAny> = native_field(&item?, "relative_path")?;
             let parts: Vec<String> = native_field(&path, "parts")?.extract()?;
             if !paths.iter().any(|(known, _)| *known == parts) {
@@ -58,7 +58,7 @@ fn read_text(path: PathBuf) -> Option<String> {
 /// Flag Python strings that name a model or column; with context, only SQL naming it too.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn find_python_string_locations<'py>(
+pub(crate) fn find_python_string_locations<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("find_python_string_locations", request)?;
@@ -70,7 +70,6 @@ fn find_python_string_locations<'py>(
         Some(context) => context.extract()?,
         None => None,
     };
-    let location_type: Bound<'py, PyAny> = registry::class(py, RecordId::ManualLocation)?;
     let version = py.version_info();
     let mut locations: Vec<Bound<'py, PyAny>> = Vec::new();
     for (_, relative_path) in python_paths(&request.get("discovered")?)? {
@@ -91,7 +90,12 @@ fn find_python_string_locations<'py>(
             keywords.set_item("line", line)?;
             keywords.set_item("column", column)?;
             keywords.set_item("reason", &reason)?;
-            locations.push(location_type.call((), Some(&keywords))?);
+            locations.push(new_record(
+                py,
+                RecordId::ManualLocation,
+                (),
+                Some(&keywords),
+            )?);
         }
     }
     PyTuple::new(py, locations)

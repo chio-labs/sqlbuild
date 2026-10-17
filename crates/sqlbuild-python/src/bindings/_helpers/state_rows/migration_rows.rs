@@ -16,11 +16,11 @@ use sqlbuild_state::events::main::grants_json::grants_json;
 use sqlbuild_state::events::main::readable_columns::readable_columns;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::events::typed_insert_sql;
 use crate::bindings::_helpers::state_rows::migration_objects::{
     layout, qualified_table, state_error,
@@ -41,7 +41,6 @@ fn create_sql<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, 
         &request.get("render_qualified_name")?,
         (request.get("database")?, request.get("schema")?),
     )?;
-    let value_types: Bound<'py, PyAny> = registry::class(py, RecordId::StateSqlValueType)?;
     let column_types: Bound<'py, PyDict> = PyDict::new(py);
     for column in layout.columns {
         let member: &str = if TIMESTAMP_COLUMNS.contains(column) {
@@ -49,7 +48,10 @@ fn create_sql<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, 
         } else {
             "STRING"
         };
-        column_types.set_item(*column, value_types.getattr(member)?)?;
+        column_types.set_item(
+            *column,
+            enum_member(py, RecordId::StateSqlValueType, member)?,
+        )?;
     }
     let columns: Bound<'py, PyAny> = PyTuple::new(py, layout.columns)?.into_any();
     let sql: String = state_table_create_sql(
@@ -86,7 +88,7 @@ fn optional<'py>(value: Bound<'py, PyAny>, attribute: &str) -> PyResult<Bound<'p
     if value.is_none() {
         Ok(value)
     } else {
-        value.getattr(attribute)
+        native_field(&value, attribute)
     }
 }
 
@@ -102,9 +104,9 @@ fn row_values<'py>(
     event: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = event.py();
-    let field = |name: &str| event.getattr(name);
+    let field = |name: &str| native_field(event, name);
     let relation = |name: &str| -> PyResult<[Bound<'py, PyAny>; 3]> {
-        let relation: Bound<'py, PyAny> = event.getattr(name)?;
+        let relation: Bound<'py, PyAny> = native_field(event, name)?;
         Ok([
             native_field(&relation, "database")?,
             native_field(&relation, "schema")?,
@@ -127,7 +129,7 @@ fn row_values<'py>(
             values.push(field("destination_column")?);
         }
         EventTable::OldName => {
-            values.push(field("event_type")?.getattr("value")?);
+            values.push(native_field(&field("event_type")?, "value")?);
             values.push(field("migration_event_id")?);
             values.push(field("destination_model")?);
             values.extend(relation("old")?);
@@ -150,8 +152,8 @@ fn row_values<'py>(
             return Ok(values);
         }
     }
-    values.push(field("discovery")?.getattr("value")?);
-    values.push(field("decision")?.getattr("value")?);
+    values.push(native_field(&field("discovery")?, "value")?);
+    values.push(native_field(&field("decision")?, "value")?);
     values.push(field("run_id")?);
     values.push(field("created_at")?);
     Ok(values)
@@ -222,8 +224,9 @@ impl<'py> StoredRow<'_, 'py> {
     }
 
     fn relation(&self, py: Python<'py>, prefix: &str) -> PyResult<Bound<'py, PyAny>> {
-        call_with(
-            &registry::class(py, RecordId::MigrationRelation)?,
+        new_record_with(
+            py,
+            RecordId::MigrationRelation,
             &[
                 (
                     "database",
@@ -257,7 +260,7 @@ fn enumerated<'py>(
     class: RecordId,
     value: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, class)?.call1((value,))
+    new_record(py, class, (value,), None)
 }
 
 fn known_member<'py>(
@@ -280,8 +283,9 @@ fn model_event<'py>(py: Python<'py>, row: &StoredRow<'_, 'py>) -> PyResult<Bound
     } else {
         PyString::new(py, "").into_any()
     };
-    call_with(
-        &registry::class(py, RecordId::MigrationEvent)?,
+    new_record_with(
+        py,
+        RecordId::MigrationEvent,
         &[
             ("event_id", row.text("event_id")?),
             ("target_name", row.nullable(py, "target_name")?),
@@ -305,8 +309,9 @@ fn model_event<'py>(py: Python<'py>, row: &StoredRow<'_, 'py>) -> PyResult<Bound
 }
 
 fn column_event<'py>(py: Python<'py>, row: &StoredRow<'_, 'py>) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(py, RecordId::ColumnMigrationEvent)?,
+    new_record_with(
+        py,
+        RecordId::ColumnMigrationEvent,
         &[
             ("event_id", row.text("event_id")?),
             ("target_name", row.nullable(py, "target_name")?),
@@ -379,7 +384,7 @@ fn old_name_event<'py>(
         ("grants_copied", grants),
         ("view_sql", row.nullable(py, "view_sql")?),
     ];
-    call_with(&registry::class(py, RecordId::OldNameViewEvent)?, &fields).map(Some)
+    new_record_with(py, RecordId::OldNameViewEvent, &fields).map(Some)
 }
 
 /// Stored rows of the selected `columns` as events; rows this version cannot read are skipped.

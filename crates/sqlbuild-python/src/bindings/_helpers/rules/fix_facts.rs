@@ -4,11 +4,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::fact_replay::project_attribute;
 
 /// Index a compilation by model key and diagnostic owner without changing its fact views.
@@ -56,8 +55,9 @@ pub(crate) fn compile_facts<'py>(
         let count: i64 = counts.get_item(&identity)?.extract()?;
         counts.set_item(identity, count + 1)?;
     }
-    call_with(
-        &registry::class(py, RecordId::CompileFacts)?,
+    new_record_with(
+        py,
+        RecordId::CompileFacts,
         &[
             ("models", models.into_any()),
             ("model_paths", model_paths.into_any()),

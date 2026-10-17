@@ -11,10 +11,9 @@ use sqlbuild_state::events::models::{
     ColumnEventKey, EventOrder, EventRelation, MoveEventKey, OldNameFactKey, OldNameStep,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::constants::OLD_NAME_VIEW_CONFIG_KEY;
 use crate::bindings::_helpers::state_rows::events::relation as event_relation;
 use crate::bindings::_helpers::state_rows::migration_objects::event_order;
@@ -78,9 +77,7 @@ pub(crate) fn newest_column<'py>(
 }
 
 fn step(fact: &Bound<'_, PyAny>) -> PyResult<OldNameStep> {
-    let value: String = native_field(fact, "event_type")?
-        .getattr("value")?
-        .extract()?;
+    let value: String = native_field(&native_field(fact, "event_type")?, "value")?.extract()?;
     match value.as_str() {
         "required" => Ok(OldNameStep::Required),
         "origin_archived" => Ok(OldNameStep::OriginArchived),
@@ -111,13 +108,13 @@ pub(crate) fn old_name_views<'py>(
             })
         })
         .collect::<PyResult<_>>()?;
-    let history = registry::class(py, RecordId::OldNameViewHistory)?;
     let fact_at = |index: Option<usize>| chosen(py, &facts, index);
     let histories: Vec<Bound<'py, PyAny>> = old_name_histories(&move_orders, &fact_keys)
         .into_iter()
         .map(|indexes| {
-            call_with(
-                &history,
+            new_record_with(
+                py,
+                RecordId::OldNameViewHistory,
                 &[
                     ("move", moves[indexes.moved].clone()),
                     ("required", facts[indexes.required].clone()),

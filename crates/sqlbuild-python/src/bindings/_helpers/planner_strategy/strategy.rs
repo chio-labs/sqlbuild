@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -14,14 +15,13 @@ use sqlbuild_analysis::planner_strategy::models::{
     ModelStrategy, PlanAction, PlanReason, SchemaActionKind, WarningInputs,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_changes::results::planner_enum;
 use crate::bindings::_helpers::planner_strategy::values::{
     change_facts, config_value, finding_rows, input_error, materialization_value,
     model_materialization, optional_string, plan_warning, text,
 };
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 fn action_value(action: PlanAction) -> &'static str {
     match action {
@@ -114,7 +114,6 @@ pub(crate) fn resolve_schema_actions<'py>(
     on_schema_change: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = schema_findings.py();
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::SchemaAction)?;
     let policy: Option<String> = schema_policy(on_schema_change)?;
     let mut actions: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in schema_actions(&finding_rows(schema_findings)?, policy.as_deref()) {
@@ -123,8 +122,9 @@ pub(crate) fn resolve_schema_actions<'py>(
             SchemaActionKind::DropColumn => "drop_column",
             SchemaActionKind::AlterColumnType => "alter_column_type",
         };
-        actions.push(call_with(
-            &class,
+        actions.push(new_record_with(
+            py,
+            RecordId::SchemaAction,
             &[
                 ("kind", native_enum(py, RecordId::SchemaActionKind, kind)?),
                 (

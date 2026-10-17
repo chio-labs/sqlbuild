@@ -12,9 +12,7 @@ use sqlbuild_core::cli_text::models::{
 };
 
 use crate::bindings::_helpers::compile_command::surrogates::SurrogateText;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::compile_outputs::json_report::{
     emit_json_report, emit_orjson_report,
 };
@@ -22,9 +20,9 @@ use crate::bindings::_helpers::discovery::constants::SQL_HOOK_OUTPUT_FIELDS;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 
 const METADATA_MODULE: &str = "importlib.metadata";
@@ -230,8 +228,8 @@ fn source_texts<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
         }
     }
     for (collection, file) in [("sources", "source_file"), ("sql_tests", "test_file")] {
-        for resource in project.getattr(collection)?.try_iter()? {
-            let file: Bound<'py, PyAny> = resource?.getattr(file)?;
+        for resource in native_field(project, collection)?.try_iter()? {
+            let file: Bound<'py, PyAny> = native_field(&resource?, file)?;
             texts.set_item(
                 native_field(&file, "relative_path")?,
                 native_field(&file, "contents")?,
@@ -466,7 +464,7 @@ fn location_json<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
         ],
     )?;
     for key in ["end_line", "end_column"] {
-        let value: Bound<'py, PyAny> = location.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(location, key)?;
         if !value.is_none() {
             payload.set_item(key, value)?;
         }
@@ -497,7 +495,7 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         payload.set_item("resource_type", resource_type.str()?)?;
     }
     for key in ["resource_name", "column_name"] {
-        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(diagnostic, key)?;
         if !value.is_none() {
             payload.set_item(key, value)?;
         }
@@ -507,7 +505,7 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         payload.set_item("path", path.str()?)?;
     }
     for key in ["line", "column"] {
-        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(diagnostic, key)?;
         if !value.is_none() {
             payload.set_item(key, value)?;
         }
@@ -544,7 +542,7 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         payload.set_item("help", help)?;
     }
     for key in ["notes", "affected_rules"] {
-        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(diagnostic, key)?;
         if value.is_truthy()? {
             payload.set_item(
                 key,
@@ -782,7 +780,7 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
     let py: Python<'py> = test.py();
     let payload: Bound<'py, PyAny> = native_field(test, "payload")?;
     let expected_models: Bound<'py, PyList> =
-        if payload.is_instance(&registry::class(py, RecordId::CompiledModelSqlTestPayload)?)? {
+        if payload.is_instance(&record_class(py, RecordId::CompiledModelSqlTestPayload)?)? {
             PyList::new(
                 py,
                 payload
@@ -875,8 +873,7 @@ fn resources<'py>(
     collection: &str,
     resource: impl Fn(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let items: Vec<Bound<'py, PyDict>> = project
-        .getattr(collection)?
+    let items: Vec<Bound<'py, PyDict>> = native_field(project, collection)?
         .try_iter()?
         .map(|item| resource(&item?))
         .collect::<PyResult<_>>()?;
@@ -955,7 +952,7 @@ pub(crate) fn format_compile_json(
         has_errors = has_errors || native_field(diagnostic, "is_error")?.is_truthy()?;
         diagnostics.push(diagnostic_json(diagnostic)?);
     }
-    let length = |collection: &str| -> PyResult<usize> { project.getattr(collection)?.len() };
+    let length = |collection: &str| -> PyResult<usize> { native_field(project, collection)?.len() };
     let summary: Bound<'_, PyDict> = dict(
         py,
         vec![
@@ -1069,8 +1066,9 @@ pub(crate) fn format_compile_error_json<'py>(
             native_field(&location, "column")?,
         )
     };
-    let diagnostic: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilerDiagnostic)?,
+    let diagnostic: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompilerDiagnostic,
         &[
             ("phase", any(py, "compile")?),
             ("severity", any(py, ERROR_SEVERITY)?),

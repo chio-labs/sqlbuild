@@ -4,6 +4,7 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_resolution::values::{method, string};
+use crate::bindings::_helpers::records::construct::enum_from_value;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -47,7 +48,7 @@ pub(crate) fn type_cursor_overrides<'py>(
     }
     let mut models: Vec<(String, String)> = Vec::new();
     for model in selected {
-        let values = native_field(model, "config")?.getattr("values")?;
+        let values = native_field(&native_field(model, "config")?, "values")?;
         let config = |key: &str| -> PyResult<Bound<'_, PyAny>> {
             Ok(authored_config_str(&values, key)?.unwrap_or_else(|| py.None().into_bound(py)))
         };
@@ -62,7 +63,7 @@ pub(crate) fn type_cursor_overrides<'py>(
     let mut integer_literals = true;
     if models.is_empty() {
         for field in ["start", "end"] {
-            let value = overrides.getattr(field)?;
+            let value = native_field(overrides, field)?;
             if value.is_none() {
                 continue;
             }
@@ -81,7 +82,7 @@ pub(crate) fn type_cursor_overrides<'py>(
             ("help", string(py, "select models with one cursor type, or set each type explicitly with --start-cursor-ts/--end-cursor-ts and --start-cursor-int/--end-cursor-int")),
         ])) { Ok(error) => PyErr::from_value(error), Err(error) => error }
     })?;
-    let kind = registry::class(py, RecordId::CursorType)?.call1((kind,))?;
+    let kind = enum_from_value(py, RecordId::CursorType, kind)?;
     method(overrides, "typed_as", &[("cursor_type", kind)])
 }
 

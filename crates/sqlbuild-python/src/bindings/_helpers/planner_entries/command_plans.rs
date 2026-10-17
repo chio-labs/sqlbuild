@@ -147,7 +147,7 @@ pub(crate) fn resolve_static_relation_context<'py>(
 /// Project selected audits from canonical static state.
 #[pyfunction]
 #[pyo3(signature = (*, project, adapter, scope, relations))]
-fn build_audit_command_plan<'py>(
+pub(crate) fn build_audit_command_plan<'py>(
     project: &Bound<'py, PyAny>,
     adapter: &Bound<'py, PyAny>,
     scope: &Bound<'py, PyAny>,
@@ -192,7 +192,7 @@ fn build_audit_command_plan<'py>(
 /// Project selected SQL tests from canonical static state.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn build_test_command_plan<'py>(
+pub(crate) fn build_test_command_plan<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -283,7 +283,7 @@ fn build_test_command_plan<'py>(
 /// Project selected direct seed work and canonical identities.
 #[pyfunction]
 #[pyo3(signature = (*, project, scope, relations, fingerprints = None))]
-fn build_seed_command_plan<'py>(
+pub(crate) fn build_seed_command_plan<'py>(
     project: &Bound<'py, PyAny>,
     scope: &Bound<'py, PyAny>,
     relations: &Bound<'py, PyAny>,
@@ -320,12 +320,12 @@ fn build_seed_command_plan<'py>(
                 ("destination", native_field(&seed, "destination")?),
                 (
                     "file_path",
-                    native_field(&seed, "seed_file")?.getattr("file_path")?,
+                    native_field(&native_field(&seed, "seed_file")?, "file_path")?,
                 ),
                 ("columns", object(py, extract_seed_columns(&seed)?)?),
                 (
                     "csv_settings",
-                    native_field(&seed, "schema_entry")?.getattr("csv_settings")?,
+                    native_field(&native_field(&seed, "schema_entry")?, "csv_settings")?,
                 ),
                 ("fingerprint_definition", metadata_json.clone()),
                 ("fingerprint_version_hash", version_hash),
@@ -362,7 +362,7 @@ type Target = (Option<String>, String);
 /// Read only fingerprint state required by selected direct seeds.
 #[pyfunction]
 #[pyo3(signature = (*, adapter, connection, seeds))]
-fn read_selected_seed_fingerprints<'py>(
+pub(crate) fn read_selected_seed_fingerprints<'py>(
     adapter: &Bound<'py, PyAny>,
     connection: &Bound<'py, PyAny>,
     seeds: &Bound<'py, PyAny>,
@@ -436,8 +436,7 @@ fn read_selected_seed_fingerprints<'py>(
         )?))?;
         let items = PyList::new(
             py,
-            latest
-                .getattr("fingerprints")?
+            native_field(&latest, "fingerprints")?
                 .call_method0("items")?
                 .try_iter()?
                 .collect::<PyResult<Vec<_>>>()?,

@@ -197,7 +197,10 @@ pub(crate) fn results_json(results: &[Bound<'_, PyAny>]) -> PyResult<String> {
 /// Write human-readable check result rows.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn write_check_results(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<()> {
+pub(crate) fn write_check_results(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<()> {
     let arguments: KeywordArguments<'_> = KeywordArguments::read(
         py,
         "write_check_results",

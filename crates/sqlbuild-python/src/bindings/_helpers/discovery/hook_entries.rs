@@ -4,9 +4,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const RELATIVE_PATH_FIELD: &str = "relative_path";
 const SQL_HOOK_FIELDS: [&str; 6] = [
@@ -25,7 +25,7 @@ fn sql_hook<'py>(entry: &Bound<'py, PyAny>, sql_fields: &[String]) -> PyResult<B
         let Some(name) = SQL_HOOK_FIELDS.iter().find(|name| **name == field) else {
             return Err(pyo3::exceptions::PyKeyError::new_err(field.clone()));
         };
-        let mut value: Bound<'py, PyAny> = entry.getattr(*name)?;
+        let mut value: Bound<'py, PyAny> = native_field(entry, name)?;
         if value.is_none() {
             continue;
         }
@@ -48,8 +48,8 @@ pub(crate) fn hook_entries<'py>(
     if !value.is_instance_of::<PyList>() && !value.is_instance_of::<PyTuple>() {
         return Ok(hooks);
     }
-    let sql_class: Bound<'py, PyAny> = registry::class(py, RecordId::SqlHookEntry)?;
-    let python_class: Bound<'py, PyAny> = registry::class(py, RecordId::PythonHookEntry)?;
+    let sql_class: Bound<'py, PyAny> = record_class(py, RecordId::SqlHookEntry)?;
+    let python_class: Bound<'py, PyAny> = record_class(py, RecordId::PythonHookEntry)?;
     for entry in value.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
         if entry.is_instance(&sql_class)? {

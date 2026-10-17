@@ -2,19 +2,23 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyDict, PyList, PyTuple};
+use pyo3::types::{PyDict, PyString, PyTuple};
 
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::contracts::effective_config::effective_config_connection;
+use crate::bindings::_helpers::contracts::effective_config::effective_config_settings;
+use crate::bindings::_helpers::contracts::effective_config::effective_config_vars;
 use crate::bindings::_helpers::contracts::spec_resolution::{
     resolve_target_config, resolve_target_name,
 };
 use crate::bindings::_helpers::model_config::template_data::{
     expanded_effective_vars, expanded_template_data, run_id,
 };
+use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const CONNECTION_LABEL: &str = "effective connection";
@@ -30,8 +34,8 @@ pub(crate) fn build_effective_connection<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_config.py();
     let (connection, error): (Bound<'py, PyAny>, Option<String>) =
-        registry::native(py, NativeAttr::EffectiveConfigConnection)?
-            .call1((project_config, local_config, target_config))?
+        effective_config_connection(py, project_config, local_config, target_config)
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
             .extract()?;
     if connection.is_none() {
         let raised: Bound<'py, PyAny> =
@@ -60,23 +64,27 @@ pub(crate) fn build_effective_settings<'py>(
     local_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_config.py();
-    let settings_class: Bound<'py, PyAny> = registry::class(py, RecordId::SettingsConfig)?;
+    let settings_class: Bound<'py, PyAny> = record_class(py, RecordId::SettingsConfig)?;
     let names: Vec<Bound<'py, PyAny>> = imported(py, "dataclasses", "fields")?
         .call1((&settings_class,))?
         .try_iter()?
         .map(|field| native_field(&field?, "name"))
         .collect::<PyResult<_>>()?;
-    let values: Bound<'py, PyDict> = registry::native(py, NativeAttr::EffectiveConfigSettings)?
-        .call1((
-            (
-                native_field(project_config, "settings")?,
-                native_field(local_config, "settings")?,
-            ),
-            native_field(local_config, "setting_overrides")?,
-            PyList::new(py, names)?,
-        ))?
-        .downcast_into()?;
-    settings_class.call((), Some(&values))
+    let values: Bound<'py, PyDict> = effective_config_settings(
+        py,
+        (
+            native_field(project_config, "settings")?,
+            native_field(local_config, "settings")?,
+        ),
+        &native_field(local_config, "setting_overrides")?,
+        names
+            .into_iter()
+            .map(|name| Ok(name.cast_into::<PyString>()?))
+            .collect::<PyResult<_>>()?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
+    .downcast_into()?;
+    new_record(py, RecordId::SettingsConfig, (), Some(&values))
 }
 
 /// Merge effective vars using the locked precedence order.
@@ -89,8 +97,13 @@ pub(crate) fn build_effective_vars<'py>(
     cli_vars: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_config.py();
-    let merged: Bound<'py, PyAny> = registry::native(py, NativeAttr::EffectiveConfigVars)?
-        .call1(((project_config, local_config), target_config, cli_vars))?;
+    let merged: Bound<'py, PyAny> = effective_config_vars(
+        py,
+        (project_config.clone(), local_config.clone()),
+        target_config,
+        cli_vars,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     expanded_effective_vars(merged.downcast()?)
 }
 

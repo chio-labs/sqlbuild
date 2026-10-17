@@ -18,9 +18,11 @@ use sqlbuild_scopes::scope_index::models::{
     DeclarationKind, DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind,
 };
 
+use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const INACCESSIBLE_DECLARATION_CODE: &str = "S006";
@@ -96,15 +98,13 @@ pub(crate) fn model_schema_scope_usages<'py>(
     }
     let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut record_rows: Vec<(IdentityRow, RecordRow)> = Vec::new();
-    let declarations = native_field(resolver, "lookup")?.getattr("declarations")?;
+    let declarations = native_field(&native_field(resolver, "lookup")?, "declarations")?;
     for item in declarations.call_method0("items")?.try_iter()? {
         let (identity, found): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         if !found.is_truthy()?
             || !native_field(&identity, "owner")?.is_none()
             || !SCHEMA_USAGE_KINDS.contains(
-                &identity
-                    .getattr("kind")?
-                    .getattr("value")?
+                &native_field(&native_field(&identity, "kind")?, "value")?
                     .extract::<String>()?
                     .as_str(),
             )
@@ -115,9 +115,7 @@ pub(crate) fn model_schema_scope_usages<'py>(
         let recorded: Bound<'py, PyAny> = native_field(&record, "identity")?;
         record_rows.push((
             (
-                native_field(&recorded, "kind")?
-                    .getattr("value")?
-                    .extract()?,
+                native_field(&native_field(&recorded, "kind")?, "value")?.extract()?,
                 native_field(&recorded, "name")?.extract()?,
             ),
             record_row(&record)?,
@@ -150,13 +148,12 @@ pub(crate) fn model_schema_scope_usages<'py>(
         ));
     }
     report_inaccessible(py, diagnostics)?;
-    let usage_record = registry::class(py, RecordId::UsageRecord)?;
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(usages.len());
     for (consumer, used) in usages {
         let fields: Bound<'py, PyDict> = PyDict::new(py);
         fields.set_item("consumer", native_field(&records[consumer], "identity")?)?;
         fields.set_item("declaration", native_field(&records[used], "identity")?)?;
-        built.push(usage_record.call((), Some(&fields))?);
+        built.push(new_record(py, RecordId::UsageRecord, (), Some(&fields))?);
     }
     PyTuple::new(py, built)
 }
@@ -167,20 +164,17 @@ fn record_row(record: &Bound<'_, PyAny>) -> PyResult<RecordRow> {
     let owner: Bound<'_, PyAny> = native_field(&identity, "owner")?;
     Ok((
         native_field(record, "path")?.extract()?,
-        native_field(record, "scope")?.getattr("value")?.extract()?,
+        native_field(&native_field(record, "scope")?, "value")?.extract()?,
         if owner.is_none() {
             None
         } else {
             Some((
-                native_field(&owner, "kind")?.getattr("value")?.extract()?,
+                native_field(&native_field(&owner, "kind")?, "value")?.extract()?,
                 native_field(&owner, "name")?.extract()?,
             ))
         },
         native_field(record, "owning_path")?.extract()?,
-        record
-            .getattr("ownership_root")?
-            .getattr("path")?
-            .extract()?,
+        native_field(&native_field(record, "ownership_root")?, "path")?.extract()?,
     ))
 }
 
@@ -189,8 +183,6 @@ fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyRes
     if diagnostics.is_empty() {
         return Ok(());
     }
-    let report = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
-    let compiler_diagnostic = registry::class(py, RecordId::CompilerDiagnostic)?;
     let path_class = py.import("pathlib")?.getattr("Path")?;
     for (key, message, path, help) in diagnostics {
         let fields: Bound<'_, PyDict> = PyDict::new(py);
@@ -200,10 +192,10 @@ fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyRes
         fields.set_item("message", message)?;
         fields.set_item("path", path_class.call1((path,))?)?;
         fields.set_item("help", help)?;
-        let arguments: Bound<'_, PyDict> = PyDict::new(py);
-        arguments.set_item("key", PyTuple::new(py, key)?)?;
-        arguments.set_item("diagnostic", compiler_diagnostic.call((), Some(&fields))?)?;
-        report.call((), Some(&arguments))?;
+        report_compile_diagnostic(
+            PyTuple::new(py, key)?.as_any(),
+            &new_record(py, RecordId::CompilerDiagnostic, (), Some(&fields))?,
+        )?;
     }
     Ok(())
 }

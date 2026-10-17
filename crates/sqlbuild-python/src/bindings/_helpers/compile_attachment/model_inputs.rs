@@ -16,14 +16,18 @@ use crate::bindings::_helpers::compiled_project::model_loop::NativeModelLoop;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
+use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::construct::{
+    enum_member, new_record, new_record_with, record_class,
+};
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 /// The explicit reference call kinds and the `SqlResourceRefKind` member each resolves to.
@@ -35,7 +39,7 @@ fn explicit_reference_kinds(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let kinds: Bound<'_, PyAny> = host::entry(py, UserCodeHost::SqlResourceRefKind)?;
     let built: Bound<'_, PyDict> = PyDict::new(py);
     for (call_kind, member) in EXPLICIT_REFERENCE_KINDS {
-        built.set_item(call_kind, kinds.getattr(member)?)?;
+        built.set_item(call_kind, native_field(&kinds, member)?)?;
     }
     Ok(built)
 }
@@ -89,7 +93,7 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ),
             (
                 "declaration_context",
-                registry::class(py, RecordId::DeclarationResolutionContext)?,
+                record_class(py, RecordId::DeclarationResolutionContext)?,
             ),
             (
                 "macro_argument_error",
@@ -98,9 +102,7 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ("expansion", macro_expansion_classes(py)?.into_any()),
             (
                 "generic_syntax",
-                registry::class(py, RecordId::SqlLexicalSyntax)?
-                    .call0()?
-                    .getattr("native_mapping")?,
+                new_record(py, RecordId::SqlLexicalSyntax, (), None)?.getattr("native_mapping")?,
             ),
         ],
     )
@@ -116,18 +118,18 @@ fn sql_hook_inputs<'py>(
         vec![
             (
                 "named_sql_hook_entry",
-                registry::class(py, RecordId::NamedSqlHookEntry)?,
+                record_class(py, RecordId::NamedSqlHookEntry)?,
             ),
             (
                 "python_hook_entry",
-                registry::class(py, RecordId::PythonHookEntry)?,
+                record_class(py, RecordId::PythonHookEntry)?,
             ),
             ("hook_files", native_field(discovered, "sql_hook_files")?),
             ("effective_vars", native_field(context, "effective_vars")?),
             ("environment", unicode_environment(py)?),
             (
                 "render_project_var",
-                registry::native(py, NativeAttr::RenderProjectVarText)?,
+                pyo3::wrap_pyfunction!(crate::bindings::_helpers::authored_values::project_vars::render_project_var_text, py)?.into_any(),
             ),
             (
                 "sql_resource_ref",
@@ -136,11 +138,11 @@ fn sql_hook_inputs<'py>(
             ("explicit_kinds", explicit_reference_kinds(py)?.into_any()),
             (
                 "declaration_identity",
-                registry::class(py, RecordId::DeclarationIdentity)?,
+                record_class(py, RecordId::DeclarationIdentity)?,
             ),
             (
                 "sql_hook_kind",
-                registry::class(py, RecordId::DeclarationKind)?.getattr("SQL_HOOK")?,
+                enum_member(py, RecordId::DeclarationKind, "SQL_HOOK")?,
             ),
         ],
     )
@@ -173,14 +175,14 @@ pub(crate) fn build_model_inputs<'py>(
     let defer_model_sql_validation: bool = arguments.flag("defer_model_sql_validation")?;
     let external: Bound<'py, PyAny> = arguments.value("external_sql_reference_resolver")?;
     let settings: Bound<'py, PyAny> = native_field(context, "effective_settings")?;
-    let validator: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeModelValidator)?
-        .call_method1(
-            "from_inputs",
-            (
-                discovered_inputs,
-                native_field(&settings, "microbatch_concurrency")?,
-            ),
-        )?;
+    let validator: Bound<'py, PyAny> = Bound::new(
+        py,
+        NativeModelValidator::from_inputs(
+            discovered_inputs.clone(),
+            native_field(&settings, "microbatch_concurrency")?.extract()?,
+        )?,
+    )?
+    .into_any();
     if !external.is_none() {
         call_with(
             &native_field(&external, "validate_model_names")?,
@@ -194,8 +196,9 @@ pub(crate) fn build_model_inputs<'py>(
         imported(py, "pathlib", "Path")?.call0()?
     };
     let project_config_path: Bound<'py, PyAny> = root.div(PROJECT_CONFIG_FILENAME)?;
-    let config_inputs: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::NativeModelConfigInputs)?,
+    let config_inputs: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::NativeModelConfigInputs,
         &[
             (
                 "project_config",
@@ -225,15 +228,15 @@ pub(crate) fn build_model_inputs<'py>(
         vec![
             (
                 "report_diagnostic",
-                registry::native(py, NativeAttr::ReportCompileDiagnostic)?,
+                pyo3::wrap_pyfunction!(crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic, py)?.into_any(),
             ),
             (
                 "record_template_reads",
-                registry::native(py, NativeAttr::RecordTemplateReads)?,
+                pyo3::wrap_pyfunction!(crate::bindings::_helpers::model_config::template_data::record_template_reads, py)?.into_any(),
             ),
             (
                 "visible_declarations",
-                registry::class(py, RecordId::VisibleModelDeclarations)?,
+                record_class(py, RecordId::VisibleModelDeclarations)?,
             ),
             ("config_session", session),
             ("syntax_help", opt_out_help(py, true)?),
@@ -261,20 +264,26 @@ pub(crate) fn build_model_inputs<'py>(
     )?;
     let syntax: Bound<'py, PyAny> = native_field(context, "sql_lexical_syntax")?;
     let native_loop: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::NativeModelLoop)?.call1((
-            (validator, contract_classes(py)?.into_any(), classes),
-            native_field(&syntax, "native_mapping")?,
+        crate::bindings::_helpers::compiled_project::model_loop::NativeModelLoop::new(
+            (
+                validator.unbind(),
+                contract_classes(py)?.unbind(),
+                classes.unbind(),
+            ),
+            native_field(&syntax, "native_mapping")?.extract()?,
             reserved_cursor_markers(),
             (
                 (
-                    native_field(&settings, "sql_analysis")?,
+                    native_field(&settings, "sql_analysis")?.extract()?,
                     no_sql_validation,
                     defer_model_sql_validation,
-                    native_field(&settings, "require_sql_analysis")?,
+                    native_field(&settings, "require_sql_analysis")?.extract()?,
                 ),
-                project_config_path.str()?,
+                project_config_path.str()?.extract()?,
             ),
-        ))?;
+        )
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?;
     let files: Vec<Py<NativeModelFile>> = discovered_inputs
         .getattr("model_files")?
         .try_iter()?

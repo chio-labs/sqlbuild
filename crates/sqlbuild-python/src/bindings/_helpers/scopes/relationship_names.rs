@@ -13,6 +13,8 @@ use sqlbuild_scopes::relationship_names::models::{
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::new_record;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
@@ -86,8 +88,7 @@ fn extract_sql_test_ctes<'py>(
     file_label: &str,
     syntax: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let syntax: LexicalSyntax = syntax
-        .getattr("native_mapping")?
+    let syntax: LexicalSyntax = native_field(syntax, "native_mapping")?
         .extract::<LexicalSyntaxInput>()?
         .into();
     let outcome: TopLevelCtes = py
@@ -108,13 +109,17 @@ fn extract_sql_test_ctes<'py>(
             return Err(PyErr::from_value(error));
         }
     };
-    let cte_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompileSqlTestCte)?;
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(ctes.len());
     for (name, body) in ctes {
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
         arguments.set_item("name", name)?;
         arguments.set_item("sql_body", body)?;
-        built.push(cte_class.call((), Some(&arguments))?);
+        built.push(new_record(
+            py,
+            RecordId::CompileSqlTestCte,
+            (),
+            Some(&arguments),
+        )?);
     }
     PyTuple::new(py, built)
 }

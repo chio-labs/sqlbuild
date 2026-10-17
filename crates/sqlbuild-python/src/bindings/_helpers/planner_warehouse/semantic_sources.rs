@@ -77,8 +77,7 @@ fn source_candidates<'py>(
         let mut names: BTreeSet<_> = BTreeSet::new();
         for entry in &scoped {
             schemas.insert(
-                entry
-                    .getattr("schema")?
+                native_field(entry, "schema")?
                     .extract::<Option<String>>()?
                     .unwrap_or_default(),
             );
@@ -182,10 +181,7 @@ pub(crate) fn semantic_source_columns<'py>(
     let selected_keys = &args.value("selected_keys")?;
 
     let py = project.py();
-    if !project
-        .getattr("settings")?
-        .getattr("sql_analysis")?
-        .is_truthy()?
+    if !native_field(&native_field(project, "settings")?, "sql_analysis")?.is_truthy()?
         || connection.is_none()
     {
         return Ok(columns.clone());
@@ -193,9 +189,7 @@ pub(crate) fn semantic_source_columns<'py>(
     let mut required: BTreeSet<String> = BTreeSet::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
-        let analysis = model
-            .getattr("config")?
-            .getattr("values")?
+        let analysis = native_field(&native_field(&model, "config")?, "values")?
             .call_method1("get", ("sql_analysis",))?;
         if !selected_keys.contains(model_reads::model_key(&model)?)?
             || analysis.is(pyo3::types::PyBool::new(py, false))

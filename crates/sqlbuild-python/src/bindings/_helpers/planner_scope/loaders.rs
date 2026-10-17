@@ -6,9 +6,9 @@ use crate::bindings::_helpers::graph::views::edge_dict;
 use crate::bindings::_helpers::planner_scope::values::{
     dependency_names, edges, keys, loader_graph, loader_names, project_graph,
 };
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::planner_scope::main::{
@@ -54,7 +54,7 @@ pub(crate) fn loader_to_source_entry<'py>(
     kwargs.set_item("name", &name)?;
     kwargs.set_item("loader", &name)?;
     for field in ["database", "schema", "table"] {
-        kwargs.set_item(field, parts.getattr(field)?)?;
+        kwargs.set_item(field, native_field(&parts, field)?)?;
     }
     for field in [
         "write_strategy",
@@ -63,12 +63,12 @@ pub(crate) fn loader_to_source_entry<'py>(
         "contract",
         "columns",
     ] {
-        kwargs.set_item(field, loader.getattr(field)?)?;
+        kwargs.set_item(field, native_field(loader, field)?)?;
     }
     let meta = PyDict::new(py);
     meta.set_item("sqlbuild_loader_node", true)?;
     kwargs.set_item("meta", meta)?;
-    registry::class(py, RecordId::SourceEntry)?.call((), Some(&kwargs))
+    new_record(py, RecordId::SourceEntry, (), Some(&kwargs))
 }
 
 pub(crate) fn intermediate_map<'py>(

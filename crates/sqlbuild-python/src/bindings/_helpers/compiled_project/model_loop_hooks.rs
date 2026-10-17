@@ -36,6 +36,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_named::{
     SQL_HOOK_DECLARATION, named_usages,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_visibility::ModelVisibility;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
     expand_declarations,
@@ -229,7 +230,7 @@ impl<'py> HookRun<'_, '_, 'py> {
     ) -> PyResult<Bound<'py, PyAny>> {
         let start: usize = self.references.borrow().len();
         let statement: String = self
-            .value(&entry.getattr(STATEMENT_ATTRIBUTE)?, scope, position)?
+            .value(&native_field(entry, STATEMENT_ATTRIBUTE)?, scope, position)?
             .str()?
             .to_str()?
             .to_owned();
@@ -243,7 +244,7 @@ impl<'py> HookRun<'_, '_, 'py> {
             KWARGS_ATTRIBUTE,
             DESCRIPTION_ATTRIBUTE,
         ] {
-            fields.set_item(field, entry.getattr(field)?)?;
+            fields.set_item(field, native_field(entry, field)?)?;
         }
         fields.set_item(READS_ATTRIBUTE, self.reads_since(start)?)?;
         self.context.classes.sql_hook_entry.call((), Some(&fields))
@@ -256,7 +257,7 @@ impl<'py> HookRun<'_, '_, 'py> {
         position: HookPosition<'_>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let py: Python<'py> = entry.py();
-        let name: String = entry.getattr(NAME_ATTRIBUTE)?.extract()?;
+        let name: String = native_field(entry, NAME_ATTRIBUTE)?.extract()?;
         let label: String = named_label(&name, position);
         let Some(definition) = self.classes().definitions.get_item(&name)? else {
             let mut known: Vec<String> = self
@@ -285,9 +286,10 @@ impl<'py> HookRun<'_, '_, 'py> {
             &scope.consumer,
             (self.model.name, self.model.relative_path),
         )?);
-        let kwargs: Bound<'py, PyDict> = entry.getattr(KWARGS_ATTRIBUTE)?.downcast_into()?;
-        let body: String = definition.getattr(SQL_BODY_ATTRIBUTE)?.extract()?;
-        let definition_path: Bound<'py, PyAny> = definition.getattr(RELATIVE_PATH_ATTRIBUTE)?;
+        let kwargs: Bound<'py, PyDict> = native_field(entry, KWARGS_ATTRIBUTE)?.downcast_into()?;
+        let body: String = native_field(&definition, SQL_BODY_ATTRIBUTE)?.extract()?;
+        let definition_path: Bound<'py, PyAny> =
+            native_field(&definition, RELATIVE_PATH_ATTRIBUTE)?;
         let owner: String = format!("{} {label}", scope.file_path);
         let definition_label: String =
             format!("SQL hook '{name}' in {}", definition_path.str()?.to_str()?);
@@ -308,8 +310,7 @@ impl<'py> HookRun<'_, '_, 'py> {
                 compile_error(self.context.classes, &message, None)
             })?;
         let start: usize = self.references.borrow().len();
-        let hook_path: String = definition
-            .getattr(FILE_PATH_ATTRIBUTE)?
+        let hook_path: String = native_field(&definition, FILE_PATH_ATTRIBUTE)?
             .str()?
             .to_str()?
             .to_owned();
@@ -330,7 +331,7 @@ impl<'py> HookRun<'_, '_, 'py> {
         fields.set_item(KWARGS_ATTRIBUTE, kwargs.copy()?)?;
         fields.set_item(
             DESCRIPTION_ATTRIBUTE,
-            definition.getattr(DESCRIPTION_ATTRIBUTE)?,
+            native_field(&definition, DESCRIPTION_ATTRIBUTE)?,
         )?;
         fields.set_item(READS_ATTRIBUTE, self.reads_since(start)?)?;
         self.context.classes.sql_hook_entry.call((), Some(&fields))
@@ -396,7 +397,10 @@ impl<'py> HookRun<'_, '_, 'py> {
         } else {
             let fields: Bound<'py, PyDict> = PyDict::new(py);
             for field in UNSCOPED_FIELDS {
-                fields.set_item(field, self.model.visible.declarations.getattr(field)?)?;
+                fields.set_item(
+                    field,
+                    native_field(&self.model.visible.declarations, field)?,
+                )?;
             }
             self.context
                 .classes
@@ -558,7 +562,7 @@ fn reject_hook_intrinsics(
             if !entry.is_instance(&context.classes.sql_hook_entry)? {
                 continue;
             }
-            let statement: String = entry.getattr(STATEMENT_ATTRIBUTE)?.extract()?;
+            let statement: String = native_field(&entry, STATEMENT_ATTRIBUTE)?.extract()?;
             if let IntrinsicCheck::Rejected(message) =
                 intrinsic_free(&statement, &model_loop.reserved_markers, &hook_context)
             {

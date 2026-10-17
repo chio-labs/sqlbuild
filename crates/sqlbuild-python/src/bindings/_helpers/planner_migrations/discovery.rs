@@ -46,9 +46,7 @@ pub(super) fn discover_model_migrations<'py>(
     let metadata = discovery_models::metadata(&runtime, &models)?;
     let inputs = FingerprintInputs {
         metadata_jsons: metadata.into_any(),
-        dialect: runtime
-            .getattr("adapter")?
-            .call_method0("sql_analysis_dialect")?,
+        dialect: native_field(&runtime, "adapter")?.call_method0("sql_analysis_dialect")?,
         fingerprints: cache,
     };
     call_with(

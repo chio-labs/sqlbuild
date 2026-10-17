@@ -48,7 +48,7 @@ fn references<'py>(owner: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>
 
 /// Whether a model's `incremental_mode` is microbatch.
 fn microbatch_flag(model: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(&native_field(model, "config")?, "values")?;
     Ok(match config_str(&values, "incremental_mode")? {
         Some(mode) => mode.eq(MICROBATCH_MODE)?,
         None => false,
@@ -57,8 +57,7 @@ fn microbatch_flag(model: &Bound<'_, PyAny>) -> PyResult<bool> {
 
 /// A model's watermark input names.
 fn watermark_names(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    resolve_cursor_input_roles(model)?
-        .getattr("watermark_inputs")?
+    native_field(&resolve_cursor_input_roles(model)?, "watermark_inputs")?
         .try_iter()?
         .map(|name| text(&name?))
         .collect()
@@ -85,7 +84,8 @@ impl<'py> ReferenceGraph for ProjectLineage<'py> {
 
     fn producer_facts(&self, name: &str) -> PyResult<ProducerFacts> {
         let producer: Bound<'py, PyAny> = self.models_by_name.get_item(name)?;
-        let values: Bound<'py, PyAny> = native_field(&producer, "config")?.getattr("values")?;
+        let values: Bound<'py, PyAny> =
+            native_field(&native_field(&producer, "config")?, "values")?;
         let capped: bool = match microbatch_limit_config(&values)?.1 {
             Some(action) => CAP_ACTIONS.contains(&text(&action)?.as_str()),
             None => false,

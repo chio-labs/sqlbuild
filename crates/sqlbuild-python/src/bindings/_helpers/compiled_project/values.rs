@@ -8,6 +8,7 @@ use pyo3::types::{
 use serde_json::{Map, Number, Value};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DATACLASS_FIELDS: &str = "__dataclass_fields__";
 const INSTANCE_DICT: &str = "__dict__";
@@ -55,14 +56,14 @@ pub(crate) fn plain_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
 fn object_like_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
     let py = value.py();
     if value.is_instance(&py.import(ENUM_MODULE)?.getattr(ENUM_TYPE)?)? {
-        return plain_value(&value.getattr(ENUM_VALUE)?);
+        return plain_value(&native_field(value, ENUM_VALUE)?);
     }
     if value.hasattr(DATACLASS_FIELDS)? && !value.is_instance_of::<pyo3::types::PyType>() {
         return dataclass_value(value);
     }
     let datetime = py.import(DATETIME_MODULE)?;
-    if value.is_instance(&datetime.getattr(DATE_TYPE)?)?
-        || value.is_instance(&datetime.getattr(TIME_TYPE)?)?
+    if value.is_instance(&native_field(&datetime, DATE_TYPE)?)?
+        || value.is_instance(&native_field(&datetime, TIME_TYPE)?)?
     {
         return Ok(Value::String(
             value.call_method0(ISOFORMAT)?.str()?.to_str()?.to_owned(),
@@ -74,7 +75,7 @@ fn object_like_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
 /// A dataclass's public instance attributes, or its public fields when it has slots.
 fn dataclass_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
     let mut entries: Vec<(String, Value)> = Vec::new();
-    if let Ok(attributes) = value.getattr(INSTANCE_DICT) {
+    if let Ok(attributes) = native_field(value, INSTANCE_DICT) {
         for (key, item) in attributes.downcast::<PyDict>()?.iter() {
             let name: String = key.str()?.to_str()?.to_owned();
             if !name.starts_with(PRIVATE_PREFIX) {
@@ -82,10 +83,10 @@ fn dataclass_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
             }
         }
     } else {
-        for key in value.getattr(DATACLASS_FIELDS)?.try_iter()? {
+        for key in native_field(value, DATACLASS_FIELDS)?.try_iter()? {
             let name: String = key?.str()?.to_str()?.to_owned();
             if !name.starts_with(PRIVATE_PREFIX) {
-                let item = value.getattr(name.as_str())?;
+                let item = native_field(value, name.as_str())?;
                 entries.push((name, plain_value(&item)?));
             }
         }

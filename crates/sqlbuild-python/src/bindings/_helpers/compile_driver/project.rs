@@ -17,18 +17,20 @@ use crate::bindings::_helpers::compile_driver::targets::{
     project_targets,
 };
 use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, bridged, produced};
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 
 use crate::bindings::_helpers::compile_driver::assembly::assemble_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::selection_phases::resolve_analysis_model_names;
-use crate::bindings::_helpers::compile_driver::stage_work::{PROMOTION_CONFLICTS, count_stage};
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    PROJECT_GRAPHS, PROMOTION_CONFLICTS, count_stage,
+};
 use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::contracts::contract_diagnostics::promotion_conflict_diagnostics;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 use sqlbuild_core::constants::TABLE_PROMOTION_MODE_SETTING_KEY;
@@ -64,7 +66,7 @@ pub(crate) fn lineage_mode<'py>(arguments: &KeywordArguments<'py>) -> PyResult<B
     if arguments.passed("column_lineage_mode")? {
         return Ok(mode);
     }
-    registry::class(mode.py(), RecordId::ColumnLineageMode)?.getattr("FAST")
+    enum_member(mode.py(), RecordId::ColumnLineageMode, "FAST")
 }
 
 /// `value` as a Python `bool`.
@@ -254,8 +256,9 @@ fn frontier_compile_inputs<'py>(
         &py.None().into_bound(py),
     )
     .and_then(|value| value.into_bound_py_any(py))?;
-    let adapter_context: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompileAdapterContext)?,
+    let adapter_context: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompileAdapterContext,
         &[
             ("value_renderer", adapter.clone()),
             ("collection_rendering", collection_rendering),
@@ -321,6 +324,7 @@ pub(crate) fn build_project_graph<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    count_stage(py, PROJECT_GRAPHS, 1)?;
     let mut optional: Vec<&str> = GRAPH_OPTIONAL.to_vec();
     optional.push("no_cache");
     let arguments: KeywordArguments<'py> = KeywordArguments::read(
@@ -329,8 +333,9 @@ pub(crate) fn build_project_graph<'py>(
         options,
         (&["discovered_inputs", "adapter"], &optional),
     )?;
-    let selection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+    let selection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompileAnalysisSelection,
         &[("no_cache", py_bool(py, arguments.flag("no_cache")?))],
     )?;
     selected_graph(&arguments, selection)

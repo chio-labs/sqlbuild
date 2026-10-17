@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
@@ -10,8 +11,6 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
-
-const DATACLASSES_MODULE: &str = "dataclasses";
 
 /// `CompileInputError(message)`.
 fn compile_input_error(py: Python<'_>, message: String) -> PyErr {
@@ -22,7 +21,7 @@ fn compile_input_error(py: Python<'_>, message: String) -> PyErr {
 }
 
 fn text(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    Ok(owner.getattr(name)?.str()?.to_string())
+    Ok(native_field(owner, name)?.str()?.to_string())
 }
 
 /// Add each declaration of `files` to `index`, rejecting a name declared twice.
@@ -78,7 +77,6 @@ struct SchemaResolution<'py> {
     resolved: HashMap<String, Bound<'py, PyAny>>,
     /// Names in the order Python's `resolved` dict gains them.
     order: Vec<String>,
-    replace: Bound<'py, PyAny>,
 }
 
 impl<'py> SchemaResolution<'py> {
@@ -122,7 +120,7 @@ impl<'py> SchemaResolution<'py> {
         }
         let fields: Bound<'py, PyDict> = PyDict::new(self.py);
         fields.set_item("columns", PyTuple::new(self.py, columns)?)?;
-        let resolved: Bound<'py, PyAny> = self.replace.call((declaration,), Some(&fields))?;
+        let resolved: Bound<'py, PyAny> = replaced_keywords(&declaration, &fields)?;
         self.resolved.insert(name.to_owned(), resolved.clone());
         self.order.push(name.to_owned());
         Ok(resolved)
@@ -204,7 +202,6 @@ pub(crate) fn public_model_schema_index<'py>(
         by_name,
         resolved: HashMap::new(),
         order: Vec::new(),
-        replace: py.import(DATACLASSES_MODULE)?.getattr("replace")?,
     };
     let index: Bound<'py, PyDict> = PyDict::new(py);
     for name in &names {

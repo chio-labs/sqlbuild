@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::{pyclass, pymethods};
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
@@ -22,6 +22,7 @@ use sqlbuild_analysis::graph::models::{
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::views::lineage_graph_views;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// `(key, deps, tags, model folder)`.
 pub(crate) type ResourceRow = (ObjectKey, Vec<ObjectKey>, Vec<String>, Option<String>);
@@ -103,7 +104,7 @@ impl CompiledProjectGraph {
     }
 
     fn view(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
-        Ok(self.lineage_views(py)?.bind(py).getattr(name)?.unbind())
+        Ok(native_field(self.lineage_views(py)?.bind(py), name)?.unbind())
     }
 }
 

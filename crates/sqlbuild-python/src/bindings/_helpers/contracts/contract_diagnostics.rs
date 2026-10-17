@@ -8,12 +8,13 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_sqltext::compiler::main::model_output_columns::model_output_columns;
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::records::compiled_project_facts;
 use crate::bindings::_helpers::contracts::model_contracts::{
     ConflictRow, DiagnosticRow, evaluate_project_model_contracts, project_promotion_conflicts,
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::sqltext::model_headers::{ColumnLocation, location_rows};
 
 const PATHLIB_MODULE: &str = "pathlib";
@@ -36,7 +37,7 @@ fn keyword_call<'py>(
 
 /// The compile's retained native project, read through `_native.compiled_project_facts`.
 fn native_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    registry::native(project.py(), NativeAttr::CompiledProjectFacts)?.call1((project,))
+    Ok(compiled_project_facts(project)?.into_any())
 }
 
 /// Where the model's SQL produces `column_name`, recovered from the authored SQL when needed.
@@ -65,7 +66,7 @@ fn output_column_location<'py>(
     };
     let py: Python<'py> = model.py();
     let location: Bound<'py, PyAny> = keyword_call(
-        &registry::class(py, RecordId::SourceLocation)?,
+        &record_class(py, RecordId::SourceLocation)?,
         vec![
             ("path", native_field(model, "relative_path")?),
             ("line", line.into_pyobject(py)?.into_any()),
@@ -112,7 +113,7 @@ fn related_locations<'py>(
         return Ok(PyTuple::empty(py));
     };
     let related: Bound<'py, PyAny> = keyword_call(
-        &registry::class(py, RecordId::RelatedLocation)?,
+        &record_class(py, RecordId::RelatedLocation)?,
         vec![
             ("label", OUTPUT_LABEL.into_pyobject(py)?.into_any()),
             ("location", location),
@@ -130,7 +131,7 @@ fn contract_diagnostic<'py>(
     let (code, is_error, message, column_name, declared_index, output_column, related, help) = row;
     let severity: &str = if is_error { "error" } else { "warning" };
     keyword_call(
-        &registry::class(py, RecordId::CompilerDiagnostic)?,
+        &record_class(py, RecordId::CompilerDiagnostic)?,
         vec![
             ("phase", CONTRACT_PHASE.into_pyobject(py)?.into_any()),
             ("severity", severity.into_pyobject(py)?.into_any()),
@@ -154,7 +155,7 @@ fn contract_diagnostic<'py>(
 }
 
 fn model_resource_type(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    registry::class(py, RecordId::CompiledResourceType)?.call1((MODEL_RESOURCE,))
+    enum_from_value(py, RecordId::CompiledResourceType, MODEL_RESOURCE)
 }
 
 /// Every model's column contract diagnostics, in model order.
@@ -195,7 +196,7 @@ pub(crate) fn evaluate_model_contracts<'py>(
         }
     }
     keyword_call(
-        &registry::class(py, RecordId::ContractValidationResult)?,
+        &record_class(py, RecordId::ContractValidationResult)?,
         vec![("diagnostics", PyTuple::new(py, diagnostics)?.into_any())],
     )
 }
@@ -224,7 +225,7 @@ pub(crate) fn promotion_conflict_diagnostics<'py>(
         ),
         &native,
     )?;
-    let diagnostic_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompilerDiagnostic)?;
+    let diagnostic_type: Bound<'py, PyAny> = record_class(py, RecordId::CompilerDiagnostic)?;
     let path_type: Bound<'py, PyAny> = py.import(PATHLIB_MODULE)?.getattr("Path")?;
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::with_capacity(conflicts.len());
     for (name, relative_path, code, message, help) in conflicts {

@@ -27,7 +27,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
@@ -53,7 +55,7 @@ struct Recorders<'py> {
 /// Run one full compile, recording it for reuse; returns the exit code.
 #[pyfunction]
 #[pyo3(signature = (request, reuse_attempt=None))]
-fn run_compile_command<'py>(
+pub(crate) fn run_compile_command<'py>(
     py: Python<'py>,
     request: Bound<'py, PyAny>,
     reuse_attempt: Option<Bound<'py, PyAny>>,
@@ -64,12 +66,9 @@ fn run_compile_command<'py>(
     };
     let path_class: Bound<'py, PyAny> = imported(py, "pathlib", "Path")?;
     let effective_request: Bound<'py, PyAny> = if native_field(&request, "project_dir")?.is_none() {
-        imported(py, "dataclasses", "replace")?.call(
-            (request.clone(),),
-            Some(&keywords(
-                py,
-                &[("project_dir", path_class.call_method0("cwd")?)],
-            )?),
+        replaced(
+            &request.clone(),
+            &[("project_dir", path_class.call_method0("cwd")?)],
         )?
     } else {
         request.clone()
@@ -335,8 +334,9 @@ fn analysis_options<'py>(
     status: &Status<'py>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = request.py();
-    let selection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+    let selection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompileAnalysisSelection,
         &[
             ("select", native_field(request, "select")?),
             ("exclude", native_field(request, "exclude")?),
@@ -365,8 +365,7 @@ fn analysis_options<'py>(
 /// Whether a rule finding failed the compile.
 fn rules_failed(analysis: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = analysis.py();
-    let rule_phase: Bound<'_, PyAny> =
-        registry::class(py, RecordId::DiagnosticPhase)?.getattr("RULE")?;
+    let rule_phase: Bound<'_, PyAny> = enum_member(py, RecordId::DiagnosticPhase, "RULE")?;
     for diagnostic in native_field(analysis, "diagnostics")?.try_iter()? {
         let diagnostic: Bound<'_, PyAny> = diagnostic?;
         if native_field(&diagnostic, "is_error")?.is_truthy()?
@@ -399,7 +398,7 @@ fn timings_ms<'py>(
         ("rule_cache_hits", "rule_cache_hits"),
         ("rule_cache_misses", "rule_cache_misses"),
     ] {
-        timings.set_item(key, analysis.getattr(attribute)?)?;
+        timings.set_item(key, native_field(analysis, attribute)?)?;
     }
     timings.set_item("write_ms", write_ms)?;
     for (key, value) in timing_milliseconds(detailed_timings) {

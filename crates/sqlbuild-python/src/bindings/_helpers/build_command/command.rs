@@ -16,12 +16,11 @@ use crate::bindings::_helpers::build_command::planning::{
     write_compile_target, write_plan_text,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::diagnostics::trackers::BuildPhaseTimingTracker;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 fn run_with_providers(context: &BuildContext<'_>) -> PyResult<i32> {
     let py: Python<'_> = context.py();
@@ -89,9 +88,10 @@ fn run_within_limits(
 /// Run one `sqb build` request.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn run_build_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let tracker: Bound<'_, PyAny> =
-        registry::native(py, NativeAttr::BuildPhaseTimingTracker)?.call0()?;
+pub(crate) fn run_build_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
+    let tracker: Bound<'_, PyAny> = BuildPhaseTimingTracker::new(py, None)
+        .and_then(|value| pyo3::Bound::new(py, value))
+        .map(pyo3::Bound::into_any)?;
     let reporting: Bound<'_, PyAny> = call_with(
         &host::entry(py, ExecutorHost::ProcessResourceReporting)?,
         &[("enabled", native_field(request, "debug")?)],

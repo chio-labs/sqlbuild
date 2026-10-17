@@ -8,9 +8,9 @@ use crate::bindings::_helpers::analysis::explicit_references::{
     GateRow, HookRow, native_execution_gate_edges,
 };
 use crate::bindings::_helpers::graph::keys::KeyCache;
+use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const PATHLIB_MODULE: &str = "pathlib";
 /// The model config keys whose entries are hooks, in lifecycle order.
@@ -36,7 +36,7 @@ fn attached_audit_gate_edges<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let (gates, _): (Vec<GateRow>, Vec<HookRow>) = native_execution_gate_edges(project)?;
     let cache: KeyCache<'py> = KeyCache::new(py)?;
-    let edge_type: Bound<'py, PyAny> = registry::class(py, RecordId::AttachedAuditGateEdge)?;
+    let edge_type: Bound<'py, PyAny> = record_class(py, RecordId::AttachedAuditGateEdge)?;
     let mut edges: Vec<Bound<'py, PyAny>> = Vec::with_capacity(gates.len());
     for (audit_name, target, gated, read) in gates {
         edges.push(keyword_call(
@@ -61,8 +61,7 @@ fn hook_read_edges<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let (_, hooks): (Vec<GateRow>, Vec<HookRow>) = native_execution_gate_edges(project)?;
     let cache: KeyCache<'py> = KeyCache::new(py)?;
-    let edge_type: Bound<'py, PyAny> = registry::class(py, RecordId::HookReadEdge)?;
-    let hook_type: Bound<'py, PyAny> = registry::class(py, RecordId::HookReadType)?;
+    let edge_type: Bound<'py, PyAny> = record_class(py, RecordId::HookReadEdge)?;
     let path_type: Bound<'py, PyAny> = py.import(PATHLIB_MODULE)?.getattr("Path")?;
     let mut edges: Vec<Bound<'py, PyAny>> = Vec::with_capacity(hooks.len());
     for (hook_name, gated, read, kind, path) in hooks {
@@ -76,7 +75,10 @@ fn hook_read_edges<'py>(
                 ("hook_name", PyString::new(py, &hook_name).into_any()),
                 ("gated", cache.key(&gated)?),
                 ("read", cache.key(&read)?),
-                ("hook_type", hook_type.call1((kind,))?),
+                (
+                    "hook_type",
+                    enum_from_value(py, RecordId::HookReadType, kind)?,
+                ),
                 ("hook_path", hook_path),
             ],
         )?);
@@ -87,11 +89,11 @@ fn hook_read_edges<'py>(
 /// The Python hooks attached to one model, in lifecycle order without repeats.
 #[pyfunction]
 #[pyo3(signature = (*, model))]
-fn model_python_hook_names<'py>(
+pub(crate) fn model_python_hook_names<'py>(
     py: Python<'py>,
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let entry_type: Bound<'_, PyAny> = registry::class(py, RecordId::PythonHookEntry)?;
+    let entry_type: Bound<'_, PyAny> = record_class(py, RecordId::PythonHookEntry)?;
     let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
     let mut names: Vec<String> = Vec::new();
     for hook_key in MODEL_HOOK_KEYS {
@@ -122,10 +124,13 @@ pub(crate) fn sql_ref_key<'py>(
     py: Python<'py>,
     reference: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let resource_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledResourceType)?
-        .call1((native_field(reference, "kind")?.getattr("value")?,))?;
+    let resource_type: Bound<'py, PyAny> = enum_from_value(
+        py,
+        RecordId::CompiledResourceType,
+        native_field(reference, "kind")?.getattr("value")?,
+    )?;
     keyword_call(
-        &registry::class(py, RecordId::CompiledObjectKey)?,
+        &record_class(py, RecordId::CompiledObjectKey)?,
         &[
             ("resource_type", resource_type),
             ("name", native_field(reference, "name")?),

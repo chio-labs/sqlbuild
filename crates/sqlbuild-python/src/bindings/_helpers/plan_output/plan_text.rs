@@ -27,9 +27,9 @@ use crate::bindings::_helpers::plan_output::python_identity::{
     definition_source_text, dependency_source_text,
 };
 use crate::bindings::_helpers::plan_output::values::{items, optional_text, text, texts};
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const SKIP_ACTION: &str = "skip";
 const QUERY_CHANGED: &str = "query_changed";
@@ -169,8 +169,8 @@ fn config_diff(entry: &Bound<'_, PyAny>, reason: &str) -> PyResult<Option<Vec<St
 }
 
 fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
-    let action: String = text(&native_field(entry, "action")?.getattr("value")?)?;
-    let reason: String = text(&native_field(entry, "reason")?.getattr("value")?)?;
+    let action: String = text(&native_field(&native_field(entry, "action")?, "value")?)?;
+    let reason: String = text(&native_field(&native_field(entry, "reason")?, "value")?)?;
     let name: String = text(&native_field(entry, "name")?)?;
     if action == SKIP_ACTION {
         return Ok(ModelPlanText {
@@ -184,7 +184,7 @@ fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
     let mut schema_findings: Vec<SchemaFindingText> = Vec::new();
     for finding in items(&native_field(entry, "schema_findings")?)? {
         schema_findings.push(SchemaFindingText {
-            kind: text(&native_field(&finding, "kind")?.getattr("value")?)?,
+            kind: text(&native_field(&native_field(&finding, "kind")?, "value")?)?,
             column_name: text(&native_field(&finding, "column_name")?)?,
             expected_type: optional_text(&native_field(&finding, "expected_type")?)?,
             actual_type: optional_text(&native_field(&finding, "actual_type")?)?,
@@ -214,7 +214,7 @@ fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
             entry,
             "custom_materialization_name",
         )?)?,
-        backfill_action: text(&native_field(&backfill, "action")?.getattr("value")?)?,
+        backfill_action: text(&native_field(&native_field(&backfill, "action")?, "value")?)?,
         backfill_duration: optional_text(&native_field(&backfill, "duration")?)?,
         cursor: cursor_details(entry)?
             .map(|details| cursor_text(entry, details))
@@ -231,7 +231,7 @@ fn model_text(entry: &Bound<'_, PyAny>) -> PyResult<ModelPlanText> {
 }
 
 fn function_text(entry: &Bound<'_, PyAny>) -> PyResult<FunctionPlanText> {
-    let reason: String = text(&native_field(entry, "reason")?.getattr("value")?)?;
+    let reason: String = text(&native_field(&native_field(entry, "reason")?, "value")?)?;
     let previous: Bound<'_, PyAny> = native_field(entry, "previous_query_sql")?;
     let query_diff_lines: Option<Vec<String>> = if reason == QUERY_CHANGED && !previous.is_none() {
         Some(query_diff(
@@ -248,7 +248,7 @@ fn function_text(entry: &Bound<'_, PyAny>) -> PyResult<FunctionPlanText> {
         } else {
             format!(
                 "{} udf",
-                text(&native_field(entry, "language")?.getattr("value")?)?
+                text(&native_field(&native_field(entry, "language")?, "value")?)?
             )
         },
         reason,
@@ -260,7 +260,10 @@ fn source_load_text(entry: &Bound<'_, PyAny>) -> PyResult<SourceLoadPlanText> {
     let strategy: Bound<'_, PyAny> = native_field(entry, "write_strategy")?;
     Ok(SourceLoadPlanText {
         name: text(&native_field(entry, "name")?)?,
-        resource_kind: text(&native_field(entry, "resource_kind")?.getattr("value")?)?,
+        resource_kind: text(&native_field(
+            &native_field(entry, "resource_kind")?,
+            "value",
+        )?)?,
         is_reload: native_field(entry, "is_reload")?.is_truthy()?,
         integration_kind: optional_text(&native_field(entry, "integration_kind")?)?,
         write_strategy: if strategy.is_none() {
@@ -275,7 +278,10 @@ fn source_load_text(entry: &Bound<'_, PyAny>) -> PyResult<SourceLoadPlanText> {
 
 /// Both identity diffs of a changed Python entry, each as `format_query_diff` lines.
 fn python_text(entry: &Bound<'_, PyAny>) -> PyResult<PythonPlanText> {
-    let identity_status: String = text(&native_field(entry, "identity_status")?.getattr("value")?)?;
+    let identity_status: String = text(&native_field(
+        &native_field(entry, "identity_status")?,
+        "value",
+    )?)?;
     let mut diffs: [Vec<String>; 2] = [Vec::new(), Vec::new()];
     if identity_status == CHANGED_IDENTITY {
         let sources = [
@@ -303,8 +309,8 @@ fn python_text(entry: &Bound<'_, PyAny>) -> PyResult<PythonPlanText> {
     let [source_diff, dependency_diff] = diffs;
     Ok(PythonPlanText {
         name: text(&native_field(entry, "name")?)?,
-        kind: text(&native_field(entry, "kind")?.getattr("value")?)?,
-        phase: text(&native_field(entry, "phase")?.getattr("value")?)?,
+        kind: text(&native_field(&native_field(entry, "kind")?, "value")?)?,
+        phase: text(&native_field(&native_field(entry, "phase")?, "value")?)?,
         identity_status,
         source_diff,
         dependency_diff,
@@ -327,7 +333,7 @@ fn provider_usages(
     }
     for entry in python_entries {
         let (kind, name) = (
-            text(&native_field(entry, "kind")?.getattr("value")?)?,
+            text(&native_field(&native_field(entry, "kind")?, "value")?)?,
             text(&native_field(entry, "name")?)?,
         );
         for usage in items(&native_field(entry, "provider_usages")?)? {
@@ -416,7 +422,7 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
     let display_options: Bound<'_, PyAny> = {
         let given: Bound<'_, PyAny> = arguments.value("display_options")?;
         if given.is_none() {
-            registry::class(py, RecordId::DisplayOptions)?.call0()?
+            new_record(py, RecordId::DisplayOptions, (), None)?
         } else {
             given
         }
@@ -437,7 +443,10 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
     let mut warnings: Vec<PlanWarningText> = Vec::new();
     for warning in items(&native_field(&plan, "warnings")?)? {
         warnings.push(PlanWarningText {
-            severity: text(&native_field(&warning, "severity")?.getattr("value")?)?,
+            severity: text(&native_field(
+                &native_field(&warning, "severity")?,
+                "value",
+            )?)?,
             message: text(&native_field(&warning, "message")?)?,
             model_name: optional_text(&native_field(&warning, "model_name")?)?,
         });
@@ -488,7 +497,7 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
 /// The text plan grouped by reason with inline detail, optionally closed by its completion line.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn format_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "format_plan", options, PLAN_OPTIONS)?;
     let report: PlanTextReport = report(&arguments)?;

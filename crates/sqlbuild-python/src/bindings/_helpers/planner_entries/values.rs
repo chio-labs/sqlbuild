@@ -1,7 +1,9 @@
 //! Python boundary values shared by plan entry and plan output assembly.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
+use crate::bindings::_helpers::records::fields::replaced_keywords;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -10,13 +12,13 @@ use pyo3::types::PyString;
 pub(super) const MICROBATCH_CONCURRENCY_MESSAGE: &str =
     "batch_concurrency > 1 requires concurrent microbatches; selected model(s): ";
 
-/// `sqlbuild._native.name(**pairs)`.
+/// The native record `name(**pairs)`.
 pub(super) fn native<'py>(
     py: Python<'py>,
-    name: impl Into<NativeItem>,
+    name: RecordId,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::item(py, name)?, pairs)
+    new_record_with(py, name, pairs)
 }
 
 /// The planner record `name(**pairs)`.
@@ -25,7 +27,7 @@ pub(super) fn planner_model<'py>(
     name: RecordId,
     pairs: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::class(py, name)?, pairs)
+    new_record_with(py, name, pairs)
 }
 
 /// One member of a planner enumeration.
@@ -34,7 +36,7 @@ pub(super) fn planner_type<'py>(
     class: RecordId,
     member: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    registry::member(py, class, member)
+    enum_member(py, class, member)
 }
 
 /// A Python string.
@@ -57,8 +59,7 @@ pub(super) fn replaced<'py>(
     object: &Bound<'py, PyAny>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(object.py(), "dataclasses", "replace")?
-        .call((object,), Some(&keywords(object.py(), fields)?))
+    replaced_keywords(object, &keywords(object.py(), fields)?)
 }
 
 /// `class(message, **fields)` from `module`, as a raised error.

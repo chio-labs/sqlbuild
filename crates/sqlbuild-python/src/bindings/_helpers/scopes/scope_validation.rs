@@ -14,7 +14,9 @@ use sqlbuild_scopes::placement::models::{
 use sqlbuild_scopes::scope_index::models::ResourceIdentity;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::compile_usages::{
@@ -27,7 +29,6 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 };
 use crate::bindings::types::CompilerDetach;
 
-const DATACLASSES_MODULE: &str = "dataclasses";
 const RUNTIME_USAGE: usize = 2;
 /// Compile input groups whose items carry declaration usages, after the model inputs.
 const COMPILE_USAGE_GROUPS: [&str; 5] = [
@@ -48,9 +49,7 @@ pub(crate) fn replace<'py>(
     for (name, value) in changes {
         keywords.set_item(*name, value)?;
     }
-    py.import(DATACLASSES_MODULE)?
-        .getattr("replace")?
-        .call((item,), Some(&keywords))
+    replaced_keywords(item, &keywords)
 }
 
 fn tuple_from<'py>(py: Python<'py>, items: Vec<Bound<'py, PyAny>>) -> PyResult<Bound<'py, PyAny>> {
@@ -75,8 +74,7 @@ fn dependency_row(
     let dependencies: Option<Vec<QualifiedRow>> = match optional_item(record, "macro")? {
         None => None,
         Some(metadata) => Some(
-            metadata
-                .getattr("dependencies")?
+            native_field(&metadata, "dependencies")?
                 .try_iter()?
                 .map(|item| qualified_row(&item?))
                 .collect::<PyResult<_>>()?,
@@ -349,9 +347,10 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
     } else {
         native_field(&scope, "resolver")?
     };
-    let schema_files: Bound<'py, PyAny> = inputs
-        .getattr("discovered_inputs")?
-        .getattr("model_schema_files")?;
+    let schema_files: Bound<'py, PyAny> = native_field(
+        &native_field(inputs, "discovered_inputs")?,
+        "model_schema_files",
+    )?;
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
     usages.extend(usage_records(
         model_schema_scope_usages(&schema_files, &resolver)?.as_any(),
@@ -362,15 +361,15 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
         usages.extend(usage_records(&native_field(&model, "declaration_usages")?)?);
     }
     for group in COMPILE_USAGE_GROUPS {
-        for item in inputs.getattr(group)?.try_iter()? {
+        for item in native_field(inputs, group)?.try_iter()? {
             usages.extend(usage_records(&native_field(&item?, "declaration_usages")?)?);
         }
     }
-    let enforce_placement: bool = inputs
-        .getattr("project_config")?
-        .getattr("scopes")?
-        .getattr("enforce_placement")?
-        .extract()?;
+    let enforce_placement: bool = native_field(
+        &native_field(&native_field(inputs, "project_config")?, "scopes")?,
+        "enforce_placement",
+    )?
+    .extract()?;
     Ok(scope_placement_validated_index(
         &native_field(inputs, "scope_index")?,
         enforce_placement,
@@ -384,8 +383,7 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
 #[pyo3(signature = (*, index))]
 pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr> {
     let py: Python<'_> = index.py();
-    let error: Bound<'_, PyAny> =
-        registry::class(py, RecordId::ScopeDiagnosticSeverity)?.getattr("ERROR")?;
+    let error: Bound<'_, PyAny> = enum_member(py, RecordId::ScopeDiagnosticSeverity, "ERROR")?;
     let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
     for item in native_field(index, "diagnostics")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
@@ -398,7 +396,7 @@ pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr
     }
     let mut message: String = String::from("Invalid declaration scope index:");
     for item in &errors {
-        let code: String = native_field(item, "code")?.getattr("value")?.extract()?;
+        let code: String = native_field(&native_field(item, "code")?, "value")?.extract()?;
         let text: String = native_field(item, "message")?.extract()?;
         message.push_str(&format!("\n[{code}] {text}"));
     }

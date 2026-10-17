@@ -9,8 +9,8 @@ use crate::bindings::_helpers::contracts::project_config::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// `DiscoveredProjectInputs` with the loaded configuration, inside the project discovery lifecycle.
 pub(crate) fn discover_project_configuration<'py>(
@@ -28,8 +28,9 @@ pub(crate) fn discover_project_configuration<'py>(
         ],
     )?;
     within(&lifecycle, |_| {
-        call_with(
-            &registry::class(py, RecordId::DiscoveredProjectInputs)?,
+        new_record_with(
+            py,
+            RecordId::DiscoveredProjectInputs,
             &[
                 ("project_dir", project_dir.clone()),
                 (

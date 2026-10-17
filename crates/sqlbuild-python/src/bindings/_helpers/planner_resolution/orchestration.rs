@@ -4,9 +4,7 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::resolve_cursor_intrinsics;
 use crate::bindings::_helpers::attachments::reference_markers::assert_no_unresolved_sql_markers;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
@@ -18,7 +16,9 @@ use crate::bindings::_helpers::planner_resolution::refs::{
     resolve_udf_references,
 };
 use crate::bindings::_helpers::planner_resolution::sources::resolve_sources;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -106,13 +106,13 @@ impl<'py> Resolution<'py> {
 
     fn hook(&self, value: Bound<'py, PyAny>, label: &str) -> PyResult<Bound<'py, PyAny>> {
         let py = value.py();
-        if value.is_instance(&registry::class(py, RecordId::SqlHookEntry)?)? {
+        if value.is_instance(&record_class(py, RecordId::SqlHookEntry)?)? {
             let kwargs = PyDict::new(py);
             kwargs.set_item(
                 "statement",
                 self.unbounded(native_field(&value, "statement")?, label)?,
             )?;
-            return imported(py, "dataclasses", "replace")?.call((value,), Some(&kwargs));
+            return replaced_keywords(&value, &kwargs);
         }
         let is_list = value.is_instance_of::<PyList>();
         if is_list || value.is_instance_of::<PyTuple>() {
@@ -194,7 +194,7 @@ pub(crate) fn resolve_model_sql<'py>(
     let model = &request.model;
     let py = model.py();
     let cursor_type = authored_config_str(
-        &native_field(model, "config")?.getattr("values")?,
+        &native_field(&native_field(model, "config")?, "values")?,
         "cursor_type",
     )?
     .unwrap_or_else(|| py.None().into_bound(py));
@@ -231,13 +231,11 @@ pub(crate) fn resolve_model_sql<'py>(
 fn append_cursor_inclusive(model: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = model.py();
     let strategy = authored_config_str(
-        &native_field(model, "config")?.getattr("values")?,
+        &native_field(&native_field(model, "config")?, "values")?,
         "incremental_strategy",
     )?
     .unwrap_or_else(|| py.None().into_bound(py));
-    let raw = model
-        .getattr("config")?
-        .getattr("values")?
+    let raw = native_field(&native_field(model, "config")?, "values")?
         .call_method1("get", ("append_cursor_inclusive",))?;
     Ok(!strategy.eq("append")? || !raw.is_instance_of::<PyBool>() || raw.is_truthy()?)
 }
@@ -256,7 +254,8 @@ fn intrinsic_bounds<'py>(
             &[
                 (
                     "value",
-                    PyString::new(py, &sentinel_to_token(&bounds.getattr(field)?)?).into_any(),
+                    PyString::new(py, &sentinel_to_token(&native_field(bounds, field)?)?)
+                        .into_any(),
                 ),
                 ("cursor_type", cursor_type.clone()),
             ],
@@ -341,7 +340,7 @@ pub(crate) fn model_hook_entries<'py>(
     model: &Bound<'py, PyAny>,
     resolution: &Resolution<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let values = native_field(model, "config")?.getattr("values")?;
+    let values = native_field(&native_field(model, "config")?, "values")?;
     let name: String = model_reads::model_name(model)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ["pre_hooks", "post_hooks"] {

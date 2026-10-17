@@ -116,7 +116,7 @@ fn subject(table: EventTable, event: &Bound<'_, PyAny>) -> PyResult<String> {
         EventTable::OldName => format!(
             "{} old name {}",
             text(native_field(event, "destination_model")?)?,
-            text(native_field(event, "old")?.getattr("name")?)?
+            text(native_field(&native_field(event, "old")?, "name")?)?
         ),
     })
 }
@@ -268,9 +268,7 @@ fn read_renames<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py
             Ok(RecordedRenameKey {
                 order: event_order(&event)?,
                 relation: event_relation(&native_field(&event, "relation")?)?,
-                records_event: event
-                    .getattr("decision")?
-                    .getattr("records_event")?
+                records_event: native_field(&native_field(&event, "decision")?, "records_event")?
                     .is_truthy()?,
             })
         })

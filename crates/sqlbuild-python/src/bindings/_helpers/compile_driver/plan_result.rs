@@ -10,19 +10,19 @@ use crate::bindings::_helpers::compile_driver::python_plan_entries::{
 };
 use crate::bindings::_helpers::planner_entries::execution_plan::build_execution_plan;
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const SINGLE_CONNECTION: i64 = 1;
 
@@ -80,8 +80,9 @@ pub(crate) fn pipeline_result<'py>(
             )?),
         )?;
     }
-    let selection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::PlannerSelection)?,
+    let selection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::PlannerSelection,
         &[
             ("select", select),
             ("exclude", exclude),
@@ -90,8 +91,9 @@ pub(crate) fn pipeline_result<'py>(
             ("sql_test_selection", sql_test_selection),
         ],
     )?;
-    let overrides: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::PlannerOverrides)?,
+    let overrides: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::PlannerOverrides,
         &option_fields(
             options,
             &[
@@ -110,12 +112,11 @@ pub(crate) fn pipeline_result<'py>(
         options,
         &["defer_sources_to", "source_deferral_enabled"],
     )?);
-    let deferral: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::DeferralInputs)?,
-        &deferral_fields,
-    )?;
-    let policies: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::PlannerPolicies)?,
+    let deferral: Bound<'py, PyAny> =
+        new_record_with(py, RecordId::DeferralInputs, &deferral_fields)?;
+    let policies: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::PlannerPolicies,
         &option_fields(
             options,
             &[
@@ -162,8 +163,9 @@ pub(crate) fn pipeline_result<'py>(
             ],
         )?),
     )?;
-    call_with(
-        &registry::class(py, RecordId::CompilePipelineResult)?,
+    new_record_with(
+        py,
+        RecordId::CompilePipelineResult,
         &[
             ("project", project.clone()),
             ("plan_output", native_field(&python_outputs, "plan_output")?),
@@ -187,7 +189,7 @@ fn option_fields<'a, 'py>(
 ) -> PyResult<Vec<(&'a str, Bound<'py, PyAny>)>> {
     names
         .iter()
-        .map(|name| Ok((*name, options.getattr(*name)?)))
+        .map(|name| Ok((*name, native_field(options, name)?)))
         .collect()
 }
 

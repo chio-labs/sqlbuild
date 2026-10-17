@@ -12,13 +12,14 @@ use sqlbuild_core::dbt_cli::errors::DbtCliError;
 use sqlbuild_core::dbt_cli::main::dbt_flag_value::dbt_flag_value;
 use sqlbuild_core::dbt_cli::models::DbtParsedFlags;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::dbt_interop::cli::resolve_dbt_config;
 use crate::bindings::_helpers::dbt_interop::cli::{raised, resolved_path};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const ARGUMENT_ERROR: ErrorId = ErrorId::DbtInteropArgument;
 const CONFIG_ERROR: ErrorId = ErrorId::DbtInteropConfig;
@@ -64,7 +65,7 @@ fn write_outputs(py: Python<'_>, outcome: &DbtExecutionOutcome) -> PyResult<()> 
             Stream::Stdout => "stdout",
             Stream::Stderr => "stderr",
         };
-        sys.getattr(name)?.call_method1("write", (text,))?;
+        native_field(&sys, name)?.call_method1("write", (text,))?;
     }
     Ok(())
 }
@@ -104,8 +105,9 @@ pub(crate) fn parsed_flags(
 }
 
 fn parsed_args_model<'py>(py: Python<'py>, flags: DbtParsedFlags) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(py, RecordId::DbtInteropParsedArgs)?,
+    new_record_with(
+        py,
+        RecordId::DbtInteropParsedArgs,
         &[
             ("select", PyTuple::new(py, flags.select)?.into_any()),
             ("exclude", PyTuple::new(py, flags.exclude)?.into_any()),
@@ -184,8 +186,9 @@ pub(crate) fn config_overrides<'py>(
     args: &[String],
 ) -> PyResult<Bound<'py, PyAny>> {
     let value = |name: &str| optional_text(py, dbt_flag_value(args, name));
-    call_with(
-        &registry::class(py, RecordId::DbtCliConfigOverrides)?,
+    new_record_with(
+        py,
+        RecordId::DbtCliConfigOverrides,
         &[
             ("project_dir", value("--project-dir")),
             ("profiles_dir", value("--profiles-dir")),
@@ -265,15 +268,18 @@ pub(crate) fn plan_options<'py>(
         .getattr("dbt")?;
     let local_config: Bound<'py, PyAny> =
         native_field(discovered_inputs, "local_config")?.getattr("dbt")?;
-    let resolved: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveDbtConfig)?,
-        &[
-            ("project_root", project_dir.clone()),
-            ("config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("overrides", config_overrides(py, args)?),
-            ("require_project_dir", flag(py, true)),
-        ],
+    let resolved: Bound<'py, PyAny> = resolve_dbt_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_root", project_dir.clone()),
+                ("config", project_config.clone()),
+                ("local_config", local_config.clone()),
+                ("overrides", config_overrides(py, args)?),
+                ("require_project_dir", flag(py, true)),
+            ],
+        )?),
     )?;
     let values: Bound<'py, PyDict> = vars_mapping(&project_config, &local_config, args)?;
     let vars: Bound<'py, PyAny> = if values.is_empty() {
@@ -284,8 +290,9 @@ pub(crate) fn plan_options<'py>(
             &[("obj", values.into_any()), ("sort_keys", flag(py, true))],
         )?
     };
-    call_with(
-        &registry::class(py, RecordId::DbtCliOptions)?,
+    new_record_with(
+        py,
+        RecordId::DbtCliOptions,
         &[
             ("project_dir", native_field(&resolved, "project_dir")?),
             ("profiles_dir", native_field(&resolved, "profiles_dir")?),

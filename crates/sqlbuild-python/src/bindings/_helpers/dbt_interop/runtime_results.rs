@@ -1,9 +1,9 @@
 //! Backfill streamed dbt results using Python's JSON and UTF-8 artifact contract.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
@@ -48,8 +48,9 @@ fn messages<'py>(raw: &Bound<'py, PyDict>) -> PyResult<Bound<'py, PyTuple>> {
     };
     PyTuple::new(
         py,
-        [call_with(
-            &registry::class(py, RecordId::DbtNodeMessage)?,
+        [new_record_with(
+            py,
+            RecordId::DbtNodeMessage,
             &[
                 ("level", PyString::new(py, "error").into_any()),
                 ("message", text),
@@ -128,8 +129,9 @@ pub(crate) fn append_missing<'py>(
         } else {
             py.None().into_bound(py)
         };
-        appended.push(call_with(
-            &registry::class(py, RecordId::DbtNodeExecutionResult)?,
+        appended.push(new_record_with(
+            py,
+            RecordId::DbtNodeExecutionResult,
             &[
                 ("unique_id", unique_id),
                 ("resource_type", PyString::new(py, resource_type).into_any()),

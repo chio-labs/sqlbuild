@@ -1,10 +1,9 @@
 //! Model description resolution for header-only tooling, without importing project Python.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyCFunction, PyDict, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::project_config::load_project_config_file;
 use crate::bindings::_helpers::discovery::declaration_records::discover_model_schema_files;
 use crate::bindings::_helpers::discovery::model_records::{
@@ -12,8 +11,8 @@ use crate::bindings::_helpers::discovery::model_records::{
 };
 use crate::bindings::_helpers::discovery::snapshot::in_snapshot;
 use crate::bindings::_helpers::model_config::described_models::externally_described_models as described_models;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_indexes::public_model_schema_index;
 
 /// Models and model schemas, skipping files that cannot be read.
@@ -31,13 +30,14 @@ pub(crate) fn discover_model_description_inputs<'py>(
         })?
         .into_any();
     in_snapshot(project_dir, || {
-        call_with(
-            &registry::class(py, RecordId::DiscoveredProjectInputs)?,
+        new_record_with(
+            py,
+            RecordId::DiscoveredProjectInputs,
             &[
                 ("project_config", project_config),
                 (
                     "local_config",
-                    registry::class(py, RecordId::LocalConfig)?.call0()?,
+                    new_record(py, RecordId::LocalConfig, (), None)?,
                 ),
                 (
                     "model_files",

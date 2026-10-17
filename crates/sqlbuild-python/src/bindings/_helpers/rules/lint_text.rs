@@ -22,10 +22,11 @@ use sqlbuild_rules::lint_text::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, enum_member, new_record_with,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     LintViolationRow, NATIVE_ENGINE, ViolationClasses,
 };
@@ -130,9 +131,11 @@ fn named_declaration_role_kind<'py>(
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let parts: Vec<String> = native_field(relative_path, "parts")?.extract()?;
     match role_kind(&parts) {
-        Some(kind) => Ok(Some(
-            registry::class(relative_path.py(), RecordId::DeclarationKind)?.call1((kind,))?,
-        )),
+        Some(kind) => Ok(Some(enum_from_value(
+            relative_path.py(),
+            RecordId::DeclarationKind,
+            kind,
+        )?)),
         None => Ok(None),
     }
 }
@@ -206,7 +209,7 @@ fn relative_parts(path: &std::path::Path, project_dir: &std::path::Path) -> Opti
 
 /// Format the SQL bodies of `files`; return changed texts by path and declined-body faults.
 #[pyfunction]
-fn format_lint_sql_bodies<'py>(
+pub(crate) fn format_lint_sql_bodies<'py>(
     py: Python<'py>,
     files: Vec<(Bound<'py, PyAny>, String)>,
     project_dir: PathBuf,
@@ -232,15 +235,12 @@ fn format_lint_sql_bodies<'py>(
     for (index, text) in result.formatted {
         formatted.set_item(&files[index].0, text)?;
     }
-    let violation: Bound<'py, PyAny> = registry::class(py, RecordId::LintViolation)?;
-    let fault: Bound<'py, PyAny> = registry::class(py, RecordId::LintSeverity)?.getattr("FAULT")?;
+    let fault: Bound<'py, PyAny> = enum_member(py, RecordId::LintSeverity, "FAULT")?;
     let faults: Vec<Bound<'py, PyAny>> = result
         .faults
         .into_iter()
         .map(|item| {
-            call_with(
-                &violation,
-                &[
+            new_record_with(py, RecordId::LintViolation, &[
                     ("file_path", files[item.file].0.clone()),
                     ("line", item.line.into_pyobject(py)?.into_any()),
                     ("column", 1_usize.into_pyobject(py)?.into_any()),

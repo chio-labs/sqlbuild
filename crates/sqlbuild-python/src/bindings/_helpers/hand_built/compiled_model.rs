@@ -1,10 +1,14 @@
 //! A `CompiledModel` for a model input built outside the native compile-input stage.
 
+use crate::bindings::_helpers::analysis::binding_locations::locate_model_binding_diagnostics;
+use crate::bindings::_helpers::analysis_session::outcome_objects::dynamic_contract_proof;
+use crate::bindings::_helpers::analysis_session::outcome_objects::session_outcome_analysis;
+use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use sqlbuild_analysis::semantic_validation::types::{DiagnosticRow, Expansion};
 
 type Object<'py> = Bound<'py, PyAny>;
 
@@ -25,8 +29,8 @@ pub(crate) fn compiled_model<'py>(
     let mut star_resolved: Object<'py> = false_object(py);
     let mut diagnostics: Object<'py> = PyTuple::empty(py).into_any();
     let mut validated: Object<'py> = false_object(py);
-    let mut proof: Object<'py> = registry::native(py, NativeAttr::DynamicContractProof)?
-        .call1((native_field(analysis, "standalone_proof")?,))?;
+    let mut proof: Object<'py> =
+        dynamic_contract_proof(&native_field(analysis, "standalone_proof")?)?;
     let session: Object<'py> = native_field(analysis, "session")?;
     if !session.is_none() {
         let (session, position): (Object<'py>, Object<'py>) = session.extract()?;
@@ -34,8 +38,7 @@ pub(crate) fn compiled_model<'py>(
         arguments.set_item("session", session)?;
         arguments.set_item("position", position)?;
         arguments.set_item("placeholders", &none)?;
-        let outcome: Object<'py> =
-            registry::native(py, NativeAttr::SessionOutcomeAnalysis)?.call((), Some(&arguments))?;
+        let outcome: Object<'py> = session_outcome_analysis(Some(&arguments))?;
         let result: Object<'py> = native_field(&outcome, "polyglot_analysis")?;
         if native_field(&result, "analysis_succeeded")?.is_truthy()? {
             inferred = native_field(&result, "columns")?;
@@ -66,15 +69,18 @@ pub(crate) fn compiled_model<'py>(
         inferred = native_field(&proof, "fixed_columns")?;
         has_star = true_object(py);
     }
-    let resource_type: Object<'py> = registry::class(py, RecordId::CompiledResourceType)?;
-    let key_class: Object<'py> = registry::class(py, RecordId::CompiledObjectKey)?;
+    let resource_type: Object<'py> = record_class(py, RecordId::CompiledResourceType)?;
+    let key_class: Object<'py> = record_class(py, RecordId::CompiledObjectKey)?;
     let mut dependency_keys: Vec<Object<'py>> = Vec::new();
     for dependency in deps.try_iter()? {
         let (kind, name): (Object<'py>, Object<'py>) = dependency?.extract()?;
         dependency_keys.push(call(
             &key_class,
             &[
-                ("resource_type", resource_type.call1((kind,))?),
+                (
+                    "resource_type",
+                    enum_from_value(py, RecordId::CompiledResourceType, kind)?,
+                ),
                 ("name", name),
             ],
         )?);
@@ -88,7 +94,7 @@ pub(crate) fn compiled_model<'py>(
         ],
     )?;
     call(
-        &registry::class(py, RecordId::CompiledModel)?,
+        &record_class(py, RecordId::CompiledModel)?,
         &[
             ("key", key),
             ("deps", PyTuple::new(py, dependency_keys)?.into_any()),
@@ -155,7 +161,7 @@ fn destination<'py>(config: &Object<'py>, model_name: &Object<'py>) -> PyResult<
     };
     let none: Object<'py> = py.None().into_bound(py);
     call(
-        &registry::class(py, RecordId::CompiledRelationLocation)?,
+        &record_class(py, RecordId::CompiledRelationLocation)?,
         &[
             (
                 "database",
@@ -179,8 +185,7 @@ fn fallback_columns<'py>(rows: &Object<'py>) -> PyResult<Object<'py>> {
     if rows.is_none() {
         return Ok(rows.clone());
     }
-    let column_class: Object<'py> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability: Object<'py> = registry::class(py, RecordId::InferredNullability)?;
+    let column_class: Object<'py> = record_class(py, RecordId::InferredColumn)?;
     let mut columns: Vec<Object<'py>> = Vec::new();
     for row in rows.try_iter()? {
         let (name, data_type, value): (Object<'py>, Object<'py>, Object<'py>) = row?.extract()?;
@@ -189,7 +194,10 @@ fn fallback_columns<'py>(rows: &Object<'py>) -> PyResult<Object<'py>> {
             &[
                 ("name", name),
                 ("type", data_type),
-                ("nullability", nullability.call1((value,))?),
+                (
+                    "nullability",
+                    enum_from_value(py, RecordId::InferredNullability, value)?,
+                ),
             ],
         )?);
     }
@@ -215,7 +223,7 @@ fn located<'py>(
             "code", "message", "line", "column", "start", "end", "severity",
         ]
         .into_iter()
-        .map(|name| item.getattr(name))
+        .map(|name| native_field(&item, name))
         .collect::<PyResult<_>>()?;
         rows.push(PyTuple::new(py, fields)?.into_any());
     }
@@ -240,7 +248,7 @@ fn located<'py>(
                 let fields: Vec<Object<'py>> =
                     ["source_start", "source_end", "output_start", "output_end"]
                         .into_iter()
-                        .map(|name| span.getattr(name))
+                        .map(|name| native_field(&span, name))
                         .collect::<PyResult<_>>()?;
                 rows.push(PyTuple::new(py, fields)?.into_any());
             }
@@ -255,13 +263,16 @@ fn located<'py>(
         )?
         .into_any()
     };
-    let located: Object<'py> = registry::native(py, NativeAttr::LocateModelBindingDiagnostics)?
-        .call1((PyList::new(py, rows)?, texts, expansion_row))?;
-    let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
-    let location_class: Object<'py> = registry::class(py, RecordId::SourceLocation)?;
-    let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
-    let model: Object<'py> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let located: Object<'py> = locate_model_binding_diagnostics(
+        PyList::new(py, rows)?.extract::<Vec<DiagnosticRow>>()?,
+        texts.extract::<(String, String, String)>()?,
+        expansion_row.extract::<Option<(String, Vec<Vec<Expansion>>)>>()?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    let diagnostic_class: Object<'py> = record_class(py, RecordId::CompilerDiagnostic)?;
+    let location_class: Object<'py> = record_class(py, RecordId::SourceLocation)?;
+    let phase: Object<'py> = enum_member(py, RecordId::DiagnosticPhase, "COMPILE")?;
+    let model: Object<'py> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let name: Object<'py> = native_field(&model_file, "file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();
     for row in located.try_iter()? {

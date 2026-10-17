@@ -5,10 +5,9 @@ use pyo3::pyfunction;
 use pyo3::types::PyBool;
 use sqlbuild_rules::lint_text::main::named_declaration_role_kind::named_declaration_role_kind;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const HOOKS_FOLDER: &str = "hooks";
 
@@ -28,18 +27,19 @@ pub(crate) fn lint_file_role<'py>(
                 .call_method1("is_relative_to", (project_dir,))?
                 .is_truthy()?
             {
-                return registry::class(py, RecordId::LintFileRole)?.call0();
+                return new_record(py, RecordId::LintFileRole, (), None);
             }
             file_path.call_method1("relative_to", (project_dir,))?
         }
     };
     let parts: Vec<String> = native_field(&relative, "parts")?.extract()?;
     let kind: Bound<'py, PyAny> = match named_declaration_role_kind(&parts) {
-        Some(kind) => registry::class(py, RecordId::DeclarationKind)?.call1((kind,))?,
+        Some(kind) => enum_from_value(py, RecordId::DeclarationKind, kind)?,
         None => py.None().into_bound(py),
     };
-    call_with(
-        &registry::class(py, RecordId::LintFileRole)?,
+    new_record_with(
+        py,
+        RecordId::LintFileRole,
         &[
             ("declaration_kind", kind),
             ("in_project", PyBool::new(py, true).to_owned().into_any()),

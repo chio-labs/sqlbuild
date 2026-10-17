@@ -15,15 +15,16 @@ use crate::bindings::_helpers::cost_telemetry::values::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const PENDING_MESSAGE: &str = "Snowflake query history is not complete yet.";
 
 /// One `QueryCostObservation` as a native query, in the run when its run ID matches.
 pub(crate) fn cost_query(observation: &Bound<'_, PyAny>, run_id: &str) -> PyResult<CostQuery> {
-    let text = |name: &str| -> PyResult<Option<String>> { observation.getattr(name)?.extract() };
+    let text =
+        |name: &str| -> PyResult<Option<String>> { native_field(observation, name)?.extract() };
     Ok(CostQuery {
         query_id: native_field(observation, "query_id")?.extract()?,
         warehouse: WarehouseKey {
@@ -64,8 +65,9 @@ fn resource_cost<'py>(
     resource: &ResourceAllocation,
 ) -> PyResult<Bound<'py, PyAny>> {
     let decimal = |value: &PyDecimal| python_decimal(py, value);
-    call_with(
-        &registry::class(py, RecordId::ResourceCost)?,
+    new_record_with(
+        py,
+        RecordId::ResourceCost,
         &[
             (
                 "resource_type",

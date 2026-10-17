@@ -117,7 +117,7 @@ fn texts(value: Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 /// The facts of one `DiffCommandRequest` that validation and the size guard read.
 pub(crate) fn request_facts(request: &Bound<'_, PyAny>) -> PyResult<DiffRequestFacts> {
     let py: Python<'_> = request.py();
-    let attribute = |name: &str| request.getattr(name);
+    let attribute = |name: &str| native_field(request, name);
     let present = |name: &str| -> PyResult<bool> { Ok(!attribute(name)?.is_none()) };
     let number = |name: &str| -> PyResult<Option<i64>> { attribute(name)?.extract() };
     let flag = |name: &str| -> PyResult<bool> { attribute(name)?.is_truthy() };

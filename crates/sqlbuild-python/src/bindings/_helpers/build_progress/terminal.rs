@@ -5,10 +5,9 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_progress::transient_lines::shared_coordinator;
+use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 const DEFAULT_TERMINAL_SIZE: (i64, i64) = (120, 24);
 const SPINNER_JOIN_SECONDS: f64 = 0.2;
@@ -50,8 +49,7 @@ pub(crate) fn tty_flag(stream: &Bound<'_, PyAny>) -> PyResult<bool> {
 
 /// The current native progress projector, if a projection is active.
 pub(crate) fn projector(py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
-    let projector: Bound<'_, PyAny> =
-        registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
+    let projector: Bound<'_, PyAny> = current_native_progress_projector(py)?;
     Ok((!projector.is_none()).then(|| projector.unbind()))
 }
 
@@ -111,7 +109,7 @@ fn stop_progress_spinners(py: Python<'_>) -> PyResult<()> {
         if native_field(&thread, "name")?.eq(SPINNER_THREAD_NAME)?
             && thread.hasattr(STOP_EVENT_ATTRIBUTE)?
         {
-            thread.getattr(STOP_EVENT_ATTRIBUTE)?.call_method0("set")?;
+            native_field(&thread, STOP_EVENT_ATTRIBUTE)?.call_method0("set")?;
             spinners.push(thread);
         }
     }

@@ -1,6 +1,7 @@
 //! Conversions between the planner's Python models and the native strategy rows.
 
 use crate::bindings::_helpers::planner_changes::results::native_enum;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
@@ -13,7 +14,6 @@ use sqlbuild_analysis::planner_strategy::models::{
     ChangeFacts, MaterializationType, PlanChangeKind, WarningRow, WarningSeverity,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -40,10 +40,7 @@ pub(crate) fn config_value<'py>(
     model: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    model
-        .getattr("config")?
-        .getattr("values")?
-        .call_method1("get", (key,))
+    native_field(&native_field(model, "config")?, "values")?.call_method1("get", (key,))
 }
 
 /// The materialization type of a model's `materialized` config.
@@ -107,21 +104,19 @@ pub(crate) fn finding_rows(findings: &Bound<'_, PyAny>) -> PyResult<Vec<SchemaFi
 
 /// The parts of a `ChangeDetectionResult` the strategy reads.
 pub(crate) fn change_facts(change: &Bound<'_, PyAny>) -> PyResult<ChangeFacts> {
-    let backfill: String = text(&native_field(change, "backfill")?.getattr("action")?)?;
+    let backfill: String = text(&native_field(&native_field(change, "backfill")?, "action")?)?;
     Ok(ChangeFacts {
         kind: change_kind(&text(&native_field(change, "change_kind")?)?),
         backfill_full: backfill == FULL_BACKFILL,
         backfill_forward_only: backfill == FORWARD_ONLY_BACKFILL,
         query_changed: native_field(change, "query_changed")?.is_truthy()?,
-        changed_functions: change
-            .getattr("changed_functions")?
+        changed_functions: native_field(change, "changed_functions")?
             .try_iter()?
             .map(|name| text(&name?))
             .collect::<PyResult<_>>()?,
         config_changed: native_field(change, "config_changed")?.is_truthy()?,
         schema_findings: finding_rows(&native_field(change, "schema_findings")?)?,
-        recorded_build_relation_missing: change
-            .getattr("recorded_build_relation_missing")?
+        recorded_build_relation_missing: native_field(change, "recorded_build_relation_missing")?
             .is_truthy()?,
     })
 }
@@ -137,8 +132,9 @@ pub(crate) fn plan_warning<'py>(
         WarningSeverity::Warning => "warning",
         WarningSeverity::Info => "info",
     };
-    call_with(
-        &registry::class(py, RecordId::PlanWarning)?,
+    new_record_with(
+        py,
+        RecordId::PlanWarning,
         &[
             ("model_name", model_name.clone()),
             (

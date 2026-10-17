@@ -8,16 +8,16 @@ use sqlbuild_cursor::algebra::main::parse_integer_text::parse_integer_text;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::conversion::algebra_error;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DECIMAL_MODULE: &str = "decimal";
 const INTEGER_AS_TIMESTAMP: &str = "an integer cursor cannot be used as a timestamp";
 const TIMESTAMP_AS_INTEGER: &str = "a timestamp cursor cannot be used as an integer";
 
 fn instance_of(value: &Bound<'_, PyAny>, class: RecordId) -> PyResult<bool> {
-    value.is_instance(&registry::class(value.py(), class)?)
+    value.is_instance(&record_class(value.py(), class)?)
 }
 
 /// A timestamp override as a `datetime`; dates start at midnight and text is ISO 8601.

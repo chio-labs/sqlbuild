@@ -10,15 +10,17 @@ use crate::bindings::_helpers::analysis::binding_catalog::{
 use crate::bindings::_helpers::analysis::model_reads::{
     declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
 };
+use crate::bindings::_helpers::analysis::normalization::normalize_analysis_sql;
+use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_expression_source_shapes;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{DeclaredRow, InferredRow};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
+use crate::bindings::_helpers::records::ids::RecordId;
 
-const DATACLASSES_MODULE: &str = "dataclasses";
 const UNKNOWN: &str = "UNKNOWN";
 const GENERIC_DIALECT: &str = "generic";
 /// Snapshot validity start column when the model names none.
@@ -77,9 +79,8 @@ pub(crate) fn published_shape<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
     let shape: Bound<'py, PyDict> = binding_shape(model, columns, inputs, profile)?;
-    let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
-    let snapshot: Bound<'py, PyAny> =
-        registry::class(py, RecordId::MaterializationType)?.getattr("SNAPSHOT")?;
+    let values: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?;
+    let snapshot: Bound<'py, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
     if values
         .call_method1("get", ("materialized",))?
         .eq(snapshot)?
@@ -111,11 +112,7 @@ fn binding_shape<'py>(
     let dialect: Bound<'py, PyAny> = native_field(profile, "sql_analysis_dialect")?;
     let sensitive: bool = !dialect.is_none()
         && CASE_SENSITIVE_BINDING_DIALECTS.contains(&dialect.extract::<String>()?.as_str());
-    if profile
-        .getattr("quoted_identifiers_ignore_case")?
-        .is_truthy()?
-        || !sensitive
-    {
+    if native_field(profile, "quoted_identifiers_ignore_case")?.is_truthy()? || !sensitive {
         return Ok(columns.clone());
     }
     let mut catalog: Bound<'py, PyAny> = native_field(profile, "binding_catalog")?;
@@ -138,13 +135,12 @@ fn binding_shape<'py>(
     request.set_item("stubs", PyDict::new(py))?;
     request.set_item("placeholders", PyDict::new(py))?;
     let sql: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::NormalizeAnalysisSql)?.call1((request,))?;
+        PyString::new(py, &normalize_analysis_sql(py, request.extract()?)?).into_any();
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("sql", sql)?;
     arguments.set_item("columns", columns)?;
     arguments.set_item("inputs", inputs)?;
-    Ok(catalog
-        .getattr("inferred_schema")?
+    Ok(native_field(&catalog, "inferred_schema")?
         .call((), Some(&arguments))?
         .downcast_into::<PyDict>()?)
 }
@@ -212,9 +208,7 @@ pub(crate) fn project_profile<'py>(
     };
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("binding_catalog", native_field(project, "binding_catalog")?)?;
-    py.import(DATACLASSES_MODULE)?
-        .getattr("replace")?
-        .call((profile,), Some(&arguments))
+    replaced_keywords(&profile, &arguments)
 }
 
 /// Closed shapes by relation name; absence means open, never an empty physical table.
@@ -231,7 +225,7 @@ pub(crate) fn project_shapes<'py>(
             native_field(&seed, "name")?,
             declared_columns(
                 py,
-                &native_field(&seed, "schema_entry")?.getattr("columns")?,
+                &native_field(&native_field(&seed, "schema_entry")?, "columns")?,
             )?,
         )?;
     }
@@ -251,8 +245,7 @@ pub(crate) fn project_shapes<'py>(
             shapes.set_item(format!("{TABLE_FUNCTION_PREFIX}{name}"), shape)?;
         }
     }
-    let enforced: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
+    let enforced: Bound<'py, PyAny> = enum_member(py, RecordId::ContractPolicy, "ENFORCED")?;
     let mut expression_names: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
     for source in native_field(project, "sources")?.try_iter()? {
@@ -275,8 +268,7 @@ pub(crate) fn project_shapes<'py>(
     arguments.set_item("expressions", PyTuple::new(py, expressions)?)?;
     arguments.set_item("profile", &profile)?;
     let source_shapes: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::InferNativeExpressionSourceShapes)?
-            .call((), Some(&arguments))?;
+        infer_native_expression_source_shapes(Some(&arguments))?.into_any();
     for (name, shape) in expression_names.iter().zip(source_shapes.try_iter()?) {
         let shape: Bound<'py, PyAny> = shape?;
         if !shape.is_none() {
@@ -295,8 +287,7 @@ fn model_shapes<'py>(
     shapes: &Bound<'py, PyDict>,
 ) -> PyResult<()> {
     let py: Python<'py> = project.py();
-    let mut pending: Vec<Bound<'py, PyAny>> = project
-        .getattr("models")?
+    let mut pending: Vec<Bound<'py, PyAny>> = native_field(project, "models")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     while !pending.is_empty() {
@@ -306,10 +297,9 @@ fn model_shapes<'py>(
             let inferred: Option<Vec<InferredRow>> = inferred_rows(model)?;
             let rows: Bound<'py, PyAny> = native_field(model, "reference_rows")?;
             let relations: Vec<String> = relation_row_names(&rows)?;
-            let contract: Bound<'py, PyAny> = model
-                .getattr("config")?
-                .getattr("values")?
-                .call_method1("get", ("contract",))?;
+            let contract: Bound<'py, PyAny> =
+                native_field(&native_field(model, "config")?, "values")?
+                    .call_method1("get", ("contract",))?;
             if contract.eq(enforced)?
                 && let Some(declared) = &declared
                 && !dynamic_columns_declared(model)?

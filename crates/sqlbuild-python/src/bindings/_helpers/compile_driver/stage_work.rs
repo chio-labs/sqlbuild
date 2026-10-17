@@ -20,6 +20,9 @@ pub(crate) const PIVOT_PROOFS: &str = "pivot_proofs";
 pub(crate) const SESSION_PIVOT_PROOFS: &str = "session_pivot_proofs";
 pub(crate) const DECLARATION_SCOPES: &str = "build_declaration_scope";
 pub(crate) const LINEAGE_GRAPH_BUILDS: &str = "lineage_graph_builds";
+pub(crate) const PROJECT_GRAPHS: &str = "build_project_graph";
+pub(crate) const FORMAT_LINT_BATCHES: &str = "format_lint_batches";
+pub(crate) const FORMAT_LINT_FILES: &str = "format_lint_files";
 
 /// Compile stage runs since the last reset, by stage.
 #[pyclass]

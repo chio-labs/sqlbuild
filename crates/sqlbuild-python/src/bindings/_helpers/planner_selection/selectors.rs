@@ -14,15 +14,15 @@ use sqlbuild_analysis::graph::main::resolve_selectors::resolve_selectors;
 use sqlbuild_analysis::graph::models::{ParsedSelector, ProjectGraph};
 use sqlbuild_analysis::planner_selection::main::unit_test_selector_rejection::unit_test_selector_rejection;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
 use crate::bindings::_helpers::graph::views::{GraphViewMappings, graph_from_view_mappings};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const VIEW_OPTIONS: &[&str] = &[
     "all_keys",
@@ -44,13 +44,11 @@ pub(crate) fn parsed_selector<'py>(
             value,
             upstream,
             downstream,
-        } => call_with(
-            &registry::class(py, RecordId::ParsedSelector)?,
+        } => new_record_with(
+            py,
+            RecordId::ParsedSelector,
             &[
-                (
-                    "kind",
-                    registry::class(py, RecordId::SelectorKind)?.call1((kind,))?,
-                ),
+                ("kind", enum_from_value(py, RecordId::SelectorKind, kind)?),
                 ("value", carrier.back(&value)?.into_any()),
                 ("upstream", PyBool::new(py, upstream).to_owned().into_any()),
                 (
@@ -64,8 +62,9 @@ pub(crate) fn parsed_selector<'py>(
             end,
             upstream,
             downstream,
-        } => call_with(
-            &registry::class(py, RecordId::PathSelector)?,
+        } => new_record_with(
+            py,
+            RecordId::PathSelector,
             &[
                 ("start_name", carrier.back(&start)?.into_any()),
                 ("end_name", carrier.back(&end)?.into_any()),
@@ -158,7 +157,7 @@ pub(crate) fn select_project_graph<'py>(
 /// Model, source, seed and function selectors resolved against compiled graph mappings.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_project_selectors<'py>(
+pub(crate) fn resolve_project_selectors<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
@@ -178,7 +177,7 @@ fn resolve_project_selectors<'py>(
 /// The keys whitespace-separated selector tokens match, without required build resources.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_project_selector_tokens<'py>(
+pub(crate) fn resolve_project_selector_tokens<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
@@ -210,7 +209,7 @@ fn arguments_graph(arguments: &KeywordArguments<'_>) -> PyResult<NativeProjectGr
 /// The keys one parsed selector matches before `+` graph expansion.
 #[pyfunction]
 #[pyo3(signature = (*, parsed, all_keys, tag_index, path_index))]
-fn match_project_selector<'py>(
+pub(crate) fn match_project_selector<'py>(
     parsed: &Bound<'py, PyAny>,
     all_keys: &Bound<'py, PyAny>,
     tag_index: &Bound<'py, PyAny>,

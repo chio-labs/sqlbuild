@@ -60,7 +60,7 @@ fn validate_discovered_project_inputs(
             }
             raised(
                 py.import(BUILTINS_MODULE)
-                    .and_then(|module| module.getattr(error.class.as_str()))
+                    .and_then(|module| native_field(&module, error.class.as_str()))
                     .and_then(|class| class.call1((error.message,))),
             )
         }
