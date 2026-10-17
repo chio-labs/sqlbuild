@@ -29,7 +29,6 @@ import duckdb
 import pytest
 
 import sqlbuild._native as native_module
-import sqlbuild._native as plan_artifacts_module
 import sqlbuild.adapter.type_system._helpers.type_normalization as type_normalization
 import sqlbuild.cli.compile_reuse._helpers.provider_settings as provider_settings
 import sqlbuild.compiler.compile._helpers.macro_bridge.call_store as call_store_module
@@ -4804,40 +4803,13 @@ def full_macro_call_runs(
     )
 
 
-_ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
-    (plan_artifacts_module, "plan_compiled_sql_test_artifacts"),
-)
-
-
-def record_analysis_seams(*, monkeypatch: pytest.MonkeyPatch) -> dict[str, list[object]]:
-    """Record what each native analysis stage seam returns, keyed by its entry name."""
-
-    results: dict[str, list[object]] = {}
-    for module, name in _ANALYSIS_SEAMS:
-        monkeypatch.setattr(
-            module, name, _recorded_seam(entry=getattr(module, name), name=name, results=results)
-        )
-    return results
-
-
-def _recorded_seam(
-    *, entry: Callable[..., object], name: str, results: dict[str, list[object]]
-) -> Callable[..., object]:
-    def recorded(*positional: object, **arguments: object) -> object:
-        result: object = entry(*positional, **arguments)
-        results.setdefault(name, []).append(result)
-        return result
-
-    return recorded
-
-
 def seam_recording_compile(
     *,
     project_dir: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-) -> tuple[CompileReuseRun, dict[str, list[object]]]:
-    """Compile in this process; return the run and what each seam returned."""
+) -> CompileReuseRun:
+    """Compile in this process with fresh native stage counters."""
 
     with monkeypatch.context() as patch:
         for name, value in {
@@ -4845,10 +4817,8 @@ def seam_recording_compile(
             REUSE_DISABLE_ENV_VAR: "1",
         }.items():
             patch.setenv(name, value)
-        seams: dict[str, list[object]] = record_analysis_seams(monkeypatch=patch)
         _ = native_module.compile_stage_work_info(reset=True)
-        run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
-    return run, seams
+        return in_process_reuse_run(project_dir=project_dir, capsys=capsys)
 
 
 class NativeTypeAnswers(NamedTuple):
