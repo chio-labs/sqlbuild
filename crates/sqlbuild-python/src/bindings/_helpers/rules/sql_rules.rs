@@ -1,5 +1,6 @@
 //! Run the planned SQL rules through native lint, reusing cached and early-lint results.
 
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -213,14 +214,17 @@ fn sql_rule_models<'py>(
     if !field(&project_attribute(project, "settings")?, "sql_analysis")?.is_truthy()? {
         return Ok(models);
     }
+    let mut positions: HashMap<String, usize> = HashMap::new();
     for model in project_attribute(project, "models")?.try_iter()? {
         let Some(entry) = sql_rule_model(model?, keyed)? else {
             continue;
         };
-        if let Some(index) = models.iter().position(|known| known.path == entry.path) {
-            models[index] = entry;
-        } else {
-            models.push(entry);
+        match positions.entry(entry.path.clone()) {
+            Entry::Occupied(known) => models[*known.get()] = entry,
+            Entry::Vacant(slot) => {
+                slot.insert(models.len());
+                models.push(entry);
+            }
         }
     }
     Ok(models)
