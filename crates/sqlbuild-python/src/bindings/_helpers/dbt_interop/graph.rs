@@ -165,7 +165,7 @@ fn project_models<'py>(
 /// Build the combined graph from a dbt manifest index and a compiled SQLBuild project.
 #[pyfunction]
 #[pyo3(signature = (*, manifest, project))]
-fn build_dbt_combined_graph<'py>(
+pub(crate) fn build_dbt_combined_graph<'py>(
     py: Python<'py>,
     manifest: Bound<'py, PyAny>,
     project: Bound<'py, PyAny>,

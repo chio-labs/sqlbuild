@@ -137,7 +137,7 @@ fn argv_tuples<'py>(py: Python<'py>, argvs: Vec<Vec<String>>) -> PyResult<Bound<
 /// Plan dbt and SQLBuild work from already-compiled interop inputs.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_dbt_interop_command<'py>(
+pub(crate) fn plan_dbt_interop_command<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

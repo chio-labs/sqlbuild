@@ -8,15 +8,20 @@ use crate::bindings::_helpers::build_command::support::{boolean, keyword_relay, 
 use crate::bindings::_helpers::command_runtime::connection::{
     anchor_duckdb_database, with_dbt_profile,
 };
+use crate::bindings::_helpers::command_runtime::warehouses::apply_command_warehouse;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
+use crate::bindings::_helpers::compile_driver::deferral::resolve_model_deferral_inputs;
 use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hooks;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::display_plan::build_display_only_sqlbuild_plan;
+use crate::bindings::_helpers::planner_entries::execution_plan::build_execution_plan;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const BUILD_OPTIONS: (&[&str], &[&str]) = (&["environment", "request", "hooks"], &[]);
@@ -38,10 +43,7 @@ pub(crate) fn connection_config<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = environment.py();
     let discovered = native_field(environment, "discovered_inputs")?;
-    let raw = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
-        &[("discovered_inputs", discovered.clone())],
-    )?;
+    let raw = build_effective_connection_config(&discovered.clone(), None, None)?;
     let raw: Bound<'_, PyDict> = raw.cast_into()?;
     let project_dir = native_field(environment, "project_dir")?;
     let adapter_name = native_field(environment, "adapter_name")?;
@@ -56,15 +58,18 @@ pub(crate) fn connection_config<'py>(
         (&project_dir, &adapter_name.str()?.extract::<String>()?),
     )?;
     let config = config.into_any();
-    call_with(
-        &registry::native(py, NativeAttr::ApplyCommandWarehouse)?,
-        &[
-            ("config", config),
-            ("adapter_name", native_field(environment, "adapter_name")?),
-            ("discovered_inputs", discovered),
-            ("project_dir", native_field(environment, "project_dir")?),
-            ("selected_target", none(py)),
-        ],
+    apply_command_warehouse(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("config", config),
+                ("adapter_name", native_field(environment, "adapter_name")?),
+                ("discovered_inputs", discovered),
+                ("project_dir", native_field(environment, "project_dir")?),
+                ("selected_target", none(py)),
+            ],
+        )?),
     )
 }
 
@@ -149,18 +154,21 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
     let connection = open_connection(&environment, connection_config(&environment)?, &hooks)?;
     let planned = (|| {
         let args = native_field(&request, "sqlbuild_args")?;
-        let deferral = call_with(
-            &registry::native(py, NativeAttr::ResolveModelDeferralInputs)?,
-            &[
-                ("project", native_field(&environment, "project")?),
-                (
-                    "discovered_inputs",
-                    native_field(&environment, "discovered_inputs")?,
-                ),
-                ("adapter", native_field(&environment, "adapter")?),
-                ("connection", connection.clone()),
-                ("defer_to", flag_value(&args, "--defer-to")?),
-            ],
+        let deferral = resolve_model_deferral_inputs(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project", native_field(&environment, "project")?),
+                    (
+                        "discovered_inputs",
+                        native_field(&environment, "discovered_inputs")?,
+                    ),
+                    ("adapter", native_field(&environment, "adapter")?),
+                    ("connection", connection.clone()),
+                    ("defer_to", flag_value(&args, "--defer-to")?),
+                ],
+            )?),
         )?;
         let cursor = new_record_with(
             py,
@@ -191,36 +199,36 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
             ],
         )?;
         let discovered = native_field(&environment, "discovered_inputs")?;
-        let result = call_with(
-            &registry::native(py, NativeAttr::BuildExecutionPlan)?,
-            &[
-                ("project", native_field(&environment, "project")?),
-                ("adapter", native_field(&environment, "adapter")?),
-                ("connection", connection.clone()),
-                ("selection", selection),
-                ("overrides", overrides),
-                ("deferral", deferral),
-                (
-                    "policies",
-                    new_record(py, RecordId::PlannerPolicies, (), None)?,
-                ),
-                ("on_progress", native_field(&hooks, "on_progress")?),
-                (
-                    "project_config",
-                    native_field(&discovered, "project_config")?,
-                ),
-                ("local_config", native_field(&discovered, "local_config")?),
-            ],
+        let result = build_execution_plan(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project", native_field(&environment, "project")?),
+                    ("adapter", native_field(&environment, "adapter")?),
+                    ("connection", connection.clone()),
+                    ("selection", selection),
+                    ("overrides", overrides),
+                    ("deferral", deferral),
+                    (
+                        "policies",
+                        new_record(py, RecordId::PlannerPolicies, (), None)?,
+                    ),
+                    ("on_progress", native_field(&hooks, "on_progress")?),
+                    (
+                        "project_config",
+                        native_field(&discovered, "project_config")?,
+                    ),
+                    ("local_config", native_field(&discovered, "local_config")?),
+                ],
+            )?),
         );
         match result {
             Err(error) if error.is_instance(py, &registry::error(py, ErrorId::PlannerInput)?) => {
-                call_with(
-                    &registry::native(py, NativeAttr::BuildDisplayOnlySqlbuildPlan)?,
-                    &[
-                        ("project", native_field(&environment, "project")?),
-                        ("selected_model_names", selected),
-                        ("full_refresh", full_refresh),
-                    ],
+                build_display_only_sqlbuild_plan(
+                    &native_field(&environment, "project")?,
+                    &selected,
+                    full_refresh.extract::<bool>()?,
                 )
             }
             result => result,

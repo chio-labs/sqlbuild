@@ -59,7 +59,7 @@ fn build_merged_dbt_execution_argv<'py>(
 /// The `dbt ls --output json` that counts an execution argv's selection, when it has a command.
 #[pyfunction]
 #[pyo3(signature = (*, argv))]
-fn dbt_execution_ls_argv(argv: Vec<String>) -> Option<Vec<String>> {
+pub(crate) fn dbt_execution_ls_argv(argv: Vec<String>) -> Option<Vec<String>> {
     ls_argv(&argv)
 }
 
@@ -102,7 +102,7 @@ fn build_failed_sqlbuild_model_names<'py>(
 /// Render a PASS/WARN/FAIL/SKIP/TOTAL footer for executed dbt nodes.
 #[pyfunction]
 #[pyo3(signature = (*, node_results, use_color))]
-fn render_dbt_execution_summary_footer(
+pub(crate) fn render_dbt_execution_summary_footer(
     node_results: &Bound<'_, PyAny>,
     use_color: bool,
 ) -> PyResult<Option<String>> {

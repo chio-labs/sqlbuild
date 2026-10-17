@@ -121,7 +121,10 @@ impl DbtEventStream {
 /// One dbt node row and its messages.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn render_dbt_node_result(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn render_dbt_node_result(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "render_dbt_node_result", options, RENDER_OPTIONS)?;
     let position: DbtRowPosition = DbtRowPosition {

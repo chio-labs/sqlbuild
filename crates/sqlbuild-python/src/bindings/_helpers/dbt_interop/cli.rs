@@ -221,7 +221,10 @@ fn ls_node<'py>(
 /// Nodes from `dbt ls` JSON lines, skipping log lines, non-objects and nodes without an ID.
 #[pyfunction]
 #[pyo3(signature = (*, stdout))]
-fn parse_dbt_ls_json_lines<'py>(py: Python<'py>, stdout: &str) -> PyResult<Bound<'py, PyTuple>> {
+pub(crate) fn parse_dbt_ls_json_lines<'py>(
+    py: Python<'py>,
+    stdout: &str,
+) -> PyResult<Bound<'py, PyTuple>> {
     ls_nodes(py, stdout)
 }
 
@@ -293,7 +296,7 @@ fn parsed_flags(parsed: &Bound<'_, PyAny>) -> PyResult<DbtParsedFlags> {
 /// Split parsed `sqb dbt <command>` flags into dbt and SQLBuild buckets.
 #[pyfunction]
 #[pyo3(signature = (*, command, parsed))]
-fn route_dbt_interop_args<'py>(
+pub(crate) fn route_dbt_interop_args<'py>(
     py: Python<'py>,
     command: &Bound<'py, PyAny>,
     parsed: &Bound<'py, PyAny>,
@@ -366,7 +369,7 @@ fn config_sources(
 /// Resolve dbt config from CLI overrides, local config and project config.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_dbt_config<'py>(
+pub(crate) fn resolve_dbt_config<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

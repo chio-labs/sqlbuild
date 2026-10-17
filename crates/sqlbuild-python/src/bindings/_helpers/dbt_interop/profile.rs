@@ -103,7 +103,7 @@ fn normalized_connection<'py>(
 /// Normalize rendered dbt profile output for SQLBuild.
 #[pyfunction]
 #[pyo3(signature = (*, resolved))]
-fn normalize_dbt_profile_connection<'py>(
+pub(crate) fn normalize_dbt_profile_connection<'py>(
     py: Python<'py>,
     resolved: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -132,7 +132,7 @@ fn text_argument(arguments: &KeywordArguments<'_>, name: &str) -> PyResult<Strin
 /// The `sqlbuild_project.toml` text `sqb dbt init` writes.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn build_dbt_init_project_toml(
+pub(crate) fn build_dbt_init_project_toml(
     py: Python<'_>,
     options: Option<Bound<'_, PyDict>>,
 ) -> PyResult<String> {

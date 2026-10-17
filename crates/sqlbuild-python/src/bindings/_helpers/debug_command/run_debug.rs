@@ -30,6 +30,7 @@ use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehou
 use crate::bindings::_helpers::command_runtime::warehouses::{
     CommandScope, WarehouseInputs, apply_warehouse, command_scope, find_authored, resolve_warehouse,
 };
+use crate::bindings::_helpers::compile_attachment::target::build_effective_target_namespace;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
@@ -303,33 +304,37 @@ fn build_report(
     })?;
     let connection_config: Bound<'_, PyDict> =
         effective_connection(&context, (&adapter_name, &base_connection))?.cast_into()?;
-    let namespace: Bound<'_, PyTuple> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveTargetNamespace)?,
-        &[
-            ("discovered_inputs", context.discovered_inputs.clone()),
-            ("selected_target", context.selected_target.clone()),
-            (
-                "connection_database",
-                connection_config
-                    .get_item("database")?
-                    .unwrap_or_else(|| py.None().into_bound(py)),
-            ),
-            (
-                "connection_schema",
-                connection_config
-                    .get_item("schema")?
-                    .unwrap_or_else(|| py.None().into_bound(py)),
-            ),
-            (
-                "default_database",
-                context.adapter.call_method0("default_database")?,
-            ),
-            (
-                "default_schema",
-                context.adapter.call_method0("default_schema")?,
-            ),
-        ],
-    )?
+    let namespace: Bound<'_, PyTuple> = build_effective_target_namespace(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", context.discovered_inputs.clone()),
+                ("selected_target", context.selected_target.clone()),
+                (
+                    "connection_database",
+                    connection_config
+                        .get_item("database")?
+                        .unwrap_or_else(|| py.None().into_bound(py)),
+                ),
+                (
+                    "connection_schema",
+                    connection_config
+                        .get_item("schema")?
+                        .unwrap_or_else(|| py.None().into_bound(py)),
+                ),
+                (
+                    "default_database",
+                    context.adapter.call_method0("default_database")?,
+                ),
+                (
+                    "default_schema",
+                    context.adapter.call_method0("default_schema")?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .cast_into()?;
     let target_config: Bound<'_, PyAny> = namespace.get_item(1)?;
     let connection_name: Option<String> = if target_config.is_none() {

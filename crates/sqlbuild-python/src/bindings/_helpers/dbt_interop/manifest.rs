@@ -378,7 +378,7 @@ fn decoded<'py>(contents: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// Load and index dbt model nodes from a manifest.json file.
 #[pyfunction]
 #[pyo3(signature = (*, manifest_path))]
-fn load_dbt_manifest_index<'py>(
+pub(crate) fn load_dbt_manifest_index<'py>(
     py: Python<'py>,
     manifest_path: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -396,7 +396,7 @@ fn load_dbt_manifest_index<'py>(
 /// Build a dbt manifest index from discovered manifest contents.
 #[pyfunction]
 #[pyo3(signature = (*, manifest_contents))]
-fn build_compile_dbt_manifest_index<'py>(
+pub(crate) fn build_compile_dbt_manifest_index<'py>(
     py: Python<'py>,
     manifest_contents: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -463,7 +463,7 @@ fn resolve_dbt_manifest_model<'py>(
 /// Reject ambiguous ownership between dbt and SQLBuild models.
 #[pyfunction]
 #[pyo3(signature = (*, known_model_names, dbt_manifest))]
-fn validate_compile_dbt_model_names(
+pub(crate) fn validate_compile_dbt_model_names(
     py: Python<'_>,
     known_model_names: Bound<'_, PyAny>,
     dbt_manifest: Bound<'_, PyAny>,
@@ -499,7 +499,7 @@ fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 /// Validate one compile-time dbt ref against a dbt manifest.
 #[pyfunction]
 #[pyo3(signature = (*, reference, model_relative_path, dbt_manifest))]
-fn validate_compile_dbt_model_reference(
+pub(crate) fn validate_compile_dbt_model_reference(
     py: Python<'_>,
     reference: Bound<'_, PyAny>,
     model_relative_path: Bound<'_, PyAny>,
@@ -564,7 +564,7 @@ pub(crate) fn resolve_sqlbuild_model_dbt_refs<'py>(
 /// Resolve one external dbt reference to its manifest relation.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_dbt_reference_relation<'py>(
+pub(crate) fn resolve_dbt_reference_relation<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

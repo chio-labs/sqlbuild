@@ -8,8 +8,13 @@ use crate::bindings::_helpers::build_command::support::{boolean, emit, none, tex
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords,
 };
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::dbt_interop::execution::render_dbt_execution_summary_footer;
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
+use crate::bindings::_helpers::dbt_interop::plan::render_dbt_interop_plan;
+use crate::bindings::_helpers::dbt_interop::plan_output::build_sqlbuild_plan_output;
 use crate::bindings::_helpers::dbt_interop::plan_output::{connection_config, connection_hooks};
+use crate::bindings::_helpers::dbt_interop::sqlbuild_work::execute_dbt_sqlbuild_work;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -93,22 +98,26 @@ fn write_dbt_execution_plan_text(
     } else {
         pyo3::types::PyInt::new(py, super::constants::PLAN_DISPLAY_LIMIT).into_any()
     };
-    let rendered = call_with(
-        &registry::native(py, NativeAttr::RenderDbtInteropPlan)?,
-        &[
-            ("plan", display),
-            ("json_output", boolean(py, false)),
-            ("use_color", native_field(&request, "use_color")?),
-            (
-                "display_options",
-                new_record_with(
-                    py,
-                    RecordId::DisplayOptions,
-                    &[("max_entries_per_section", limit)],
-                )?,
-            ),
-        ],
-    )?;
+    let rendered = render_dbt_interop_plan(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", display),
+                ("json_output", boolean(py, false)),
+                ("use_color", native_field(&request, "use_color")?),
+                (
+                    "display_options",
+                    new_record_with(
+                        py,
+                        RecordId::DisplayOptions,
+                        &[("max_entries_per_section", limit)],
+                    )?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     emit(
         &args.value("invocation")?.getattr("output_stream")?,
         &format!("{}\n\n", rendered.extract::<String>()?),
@@ -154,16 +163,13 @@ fn execute_dbt_without_state_tracking<'py>(
 #[pyo3(signature = (**options))]
 fn write_dbt_execution_summary(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<()> {
     let args = KeywordArguments::read(py, "write_dbt_execution_summary", options, OPTIONS)?;
-    let footer = call_with(
-        &registry::native(py, NativeAttr::RenderDbtExecutionSummaryFooter)?,
-        &[
-            (
-                "node_results",
-                args.value("execution")?.getattr("node_results")?,
-            ),
-            ("use_color", args.value("request")?.getattr("use_color")?),
-        ],
-    )?;
+    let footer = render_dbt_execution_summary_footer(
+        &args.value("execution")?.getattr("node_results")?,
+        args.value("request")?
+            .getattr("use_color")?
+            .extract::<bool>()?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     if !footer.is_none() {
         emit(
             &args.value("invocation")?.getattr("output_stream")?,
@@ -224,13 +230,16 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
             ),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::BuildSqlbuildPlanOutput)?,
-        &[
-            ("environment", environment(&args)?),
-            ("request", request),
-            ("hooks", connection_hooks(&reporter, none(py))?),
-        ],
+    build_sqlbuild_plan_output(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("environment", environment(&args)?),
+                ("request", request),
+                ("hooks", connection_hooks(&reporter, none(py))?),
+            ],
+        )?),
     )
 }
 
@@ -242,16 +251,11 @@ fn execution_limits<'py>(
     if target.is_none() {
         return new_record(py, RecordId::ExecutionLimitsConfig, (), None);
     }
-    call_with(
-        &registry::native(py, NativeAttr::ResolveTargetConfig)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered, "project_config")?,
-            ),
-            ("local_config", native_field(discovered, "local_config")?),
-            ("target_name", target),
-        ],
+    resolve_target_config(
+        py,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
+        &target,
     )?
     .getattr("execution_limits")
 }
@@ -292,17 +296,21 @@ fn run_dbt_sqlbuild_work<'py>(
             ),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::ExecuteDbtSqlbuildWork)?,
-        &[
-            ("context", context),
-            ("command", native_field(&request, "command")?),
-            ("project", project),
-            ("project_dir", native_field(&request, "project_dir")?),
-            ("fail_fast", native_field(&request, "fail_fast")?),
-            ("verbose", native_field(&request, "verbose")?),
-        ],
+    execute_dbt_sqlbuild_work(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("context", context),
+                ("command", native_field(&request, "command")?),
+                ("project", project),
+                ("project_dir", native_field(&request, "project_dir")?),
+                ("fail_fast", native_field(&request, "fail_fast")?),
+                ("verbose", native_field(&request, "verbose")?),
+            ],
+        )?),
     )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
 
 /// Report a SQLBuild skip transition without writing machine output to stdout.

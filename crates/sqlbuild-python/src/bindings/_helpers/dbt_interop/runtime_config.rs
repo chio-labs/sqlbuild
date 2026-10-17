@@ -12,14 +12,14 @@ use sqlbuild_core::dbt_cli::errors::DbtCliError;
 use sqlbuild_core::dbt_cli::main::dbt_flag_value::dbt_flag_value;
 use sqlbuild_core::dbt_cli::models::DbtParsedFlags;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::dbt_interop::cli::resolve_dbt_config;
 use crate::bindings::_helpers::dbt_interop::cli::{raised, resolved_path};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const ARGUMENT_ERROR: ErrorId = ErrorId::DbtInteropArgument;
 const CONFIG_ERROR: ErrorId = ErrorId::DbtInteropConfig;
@@ -268,15 +268,18 @@ pub(crate) fn plan_options<'py>(
         .getattr("dbt")?;
     let local_config: Bound<'py, PyAny> =
         native_field(discovered_inputs, "local_config")?.getattr("dbt")?;
-    let resolved: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveDbtConfig)?,
-        &[
-            ("project_root", project_dir.clone()),
-            ("config", project_config.clone()),
-            ("local_config", local_config.clone()),
-            ("overrides", config_overrides(py, args)?),
-            ("require_project_dir", flag(py, true)),
-        ],
+    let resolved: Bound<'py, PyAny> = resolve_dbt_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_root", project_dir.clone()),
+                ("config", project_config.clone()),
+                ("local_config", local_config.clone()),
+                ("overrides", config_overrides(py, args)?),
+                ("require_project_dir", flag(py, true)),
+            ],
+        )?),
     )?;
     let values: Bound<'py, PyDict> = vars_mapping(&project_config, &local_config, args)?;
     let vars: Bound<'py, PyAny> = if values.is_empty() {

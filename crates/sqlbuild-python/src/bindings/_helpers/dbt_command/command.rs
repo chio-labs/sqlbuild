@@ -6,10 +6,13 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::dbt_command::main::dbt_output_options::dbt_output_options;
 use sqlbuild_core::dbt_command::models::DbtOutputOptions;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, keywords,
+};
 use crate::bindings::_helpers::dbt_command::auto_init::{args_tuple, ensure_twin_project};
 use crate::bindings::_helpers::dbt_command::debug::run_dbt_debug;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, effective_dir, flag, stream};
+use crate::bindings::_helpers::dbt_interop::plan::render_dbt_interop_plan;
 use crate::bindings::_helpers::dbt_interop::runtime_config::validate_dbt_execution_args;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -92,15 +95,19 @@ fn run_plan(project_dir: &Bound<'_, PyAny>, args: &[String], no_color: bool) -> 
             },
         )],
     )?;
-    let rendered: String = call_with(
-        &registry::native(py, NativeAttr::RenderDbtInteropPlan)?,
-        &[
-            ("plan", plan),
-            ("json_output", flag(py, options.json_output)),
-            ("use_color", flag(py, progress.use_color)),
-            ("display_options", display),
-        ],
-    )?
+    let rendered: String = render_dbt_interop_plan(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", plan),
+                ("json_output", flag(py, options.json_output)),
+                ("use_color", flag(py, progress.use_color)),
+                ("display_options", display),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .extract()?;
     stream(py, "stdout")?.call_method1("write", (format!("{rendered}\n"),))?;
     Ok(0)

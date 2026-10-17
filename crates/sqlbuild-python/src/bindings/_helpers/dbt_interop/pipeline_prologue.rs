@@ -4,6 +4,10 @@ use crate::bindings::_helpers::compile_driver::discovery::discover_project_input
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::dbt_interop::cli::route_dbt_interop_args;
+use crate::bindings::_helpers::dbt_interop::graph::build_dbt_combined_graph;
+use crate::bindings::_helpers::dbt_interop::manifest::load_dbt_manifest_index;
+use crate::bindings::_helpers::dbt_interop::orchestration::plan_dbt_interop_command;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -77,10 +81,7 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
     }
     let command = native_field(request, "command")?;
     let parsed = parse_dbt_execution_args(&command, &native_field(request, "args")?)?;
-    let routed = call_with(
-        &registry::native(py, NativeAttr::RouteDbtInteropArgs)?,
-        &[("command", command), ("parsed", parsed)],
-    )?;
+    let routed = route_dbt_interop_args(py, &command, &parsed)?;
     let project_dir = native_field(request, "project_dir")?;
     let discovered = discover_project_inputs(
         py,
@@ -163,10 +164,7 @@ fn load_compiled_dbt_manifest<'py>(
     let start = Instant::now();
     progress(&callback, "Loading dbt manifest...")?;
     let path = manifest_path(&args.value("dbt_options")?)?;
-    let manifest = call_with(
-        &registry::native(py, NativeAttr::LoadDbtManifestIndex)?,
-        &[("manifest_path", path)],
-    )?;
+    let manifest = load_dbt_manifest_index(py, path)?;
     completed(&callback, "Loaded dbt manifest.", start)?;
     Ok(manifest)
 }
@@ -236,13 +234,8 @@ fn resolve_dbt_interop_plan<'py>(
     let start = Instant::now();
     progress(&callback, "Building dbt interop graph...")?;
     let project = args.value("compiled")?.getattr("project")?;
-    let graph = call_with(
-        &registry::native(py, NativeAttr::BuildDbtCombinedGraph)?,
-        &[
-            ("manifest", args.value("manifest")?),
-            ("project", project.clone()),
-        ],
-    )?;
+    let graph = build_dbt_combined_graph(py, args.value("manifest")?, project.clone())
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     completed(&callback, "Built dbt interop graph.", start)?;
     let start = Instant::now();
     progress(&callback, "Resolving dbt and SQLBuild selection...")?;
@@ -273,17 +266,20 @@ fn resolve_dbt_interop_plan<'py>(
             ("sqlbuild_executable", args.value("sqlbuild_executable")?),
         ],
     )?;
-    let plan = call_with(
-        &registry::native(py, NativeAttr::PlanDbtInteropCommand)?,
-        &[
-            ("command", args.value("command")?),
-            ("project", project),
-            ("manifest", args.value("manifest")?),
-            ("graph", graph.clone()),
-            ("dbt_runner", native_field(&invocation, "runner")?),
-            ("dbt_options", native_field(&invocation, "dbt_options")?),
-            ("command_args", command_args),
-        ],
+    let plan = plan_dbt_interop_command(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("command", args.value("command")?),
+                ("project", project),
+                ("manifest", args.value("manifest")?),
+                ("graph", graph.clone()),
+                ("dbt_runner", native_field(&invocation, "runner")?),
+                ("dbt_options", native_field(&invocation, "dbt_options")?),
+                ("command_args", command_args),
+            ],
+        )?),
     )?;
     completed(&callback, "Resolved dbt and SQLBuild selection.", start)?;
     new_record_with(

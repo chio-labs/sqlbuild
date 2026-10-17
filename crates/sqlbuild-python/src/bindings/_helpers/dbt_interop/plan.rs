@@ -8,13 +8,13 @@ use sqlbuild_core::cli_text::main::format_dbt_interop_plan::format_dbt_interop_p
 use sqlbuild_core::cli_text::main::format_dbt_interop_plan_json::format_dbt_interop_plan_json;
 use sqlbuild_core::cli_text::models::{DbtInteropPlanText, DbtLsNodeText, DisplayLimit};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
+use crate::bindings::_helpers::plan_output::plan_text::format_plan;
 use crate::bindings::_helpers::records::construct::{
     enum_from_value, enum_member, new_record, new_record_with,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const BUILD_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -206,7 +206,10 @@ fn display_limit(options: &Bound<'_, PyAny>) -> PyResult<DisplayLimit> {
 /// Render a dbt interop plan in the requested CLI output format.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn render_dbt_interop_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn render_dbt_interop_plan(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "render_dbt_interop_plan", options, RENDER_OPTIONS)?;
     let plan: Bound<'_, PyAny> = arguments.value("plan")?;
@@ -225,17 +228,21 @@ fn render_dbt_interop_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -
             None
         } else {
             Some(
-                call_with(
-                    &registry::native(py, NativeAttr::FormatPlan)?,
-                    &[
-                        ("plan", plan_output),
-                        (
-                            "use_color",
-                            PyBool::new(py, use_color).to_owned().into_any(),
-                        ),
-                        ("display_options", display.clone()),
-                    ],
-                )?
+                format_plan(
+                    py,
+                    Some(keywords(
+                        py,
+                        &[
+                            ("plan", plan_output),
+                            (
+                                "use_color",
+                                PyBool::new(py, use_color).to_owned().into_any(),
+                            ),
+                            ("display_options", display.clone()),
+                        ],
+                    )?),
+                )
+                .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
                 .extract()?,
             )
         };

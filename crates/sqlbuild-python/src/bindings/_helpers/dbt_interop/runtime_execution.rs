@@ -1,6 +1,11 @@
 //! Execute dbt through the subprocess boundary and finalize results in artifact order.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, keywords,
+};
+use crate::bindings::_helpers::dbt_events::stream::render_dbt_node_result;
+use crate::bindings::_helpers::dbt_interop::cli::parse_dbt_ls_json_lines;
+use crate::bindings::_helpers::dbt_interop::execution::dbt_execution_ls_argv;
 use crate::bindings::_helpers::dbt_interop::runtime_results::{append_missing, result_ids};
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -40,9 +45,9 @@ fn expected_total<'py>(
     argv: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = argv.py();
-    let ls = call_with(
-        &registry::native(py, NativeAttr::DbtExecutionLsArgv)?,
-        &[("argv", argv.clone())],
+    let ls = pyo3::IntoPyObjectExt::into_bound_py_any(
+        dbt_execution_ls_argv(argv.clone().extract::<Vec<String>>()?),
+        py,
     )?;
     if ls.is_none() {
         return Ok(py.None().into_bound(py));
@@ -84,10 +89,8 @@ fn expected_total<'py>(
     if native_field(&result, "returncode")?.extract::<i64>()? != 0 {
         return Ok(py.None().into_bound(py));
     }
-    let nodes = call_with(
-        &registry::native(py, NativeAttr::ParseDbtLsJsonLines)?,
-        &[("stdout", native_field(&result, "stdout")?)],
-    )?;
+    let nodes = parse_dbt_ls_json_lines(py, &native_field(&result, "stdout")?.extract::<String>()?)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(PyInt::new(py, nodes.len()?).into_any())
 }
 
@@ -212,25 +215,29 @@ fn execute_dbt_commands<'py>(
     }
     let count = results.len()? - appended.len();
     for (offset, result) in appended.into_iter().enumerate() {
-        let rendered = call_with(
-            &registry::native(py, NativeAttr::RenderDbtNodeResult)?,
-            &[
-                ("result", result.clone()),
-                ("use_color", native_field(&style, "use_color")?),
-                (
-                    "display_index",
-                    PyInt::new(py, count + offset + 1).into_any(),
-                ),
-                (
-                    "display_total",
-                    if total.is_none() {
-                        PyInt::new(py, results.len()?).into_any()
-                    } else {
-                        total.clone()
-                    },
-                ),
-            ],
-        )?;
+        let rendered = render_dbt_node_result(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("result", result.clone()),
+                    ("use_color", native_field(&style, "use_color")?),
+                    (
+                        "display_index",
+                        PyInt::new(py, count + offset + 1).into_any(),
+                    ),
+                    (
+                        "display_total",
+                        if total.is_none() {
+                            PyInt::new(py, results.len()?).into_any()
+                        } else {
+                            total.clone()
+                        },
+                    ),
+                ],
+            )?),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
         write(
             &arguments.value("stdout_stream")?,
             &rendered.extract::<String>()?,

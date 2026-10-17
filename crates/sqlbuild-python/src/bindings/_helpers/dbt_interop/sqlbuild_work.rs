@@ -8,10 +8,15 @@ use sqlbuild_core::build_command::constants::{
     SNAPSHOT_FULL_REFRESH_DBT_HELP, TABLE_TYPE_DOWNGRADE_DBT_HELP,
 };
 
+use crate::bindings::_helpers::build_command::policies::enforce_plan_safety_policies_binding;
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none, text, tuple,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::build_progress::footer::format_build_footer;
+use crate::bindings::_helpers::cli::progress_text::format_execution_header;
+use crate::bindings::_helpers::compile_driver::python_calls::{
+    KeywordArguments, call_with, keywords,
+};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
@@ -69,7 +74,7 @@ fn dbt_interop_plan_safety_gates(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 /// Execute SQLBuild work only after its plan safety policies succeed.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn execute_dbt_sqlbuild_work<'py>(
+pub(crate) fn execute_dbt_sqlbuild_work<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<i64> {
@@ -79,29 +84,33 @@ fn execute_dbt_sqlbuild_work<'py>(
     let plan = native_field(&context, "plan_output")?;
     let output = native_field(&context, "output_stream")?;
     let color = native_field(&context, "use_color")?;
-    call_with(
-        &registry::native(py, NativeAttr::EnforcePlanSafetyPolicies)?,
-        &[
-            ("plan", plan.clone()),
-            ("gates", dbt_interop_plan_safety_gates(py)?),
-            (
-                "snapshots_config",
-                native_field(&context, "snapshots_config")?,
-            ),
-            (
-                "target_name",
-                native_field(&project, "effective_target_name")?,
-            ),
-            (
-                "execution_limits",
-                native_field(&context, "execution_limits")?,
-            ),
-            (
-                "streams",
-                tuple(py, &[py.import("sys")?.getattr("stdin")?, output.clone()])?,
-            ),
-        ],
-    )?;
+    enforce_plan_safety_policies_binding(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("plan", plan.clone()),
+                ("gates", dbt_interop_plan_safety_gates(py)?),
+                (
+                    "snapshots_config",
+                    native_field(&context, "snapshots_config")?,
+                ),
+                (
+                    "target_name",
+                    native_field(&project, "effective_target_name")?,
+                ),
+                (
+                    "execution_limits",
+                    native_field(&context, "execution_limits")?,
+                ),
+                (
+                    "streams",
+                    tuple(py, &[py.import("sys")?.getattr("stdin")?, output.clone()])?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let callbacks = call_with(
         &registry::native(py, NativeAttr::BuildProgressCallbacks)?,
         &[
@@ -122,13 +131,13 @@ fn execute_dbt_sqlbuild_work<'py>(
         )
     };
     let concurrency = native_field(&project, "settings")?.getattr("concurrency")?;
-    let header = call_with(
-        &registry::native(py, NativeAttr::FormatExecutionHeader)?,
-        &[
-            ("command", text(py, &display)),
-            ("target", none(py)),
-            ("concurrency", concurrency.clone()),
-        ],
+    let header = pyo3::IntoPyObjectExt::into_bound_py_any(
+        format_execution_header(
+            &text(py, &display).extract::<String>()?,
+            none(py).extract::<Option<String>>()?.as_deref(),
+            concurrency.clone().extract::<i64>()?,
+        ),
+        py,
     )?;
     let style = call_with(
         &registry::native(py, NativeAttr::CliStyle)?,
@@ -230,14 +239,13 @@ fn execute_dbt_sqlbuild_work<'py>(
             ("result", result.clone()),
         ],
     )?;
-    let footer = call_with(
-        &registry::native(py, NativeAttr::FormatBuildFooter)?,
-        &[
-            ("result", result.clone()),
-            ("elapsed", native_field(&callbacks, "elapsed")?),
-            ("use_color", color),
-        ],
-    )?;
+    let footer = format_build_footer(
+        &result.clone(),
+        native_field(&callbacks, "elapsed")?.extract::<f64>()?,
+        color.extract::<bool>()?,
+        None,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     emit(&output, &format!("\n{}\n", footer.extract::<String>()?))?;
     Ok(i64::from(!native_field(&result, "status")?.eq(
         host::entry(py, ExecutorHost::BuildStatus)?.getattr("SUCCESS")?,

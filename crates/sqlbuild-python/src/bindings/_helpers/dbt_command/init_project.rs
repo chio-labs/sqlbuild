@@ -12,7 +12,9 @@ use sqlbuild_core::dbt_process::main::run_dbt_process::run_dbt_process;
 use sqlbuild_core::dbt_process::models::DbtProcessOutput;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::dbt_interop::profile::build_dbt_init_project_toml;
+use crate::bindings::_helpers::dbt_interop::profile::normalize_dbt_profile_connection;
 use crate::bindings::_helpers::dbt_interop::profile_load::{
     load_dbt_project_metadata, load_selected_dbt_profile_output,
 };
@@ -24,8 +26,7 @@ use sqlbuild_config::dbt_profile::models::DbtProjectMetadata;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_FILE;
 const DEFAULT_OUTPUT_DIR: &str = "sqlbuild_project";
 const PROFILES_FILE: &str = "profiles.yml";
@@ -90,39 +91,40 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
             ("profiles_dir", paths.profiles_dir.clone()),
         ],
     )?;
-    let normalized: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::NormalizeDbtProfileConnection)?,
-        &[("resolved", resolved_output)],
-    )?;
+    let normalized: Bound<'py, PyAny> = normalize_dbt_profile_connection(py, resolved_output)?;
     let target_path: Bound<'py, PyAny> = resolved(
         &paths.dbt_project_dir,
         &path_of(py, &PyString::new(py, &metadata.target_path).into_any())?,
     )?;
     let project_name: String = metadata.project_name.replace('-', "_");
     let target_name: Bound<'py, PyAny> = native_field(&selected, "target_name")?;
-    let toml: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildDbtInitProjectToml)?,
-        &[
-            ("project_name", project_name.clone().into_bound_py_any(py)?),
-            ("adapter", native_field(&normalized, "adapter")?),
-            ("target_name", target_name.clone()),
-            ("profile_name", profile_name.clone()),
-            (
-                "dbt_project_dir",
-                display_path(&paths.dbt_project_dir, &output_dir)?,
-            ),
-            (
-                "profiles_dir",
-                display_path(&paths.profiles_dir, &output_dir)?,
-            ),
-            ("target_path", display_path(&target_path, &output_dir)?),
-            ("target_schema", native_field(&normalized, "target_schema")?),
-            (
-                "target_database",
-                native_field(&normalized, "target_database")?,
-            ),
-        ],
-    )?;
+    let toml: Bound<'py, PyAny> = build_dbt_init_project_toml(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_name", project_name.clone().into_bound_py_any(py)?),
+                ("adapter", native_field(&normalized, "adapter")?),
+                ("target_name", target_name.clone()),
+                ("profile_name", profile_name.clone()),
+                (
+                    "dbt_project_dir",
+                    display_path(&paths.dbt_project_dir, &output_dir)?,
+                ),
+                (
+                    "profiles_dir",
+                    display_path(&paths.profiles_dir, &output_dir)?,
+                ),
+                ("target_path", display_path(&target_path, &output_dir)?),
+                ("target_schema", native_field(&normalized, "target_schema")?),
+                (
+                    "target_database",
+                    native_field(&normalized, "target_database")?,
+                ),
+            ],
+        )?),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     progress(&callbacks, "complete", "Rendered dbt profile connection.")?;
     let mut warnings: Vec<Bound<'py, PyAny>> = normalized
         .getattr("warnings")?
