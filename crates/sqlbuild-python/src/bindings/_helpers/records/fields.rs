@@ -38,25 +38,6 @@ const ENUM_NAME_ATTRIBUTE: &str = "name";
 /// Native string enums by class object, for `.value` and `.name` reads answered from their members.
 static ENUM_CLASSES: PyOnceLock<HashMap<usize, &'static EnumSpec>> = PyOnceLock::new();
 
-/// Each class seen by `enum_member_field`, held with whether it is a Python enum.
-type PythonEnumClasses = HashMap<usize, (Py<PyAny>, bool)>;
-
-/// Whether each class seen by `enum_member_field` is a Python enum, keyed by class object.
-static PYTHON_ENUM_CLASSES: Mutex<Option<PythonEnumClasses>> = Mutex::new(None);
-
-/// The name and value of each Python enum member read so far, keyed by member object.
-static PYTHON_ENUM_MEMBERS: Mutex<Option<HashMap<usize, PythonEnumMember>>> = Mutex::new(None);
-
-/// The module and class every Python enum derives from.
-const ENUM_BASE: (&str, &str) = ("enum", "Enum");
-
-/// A Python enum member with its name and value, held so the member identity stays valid.
-struct PythonEnumMember {
-    _member: Py<PyAny>,
-    name: Py<PyAny>,
-    value: Py<PyAny>,
-}
-
 /// Every registered record spec, in registration order.
 pub(crate) fn all_specs() -> impl Iterator<Item = &'static RecordSpec> {
     RECORDS.iter().flat_map(|group| group.iter())
@@ -235,9 +216,7 @@ fn enum_member_field<'py>(
             Ok(classes) => classes,
             Err(error) => return Some(Err(error)),
         };
-    let Some(spec) = classes.get(&(value.get_type().as_ptr() as usize)) else {
-        return python_enum_member_field(value, wants_value);
-    };
+    let spec: &EnumSpec = classes.get(&(value.get_type().as_ptr() as usize))?;
     let Ok(member) = value.cast::<PyString>() else {
         return None;
     };
@@ -255,87 +234,6 @@ fn enum_member_field<'py>(
         member_name
     };
     Some(Ok(PyString::new(py, answer).into_any()))
-}
-
-/// `member.value` or `member.name` of a Python enum, read once per member and then answered natively.
-fn python_enum_member_field<'py>(
-    value: &Bound<'py, PyAny>,
-    wants_value: bool,
-) -> Option<PyResult<Bound<'py, PyAny>>> {
-    let py: Python<'py> = value.py();
-    let identity: usize = value.as_ptr() as usize;
-    if let Some(answer) = cached_python_enum_member(py, identity, wants_value) {
-        return Some(Ok(answer));
-    }
-    match python_enum_class_check(value) {
-        Ok(true) => {}
-        Ok(false) => return None,
-        Err(error) => return Some(Err(error)),
-    }
-    let member: PythonEnumMember = match read_python_enum_member(value) {
-        Ok(member) => member,
-        Err(error) => return Some(Err(error)),
-    };
-    let answer: Bound<'py, PyAny> = if wants_value {
-        member.value.bind(py).clone()
-    } else {
-        member.name.bind(py).clone()
-    };
-    let mut members = PYTHON_ENUM_MEMBERS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _ = members
-        .get_or_insert_with(HashMap::new)
-        .entry(identity)
-        .or_insert(member);
-    Some(Ok(answer))
-}
-
-fn cached_python_enum_member<'py>(
-    py: Python<'py>,
-    identity: usize,
-    wants_value: bool,
-) -> Option<Bound<'py, PyAny>> {
-    let members = PYTHON_ENUM_MEMBERS
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let member: &PythonEnumMember = members.as_ref()?.get(&identity)?;
-    let answer: &Py<PyAny> = if wants_value {
-        &member.value
-    } else {
-        &member.name
-    };
-    Some(answer.bind(py).clone())
-}
-
-/// Whether `value`'s class derives from `enum.Enum`, classified once per class.
-fn python_enum_class_check(value: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let class: Bound<'_, PyType> = value.get_type();
-    let identity: usize = class.as_ptr() as usize;
-    let known: Option<bool> = PYTHON_ENUM_CLASSES
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .as_ref()
-        .and_then(|classes| classes.get(&identity).map(|(_, is_enum)| *is_enum));
-    if let Some(is_enum) = known {
-        return Ok(is_enum);
-    }
-    let is_enum: bool = class.is_subclass(&imported(value.py(), ENUM_BASE.0, ENUM_BASE.1)?)?;
-    let _ = PYTHON_ENUM_CLASSES
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .get_or_insert_with(HashMap::new)
-        .entry(identity)
-        .or_insert((class.into_any().unbind(), is_enum));
-    Ok(is_enum)
-}
-
-fn read_python_enum_member(value: &Bound<'_, PyAny>) -> PyResult<PythonEnumMember> {
-    Ok(PythonEnumMember {
-        _member: value.clone().unbind(),
-        name: value.getattr(ENUM_NAME_ATTRIBUTE)?.unbind(),
-        value: value.getattr(ENUM_VALUE_ATTRIBUTE)?.unbind(),
-    })
 }
 
 fn enum_classes(py: Python<'_>) -> PyResult<HashMap<usize, &'static EnumSpec>> {

@@ -6,7 +6,11 @@ use crate::rule_cache::models::ModelKeyInput;
 
 /// A digest of the lint key, selected codes, authored and compiled SQL and dynamic contract.
 #[must_use]
-pub fn model_rule_key(lint_key: &str, codes: &[String], model: &ModelKeyInput<'_>) -> String {
+pub(crate) fn model_rule_key(
+    lint_key: &str,
+    codes: &[String],
+    model: &ModelKeyInput<'_>,
+) -> String {
     let codes: String = codes.join("\0");
     let contract: &str = model.contract.unwrap_or(NO_CONTRACT);
     let has_contract: &str = if model.contract.is_some() { "1" } else { "0" };

@@ -2,7 +2,7 @@
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use crate::rule_cache::main::model_rule_key::model_rule_key;
+use crate::rule_cache::_helpers::model_rule_key::model_rule_key;
 use crate::rule_cache::models::ModelKeyInput;
 
 /// Each model's `model_rule_key`, in input order.

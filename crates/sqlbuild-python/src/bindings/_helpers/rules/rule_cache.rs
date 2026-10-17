@@ -64,8 +64,7 @@ fn sql_model_rule_keys(
     model_rule_keys(py, lint_key, &codes, &models)
 }
 
-/// Each model path's SQL rule cache key from `(path, authored_sql, query_sql, contract)`.
-/// Hashed in parallel with the GIL released: the inputs are owned Rust strings.
+/// Each model path's SQL rule cache key, hashed in parallel with the GIL released.
 pub(crate) fn model_rule_keys(
     py: Python<'_>,
     lint_key: &str,
