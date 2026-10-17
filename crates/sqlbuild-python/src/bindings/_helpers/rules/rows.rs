@@ -110,26 +110,76 @@ pub(crate) fn build_rules_request(
     as_rules_error(py, built_request(&request))
 }
 
+/// The model-free request of a run selecting no rules, which only validates its configuration.
+pub(crate) fn selectionless_rules_request(
+    config: &Bound<'_, PyAny>,
+    project_dir: &Bound<'_, PyAny>,
+    dialect: &str,
+    custom_payloads: &Bound<'_, PyAny>,
+) -> PyResult<NativeRulesRequest> {
+    let py: Python<'_> = config.py();
+    let header: PyResult<Value> = dialect
+        .into_bound_py_any(py)
+        .and_then(|dialect| request_header(config, project_dir, &dialect, (None, custom_payloads)));
+    as_rules_error(
+        py,
+        header.and_then(|header| {
+            compiler_guard(|| {
+                let request: EvaluateRequest =
+                    serde_json::from_value(header).map_err(value_error)?;
+                Ok(NativeRulesRequest {
+                    request: Mutex::new(Some(RowsRequest {
+                        request,
+                        memo: None,
+                    })),
+                })
+            })
+        }),
+    )
+}
+
+/// The request's version, paths, dialect, config, custom rules and, when given, scope index.
+fn request_header(
+    config: &Bound<'_, PyAny>,
+    project_dir: &Bound<'_, PyAny>,
+    dialect: &Bound<'_, PyAny>,
+    (project, custom_payloads): (Option<&Bound<'_, PyAny>>, &Bound<'_, PyAny>),
+) -> PyResult<Value> {
+    let py: Python<'_> = config.py();
+    let resolved: Bound<'_, PyAny> = project_dir.call_method0("resolve")?;
+    let resolved_path: PathBuf = resolved.extract()?;
+    let mut header: Value = json!({
+        "version": API_VERSION,
+        "project_dir": resolved.str()?.to_str()?,
+        "dialect": dialect.extract::<String>()?,
+        "config": config_value(config)?,
+    });
+    if let Some(project) = project {
+        header["scope_index"] = plain_value(
+            metadata_projection(py, &project_attribute(project, "scope_index")?)?.bind(py),
+        )?;
+    }
+    header["defer_suppressions"] = Value::Bool(true);
+    header["custom_rules"] = plain_value(custom_payloads)?;
+    header["rules_cache_path"] = Value::String(path_text(
+        py,
+        rules_bulk_cache_path(&resolved_path, NATIVE_RULES_CACHE_FILE),
+    )?);
+    Ok(header)
+}
+
 fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
     let py: Python<'_> = options.py();
     let project: Bound<'_, PyAny> = options.get("project")?;
     let config: Bound<'_, PyAny> = options.get("config")?;
     let project_dir: Bound<'_, PyAny> = options.get("project_dir")?;
     let dialect: Bound<'_, PyAny> = options.get("dialect")?;
-    let resolved: Bound<'_, PyAny> = project_dir.call_method0("resolve")?;
-    let resolved_path: PathBuf = resolved.extract()?;
-    let header: Value = json!({
-        "version": API_VERSION,
-        "project_dir": resolved.str()?.to_str()?,
-        "dialect": dialect.extract::<String>()?,
-        "config": config_value(&config)?,
-        "scope_index": plain_value(
-            metadata_projection(py, &project_attribute(&project, "scope_index")?)?.bind(py),
-        )?,
-        "defer_suppressions": true,
-        "custom_rules": plain_value(&options.get("custom_payloads")?)?,
-        "rules_cache_path": path_text(py, rules_bulk_cache_path(&resolved_path, NATIVE_RULES_CACHE_FILE))?,
-    });
+    let header: Value = request_header(
+        &config,
+        &project_dir,
+        &dialect,
+        (Some(&project), &options.get("custom_payloads")?),
+    )?;
     let (public_enums, public_constants) = declaration_rows(
         PyTuple::new(
             py,

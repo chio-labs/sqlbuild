@@ -165,6 +165,16 @@ class RulesIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class EmptyRuleSelectionTestCase:
+    """A compile that selects no rules, with the Rules configuration it still validates."""
+
+    description: str
+    configuration: str
+    expected_exit_code: int
+    expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CustomHostSplitIntegrationTestCase:
     """A compile whose custom rules run on several hosts and must match one host."""
 
