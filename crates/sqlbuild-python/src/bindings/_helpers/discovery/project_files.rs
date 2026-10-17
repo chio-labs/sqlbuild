@@ -89,7 +89,7 @@ pub(crate) fn model_record<'py>(
             declarations: (enum_declarations.unbind(), constant_declarations.unbind()),
             extract_implicit_alias_columns,
         },
-    );
+    )?;
     Ok(Ok(record.into_py_any(py)?))
 }
 

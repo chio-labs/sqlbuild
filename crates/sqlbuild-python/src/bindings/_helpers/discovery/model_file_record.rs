@@ -92,7 +92,7 @@ impl Locations {
 pub(crate) struct NativeModelFile {
     file_path: Py<PyAny>,
     /// `file_path` as a native path, read once so hot paths need not call back into `pathlib`.
-    native_file_path: Option<PathBuf>,
+    native_file_path: PathBuf,
     relative_path: Py<PyAny>,
     contents: Py<PyString>,
     header_values: Py<PyDict>,
@@ -137,10 +137,10 @@ struct ModelFileFields {
 }
 
 impl NativeModelFile {
-    pub(crate) fn discovered(py: Python<'_>, parts: ModelFileParts) -> Self {
+    pub(crate) fn discovered(py: Python<'_>, parts: ModelFileParts) -> PyResult<Self> {
         let (enum_declarations, constant_declarations) = parts.declarations;
-        Self {
-            native_file_path: parts.file_path.bind(py).extract().ok(),
+        Ok(Self {
+            native_file_path: parts.file_path.bind(py).extract()?,
             file_path: parts.file_path,
             relative_path: parts.relative_path,
             contents: parts.contents,
@@ -151,7 +151,7 @@ impl NativeModelFile {
             enum_declarations,
             constant_declarations,
             extract_implicit_alias_columns: parts.extract_implicit_alias_columns,
-        }
+        })
     }
 
     pub(crate) fn header_locations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
@@ -172,12 +172,9 @@ impl NativeModelFile {
         )
     }
 
-    /// The file path as a native path, reading `file_path` only when it was not a path at construction.
-    pub(crate) fn file_path_buf(&self, py: Python<'_>) -> PyResult<PathBuf> {
-        match &self.native_file_path {
-            Some(path) => Ok(path.clone()),
-            None => self.file_path.bind(py).extract(),
-        }
+    /// The file path as a native path.
+    pub(crate) fn file_path_buf(&self) -> PathBuf {
+        self.native_file_path.clone()
     }
 
     pub(crate) fn paths<'py>(&self, py: Python<'py>) -> (&Bound<'py, PyAny>, &Bound<'py, PyAny>) {
@@ -231,7 +228,7 @@ impl NativeModelFile {
         }
         let fields: ModelFileFields = fields.extract()?;
         Ok(Self {
-            native_file_path: fields.file_path.bind(py).extract().ok(),
+            native_file_path: fields.file_path.bind(py).extract()?,
             file_path: fields.file_path,
             relative_path: fields.relative_path,
             contents: fields.contents,

@@ -37,7 +37,7 @@ pub(crate) fn model_key_row(model: &Bound<'_, PyAny>) -> PyResult<RelationKeyRow
 fn record_path(record: &ModelInputRecord, py: Python<'_>) -> PyResult<PathBuf> {
     let model_file: &Bound<'_, PyAny> = record.model_file.bind(py);
     match model_file.downcast::<NativeModelFile>() {
-        Ok(native) => native.get().file_path_buf(py),
+        Ok(native) => Ok(native.get().file_path_buf()),
         Err(_) => model_file.getattr(FILE_PATH_ATTRIBUTE)?.extract(),
     }
 }
