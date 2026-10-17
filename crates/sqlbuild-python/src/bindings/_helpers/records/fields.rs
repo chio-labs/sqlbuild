@@ -123,10 +123,12 @@ fn strict_fallback(value: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
         return Ok(());
     }
     let caller: &std::panic::Location<'_> = std::panic::Location::caller();
-    let entry: String = format!("{}\t{}.{name}", caller.file(), class.qualname()?);
+    let qualname: Bound<'_, PyString> = class.qualname()?;
+    let entry: String = format!("{}\t{}.{name}", caller.file(), qualname.to_cow()?);
     match strict {
         StrictFields::Enforce(Err(error)) => Err(PyRuntimeError::new_err(error.clone())),
         StrictFields::Enforce(Ok(allowed)) if !allowed.contains(&entry) => {
+            value.py().check_signals()?;
             Err(PyRuntimeError::new_err(format!(
                 "native field read fell back to Python: {}",
                 entry.replace('\t', " ")
