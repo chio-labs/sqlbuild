@@ -9,10 +9,9 @@ use sqlbuild_analysis::required_columns::main::resolve_required_columns::resolve
 use sqlbuild_analysis::required_columns::models::{ColumnRead, ReferenceInput};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 /// CTE-aware column reads of `query_sql`, resolved to the external resources it references.
@@ -41,11 +40,11 @@ fn analyze_resolved_column_reads<'py>(
             }
             RequiredColumnsError::Normalization(message) => value_error(message),
         })?;
-    let fact: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledLineageSourceFact)?;
     let mut facts: Vec<Bound<'py, PyAny>> = Vec::with_capacity(reads.len());
     for read in reads {
-        facts.push(call_with(
-            &fact,
+        facts.push(new_record_with(
+            py,
+            RecordId::CompiledLineageSourceFact,
             &[
                 (
                     "resource_type",

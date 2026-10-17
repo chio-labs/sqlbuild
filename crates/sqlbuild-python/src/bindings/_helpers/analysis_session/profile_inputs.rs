@@ -9,9 +9,9 @@ use crate::bindings::_helpers::analysis::binding_catalog::{
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const GENERIC_DIALECT: &str = "generic";
 const ADAPTER_RULE_ID: &str = "python";
@@ -55,7 +55,7 @@ pub(crate) fn nullability_rules(profile: &Bound<'_, PyAny>) -> PyResult<(Pairs, 
     if adapter.is_empty() {
         return Ok((rows, None));
     }
-    let nullability: Bound<'_, PyAny> = registry::class(py, RecordId::InferredNullability)?;
+    let nullability: Bound<'_, PyAny> = record_class(py, RecordId::InferredNullability)?;
     Ok((rows, Some((adapter.unbind(), nullability.unbind()))))
 }
 

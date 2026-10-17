@@ -14,9 +14,9 @@ use crate::bindings::_helpers::analysis_session::query_columns::ColumnsRow;
 use crate::bindings::_helpers::analysis_session::stage_functions::query_column_rows;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";
@@ -36,8 +36,7 @@ fn infer_fixture_column_facts<'py>(
     query.set_item("sql", &query_sql)?;
     query.set_item("mode", LEGACY_MODE)?;
     query.set_item("recover_cte_facts", false)?;
-    let query: Bound<'py, PyAny> =
-        registry::class(py, RecordId::NativeColumnQuery)?.call((), Some(&query))?;
+    let query: Bound<'py, PyAny> = new_record(py, RecordId::NativeColumnQuery, (), Some(&query))?;
     let empty: Bound<'py, PyAny> = PyDict::new(py).into_any();
     let rows: Vec<ColumnsRow> = query_column_rows(
         PyTuple::new(py, [query])?.as_any(),
@@ -52,8 +51,6 @@ fn infer_fixture_column_facts<'py>(
         .compiler_detach(|| projection_facts(&query_sql, dialect.as_deref()))
         .map_err(|reason| compiler_error(native_failure(PROJECTION_FACTS_CONTEXT, &reason)))?;
     let simple_types: HashMap<String, String> = facts.types.into_iter().collect();
-    let column_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability_class: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(columns.len());
     for (name, data_type, nullability) in columns {
         let data_type: Option<String> = data_type
@@ -62,8 +59,16 @@ fn infer_fixture_column_facts<'py>(
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
         arguments.set_item("name", name)?;
         arguments.set_item("type", data_type)?;
-        arguments.set_item("nullability", nullability_class.call1((nullability,))?)?;
-        built.push(column_class.call((), Some(&arguments))?);
+        arguments.set_item(
+            "nullability",
+            enum_from_value(py, RecordId::InferredNullability, nullability)?,
+        )?;
+        built.push(new_record(
+            py,
+            RecordId::InferredColumn,
+            (),
+            Some(&arguments),
+        )?);
     }
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("columns", PyTuple::new(py, built)?)?;
@@ -72,7 +77,7 @@ fn infer_fixture_column_facts<'py>(
         PyFrozenSet::new(py, facts.null_literal_names)?,
     )?;
     arguments.set_item("quoted_names", PyFrozenSet::new(py, facts.quoted_names)?)?;
-    registry::class(py, RecordId::FixtureColumnInference)?.call((), Some(&arguments))
+    new_record(py, RecordId::FixtureColumnInference, (), Some(&arguments))
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

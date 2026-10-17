@@ -1,8 +1,8 @@
 //! The explicit-reference facts of a compiled project, read from its Python views.
 
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyList, PyTuple};
 use sqlbuild_analysis::explicit_references::models::{
@@ -108,8 +108,8 @@ struct HookEntries<'py> {
 impl<'py> HookEntries<'py> {
     fn imported(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            python: registry::class(py, RecordId::PythonHookEntry)?,
-            sql: registry::class(py, RecordId::SqlHookEntry)?,
+            python: record_class(py, RecordId::PythonHookEntry)?,
+            sql: record_class(py, RecordId::SqlHookEntry)?,
         })
     }
 }

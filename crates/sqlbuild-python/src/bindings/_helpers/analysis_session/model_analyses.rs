@@ -22,9 +22,9 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 
 const LOGGING_MODULE: &str = "logging";
@@ -152,8 +152,7 @@ fn run_session<'py>(
             PyString::new(py, &failure).as_any(),
         )?;
     }
-    let unknown: Bound<'py, PyAny> =
-        registry::class(py, RecordId::InferredNullability)?.getattr("UNKNOWN")?;
+    let unknown: Bound<'py, PyAny> = enum_member(py, RecordId::InferredNullability, "UNKNOWN")?;
     for (name, shape) in publications {
         let published: Bound<'py, PyDict> = shape.into_py_dict(py)?;
         types.call_method1("setdefault", (&name, &published))?;
@@ -256,10 +255,8 @@ fn model_rows<'py>(
     py: Python<'py>,
     model_inputs: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let enforced: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
-    let snapshot: Bound<'py, PyAny> =
-        registry::class(py, RecordId::MaterializationType)?.getattr("SNAPSHOT")?;
+    let enforced: Bound<'py, PyAny> = enum_member(py, RecordId::ContractPolicy, "ENFORCED")?;
+    let snapshot: Bound<'py, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::with_capacity(model_inputs.len());
     for model_input in model_inputs {
         let values: Bound<'py, PyAny> = native_field(model_input, "config")?.getattr("values")?;
