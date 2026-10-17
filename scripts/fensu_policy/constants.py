@@ -1,5 +1,7 @@
 """Stable constants for SQLBuild custom Fensu rules."""
 
+from fensu import RuleOption
+
 ADAPTER_CLASS_BOUNDARIES: frozenset[str] = frozenset(
     {"_helpers", "classes", "models", "types", "constants", "exceptions", "shared"}
 )
@@ -294,3 +296,50 @@ OBSERVABILITY_DEFINITION_MODULES: tuple[tuple[str, ...], ...] = (
     ("sqlbuild", "runtime", "observability", "models"),
 )
 PUBLIC_EVENT_EXPORTER_MODULE_PARTS: tuple[str, ...] = ("sqlbuild", "sinks")
+NATIVE_BINDINGS_ROOT: str = "crates/sqlbuild-python/src/"
+NATIVE_CROSSING_PATTERNS: tuple[str, ...] = (
+    r"\.getattr\(",
+    r"\.setattr\(",
+    r"\.call_method[01]?\(",
+    r"\.call[01]?\(",
+    r"\bregistry::(?:native|error)\(",
+    r"\bimported\(",
+    r"\.import\(",
+    r"\bPyModule::import\(",
+    r"\"dataclasses\"",
+    r"\"sqlbuild\.",
+)
+NATIVE_PYTHON_FIELD_PATTERN: str = (
+    r"\b(?:Py|Bound|Borrowed)<[^;]*?\b(?:PyAny|PyDict|PyList|PyTuple|PySet|PyFrozenSet"
+    r"|PyString|PyType|PyModule)\b"
+)
+NATIVE_TEST_MODULE_MARKER: str = "#[cfg(test)]"
+NATIVE_RUST_SUFFIX: str = ".rs"
+NATIVE_TEST_DIRECTORY: str = "tests"
+NATIVE_TEST_FILE_NAME: str = "tests.rs"
+NATIVE_TEST_FILE_PREFIX: str = "test_"
+NATIVE_LINE_COMMENT: str = "//"
+NATIVE_STRING_QUOTE: str = '"'
+NATIVE_SKIPPED_LINE_PREFIXES: tuple[str, ...] = ("//", "use ", "pub use ", "pub(crate) use ")
+NATIVE_BUDGET_SEPARATOR: str = "="
+NATIVE_EDGE_PATHS: RuleOption[tuple[str, ...]] = RuleOption.string_list(
+    name="edge_paths",
+    default=(),
+    description="Path prefixes that own the real Python edges and may cross freely.",
+)
+NATIVE_PENDING_BUDGETS: RuleOption[tuple[str, ...]] = RuleOption.string_list(
+    name="pending_budgets",
+    default=(),
+    description="`path=count` budgets for files that still cross; each may only fall.",
+)
+NATIVE_MODULE_PATH: str = "sqlbuild._native"
+NATIVE_MODULE_PACKAGE: str = "sqlbuild"
+NATIVE_MODULE_NAME: str = "_native"
+NATIVE_PATCH_CALL_NAMES: frozenset[str] = frozenset({"setattr", "object", "delattr"})
+NATIVE_STRING_PATCH_CALL_NAMES: frozenset[str] = frozenset({"setattr", "patch", "delattr"})
+NATIVE_TEST_PATH_PREFIX: str = "tests/"
+NATIVE_TEST_PATCH_BUDGETS: RuleOption[tuple[str, ...]] = RuleOption.string_list(
+    name="pending_budgets",
+    default=(),
+    description="`path=count` budgets for test files that still patch the native module.",
+)
