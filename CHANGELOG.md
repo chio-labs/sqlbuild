@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.157.0](https://github.com/chio-labs/sqlbuild/compare/v0.156.1...v0.157.0) (2026-10-17)
+
+
+### Code Refactoring
+
+* guard native bindings and read native views, properties and dicts directly ([#1126](https://github.com/chio-labs/sqlbuild/issues/1126)) ([1729fce](https://github.com/chio-labs/sqlbuild/commit/1729fce860671d91a4036eaa87beac035603c0e9))
+
 ## [0.156.1](https://github.com/chio-labs/sqlbuild/compare/v0.156.0...v0.156.1) (2026-10-12)
 
 
