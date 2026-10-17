@@ -50,7 +50,7 @@ pub(crate) struct IntegrationResultEnvelope {
 
 #[pymethods]
 impl IntegrationAssetResult {
-    fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
+    pub(crate) fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         field(&self.fields, py, name)
     }
 
@@ -62,7 +62,7 @@ impl IntegrationAssetResult {
 
 #[pymethods]
 impl IntegrationCheckResult {
-    fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
+    pub(crate) fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         field(&self.fields, py, name)
     }
 
@@ -182,7 +182,7 @@ impl IntegrationResultEnvelope {
         self.checks.clone_ref(py)
     }
 
-    fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
+    pub(crate) fn __getattr__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
         field(&self.fields, py, name)
     }
 }

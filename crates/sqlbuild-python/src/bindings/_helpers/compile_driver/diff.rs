@@ -19,6 +19,7 @@ use crate::bindings::_helpers::graph::views::project_lineage_views;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::ids::RecordId;
 
@@ -48,7 +49,7 @@ fn adjacency<'py>(
     keys: &KeyIndexes<'py>,
 ) -> PyResult<Vec<(usize, Vec<usize>)>> {
     let mut rows: Vec<(usize, Vec<usize>)> = Vec::new();
-    for item in edges.call_method0("items")?.try_iter()? {
+    for item in mapping_items(edges)?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         rows.push((
             keys.index(&item.get_item(0)?)?,

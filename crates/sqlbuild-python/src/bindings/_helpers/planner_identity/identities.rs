@@ -25,6 +25,7 @@ use crate::bindings::_helpers::planner_identity::metadata::{
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 
@@ -40,8 +41,7 @@ fn graph_keys(keys: &Bound<'_, PyAny>) -> PyResult<Vec<GraphKey>> {
 }
 
 fn string_pairs(mapping: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
-    mapping
-        .call_method0("items")?
+    mapping_items(mapping)?
         .try_iter()?
         .map(|item| item?.extract::<(String, String)>())
         .collect()
@@ -53,7 +53,7 @@ fn hook_version_hashes<'py>(hook_functions: &Bound<'py, PyAny>) -> PyResult<Boun
     let hashes: Bound<'py, PyDict> = PyDict::new(py);
     let identities: Bound<'py, PyAny> =
         host::entry(py, UserCodeHost::BuildHookIdentities)?.call1((hook_functions,))?;
-    for item in identities.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&identities)?.try_iter()? {
         let (name, identity): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         hashes.set_item(name, native_field(&identity, "version_hash")?)?;
     }
@@ -298,7 +298,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
     }
     let recorded_models: Bound<'py, PyAny> =
         native_field(&native_field(&snapshot, "fingerprints")?, "models")?;
-    for item in recorded_models.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&recorded_models)?.try_iter()? {
         let (name, fingerprint): (String, Bound<'py, PyAny>) = item?.extract()?;
         let version_hash: Bound<'py, PyAny> = native_field(&fingerprint, "version_hash")?;
         if version_hash.is_truthy()? {

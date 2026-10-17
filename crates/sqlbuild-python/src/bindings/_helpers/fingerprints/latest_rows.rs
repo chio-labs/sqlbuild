@@ -5,6 +5,7 @@ use std::ffi::CString;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use pyo3::exceptions::{PyUnicodeDecodeError, PyValueError};
 use pyo3::prelude::{
@@ -70,8 +71,7 @@ pub(crate) fn select_latest_fingerprints<'py>(
     }
     let by_identity: Bound<'py, PyAny> = native_field(fingerprint_set, "fingerprints_by_identity")?;
     let latest: Vec<Bound<'py, PyAny>> = if by_identity.is_truthy()? {
-        by_identity
-            .call_method0("values")?
+        mapping_values(&by_identity)?
             .try_iter()?
             .collect::<PyResult<_>>()?
     } else {

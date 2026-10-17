@@ -10,6 +10,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 /// The materializations a model's storage policies are inherited for, besides none.
@@ -94,7 +95,7 @@ fn named_records<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
         .collect::<PyResult<_>>()?;
     let declarations: Bound<'py, PyAny> =
         native_field(resolver, "lookup")?.getattr("declarations")?;
-    for pair in declarations.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(&declarations)?.try_iter()? {
         let (identity, records_of): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let kind: Bound<'py, PyAny> = native_field(&identity, "kind")?;
         if kinds.iter().any(|named| kind.is(named))
@@ -124,7 +125,7 @@ fn schema_enums<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict
     let enum_class: Bound<'py, PyAny> = record_class(py, RecordId::EnumDeclaration)?;
     let declarations: Bound<'py, PyAny> =
         native_field(resolver, "projection")?.getattr("declarations")?;
-    for pair in declarations.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(&declarations)?.try_iter()? {
         let (identity, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         if native_field(&identity, "kind")?.is(&enum_kind)
             && native_field(&identity, "owner")?.is_none()

@@ -20,6 +20,7 @@ use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
@@ -120,7 +121,7 @@ fn shape(
     columns: &Bound<'_, PyAny>,
 ) -> PyResult<(String, Vec<(String, String)>)> {
     let mut pairs: Vec<(String, String)> = Vec::new();
-    for pair in columns.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(columns)?.try_iter()? {
         pairs.push(pair?.extract()?);
     }
     Ok((name.extract()?, pairs))

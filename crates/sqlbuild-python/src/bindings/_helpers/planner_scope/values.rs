@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::graph::keys::native_key;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyDict;
 use pyo3::types::PyDictMethods;
@@ -16,8 +17,7 @@ pub(crate) fn keys(values: &Bound<'_, PyAny>) -> PyResult<Vec<ObjectKey>> {
 }
 
 pub(crate) fn edges(values: &Bound<'_, PyAny>) -> PyResult<Vec<(ObjectKey, Vec<ObjectKey>)>> {
-    values
-        .call_method0("items")?
+    mapping_items(values)?
         .try_iter()?
         .map(|item| {
             let (key, deps): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;

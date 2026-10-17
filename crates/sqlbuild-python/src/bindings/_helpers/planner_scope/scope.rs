@@ -14,6 +14,7 @@ use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings}
 use crate::bindings::_helpers::planner_selection::selectors::resolve_graph_selection;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::PyDictMethods;
@@ -80,8 +81,7 @@ pub(crate) fn build_planner_scope<'py>(
     if selected.is_none() {
         selected = resolve_graph_selection(lineage.borrow(), &select, &exclude)?.into_any();
     }
-    let names: Vec<(String, (String, String))> = all_keys
-        .call_method0("items")?
+    let names: Vec<(String, (String, String))> = mapping_items(&all_keys)?
         .try_iter()?
         .map(|item| {
             let (name, key): (String, Bound<'py, PyAny>) = item?.extract()?;

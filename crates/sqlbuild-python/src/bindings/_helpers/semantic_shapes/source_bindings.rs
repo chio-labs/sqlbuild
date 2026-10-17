@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::constants::SOURCE_REBINDING_ANALYSES;
@@ -80,7 +81,7 @@ pub(crate) fn source_binding_diagnostics<'py>(
         && CASE_SENSITIVE_BINDING_DIALECTS.contains(&dialect.extract::<String>()?.as_str())
         && !ignore_case.is_truthy()?;
     let mut changed: HashSet<String> = HashSet::new();
-    for item in columns.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&columns)?.try_iter()? {
         let (name, value): (String, Object<'py>) = item?.extract()?;
         if !value.is_truthy()? {
             continue;
@@ -397,8 +398,7 @@ fn adds_physical_evidence(
     let Some(known) = known else {
         return Ok(true);
     };
-    let known: Vec<(String, String)> = known
-        .call_method0("items")?
+    let known: Vec<(String, String)> = mapping_items(known)?
         .try_iter()?
         .map(|item| item?.extract())
         .collect::<PyResult<_>>()?;
@@ -435,7 +435,7 @@ fn placeholders<'py>(model: &Object<'py>) -> PyResult<Object<'py>> {
         return Ok(py.None().into_bound(py));
     }
     let placeholders: Bound<'py, PyDict> = PyDict::new(py);
-    for item in values.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&values)?.try_iter()? {
         let (key, value): (Object<'py>, Object<'py>) = item?.extract()?;
         placeholders.set_item(key.str()?, value.str()?)?;
     }

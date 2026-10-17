@@ -25,6 +25,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 
@@ -96,7 +97,7 @@ fn session_request<'py>(
     let py: Python<'py> = catalog.py();
     let profile: &Bound<'py, PyAny> = &request.profile;
     let mut families: Vec<(String, Vec<_>)> = Vec::new();
-    for item in request.dynamic_families.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&request.dynamic_families)?.try_iter()? {
         let (name, declared): (String, Bound<'py, PyAny>) = item?.extract()?;
         families.push((name, family_rows(&declared)?));
     }
@@ -270,7 +271,7 @@ fn model_rows<'py>(
         let mut placeholders: Vec<(String, String)> = Vec::new();
         let raw: Bound<'py, PyAny> = get("placeholders")?;
         if raw.is_instance_of::<PyDict>() {
-            for item in raw.call_method0("items")?.try_iter()? {
+            for item in mapping_items(&raw)?.try_iter()? {
                 let (key, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
                 placeholders.push((key.str()?.extract()?, value.str()?.extract()?));
             }

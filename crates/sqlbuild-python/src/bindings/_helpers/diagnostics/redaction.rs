@@ -10,6 +10,7 @@ use sqlbuild_core::redaction::main::redact_text::redact_text;
 use sqlbuild_core::redaction::main::secret_field_name::secret_field_name;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const REDACTED: &str = "[REDACTED]";
 
@@ -23,7 +24,7 @@ fn redact_diagnostic_text(value: &str) -> String {
 fn redacted_mapping<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     let redacted: Bound<'py, PyDict> = PyDict::new(py);
-    for item in value.call_method0("items")?.try_iter()? {
+    for item in mapping_items(value)?.try_iter()? {
         let (key, item): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         let name: String = key.str()?.extract()?;
         redacted.set_item(&name, redacted_value(&name, &item)?)?;

@@ -28,6 +28,7 @@ use crate::bindings::_helpers::janitor::janitor_old_names::{
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::relation_naming::fitting::shared_error;
 
 const LIFECYCLE: ExecutorHost = ExecutorHost::OperationLifecycle;
@@ -310,7 +311,7 @@ fn reasons_of(value: &Bound<'_, PyAny>) -> PyResult<Vec<(Key, String)>> {
         return Ok(Vec::new());
     }
     let mut reasons: Vec<(Key, String)> = Vec::new();
-    for item in value.call_method0("items")?.try_iter()? {
+    for item in mapping_items(value)?.try_iter()? {
         let (key, reason): (Bound<'_, PyAny>, String) = item?.extract()?;
         reasons.push((Key::of(&key)?, reason));
     }

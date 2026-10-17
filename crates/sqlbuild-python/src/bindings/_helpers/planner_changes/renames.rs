@@ -20,6 +20,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -183,7 +184,7 @@ pub(crate) fn plan_reference_renames<'py>(
     let target_name: Bound<'py, PyAny> =
         native_field(&native_field(runtime, "project")?, "effective_target_name")?;
     let mut renames: Vec<Bound<'py, PyAny>> = Vec::new();
-    for item in planned.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&planned)?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         let (new_name, origin_name) = (item.get_item(0)?, item.get_item(1)?);
         if new_name.ne(&origin_name)? {

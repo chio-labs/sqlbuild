@@ -24,6 +24,7 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::frontier::python_types::PythonTypes;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 /// An instance's attributes, by name in first-set order.
 type Attributes<'py> = Vec<(String, Bound<'py, PyAny>)>;
@@ -339,7 +340,7 @@ impl<'py> CaptureEncoder<'py> {
             ));
         }
         let mut entries: Vec<(String, JsonValue)> = Vec::new();
-        for item in value.call_method0("items")?.try_iter()? {
+        for item in mapping_items(value)?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             let key: String = item.get_item(0)?.str()?.to_str()?.to_owned();
             let encoded: JsonValue = self.encode(&item.get_item(1)?)?;
@@ -350,7 +351,7 @@ impl<'py> CaptureEncoder<'py> {
 
     fn mapping_pairs(&mut self, value: &Bound<'py, PyAny>) -> PyResult<Vec<JsonValue>> {
         let mut pairs: Vec<JsonValue> = Vec::new();
-        for item in value.call_method0("items")?.try_iter()? {
+        for item in mapping_items(value)?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             let key: JsonValue = self.encode(&item.get_item(0)?)?;
             let encoded: JsonValue = self.encode(&item.get_item(1)?)?;
@@ -419,7 +420,7 @@ fn instance_attributes<'py>(value: &Bound<'py, PyAny>) -> PyResult<Option<Attrib
         || instance_dict.is_instance_of::<pyo3::types::PyDict>();
     let mut attributes: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
     if has_dict {
-        for item in instance_dict.call_method0("items")?.try_iter()? {
+        for item in mapping_items(&instance_dict)?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             let name: String = item.get_item(0)?.str()?.to_str()?.to_owned();
             attributes = with_entry(attributes, name, item.get_item(1)?);

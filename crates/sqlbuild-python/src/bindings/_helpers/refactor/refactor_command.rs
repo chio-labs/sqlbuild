@@ -38,6 +38,7 @@ use crate::bindings::_helpers::lineage::lineage_index::lineage_key;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::refactor::offline_compile::{OfflineCompile, compile_for_refactor};
 use crate::bindings::_helpers::refactor::refactor_facts::{
@@ -204,7 +205,7 @@ struct Verified {
 
 fn target_lookup(all_keys: &Bound<'_, PyAny>) -> PyResult<HashMap<String, LineageKey>> {
     let mut names: HashMap<String, LineageKey> = HashMap::new();
-    for item in all_keys.call_method0("items")?.try_iter()? {
+    for item in mapping_items(all_keys)?.try_iter()? {
         let (name, key): (String, Bound<'_, PyAny>) = item?.extract()?;
         names.insert(name, lineage_key(&key)?);
     }

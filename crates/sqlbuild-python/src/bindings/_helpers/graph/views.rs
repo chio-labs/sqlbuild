@@ -14,6 +14,7 @@ use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The native graph's `(resource type, name)` pair for `key`.
@@ -110,7 +111,7 @@ pub(crate) fn project_lineage_views<'py>(
 
 fn native_edges(mapping: &Bound<'_, PyAny>) -> PyResult<Vec<(ObjectKey, Vec<ObjectKey>)>> {
     let mut edges: Vec<(ObjectKey, Vec<ObjectKey>)> = Vec::new();
-    for item in mapping.call_method0("items")?.try_iter()? {
+    for item in mapping_items(mapping)?.try_iter()? {
         let (key, deps): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
         edges.push((native_key(&key)?, native_graph_keys(&deps)?));
     }
@@ -160,17 +161,17 @@ pub(crate) fn graph_from_view_mappings(
     mappings: GraphViewMappings<'_, '_>,
 ) -> PyResult<NativeProjectGraph> {
     let mut names: Vec<(String, ObjectKey)> = Vec::new();
-    for item in mappings.all_keys.call_method0("items")?.try_iter()? {
+    for item in mapping_items(mappings.all_keys)?.try_iter()? {
         let (name, key): (String, Bound<'_, PyAny>) = item?.extract()?;
         names.push((name, native_key(&key)?));
     }
     let mut tags: Vec<(String, Vec<ObjectKey>)> = Vec::new();
-    for item in mappings.tag_index.call_method0("items")?.try_iter()? {
+    for item in mapping_items(mappings.tag_index)?.try_iter()? {
         let (tag, keys): (String, Bound<'_, PyAny>) = item?.extract()?;
         tags.push((tag, native_graph_keys(&keys)?));
     }
     let mut paths: Vec<(ObjectKey, String)> = Vec::new();
-    for item in mappings.path_index.call_method0("items")?.try_iter()? {
+    for item in mapping_items(mappings.path_index)?.try_iter()? {
         let (key, folder): (Bound<'_, PyAny>, String) = item?.extract()?;
         paths.push((native_key(&key)?, folder));
     }

@@ -21,6 +21,8 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
 };
 use crate::bindings::_helpers::planner_warehouse::cursors::{CursorInputs, cursor_snapshots};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -209,7 +211,7 @@ fn metadata_name_filter(
             py,
             build_upstream_intermediate_source_map(project, selected)?,
         )?;
-        for entry in intermediate.call_method0("values")?.try_iter()? {
+        for entry in mapping_values(&intermediate)?.try_iter()? {
             names.insert(source_table_name(&entry?)?);
         }
     }
@@ -557,8 +559,7 @@ fn gather_fingerprints<'py>(
             let values: Vec<Bound<'py, PyAny>> = if by_identity.is_none() {
                 Vec::new()
             } else {
-                by_identity
-                    .call_method0("values")?
+                mapping_values(&by_identity)?
                     .try_iter()?
                     .collect::<PyResult<_>>()?
             };
@@ -587,7 +588,7 @@ fn gather_fingerprints<'py>(
         }
         let by_identity = native_field(&set, "fingerprints_by_identity")?;
         if !by_identity.is_none() {
-            for item in by_identity.call_method0("items")?.try_iter()? {
+            for item in mapping_items(&by_identity)?.try_iter()? {
                 let (key, fingerprint): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
                 let node_type: String = native_field(&fingerprint, "node_type")?.extract()?;
                 if node_type != NODE_TYPE_MODEL

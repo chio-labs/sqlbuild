@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compile_driver::stage_work::{DECLARATION_SCOPES, 
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 use crate::bindings::_helpers::scopes::scope_index::open_native_scope_index;
@@ -130,7 +131,7 @@ fn indexed_macro_metadata<'py>(loaded_macros: &Bound<'py, PyAny>) -> PyResult<Bo
     let code_type: Bound<'py, PyAny> = imported(py, "types", "CodeType")?;
     let signature: Bound<'py, PyAny> = imported(py, "inspect", "signature")?;
     let mut rows: Vec<Bound<'py, PyTuple>> = Vec::new();
-    for pair in loaded_macros.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(loaded_macros)?.try_iter()? {
         let (key, loaded): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let function: Bound<'py, PyAny> = native_field(&loaded, "function")?;
         let code: Bound<'py, PyAny> =

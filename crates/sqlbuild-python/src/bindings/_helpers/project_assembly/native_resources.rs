@@ -27,6 +27,7 @@ use crate::bindings::_helpers::project_assembly::models::{
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::types::CompilerDetach;
 
@@ -103,7 +104,7 @@ fn opaque_render<'py>(value: &Bound<'py, PyAny>) -> PyResult<Render<'py>> {
 fn variables<'py>(effective_vars: &Bound<'py, PyAny>) -> PyResult<RequestVariables<'py>> {
     let mut rows: Vec<(String, Variable)> = Vec::new();
     let mut held: Vec<Bound<'py, PyAny>> = Vec::new();
-    for item in effective_vars.call_method0("items")?.try_iter()? {
+    for item in mapping_items(effective_vars)?.try_iter()? {
         let (name, value): (String, Bound<'py, PyAny>) = item?.extract()?;
         if let Some(scalar) = plain_scalar(&value)? {
             rows.push((name, Variable::Scalar(scalar)));
@@ -173,8 +174,7 @@ fn model_facts(model_input: &Bound<'_, PyAny>, checks: &Bound<'_, PyAny>) -> PyR
     for check in checks.try_iter()? {
         let (sql, placeholders): (String, Bound<'_, PyAny>) = check?.extract()?;
         let placeholders: Pairs = if placeholders.is_truthy()? {
-            placeholders
-                .call_method0("items")?
+            mapping_items(&placeholders)?
                 .try_iter()?
                 .map(|pair| pair?.extract())
                 .collect::<PyResult<_>>()?

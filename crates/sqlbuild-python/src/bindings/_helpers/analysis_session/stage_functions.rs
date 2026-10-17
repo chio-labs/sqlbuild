@@ -25,6 +25,7 @@ use crate::bindings::_helpers::compile_driver::stage_work::{
 };
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::models::ProjectCatalog;
 
@@ -216,7 +217,7 @@ pub(crate) fn dynamic_contract_proofs<'py>(
     let contracts: Vec<ContractRow> = if session.is_none() {
         let by_table: Bound<'py, PyAny> = native_field(tables, "dynamic_families_by_table")?;
         let mut families: Vec<(String, Vec<FamilyRow>)> = Vec::new();
-        for item in by_table.call_method0("items")?.try_iter()? {
+        for item in mapping_items(&by_table)?.try_iter()? {
             let (name, declared): (String, Bound<'py, PyAny>) = item?.extract()?;
             families.push((name, family_rows(&declared)?));
         }
@@ -325,8 +326,7 @@ pub(crate) fn query_column_rows(
 fn query_row(query: &Bound<'_, PyAny>) -> PyResult<QueryRow> {
     let placeholders: Bound<'_, PyAny> = native_field(query, "placeholders")?;
     let placeholders: Pairs = if placeholders.is_truthy()? {
-        placeholders
-            .call_method0("items")?
+        mapping_items(&placeholders)?
             .try_iter()?
             .map(|item| item?.extract())
             .collect::<PyResult<_>>()?

@@ -27,6 +27,7 @@ use crate::bindings::_helpers::diagnostics::redaction::redacted_value;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const PRIVATE_SQL_MARKER: ExecutorHost = ExecutorHost::SqlPrivateRecordMarker;
 
@@ -41,7 +42,7 @@ fn merged<'py>(
         if part.is_none() {
             continue;
         }
-        for item in part.call_method0("items")?.try_iter()? {
+        for item in mapping_items(part)?.try_iter()? {
             let (key, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
             if skip.is_some_and(|skipped| key.eq(skipped).unwrap_or(false)) {
                 continue;
@@ -61,7 +62,7 @@ fn identity_fields<'py>(
         return Ok(None);
     };
     let fields: Bound<'py, PyDict> = PyDict::new(py);
-    for item in identity.call_method0("items")?.try_iter()? {
+    for item in mapping_items(identity)?.try_iter()? {
         let (key, value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         fields.set_item(format!("{FIELD_PREFIX}{}", key.str()?.to_str()?), value)?;
     }

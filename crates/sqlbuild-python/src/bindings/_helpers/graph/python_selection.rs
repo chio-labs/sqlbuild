@@ -20,6 +20,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 
 type NameRows = Vec<(String, Vec<String>)>;
@@ -55,7 +56,7 @@ fn strings(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 /// A `dict[str, Iterable[str]]` as rows in dict order.
 fn name_rows(mapping: &Bound<'_, PyAny>) -> PyResult<NameRows> {
     let mut rows: NameRows = Vec::new();
-    for item in mapping.call_method0("items")?.try_iter()? {
+    for item in mapping_items(mapping)?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
         rows.push((item.get_item(0)?.extract()?, strings(&item.get_item(1)?)?));
     }

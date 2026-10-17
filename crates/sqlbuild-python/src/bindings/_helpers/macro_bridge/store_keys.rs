@@ -18,6 +18,7 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const VALUE_RENDERER_FIELD: &str = "_value_renderer";
 /// Nesting at which a value counts as too deep to key, as Python's recursion limit stops it.
@@ -190,7 +191,7 @@ impl<'py> CanonicalTypes<'py> {
         }
         if value.is_instance_of::<PyDict>() || value.is_instance(&self.mapping_proxy)? {
             let mut pairs: Vec<JsonValue> = Vec::new();
-            for item in value.call_method0("items")?.try_iter()? {
+            for item in mapping_items(value)?.try_iter()? {
                 let item: Bound<'py, PyAny> = item?;
                 pairs.push(JsonValue::Array(vec![
                     self.canonical(&item.get_item(0)?, depth + 1)?,

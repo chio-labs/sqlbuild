@@ -22,6 +22,7 @@ use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const MISSING_RELATION_CODE: &str = "C682";
 const MODEL_KIND: &str = "model";
@@ -89,7 +90,7 @@ pub(crate) fn load_results_by_loader_name<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = source_map.py();
     let loader_by_source: Bound<'py, PyDict> = PyDict::new(py);
-    for item in source_map.call_method0("items")?.try_iter()? {
+    for item in mapping_items(source_map)?.try_iter()? {
         let (name, source): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         let loader: Bound<'py, PyAny> = native_field(&source, "loader")?;
         if !loader.is_none() {

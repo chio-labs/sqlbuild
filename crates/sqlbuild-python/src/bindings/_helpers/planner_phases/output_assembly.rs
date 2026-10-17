@@ -22,6 +22,7 @@ use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
@@ -314,7 +315,7 @@ fn source_names<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 
 fn age_names<'py>(statuses: &Bound<'py, PyAny>, wanted: &str) -> PyResult<Bound<'py, PyAny>> {
     let mut names: Vec<_> = Vec::new();
-    for item in statuses.call_method0("items")?.try_iter()? {
+    for item in mapping_items(statuses)?.try_iter()? {
         let (identity, status): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         if status.eq(wanted)? {
             names.push(native_field(&identity, "source_name")?.extract::<String>()?);

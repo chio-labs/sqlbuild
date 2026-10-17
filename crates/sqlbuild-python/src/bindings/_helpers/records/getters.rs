@@ -14,7 +14,13 @@ use crate::bindings::_helpers::compile_command::reuse_recording::{
 };
 use crate::bindings::_helpers::compile_driver::diagnostic_collector::CollectedCompileDiagnostics;
 use crate::bindings::_helpers::compile_driver::input_reads::CompileInputReads;
+use crate::bindings::_helpers::compiled_project::audit_views::{
+    NativeAuditInput, NativeCompiledAudit,
+};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_project::function_views::{
+    NativeCompiledFunction, NativeFunctionInput,
+};
 use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
@@ -38,7 +44,9 @@ use crate::bindings::_helpers::execution_history::postgres::PostgresExecutionHis
 use crate::bindings::_helpers::execution_history::sqlite::SqliteExecutionHistory;
 use crate::bindings::_helpers::graph::project_graph::CompiledProjectGraph;
 use crate::bindings::_helpers::planner_migrations::state_inspection::MigrationStateInspection;
-use crate::bindings::_helpers::result_output::integration_envelope::IntegrationResultEnvelope;
+use crate::bindings::_helpers::result_output::integration_envelope::{
+    IntegrationAssetResult, IntegrationCheckResult, IntegrationResultEnvelope,
+};
 use crate::bindings::_helpers::scopes::scope_index::NativeScopeIndex;
 use crate::bindings::models::NativeDirectorySnapshot;
 
@@ -83,8 +91,24 @@ pub(crate) fn getter_field<'py>(
             read_compile_input_reads,
         );
         let _ = table.insert(
+            py.get_type::<NativeAuditInput>().as_ptr() as usize,
+            read_native_audit_input,
+        );
+        let _ = table.insert(
+            py.get_type::<NativeCompiledAudit>().as_ptr() as usize,
+            read_native_compiled_audit,
+        );
+        let _ = table.insert(
             py.get_type::<NativeCompiledModel>().as_ptr() as usize,
             read_native_compiled_model,
+        );
+        let _ = table.insert(
+            py.get_type::<NativeCompiledFunction>().as_ptr() as usize,
+            read_native_compiled_function,
+        );
+        let _ = table.insert(
+            py.get_type::<NativeFunctionInput>().as_ptr() as usize,
+            read_native_function_input,
         );
         let _ = table.insert(
             py.get_type::<NativeInputsView>().as_ptr() as usize,
@@ -177,6 +201,14 @@ pub(crate) fn getter_field<'py>(
         let _ = table.insert(
             py.get_type::<MigrationStateInspection>().as_ptr() as usize,
             read_migration_state_inspection,
+        );
+        let _ = table.insert(
+            py.get_type::<IntegrationAssetResult>().as_ptr() as usize,
+            read_integration_asset_result,
+        );
+        let _ = table.insert(
+            py.get_type::<IntegrationCheckResult>().as_ptr() as usize,
+            read_integration_check_result,
         );
         let _ = table.insert(
             py.get_type::<IntegrationResultEnvelope>().as_ptr() as usize,
@@ -324,6 +356,161 @@ fn read_compile_input_reads<'py>(
     })
 }
 
+fn read_native_audit_input<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> Option<PyResult<Bound<'py, PyAny>>> {
+    let py: Python<'py> = value.py();
+    let Ok(cell) = value.cast::<NativeAuditInput>() else {
+        return None;
+    };
+    let Ok(this) = cell.try_borrow() else {
+        return None;
+    };
+    Some(match name {
+        "audit_file" => this
+            .audit_file(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "audit_block" => this
+            .audit_block(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "sql_body" => this
+            .sql_body(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "evaluation_mode" => this
+            .evaluation_mode(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "measurement_contract" => this
+            .measurement_contract(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "thresholds" => this
+            .thresholds(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "minimum_samples" => this
+            .minimum_samples(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "measure_sql" => this
+            .measure_sql(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "evidence_sql" => this
+            .evidence_sql(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "evidence_limit" => this
+            .evidence_limit(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "references" => this
+            .references(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "attached_target_kind" => this
+            .attached_target_kind(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "attached_target_name" => this
+            .attached_target_name(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "attached_column_name" => this
+            .attached_column_name(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "severity" => this
+            .severity(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "run_scope" => this
+            .run_scope(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "always_run" => this
+            .always_run(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "description" => this
+            .description(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "declaration_usages" => this
+            .declaration_usages(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "name" => this.name(py).and_then(|value| value.into_bound_py_any(py)),
+        "assembly_row" => this
+            .assembly_row(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        _ => return None,
+    })
+}
+
+fn read_native_compiled_audit<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> Option<PyResult<Bound<'py, PyAny>>> {
+    let py: Python<'py> = value.py();
+    let Ok(cell) = value.cast::<NativeCompiledAudit>() else {
+        return None;
+    };
+    let Ok(this) = cell.try_borrow() else {
+        return None;
+    };
+    Some(match name {
+        "audit_file" => this
+            .audit_file(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "audit_block" => this
+            .audit_block(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "sql_body" => this
+            .sql_body(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "evaluation_mode" => this
+            .evaluation_mode(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "measurement_contract" => this
+            .measurement_contract(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "thresholds" => this
+            .thresholds(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "minimum_samples" => this
+            .minimum_samples(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "measure_sql" => this
+            .measure_sql(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "evidence_sql" => this
+            .evidence_sql(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "evidence_limit" => this
+            .evidence_limit(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "references" => this
+            .references(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "attached_target_kind" => this
+            .attached_target_kind(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "attached_target_name" => this
+            .attached_target_name(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "attached_column_name" => this
+            .attached_column_name(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "severity" => this
+            .severity(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "run_scope" => this
+            .run_scope(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "always_run" => this
+            .always_run(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "description" => this
+            .description(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "key" => this.key(py).and_then(|value| value.into_bound_py_any(py)),
+        "scope_deps" => this
+            .scope_deps(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "name" => this.name(py).and_then(|value| value.into_bound_py_any(py)),
+        "definition_name" => this
+            .definition_name(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        _ => return None,
+    })
+}
+
 fn read_native_compiled_model<'py>(
     value: &Bound<'py, PyAny>,
     name: &str,
@@ -434,6 +621,149 @@ fn read_native_compiled_model<'py>(
             .and_then(|value| value.into_bound_py_any(py)),
         "rejected_sql_analysis_opt_out" => this
             .rejected_sql_analysis_opt_out(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        _ => return None,
+    })
+}
+
+fn read_native_compiled_function<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> Option<PyResult<Bound<'py, PyAny>>> {
+    let py: Python<'py> = value.py();
+    let Ok(cell) = value.cast::<NativeCompiledFunction>() else {
+        return None;
+    };
+    let Ok(this) = cell.try_borrow() else {
+        return None;
+    };
+    Some(match name {
+        "name" => this.name(py).and_then(|value| value.into_bound_py_any(py)),
+        "arguments" => this
+            .arguments(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "returns" => this
+            .returns(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "body_sql" => this
+            .body_sql(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "return_columns" => this
+            .return_columns(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "references" => this
+            .references(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "language" => this
+            .language(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "runtime_version" => this
+            .runtime_version(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "entry_point" => this
+            .entry_point(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "packages" => this
+            .packages(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "tags" => this.tags(py).and_then(|value| value.into_bound_py_any(py)),
+        "description" => this
+            .description(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "key" => this.key(py).and_then(|value| value.into_bound_py_any(py)),
+        "deps" => this.deps(py).and_then(|value| value.into_bound_py_any(py)),
+        "relative_path" => this
+            .relative_path(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "source_file_path" => this
+            .source_file_path(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "destination" => this
+            .destination(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "fingerprint_destination" => this
+            .fingerprint_destination(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        _ => return None,
+    })
+}
+
+fn read_native_function_input<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> Option<PyResult<Bound<'py, PyAny>>> {
+    let py: Python<'py> = value.py();
+    let Ok(cell) = value.cast::<NativeFunctionInput>() else {
+        return None;
+    };
+    let Ok(this) = cell.try_borrow() else {
+        return None;
+    };
+    Some(match name {
+        "name" => this.name(py).and_then(|value| value.into_bound_py_any(py)),
+        "arguments" => this
+            .arguments(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "returns" => this
+            .returns(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "body_sql" => this
+            .body_sql(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "return_columns" => this
+            .return_columns(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "references" => this
+            .references(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "language" => this
+            .language(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "runtime_version" => this
+            .runtime_version(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "entry_point" => this
+            .entry_point(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "packages" => this
+            .packages(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "tags" => this.tags(py).and_then(|value| value.into_bound_py_any(py)),
+        "description" => this
+            .description(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "function_file" => this
+            .function_file(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "database" => this
+            .database(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "schema" => this
+            .schema(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "logical_database" => this
+            .logical_database(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "logical_schema" => this
+            .logical_schema(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "fingerprint_database" => this
+            .fingerprint_database(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "fingerprint_schema" => this
+            .fingerprint_schema(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "fingerprint_logical_database" => this
+            .fingerprint_logical_database(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "fingerprint_logical_schema" => this
+            .fingerprint_logical_schema(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "declaration_usages" => this
+            .declaration_usages(py)
+            .and_then(|value| value.into_bound_py_any(py)),
+        "assembly_row" => this
+            .assembly_row(py)
             .and_then(|value| value.into_bound_py_any(py)),
         _ => return None,
     })
@@ -1098,6 +1428,40 @@ fn read_migration_state_inspection<'py>(
     })
 }
 
+fn read_integration_asset_result<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> Option<PyResult<Bound<'py, PyAny>>> {
+    let py: Python<'py> = value.py();
+    let Ok(cell) = value.cast::<IntegrationAssetResult>() else {
+        return None;
+    };
+    let Ok(this) = cell.try_borrow() else {
+        return None;
+    };
+    Some(match name {
+        "as_dict" => return None,
+        _ => this.__getattr__(py, name).map(|value| value.into_bound(py)),
+    })
+}
+
+fn read_integration_check_result<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> Option<PyResult<Bound<'py, PyAny>>> {
+    let py: Python<'py> = value.py();
+    let Ok(cell) = value.cast::<IntegrationCheckResult>() else {
+        return None;
+    };
+    let Ok(this) = cell.try_borrow() else {
+        return None;
+    };
+    Some(match name {
+        "as_dict" | "decoded" | "parsed" => return None,
+        _ => this.__getattr__(py, name).map(|value| value.into_bound(py)),
+    })
+}
+
 fn read_integration_result_envelope<'py>(
     value: &Bound<'py, PyAny>,
     name: &str,
@@ -1112,7 +1476,10 @@ fn read_integration_result_envelope<'py>(
     Some(match name {
         "asset" => this.asset(py).into_bound_py_any(py),
         "checks" => this.checks(py).into_bound_py_any(py),
-        _ => return None,
+        "from_json" | "from_json_without_optional_enrichment" | "register" | "to_json" => {
+            return None;
+        }
+        _ => this.__getattr__(py, name).map(|value| value.into_bound(py)),
     })
 }
 

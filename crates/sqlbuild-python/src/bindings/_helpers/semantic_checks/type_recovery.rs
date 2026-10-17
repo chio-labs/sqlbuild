@@ -21,6 +21,8 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInp
 use crate::bindings::_helpers::compiled_project::records::with_type_recovery;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::semantic_checks::constants::SCHEMA_REVALIDATIONS;
 use crate::bindings::_helpers::semantic_checks::failures::{internal_error, semantic_error};
 use crate::bindings::_helpers::semantic_checks::inputs::revalidation_request;
@@ -56,7 +58,7 @@ pub(crate) fn recovered_types<'py>(
     }
     let ids: Bound<'py, PyDict> = diagnostic_ids(project, &models)?;
     let raw_ids: Bound<'py, PyDict> = PyDict::new(py);
-    for rows in binding_results.call_method0("values")?.try_iter()? {
+    for rows in mapping_values(binding_results)?.try_iter()? {
         for row in rows?.try_iter()? {
             let row: Bound<'py, PyAny> = row?;
             if !raw_ids.contains(&row)? {
@@ -254,7 +256,7 @@ fn revalidated<'py>(
     let py: Python<'py> = classes.py();
     let shapes: Bound<'py, PyDict> = project_shapes(project, None)?;
     let unknown: Bound<'py, PyDict> = PyDict::new(py);
-    for item in shapes.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&shapes)?.try_iter()? {
         let (name, columns): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         let copied: Bound<'py, PyDict> = PyDict::new(py);
         copied.update(columns.downcast::<PyDict>()?.as_mapping())?;

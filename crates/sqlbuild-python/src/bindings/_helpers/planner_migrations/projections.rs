@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_migrations::errors::ProofError;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -109,7 +110,7 @@ pub(crate) fn explain(
     input_columns: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
     let mut pairs: Vec<(String, String)> = Vec::new();
-    for item in renames.call_method0("items")?.try_iter()? {
+    for item in mapping_items(renames)?.try_iter()? {
         pairs.push(item?.extract::<(String, String)>()?);
     }
     proof::renames_explain_change(

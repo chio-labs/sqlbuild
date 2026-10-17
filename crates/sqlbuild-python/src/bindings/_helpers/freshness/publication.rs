@@ -14,6 +14,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 
@@ -132,7 +133,7 @@ fn eligible_records<'py>(
     let mut grouped: RecordsByLocation<'py> = Vec::new();
     let changed: Bound<'py, PyAny> =
         native_field(&freshness, "propagation")?.getattr("changed_source_model_names")?;
-    for item in changed.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&changed)?.try_iter()? {
         let (identity, affected): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         let affected: Bound<'py, PyAny> = affected.call_method1("__and__", (&selected,))?;
         if !affected.is_truthy()?

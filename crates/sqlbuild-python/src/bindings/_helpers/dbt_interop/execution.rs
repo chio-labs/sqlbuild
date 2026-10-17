@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::dbt_interop::cli::option_values;
 use crate::bindings::_helpers::dbt_interop::graph::{DbtCombinedGraph, texts};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const MERGED_OPTIONS: (&[&str], &[&str]) = (&["command", "options", "routed_args", "plan"], &[]);
 
@@ -88,7 +89,7 @@ pub(crate) fn build_failed_sqlbuild_model_names<'py>(
     let mut dependencies: HashMap<String, Vec<String>> = HashMap::new();
     let lookup: Bound<'py, PyAny> =
         native_field(manifest, "validation_depends_on_nodes_by_unique_id")?;
-    for item in lookup.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&lookup)?.try_iter()? {
         let (unique_id, depends_on): (String, Bound<'py, PyAny>) = item?.extract()?;
         dependencies.insert(unique_id, texts(&depends_on)?);
     }

@@ -46,6 +46,7 @@ use crate::bindings::_helpers::planner_identity::metadata::{
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
@@ -257,7 +258,7 @@ pub(crate) fn scope_model_changes<'py>(
     let hook_version_hashes: Bound<'py, PyDict> = PyDict::new(py);
     let identities: Bound<'py, PyAny> = host::entry(py, UserCodeHost::BuildHookIdentities)?
         .call1((native_field(project, "hook_functions")?,))?;
-    for item in identities.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&identities)?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         hook_version_hashes.set_item(
             item.get_item(0)?,

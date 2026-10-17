@@ -27,6 +27,7 @@ use crate::bindings::_helpers::planner_selection::model_selectors::{
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const MODEL_RESOURCE_TYPE: &str = "model";
@@ -227,7 +228,7 @@ fn anchors(mapping: &Bound<'_, PyAny>) -> PyResult<HashMap<String, Vec<String>>>
     if mapping.is_none() {
         return Ok(result);
     }
-    for item in mapping.call_method0("items")?.try_iter()? {
+    for item in mapping_items(mapping)?.try_iter()? {
         let (term, unique_ids): (String, Bound<'_, PyAny>) = item?.extract()?;
         result.insert(term, texts(&unique_ids)?);
     }

@@ -18,6 +18,7 @@ use crate::bindings::_helpers::dagster_invocation::access::{
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const CHECK_KIND_FALLBACK: &str = "check";
 const CHECK_NAME_JOIN: &str = "__";
@@ -94,7 +95,7 @@ fn metadata_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     }
     if value.is_instance(&imported(py, "collections.abc", "Mapping")?)? {
         let plain: Bound<'py, PyDict> = PyDict::new(py);
-        for pair in value.call_method0("items")?.try_iter()? {
+        for pair in mapping_items(value)?.try_iter()? {
             let (key, item): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
             plain.set_item(key.str()?, metadata_value(&item)?)?;
         }
@@ -115,7 +116,7 @@ fn metadata_from_mapping<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, 
     let py: Python<'py> = value.py();
     let excluded: Bound<'py, PyAny> = constant(py, ThirdPartyHost::CheckMetadataExcludedKeys)?;
     let metadata: Bound<'py, PyDict> = PyDict::new(py);
-    for pair in value.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(value)?.try_iter()? {
         let (key, item): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         if item.is_none() || excluded.contains(&key)? {
             continue;

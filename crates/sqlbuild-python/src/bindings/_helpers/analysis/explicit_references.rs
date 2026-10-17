@@ -32,6 +32,7 @@ use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::types::CompilerDetach;
 
@@ -403,7 +404,7 @@ pub(crate) fn hard_coded_relation_remedy(
     );
     let mut upstream_loaders: Vec<(String, String)> = Vec::new();
     if let Some(loaders) = upstream_loader_by_source.filter(|loaders| !loaders.is_none()) {
-        for item in loaders.call_method0("items")?.try_iter()? {
+        for item in mapping_items(loaders)?.try_iter()? {
             upstream_loaders.push(item?.extract()?);
         }
     }

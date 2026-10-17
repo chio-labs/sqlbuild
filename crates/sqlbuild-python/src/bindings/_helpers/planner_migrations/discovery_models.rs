@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_identity::metadata::build_model_version_i
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods};
 use sqlbuild_analysis::planner_migrations::main::discovery_order::discovery_order;
@@ -90,7 +91,7 @@ pub(super) fn metadata<'py>(
     let identities = host::entry(py, UserCodeHost::BuildHookIdentities)?
         .call1((native_field(&project, "hook_functions")?,))?;
     let hooks = PyDict::new(py);
-    for pair in identities.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(&identities)?.try_iter()? {
         let pair = pair?;
         hooks.set_item(
             pair.get_item(0)?,

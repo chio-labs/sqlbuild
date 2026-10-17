@@ -23,6 +23,7 @@ use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
@@ -108,10 +109,7 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
     let warehouse_columns: &Bound<'py, PyAny> = &lookups.source_warehouse_columns;
     let model_name: String = model_reads::model_name(model)?;
     for role in ["filter_inputs", "watermark_inputs"] {
-        for item in native_field(&roles, role)?
-            .call_method0("items")?
-            .try_iter()?
-        {
+        for item in mapping_items(&native_field(&roles, role)?)?.try_iter()? {
             let (input_name, column): (String, String) = item?.extract()?;
             let reference: Bound<'py, PyAny> = resolve_lineage_reference(
                 model,
@@ -272,7 +270,7 @@ pub(crate) fn build_cursor_input_relations<'py>(
     let mut relations: Vec<Bound<'py, PyAny>> = Vec::new();
     let watermarks: Bound<'py, PyAny> =
         native_field(&resolve_cursor_input_roles(&model)?, "watermark_inputs")?;
-    for item in watermarks.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&watermarks)?.try_iter()? {
         let (input_name, column): (String, Bound<'py, PyAny>) = item?.extract()?;
         let reference: Bound<'py, PyAny> = resolve_lineage_reference(
             &model,

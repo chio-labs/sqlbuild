@@ -21,6 +21,7 @@ use crate::bindings::_helpers::planner_identity::hashing::function_definition_ha
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, SPACED, sorted_dumps};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const LOCAL_FUNCTION_HASHES_KEY: &str = "local_function_hashes";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -136,7 +137,7 @@ fn execution_signature<'py>(
     }
     let python_hook_fields: Bound<'py, PyDict> = PyDict::new(py);
     if let Some(hashes) = hook_version_hashes.filter(|hashes| !hashes.is_none()) {
-        for item in hashes.call_method0("items")?.try_iter()? {
+        for item in mapping_items(hashes)?.try_iter()? {
             let (name, version_hash): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
             let fields: Bound<'py, PyDict> = PyDict::new(py);
             fields.set_item("version_hash", version_hash)?;

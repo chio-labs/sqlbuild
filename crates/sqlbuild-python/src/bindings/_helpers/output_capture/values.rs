@@ -15,6 +15,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::macro_bridge::store_keys::text;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 const SURROGATE_PASS: &str = "surrogatepass";
 const UTF8: &str = "utf-8";
@@ -94,7 +95,7 @@ pub(crate) fn freeze<'py>(value: &Bound<'py, PyAny>, path: &str) -> PyResult<Bou
     }
     if value.is_instance(&imported(py, "collections.abc", "Mapping")?)? {
         let frozen: Bound<'py, PyDict> = PyDict::new(py);
-        for item in value.call_method0("items")?.try_iter()? {
+        for item in mapping_items(value)?.try_iter()? {
             let (key, item): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
             let Ok(key_text) = key.downcast::<PyString>() else {
                 return Err(validation_error(
@@ -151,7 +152,7 @@ pub(crate) fn json_value(value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
         return Ok(JsonValue::Array(items));
     }
     let mut entries: Vec<(String, JsonValue)> = Vec::new();
-    for item in value.call_method0("items")?.try_iter()? {
+    for item in mapping_items(value)?.try_iter()? {
         let (key, item): (String, Bound<'_, PyAny>) = item?.extract()?;
         entries.push((key, json_value(&item)?));
     }

@@ -15,6 +15,8 @@ use crate::bindings::_helpers::records::construct::{
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::declaration_contexts::NativeDeclarationContexts;
@@ -98,7 +100,7 @@ fn runtime_declarations<'py>(
         }
     }
     if !loaded_macros.is_none() {
-        for name_and_macro in loaded_macros.call_method0("values")?.try_iter()? {
+        for name_and_macro in mapping_values(loaded_macros)?.try_iter()? {
             let declared_macro: Bound<'py, PyAny> = name_and_macro?;
             let identity = declaration_identity(
                 &classes,
@@ -193,7 +195,7 @@ fn value_kind_code(classes: &[Bound<'_, PyAny>], value: &Bound<'_, PyAny>) -> Py
 /// `{owner: list(items)}` of an index position mapping.
 fn listed_positions<'py>(positions: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let listed: Bound<'py, PyDict> = PyDict::new(positions.py());
-    for item in positions.call_method0("items")?.try_iter()? {
+    for item in mapping_items(positions)?.try_iter()? {
         let (owner, items): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         listed.set_item(
             owner,

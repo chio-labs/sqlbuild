@@ -22,6 +22,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 /// The module attribute holding the `ContextVar` of the installed projector.
 const CONTEXT_ATTRIBUTE: &str = "_native_progress_projector_context";
@@ -253,7 +254,7 @@ impl NativeProgressProjector {
     #[pyo3(signature = (*, ordinals, total))]
     fn configure_resources(&self, ordinals: &Bound<'_, PyAny>, total: i64) -> PyResult<()> {
         let mut entries: Vec<(String, i64)> = Vec::new();
-        for item in ordinals.call_method0("items")?.try_iter()? {
+        for item in mapping_items(ordinals)?.try_iter()? {
             entries.push(item?.extract()?);
         }
         self.locked()?.configure_resources(entries, total);

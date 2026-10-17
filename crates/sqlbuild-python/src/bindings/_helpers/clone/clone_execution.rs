@@ -18,6 +18,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
@@ -122,7 +123,7 @@ fn dependency_locations<'py>(
         native_field(&plan, "source_map")?
     };
     let source_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
-    for pair in source_map.call_method0("items")?.try_iter()? {
+    for pair in mapping_items(&source_map)?.try_iter()? {
         let (name, source): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let table: Bound<'py, PyAny> = native_field(&source, "table")?;
         if table.is_none() {

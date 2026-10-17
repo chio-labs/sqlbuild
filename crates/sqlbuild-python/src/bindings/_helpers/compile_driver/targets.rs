@@ -45,6 +45,7 @@ use crate::bindings::_helpers::discovery::guidance::setting_help;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -277,7 +278,7 @@ fn target_namespaces(
         resolved_connection.clone()
     };
     let mut identity: Vec<(String, String)> = Vec::new();
-    for item in connection.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&connection)?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
         let key: Bound<'_, PyAny> = item.get_item(0)?;
         let Some(key) = text_or_none(&key)? else {

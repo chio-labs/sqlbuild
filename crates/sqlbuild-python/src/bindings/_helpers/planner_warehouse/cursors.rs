@@ -30,6 +30,7 @@ use crate::bindings::_helpers::planner_warehouse::snapshot::{
 use crate::bindings::_helpers::planner_warehouse::watermarks::validate_watermark_column;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use pyo3::IntoPyObject;
@@ -364,11 +365,11 @@ fn collect_models<'py>(
         };
         let watermark_inputs =
             native_field(&resolve_cursor_input_roles(&model)?, "watermark_inputs")?;
-        let watermark_inputs: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = watermark_inputs
-            .call_method0("items")?
-            .try_iter()?
-            .map(|item| item?.extract())
-            .collect::<PyResult<_>>()?;
+        let watermark_inputs: Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)> =
+            mapping_items(&watermark_inputs)?
+                .try_iter()?
+                .map(|item| item?.extract())
+                .collect::<PyResult<_>>()?;
         if inputs.full_refresh_model_names.contains(&name_value)? {
             for (input_name, upstream_column) in &watermark_inputs {
                 let reference = lineage_reference(&model, input_name, maps)?;

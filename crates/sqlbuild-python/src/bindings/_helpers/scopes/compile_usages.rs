@@ -23,6 +23,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_me
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const INACCESSIBLE_DECLARATION_CODE: &str = "S006";
@@ -99,7 +100,7 @@ pub(crate) fn model_schema_scope_usages<'py>(
     let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut record_rows: Vec<(IdentityRow, RecordRow)> = Vec::new();
     let declarations = native_field(&native_field(resolver, "lookup")?, "declarations")?;
-    for item in declarations.call_method0("items")?.try_iter()? {
+    for item in mapping_items(&declarations)?.try_iter()? {
         let (identity, found): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         if !found.is_truthy()?
             || !native_field(&identity, "owner")?.is_none()

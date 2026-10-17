@@ -30,6 +30,7 @@ use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const TABLE_FN_TEST_MODE: &str = "table_fn";
@@ -262,7 +263,7 @@ fn edge_origins<'py>(
     if origins.is_none() {
         return Ok(edges);
     }
-    for item in origins.call_method0("items")?.try_iter()? {
+    for item in mapping_items(origins)?.try_iter()? {
         let ((dependent, dependency), origin): ((Bound<'py, PyAny>, Bound<'py, PyAny>), String) =
             item?.extract()?;
         edges.insert((objects.key(dependent)?, objects.key(dependency)?), origin);
@@ -280,7 +281,7 @@ pub(crate) fn topologically_order_keys<'py>(
     let py: Python<'py> = upstream.py();
     let mut objects = KeyObjects::new();
     let mut edges: Vec<(GraphKey, Vec<GraphKey>)> = Vec::new();
-    for item in upstream.call_method0("items")?.try_iter()? {
+    for item in mapping_items(upstream)?.try_iter()? {
         let (key, deps): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         edges.push((objects.key(key)?, objects.keys(&deps)?));
     }

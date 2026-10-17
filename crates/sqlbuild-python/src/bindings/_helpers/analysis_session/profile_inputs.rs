@@ -11,6 +11,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -61,10 +62,10 @@ pub(crate) fn nullability_rules(profile: &Bound<'_, PyAny>) -> PyResult<(Pairs, 
 /// `{relation: {column: value}}` as ordered rows, each value as `str(value)`.
 pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<Shapes> {
     let mut rows: Shapes = Vec::new();
-    for item in shapes.call_method0("items")?.try_iter()? {
+    for item in mapping_items(shapes)?.try_iter()? {
         let (name, shape): (String, Bound<'_, PyAny>) = item?.extract()?;
         let mut pairs: Pairs = Vec::new();
-        for column in shape.call_method0("items")?.try_iter()? {
+        for column in mapping_items(&shape)?.try_iter()? {
             let (column, value): (String, Bound<'_, PyAny>) = column?.extract()?;
             pairs.push((column, value.str()?.extract()?));
         }
@@ -75,8 +76,7 @@ pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<Shapes> {
 
 /// A `{key: value}` text mapping's items in order.
 pub(crate) fn pairs(mapping: &Bound<'_, PyAny>) -> PyResult<Pairs> {
-    mapping
-        .call_method0("items")?
+    mapping_items(mapping)?
         .try_iter()?
         .map(|item| item?.extract())
         .collect()

@@ -108,7 +108,13 @@ pub(crate) fn mapping_get<'py, K: pyo3::IntoPyObject<'py>>(
     key: K,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = mapping.py();
-    mapping_get_or(mapping, key, py.None())
+    let key: Bound<'py, PyAny> = key.into_bound_py_any(py)?;
+    match mapping.cast_exact::<PyDict>() {
+        Ok(dict) => Ok(dict
+            .get_item(&key)?
+            .unwrap_or_else(|| py.None().into_bound(py))),
+        Err(_) => mapping.call_method1("get", (key,)),
+    }
 }
 
 /// `mapping.get(key, default)`: a dict is read through the C API.
@@ -126,6 +132,22 @@ pub(crate) fn mapping_get_or<'py, K: pyo3::IntoPyObject<'py>, D: pyo3::IntoPyObj
         return default.into_bound_py_any(py);
     }
     mapping.call_method1("get", (key, default.into_bound_py_any(py)?))
+}
+
+/// `mapping.items()` for iteration: a dict yields its `(key, value)` pairs through the C API.
+pub(crate) fn mapping_items<'py>(mapping: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    match mapping.cast_exact::<PyDict>() {
+        Ok(dict) => Ok(dict.items().into_any()),
+        Err(_) => mapping.call_method0("items"),
+    }
+}
+
+/// `mapping.values()` for iteration: a dict yields its values through the C API.
+pub(crate) fn mapping_values<'py>(mapping: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    match mapping.cast_exact::<PyDict>() {
+        Ok(dict) => Ok(dict.values().into_any()),
+        Err(_) => mapping.call_method0("values"),
+    }
 }
 
 /// `dataclasses.replace(value, **changes)`: a native record is rebuilt from its own values.

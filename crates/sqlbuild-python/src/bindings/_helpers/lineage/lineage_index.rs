@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
@@ -58,7 +59,7 @@ impl<'py> PythonKeys<'py> {
 
 fn ordered_edges(edges: &Bound<'_, PyAny>) -> PyResult<Vec<(LineageKey, Vec<LineageKey>)>> {
     let mut ordered: Vec<(LineageKey, Vec<LineageKey>)> = Vec::new();
-    for item in edges.call_method0("items")?.try_iter()? {
+    for item in mapping_items(edges)?.try_iter()? {
         let (key, targets): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
         ordered.push((lineage_key(&key)?, lineage_keys(&targets)?));
     }

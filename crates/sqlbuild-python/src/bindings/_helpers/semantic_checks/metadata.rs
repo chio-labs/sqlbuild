@@ -20,6 +20,7 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeComp
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::inputs::{
     column_names, resource_sql_diagnostics, sql_test_columns,
@@ -322,7 +323,7 @@ fn sql_test_diagnostic<'py>(
 /// `{name: {column: value}}` as ordered rows.
 pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<ShapeRows> {
     let mut rows: ShapeRows = Vec::new();
-    for item in shapes.call_method0("items")?.try_iter()? {
+    for item in mapping_items(shapes)?.try_iter()? {
         let (name, columns): (String, Bound<'_, PyAny>) = item?.extract()?;
         rows.push((name, pairs(&columns)?));
     }
@@ -331,8 +332,7 @@ pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<ShapeRows> {
 
 /// A `{key: value}` text mapping's items in order.
 fn pairs(mapping: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
-    mapping
-        .call_method0("items")?
+    mapping_items(mapping)?
         .try_iter()?
         .map(|item| item?.extract())
         .collect()
@@ -439,7 +439,7 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
     let cursor_inputs: Bound<'_, PyAny> = get("cursor_inputs")?;
     let mut upstreams: Vec<NamesRow> = Vec::new();
     if cursor_inputs.is_instance_of::<PyDict>() {
-        for item in cursor_inputs.call_method0("items")?.try_iter()? {
+        for item in mapping_items(&cursor_inputs)?.try_iter()? {
             let (upstream, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
             upstreams.push((upstream.str()?.extract()?, column_names(&columns)?));
         }

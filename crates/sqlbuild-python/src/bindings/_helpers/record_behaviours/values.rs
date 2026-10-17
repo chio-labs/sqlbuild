@@ -1,6 +1,7 @@
 //! Computed attributes of the natively hosted SQL value and fingerprint records.
 
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -30,7 +31,7 @@ pub(crate) fn finish_fingerprint_set(
         return Ok(values);
     }
     let by_identity: Bound<'_, PyDict> = PyDict::new(py);
-    for fingerprint in values[1].bind(py).call_method0("values")?.try_iter()? {
+    for fingerprint in mapping_values(values[1].bind(py))?.try_iter()? {
         let fingerprint: Bound<'_, PyAny> = fingerprint?;
         let identity: Bound<'_, PyTuple> = PyTuple::new(
             py,

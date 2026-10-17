@@ -15,6 +15,8 @@ use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::models::{CatalogInput, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
@@ -92,7 +94,7 @@ impl BindingCatalog {
         let additions: Bound<'_, PyDict> = PyDict::new(py);
         for request in requests {
             let schema: Bound<'_, PyAny> = native_field(request, "schema")?;
-            for item in schema.call_method0("items")?.try_iter()? {
+            for item in mapping_items(&schema)?.try_iter()? {
                 let (name, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
                 if columns.is_truthy()? && !schemas.contains(&name)? {
                     additions.set_item(&name, &columns)?;
@@ -166,7 +168,7 @@ impl BindingCatalog {
     ) -> PyResult<()> {
         let shapes: &Bound<'_, PyDict> = self.analysis_shapes.bind(py);
         let updates: Bound<'_, PyDict> = PyDict::new(py);
-        for item in nullability.call_method0("items")?.try_iter()? {
+        for item in mapping_items(nullability)?.try_iter()? {
             let (name, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
             let typed: Bound<'_, PyAny> = mapping_get_or(types, &name, PyDict::new(py))?;
             let shape: Bound<'_, PyTuple> = PyTuple::new(py, [typed, columns])?;
@@ -223,7 +225,7 @@ impl BindingCatalog {
             return Ok(columns.clone());
         }
         let mut exact_input: bool = false;
-        for shape in inputs.call_method0("values")?.try_iter()? {
+        for shape in mapping_values(inputs)?.try_iter()? {
             for name in shape?.try_iter()? {
                 let name: String = name?.extract()?;
                 exact_input |= name.contains(QUOTED_IDENTIFIER_DELIMITER);

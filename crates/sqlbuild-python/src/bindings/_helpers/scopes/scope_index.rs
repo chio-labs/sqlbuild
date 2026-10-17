@@ -22,6 +22,7 @@ use sqlbuild_scopes::scope_index::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::scopes::relationship_scan::{
     RelationshipScanSettings, ScenarioRow, TestFileRow, scanned_relationships,
@@ -587,7 +588,7 @@ impl<'py> Walk<'py> {
             let key: String = normalized(py, &native_field(&macro_file, "relative_path")?)?;
             macro_files.insert(key, macro_file);
         }
-        for loaded in loaded_macros.call_method0("values")?.try_iter()? {
+        for loaded in mapping_values(loaded_macros)?.try_iter()? {
             let loaded: Bound<'py, PyAny> = loaded?;
             let key: String = normalized(py, &native_field(&loaded, "relative_path")?)?;
             let (line, metadata) = self.loaded_metadata(&loaded)?;

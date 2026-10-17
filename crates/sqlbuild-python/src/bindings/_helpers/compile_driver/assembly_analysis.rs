@@ -28,6 +28,7 @@ use crate::bindings::_helpers::project_assembly::declared_relations::{
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
+use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
@@ -299,7 +300,7 @@ fn record_expression_shapes<'py>(
         let declared_types: Bound<'py, PyAny> =
             mapping_get_or(&context.column_types, &name, PyDict::new(py))?;
         let declared_shape: Bound<'py, PyDict> = PyDict::new(py);
-        for item in shape.call_method0("items")?.try_iter()? {
+        for item in mapping_items(&shape)?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             let column: Bound<'py, PyAny> = item.get_item(0)?;
             declared_shape.set_item(

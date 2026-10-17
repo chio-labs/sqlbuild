@@ -19,6 +19,7 @@ use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_selection::unit_tests::split_project_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_values;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -127,8 +128,7 @@ pub(crate) fn resolve_configured_rule_selection<'py>(
         return Ok(py.None().into_bound(py));
     }
     let models: Bound<'py, PyAny> = scoped_models(&planner_scopes(project, &selection)?)?;
-    let keys: Vec<Bound<'py, PyAny>> = models
-        .call_method0("values")?
+    let keys: Vec<Bound<'py, PyAny>> = mapping_values(&models)?
         .try_iter()?
         .map(|model| native_field(&model?, "key"))
         .collect::<PyResult<_>>()?;

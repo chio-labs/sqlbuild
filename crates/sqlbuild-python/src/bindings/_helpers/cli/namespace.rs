@@ -46,7 +46,10 @@ impl CliNamespace {
     }
 
     /// A default not yet stored on this namespace, stored on first read.
-    fn __getattr__<'py>(slf: &Bound<'py, Self>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+    pub(crate) fn __getattr__<'py>(
+        slf: &Bound<'py, Self>,
+        name: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let py: Python<'py> = slf.py();
         let Some((_, default)) = cli_namespace_defaults()
             .iter()

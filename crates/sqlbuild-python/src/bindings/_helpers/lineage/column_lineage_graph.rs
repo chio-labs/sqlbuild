@@ -16,6 +16,7 @@ use crate::bindings::_helpers::record_behaviours::lineage_facts::{
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_items;
 
 /// One compact model's facts and root-star flag.
 struct CompactModel {
@@ -114,7 +115,7 @@ impl ProjectColumnLineage {
                 let _ = edge_counts.insert(name.clone(), count);
             }
         }
-        for item in models.call_method0("items")?.try_iter()? {
+        for item in mapping_items(models)?.try_iter()? {
             let (name, model): (String, Bound<'_, PyAny>) = item?.extract()?;
             let _ = edge_counts.insert(name, upstream_count(&native_field(&model, "columns")?)?);
         }
