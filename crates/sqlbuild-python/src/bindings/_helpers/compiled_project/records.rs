@@ -49,10 +49,7 @@ fn record<'py>(value: &Bound<'py, PyAny>, class: RecordId) -> PyResult<Bound<'py
         .try_iter()?
     {
         let name: Bound<'py, PyAny> = native_field(&field?, "name")?;
-        fields.set_item(
-            &name,
-            value.getattr(name.downcast::<pyo3::types::PyString>()?)?,
-        )?;
+        fields.set_item(&name, native_field(value, &name.extract::<String>()?)?)?;
     }
     class.call((), Some(&fields))
 }

@@ -13,10 +13,9 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_with;
 
 const SOURCE_RESOURCE: &str = "source";
-const DATACLASSES_MODULE: &str = "dataclasses";
-const REPLACE_FUNCTION: &str = "replace";
 
 /// `(database, schema)` native project assembly resolved for a source, or `None`.
 pub(crate) type SourceNamespace = Option<(Option<String>, Option<String>)>;
@@ -114,15 +113,11 @@ impl SourceRecord {
 
 /// `dataclasses.replace(value, **changes)`.
 pub(crate) fn replaced(
-    py: Python<'_>,
+    _py: Python<'_>,
     value: &Bound<'_, PyAny>,
     changes: &Bound<'_, PyDict>,
 ) -> PyResult<Py<PyAny>> {
-    Ok(py
-        .import(DATACLASSES_MODULE)?
-        .getattr(REPLACE_FUNCTION)?
-        .call((value,), Some(changes))?
-        .unbind())
+    Ok(replaced_with(value, changes)?.unbind())
 }
 
 fn read_source<'py, T>(

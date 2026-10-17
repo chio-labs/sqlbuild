@@ -142,10 +142,11 @@ fn fixture_inputs<'py>(resolved: &Resolved<'py>) -> PyResult<Option<Bound<'py, P
     } else {
         native_field(discovered, "project_config")?
     };
-    let enabled: bool = settings_owner
-        .getattr("settings")?
-        .getattr(SQL_ANALYSIS_SETTING_KEY)?
-        .is_truthy()?;
+    let enabled: bool = native_field(
+        &native_field(&settings_owner, "settings")?,
+        SQL_ANALYSIS_SETTING_KEY,
+    )?
+    .is_truthy()?;
     Ok(enabled.then(|| discovered.clone()))
 }
 

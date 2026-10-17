@@ -117,15 +117,13 @@ fn target_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
 
 fn clone_policy(discovered: &Bound<'_, PyAny>, (target, flag): (&str, &str)) -> PyResult<bool> {
     let py: Python<'_> = discovered.py();
-    resolve_target_config(
+    let config = resolve_target_config(
         py,
         &native_field(discovered, "project_config")?,
         &native_field(discovered, "local_config")?,
         &text(py, target),
-    )?
-    .getattr("clone")?
-    .getattr(flag)?
-    .is_truthy()
+    )?;
+    native_field(&native_field(&config, "clone")?, flag)?.is_truthy()
 }
 
 /// Discover the project, resolve and validate the targets, and resolve the adapter.

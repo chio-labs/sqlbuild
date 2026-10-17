@@ -135,10 +135,8 @@ pub(crate) fn scoped_declarations<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let visibility = &context.classes.visibility;
     if visibility.projects {
-        let contexts: Bound<'py, NativeDeclarationContexts> = visibility
-            .resolver
-            .getattr(NATIVE_CONTEXTS_ATTRIBUTE)?
-            .downcast_into()?;
+        let contexts: Bound<'py, NativeDeclarationContexts> =
+            native_field(&visibility.resolver, NATIVE_CONTEXTS_ATTRIBUTE)?.downcast_into()?;
         let (resolved, _) =
             contexts
                 .get()
@@ -173,10 +171,8 @@ pub(crate) fn file_declarations<'py>(
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item("consumer", identity)?;
     if visibility.projects {
-        let contexts: Bound<'py, NativeDeclarationContexts> = visibility
-            .resolver
-            .getattr(NATIVE_CONTEXTS_ATTRIBUTE)?
-            .downcast_into()?;
+        let contexts: Bound<'py, NativeDeclarationContexts> =
+            native_field(&visibility.resolver, NATIVE_CONTEXTS_ATTRIBUTE)?.downcast_into()?;
         let (resolved, _) =
             contexts
                 .get()

@@ -75,9 +75,7 @@ pub(crate) fn model_schema<'py>(
 
 /// The schema's column names, which validation reads as the declared columns.
 pub(crate) fn schema_column_names(schema: &ModelSchema<'_>) -> PyResult<Vec<String>> {
-    schema
-        .declaration
-        .getattr(COLUMNS_FIELD)?
+    native_field(&schema.declaration, COLUMNS_FIELD)?
         .try_iter()?
         .map(|column| native_field(&column?, NAME_FIELD)?.extract())
         .collect()

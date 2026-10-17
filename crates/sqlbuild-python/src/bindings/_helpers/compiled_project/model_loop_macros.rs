@@ -119,10 +119,7 @@ pub(crate) fn expanded_with<'py>(
             declarations.clone().unbind(),
             consumer.clone().unbind(),
         ),
-        classes
-            .macro_context
-            .getattr(ENFORCE_ATTRIBUTE)?
-            .is_truthy()?,
+        native_field(&classes.macro_context, ENFORCE_ATTRIBUTE)?.is_truthy()?,
         classes.expansion.clone_ref(py),
     )?;
     let expansion: Bound<'py, NativeMacroExpansion> = Bound::new(py, expansion)?;
