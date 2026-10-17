@@ -2,7 +2,10 @@ use crate::sql_scan::main::matching_paren::matching_paren;
 use crate::sql_scan::main::non_code_end::non_code_end;
 use crate::sql_scan::models::QuotePolicy;
 use crate::sql_scan::models::Unclosed;
-use crate::sql_scan::tests::test_types::{MatchingParenPolicyTestCase, NonCodeEndTestCase};
+use crate::sql_scan::tests::helpers::{dispatch_truncation_cases, ordinary_byte_cases};
+use crate::sql_scan::tests::test_types::{
+    DispatchInputTestCase, MatchingParenPolicyTestCase, NonCodeEndTestCase,
+};
 
 const QUOTES_ONLY: QuotePolicy = QuotePolicy {
     backtick_identifiers: false,
@@ -17,6 +20,100 @@ const BACKSLASH_ONLY: QuotePolicy = QuotePolicy {
     double_quote_backslash_escapes: false,
     dollar_quotes: false,
 };
+
+#[test]
+fn given_every_truncation_and_policy_when_dispatching_then_matches_comment_first_scanning() {
+    let test_cases = [
+        DispatchInputTestCase {
+            description: "ordinary code and non-nesting comments",
+            expected_cases: dispatch_truncation_cases,
+            sql: b"SELECT orders.id - 1 / 2; -- note\r\n/* outer /* inner */ tail */",
+        },
+        DispatchInputTestCase {
+            description: "multibyte text and doubled quotes",
+            expected_cases: dispatch_truncation_cases,
+            sql: "SELECT 'é''ü', \"ñ\"\"名\", `名``é`, $$ ' -- /* ü $$".as_bytes(),
+        },
+        DispatchInputTestCase {
+            description: "backslash escapes and tagged dollar quotes",
+            expected_cases: dispatch_truncation_cases,
+            sql: br#"'a\'b' "c\"d" `e\`f` $tag_2$ /* -- ' " $other$ $tag_2$"#,
+        },
+        DispatchInputTestCase {
+            description: "invalid dollar tags and unclosed quotes",
+            expected_cases: dispatch_truncation_cases,
+            sql: b"$ $1 $1$ $tag $tag$unterminated $$unterminated",
+        },
+        DispatchInputTestCase {
+            description: "dollar tag word boundaries",
+            expected_cases: dispatch_truncation_cases,
+            sql: "word$tag$ é$tag$ _$$ $tag$body$tag$".as_bytes(),
+        },
+        DispatchInputTestCase {
+            description: "truncated opening delimiters",
+            expected_cases: dispatch_truncation_cases,
+            sql: b"- / -- /* ' \" ` \\",
+        },
+    ];
+    for test_case in test_cases {
+        for sample in (test_case.expected_cases)(test_case.sql) {
+            assert_eq!(
+                non_code_end(&sample.sql, sample.index, sample.policy),
+                sample.expected_end,
+                "{}: {}",
+                test_case.description,
+                sample.description,
+            );
+        }
+    }
+}
+
+#[test]
+fn given_non_opening_bytes_when_dispatching_then_returns_no_boundary() {
+    let test_cases = [
+        DispatchInputTestCase {
+            description: "before a line comment",
+            expected_cases: ordinary_byte_cases,
+            sql: b"--",
+        },
+        DispatchInputTestCase {
+            description: "before a block comment",
+            expected_cases: ordinary_byte_cases,
+            sql: b"/*",
+        },
+        DispatchInputTestCase {
+            description: "before a single quote",
+            expected_cases: ordinary_byte_cases,
+            sql: b"'",
+        },
+        DispatchInputTestCase {
+            description: "before a double quote",
+            expected_cases: ordinary_byte_cases,
+            sql: b"\"",
+        },
+        DispatchInputTestCase {
+            description: "before a backtick",
+            expected_cases: ordinary_byte_cases,
+            sql: b"`",
+        },
+        DispatchInputTestCase {
+            description: "before a dollar quote",
+            expected_cases: ordinary_byte_cases,
+            sql: b"$$",
+        },
+    ];
+    for test_case in test_cases {
+        for sample in (test_case.expected_cases)(test_case.sql) {
+            assert_eq!(
+                non_code_end(&sample.sql, sample.index, sample.policy),
+                sample.expected_end,
+                "{}: {}",
+                test_case.description,
+                sample.description,
+            );
+        }
+    }
+}
 
 #[test]
 fn given_quote_policies_when_matching_parentheses_then_policy_decides_quote_boundaries() {
