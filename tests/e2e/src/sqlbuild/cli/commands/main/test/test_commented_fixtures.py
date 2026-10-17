@@ -87,6 +87,38 @@ _MISMATCH_FRAGMENT: str = (
     "test_case",
     [
         CommentedFixtureE2ETestCase(
+            description="nested model CTEs and marker lookalikes preserve mocked source results",
+            test_files={
+                "macros/status.py": "",
+                "models/_macros/status.py": _PROJECT_FILES["macros/status.py"],
+                "models/orders.sql": (
+                    "MODEL (description 'Orders through nested CTEs.');\n"
+                    'WITH "recent" AS (\n'
+                    "  WITH nested AS (SELECT order_id, status, '__ref(\"ignored\")''s' AS note\n"
+                    '    FROM __source("raw_orders"))\n'
+                    "  SELECT order_id, status FROM nested\n"
+                    ")\n"
+                    'SELECT order_id, @normalize_status("status") AS status\n'
+                    'FROM "recent" /* __seed("ignored") */\n'
+                ),
+                "tests/unit/test_orders.sql": (
+                    'TEST (name "nested_orders");\nWITH\n'
+                    + _LINE_COMMENTED_SOURCE
+                    + _LINE_COMMENTED_EXPECTED
+                ),
+                "tests/unit/test_order_counts.sql": (
+                    'TEST (name "nested_order_counts");\nWITH\n'
+                    + _LINE_COMMENTED_SOURCE
+                    + "__expected__order_counts AS (\n"
+                    "  SELECT 'paid' AS status, CAST(1 AS BIGINT) AS order_count\n"
+                    "  UNION ALL SELECT 'void' AS status, CAST(1 AS BIGINT) AS order_count\n"
+                    ") SELECT 1\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("PASS=2", "FAIL=0"),
+        ),
+        CommentedFixtureE2ETestCase(
             description="line and block comments around fixture branches pass",
             test_files={
                 "tests/unit/test_orders_line_comments.sql": (

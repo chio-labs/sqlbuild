@@ -146,7 +146,7 @@ struct AnalysisResolvedSql {
 #[derive(Clone)]
 pub(crate) struct AnalysisTemplate {
     existing_cte_names: HashSet<String>,
-    marker_calls: Vec<(String, String)>,
+    marker_calls: Arc<[(String, String)]>,
 }
 
 type AnalysisTemplateCell = Arc<OnceLock<Option<AnalysisTemplate>>>;
@@ -1341,10 +1341,10 @@ fn analyze_and_resolve_sql(
     for (name, sql) in request.fixture_ctes {
         generated_state.insert_helper(name, sql);
     }
-    let mut replacements: HashMap<(String, String), String> = HashMap::new();
-    for (function_name, referenced_name) in template.marker_calls {
+    let mut replacements: HashMap<(&str, &str), String> = HashMap::new();
+    for (function_name, referenced_name) in template.marker_calls.iter() {
         let target = if function_name == REF_FUNCTION {
-            if let Some(chain_sql) = request.resolved_chain.get(&referenced_name) {
+            if let Some(chain_sql) = request.resolved_chain.get(referenced_name) {
                 for (name, sql) in &chain_sql.generated_ctes {
                     if request.fixtures.scope.is_top_level_helper(name)
                         || name.starts_with(TABLE_FUNCTION_PREFIX)
@@ -1364,7 +1364,7 @@ fn analyze_and_resolve_sql(
             } else {
                 generated_state.mock_target(MockTargetRequest {
                     prefix: REF_PREFIX,
-                    referenced_name: &referenced_name,
+                    referenced_name,
                     mocks: &request.fixtures.mock_refs,
                     fixtures: request.fixtures,
                     file_label: request.file_label,
@@ -1373,7 +1373,7 @@ fn analyze_and_resolve_sql(
         } else if function_name == SOURCE_FUNCTION {
             generated_state.mock_target(MockTargetRequest {
                 prefix: SOURCE_PREFIX,
-                referenced_name: &referenced_name,
+                referenced_name,
                 mocks: &request.fixtures.mock_sources,
                 fixtures: request.fixtures,
                 file_label: request.file_label,
@@ -1381,7 +1381,7 @@ fn analyze_and_resolve_sql(
         } else if function_name == SEED_FUNCTION {
             generated_state.mock_target(MockTargetRequest {
                 prefix: SEED_PREFIX,
-                referenced_name: &referenced_name,
+                referenced_name,
                 mocks: &request.fixtures.mock_seeds,
                 fixtures: request.fixtures,
                 file_label: request.file_label,
@@ -1389,7 +1389,7 @@ fn analyze_and_resolve_sql(
         } else if function_name == DBT_REF_FUNCTION {
             generated_state.mock_target(MockTargetRequest {
                 prefix: DBT_REF_PREFIX,
-                referenced_name: &referenced_name,
+                referenced_name,
                 mocks: &request.fixtures.mock_dbt_refs,
                 fixtures: request.fixtures,
                 file_label: request.file_label,
@@ -1397,13 +1397,13 @@ fn analyze_and_resolve_sql(
         } else if function_name == UDF_FUNCTION || function_name == TABLE_FUNCTION {
             request
                 .functions
-                .get(&referenced_name)
+                .get(referenced_name)
                 .map(|_| referenced_name.clone())
         } else {
             None
         };
         if let Some(target) = target {
-            replacements.insert((function_name, referenced_name), target);
+            replacements.insert((function_name.as_str(), referenced_name.as_str()), target);
         }
     }
     let cte_body_sql = strip_statement_terminators(
@@ -1437,7 +1437,7 @@ fn analysis_template(
             let expression = statements.remove(0);
             Some(AnalysisTemplate {
                 existing_cte_names: top_level_cte_names(&expression),
-                marker_calls: relation_marker_calls(&expression),
+                marker_calls: relation_marker_calls(&expression).into(),
             })
         })
     })
@@ -1453,11 +1453,13 @@ where
 {
     let cached = {
         let mut cache = templates.lock().map_err(|error| error.to_string())?;
-        Arc::clone(
-            cache
-                .entry(query_sql.to_string())
-                .or_insert_with(|| Arc::new(OnceLock::new())),
-        )
+        if let Some(cached) = cache.get(query_sql) {
+            Arc::clone(cached)
+        } else {
+            let cached = Arc::new(OnceLock::new());
+            cache.insert(query_sql.to_owned(), Arc::clone(&cached));
+            cached
+        }
     };
     Ok(cached.get_or_init(initialize).clone())
 }
@@ -1532,7 +1534,7 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
     let table_functions =
         resolve_table_function_fixtures(&result, request.fixtures, request.patterns)?;
     reached.extend(table_functions.reached);
-    result = resolve_function_calls(
+    let mut result = resolve_function_calls(
         &table_functions.sql,
         request.functions,
         false,
@@ -1573,19 +1575,19 @@ fn resolve_textual_sql(request: TextualResolutionRequest<'_>) -> Result<TextualR
 }
 
 /// Model or assertion SQL with table-function fixtures replaced by their top-level CTEs.
-struct TableFunctionFixtures {
-    sql: String,
+struct TableFunctionFixtures<'a> {
+    sql: std::borrow::Cow<'a, str>,
     reached: HashSet<String>,
     ctes: Vec<(String, String)>,
 }
 
-fn resolve_table_function_fixtures(
-    sql: &str,
+fn resolve_table_function_fixtures<'a>(
+    sql: &'a str,
     fixtures: &TestFixtures,
     patterns: &SqlTestPatterns,
-) -> Result<TableFunctionFixtures, String> {
+) -> Result<TableFunctionFixtures<'a>, String> {
     let mut resolved = TableFunctionFixtures {
-        sql: sql.to_string(),
+        sql: std::borrow::Cow::Borrowed(sql),
         reached: HashSet::new(),
         ctes: Vec::new(),
     };
@@ -1603,7 +1605,7 @@ fn resolve_table_function_fixtures(
                 .then(|| (format!("{TABLE_FUNCTION_PREFIX}{name}"), true))
         },
     )?;
-    resolved.sql = replaced;
+    resolved.sql = std::borrow::Cow::Owned(replaced);
     for (name, body) in &fixtures.mock_table_functions {
         if !reached.contains(name) {
             continue;
@@ -1662,33 +1664,39 @@ fn top_level_cte_names(expression: &Expression) -> HashSet<String> {
     with.ctes.iter().map(|cte| cte.alias.name.clone()).collect()
 }
 
-fn replace_relation_markers(
-    sql: &str,
-    replacements: &HashMap<(String, String), String>,
+fn replace_relation_markers<'a>(
+    sql: &'a str,
+    replacements: &HashMap<(&str, &str), String>,
     patterns: &SqlTestPatterns,
-) -> String {
-    let mut result = sql.to_string();
+) -> std::borrow::Cow<'a, str> {
+    let mut result = std::borrow::Cow::Borrowed(sql);
     for (function_name, pattern) in [
         (REF_FUNCTION, &patterns.reference),
         (SOURCE_FUNCTION, &patterns.source),
         (SEED_FUNCTION, &patterns.seed),
     ] {
-        result = replace_named_markers(&result, pattern, &patterns.lexical, |name| {
-            replacements
-                .get(&(function_name.to_string(), name.to_string()))
-                .cloned()
-        });
+        if !replacements.keys().any(|(name, _)| *name == function_name) {
+            continue;
+        }
+        result = std::borrow::Cow::Owned(replace_named_markers(
+            &result,
+            pattern,
+            &patterns.lexical,
+            |name| replacements.get(&(function_name, name)).cloned(),
+        ));
     }
-    replace_dbt_ref_markers(
+    if !replacements
+        .keys()
+        .any(|(name, _)| *name == DBT_REF_FUNCTION)
+    {
+        return result;
+    }
+    std::borrow::Cow::Owned(replace_dbt_ref_markers(
         &result,
         &patterns.dbt_reference,
         &patterns.lexical,
-        |name| {
-            replacements
-                .get(&(DBT_REF_FUNCTION.to_string(), name.to_string()))
-                .cloned()
-        },
-    )
+        |name| replacements.get(&(DBT_REF_FUNCTION, name)).cloned(),
+    ))
 }
 
 struct UnresolvedReferenceRequest<'a> {
