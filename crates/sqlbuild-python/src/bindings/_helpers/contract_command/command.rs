@@ -26,6 +26,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -79,8 +80,9 @@ fn select_resources<'py>(
     context: &Bound<'py, PyAny>,
 ) -> PyResult<Selection<'py>> {
     let py: Python<'py> = request.py();
-    let analysis: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+    let analysis: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompileAnalysisSelection,
         &[("no_cache", PyBool::new(py, true).to_owned().into_any())],
     )?;
     let project: Bound<'py, PyAny> = build_compiled_project(
@@ -405,8 +407,9 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     let selection: Selection<'_> = select_resources(request, &discovered, &context)?;
     let progress: Progress<'_> = progress_for(request)?;
     let evidence: Bound<'_, PyAny> = compare(request, &context, &selection, &progress)?;
-    let mut result: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::ContractAdoptionResult)?,
+    let mut result: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::ContractAdoptionResult,
         &[("from_target", from_target), ("evidence", evidence)],
     )?;
     if generate_write {

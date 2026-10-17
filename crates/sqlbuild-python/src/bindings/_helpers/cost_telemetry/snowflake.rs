@@ -13,18 +13,16 @@ use sqlbuild_core::cost_allocation::constants::QUERY_HISTORY_RESULT_LIMIT;
 use sqlbuild_core::cost_allocation::main::query_history_sql::query_history_sql;
 use sqlbuild_core::cost_allocation::models::{QueryHistoryWindow, RunAllocation};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::cost_telemetry::allocation::{
     SummaryState, allocate_observations, priced, summary_object,
 };
 use crate::bindings::_helpers::cost_telemetry::health::consume_ledger_failure;
 use crate::bindings::_helpers::cost_telemetry::ledger::read_ledger;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DEADLINE_SECONDS: f64 = 10.0;
 const QUERY_TIMEOUT_SECONDS: &str = "5";
@@ -259,8 +257,9 @@ fn row_observation<'py>(
         return Ok(Err(NO_WAREHOUSE_COMPUTE));
     }
     let tag: QueryTag = tag.unwrap_or_default();
-    let observation: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::QueryCostObservation)?,
+    let observation: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::QueryCostObservation,
         &[
             ("query_id", query_id.str()?.into_any()),
             ("warehouse_name", warehouse_name.str()?.into_any()),

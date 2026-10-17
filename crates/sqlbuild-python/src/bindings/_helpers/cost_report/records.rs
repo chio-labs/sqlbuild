@@ -8,6 +8,7 @@ use sqlbuild_core::cost_report::models::{CostResource, CostRun, CostSummary};
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -155,7 +156,7 @@ fn resource_object<'py>(
         builders.decimal(&resource.estimated_compute_credits)?,
     )?;
     fields.set_item("estimated_usd", builders.decimal(&resource.estimated_usd)?)?;
-    registry::class(py, RecordId::ResourceCost)?.call((), Some(&fields))
+    new_record(py, RecordId::ResourceCost, (), Some(&fields))
 }
 
 fn summary_object<'py>(
@@ -216,7 +217,7 @@ pub(crate) fn record_object<'py>(py: Python<'py>, run: &CostRun) -> PyResult<Bou
     )?;
     fields.set_item("cost", summary_object(&builders, &run.cost)?)?;
     fields.set_item("had_executable_work", run.had_executable_work)?;
-    registry::class(py, RecordId::CostRunRecord)?.call((), Some(&fields))
+    new_record(py, RecordId::CostRunRecord, (), Some(&fields))
 }
 
 /// Records of several plain runs, as a tuple.

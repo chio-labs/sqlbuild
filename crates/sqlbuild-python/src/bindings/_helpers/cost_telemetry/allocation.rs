@@ -15,9 +15,9 @@ use crate::bindings::_helpers::cost_telemetry::values::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const PENDING_MESSAGE: &str = "Snowflake query history is not complete yet.";
 
@@ -64,8 +64,9 @@ fn resource_cost<'py>(
     resource: &ResourceAllocation,
 ) -> PyResult<Bound<'py, PyAny>> {
     let decimal = |value: &PyDecimal| python_decimal(py, value);
-    call_with(
-        &registry::class(py, RecordId::ResourceCost)?,
+    new_record_with(
+        py,
+        RecordId::ResourceCost,
         &[
             (
                 "resource_type",

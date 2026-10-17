@@ -8,6 +8,7 @@ use crate::bindings::_helpers::compile_driver::discovery::discover_project_input
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -33,8 +34,7 @@ pub(crate) fn write_contracts<'py>(
     let project: Bound<'py, PyAny> = native_field(graph, "project")?;
     let models: Bound<'py, PyDict> = by_name(&native_field(&project, "models")?)?;
     let sources: Bound<'py, PyDict> = by_name(&native_field(&project, "sources")?)?;
-    let model_type: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let model_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let updates: Bound<'py, PyDict> = PyDict::new(py);
     let updated_evidence: Bound<'py, PyList> = PyList::empty(py);
     for evidence in native_field(result, "evidence")?.try_iter()? {
@@ -141,8 +141,12 @@ fn applied<'py>(
     }
     let selection_keywords: Bound<'py, PyDict> = PyDict::new(py);
     selection_keywords.set_item("no_cache", true)?;
-    let selection: Bound<'py, PyAny> = registry::class(py, RecordId::CompileAnalysisSelection)?
-        .call((), Some(&selection_keywords))?;
+    let selection: Bound<'py, PyAny> = new_record(
+        py,
+        RecordId::CompileAnalysisSelection,
+        (),
+        Some(&selection_keywords),
+    )?;
     build_compiled_project(
         py,
         Some(keywords(

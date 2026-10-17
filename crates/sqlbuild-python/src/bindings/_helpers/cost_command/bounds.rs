@@ -12,9 +12,9 @@ use sqlbuild_core::cost_command::main::is_zero_cost_duration::is_zero_cost_durat
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DATETIME_MODULE: &str = "datetime";
 const MINUTE_TO_DAY_DURATION_UNITS: [&str; 3] = ["m", "h", "d"];
@@ -103,7 +103,7 @@ pub(crate) fn parse_since<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'
         return now(py);
     }
     let duration: Bound<'py, PyAny> =
-        registry::class(py, RecordId::Duration)?.call_method1("parse", (value,))?;
+        record_class(py, RecordId::Duration)?.call_method1("parse", (value,))?;
     if duration.is_none() {
         return parse_bound(py, value, "--since", false);
     }

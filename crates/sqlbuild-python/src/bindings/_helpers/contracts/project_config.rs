@@ -16,6 +16,7 @@ use sqlbuild_config::project::main::resolve_config_file::resolve_config_file;
 use sqlbuild_config::project::models::{Built, ConfigFile, ConfigPaths};
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
+use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -115,7 +116,7 @@ fn enum_member<'py>(py: Python<'py>, class: &str, value: &str) -> PyResult<Bound
     let class_object: Bound<'py, PyAny> =
         match PYTHON_ENUM_MODULES.iter().find(|(name, _)| *name == class) {
             Some((_, module)) => py.import(*module)?.getattr(class)?,
-            None => registry::class(py, registry::record_named(class)?)?,
+            None => record_class(py, registry::record_named(class)?)?,
         };
     class_object.call1((value,))
 }
@@ -129,7 +130,7 @@ fn object<'py>(
     for (name, value) in fields {
         keywords.set_item(name, built(py, value)?)?;
     }
-    registry::class(py, registry::record_named(class)?)?.call((), Some(&keywords))
+    new_record(py, registry::record_named(class)?, (), Some(&keywords))
 }
 
 fn built(py: Python<'_>, value: Built) -> PyResult<Py<PyAny>> {

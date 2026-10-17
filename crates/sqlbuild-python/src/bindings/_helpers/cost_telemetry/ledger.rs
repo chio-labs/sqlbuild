@@ -15,12 +15,11 @@ use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, JsonInteger, JsonValue, StdlibJsonOptions};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, within,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
 use crate::bindings::_helpers::cost_telemetry::health::mark_ledger_failure;
 use crate::bindings::_helpers::cost_telemetry::values::process_object;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -200,10 +199,7 @@ fn ledger_entry<'py>(line: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         ("started_at", parsed("started_at")?),
         ("completed_at", parsed("completed_at")?),
     ];
-    call_with(
-        &registry::class(py, RecordId::StatementLedgerEntry)?,
-        &entry_fields,
-    )
+    new_record_with(py, RecordId::StatementLedgerEntry, &entry_fields)
 }
 
 fn entry_error(py: Python<'_>, error: &PyErr) -> bool {
