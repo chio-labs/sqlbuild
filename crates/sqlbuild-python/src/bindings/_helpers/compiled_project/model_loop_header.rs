@@ -16,7 +16,7 @@ use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, compile_error, config_error,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_contracts::{
-    EnumColumns, audit_identity, dynamic_family_objects, enum_columns, factory_audits,
+    EnumColumns, dynamic_family_objects, enum_columns, factory_audits,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::present;
 use crate::bindings::_helpers::compiled_project::model_loop_schema::{
@@ -27,7 +27,9 @@ use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::column_migrations::column_migration_error;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
-use crate::bindings::_helpers::model_config::header_metadata::{audit_tuple, column_tuple};
+use crate::bindings::_helpers::model_config::header_metadata::{
+    audit_instances, parsed_audit_identity, schema_columns,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DESCRIPTION_KEY: &str = "description";
@@ -103,9 +105,7 @@ pub(crate) fn header_schema<'py>(
     let locations: Bound<'py, PyDict> = source.model_file.header_locations(py)?;
     let model_path: &Bound<'py, PyAny> = source.model_file.paths(py).1;
     let local_columns: DeclaredColumns<'py> = DeclaredColumns {
-        specs: column_tuple(py, context.contracts, &parsed_columns, &locations)?
-            .iter()
-            .collect(),
+        specs: schema_columns(py, context.contracts, &parsed_columns, &locations)?,
         facts: local_column_facts(&parsed_columns)?,
     };
     let columns: DeclaredColumns<'py> = match source.schema {
@@ -121,14 +121,20 @@ pub(crate) fn header_schema<'py>(
     let parsed_audits = metadata
         .audits
         .map_err(|error| raised_config_error(py, error))?;
-    let available: Vec<String> = context.classes.audit_factories.keys().extract()?;
-    let references: Vec<String> = audit_factory_references(&node(factories), model, &available)
-        .map_err(|error| raised_config_error(py, error))?;
-    let direct_audits: Bound<'py, PyTuple> = audit_tuple(py, context.contracts, &parsed_audits)?;
+    let references: Vec<String> = match factories {
+        Some(factories) => {
+            let available: Vec<String> = context.classes.audit_factories.keys().extract()?;
+            audit_factory_references(&PyNode(factories), model, &available)
+                .map_err(|error| raised_config_error(py, error))?
+        }
+        None => Vec::new(),
+    };
+    let mut direct_audits: Vec<Bound<'py, PyAny>> =
+        audit_instances(py, context.contracts, &parsed_audits)?;
     let (generated, generated_identities) = factory_audits(py, context, &references)?;
-    let direct_identities: Vec<String> = direct_audits
+    let direct_identities: Vec<String> = parsed_audits
         .iter()
-        .map(|audit| audit_identity(&audit))
+        .map(parsed_audit_identity)
         .collect::<PyResult<_>>()?;
     merged_audit_identities(&direct_identities, &generated_identities, model)
         .map_err(|error| raised_config_error(py, error))?;
@@ -150,10 +156,8 @@ pub(crate) fn header_schema<'py>(
             .iter()
             .any(|column| column.data_type.is_some());
     let family_facts: Vec<DynamicFamilyFact> = families.iter().map(family_fact).collect();
-    let audits: Bound<'py, PyTuple> = PyTuple::new(
-        py,
-        direct_audits.iter().chain(generated).collect::<Vec<_>>(),
-    )?;
+    direct_audits.extend(generated);
+    let audits: Bound<'py, PyTuple> = PyTuple::new(py, direct_audits)?;
     let families: Vec<Bound<'py, PyAny>> = dynamic_family_objects(py, context, &families)?;
     let enums: Bound<'py, PyDict> = native_field(source.visible.0, ENUMS_FIELD)?.downcast_into()?;
     let enums: Bound<'py, PyDict> = match source.schema {

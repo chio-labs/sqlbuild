@@ -115,7 +115,7 @@ pub(crate) fn factory_audits<'py>(
 }
 
 /// `audit.name or audit.definition_name`.
-pub(crate) fn audit_identity(audit: &Bound<'_, PyAny>) -> PyResult<String> {
+fn audit_identity(audit: &Bound<'_, PyAny>) -> PyResult<String> {
     let name: Bound<'_, PyAny> = native_field(audit, NAME_FIELD)?;
     if name.is_truthy()? {
         return name.extract();
@@ -171,6 +171,14 @@ pub(crate) fn enum_columns<'py>(
 ) -> PyResult<EnumColumns<'py>> {
     let py: Python<'py> = values.py();
     let (enums, (declarations, consumer)) = visible;
+    if enums.is_empty() {
+        return Ok(EnumColumns {
+            columns: PyTuple::new(py, columns.specs)?,
+            facts: columns.facts,
+            declarations: PyDict::new(py),
+            usages: Vec::new(),
+        });
+    }
     let enforced: bool = match values.get_item(CONTRACT_KEY)? {
         Some(value) => value.eq(&context.classes.contract_enforced)?,
         None => false,
