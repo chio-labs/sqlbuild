@@ -4,7 +4,7 @@ use crate::config_presence::_helpers::macro_walk::walk_entries;
 use crate::config_presence::models::MacroPath;
 use crate::types::AuthoredNode;
 
-/// The first macro path `first_macro_path` reports for the single entry `key: value`.
+/// The first macro path `validate_no_macros_in_config_value` reports for the entry `key: value`.
 pub fn entry_macro_path<N: AuthoredNode>(key: &N, value: &N) -> MacroPath {
     walk_entries(&[(key.clone(), value.clone())], &[])
 }

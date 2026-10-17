@@ -443,7 +443,7 @@ impl NativeCompiledModel {
     pub(crate) fn metadata_texts(
         &self,
         py: Python<'_>,
-        function_kinds: &[String],
+        function_kinds: &[&str],
     ) -> PyResult<(String, String, String, bool)> {
         self.read(py, |record, _| {
             Ok((
@@ -453,7 +453,7 @@ impl NativeCompiledModel {
                 record
                     .references
                     .iter()
-                    .any(|(kind, _, _, _)| function_kinds.contains(kind)),
+                    .any(|(kind, _, _, _)| function_kinds.contains(&kind.as_str())),
             ))
         })
     }

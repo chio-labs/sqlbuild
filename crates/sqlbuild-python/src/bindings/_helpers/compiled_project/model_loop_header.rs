@@ -106,7 +106,7 @@ pub(crate) fn header_schema<'py>(
     let none: Bound<'py, PyAny> = py.None().into_bound(py);
     let node = |value: Option<Bound<'py, PyAny>>| PyNode(value.unwrap_or_else(|| none.clone()));
     let model: (&str, &str) = (source.name, source.relative_path);
-    let native: Option<&[NativeColumn]> = native_columns(source, columns.as_ref())?;
+    let native: Option<&[NativeColumn]> = native_columns(context, source, columns.as_ref())?;
     let python_columns: Option<Bound<'py, PyAny>> = if native.is_some() { None } else { columns };
     let metadata =
         parse_header_metadata(&node(python_columns), &node(audits), source.relative_path);
@@ -213,12 +213,16 @@ pub(crate) fn header_schema<'py>(
 
 /// The natively parsed header columns, when the config's columns are the header's own value.
 fn native_columns<'a>(
+    context: &LoopContext<'_, '_>,
     source: &HeaderSource<'a, '_>,
     columns: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Option<&'a [NativeColumn]>> {
     let (Some(facts), Some(columns)) = (source.facts, columns) else {
         return Ok(None);
     };
+    if !context.contracts.uses_default_classes()? {
+        return Ok(None);
+    }
     let Some(parsed) = &facts.columns else {
         return Ok(None);
     };
@@ -237,7 +241,6 @@ fn native_declared_columns(
 ) -> PyResult<DeclaredColumns> {
     let py: Python<'_> = context.host.py();
     let rows: &[(String, LineColumnSpan)] = source.model_file.header_location_rows();
-    let contracts: Arc<Py<PyDict>> = Arc::new(context.contract_dict.clone_ref(py));
     let mut specs: Vec<HeaderColumn> = Vec::with_capacity(columns.len());
     let mut facts: Vec<SchemaColumnFact> = Vec::with_capacity(columns.len());
     for column in columns {
@@ -264,7 +267,6 @@ fn native_declared_columns(
             NativeColumnSpec {
                 column: column.clone(),
                 location: location.map(|span| (source.model_file_handle.clone_ref(py), span)),
-                contracts: Arc::clone(&contracts),
             },
         )?);
     }

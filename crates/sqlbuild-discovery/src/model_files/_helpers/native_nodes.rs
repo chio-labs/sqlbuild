@@ -119,12 +119,19 @@ impl AuthoredNode for NativeNode<'_> {
     }
 
     fn integer(&self) -> Option<i64> {
-        self.digits().and_then(|digits| digits.parse::<i64>().ok())
+        let digits: String = self.digits()?;
+        let Ok(number) = digits.parse::<i64>() else {
+            return None;
+        };
+        Some(number)
     }
 
     fn number(&self) -> Option<f64> {
         if let Some(digits) = self.digits() {
-            return digits.parse::<f64>().ok();
+            let Ok(number) = digits.parse::<f64>() else {
+                return None;
+            };
+            return Some(number);
         }
         match self {
             Self::Value(AuthoredValue::BareWord(text)) => match word(text) {

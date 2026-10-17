@@ -30,6 +30,8 @@ use crate::bindings::_helpers::semantic_checks::type_recovery::items;
 use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 use crate::bindings::types::CompilerDetach;
 
+/// `SqlReferenceKind.UDF` and `SqlReferenceKind.TABLE_FUNCTION` values.
+const FUNCTION_REFERENCE_KINDS: [&str; 2] = ["udf", "table_fn"];
 const METADATA_CONFIG_KEYS: [&str; 4] = [
     "unique_key",
     "cursor",
@@ -446,13 +448,9 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
     }
     let (name, query_sql, authored_sql, calls_functions) = match model.cast::<NativeCompiledModel>()
     {
-        Ok(native) => {
-            let function_kinds: [String; 2] = [
-                classes.udf_kind.getattr("value")?.extract()?,
-                classes.table_function_kind.getattr("value")?.extract()?,
-            ];
-            native.get().metadata_texts(model.py(), &function_kinds)?
-        }
+        Ok(native) => native
+            .get()
+            .metadata_texts(model.py(), &FUNCTION_REFERENCE_KINDS)?,
         Err(_) => {
             let mut calls_functions: bool = false;
             for reference in native_field(model, "references")?.try_iter()? {

@@ -1,18 +1,17 @@
 //! A discovered SQL model file as a native record whose Python attributes are built on demand.
 
-use std::ffi::OsString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::bindings::_helpers::records::construct::new_record;
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple};
-use pyo3::{FromPyObject, IntoPyObjectExt, pyclass, pymethods};
+use pyo3::{FromPyObject, IntoPyObject, IntoPyObjectExt, pyclass, pymethods};
 use sqlbuild_discovery::model_files::main::model_file_stem::model_file_stem;
 use sqlbuild_discovery::models::LineColumnSpan;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
@@ -30,7 +29,6 @@ const FIELD_NAMES: [&str; 10] = [
     "extract_implicit_alias_columns",
 ];
 const STEM_ATTRIBUTE: &str = "stem";
-const AS_POSIX_METHOD: &str = "as_posix";
 
 /// Authored locations: native rows until Python reads them, then a cached dict.
 struct Locations {
@@ -106,32 +104,41 @@ pub(crate) struct ModelFileTexts {
 /// A model file's paths: native text, with the Python path objects built on first read.
 struct ModelFilePaths {
     native_file_path: PathBuf,
-    /// `None` when a path is not text Python can encode, so readers ask Python as they always did.
+    /// `None` when a path is not text Python can encode, so readers raise as Python does.
     texts: Option<ModelFileTexts>,
     /// `(file_path, relative_path)` as Python path objects.
     objects: PyOnceLock<(Py<PyAny>, Py<PyAny>)>,
-    /// The project directory and relative path the objects are built from, unless given.
-    origin: Option<(Py<PyAny>, OsString)>,
+    /// The relative path the objects are built from, unless they were given.
+    relative: Option<PathBuf>,
 }
 
 impl ModelFilePaths {
     /// Paths given as Python objects; their text is read once, here.
     fn given(py: Python<'_>, file_path: Py<PyAny>, relative_path: Py<PyAny>) -> PyResult<Self> {
         let native_file_path: PathBuf = file_path.bind(py).extract()?;
+        let relative: PathBuf = relative_path.bind(py).extract()?;
         let texts: Option<ModelFileTexts> =
-            python_texts(file_path.bind(py), relative_path.bind(py)).ok();
+            native_file_path
+                .to_str()
+                .zip(relative.to_str())
+                .map(|(file_text, relative_text)| ModelFileTexts {
+                    name: model_file_stem(&posix(file_text)).to_owned(),
+                    posix_path: posix(relative_text),
+                    relative_path: relative_text.to_owned(),
+                    file_path: file_text.to_owned(),
+                });
         let objects: PyOnceLock<(Py<PyAny>, Py<PyAny>)> = PyOnceLock::new();
         let _ = objects.set(py, (file_path, relative_path));
         Ok(Self {
             native_file_path,
             texts,
             objects,
-            origin: None,
+            relative: None,
         })
     }
 
-    /// Paths native discovery named; Python builds `project_dir / relative_path` only when read.
-    fn discovered(project_dir: Py<PyAny>, relative_path: &str, file_path: String) -> Self {
+    /// Paths native discovery named; their Python path objects are built only when read.
+    fn discovered(relative_path: &str, file_path: String) -> Self {
         let name: String = model_file_stem(relative_path).to_owned();
         Self {
             native_file_path: PathBuf::from(&file_path),
@@ -142,7 +149,7 @@ impl ModelFilePaths {
                 file_path,
             }),
             objects: PyOnceLock::new(),
-            origin: Some((project_dir, OsString::from(relative_path))),
+            relative: Some(PathBuf::from(relative_path)),
         }
     }
 
@@ -155,42 +162,40 @@ impl ModelFilePaths {
             native_file_path: self.native_file_path.clone(),
             texts: self.texts.clone(),
             objects,
-            origin: self
-                .origin
-                .as_ref()
-                .map(|(project_dir, relative)| (project_dir.clone_ref(py), relative.clone())),
+            relative: self.relative.clone(),
         }
     }
 
-    /// `(file_path, relative_path)` as the Python path objects discovery names the file by.
+    /// `(file_path, relative_path)` as the `pathlib` objects discovery names the file by.
     fn objects<'py>(&self, py: Python<'py>) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
         let (file_path, relative_path) = self.objects.get_or_try_init(py, || {
-            let Some((project_dir, relative)) = &self.origin else {
-                return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                    "a model file has no paths",
-                ));
+            let Some(relative) = &self.relative else {
+                return Err(PyRuntimeError::new_err("a model file has no paths"));
             };
-            let relative_path: Bound<'_, PyAny> =
-                py.import("pathlib")?.getattr("Path")?.call1((relative,))?;
-            let file_path: Bound<'_, PyAny> = project_dir.bind(py).div(&relative_path)?;
-            Ok::<_, pyo3::PyErr>((file_path.unbind(), relative_path.unbind()))
+            Ok::<_, pyo3::PyErr>((
+                self.native_file_path.as_path().into_pyobject(py)?.unbind(),
+                relative.as_path().into_pyobject(py)?.unbind(),
+            ))
         })?;
         Ok((file_path.bind(py).clone(), relative_path.bind(py).clone()))
     }
+
+    /// The file's names, or the error Python raises reading a name that is not UTF-8 text.
+    fn texts(&self, py: Python<'_>) -> PyResult<&ModelFileTexts> {
+        if let Some(texts) = &self.texts {
+            return Ok(texts);
+        }
+        let (file_path, relative_path) = self.objects(py)?;
+        for path in [file_path, relative_path] {
+            path.str()?.to_str()?;
+        }
+        Err(PyRuntimeError::new_err("a model file path is not text"))
+    }
 }
 
-/// The names of a model file read from its Python path objects.
-fn python_texts(
-    file_path: &Bound<'_, PyAny>,
-    relative_path: &Bound<'_, PyAny>,
-) -> PyResult<ModelFileTexts> {
-    let file_text: String = file_path.str()?.to_str()?.to_owned();
-    Ok(ModelFileTexts {
-        name: native_field(file_path, STEM_ATTRIBUTE)?.extract()?,
-        posix_path: relative_path.call_method0(AS_POSIX_METHOD)?.extract()?,
-        relative_path: relative_path.str()?.to_str()?.to_owned(),
-        file_path: file_text,
-    })
+/// `text` with the platform's path separator spelled `/`, as `PurePath.as_posix` spells it.
+fn posix(text: &str) -> String {
+    text.replace(std::path::MAIN_SEPARATOR, "/")
 }
 
 /// `text` as the Python string `cache` shares with every reader, built on first read.
@@ -283,8 +288,8 @@ pub(crate) struct ModelFileParts {
 
 /// How discovery names a model file: natively, or by Python paths for names Python escapes.
 pub(crate) enum DiscoveredPaths {
-    /// The project directory, the `/`-separated relative path and `str(project_dir / relative)`.
-    Native(Py<PyAny>, String, String),
+    /// The `/`-separated relative path and `str(project_dir / relative_path)`.
+    Native(String, String),
     /// `(file_path, relative_path)` built by Python.
     Python(Py<PyAny>, Py<PyAny>),
 }
@@ -302,8 +307,8 @@ impl PendingModelFile {
         parts: ModelFileParts,
     ) -> PyResult<Self> {
         let paths: ModelFilePaths = match paths {
-            DiscoveredPaths::Native(project_dir, relative_path, file_path) => {
-                ModelFilePaths::discovered(project_dir, &relative_path, file_path)
+            DiscoveredPaths::Native(relative_path, file_path) => {
+                ModelFilePaths::discovered(&relative_path, file_path)
             }
             DiscoveredPaths::Python(file_path, relative_path) => {
                 ModelFilePaths::given(py, file_path, relative_path)?
@@ -316,7 +321,7 @@ impl PendingModelFile {
     pub(crate) fn name(&self, py: Python<'_>) -> PyResult<String> {
         match &self.paths.texts {
             Some(texts) => Ok(texts.name.clone()),
-            None => native_field(&self.paths.objects(py)?.0, STEM_ATTRIBUTE)?.extract(),
+            None => field(&self.paths.objects(py)?.0, STEM_ATTRIBUTE)?.extract(),
         }
     }
 
@@ -408,53 +413,29 @@ impl NativeModelFile {
         self.paths.native_file_path.clone()
     }
 
-    /// The file's names, read through Python only for paths Python escapes.
+    /// The file's names, or the error Python raises reading a name that is not UTF-8 text.
     pub(crate) fn path_texts(&self, py: Python<'_>) -> PyResult<ModelFileTexts> {
-        match &self.paths.texts {
-            Some(texts) => Ok(texts.clone()),
-            None => {
-                let (file_path, relative_path) = self.paths.objects(py)?;
-                python_texts(&file_path, &relative_path)
-            }
-        }
+        self.paths.texts(py).cloned()
     }
 
     /// `relative_path.as_posix()`.
     pub(crate) fn posix_path(&self, py: Python<'_>) -> PyResult<String> {
-        match &self.paths.texts {
-            Some(texts) => Ok(texts.posix_path.clone()),
-            None => self
-                .paths
-                .objects(py)?
-                .1
-                .call_method0(AS_POSIX_METHOD)?
-                .extract(),
-        }
+        Ok(self.paths.texts(py)?.posix_path.clone())
     }
 
     /// `str(relative_path)`.
     pub(crate) fn relative_text(&self, py: Python<'_>) -> PyResult<String> {
-        match &self.paths.texts {
-            Some(texts) => Ok(texts.relative_path.clone()),
-            None => Ok(self.paths.objects(py)?.1.str()?.to_string()),
-        }
+        Ok(self.paths.texts(py)?.relative_path.clone())
     }
 
     /// `str(relative_path.parent)`, the folder project graphs group the model by.
     pub(crate) fn folder(&self, py: Python<'_>) -> PyResult<String> {
-        match &self.paths.texts {
-            Some(texts) => Ok(texts
-                .relative_path
-                .rsplit_once(std::path::MAIN_SEPARATOR)
-                .map_or_else(|| ".".to_owned(), |(folder, _)| folder.to_owned())),
-            None => self
-                .paths
-                .objects(py)?
-                .1
-                .getattr("parent")?
-                .str()?
-                .extract(),
-        }
+        Ok(self
+            .paths
+            .texts(py)?
+            .relative_path
+            .rsplit_once(std::path::MAIN_SEPARATOR)
+            .map_or_else(|| ".".to_owned(), |(folder, _)| folder.to_owned()))
     }
 
     /// `(file_path, relative_path)` as Python path objects.

@@ -1,6 +1,6 @@
 //! Parsed MODEL header columns and audits built into the Python contract objects.
 
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
@@ -16,11 +16,49 @@ use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::all_specs;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::sqltext::authored_values::authored_value_to_python;
+
+/// `SchemaColumn` fields in declaration order, the order its objects are built positionally in.
+const SCHEMA_COLUMN_FIELDS: [&str; 8] = [
+    "name",
+    "type",
+    "nullable",
+    "description",
+    "meta",
+    "audits",
+    "location",
+    "migrate_from",
+];
+/// `SchemaAuditInstance` fields in declaration order.
+const AUDIT_INSTANCE_FIELDS: [&str; 11] = [
+    "definition_name",
+    "arguments",
+    "name",
+    "description",
+    "severity",
+    "run_scope",
+    "always_run",
+    "thresholds",
+    "minimum_samples",
+    "evidence_limit",
+    "location",
+];
+/// `MeasurementThresholds` fields in declaration order.
+const THRESHOLDS_FIELDS: [&str; 2] = ["warn", "error"];
+/// `MeasurementThresholdBound` fields in declaration order.
+const THRESHOLD_BOUND_FIELDS: [&str; 4] = ["operator", "limit", "lower", "upper"];
+/// Each positionally built record with the field order its values are given in.
+const POSITIONAL_RECORDS: [(&str, &[&str]); 4] = [
+    ("SchemaColumn", &SCHEMA_COLUMN_FIELDS),
+    ("SchemaAuditInstance", &AUDIT_INSTANCE_FIELDS),
+    ("MeasurementThresholds", &THRESHOLDS_FIELDS),
+    ("MeasurementThresholdBound", &THRESHOLD_BOUND_FIELDS),
+];
 
 /// Native column fields; a Python record is constructed only for public consumers.
 pub(crate) struct HeaderColumn {
@@ -44,8 +82,6 @@ pub(crate) struct NativeColumnSpec {
     pub(crate) column: NativeColumn,
     /// The model file whose relative path the column's location names, and the location.
     pub(crate) location: Option<(Py<NativeModelFile>, LineColumnSpan)>,
-    /// The contract classes the record and its audits are built with.
-    pub(crate) contracts: Arc<Py<PyDict>>,
 }
 
 impl HeaderColumn {
@@ -204,7 +240,7 @@ fn native_audits<'py>(
     spec: &NativeColumnSpec,
     location: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let classes: ContractClasses<'py> = spec.contracts.bind(py).extract()?;
+    let classes: ContractClasses<'py> = contract_classes(py)?.extract()?;
     let audits: Vec<Bound<'py, PyAny>> = spec
         .column
         .audits
@@ -284,43 +320,6 @@ impl HeaderColumns {
     }
 }
 
-/// `SchemaColumn` fields in declaration order, the order its objects are built positionally in.
-const SCHEMA_COLUMN_FIELDS: [&str; 8] = [
-    "name",
-    "type",
-    "nullable",
-    "description",
-    "meta",
-    "audits",
-    "location",
-    "migrate_from",
-];
-/// `SchemaAuditInstance` fields in declaration order.
-const AUDIT_INSTANCE_FIELDS: [&str; 11] = [
-    "definition_name",
-    "arguments",
-    "name",
-    "description",
-    "severity",
-    "run_scope",
-    "always_run",
-    "thresholds",
-    "minimum_samples",
-    "evidence_limit",
-    "location",
-];
-/// `MeasurementThresholds` fields in declaration order.
-const THRESHOLDS_FIELDS: [&str; 2] = ["warn", "error"];
-/// `MeasurementThresholdBound` fields in declaration order.
-const THRESHOLD_BOUND_FIELDS: [&str; 4] = ["operator", "limit", "lower", "upper"];
-/// Each positionally built record with the field order its values are given in.
-const POSITIONAL_RECORDS: [(&str, &[&str]); 4] = [
-    ("SchemaColumn", &SCHEMA_COLUMN_FIELDS),
-    ("SchemaAuditInstance", &AUDIT_INSTANCE_FIELDS),
-    ("MeasurementThresholds", &THRESHOLDS_FIELDS),
-    ("MeasurementThresholdBound", &THRESHOLD_BOUND_FIELDS),
-];
-
 /// The Python classes the parsed metadata becomes, read from a Python mapping.
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
@@ -333,6 +332,27 @@ pub(crate) struct ContractClasses<'py> {
     measurement_threshold_bound: Bound<'py, PyAny>,
     severities: Bound<'py, PyDict>,
     threshold_operators: Bound<'py, PyDict>,
+}
+
+impl ContractClasses<'_> {
+    /// Whether these are the classes native header parsing builds by default.
+    pub(crate) fn uses_default_classes(&self) -> PyResult<bool> {
+        let py: Python<'_> = self.schema_column.py();
+        let default: ContractClasses<'_> = contract_classes(py)?.extract()?;
+        Ok(self.schema_column.is(&default.schema_column)
+            && self
+                .schema_audit_instance
+                .is(&default.schema_audit_instance)
+            && self.source_location.is(&default.source_location)
+            && self
+                .measurement_thresholds
+                .is(&default.measurement_thresholds)
+            && self
+                .measurement_threshold_bound
+                .is(&default.measurement_threshold_bound)
+            && self.severities.is(&default.severities)
+            && self.threshold_operators.is(&default.threshold_operators))
+    }
 }
 
 pub(crate) fn column_tuple<'py>(

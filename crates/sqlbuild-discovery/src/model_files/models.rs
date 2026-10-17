@@ -30,7 +30,7 @@ pub struct DiscoveredModelFile {
 pub struct EntryFacts {
     /// Whether a string in the value holds a `${...}` template.
     pub template: bool,
-    /// Where `first_macro_path` finds a macro call in this entry.
+    /// Where the config macro walk finds a macro call in this entry.
     pub macro_path: MacroPath,
     /// Whether the value keeps the model from reusing another model's config.
     pub blocks_reuse: bool,

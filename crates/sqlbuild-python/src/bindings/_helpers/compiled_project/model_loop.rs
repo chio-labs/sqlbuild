@@ -19,8 +19,8 @@ use crate::bindings::_helpers::compiled_project::model_loop_hooks::{
     ExpandedHooks, HookModel, SqlHookClasses, expanded_hooks,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::{
-    DeclarationScan, FinishedModel, InterpolationRow, ModelLoopRow, ModelPaths, RecordClasses,
-    RecordInputs, ReferenceRow, finished_record,
+    DeclarationScan, FinishedModel, InterpolationRow, ModelLoopRow, RecordClasses, RecordInputs,
+    ReferenceRow, finished_record,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     analysis_override, hook_presence, reference_row,
@@ -35,7 +35,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
     OptOut, OptOutModel, reject_unparseable_query, rejected_opt_out,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_prepass::{
-    NativeHeader, all_header_facts,
+    NativeHeader, all_header_facts, native_header,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_python_hooks::{
     HookClasses, HookSignatures,
@@ -57,7 +57,7 @@ use crate::bindings::_helpers::compiled_project::source_views::{
 use crate::bindings::_helpers::compiled_project::sql_test_loop::{
     AttachedSqlTests, SqlTestSettings, TestFileRow, TestScope,
 };
-use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
+use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::model_config::config_errors::raised_config_exception;
 use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
@@ -94,7 +94,6 @@ use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
@@ -189,8 +188,6 @@ pub(crate) struct LoopContext<'a, 'py> {
     pub(crate) host: &'a Bound<'py, ConstantRendering>,
     pub(crate) classes: &'a LoopClasses<'py>,
     pub(crate) contracts: &'a ContractClasses<'py>,
-    /// The contract classes as Python passed them, kept by natively parsed columns.
-    pub(crate) contract_dict: &'a Py<PyDict>,
 }
 
 /// The declarations a model sees and the identity its usages are recorded for.
@@ -277,10 +274,10 @@ fn prepared_rows<'py>(
 ) -> PyResult<Vec<ModelLoopRow>> {
     let hooks = &classes.sql_hooks;
     let mut sqls: Vec<(String, String)> = Vec::with_capacity(model_files.len());
-    let mut paths: Vec<ModelPaths> = Vec::with_capacity(model_files.len());
+    let mut paths: Vec<ModelFileTexts> = Vec::with_capacity(model_files.len());
     for model_file in &model_files {
         let record: &NativeModelFile = model_file.get();
-        let texts: ModelPaths = record.path_texts(py)?;
+        let texts: ModelFileTexts = record.path_texts(py)?;
         sqls.push((record.query_text().to_string(), texts.file_path.clone()));
         paths.push(texts);
     }
@@ -326,7 +323,6 @@ impl NativeModelLoop {
             host: &host,
             classes: &classes,
             contracts: &contracts,
-            contract_dict: &self.contract_classes,
         };
         project
             .borrow_mut()
@@ -336,7 +332,7 @@ impl NativeModelLoop {
         let visibility: ModelVisibility<'py> = ModelVisibility::default();
         let signatures: HookSignatures = HookSignatures::default();
         for row in models {
-            let ModelPaths {
+            let ModelFileTexts {
                 name,
                 relative_path,
                 file_path,
@@ -395,15 +391,7 @@ impl NativeModelLoop {
         let py: Python<'py> = slf.py();
         let classes: LoopClasses<'py> = slf.get().loop_classes.bind(py).extract()?;
         let mut models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
-        let headers: Vec<Option<NativeHeader>> = models
-            .iter()
-            .map(|row| {
-                row.model_file
-                    .get()
-                    .native_header_values()
-                    .map(|values| (Arc::clone(values), row.paths.relative_path.clone()))
-            })
-            .collect();
+        let headers: Vec<Option<NativeHeader>> = models.iter().map(native_header).collect();
         let facts: Vec<Option<HeaderFacts>> = py
             .compiler_detach(|| all_header_facts(&headers))
             .map_err(compiler_error)?;
@@ -431,7 +419,6 @@ impl NativeModelLoop {
             host,
             classes: &classes,
             contracts: &contracts,
-            contract_dict: &self.contract_classes,
         };
         let attached: Vec<AttachedSource> = attached_sources(self, &context, rows, settings)?;
         Ok(retain_sources(project, attached))
@@ -452,7 +439,6 @@ impl NativeModelLoop {
             host,
             classes: &classes,
             contracts: &contracts,
-            contract_dict: &self.contract_classes,
         };
         attached_audits(self, &context, (files, owners), settings)
     }
@@ -472,7 +458,6 @@ impl NativeModelLoop {
             host,
             classes: &classes,
             contracts: &contracts,
-            contract_dict: &self.contract_classes,
         };
         let validator: Bound<'py, NativeModelValidator> =
             self.validator.bind(py).downcast()?.clone();
@@ -540,7 +525,6 @@ impl NativeModelLoop {
             host,
             classes: &classes,
             contracts: &contracts,
-            contract_dict: &self.contract_classes,
         };
         let attached: Vec<AttachedFunction> = attached_functions(self, &context, rows, settings)?;
         checked_table_function_arities(&context, models, &attached)?;
@@ -563,7 +547,7 @@ impl NativeModelLoop {
         } = model;
         let ModelLoopRow {
             paths:
-                ModelPaths {
+                ModelFileTexts {
                     name,
                     posix_path,
                     relative_path,

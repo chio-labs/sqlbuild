@@ -23,7 +23,7 @@ use crate::bindings::_helpers::compiled_project::project::{
 use crate::bindings::_helpers::compiled_project::project::{
     DeclarationPy, config_values, declarations,
 };
-use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
+use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::{
     ExpandedDeclarations, ScannedReference, span_rows,
@@ -44,12 +44,9 @@ const NAME_ATTRIBUTE: &str = "name";
 /// A model's scanned declaration references and the scan's stop marker.
 pub(crate) type DeclarationScan = (Vec<ScannedReference>, Option<u8>);
 
-/// The names a model's file is known by.
-pub(crate) use crate::bindings::_helpers::discovery::model_file_record::ModelFileTexts as ModelPaths;
-
 /// One model the loop builds: its discovered file and what the host prepared for it.
 pub(crate) struct ModelLoopRow {
-    pub(crate) paths: ModelPaths,
+    pub(crate) paths: ModelFileTexts,
     pub(crate) authored_query: Arc<str>,
     pub(crate) contents: Arc<str>,
     pub(crate) scan: Option<DeclarationScan>,
@@ -63,7 +60,7 @@ pub(crate) struct ModelLoopRow {
 
 impl ModelLoopRow {
     pub(crate) fn new(
-        file: (Py<NativeModelFile>, ModelPaths),
+        file: (Py<NativeModelFile>, ModelFileTexts),
         scan: Option<DeclarationScan>,
         interpolation: InterpolationRow,
     ) -> Self {
@@ -128,7 +125,7 @@ pub(crate) fn finished_record<'py>(
     let py: Python<'py> = inputs.visible.py();
     let ModelLoopRow {
         paths:
-            ModelPaths {
+            ModelFileTexts {
                 name,
                 posix_path: relative_path,
                 ..

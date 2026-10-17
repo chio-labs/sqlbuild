@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import cast
 
 import duckdb
 import pytest
@@ -13,11 +11,17 @@ from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     FirstModelErrorTestCase,
     HeaderColumnAuditBuildTestCase,
+    TemplatedHeaderDiagnosticsTestCase,
+)
+from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
+    compile_diagnostics,
+    diagnostics_by_model,
+    write_header_project,
 )
 
 PROJECT_TOML: str = (
     'name = "orders"\nadapter = "duckdb"\n\n[vars]\nlabel = "Order amount"\n\n'
-    '[connection]\ndatabase = "orders.duckdb"\n'
+    'amount_type = "VARCHAR"\n\n[connection]\ndatabase = "orders.duckdb"\n'
 )
 HOOKED_MODEL: str = (
     "MODEL (description 'Hooked orders.', pre_hooks [inline_sql('SELECT 1')], "
@@ -46,22 +50,6 @@ CONTRACT_MODEL: str = (
     "));\n"
     "SELECT CAST(1 AS INTEGER) AS id, CAST(2.0 AS DOUBLE) AS amount\n"
 )
-
-
-def write_project(project_dir: Path, models: dict[str, str]) -> None:
-    (project_dir / "sqlbuild_project.toml").write_text(PROJECT_TOML)
-    model_dir: Path = project_dir / "models"
-    model_dir.mkdir()
-    for name, contents in models.items():
-        (model_dir / f"{name}.sql").write_text(contents)
-
-
-def compile_diagnostics(
-    project_dir: Path, capsys: pytest.CaptureFixture[str]
-) -> tuple[int, list[dict[str, object]]]:
-    exit_code: int = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
-    payload: dict[str, object] = json.loads(capsys.readouterr().out)
-    return exit_code, cast(list[dict[str, object]], payload["diagnostics"])
 
 
 @pytest.mark.parametrize(
@@ -106,7 +94,7 @@ def compile_diagnostics(
 def test_given_several_failing_models_when_compiling_then_the_first_in_model_order_is_reported(
     test_case: FirstModelErrorTestCase, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    write_project(tmp_path, test_case.models)
+    write_header_project(tmp_path, test_case.models, PROJECT_TOML)
 
     exit_code, diagnostics = compile_diagnostics(tmp_path, capsys)
 
@@ -114,35 +102,59 @@ def test_given_several_failing_models_when_compiling_then_the_first_in_model_ord
     assert [item["message"] for item in diagnostics] == [test_case.expected_message]
 
 
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        TemplatedHeaderDiagnosticsTestCase(
+            description="a templated column description",
+            amount_type="VARCHAR",
+            amount_description="'${label}'",
+            expected_location={
+                "path": "models/a_orders.sql",
+                "line": 3,
+                "column": 3,
+                "end_line": 3,
+                "end_column": 9,
+            },
+        ),
+        TemplatedHeaderDiagnosticsTestCase(
+            description="a templated column type",
+            amount_type="'${amount_type}'",
+            amount_description="'Order amount'",
+            expected_location={
+                "path": "models/a_orders.sql",
+                "line": 3,
+                "column": 3,
+                "end_line": 3,
+                "end_column": 9,
+            },
+        ),
+    ),
+    ids=lambda case: case.description,
+)
 def test_given_native_and_templated_header_columns_when_compiling_then_diagnostics_agree(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    test_case: TemplatedHeaderDiagnosticsTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    write_project(
+    write_header_project(
         tmp_path,
         {
-            "a_orders": CONTRACT_MODEL.format(
-                amount_type="VARCHAR", description="'Order amount'"
+            "a_orders": CONTRACT_MODEL.format(amount_type="VARCHAR", description="'Order amount'"),
+            "b_orders": CONTRACT_MODEL.format(
+                amount_type=test_case.amount_type, description=test_case.amount_description
             ),
-            "b_orders": CONTRACT_MODEL.format(amount_type="VARCHAR", description="'${label}'"),
         },
+        PROJECT_TOML,
     )
 
     exit_code, diagnostics = compile_diagnostics(tmp_path, capsys)
 
-    by_model: dict[str, str] = {}
-    for item in diagnostics:
-        name: str = cast(str, item["resource_name"])
-        by_model[name] = json.dumps(item, sort_keys=True).replace(name, "<model>")
+    by_model: dict[str, str] = diagnostics_by_model(diagnostics)
     assert exit_code == 1
     assert sorted(by_model) == ["a_orders", "b_orders"]
     assert by_model["a_orders"] == by_model["b_orders"]
-    assert diagnostics[0]["location"] == {
-        "path": "models/a_orders.sql",
-        "line": 3,
-        "column": 3,
-        "end_line": 3,
-        "end_column": 9,
-    }
+    assert diagnostics[0]["location"] == test_case.expected_location
 
 
 @pytest.mark.parametrize(
@@ -169,12 +181,13 @@ def test_given_native_header_column_audits_when_building_then_duckdb_runs_them(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     contract: str = CONTRACT_MODEL.format(amount_type="DOUBLE", description="'Order amount'")
-    write_project(
+    write_header_project(
         tmp_path,
         {
             "a_orders": contract,
             "b_orders": contract.replace("[1, 2]", test_case.accepted_values),
         },
+        PROJECT_TOML,
     )
 
     exit_code: int = main(["--project-dir", str(tmp_path), "--no-color", "build"])

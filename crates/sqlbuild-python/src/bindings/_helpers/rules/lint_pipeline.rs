@@ -645,12 +645,7 @@ pub(crate) fn lint(
 
 /// A file's bodies planned again against its shared compile expansion, read only for this file.
 fn shared_plan(request: &LintRequest<'_>, file: &LintFile) -> Option<PlannedBodies> {
-    let Some(source) = request.compiled_expansions.get(&file.path) else {
-        return None;
-    };
-    let Some(compiled) = source.shared() else {
-        return None;
-    };
+    let compiled: CompiledExpansion = request.compiled_expansions.get(&file.path)?.shared()?;
     let Ok(relative) = file.path.strip_prefix(request.project_dir) else {
         return None;
     };

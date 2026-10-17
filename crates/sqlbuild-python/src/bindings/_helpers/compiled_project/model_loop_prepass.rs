@@ -1,7 +1,4 @@
 //! Each model's native header facts, read before the ordered loop on a fixed pool off the GIL.
-//!
-//! The ordered loop uses a fact only for a config value that is the header's own object, so a
-//! value that path defaults, templates or hooks replaced is still read from Python.
 
 use std::sync::{Arc, OnceLock};
 
@@ -13,6 +10,8 @@ use sqlbuild_discovery::model_files::main::header_facts::header_facts;
 use sqlbuild_discovery::model_files::models::{EntryFacts, HeaderFacts};
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
+use crate::bindings::_helpers::compiled_project::model_loop_host::ModelLoopRow;
+
 /// The compile pools' fixed worker count.
 const PREPASS_WORKERS: usize = 4;
 const WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
@@ -22,7 +21,7 @@ static POOL: OnceLock<Result<ThreadPool, String>> = OnceLock::new();
 /// A model's native header values and the relative path parse messages name.
 pub(crate) type NativeHeader = (Arc<[(String, AuthoredValue)]>, String);
 
-/// The facts of a config entry, when its value is the header's own value of `key`.
+/// An entry's facts only when its value is the header's own, so replaced values read from Python.
 pub(crate) fn own_entry<'a, 'py>(
     facts: &'a HeaderFacts,
     header: &Bound<'py, PyDict>,
@@ -58,14 +57,16 @@ pub(crate) fn all_header_facts(
         })
         .as_ref()
         .map_err(Clone::clone)?;
-    Ok(pool.install(|| {
-        headers
-            .par_iter()
-            .map(|header| {
-                header
-                    .as_ref()
-                    .map(|(values, path)| header_facts(values, path))
-            })
-            .collect()
-    }))
+    Ok(pool.install(|| headers.par_iter().map(facts_of).collect()))
+}
+
+fn facts_of(header: &Option<NativeHeader>) -> Option<HeaderFacts> {
+    let (values, path) = header.as_ref()?;
+    Some(header_facts(values, path))
+}
+
+/// The row's native header values and relative path, unless Python constructed its file.
+pub(crate) fn native_header(row: &ModelLoopRow) -> Option<NativeHeader> {
+    let values: &Arc<[(String, AuthoredValue)]> = row.model_file.get().native_header_values()?;
+    Some((Arc::clone(values), row.paths.relative_path.clone()))
 }

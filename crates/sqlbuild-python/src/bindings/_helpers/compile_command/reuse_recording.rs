@@ -106,15 +106,7 @@ pub(crate) type ArtifactRecorder<'a> = Option<&'a Py<CompileArtifactWrites>>;
 
 /// `os.path.abspath(path)`, computed natively on POSIX for UTF-8 paths and working directories.
 fn absolute(path: &Bound<'_, PyAny>) -> PyResult<String> {
-    if cfg!(unix)
-        && let Ok(native) = path.extract::<PathBuf>()
-        && let Some(found) = native_absolute(&native)
-    {
-        return Ok(found);
-    }
-    imported(path.py(), "os.path", "abspath")?
-        .call1((path,))?
-        .extract()
+    absolute_path(path.py(), &path.extract::<PathBuf>()?)
 }
 
 /// `os.path.abspath(path)` of a native path.

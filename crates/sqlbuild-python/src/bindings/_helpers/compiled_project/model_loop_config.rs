@@ -92,7 +92,8 @@ impl<'py> ModelConfigs<'py> {
             values.update(metadata.as_mapping())?;
             return view(classes, &values, &cached.fields);
         }
-        let built: ConfigBuild<'py> = builder.built(py, header, matched.as_deref(), name, facts)?;
+        let built: ConfigBuild<'py> =
+            builder.built(py, (header, facts), matched.as_deref(), name)?;
         let built: BuiltConfig<'py> = match built {
             ConfigBuild::Built(built) => built,
             ConfigBuild::Rejected(error) => {

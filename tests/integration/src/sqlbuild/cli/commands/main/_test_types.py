@@ -1167,3 +1167,13 @@ class HeaderColumnAuditBuildTestCase:
     accepted_values: str
     expected_exit_code: int
     expected_failed_models: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TemplatedHeaderDiagnosticsTestCase:
+    """A second model's templated column and where the first model's diagnostic points."""
+
+    description: str
+    amount_type: str
+    amount_description: str
+    expected_location: dict[str, object]

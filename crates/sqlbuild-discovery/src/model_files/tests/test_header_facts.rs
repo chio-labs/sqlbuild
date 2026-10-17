@@ -1,49 +1,6 @@
-use sqlbuild_model_config::config_presence::models::MacroPath;
-
-use crate::model_files::models::{HeaderFacts, NativeColumn};
-use crate::model_files::tests::helpers::parsed_header_facts;
-use crate::model_files::tests::test_types::{ColumnSummary, HeaderFactsTestCase};
-
-fn column_summary(
-    column: &NativeColumn,
-) -> (
-    String,
-    Option<String>,
-    Option<bool>,
-    Option<String>,
-    Vec<String>,
-) {
-    (
-        column.name.clone(),
-        column.column_type.clone(),
-        column.nullable,
-        column.description.clone(),
-        column
-            .audits
-            .iter()
-            .map(|audit| audit.definition_name.clone())
-            .collect(),
-    )
-}
-
-fn expected_summary(
-    column: &ColumnSummary,
-) -> (
-    String,
-    Option<String>,
-    Option<bool>,
-    Option<String>,
-    Vec<String>,
-) {
-    let (name, column_type, nullable, description, audits) = column;
-    (
-        (*name).to_owned(),
-        column_type.map(str::to_owned),
-        *nullable,
-        description.map(str::to_owned),
-        audits.iter().map(|audit| (*audit).to_owned()).collect(),
-    )
-}
+use crate::model_files::models::HeaderFacts;
+use crate::model_files::tests::helpers::{column_summaries, entry_summaries, parsed_header_facts};
+use crate::model_files::tests::test_types::HeaderFactsTestCase;
 
 #[test]
 fn given_model_headers_when_reading_native_facts_then_they_match_the_python_projection() {
@@ -96,35 +53,15 @@ fn given_model_headers_when_reading_native_facts_then_they_match_the_python_proj
     ];
     for test_case in test_cases {
         let facts: HeaderFacts = parsed_header_facts(test_case.contents);
-        let entries: Vec<(&str, bool, Option<Vec<&str>>, bool)> = facts
-            .entries
-            .iter()
-            .map(|(key, entry)| {
-                (
-                    key.as_str(),
-                    entry.template,
-                    match &entry.macro_path {
-                        MacroPath::Found(path) => Some(path.iter().map(String::as_str).collect()),
-                        MacroPath::Absent => None,
-                    },
-                    entry.blocks_reuse,
-                )
-            })
-            .collect();
         assert_eq!(
-            entries, test_case.expected_entries,
+            entry_summaries(&facts),
+            test_case.expected_entries,
             "{}",
             test_case.description
         );
         assert_eq!(
-            facts
-                .columns
-                .as_ref()
-                .map(|columns| columns.iter().map(column_summary).collect::<Vec<_>>()),
-            test_case
-                .expected_columns
-                .as_ref()
-                .map(|columns| columns.iter().map(expected_summary).collect::<Vec<_>>()),
+            column_summaries(&facts),
+            test_case.expected_columns,
             "{}",
             test_case.description
         );

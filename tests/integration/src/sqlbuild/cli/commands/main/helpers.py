@@ -951,3 +951,33 @@ def write_provider_task_project(*, project_dir: Path, annotation: str) -> None:
         path: Path = project_dir / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+
+
+def write_header_project(project_dir: Path, models: dict[str, str], project_toml: str) -> None:
+    """Write a DuckDB project with one SQL model file per name."""
+
+    _ = (project_dir / "sqlbuild_project.toml").write_text(project_toml)
+    model_dir: Path = project_dir / "models"
+    model_dir.mkdir()
+    for name, contents in models.items():
+        _ = (model_dir / f"{name}.sql").write_text(contents)
+
+
+def compile_diagnostics(
+    project_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, list[dict[str, object]]]:
+    """Run one real CLI JSON compile and return its exit code and diagnostics."""
+
+    exit_code: int = main(["--project-dir", str(project_dir), "compile", "--json", "--no-cache"])
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    return exit_code, cast(list[dict[str, object]], payload["diagnostics"])
+
+
+def diagnostics_by_model(diagnostics: list[dict[str, object]]) -> dict[str, str]:
+    """Each model's diagnostic as JSON with its own name replaced, to compare across models."""
+
+    by_model: dict[str, str] = {}
+    for item in diagnostics:
+        name: str = cast(str, item["resource_name"])
+        by_model[name] = json.dumps(item, sort_keys=True).replace(name, "<model>")
+    return by_model
