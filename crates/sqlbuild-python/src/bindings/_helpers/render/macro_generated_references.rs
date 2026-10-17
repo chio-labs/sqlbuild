@@ -11,6 +11,7 @@ use sqlbuild_sqltext::sql_references::models::{
 };
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
+use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
@@ -31,7 +32,6 @@ const MODEL_KIND: &str = "model";
 #[pyo3(from_item_all)]
 pub(crate) struct GeneratedReferenceClasses<'py> {
     compiler_diagnostic: Bound<'py, PyAny>,
-    report_diagnostic: Bound<'py, PyAny>,
     source_location: Bound<'py, PyAny>,
     resource_identity: Bound<'py, PyAny>,
     generic_syntax: LexicalSyntaxInput,
@@ -247,13 +247,9 @@ impl<'py> Reporter<'_, 'py> {
     }
 
     fn report(&self, key: Bound<'py, PyTuple>, fields: &Bound<'py, PyDict>) -> PyResult<()> {
-        let arguments: Bound<'py, PyDict> = PyDict::new(self.py());
-        arguments.set_item("key", key)?;
-        arguments.set_item(
-            "diagnostic",
-            self.classes.compiler_diagnostic.call((), Some(fields))?,
-        )?;
-        let _ = self.classes.report_diagnostic.call((), Some(&arguments))?;
-        Ok(())
+        report_compile_diagnostic(
+            key.as_any(),
+            &self.classes.compiler_diagnostic.call((), Some(fields))?,
+        )
     }
 }

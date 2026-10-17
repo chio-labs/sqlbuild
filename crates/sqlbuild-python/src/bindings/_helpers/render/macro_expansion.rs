@@ -17,9 +17,7 @@ use sqlbuild_render::macro_calls::models::{
 
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::usage_visibility;
-use crate::bindings::_helpers::render::macro_call_classes::{
-    CallClass, ClassInputs, StoreTokenClasses,
-};
+use crate::bindings::_helpers::render::macro_call_classes::{CallClass, ClassInputs};
 use crate::bindings::_helpers::render::macro_call_memo::{MacroCallMemo, poisoned};
 use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
 use crate::bindings::_helpers::render::macro_evaluation::{CallText, Evaluation, evaluate_call};
@@ -63,8 +61,6 @@ pub(crate) struct ExpansionClasses<'py> {
     pub(crate) ref_kinds: Bound<'py, PyDict>,
     /// Typed reference function by `SqlResourceRefKind` value.
     ref_functions: Bound<'py, PyDict>,
-    /// `macro_store_token` and `context_store_token`.
-    store_tokens: StoreTokenClasses<'py>,
     pub(crate) relation_renderer: Bound<'py, PyAny>,
     /// Builds the `MacroContext` a macro is called with from the visible declarations.
     pub(crate) invocation_context: Bound<'py, PyAny>,
@@ -180,7 +176,6 @@ impl NativeMacroExpansion {
             declarations: self.declarations.bind(py),
             loaded_macros: self.loaded_macros.bind(py),
             macro_context: self.macro_context.bind(py),
-            store: &classes.store_tokens,
         };
         let mut state = memo.classes.lock().map_err(poisoned)?;
         let mut found: Vec<CallClass> = Vec::with_capacity(scan.sites.len());

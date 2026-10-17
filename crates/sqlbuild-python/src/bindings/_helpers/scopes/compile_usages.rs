@@ -18,10 +18,11 @@ use sqlbuild_scopes::scope_index::models::{
     DeclarationKind, DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind,
 };
 
+use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const INACCESSIBLE_DECLARATION_CODE: &str = "S006";
@@ -189,7 +190,6 @@ fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyRes
     if diagnostics.is_empty() {
         return Ok(());
     }
-    let report = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
     let path_class = py.import("pathlib")?.getattr("Path")?;
     for (key, message, path, help) in diagnostics {
         let fields: Bound<'_, PyDict> = PyDict::new(py);
@@ -199,13 +199,10 @@ fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyRes
         fields.set_item("message", message)?;
         fields.set_item("path", path_class.call1((path,))?)?;
         fields.set_item("help", help)?;
-        let arguments: Bound<'_, PyDict> = PyDict::new(py);
-        arguments.set_item("key", PyTuple::new(py, key)?)?;
-        arguments.set_item(
-            "diagnostic",
-            new_record(py, RecordId::CompilerDiagnostic, (), Some(&fields))?,
+        report_compile_diagnostic(
+            PyTuple::new(py, key)?.as_any(),
+            &new_record(py, RecordId::CompilerDiagnostic, (), Some(&fields))?,
         )?;
-        report.call((), Some(&arguments))?;
     }
     Ok(())
 }

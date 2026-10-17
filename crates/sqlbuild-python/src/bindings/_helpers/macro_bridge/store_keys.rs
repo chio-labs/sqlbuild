@@ -218,7 +218,7 @@ impl<'py> CanonicalTypes<'py> {
 /// Name a macro by its name, file, identity and exact source, or None when it has no key.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn macro_store_token<'py>(
+pub(crate) fn macro_store_token<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Option<String>> {
@@ -251,7 +251,7 @@ fn macro_store_token<'py>(
 /// Digest the whole context a macro may read, or None when a value has no stable text.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn context_store_token<'py>(
+pub(crate) fn context_store_token<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Option<String>> {

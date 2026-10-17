@@ -16,7 +16,7 @@ use crate::bindings::_helpers::records::construct::{
     enum_member, new_record, new_record_with, record_class,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
@@ -69,10 +69,6 @@ fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
                 record_class(py, RecordId::CompilerDiagnostic)?,
             ),
             (
-                "report_diagnostic",
-                registry::native(py, NativeAttr::ReportCompileDiagnostic)?,
-            ),
-            (
                 "source_location",
                 record_class(py, RecordId::SourceLocation)?,
             ),
@@ -99,19 +95,6 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         ref_kinds.set_item(function, ref_kind.call1((kind,))?)?;
         ref_functions.set_item(kind, function)?;
     }
-    let store_tokens: Bound<'_, PyDict> = keywords(
-        py,
-        &[
-            (
-                "macro_token",
-                registry::native(py, NativeAttr::MacroStoreToken)?,
-            ),
-            (
-                "context_token",
-                registry::native(py, NativeAttr::ContextStoreToken)?,
-            ),
-        ],
-    )?;
     keywords(
         py,
         &[
@@ -149,7 +132,6 @@ fn built_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
             ),
             ("ref_kinds", ref_kinds.into_any()),
             ("ref_functions", ref_functions.into_any()),
-            ("store_tokens", store_tokens.into_any()),
             (
                 "relation_renderer",
                 host::entry(py, UserCodeHost::RelationRenderer)?,

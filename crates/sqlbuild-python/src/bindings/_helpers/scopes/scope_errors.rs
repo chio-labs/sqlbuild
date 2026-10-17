@@ -1,9 +1,9 @@
 //! Report a scope index's error findings as individual compile diagnostics.
 
+use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
@@ -12,7 +12,6 @@ const ERROR_SEVERITY: &str = "error";
 /// `report_scope_index_errors`: each error-severity finding of `index`, keyed for the collector.
 pub(crate) fn report_scope_index_errors(index: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = index.py();
-    let report = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
     let path_class = py.import("pathlib")?.getattr("Path")?;
     for item in native_field(index, "diagnostics")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
@@ -55,10 +54,7 @@ pub(crate) fn report_scope_index_errors(index: &Bound<'_, PyAny>) -> PyResult<()
         fields.set_item("column", native_field(&item, "column")?)?;
         let diagnostic: Bound<'_, PyAny> =
             new_record(py, RecordId::CompilerDiagnostic, (), Some(&fields))?;
-        let arguments: Bound<'_, PyDict> = PyDict::new(py);
-        arguments.set_item("key", key)?;
-        arguments.set_item("diagnostic", diagnostic)?;
-        report.call((), Some(&arguments))?;
+        report_compile_diagnostic(key.as_any(), &diagnostic)?;
     }
     Ok(())
 }
