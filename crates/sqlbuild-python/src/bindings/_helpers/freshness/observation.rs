@@ -15,9 +15,11 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{DATA_VERSION_FIELD, OBSERVED_AT_FIELD};
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, enum_member, new_record, new_record_with,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::state_rows::freshness::{normalize, version_hash};
 use crate::bindings::_helpers::state_rows::timestamps::{in_utc, offset_aware};
@@ -67,8 +69,9 @@ pub(crate) fn observation_source<'py>(
     {
         return Ok(None);
     }
-    let config: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::SourceFreshnessConfig)?,
+    let config: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::SourceFreshnessConfig,
         &[("strategy", adapter_strategy(py)?)],
     )?;
     replaced_source(source, config).map(Some)
@@ -84,7 +87,7 @@ fn replaced_source<'py>(
 }
 
 fn adapter_strategy(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    registry::class(py, RecordId::SourceFreshnessStrategy)?.getattr("ADAPTER")
+    enum_member(py, RecordId::SourceFreshnessStrategy, "ADAPTER")
 }
 
 /// `OperationLifecycle(operation_kind="freshness", ...)` for one observation phase.
@@ -122,8 +125,9 @@ fn observation<'py>(
     (strategy, value_kind): (Bound<'py, PyAny>, Bound<'py, PyAny>),
     (data_version, observed_at): (Bound<'py, PyAny>, Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(source_name.py(), RecordId::SourceFreshnessObservation)?,
+    new_record_with(
+        source_name.py(),
+        RecordId::SourceFreshnessObservation,
         &[
             ("source_name", source_name.clone()),
             ("strategy", strategy),
@@ -310,13 +314,14 @@ pub(crate) fn unknown<'py>(
     (reason, message): (&str, Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = source_name.py();
-    call_with(
-        &registry::class(py, RecordId::SourceFreshnessUnknown)?,
+    new_record_with(
+        py,
+        RecordId::SourceFreshnessUnknown,
         &[
             ("source_name", source_name.clone()),
             (
                 "reason",
-                registry::class(py, RecordId::SourceFreshnessUnknownReason)?.getattr(reason)?,
+                enum_member(py, RecordId::SourceFreshnessUnknownReason, reason)?,
             ),
             ("message", message),
         ],
@@ -364,8 +369,11 @@ fn metadata_observation<'py>(
         source_name,
         (
             adapter_strategy(py)?,
-            registry::class(py, RecordId::SourceFreshnessValueKind)?
-                .call1((native_field(metadata, "value_kind")?,))?,
+            enum_from_value(
+                py,
+                RecordId::SourceFreshnessValueKind,
+                native_field(metadata, "value_kind")?,
+            )?,
         ),
         (
             presumed_utc_value(&native_field(metadata, "data_version")?)?,
@@ -409,10 +417,8 @@ pub(crate) fn observe_adapter_batch<'py>(
     sources: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = observer.adapter.py();
-    let batch_class: Bound<'py, PyAny> =
-        registry::class(py, RecordId::AdapterSourceFreshnessBatch)?;
     if sources.is_empty() {
-        return batch_class.call0();
+        return new_record(py, RecordId::AdapterSourceFreshnessBatch, (), None);
     }
     let manager: Bound<'py, PyAny> = lifecycle(
         py,
@@ -437,8 +443,6 @@ fn observe_adapter_batch_inner<'py>(
     sources: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = observer.adapter.py();
-    let batch_class: Bound<'py, PyAny> =
-        registry::class(py, RecordId::AdapterSourceFreshnessBatch)?;
     let unknown_sources: Bound<'py, PyDict> = PyDict::new(py);
     let requests: Bound<'py, PyDict> = PyDict::new(py);
     let request_class: Bound<'py, PyAny> = host::entry(py, AdapterHost::TableFreshnessRequest)?;
@@ -462,7 +466,11 @@ fn observe_adapter_batch_inner<'py>(
         )?;
     }
     if requests.is_empty() {
-        return call_with(&batch_class, &[("unknown", unknown_sources.into_any())]);
+        return new_record_with(
+            py,
+            RecordId::AdapterSourceFreshnessBatch,
+            &[("unknown", unknown_sources.into_any())],
+        );
     }
     let unique: Bound<'py, PyDict> = PyDict::new(py);
     for request in requests.values() {
@@ -502,8 +510,9 @@ fn observe_adapter_batch_inner<'py>(
             metadata_observation(&name, &metadata, &observer.observed_at)?,
         )?;
     }
-    call_with(
-        &batch_class,
+    new_record_with(
+        py,
+        RecordId::AdapterSourceFreshnessBatch,
         &[
             ("observations", observations.into_any()),
             ("unknown", unknown_sources.into_any()),
@@ -529,8 +538,9 @@ pub(crate) fn observation_record<'py>(
         &value_kind.extract::<String>()?,
         &data_version.extract::<String>()?,
     )?;
-    call_with(
-        &registry::class(py, RecordId::SourceFreshnessRecord)?,
+    new_record_with(
+        py,
+        RecordId::SourceFreshnessRecord,
         &[
             ("source_name", source_name),
             ("target_database", native_field(source, "database")?),

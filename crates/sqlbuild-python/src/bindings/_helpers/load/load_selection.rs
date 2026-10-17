@@ -17,6 +17,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -137,8 +138,9 @@ impl<'py> LoadProject<'py> {
         let meta: Bound<'py, PyDict> = PyDict::new(py);
         meta.set_item(LOADER_NODE_KEY, true)?;
         let name_value: Bound<'py, PyAny> = PyString::new(py, name).into_any();
-        call_with(
-            &registry::class(py, RecordId::SourceEntry)?,
+        new_record_with(
+            py,
+            RecordId::SourceEntry,
             &[
                 ("name", name_value.clone()),
                 ("database", native_field(&parts, "database")?),

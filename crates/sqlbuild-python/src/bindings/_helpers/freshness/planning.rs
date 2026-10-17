@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTup
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_state::freshness::main::configuration_error::configuration_error;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::freshness::exception_types::SourceFreshnessObservationError;
 use crate::bindings::_helpers::freshness::observation::{
     Observer, observation_record, observation_source, observe_adapter_batch, observe_configured,
@@ -18,9 +18,9 @@ use crate::bindings::_helpers::freshness::support::text;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::graph::build_downstream_model_name_closure;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 
 const ADAPTER_STRATEGY: &str = "adapter";
@@ -125,8 +125,9 @@ fn adapter_batch<'py>(
         let name: Bound<'py, PyAny> = native_field(source, "name")?;
         unknown_sources.set_item(&name, unknown(&name, ("ERROR", message.clone()))?)?;
     }
-    call_with(
-        &registry::class(py, RecordId::AdapterSourceFreshnessBatch)?,
+    new_record_with(
+        py,
+        RecordId::AdapterSourceFreshnessBatch,
         &[("unknown", unknown_sources.into_any())],
     )
 }
@@ -268,8 +269,9 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
         }
     }
     let unknown_names: Bound<'py, PyDict> = sorted_dict(py, &unknown_sources)?;
-    call_with(
-        &registry::class(py, RecordId::DirectSourceFreshnessPlanningResult)?,
+    new_record_with(
+        py,
+        RecordId::DirectSourceFreshnessPlanningResult,
         &[
             (
                 "observed_records",
@@ -301,12 +303,13 @@ fn downstream_models<'py>(
     downstream_deps: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let py: Python<'py> = source_name.py();
-    let key: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompiledObjectKey)?,
+    let key: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompiledObjectKey,
         &[
             (
                 "resource_type",
-                registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?,
+                enum_member(py, RecordId::CompiledResourceType, "SOURCE")?,
             ),
             ("name", source_name.clone()),
         ],
@@ -345,7 +348,7 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
         unknown_sources.set_item(name, models)?;
     }
     let error_status: Bound<'py, PyAny> =
-        registry::class(py, RecordId::SourceFreshnessAgeStatus)?.getattr("ERROR")?;
+        enum_member(py, RecordId::SourceFreshnessAgeStatus, "ERROR")?;
     for (identity, status) in source_freshness
         .getattr("age_statuses")?
         .downcast::<PyDict>()?
@@ -359,8 +362,9 @@ pub(crate) fn build_direct_source_freshness_propagation_result<'py>(
         blocked.call_method1("update", (&models,))?;
         errors.set_item(identity, models)?;
     }
-    call_with(
-        &registry::class(py, RecordId::DirectSourceFreshnessPropagationResult)?,
+    new_record_with(
+        py,
+        RecordId::DirectSourceFreshnessPropagationResult,
         &[
             ("changed_source_model_names", changed.into_any()),
             ("unknown_source_model_names", unknown_sources.into_any()),

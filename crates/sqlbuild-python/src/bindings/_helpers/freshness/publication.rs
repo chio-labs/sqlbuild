@@ -12,9 +12,9 @@ use crate::bindings::_helpers::cost_telemetry::context::CostContext;
 use crate::bindings::_helpers::freshness::state_io::write_source_freshness_records;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Observed records grouped by `(database, schema)` in first-seen order.
 type RecordsByLocation<'py> = Vec<(
@@ -154,8 +154,9 @@ fn eligible_records<'py>(
 
 /// `SourceFreshnessRenderers` bound to `adapter`.
 fn renderers<'py>(adapter: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(adapter.py(), RecordId::SourceFreshnessRenderers)?,
+    new_record_with(
+        adapter.py(),
+        RecordId::SourceFreshnessRenderers,
         &[
             (
                 "render_qualified_name",

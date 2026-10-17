@@ -32,6 +32,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -321,7 +322,7 @@ fn prepare<'py>(
     let cursor_overrides: Bound<'py, PyAny> = if typed.is_truthy()? {
         typed
     } else {
-        registry::class(py, RecordId::CursorOverrides)?.call0()?
+        new_record(py, RecordId::CursorOverrides, (), None)?
     };
     let provider_session: Bound<'py, PyAny> = call_with(
         &host::entry(py, UserCodeHost::BuildProviderSession)?,

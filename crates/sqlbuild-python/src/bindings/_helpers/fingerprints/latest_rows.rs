@@ -2,6 +2,7 @@
 
 use std::ffi::CString;
 
+use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -37,7 +38,7 @@ pub(crate) fn fingerprint_set_from_rows<'py>(
     qualified_name: &str,
     rows: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let fingerprint_class: Bound<'py, PyAny> = registry::class(py, RecordId::Fingerprint)?;
+    let fingerprint_class: Bound<'py, PyAny> = record_class(py, RecordId::Fingerprint)?;
     let from_iso: Bound<'py, PyAny> = py
         .import(DATETIME_MODULE)?
         .getattr("datetime")?
@@ -109,7 +110,7 @@ fn indexed_set<'py>(
     kwargs.set_item("schema", schema)?;
     kwargs.set_item("fingerprints", by_name)?;
     kwargs.set_item("fingerprints_by_identity", by_identity)?;
-    registry::class(py, RecordId::FingerprintSet)?.call((), Some(&kwargs))
+    new_record(py, RecordId::FingerprintSet, (), Some(&kwargs))
 }
 
 fn identity_of(fingerprint: &Bound<'_, PyAny>) -> PyResult<(String, String)> {

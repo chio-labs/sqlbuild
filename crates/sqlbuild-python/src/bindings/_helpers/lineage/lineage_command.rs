@@ -39,6 +39,7 @@ use crate::bindings::_helpers::lineage::lineage_cache::{
 };
 use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views, lineage_keys};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -478,7 +479,7 @@ fn selector_anchors(
 ) -> PyResult<LineageAnchors> {
     let parse: Bound<'_, PyAny> = registry::native(py, NativeAttr::ParseProjectSelector)?;
     let matcher: Bound<'_, PyAny> = registry::native(py, NativeAttr::MatchProjectSelector)?;
-    let path_class: Bound<'_, PyAny> = registry::class(py, RecordId::PathSelector)?;
+    let path_class: Bound<'_, PyAny> = record_class(py, RecordId::PathSelector)?;
     let names: HashMap<&str, &LineageKey> = name_lookup(index);
     let named = |name: String| -> PyResult<LineageKey> {
         names

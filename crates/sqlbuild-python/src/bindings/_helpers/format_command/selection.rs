@@ -18,6 +18,7 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -171,8 +172,7 @@ fn model_paths(
             ("exclude", selectors(py, exclude)?),
         ],
     )?;
-    let model_type: Bound<'_, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let model_type: Bound<'_, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let mut names: BTreeSet<String> = BTreeSet::new();
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
@@ -257,8 +257,9 @@ fn selected_contract_inputs<'py>(
         let project_only = |name: NativeAttr| -> PyResult<Bound<'py, PyAny>> {
             call_with(&native(name)?, &[("project_dir", project_dir.clone())])
         };
-        call_with(
-            &registry::class(py, RecordId::DiscoveredProjectInputs)?,
+        new_record_with(
+            py,
+            RecordId::DiscoveredProjectInputs,
             &[
                 ("project_config", project_config),
                 ("local_config", local_config),

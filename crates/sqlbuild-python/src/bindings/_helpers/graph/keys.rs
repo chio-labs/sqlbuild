@@ -1,8 +1,8 @@
 //! `CompiledObjectKey`s for native `(resource type, name)` pairs, converted once per pair.
 
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 
@@ -16,8 +16,8 @@ pub(crate) struct KeyCache<'py> {
 impl<'py> KeyCache<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            key_type: registry::class(py, RecordId::CompiledObjectKey)?,
-            resource_type: registry::class(py, RecordId::CompiledResourceType)?,
+            key_type: record_class(py, RecordId::CompiledObjectKey)?,
+            resource_type: record_class(py, RecordId::CompiledResourceType)?,
             keys: PyDict::new(py),
         })
     }

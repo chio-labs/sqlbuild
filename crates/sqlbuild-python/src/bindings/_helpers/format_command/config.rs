@@ -10,6 +10,7 @@ use sqlbuild_rules::lint_text::main::resolve_format_settings::resolve_format_set
 use sqlbuild_rules::lint_text::models::FormatSettings;
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -50,8 +51,9 @@ pub(crate) fn lint_config<'py>(
     dialect: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let settings: &FormatSettings = &config.settings;
-    call_with(
-        &registry::class(py, RecordId::LintConfig)?,
+    new_record_with(
+        py,
+        RecordId::LintConfig,
         &[
             (
                 "line_width",

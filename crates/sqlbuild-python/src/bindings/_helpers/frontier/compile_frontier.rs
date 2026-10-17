@@ -8,8 +8,8 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::frontier::stage_capture::write_stage_capture;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Produce the frontier object for `until`, capturing it on request.
 #[pyfunction]
@@ -65,7 +65,7 @@ pub(crate) fn frontier_stage(py: Python<'_>, stage: FrontierStage) -> PyResult<B
         FrontierStage::CompileProjectInputs => "COMPILE_PROJECT_INPUTS",
         FrontierStage::CompiledProject => "COMPILED_PROJECT",
     };
-    registry::class(py, RecordId::CompilerStage)?.getattr(member)
+    enum_member(py, RecordId::CompilerStage, member)
 }
 
 /// `stage()` run inside the macro bridge user macros render through.

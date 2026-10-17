@@ -14,8 +14,8 @@ use sqlbuild_core::lifecycle_events::main::catalog::catalog;
 
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::enum_from_value;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// `BoundEventExporter` parameters, in positional order.
 const BOUND_EXPORTER_PARAMETERS: [&str; 5] = [
@@ -52,7 +52,7 @@ pub(crate) fn severity_object(
     py: Python<'_>,
     severity: ExportSeverity,
 ) -> PyResult<Bound<'_, PyAny>> {
-    registry::class(py, RecordId::EventExportSeverity)?.call1((severity.value(),))
+    enum_from_value(py, RecordId::EventExportSeverity, severity.value())
 }
 
 /// An `EventExportSeverity` or its string value, as `EventExportSeverity(value)` accepts it.

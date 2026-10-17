@@ -1,5 +1,6 @@
 //! A `CompiledModel` for a model input built outside the native compile-input stage.
 
+use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -66,15 +67,18 @@ pub(crate) fn compiled_model<'py>(
         inferred = native_field(&proof, "fixed_columns")?;
         has_star = true_object(py);
     }
-    let resource_type: Object<'py> = registry::class(py, RecordId::CompiledResourceType)?;
-    let key_class: Object<'py> = registry::class(py, RecordId::CompiledObjectKey)?;
+    let resource_type: Object<'py> = record_class(py, RecordId::CompiledResourceType)?;
+    let key_class: Object<'py> = record_class(py, RecordId::CompiledObjectKey)?;
     let mut dependency_keys: Vec<Object<'py>> = Vec::new();
     for dependency in deps.try_iter()? {
         let (kind, name): (Object<'py>, Object<'py>) = dependency?.extract()?;
         dependency_keys.push(call(
             &key_class,
             &[
-                ("resource_type", resource_type.call1((kind,))?),
+                (
+                    "resource_type",
+                    enum_from_value(py, RecordId::CompiledResourceType, kind)?,
+                ),
                 ("name", name),
             ],
         )?);
@@ -88,7 +92,7 @@ pub(crate) fn compiled_model<'py>(
         ],
     )?;
     call(
-        &registry::class(py, RecordId::CompiledModel)?,
+        &record_class(py, RecordId::CompiledModel)?,
         &[
             ("key", key),
             ("deps", PyTuple::new(py, dependency_keys)?.into_any()),
@@ -155,7 +159,7 @@ fn destination<'py>(config: &Object<'py>, model_name: &Object<'py>) -> PyResult<
     };
     let none: Object<'py> = py.None().into_bound(py);
     call(
-        &registry::class(py, RecordId::CompiledRelationLocation)?,
+        &record_class(py, RecordId::CompiledRelationLocation)?,
         &[
             (
                 "database",
@@ -179,8 +183,7 @@ fn fallback_columns<'py>(rows: &Object<'py>) -> PyResult<Object<'py>> {
     if rows.is_none() {
         return Ok(rows.clone());
     }
-    let column_class: Object<'py> = registry::class(py, RecordId::InferredColumn)?;
-    let nullability: Object<'py> = registry::class(py, RecordId::InferredNullability)?;
+    let column_class: Object<'py> = record_class(py, RecordId::InferredColumn)?;
     let mut columns: Vec<Object<'py>> = Vec::new();
     for row in rows.try_iter()? {
         let (name, data_type, value): (Object<'py>, Object<'py>, Object<'py>) = row?.extract()?;
@@ -189,7 +192,10 @@ fn fallback_columns<'py>(rows: &Object<'py>) -> PyResult<Object<'py>> {
             &[
                 ("name", name),
                 ("type", data_type),
-                ("nullability", nullability.call1((value,))?),
+                (
+                    "nullability",
+                    enum_from_value(py, RecordId::InferredNullability, value)?,
+                ),
             ],
         )?);
     }
@@ -257,11 +263,10 @@ fn located<'py>(
     };
     let located: Object<'py> = registry::native(py, NativeAttr::LocateModelBindingDiagnostics)?
         .call1((PyList::new(py, rows)?, texts, expansion_row))?;
-    let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
-    let location_class: Object<'py> = registry::class(py, RecordId::SourceLocation)?;
-    let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
-    let model: Object<'py> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let diagnostic_class: Object<'py> = record_class(py, RecordId::CompilerDiagnostic)?;
+    let location_class: Object<'py> = record_class(py, RecordId::SourceLocation)?;
+    let phase: Object<'py> = enum_member(py, RecordId::DiagnosticPhase, "COMPILE")?;
+    let model: Object<'py> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let name: Object<'py> = native_field(&model_file, "file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();
     for row in located.try_iter()? {
