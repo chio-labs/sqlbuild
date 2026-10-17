@@ -89,9 +89,7 @@ pub(crate) fn build_declaration_scope<'py>(
         raised.set_cause(py, Some(error));
         return Err(raised);
     }
-    if native
-        .getattr("has_scoped_relationship_declarations")?
-        .is_truthy()?
+    if native_field(&native, "has_scoped_relationship_declarations")?.is_truthy()?
         && (test_files.is_truthy()? || scenario_files.is_truthy()?)
     {
         let faults: Bound<'py, PyAny> = call_with(
@@ -144,9 +142,7 @@ fn indexed_macro_metadata<'py>(loaded_macros: &Bound<'py, PyAny>) -> PyResult<Bo
         };
         let parameters: Bound<'py, PyTuple> = PyTuple::new(
             py,
-            signature
-                .call1((&function,))?
-                .getattr("parameters")?
+            native_field(&signature.call1((&function,))?, "parameters")?
                 .try_iter()?
                 .collect::<PyResult<Vec<_>>>()?,
         )?;

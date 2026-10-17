@@ -91,8 +91,7 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
         py,
         Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
-    let dbt_args: Vec<String> = routed
-        .getattr("dbt_args")?
+    let dbt_args: Vec<String> = native_field(&routed, "dbt_args")?
         .try_iter()?
         .map(|arg| arg?.extract())
         .collect::<PyResult<_>>()?;

@@ -57,8 +57,7 @@ pub(crate) fn selected_for_analysis(
 
 /// The model's name: its file's stem.
 pub(crate) fn model_stem<'py>(model_input: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    model_input
-        .getattr("model_file")?
+    native_field(model_input, "model_file")?
         .getattr("file_path")?
         .getattr("stem")
 }
@@ -83,9 +82,7 @@ pub(crate) fn analysis_context<'py>(
 ) -> PyResult<AnalysisContext<'py>> {
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let sql_analysis_enabled: Bound<'py, PyAny> = and_not(
-        &inputs
-            .getattr("effective_settings")?
-            .getattr("sql_analysis")?,
+        &native_field(inputs, "effective_settings")?.getattr("sql_analysis")?,
         request.skip_column_inference.bind(py),
     )?;
     let (column_types, nullability, complete_schemas): DeclaredRelations<'py> =
@@ -115,12 +112,9 @@ pub(crate) fn analysis_context<'py>(
         record_expression_shapes(request, &context)?;
     }
     let catalog: Bound<'py, PyAny> = native_field(&context.profile, "binding_catalog")?;
-    catalog
-        .getattr("native")?
+    native_field(&catalog, "native")?
         .call_method1("update_relations", (&context.complete_schemas,))?;
-    catalog
-        .getattr("schemas")?
-        .call_method1("update", (&context.complete_schemas,))?;
+    native_field(&catalog, "schemas")?.call_method1("update", (&context.complete_schemas,))?;
     context.analyses = model_analyses(request, &context)?;
     Ok(context)
 }
@@ -132,8 +126,7 @@ fn dynamic_families_by_table<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<
     let families: Bound<'py, PyDict> = PyDict::new(py);
     for model_input in native_field(inputs, "model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
-        let contract: Bound<'py, PyAny> = model_input
-            .getattr("config")?
+        let contract: Bound<'py, PyAny> = native_field(&model_input, "config")?
             .getattr("values")?
             .call_method1("get", ("contract",))?;
         if !contract.eq(&enforced)? {
@@ -217,9 +210,7 @@ fn profile_with_catalog<'py>(
             py,
             (
                 dialect,
-                profile
-                    .getattr("quoted_identifiers_ignore_case")?
-                    .extract()?,
+                native_field(&profile, "quoted_identifiers_ignore_case")?.extract()?,
                 native_field(&profile, "semantic_known_functions")?.extract()?,
                 native_field(&profile, "semantic_known_types")?.extract()?,
             ),
@@ -266,9 +257,8 @@ fn record_expression_shapes<'py>(
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
     for source_input in native_field(inputs, "source_inputs")?.try_iter()? {
         let source_input: Bound<'py, PyAny> = source_input?;
-        let expression: Bound<'py, PyAny> = source_input
-            .getattr("source_entry")?
-            .getattr("expression")?;
+        let expression: Bound<'py, PyAny> =
+            native_field(&source_input, "source_entry")?.getattr("expression")?;
         if expression.is_truthy()? {
             sources.push(source_input);
             expressions.push(expression);

@@ -113,10 +113,8 @@ fn warehouse_checks(
     (command_scope, base_connection): (&CommandScope<'_>, &Bound<'_, PyAny>),
 ) -> PyResult<Vec<WarehouseCheck>> {
     let py: Python<'_> = context.adapter.py();
-    let supports_session_warehouse: bool = context
-        .adapter
-        .getattr("supports_session_warehouse")?
-        .is_truthy()?;
+    let supports_session_warehouse: bool =
+        native_field(&context.adapter, "supports_session_warehouse")?.is_truthy()?;
     let adapter_name: String = native_field(&context.adapter, "adapter_name")?
         .str()?
         .extract()?;
@@ -166,8 +164,7 @@ fn providers(discovered_inputs: &Bound<'_, PyAny>) -> PyResult<Vec<DebugProvider
         providers.push(DebugProvider {
             name: native_field(&provider, "name")?.str()?.extract()?,
             relative_path: native_field(&provider, "relative_path")?.str()?.extract()?,
-            class_name: provider
-                .getattr("provider_class")?
+            class_name: native_field(&provider, "provider_class")?
                 .getattr("__name__")?
                 .str()?
                 .extract()?,
@@ -340,9 +337,7 @@ fn build_report(
             .as_ref()
             .map(|path| path_text(py, path))
             .transpose()?,
-        project_name: context
-            .discovered_inputs
-            .getattr("project_config")?
+        project_name: native_field(&context.discovered_inputs, "project_config")?
             .getattr("name")?
             .str()?
             .extract()?,

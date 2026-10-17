@@ -76,8 +76,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
         adjacency(&native_field(&lineage, "upstream_deps")?, keys)?;
     let downstream: Vec<(usize, Vec<usize>)> =
         adjacency(&native_field(&lineage, "downstream_deps")?, keys)?;
-    for item in lineage
-        .getattr("tag_index")?
+    for item in native_field(&lineage, "tag_index")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -87,8 +86,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
             keys.indexes(&item.get_item(1)?)?,
         ));
     }
-    for item in lineage
-        .getattr("path_index")?
+    for item in native_field(&lineage, "path_index")?
         .call_method0("items")?
         .try_iter()?
     {

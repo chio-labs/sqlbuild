@@ -235,9 +235,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
             result => result,
         }
     })();
-    environment
-        .getattr("adapter")?
-        .call_method1("close", (connection,))?;
+    native_field(&environment, "adapter")?.call_method1("close", (connection,))?;
     planned
 }
 

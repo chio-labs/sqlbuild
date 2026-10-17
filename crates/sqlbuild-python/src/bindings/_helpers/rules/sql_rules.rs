@@ -610,9 +610,8 @@ fn violation_findings(
     model_paths: &BTreeSet<String>,
 ) -> PyResult<Vec<RuleFinding>> {
     let py: Python<'_> = run.project.py();
-    let engine_error: String = error_class(py, ErrorId::NativeLint)?
-        .getattr("code")?
-        .extract()?;
+    let engine_error: String =
+        native_field(&error_class(py, ErrorId::NativeLint)?, "code")?.extract()?;
     let resolved_dir: PathBuf = resolved(&run.project_dir);
     let no_paths: BTreeSet<String> = BTreeSet::new();
     let mut evaluated: Vec<RuleFinding> = Vec::new();

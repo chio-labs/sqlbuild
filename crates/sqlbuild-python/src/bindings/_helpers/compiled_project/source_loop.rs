@@ -104,8 +104,7 @@ pub(crate) fn attached_sources<'py>(
                 checked_expression(context, (&name, &file_path, sql))?;
             }
         }
-        let contract: Option<String> = entry
-            .getattr("contract")?
+        let contract: Option<String> = native_field(&entry, "contract")?
             .extract::<Option<String>>()?
             .or_else(|| default_contract.clone());
         attached.push(AttachedSource {

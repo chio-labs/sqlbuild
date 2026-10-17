@@ -33,8 +33,7 @@ fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
         expected_statement_count: native_field(summary, "expected_statement_count")?.extract()?,
         observed_statement_count: native_field(summary, "observed_statement_count")?.extract()?,
         query_count: native_field(summary, "query_count")?.extract()?,
-        limitations: summary
-            .getattr("limitations")?
+        limitations: native_field(summary, "limitations")?
             .try_iter()?
             .map(|limitation| limitation?.extract())
             .collect::<PyResult<_>>()?,

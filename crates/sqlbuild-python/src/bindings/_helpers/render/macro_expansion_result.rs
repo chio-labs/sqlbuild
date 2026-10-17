@@ -78,7 +78,10 @@ fn generated_classes(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
             ),
             (
                 "generic_syntax",
-                new_record(py, RecordId::SqlLexicalSyntax, (), None)?.getattr("native_mapping")?,
+                native_field(
+                    &new_record(py, RecordId::SqlLexicalSyntax, (), None)?,
+                    "native_mapping",
+                )?,
             ),
             ("generated_help", help),
             ("all_markers", markers),

@@ -45,8 +45,7 @@ fn retention<'py>(
         }
         if !target.is_none()
             && let Some(found) = present(
-                target
-                    .getattr("time_travel_retention_by_materialization")?
+                native_field(target, "time_travel_retention_by_materialization")?
                     .call_method1("get", (materialized,))?,
             )
         {

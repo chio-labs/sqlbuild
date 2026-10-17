@@ -849,8 +849,7 @@ impl SqliteExecutionHistory {
             if this.closed.load(Ordering::SeqCst) {
                 return Ok(());
             }
-            let closed = slf
-                .getattr("_connection")
+            let closed = native_field(slf, "_connection")
                 .and_then(|connection| connection.call_method0("close"));
             this.closed.store(true, Ordering::SeqCst);
             closed.map(|_| ())

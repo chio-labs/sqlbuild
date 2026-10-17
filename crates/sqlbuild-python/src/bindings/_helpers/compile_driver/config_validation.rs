@@ -45,8 +45,7 @@ fn project_config_error(py: Python<'_>, message: &str, help: Option<&str>) -> Py
 
 /// The target names of one configuration's `targets` mapping.
 fn target_names(config: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    config
-        .getattr("targets")?
+    native_field(config, "targets")?
         .try_iter()?
         .map(|name| name?.extract())
         .collect()
@@ -59,13 +58,8 @@ fn reject_local_sql_analysis_opt_out(config: &ProjectConfiguration<'_, '_>) -> P
     let flags: Bound<'_, PyTuple> = PyTuple::new(
         py,
         [
-            config
-                .project_config
-                .getattr("settings")?
-                .getattr("require_sql_analysis")?,
-            config
-                .local_config
-                .getattr("setting_overrides")?
+            native_field(config.project_config, "settings")?.getattr("require_sql_analysis")?,
+            native_field(config.local_config, "setting_overrides")?
                 .contains(SQL_ANALYSIS_KEY)
                 .map(|overridden| PyBool::new(py, overridden).to_owned().into_any())?,
             native_field(&local_settings, SQL_ANALYSIS_KEY)?,

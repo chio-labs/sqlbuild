@@ -122,8 +122,7 @@ fn entry_paths<T>(
 }
 
 fn relative_posix(entry: &Bound<'_, PyAny>) -> PyResult<String> {
-    entry
-        .getattr("relative_path")?
+    native_field(entry, "relative_path")?
         .call_method0("as_posix")?
         .extract()
 }
@@ -143,8 +142,7 @@ pub(crate) fn write_runtime_target(
         entry_paths(&native_field(plan, "function_entries")?, |entry| {
             Ok(function_run_path(
                 &relative_posix(entry)?,
-                &entry
-                    .getattr("language")?
+                &native_field(entry, "language")?
                     .getattr("value")?
                     .extract::<String>()?,
             ))

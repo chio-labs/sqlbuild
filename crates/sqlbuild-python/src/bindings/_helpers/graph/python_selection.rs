@@ -83,16 +83,14 @@ fn selection_node(node: &Bound<'_, PyAny>) -> PyResult<PythonSelectionNode> {
 /// A `PythonNodeGraph` as the native selection graph.
 fn selection_graph(graph: &Bound<'_, PyAny>) -> PyResult<PythonSelectionGraph> {
     Ok(PythonSelectionGraph {
-        nodes: graph
-            .getattr("nodes")?
+        nodes: native_field(graph, "nodes")?
             .try_iter()?
             .map(|node| selection_node(&node?))
             .collect::<PyResult<_>>()?,
         upstream: name_rows(&native_field(graph, "upstream_deps")?)?,
         downstream: name_rows(&native_field(graph, "downstream_deps")?)?,
         tags: name_rows(&native_field(graph, "tag_index")?)?,
-        paths: graph
-            .getattr("path_index")?
+        paths: native_field(graph, "path_index")?
             .call_method0("items")?
             .try_iter()?
             .map(|item| item?.extract())
@@ -102,15 +100,13 @@ fn selection_graph(graph: &Bound<'_, PyAny>) -> PyResult<PythonSelectionGraph> {
 
 /// `(name, loader)` of every source in the compiled project.
 fn project_sources(project: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>)>> {
-    project
-        .getattr("sources")?
+    native_field(project, "sources")?
         .try_iter()?
         .map(|source| {
             let source: Bound<'_, PyAny> = source?;
             Ok((
                 native_field(&source, "name")?.extract()?,
-                source
-                    .getattr("source_entry")?
+                native_field(&source, "source_entry")?
                     .getattr("loader")?
                     .extract()?,
             ))

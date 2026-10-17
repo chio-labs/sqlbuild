@@ -147,9 +147,10 @@ fn inference_profile_payload<'py>(
     let inspect = py.import("inspect")?;
     let sorted: Bound<'py, PyAny> = imported(py, "builtins", "sorted")?;
     let rules: Bound<'py, PyList> = PyList::empty(py);
-    let items: Bound<'py, PyAny> = sorted.call1((profile
-        .getattr("function_nullability_rules")?
-        .call_method0("items")?,))?;
+    let items: Bound<'py, PyAny> =
+        sorted.call1((
+            native_field(profile, "function_nullability_rules")?.call_method0("items")?,
+        ))?;
     for item in items.try_iter()? {
         let (name, rule): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         if !inspect.call_method1("isfunction", (&rule,))?.is_truthy()? {
@@ -199,9 +200,11 @@ fn inference_profile_payload<'py>(
     payload.set_item("function_nullability_rules", rules)?;
     payload.set_item(
         "function_return_types",
-        imported(py, "builtins", "dict")?.call1((sorted.call1((profile
-            .getattr("function_return_types")?
-            .call_method0("items")?,))?,))?,
+        imported(py, "builtins", "dict")?.call1((sorted.call1((native_field(
+            profile,
+            "function_return_types",
+        )?
+        .call_method0("items")?,))?,))?,
     )?;
     Ok(Some(payload))
 }

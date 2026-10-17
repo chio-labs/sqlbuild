@@ -197,8 +197,7 @@ fn drop_resolved_description_faults<'py>(
         .collect::<PyResult<_>>()?;
     let mut kept: Vec<Bound<'py, PyAny>> = Vec::new();
     for violation in violations {
-        let resolved: PathBuf = violation
-            .getattr("file_path")?
+        let resolved: PathBuf = native_field(&violation, "file_path")?
             .call_method0("resolve")?
             .extract()?;
         if !code_is(&violation, DESCRIPTION_PRESENT)? || !described.contains(&resolved) {

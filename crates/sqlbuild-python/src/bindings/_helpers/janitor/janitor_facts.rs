@@ -138,12 +138,10 @@ fn source_schemas(
         if !native_field(&entry, "expression")?.is_none() {
             continue;
         }
-        let database: Option<String> = entry
-            .getattr("database")?
+        let database: Option<String> = native_field(&entry, "database")?
             .extract::<Option<String>>()?
             .or_else(|| default_database.clone());
-        let schema: Option<String> = entry
-            .getattr("schema")?
+        let schema: Option<String> = native_field(&entry, "schema")?
             .extract::<Option<String>>()?
             .or_else(|| default_schema.clone());
         let name: String = native_field(&source, "name")?.extract()?;
@@ -308,9 +306,7 @@ fn tracked_relation_keys(
                 ),
                 (
                     "render_read_latest_sql",
-                    warehouse
-                        .adapter
-                        .getattr("render_read_latest_fingerprints_sql")?,
+                    native_field(&warehouse.adapter, "render_read_latest_fingerprints_sql")?,
                 ),
             ],
         )?));
@@ -340,8 +336,7 @@ fn tracked_relation_keys(
             }
             Err(error) => return Err(error),
         };
-        for fingerprint in fingerprint_set
-            .getattr("fingerprints")?
+        for fingerprint in native_field(&fingerprint_set, "fingerprints")?
             .call_method0("values")?
             .try_iter()?
         {

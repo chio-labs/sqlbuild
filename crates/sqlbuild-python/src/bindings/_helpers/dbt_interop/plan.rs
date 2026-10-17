@@ -83,8 +83,7 @@ fn plan_text(plan: &Bound<'_, PyAny>) -> PyResult<DbtInteropPlanText> {
         command: native_field(plan, "command")?.getattr("value")?.extract()?,
         dbt_argv: strings(&native_field(plan, "dbt_command_argv")?)?,
         supplemental_dbt_argvs: argvs(&native_field(plan, "supplemental_dbt_command_argvs")?)?,
-        dbt_nodes: plan
-            .getattr("dbt_selected_nodes")?
+        dbt_nodes: native_field(plan, "dbt_selected_nodes")?
             .try_iter()?
             .map(|node| ls_node(&node?))
             .collect::<PyResult<_>>()?,

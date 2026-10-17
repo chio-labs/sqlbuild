@@ -614,8 +614,7 @@ fn rendering(
             .map_err(|error| selector_failure(py, request, (source, project_dir), error));
     }
     let targets: Vec<String> = normalized_targets(py, source.index(), &targets)?;
-    let direction: String = request
-        .getattr("direction")?
+    let direction: String = native_field(request, "direction")?
         .extract::<Option<String>>()?
         .unwrap_or_else(|| UPSTREAM_DIRECTION.to_owned());
     if let [target] = targets.as_slice()

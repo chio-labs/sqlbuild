@@ -16,15 +16,13 @@ fn object<'py, T: IntoPyObject<'py>>(py: Python<'py>, value: T) -> PyResult<PyOb
 }
 
 fn date(datetime: &Bound<'_, PyModule>, value: ConfigDate) -> PyResult<PyObject> {
-    Ok(datetime
-        .getattr("date")?
+    Ok(native_field(datetime, "date")?
         .call1((value.year, value.month, value.day))?
         .unbind())
 }
 
 fn time(datetime: &Bound<'_, PyModule>, value: ConfigTime) -> PyResult<PyObject> {
-    Ok(datetime
-        .getattr("time")?
+    Ok(native_field(datetime, "time")?
         .call1((value.hour, value.minute, value.second, value.microsecond))?
         .unbind())
 }
@@ -41,8 +39,7 @@ fn date_time(datetime: &Bound<'_, PyModule>, value: ConfigDateTime) -> PyResult<
         None => None,
     };
     let (date, time) = (value.date, value.time);
-    Ok(datetime
-        .getattr("datetime")?
+    Ok(native_field(datetime, "datetime")?
         .call1((
             date.year,
             date.month,

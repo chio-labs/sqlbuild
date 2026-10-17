@@ -507,8 +507,7 @@ pub(crate) fn input_model_name(model_input: &Bound<'_, PyAny>) -> PyResult<Strin
             .get()
             .read(model_input.py(), |record, _| Ok(record.name.clone()));
     }
-    model_input
-        .getattr("model_file")?
+    native_field(model_input, "model_file")?
         .getattr("file_path")?
         .getattr("stem")?
         .extract()
@@ -522,8 +521,7 @@ pub(crate) fn input_reference_rows(model_input: &Bound<'_, PyAny>) -> PyResult<V
             .get()
             .read(py, |record, _| Ok(record.references.clone()));
     }
-    model_input
-        .getattr("references")?
+    native_field(model_input, "references")?
         .try_iter()?
         .map(|reference| reference_row_of(&reference?))
         .collect()

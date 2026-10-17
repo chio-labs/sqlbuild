@@ -114,8 +114,7 @@ pub(crate) fn write_dag_artifact<'py>(
     let discovered: Bound<'py, PyAny> = native_field(analysis, "discovered_inputs")?;
     let python_graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let path: Bound<'py, PyAny> = resolved_dag_path(project_dir, dag_path)?;
-    let project_name: String = discovered
-        .getattr("project_config")?
+    let project_name: String = native_field(&discovered, "project_config")?
         .getattr("name")?
         .extract()?;
     let dag_json: String = build_dag_json(

@@ -421,8 +421,7 @@ fn resolved_model<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = manifest.py();
     if let Some(package) = package_name {
-        let model: Bound<'py, PyAny> = manifest
-            .getattr("models_by_package_and_name")?
+        let model: Bound<'py, PyAny> = native_field(manifest, "models_by_package_and_name")?
             .call_method1("get", ((package, name),))?;
         if model.is_none() {
             return Err(raised(
@@ -432,8 +431,7 @@ fn resolved_model<'py>(
         }
         return Ok(model);
     }
-    let matches: Bound<'py, PyAny> = manifest
-        .getattr("models_by_name")?
+    let matches: Bound<'py, PyAny> = native_field(manifest, "models_by_name")?
         .call_method1("get", (name, PyTuple::empty(py)))?;
     let matches: Vec<Bound<'py, PyAny>> = matches.try_iter()?.collect::<PyResult<_>>()?;
     match matches.as_slice() {

@@ -213,14 +213,12 @@ fn targeted_project<'py>(
     project_targets(&adapter_name, &project)?;
     let promotion_key: Bound<'py, PyAny> =
         pyo3::types::PyString::new(py, TABLE_PROMOTION_MODE_SETTING_KEY).into_any();
-    let settings_file: Bound<'py, PyAny> = if local_config
-        .getattr("setting_overrides")?
-        .contains(promotion_key)?
-    {
-        pyo3::types::PyString::new(py, LOCAL_CONFIG_FILENAME).into_any()
-    } else {
-        pyo3::types::PyString::new(py, PROJECT_CONFIG_FILENAME).into_any()
-    };
+    let settings_file: Bound<'py, PyAny> =
+        if native_field(&local_config, "setting_overrides")?.contains(promotion_key)? {
+            pyo3::types::PyString::new(py, LOCAL_CONFIG_FILENAME).into_any()
+        } else {
+            pyo3::types::PyString::new(py, PROJECT_CONFIG_FILENAME).into_any()
+        };
     count_stage(py, PROMOTION_CONFLICTS, 1)?;
     let conflicts: Bound<'py, PyAny> = promotion_conflict_diagnostics(
         py,
@@ -231,8 +229,7 @@ fn targeted_project<'py>(
     .into_any();
     let diagnostics: Bound<'py, PyTuple> = PyTuple::new(
         py,
-        project
-            .getattr("diagnostics")?
+        native_field(&project, "diagnostics")?
             .try_iter()?
             .chain(conflicts.try_iter()?)
             .collect::<PyResult<Vec<_>>>()?,

@@ -152,8 +152,7 @@ fn hook_signature<'py>(function: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLi
         let parameter: Bound<'py, PyAny> = parameter?;
         parameters.push((
             native_field(&parameter, "name")?.extract()?,
-            parameter
-                .getattr("kind")?
+            native_field(&parameter, "kind")?
                 .call_method0("__int__")?
                 .extract()?,
             !native_field(&parameter, "default")?.is(&empty),

@@ -51,8 +51,7 @@ fn dbt_project_dir<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
     if !given.is_none() {
         return optional_path(given);
     }
-    let in_project: bool = request
-        .getattr("cwd")?
+    let in_project: bool = native_field(request, "cwd")?
         .call_method1("__truediv__", (DBT_PROJECT_FILE,))?
         .call_method0("exists")?
         .is_truthy()?;

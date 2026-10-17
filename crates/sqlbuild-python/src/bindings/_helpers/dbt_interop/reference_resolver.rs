@@ -126,8 +126,7 @@ impl DbtCompileReferenceResolver {
         let Some(manifest) = self.manifest(py) else {
             return Ok(names);
         };
-        for item in manifest
-            .getattr("models_by_name")?
+        for item in native_field(&manifest, "models_by_name")?
             .call_method0("items")?
             .try_iter()?
         {
@@ -175,8 +174,7 @@ impl DbtCompileReferenceResolver {
         let Some(manifest) = self.manifest(py) else {
             return Ok(names);
         };
-        let sources: Vec<Bound<'py, PyAny>> = manifest
-            .getattr("sources_by_unique_id")?
+        let sources: Vec<Bound<'py, PyAny>> = native_field(&manifest, "sources_by_unique_id")?
             .call_method0("values")?
             .try_iter()?
             .collect::<PyResult<_>>()?;
@@ -223,8 +221,7 @@ impl DbtCompileReferenceResolver {
         let Some(manifest) = self.manifest(py) else {
             return Ok(names);
         };
-        let seeds: Vec<Bound<'py, PyAny>> = manifest
-            .getattr("seeds_by_unique_id")?
+        let seeds: Vec<Bound<'py, PyAny>> = native_field(&manifest, "seeds_by_unique_id")?
             .call_method0("values")?
             .try_iter()?
             .collect::<PyResult<_>>()?;
@@ -347,8 +344,7 @@ pub(crate) fn resolve_external_sql_reference_resolver<'py>(
     discovered_inputs: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
-    let target_path: Bound<'py, PyAny> = discovered_inputs
-        .getattr("project_config")?
+    let target_path: Bound<'py, PyAny> = native_field(&discovered_inputs, "project_config")?
         .getattr("dbt")?
         .getattr("target_path")?;
     let contents: Bound<'py, PyAny> = if target_path.is_none() {

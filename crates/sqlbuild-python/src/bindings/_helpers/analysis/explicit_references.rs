@@ -100,8 +100,7 @@ pub(crate) fn explicit_reference_report<'py>(
     {
         path_order.set_item(path?, index)?;
     }
-    let retains_old_names: bool = !discovered_inputs
-        .getattr("project_config")?
+    let retains_old_names: bool = !native_field(discovered_inputs, "project_config")?
         .getattr("migrations")?
         .getattr("old_name_views")?
         .is_none();
@@ -205,8 +204,7 @@ fn loader_owners<'py>(
     let mut sources_by_loader: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for source in native_field(project, "sources")?.try_iter()? {
         let source: Bound<'py, PyAny> = source?;
-        let loader: Option<String> = source
-            .getattr("source_entry")?
+        let loader: Option<String> = native_field(&source, "source_entry")?
             .getattr("loader")?
             .extract()?;
         if let Some(loader) = loader {

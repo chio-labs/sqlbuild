@@ -130,9 +130,8 @@ fn eligible_records<'py>(
     let changes: Bound<'py, PyDict> = PyDict::new(py);
     changes.set_item("run_id", run_id)?;
     let mut grouped: RecordsByLocation<'py> = Vec::new();
-    let changed: Bound<'py, PyAny> = freshness
-        .getattr("propagation")?
-        .getattr("changed_source_model_names")?;
+    let changed: Bound<'py, PyAny> =
+        native_field(&freshness, "propagation")?.getattr("changed_source_model_names")?;
     for item in changed.call_method0("items")?.try_iter()? {
         let (identity, affected): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         let affected: Bound<'py, PyAny> = affected.call_method1("__and__", (&selected,))?;

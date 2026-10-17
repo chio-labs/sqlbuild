@@ -46,8 +46,7 @@ pub(crate) fn build_project_column_lineage<'py>(
         return Ok(None);
     }
     let classes: LineageClasses<'py> = LineageClasses::new(project.py())?;
-    if !project
-        .getattr("settings")?
+    if !native_field(project, "settings")?
         .getattr("sql_analysis")?
         .is_truthy()?
     {
@@ -253,8 +252,7 @@ fn fast_lineage<'py>(
 fn output_columns(classes: &LineageClasses<'_>, facts: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     if facts.is_instance(&classes.compact_facts)? {
         let pool: Bound<'_, PyAny> = native_field(facts, "string_pool")?;
-        return facts
-            .getattr("rows")?
+        return native_field(facts, "rows")?
             .try_iter()?
             .map(|row| pool.get_item(row?.get_item(0)?)?.extract())
             .collect();
@@ -360,11 +358,9 @@ fn polyglot_dialect(
         .extract()?;
     match analysis_dialect(&normalized) {
         AnalysisDialect::Alias(value) => Ok(value.to_owned()),
-        AnalysisDialect::Named(name) => classes
-            .analysis_dialect
-            .call1((name,))?
-            .getattr("value")?
-            .extract(),
+        AnalysisDialect::Named(name) => {
+            native_field(&classes.analysis_dialect.call1((name,))?, "value")?.extract()
+        }
     }
 }
 

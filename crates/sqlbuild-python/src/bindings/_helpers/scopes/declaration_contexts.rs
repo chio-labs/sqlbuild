@@ -7,6 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{FromPyObject, intern, pyclass, pymethods};
 
 use crate::bindings::_helpers::boundary::panics::{compiler_error, compiler_guard};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scopes::declaration_resolution::ResolutionInputs;
 use sqlbuild_scopes::scope_index::main::classify_resource::classify_resource;
 use sqlbuild_scopes::scope_index::models::{
@@ -117,8 +118,8 @@ impl NativeDeclarationContexts {
         let mut visible: Vec<VisibleRow<'py>> = Vec::new();
         let mut inaccessible: Vec<usize> = Vec::new();
         for record in matches {
-            let identity: Bound<'py, PyAny> = record.getattr(intern!(py, "identity"))?;
-            let path: String = record.getattr(intern!(py, "path"))?.extract()?;
+            let identity: Bound<'py, PyAny> = native_field(&record, "identity")?;
+            let path: String = native_field(&record, "path")?.extract()?;
             let private: Vec<usize> = self
                 .lookup
                 .private_positions
@@ -170,12 +171,11 @@ impl NativeDeclarationContexts {
         for grant in records.try_iter()? {
             let grant: Bound<'py, PyAny> = grant?;
             let Some(identity_key) =
-                identity_keys.get_item(grant.getattr(intern!(py, "declaration"))?)?
+                identity_keys.get_item(native_field(&grant, "declaration")?)?
             else {
                 continue;
             };
-            let kind: String = grant
-                .getattr(intern!(py, "kind"))?
+            let kind: String = native_field(&grant, "kind")?
                 .getattr(intern!(py, "value"))?
                 .extract()?;
             grants.push(GrantEntry {
@@ -187,7 +187,7 @@ impl NativeDeclarationContexts {
                 },
                 through: throughs.len(),
             });
-            throughs.push(grant.getattr(intern!(py, "through"))?);
+            throughs.push(native_field(&grant, "through")?);
         }
         Ok((grants, throughs))
     }

@@ -129,9 +129,7 @@ pub(crate) fn resolve_effective_collection_rendering<'py>(
     if !declaration_override.is_none() {
         return Ok(declaration_override.clone());
     }
-    project_config
-        .getattr("constants")?
-        .getattr("collection_rendering")
+    native_field(project_config, "constants")?.getattr("collection_rendering")
 }
 
 /// `local` when set, else `project`.
@@ -150,16 +148,14 @@ pub(crate) fn resolve_effective_scenario_config<'py>(
     let project: Bound<'py, PyAny> = native_field(project_config, "scenario")?;
     let local: Bound<'py, PyAny> = native_field(local_config, "scenario")?;
     let overrides: Bound<'py, PyDict> = PyDict::new(py);
-    for item in project
-        .getattr("local_type_overrides")?
+    for item in native_field(&project, "local_type_overrides")?
         .call_method0("items")?
         .try_iter()?
     {
         let (dialect, rules): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         overrides.set_item(dialect, py.get_type::<PyDict>().call1((rules,))?)?;
     }
-    for item in local
-        .getattr("local_type_overrides")?
+    for item in native_field(&local, "local_type_overrides")?
         .call_method0("items")?
         .try_iter()?
     {

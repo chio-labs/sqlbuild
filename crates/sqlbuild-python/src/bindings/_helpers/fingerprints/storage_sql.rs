@@ -58,8 +58,7 @@ fn stored_fingerprint(fingerprint: &Bound<'_, PyAny>) -> PyResult<StoredFingerpr
         schema_fingerprint: formatted(fingerprint, "schema_fingerprint")?,
         definition: native_field(fingerprint, "definition")?.extract()?,
         metadata_json: native_field(fingerprint, "metadata_json")?.extract()?,
-        ts: fingerprint
-            .getattr("ts")?
+        ts: native_field(fingerprint, "ts")?
             .call_method0("isoformat")?
             .extract()?,
     })

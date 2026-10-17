@@ -128,8 +128,7 @@ pub(crate) fn build_dbt_init_project<'py>(
     )
     .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     progress(&callbacks, "complete", "Rendered dbt profile connection.")?;
-    let mut warnings: Vec<Bound<'py, PyAny>> = normalized
-        .getattr("warnings")?
+    let mut warnings: Vec<Bound<'py, PyAny>> = native_field(&normalized, "warnings")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     if !native_field(request, "skip_dbt_debug")?.is_truthy()? {

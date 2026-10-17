@@ -295,9 +295,7 @@ pub(crate) fn schema_validations<'py>(
     for (index, request) in requests.iter().enumerate() {
         let key: CatalogKey = (
             native_dialect(&native_field(request, "dialect")?)?,
-            request
-                .getattr("quoted_identifiers_ignore_case")?
-                .extract()?,
+            native_field(request, "quoted_identifiers_ignore_case")?.extract()?,
             native_field(request, "known_functions")?.extract()?,
             native_field(request, "known_types")?.extract()?,
         );

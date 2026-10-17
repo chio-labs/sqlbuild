@@ -140,8 +140,7 @@ fn function_sql(adapter: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyRe
     ] {
         arguments.push((field, native_field(function, field)?));
     }
-    let statements: Vec<String> = adapter
-        .getattr("render_create_function")?
+    let statements: Vec<String> = native_field(adapter, "render_create_function")?
         .call((), Some(&keywords(py, &arguments)?))?
         .extract()?;
     Ok(statements.join(";\n\n"))
@@ -247,8 +246,7 @@ fn write_planned_target<'py>(
     batch.flush(py)?;
     for entry in native_field(plan_output, "function_entries")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
-        if entry
-            .getattr("destination")?
+        if native_field(&entry, "destination")?
             .getattr("qualified_name")?
             .is_none()
         {
@@ -493,7 +491,7 @@ fn artifact_diagnostics<'py>(
                 ("severity", "error".into_bound_py_any(py)?),
                 (
                     "code",
-                    error_class(py, ErrorId::PlannerInput)?.getattr("code")?,
+                    native_field(&error_class(py, ErrorId::PlannerInput)?, "code")?,
                 ),
                 ("message", message?),
                 ("resource_type", "sql_test".into_bound_py_any(py)?),
@@ -582,8 +580,7 @@ pub(crate) fn write_static_target<'py>(
     batch.flush(py)?;
     for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        if function
-            .getattr("destination")?
+        if native_field(&function, "destination")?
             .getattr("qualified_name")?
             .is_none()
         {

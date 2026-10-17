@@ -126,9 +126,7 @@ fn model_macro_context<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
             ("adapter_name", adapter_name),
             (
                 "sql_analysis_enabled",
-                inputs
-                    .getattr("effective_settings")?
-                    .getattr("sql_analysis")?,
+                native_field(inputs, "effective_settings")?.getattr("sql_analysis")?,
             ),
             (
                 "target_name",

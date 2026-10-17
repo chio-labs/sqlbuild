@@ -285,9 +285,7 @@ fn project_fields<'py>(
     }
     fields.set_item(
         "enforce_explicit_references",
-        project_config
-            .getattr("references")?
-            .getattr("enforce_explicit")?,
+        native_field(&project_config, "references")?.getattr("enforce_explicit")?,
     )?;
     for name in ["sql_hook_files", "materialization_files"] {
         fields.set_item(name, native_field(&discovered, name)?)?;
@@ -295,8 +293,7 @@ fn project_fields<'py>(
     for name in ["public_enums", "public_constants", "loaded_macros"] {
         fields.set_item(name, native_field(inputs, name)?)?;
     }
-    let mut diagnostics: Vec<Bound<'py, PyAny>> = inputs
-        .getattr("diagnostics")?
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = native_field(inputs, "diagnostics")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     diagnostics.extend(project_binding_diagnostics(

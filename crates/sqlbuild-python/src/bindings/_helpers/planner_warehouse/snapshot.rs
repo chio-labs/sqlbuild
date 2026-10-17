@@ -192,11 +192,7 @@ fn metadata_name_filter(
         for key in selected.try_iter()? {
             let name = native_field(&key?, "name")?;
             if let Some(model) = models.get_item(&name)? {
-                names.insert(
-                    model_reads::destination(&model)?
-                        .getattr("name")?
-                        .extract()?,
-                );
+                names.insert(native_field(&model_reads::destination(&model)?, "name")?.extract()?);
                 names.extend(model_upstream_names(
                     &model,
                     (&models, &seeds),

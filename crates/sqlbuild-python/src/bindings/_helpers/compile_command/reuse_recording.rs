@@ -406,9 +406,7 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
                 "stderr_lines",
                 PyList::new(
                     py,
-                    facts
-                        .output
-                        .getattr("stderr_lines")?
+                    native_field(&facts.output, "stderr_lines")?
                         .try_iter()?
                         .collect::<PyResult<Vec<_>>>()?,
                 )?
@@ -425,9 +423,7 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
                 "template_environment_names",
                 PyList::new(
                     py,
-                    facts
-                        .input_reads
-                        .getattr("environment_names")?
+                    native_field(&facts.input_reads, "environment_names")?
                         .try_iter()?
                         .collect::<PyResult<Vec<_>>>()?,
                 )?

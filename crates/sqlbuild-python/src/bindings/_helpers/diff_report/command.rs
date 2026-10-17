@@ -198,12 +198,8 @@ fn run_query_diff(
             &native_field(&preparation, "right_label")?.extract::<String>()?,
         ),
         (
-            preparation
-                .getattr("effective_max_column_examples")?
-                .extract()?,
-            preparation
-                .getattr("effective_max_row_only_examples")?
-                .extract()?,
+            native_field(&preparation, "effective_max_column_examples")?.extract()?,
+            native_field(&preparation, "effective_max_row_only_examples")?.extract()?,
         ),
         (&models, Some(phases), Some(outcome)),
     );

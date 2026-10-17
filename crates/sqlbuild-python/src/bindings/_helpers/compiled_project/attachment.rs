@@ -174,9 +174,8 @@ pub(crate) fn attach_resources<'py>(
             .collect(),
         &error_class(py, ErrorId::CompileInput)?,
     )?;
-    let defaults: Bound<'py, PyAny> = discovered_inputs
-        .getattr("project_config")?
-        .getattr("defaults")?;
+    let defaults: Bound<'py, PyAny> =
+        native_field(discovered_inputs, "project_config")?.getattr("defaults")?;
     let function_kind: Bound<'py, PyAny> = enum_member(py, RecordId::ResourceKind, "FUNCTION")?;
     let functions = NativeCompiledProject::attach_functions(
         native_project,
@@ -494,8 +493,7 @@ fn loader_rows<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<HashMap<String, 
                 attr(&loader, DESCRIPTION_KEY)?,
                 relative_path.str()?.to_string(),
                 YAML_FILE_SUFFIXES.contains(
-                    &relative_path
-                        .getattr("suffix")?
+                    &native_field(&relative_path, "suffix")?
                         .extract::<String>()?
                         .as_str(),
                 ),
@@ -542,8 +540,7 @@ fn diagnostic_settings<'py>(
                     native_field(scenario, "name")?,
                     text(scenario, "relative_path")?.into_bound_py_any(py)?,
                     native_field(scenario, "contents")?,
-                    scenario
-                        .getattr("header_values")?
+                    native_field(scenario, "header_values")?
                         .call_method1("get", (DESCRIPTION_KEY,))?,
                 ],
             )

@@ -21,14 +21,12 @@ pub(crate) fn build_python_sql_run_lifecycle<'py>(
     python_graph: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = selection.py();
-    let selected: BTreeSet<String> = selection
-        .getattr("python_node_names")?
+    let selected: BTreeSet<String> = native_field(selection, "python_node_names")?
         .try_iter()?
         .map(|name| name?.extract())
         .collect::<PyResult<_>>()?;
     let mut nodes: HashMap<String, LifecycleNode> = HashMap::new();
-    for item in python_graph
-        .getattr("nodes_by_name")?
+    for item in native_field(python_graph, "nodes_by_name")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -36,8 +34,7 @@ pub(crate) fn build_python_sql_run_lifecycle<'py>(
         nodes.insert(name, lifecycle_node(&node)?);
     }
     let mut upstream: HashMap<String, Vec<String>> = HashMap::new();
-    for item in python_graph
-        .getattr("upstream_deps")?
+    for item in native_field(python_graph, "upstream_deps")?
         .call_method0("items")?
         .try_iter()?
     {

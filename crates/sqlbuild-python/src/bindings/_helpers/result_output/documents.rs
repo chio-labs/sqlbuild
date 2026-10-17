@@ -796,9 +796,7 @@ pub(crate) fn write_execution_json_output(
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("parents", true)?;
         keywords.set_item("exist_ok", true)?;
-        json_output_path
-            .getattr("parent")?
-            .call_method("mkdir", (), Some(&keywords))?;
+        native_field(&json_output_path, "parent")?.call_method("mkdir", (), Some(&keywords))?;
         let encoding: Bound<'_, PyDict> = PyDict::new(py);
         encoding.set_item("encoding", "utf-8")?;
         json_output_path.call_method("write_text", (payload,), Some(&encoding))?;

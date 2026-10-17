@@ -201,9 +201,7 @@ fn observe_configured_inner<'py>(
         };
         let relation: String = render_source_relation(source, Some(&observer.adapter))?;
         call_with(
-            &observer
-                .adapter
-                .getattr("render_source_freshness_max_query")?,
+            &native_field(&observer.adapter, "render_source_freshness_max_query")?,
             &[
                 ("column", column),
                 ("source_relation", text(py, &relation)),

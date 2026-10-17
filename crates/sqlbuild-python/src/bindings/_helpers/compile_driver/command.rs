@@ -146,8 +146,7 @@ fn recorded_compile<'py>(
     total_start: f64,
 ) -> PyResult<i64> {
     let py: Python<'py> = request.py();
-    let skip_write: bool = request
-        .getattr("profile_flags")?
+    let skip_write: bool = native_field(request, "profile_flags")?
         .getattr("skip_write")?
         .is_truthy()?;
     let compiled: PyResult<(CommandOutcome<'py>, Bound<'py, PyAny>, Bound<'py, PyAny>)> =
@@ -250,8 +249,7 @@ fn compiled_with_status<'py>(
         &analysis_options(request, &project_dir, recorders, status)?,
     )?;
     let rules_failed: bool = rules_failed(&analysis)?;
-    let skip_write: bool = request
-        .getattr("profile_flags")?
+    let skip_write: bool = native_field(request, "profile_flags")?
         .getattr("skip_write")?
         .is_truthy()?;
     let manifest_requested: bool = native_field(request, "manifest")?.is_truthy()?;
@@ -282,8 +280,7 @@ fn compiled_with_status<'py>(
     };
     let diagnostics: Bound<'py, PyTuple> = PyTuple::new(
         py,
-        analysis
-            .getattr("diagnostics")?
+        native_field(&analysis, "diagnostics")?
             .try_iter()?
             .chain(native_field(&written, "diagnostics")?.try_iter()?)
             .chain(withheld.try_iter()?)
@@ -310,8 +307,7 @@ fn compiled_with_status<'py>(
         };
     let outcome: CommandOutcome<'py> = CommandOutcome {
         exit_code,
-        compile_cache_enabled: !analysis
-            .getattr("graph")?
+        compile_cache_enabled: !native_field(&analysis, "graph")?
             .getattr("project")?
             .getattr("compile_cache_dir")?
             .is_none(),

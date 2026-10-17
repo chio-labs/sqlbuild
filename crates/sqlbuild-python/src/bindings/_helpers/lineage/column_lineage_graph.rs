@@ -62,12 +62,10 @@ impl ProjectColumnLineage {
         for edge in edges.try_iter()? {
             let edge: Bound<'_, PyAny> = edge?;
             keys.push(EdgeKey {
-                source_name: edge
-                    .getattr("source")?
+                source_name: native_field(&edge, "source")?
                     .getattr("resource_name")?
                     .extract()?,
-                target_model: edge
-                    .getattr("target")?
+                target_model: native_field(&edge, "target")?
                     .getattr("resource_name")?
                     .extract()?,
                 ..empty_key()
@@ -242,8 +240,7 @@ impl ProjectColumnLineage {
         let mut consumers: Vec<Bound<'py, PyAny>> = Vec::new();
         for edge in sourced.try_iter()? {
             let edge: Bound<'py, PyAny> = edge?;
-            if edge
-                .getattr("source")?
+            if native_field(&edge, "source")?
                 .getattr("column_name")?
                 .eq(column_name)?
             {

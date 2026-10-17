@@ -27,8 +27,7 @@ pub(crate) fn clone_item_text(item: &Bound<'_, PyAny>) -> PyResult<CloneItemText
         name: native_field(item, "name")?.extract()?,
         action: native_field(item, "action")?.getattr("value")?.extract()?,
         status: CloneStatusKind::from_value(
-            &item
-                .getattr("status")?
+            &native_field(item, "status")?
                 .getattr("value")?
                 .extract::<String>()?,
         ),

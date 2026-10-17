@@ -62,14 +62,12 @@ fn recreated_over_clones(scope: &Bound<'_, PyAny>, key: &Bound<'_, PyAny>) -> Py
     if RECREATED_TYPES.contains(&resource_type(key)?.as_str()) {
         return Ok(true);
     }
-    let model: Bound<'_, PyAny> = scope
-        .getattr("models_by_name")?
+    let model: Bound<'_, PyAny> = native_field(scope, "models_by_name")?
         .call_method1("get", (native_field(key, "name")?,))?;
     if model.is_none() {
         return Ok(false);
     }
-    let materialized: Bound<'_, PyAny> = model
-        .getattr("config")?
+    let materialized: Bound<'_, PyAny> = native_field(&model, "config")?
         .getattr("values")?
         .call_method1("get", ("materialized", VIEW_MATERIALIZATION))?;
     let lowered: String = materialized.str()?.call_method0("lower")?.extract()?;
@@ -78,12 +76,10 @@ fn recreated_over_clones(scope: &Bound<'_, PyAny>, key: &Bound<'_, PyAny>) -> Py
 
 /// Every key the scope's traversal can visit: the selection and the upstream graph.
 fn scope_keys<'py>(scope: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let mut keys: Vec<Bound<'py, PyAny>> = scope
-        .getattr("selected_keys")?
+    let mut keys: Vec<Bound<'py, PyAny>> = native_field(scope, "selected_keys")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    for item in scope
-        .getattr("upstream_deps")?
+    for item in native_field(scope, "upstream_deps")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -152,8 +148,7 @@ fn selected_executable_model_count(scope: &Bound<'_, PyAny>) -> PyResult<usize> 
         }
         let model: Bound<'_, PyAny> = models.call_method1("get", (native_field(&key, "name")?,))?;
         if !model.is_none()
-            && model
-                .getattr("config")?
+            && native_field(&model, "config")?
                 .getattr("values")?
                 .call_method1("get", ("enabled",))?
                 .is(false.into_pyobject(scope.py())?.to_owned().into_any())
@@ -253,8 +248,7 @@ fn clone_input<'py>(
             ),
         ],
     )?;
-    let allow_decrease: bool = target
-        .getattr("time_travel_retention_decrease")?
+    let allow_decrease: bool = native_field(&target, "time_travel_retention_decrease")?
         .eq(enum_member(py, RecordId::RetentionDecreasePolicy, "ALLOW")?)?;
     let sources: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::CloneSourceEntries)?,
@@ -297,9 +291,7 @@ fn clone_input<'py>(
             ("run_id", native_field(&project, "run_id")?),
             (
                 "query_change_tracking",
-                project
-                    .getattr("settings")?
-                    .getattr("query_change_tracking")?,
+                native_field(&project, "settings")?.getattr("query_change_tracking")?,
             ),
             (
                 "destination_transient_models",
@@ -411,10 +403,8 @@ fn clone_boundaries<'py>(
     connection: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'py> = context.py();
-    let on_progress: Bound<'py, PyAny> = context
-        .invocation
-        .getattr("planning_progress")?
-        .getattr("on_progress")?;
+    let on_progress: Bound<'py, PyAny> =
+        native_field(&context.invocation, "planning_progress")?.getattr("on_progress")?;
     let start: Instant = Instant::now();
     let request: &Bound<'py, PyAny> = &context.request;
     let pipeline: Bound<'py, PyAny> = run_clone_pipeline_with_options(Some(&keywords(
@@ -505,9 +495,7 @@ fn clone_boundaries<'py>(
             ("run_id", native_field(&project, "run_id")?),
             (
                 "query_change_tracking",
-                project
-                    .getattr("settings")?
-                    .getattr("query_change_tracking")?,
+                native_field(&project, "settings")?.getattr("query_change_tracking")?,
             ),
         ],
     )?;
@@ -538,10 +526,7 @@ fn run_prephase(context: &BuildContext<'_>, prephase: &Prephase<'_>) -> PyResult
         ));
     }
     progress(
-        &context
-            .invocation
-            .getattr("planning_progress")?
-            .getattr("on_progress")?,
+        &native_field(&context.invocation, "planning_progress")?.getattr("on_progress")?,
         "Preparing defer clone plan...",
     )?;
     let connection: Bound<'_, PyAny> = prephase.adapter.call_method1(
@@ -566,8 +551,7 @@ pub(crate) fn run_defer_clone_boundary_prephase(
         &native_field(request, "exclude")?,
         &discovered.clone(),
     )?;
-    if !split
-        .getattr("sql_test_selection")?
+    if !native_field(&split, "sql_test_selection")?
         .getattr("models_selected")?
         .is_truthy()?
     {

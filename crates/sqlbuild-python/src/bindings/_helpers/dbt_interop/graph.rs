@@ -107,8 +107,7 @@ fn key_set(mapping: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
 
 fn graph_manifest(manifest: &Bound<'_, PyAny>) -> PyResult<DbtGraphManifest> {
     let mut models: Vec<DbtGraphManifestModel> = Vec::new();
-    for model in manifest
-        .getattr("models_by_unique_id")?
+    for model in native_field(manifest, "models_by_unique_id")?
         .call_method0("values")?
         .try_iter()?
     {
@@ -148,10 +147,7 @@ fn project_models<'py>(
         let mut model_deps: Vec<String> = Vec::new();
         for dependency in native_field(&model, "deps")?.try_iter()? {
             let dependency: Bound<'py, PyAny> = dependency?;
-            if dependency
-                .getattr("resource_type")?
-                .eq(MODEL_RESOURCE_TYPE)?
-            {
+            if native_field(&dependency, "resource_type")?.eq(MODEL_RESOURCE_TYPE)? {
                 model_deps.push(native_field(&dependency, "name")?.extract()?);
             }
         }

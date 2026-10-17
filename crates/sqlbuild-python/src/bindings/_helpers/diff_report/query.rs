@@ -280,8 +280,7 @@ pub(crate) fn prepare_query_diff<'py>(
             ("run_id", &runtime.get_item(2)?),
             (
                 "artifact_ttl",
-                &discovered
-                    .getattr("project_config")?
+                &native_field(discovered, "project_config")?
                     .getattr("diff")?
                     .getattr("query_artifact_ttl")?,
             ),

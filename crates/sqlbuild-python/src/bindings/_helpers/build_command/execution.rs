@@ -91,8 +91,7 @@ fn run_context_facts(
         + count(pipeline, "python_plan_entries")?;
     let mut loaded_sources: usize = 0;
     for source in native_field(&project, "sources")?.try_iter()? {
-        if !source?
-            .getattr("source_entry")?
+        if !native_field(&source?, "source_entry")?
             .getattr("loader")?
             .is_none()
         {

@@ -265,9 +265,7 @@ fn clone_source_entries<'py>(
         kwargs.set_item("database", native_field(&entry, "database")?)?;
         kwargs.set_item("schema", native_field(&entry, "schema")?)?;
         kwargs.set_item("name", &relation_name)?;
-        let qualified = adapter
-            .getattr("render_qualified_name")?
-            .call((), Some(&kwargs))?;
+        let qualified = native_field(adapter, "render_qualified_name")?.call((), Some(&kwargs))?;
         let destination = new_record(
             py,
             RecordId::CompiledRelationLocation,

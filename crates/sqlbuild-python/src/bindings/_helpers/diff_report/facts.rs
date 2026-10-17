@@ -160,12 +160,11 @@ fn coverage_differs(rows: &Bound<'_, PyAny>) -> PyResult<bool> {
     if left.is_none() || right.is_none() {
         return Ok(false);
     }
-    Ok(left
-        .getattr("minimum_cursor")?
-        .ne(native_field(&right, "minimum_cursor")?)?
-        || left
-            .getattr("maximum_cursor")?
-            .ne(native_field(&right, "maximum_cursor")?)?)
+    Ok(
+        native_field(&left, "minimum_cursor")?.ne(native_field(&right, "minimum_cursor")?)?
+            || native_field(&left, "maximum_cursor")?
+                .ne(native_field(&right, "maximum_cursor")?)?,
+    )
 }
 
 fn row_facts(rows: Bound<'_, PyAny>) -> PyResult<Option<DiffRowFacts>> {

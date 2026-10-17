@@ -106,8 +106,7 @@ fn retry_delay_seconds<'py>(
     retry_index: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let initial: Bound<'py, PyAny> = native_field(retry_policy, "initial_delay_seconds")?;
-    let growth: Bound<'py, PyAny> = retry_policy
-        .getattr("backoff_multiplier")?
+    let growth: Bound<'py, PyAny> = native_field(retry_policy, "backoff_multiplier")?
         .pow(retry_index, retry_policy.py().None())?;
     let mut delay: Bound<'py, PyAny> = initial.mul(growth)?;
     let maximum: Bound<'py, PyAny> = native_field(retry_policy, "max_delay_seconds")?;

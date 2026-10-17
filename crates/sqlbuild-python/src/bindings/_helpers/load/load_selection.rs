@@ -84,8 +84,7 @@ impl<'py> LoadProject<'py> {
                     .push((native_field(source, "name")?.extract()?, loader.extract()?));
             }
         }
-        let functions: Vec<Bound<'py, PyAny>> = discovered
-            .getattr("loader_functions")?
+        let functions: Vec<Bound<'py, PyAny>> = native_field(discovered, "loader_functions")?
             .try_iter()?
             .collect::<PyResult<_>>()?;
         let names_by_function: Bound<'py, PyDict> = PyDict::new(py);

@@ -109,8 +109,7 @@ fn observed_result(
             let tolerance: Option<String> = lag_tolerance.extract()?;
             if equivalent(previous, &current, tolerance.as_deref())? {
                 StateComparison::Equivalent {
-                    same_hash: previous
-                        .getattr("data_version_hash")?
+                    same_hash: native_field(previous, "data_version_hash")?
                         .eq(native_field(&current, "data_version_hash")?)?,
                 }
             } else {
@@ -183,9 +182,8 @@ fn adapter_observation<'py>(
             optional_text(native_field(&unknown, "message")?)?,
         )?));
     }
-    let observation: Bound<'py, PyAny> = batch
-        .getattr("observations")?
-        .call_method1("get", (name,))?;
+    let observation: Bound<'py, PyAny> =
+        native_field(batch, "observations")?.call_method1("get", (name,))?;
     if observation.is_none() {
         return Ok(Err(target_result(
             source,

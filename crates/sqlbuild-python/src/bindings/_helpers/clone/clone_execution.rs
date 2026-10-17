@@ -58,8 +58,7 @@ pub(crate) fn resource_types_by_name(
         .map(|entry| {
             Ok((
                 native_field(entry, "name")?.extract()?,
-                entry
-                    .getattr("key")?
+                native_field(entry, "key")?
                     .getattr("resource_type")?
                     .str()?
                     .extract()?,
@@ -175,8 +174,7 @@ fn execution_input<'py>(
     let project: Bound<'py, PyAny> = native_field(pipeline, "destination_project")?;
     let plan: Bound<'py, PyAny> = native_field(pipeline, "clone_plan")?;
     let config: Bound<'py, PyAny> = target_config(invocation)?;
-    let selected: Vec<Bound<'py, PyAny>> = pipeline
-        .getattr("destination_model_entries")?
+    let selected: Vec<Bound<'py, PyAny>> = native_field(pipeline, "destination_model_entries")?
         .try_iter()?
         .map(|entry| native_field(&entry?, "name"))
         .collect::<PyResult<_>>()?;
@@ -198,8 +196,7 @@ fn execution_input<'py>(
             ),
         ],
     )?;
-    let allow_decrease: bool = config
-        .getattr("time_travel_retention_decrease")?
+    let allow_decrease: bool = native_field(&config, "time_travel_retention_decrease")?
         .eq(enum_member(py, RecordId::RetentionDecreasePolicy, "ALLOW")?)?;
     let source_entries: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::CloneSourceEntries)?,
@@ -233,9 +230,7 @@ fn execution_input<'py>(
         ("run_id", native_field(&project, "run_id")?),
         (
             "query_change_tracking",
-            project
-                .getattr("settings")?
-                .getattr("query_change_tracking")?,
+            native_field(&project, "settings")?.getattr("query_change_tracking")?,
         ),
         ("upstream_deps", native_field(&plan, "upstream_deps")?),
         (
@@ -287,9 +282,7 @@ fn copy_fingerprints<'py>(
         ("run_id", native_field(&project, "run_id")?),
         (
             "query_change_tracking",
-            project
-                .getattr("settings")?
-                .getattr("query_change_tracking")?,
+            native_field(&project, "settings")?.getattr("query_change_tracking")?,
         ),
         ("on_progress", reporter.clone().into_any()),
     ]);

@@ -121,9 +121,7 @@ pub(crate) fn plan_table_types<'py>(
             &native_field(&materialization, "is_table_backed")?,
             &[(
                 "materialized",
-                config
-                    .getattr("values")?
-                    .call_method1("get", ("materialized",))?,
+                native_field(&config, "values")?.call_method1("get", ("materialized",))?,
             )],
         )?;
         if !backed.is_truthy()? {

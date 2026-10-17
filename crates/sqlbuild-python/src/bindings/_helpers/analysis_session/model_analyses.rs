@@ -198,9 +198,7 @@ fn record_catalog_changes<'py>(
     }
     schemas.call_method1("update", (&additions,))?;
     if !additions.is_empty() {
-        catalog
-            .getattr("native")?
-            .call_method1("update_relations", (&additions,))?;
+        native_field(catalog, "native")?.call_method1("update_relations", (&additions,))?;
     }
     let selected_types: Bound<'py, PyDict> = PyDict::new(py);
     let selected_nullability: Bound<'py, PyDict> = PyDict::new(py);
@@ -217,9 +215,7 @@ fn record_catalog_changes<'py>(
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("types", selected_types)?;
     arguments.set_item("nullability", selected_nullability)?;
-    catalog
-        .getattr("prepare_analysis")?
-        .call((), Some(&arguments))?;
+    native_field(catalog, "prepare_analysis")?.call((), Some(&arguments))?;
     Ok(())
 }
 

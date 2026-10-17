@@ -239,15 +239,12 @@ fn assembled_inputs<'py>(
     let sql_analysis_override: &Bound<'py, PyAny> = request.sql_analysis_enabled_override.bind(py);
     let sql_analysis_enabled: Bound<'py, PyAny> = if !sql_analysis_override.is_none() {
         sql_analysis_override.clone()
-    } else if local_config
-        .getattr("setting_overrides")?
+    } else if native_field(&local_config, "setting_overrides")?
         .contains(SQL_ANALYSIS_SETTING_KEY)?
     {
         native_field(&local_config, "settings")?.getattr("sql_analysis")?
     } else {
-        project_config
-            .getattr("settings")?
-            .getattr("sql_analysis")?
+        native_field(&project_config, "settings")?.getattr("sql_analysis")?
     };
     let discovered: Bound<'py, PyAny> = discovered_inputs(
         py,

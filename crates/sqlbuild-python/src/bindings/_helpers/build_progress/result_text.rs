@@ -132,11 +132,8 @@ pub(crate) fn model_text(model: &Bound<'_, PyAny>) -> PyResult<ModelResultText> 
         cursor_range: cursor_range(model)?,
         empty_cursor_inputs: texts(model, "empty_cursor_inputs")?,
         waiting_on_empty_inputs: native_field(model, "waiting_on_empty_inputs")?.is_truthy()?,
-        recovery_batch_count: model
-            .getattr("microbatch_recovery_batch_count")?
-            .extract()?,
-        synthetic_completion_count: model
-            .getattr("microbatch_synthetic_completion_count")?
+        recovery_batch_count: native_field(model, "microbatch_recovery_batch_count")?.extract()?,
+        synthetic_completion_count: native_field(model, "microbatch_synthetic_completion_count")?
             .extract()?,
         replay_requirement_state: optional(model, "microbatch_replay_requirement_state")?,
         audits: audits(model, "audit_results")?,

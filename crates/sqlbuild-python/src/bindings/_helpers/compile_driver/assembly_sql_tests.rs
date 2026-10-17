@@ -27,8 +27,7 @@ pub(crate) fn assembled_sql_tests<'py>(
     count_stage(py, SQL_TEST_ASSEMBLY, 1)?;
     let assemblies: Vec<Bound<'py, PyAny>> =
         assemble_native_sql_tests(py, inputs)?.iter().collect();
-    let test_inputs: Vec<Bound<'py, PyAny>> = inputs
-        .getattr("test_inputs")?
+    let test_inputs: Vec<Bound<'py, PyAny>> = native_field(inputs, "test_inputs")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     if assemblies.len() != test_inputs.len() {

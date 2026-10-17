@@ -30,8 +30,7 @@ pub(crate) fn project_path_name(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAn
 
 /// `ProjectPath.depth`: the number of path parts.
 pub(crate) fn project_path_depth(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    project_path(instance)?
-        .getattr("parts")?
+    native_field(&project_path(instance)?, "parts")?
         .len()?
         .into_py_any(instance.py())
 }

@@ -82,8 +82,7 @@ pub(crate) fn project_facts(
         let hook: Bound<'_, PyAny> = hook?;
         hooks.push(PythonHook {
             name: native_field(&hook, "name")?.extract()?,
-            path: hook
-                .getattr("relative_path")?
+            path: native_field(&hook, "relative_path")?
                 .call_method0("as_posix")?
                 .extract()?,
             reads: ref_keys(&native_field(&hook, "reads")?)?,
@@ -225,8 +224,7 @@ fn audit_gate(audit: &Bound<'_, PyAny>) -> PyResult<AuditGate> {
     };
     Ok(AuditGate {
         name: native_field(audit, "name")?.extract()?,
-        path: audit
-            .getattr("audit_file")?
+        path: native_field(audit, "audit_file")?
             .getattr("relative_path")?
             .str()?
             .extract()?,

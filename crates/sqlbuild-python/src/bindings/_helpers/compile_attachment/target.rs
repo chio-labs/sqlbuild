@@ -80,8 +80,7 @@ fn compile_cache_root<'py>(
     if no_cache
         || project_dir.is_none()
         || (!target_config.is_none()
-            && target_config
-                .getattr("compile_cache")?
+            && native_field(target_config, "compile_cache")?
                 .is(pyo3::types::PyBool::new(py, false)))
         || disabled
     {
@@ -100,8 +99,7 @@ fn remove_retired_caches(root: &Bound<'_, PyAny>) -> PyResult<()> {
     ignore.set_item("ignore_errors", true)?;
     for suffix in RETIRED_CACHE_NAMESPACE_SUFFIXES {
         for name in RETIRED_CACHE_DIRECTORY_NAMES {
-            let retired: Bound<'_, PyAny> = root
-                .getattr("parent")?
+            let retired: Bound<'_, PyAny> = native_field(root, "parent")?
                 .div(format!("{COMPILER_CACHE_DIRECTORY_NAME}{suffix}"))?
                 .div(name)?;
             if retired.call_method0("is_dir")?.is_truthy()? {

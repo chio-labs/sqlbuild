@@ -271,9 +271,8 @@ fn table_source<'py>(
     plan_output: &Bound<'py, PyAny>,
     name: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let source: Bound<'py, PyAny> = plan_output
-        .getattr("python_source_entries")?
-        .call_method1("get", (name,))?;
+    let source: Bound<'py, PyAny> =
+        native_field(plan_output, "python_source_entries")?.call_method1("get", (name,))?;
     if source.is_none()
         || !native_field(&source, "expression")?.is_none()
         || native_field(&source, "table")?.is_none()
@@ -470,9 +469,8 @@ pub(crate) fn run_read_side_dependencies<'py>(
     inputs: &ReadSideInputs<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.adapter.py();
-    let read_side_names: Bound<'py, PyAny> = inputs
-        .lifecycle_plan
-        .getattr("read_side_python_node_names")?;
+    let read_side_names: Bound<'py, PyAny> =
+        native_field(&inputs.lifecycle_plan, "read_side_python_node_names")?;
     let to_validate: Bound<'py, PyAny> = if inputs.validation_refs.is_none() {
         read_side_references(&inputs.python_graph, &read_side_names)?
     } else {

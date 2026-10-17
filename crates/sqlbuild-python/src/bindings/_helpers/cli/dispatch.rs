@@ -247,8 +247,7 @@ fn selector_inputs<'py>(
     args: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyTuple>, Bound<'py, PyTuple>)> {
     let py: Python<'py> = args.py();
-    let mut selectors: Vec<Bound<'py, PyAny>> = args
-        .getattr("select")?
+    let mut selectors: Vec<Bound<'py, PyAny>> = native_field(args, "select")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let mut files: Vec<Bound<'py, PyAny>> = Vec::new();

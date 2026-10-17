@@ -13,6 +13,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const AUDIT_RESOURCE: &str = "audit";
 const AUDIT_CLASSES: &str = "audits";
@@ -153,11 +154,10 @@ macro_rules! audit_getters {
             #[getter]
             pub(crate) fn evaluation_mode(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
-                    Ok(audit
+                    Ok(native_field(&audit
                         .attached
                         .audit_block
-                        .bind(py)
-                        .getattr("evaluation_mode")?
+                        .bind(py), "evaluation_mode")?
                         .unbind())
                 })
             }
@@ -165,11 +165,10 @@ macro_rules! audit_getters {
             #[getter]
             pub(crate) fn measurement_contract(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
-                    Ok(audit
+                    Ok(native_field(&audit
                         .attached
                         .audit_block
-                        .bind(py)
-                        .getattr("measurement_contract")?
+                        .bind(py), "measurement_contract")?
                         .unbind())
                 })
             }

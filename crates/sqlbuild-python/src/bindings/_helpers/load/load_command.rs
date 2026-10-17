@@ -231,9 +231,7 @@ fn project_relations<'py>(
     adapter: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = adapter.py();
-    if !invocation
-        .discovered
-        .getattr("project_config")?
+    if !native_field(&invocation.discovered, "project_config")?
         .getattr("references")?
         .getattr("enforce_explicit")?
         .is_truthy()?
@@ -301,9 +299,11 @@ fn prepare<'py>(
         .extract()?;
     let requested: Bound<'py, PyAny> = native_field(request, "concurrency")?;
     let concurrency: i64 = if requested.is_none() {
-        build_effective_settings_config(&discovered.clone())?
-            .getattr("concurrency")?
-            .extract()?
+        native_field(
+            &build_effective_settings_config(&discovered.clone())?,
+            "concurrency",
+        )?
+        .extract()?
     } else {
         requested.extract()?
     };
@@ -524,8 +524,7 @@ fn write_json(request: &Bound<'_, PyAny>, results: &[Bound<'_, PyAny>]) -> PyRes
 
 fn loader_node_flag(source: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = source.py();
-    Ok(source
-        .getattr("meta")?
+    Ok(native_field(source, "meta")?
         .call_method1("get", (LOADER_NODE_KEY,))?
         .is(PyBool::new(py, true).to_owned()))
 }

@@ -123,10 +123,7 @@ pub(crate) fn named_target_schema_strategy(
     selected_target: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'_> = discovered.py();
-    if adapter
-        .getattr("allows_implicit_managed_write_schema")?
-        .is_truthy()?
-    {
+    if native_field(adapter, "allows_implicit_managed_write_schema")?.is_truthy()? {
         return Ok(());
     }
     let project_config: Bound<'_, PyAny> = native_field(discovered, "project_config")?;
@@ -498,17 +495,12 @@ pub(crate) fn managed_write_schemas(
     adapter: &Bound<'_, PyAny>,
     project: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    if adapter
-        .getattr("allows_implicit_managed_write_schema")?
-        .is_truthy()?
-    {
+    if native_field(adapter, "allows_implicit_managed_write_schema")?.is_truthy()? {
         return Ok(());
     }
     let connection_schema: Option<String> = explicit_write_schema(
         text_or_none(
-            &project
-                .getattr("effective_connection")?
-                .call_method1("get", ("schema",))?,
+            &native_field(project, "effective_connection")?.call_method1("get", ("schema",))?,
         )?
         .as_deref(),
     );

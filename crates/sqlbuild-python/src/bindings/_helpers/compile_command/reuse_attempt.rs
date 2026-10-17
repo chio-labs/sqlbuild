@@ -222,8 +222,7 @@ pub(crate) fn write_launch_record(attempt: &Bound<'_, PyAny>) -> PyResult<()> {
     for part in LAUNCH_RECORD_DIRECTORY {
         directory = directory.call_method1("__truediv__", (part,))?;
     }
-    if path
-        .getattr("parent")?
+    if native_field(&path, "parent")?
         .call_method0("resolve")?
         .ne(directory.call_method0("resolve")?)?
     {
@@ -464,8 +463,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
     }
     fields.push((
         "lineage_mode",
-        request
-            .getattr("lineage_mode")?
+        native_field(request, "lineage_mode")?
             .getattr("value")?
             .str()?
             .into_any(),

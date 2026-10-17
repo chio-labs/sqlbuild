@@ -173,9 +173,8 @@ pub(crate) fn build_plan<'py>(
             push_artifact_schema(database.clone(), schema.clone());
         }
     }
-    if let Some(schema) = project
-        .getattr("effective_target_schema")?
-        .extract::<Option<String>>()?
+    if let Some(schema) =
+        native_field(project, "effective_target_schema")?.extract::<Option<String>>()?
     {
         push_artifact_schema(
             native_field(project, "effective_target_database")?.extract()?,

@@ -188,9 +188,11 @@ fn previous_records<'py>(
             .is_truthy()?;
         let schema: Bound<'py, PyAny> = PyString::new(py, schema).into_any();
         records.update(
-            read_latest(&read, (&database, &schema), table_exists, None)?
-                .getattr("records")?
-                .downcast()?,
+            native_field(
+                &read_latest(&read, (&database, &schema), table_exists, None)?,
+                "records",
+            )?
+            .downcast()?,
         )?;
     }
     Ok(records)
@@ -228,8 +230,7 @@ fn observe(
             } else {
                 None
             };
-        let sources: Vec<Bound<'_, PyAny>> = project
-            .getattr("sources")?
+        let sources: Vec<Bound<'_, PyAny>> = native_field(&project, "sources")?
             .try_iter()?
             .map(|source| native_field(&source?, "source_entry"))
             .collect::<PyResult<_>>()?;

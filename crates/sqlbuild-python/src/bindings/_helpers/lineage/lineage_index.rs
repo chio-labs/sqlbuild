@@ -135,8 +135,7 @@ fn project_nodes(project: &Bound<'_, PyAny>) -> PyResult<HashMap<LineageKey, Lin
 pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
     let views: Bound<'_, PyAny> = native_field(graph, "lineage_views")?;
     let mut all_keys: Vec<(String, LineageKey)> = Vec::new();
-    for item in views
-        .getattr("all_keys")?
+    for item in native_field(&views, "all_keys")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -144,8 +143,7 @@ pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
         all_keys.push((name, lineage_key(&key)?));
     }
     let mut tags: Vec<(String, Vec<LineageKey>)> = Vec::new();
-    for item in views
-        .getattr("tag_index")?
+    for item in native_field(&views, "tag_index")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -153,8 +151,7 @@ pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
         tags.push((tag, lineage_keys(&keys)?));
     }
     let mut paths: Vec<(LineageKey, String)> = Vec::new();
-    for item in views
-        .getattr("path_index")?
+    for item in native_field(&views, "path_index")?
         .call_method0("items")?
         .try_iter()?
     {

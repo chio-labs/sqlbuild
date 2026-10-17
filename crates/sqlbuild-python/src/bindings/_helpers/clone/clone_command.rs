@@ -324,8 +324,7 @@ pub(crate) fn run_clone_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
         invocation.adapter.call_method1("close", (&connection,));
     let (pipeline, result, elapsed) = outcome?;
     closed?;
-    let items: Vec<CloneItemText> = result
-        .getattr("item_results")?
+    let items: Vec<CloneItemText> = native_field(&result, "item_results")?
         .try_iter()?
         .map(|item| clone_item_text(&item?))
         .collect::<PyResult<_>>()?;

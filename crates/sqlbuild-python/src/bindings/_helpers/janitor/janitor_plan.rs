@@ -110,8 +110,7 @@ fn source_schemas(schemas: &Bound<'_, PyAny>, blocked: bool) -> PyResult<Vec<Sou
         };
         read.push(SourceSchemaText {
             name: display_name(&schema)?,
-            source_names: schema
-                .getattr("source_names")?
+            source_names: native_field(&schema, "source_names")?
                 .try_iter()?
                 .map(|name| name?.str()?.extract())
                 .collect::<PyResult<_>>()?,

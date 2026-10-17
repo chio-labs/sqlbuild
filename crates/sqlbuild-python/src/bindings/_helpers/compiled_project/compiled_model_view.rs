@@ -844,10 +844,7 @@ pub(crate) fn model_graph_row(
                 tags.push(tag?.str()?.extract()?);
             }
         }
-        let folder: String = record
-            .model_file
-            .bind(py)
-            .getattr("relative_path")?
+        let folder: String = native_field(record.model_file.bind(py), "relative_path")?
             .getattr("parent")?
             .str()?
             .extract()?;

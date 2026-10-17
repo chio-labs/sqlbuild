@@ -221,8 +221,7 @@ pub(crate) fn run_janitor_command(py: Python<'_>, request: &Bound<'_, PyAny>) ->
     let style: CliStyle = CliStyle {
         use_color: native_field(&invocation, "use_color")?.extract()?,
     };
-    let janitor: Bound<'_, PyAny> = invocation
-        .getattr("discovered_inputs")?
+    let janitor: Bound<'_, PyAny> = native_field(&invocation, "discovered_inputs")?
         .getattr("project_config")?
         .getattr("janitor")?;
     if !native_field(&janitor, "enabled")?.is_truthy()? {

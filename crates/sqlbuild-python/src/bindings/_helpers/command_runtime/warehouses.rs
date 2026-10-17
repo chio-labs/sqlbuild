@@ -155,12 +155,10 @@ pub(crate) fn find_authored<'py>(
     if target_name.is_none() {
         return Ok(None);
     }
-    let local_target: Bound<'py, PyAny> = local_config
-        .getattr("targets")?
-        .call_method1("get", (&target_name,))?;
-    let project_target: Bound<'py, PyAny> = project_config
-        .getattr("targets")?
-        .call_method1("get", (&target_name,))?;
+    let local_target: Bound<'py, PyAny> =
+        native_field(&local_config, "targets")?.call_method1("get", (&target_name,))?;
+    let project_target: Bound<'py, PyAny> =
+        native_field(&project_config, "targets")?.call_method1("get", (&target_name,))?;
     let target_name: String = target_name.extract()?;
     let group_name: String = native_field(group, "value")?.extract()?;
     Ok(authored_warehouse(
