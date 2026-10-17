@@ -17,7 +17,7 @@ const ENUM_KIND: u8 = 0;
 const CONSTANT_KIND: u8 = 1;
 const MACRO_KIND: u8 = 2;
 
-type TableRow = (
+pub(crate) type TableRow = (
     Vec<usize>,
     HashMap<String, Vec<usize>>,
     HashMap<String, Vec<usize>>,
@@ -26,7 +26,7 @@ type VisibleRow<'py> = (Bound<'py, PyAny>, VisibleEntry, Option<Bound<'py, PyAny
 
 /// One declaration position: identity, first record, name, kinds, runtime value and key.
 #[derive(FromPyObject)]
-struct PositionRow(Py<PyAny>, Py<PyAny>, Py<PyAny>, u8, Py<PyAny>, u8, u32);
+pub(crate) struct PositionRow(Py<PyAny>, Py<PyAny>, Py<PyAny>, u8, Py<PyAny>, u8, u32);
 
 /// The Python classes and enum members the contexts are built from.
 #[derive(FromPyObject)]
@@ -50,7 +50,7 @@ pub(crate) struct NativeDeclarationContexts {
 /// The Python lookup mappings a matching resource's private positions and grants come from.
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
-struct LookupMappings {
+pub(crate) struct LookupMappings {
     identity_keys: Py<PyDict>,
     private_positions: Py<PyAny>,
     grants_by_resource: Py<PyAny>,
@@ -69,7 +69,7 @@ struct ContextParts<'py> {
 #[pymethods]
 impl NativeDeclarationContexts {
     #[new]
-    fn new(
+    pub(crate) fn new(
         positions: Vec<PositionRow>,
         table: TableRow,
         classes: ContextClasses,

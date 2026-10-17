@@ -9,7 +9,7 @@ use sqlbuild_analysis::semantic_validation::models as validation;
 #[pymethods]
 impl BindingPositions {
     #[new]
-    fn new(request: PositionInput) -> PyResult<Self> {
+    pub(crate) fn new(request: PositionInput) -> PyResult<Self> {
         compiler_guard(|| {
             validation::BindingPositions::new(request.into())
                 .map(|inner| Self { inner })

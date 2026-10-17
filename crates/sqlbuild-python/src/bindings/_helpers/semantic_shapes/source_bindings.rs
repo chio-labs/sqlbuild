@@ -19,13 +19,13 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::constants::SOURCE_REBINDING_ANALYSES;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::_helpers::semantic_shapes::shapes::{
     model_inputs, project_shapes, published_shape,
 };
+use crate::bindings::models::BindingPositions;
 
 const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -394,7 +394,7 @@ fn positions<'py>(
     request.set_item("expanded", expanded)?;
     request.set_item("cleaned", cleaned)?;
     request.set_item("passes", passes)?;
-    registry::native(py, NativeAttr::BindingPositions)?.call1((request,))
+    Ok(Bound::new(py, BindingPositions::new(request.extract()?)?)?.into_any())
 }
 
 /// Whether inspected columns differ from the known shape; untyped names match any type.

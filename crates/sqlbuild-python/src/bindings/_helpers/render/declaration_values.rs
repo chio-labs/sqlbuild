@@ -15,6 +15,7 @@ use crate::bindings::_helpers::records::construct::{
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::scopes::declaration_contexts::NativeDeclarationContexts;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 
 const NO_DECLARATION_KIND: u8 = 255;
@@ -310,16 +311,17 @@ pub(crate) fn native_declaration_contexts<'py>(
             .try_iter()?
             .collect::<PyResult<Vec<_>>>()?,
     )?;
-    registry::native(py, NativeAttr::NativeDeclarationContexts)?.call1((
-        PyList::new(py, positions)?,
+    let contexts: NativeDeclarationContexts = NativeDeclarationContexts::new(
+        PyList::new(py, positions)?.extract()?,
         (
-            global_positions,
-            listed_positions(&native_field(&index, "local_positions")?)?,
-            listed_positions(&native_field(&index, "inherited_positions")?)?,
+            global_positions.extract()?,
+            listed_positions(&native_field(&index, "local_positions")?)?.extract()?,
+            listed_positions(&native_field(&index, "inherited_positions")?)?.extract()?,
         ),
-        classes,
-        (keys, lookups),
-    ))
+        classes.extract()?,
+        (keys.extract()?, lookups.extract()?),
+    );
+    Ok(Bound::new(py, contexts)?.into_any())
 }
 
 /// Hand one scope lookup's positions and runtime values to the native classifier.
