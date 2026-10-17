@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyString;
 use sqlbuild_sqltext::resolution::main::cursor_subquery::cursor_subquery;
@@ -17,7 +18,7 @@ pub(super) fn method<'py>(
     name: &str,
     values: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&object.getattr(name)?, values)
+    call_with(&native_field(object, name)?, values)
 }
 
 pub(super) fn cursor_wrap(
@@ -40,7 +41,7 @@ pub(super) fn cursor_wrap(
     let py = adapter.py();
     let cursor_type = &filtering.cursor_type;
     let literal = |bound: &str| -> PyResult<String> {
-        let token = sentinel_to_token(&bounds.getattr(bound)?)?;
+        let token = sentinel_to_token(&native_field(bounds, bound)?)?;
         method(
             adapter,
             "render_cursor_bound_literal",

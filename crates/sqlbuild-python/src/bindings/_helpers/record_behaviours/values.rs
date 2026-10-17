@@ -7,9 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 /// `SqlLogicalType.display_name`: the kind, with its element type in angle brackets.
 pub(crate) fn logical_type_display_name(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let kind: String = native_field(instance, "kind")?
-        .getattr("value")?
-        .extract()?;
+    let kind: String = native_field(&native_field(instance, "kind")?, "value")?.extract()?;
     let element: Bound<'_, PyAny> = native_field(instance, "element_type")?;
     if element.is_none() {
         return kind.into_py_any(instance.py());
@@ -20,9 +18,7 @@ pub(crate) fn logical_type_display_name(instance: &Bound<'_, PyAny>) -> PyResult
 
 /// `SqlValue.kind`: the outer logical kind.
 pub(crate) fn sql_value_kind(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(native_field(instance, "logical_type")?
-        .getattr("kind")?
-        .unbind())
+    Ok(native_field(&native_field(instance, "logical_type")?, "kind")?.unbind())
 }
 
 /// `FingerprintSet`: index the fingerprints by `(node_type, node_name)` when not given.

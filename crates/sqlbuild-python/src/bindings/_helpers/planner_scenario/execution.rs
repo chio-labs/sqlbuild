@@ -1,8 +1,8 @@
 //! Assemble scenario execution plans through existing planner and adapter APIs.
 
 use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
 use crate::bindings::_helpers::compiled_project::records::compiled_model_record;
 use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
@@ -23,6 +23,7 @@ use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fi
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
@@ -89,9 +90,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     for key in ordered.try_iter()? {
         let key = key?;
         if native_field(&key, "resource_type")?.eq("model")?
-            && graph
-                .getattr("model_names")?
-                .contains(native_field(&key, "name")?)?
+            && native_field(&graph, "model_names")?.contains(native_field(&key, "name")?)?
         {
             model_keys.push(key);
         }
@@ -132,7 +131,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
         let changes = PyDict::new(py);
         changes.set_item("destination", destination)?;
         changes.set_item("query_sql", query)?;
-        let model = imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
+        let model = replaced_keywords(&record, &changes)?;
         let model_context = model_context(&project, &context, (&models, &locations, &columns))?;
         let result = object(
             py,

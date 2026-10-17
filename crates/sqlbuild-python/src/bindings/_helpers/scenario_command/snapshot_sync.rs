@@ -85,11 +85,10 @@ pub(crate) fn sync_local_snapshots<'py>(
     let py: Python<'py> = request.py();
     let refresh: bool = native_field(request, "refresh")?.is_truthy()?;
     let project_connection: Bound<'py, PyAny> = project_connection_config(&run.project)?;
-    let project_name: Bound<'py, PyAny> = run
-        .project
-        .discovered
-        .getattr("project_config")?
-        .getattr("name")?;
+    let project_name: Bound<'py, PyAny> = native_field(
+        &native_field(&run.project.discovered, "project_config")?,
+        "name",
+    )?;
     let names: Vec<String> = call_with(
         &host::entry(py, ExecutorHost::SelectScenarioSnapshotCaptureCandidates)?,
         &[
@@ -142,10 +141,8 @@ pub(crate) fn sync_local_snapshots<'py>(
     finished?;
     let scenarios: Bound<'py, PyTuple> =
         selected_scenarios(&pipeline, (&names, &[], &run.project.project_dir))?;
-    let force: bool = request
-        .getattr("limit_inputs")?
-        .getattr("force")?
-        .is_truthy()?;
+    let force: bool =
+        native_field(&native_field(request, "limit_inputs")?, "force")?.is_truthy()?;
     let section: SectionStatus<'py> = begin_section(
         &run.stream,
         (

@@ -52,16 +52,14 @@ impl<'py> OldNamePlanner<'py> {
         let mut newest: Option<(Bound<'py, PyTuple>, Bound<'py, PyAny>)> = None;
         for history in &self.histories {
             let movement = native_field(history, "move")?;
-            if !movement
-                .getattr("destination")?
+            if !native_field(&movement, "destination")?
                 .call_method1("matches", (destination,))?
                 .is_truthy()?
             {
                 continue;
             }
             if let Some(origin) = origin
-                && !movement
-                    .getattr("origin")?
+                && !native_field(&movement, "origin")?
                     .call_method1("matches", (origin,))?
                     .is_truthy()?
             {
@@ -119,9 +117,7 @@ impl<'py> OldNamePlanner<'py> {
         else {
             return Ok(None);
         };
-        if !history
-            .getattr("move")?
-            .getattr("destination_model")?
+        if !native_field(&native_field(&history, "move")?, "destination_model")?
             .eq(native_field(item, "name")?)?
         {
             return Ok(None);
@@ -277,7 +273,7 @@ impl<'py> OldNamePlanner<'py> {
                     &[
                         (
                             "model_name",
-                            native_field(history, "move")?.getattr("destination_model")?,
+                            native_field(&native_field(history, "move")?, "destination_model")?,
                         ),
                         (
                             "origin",
@@ -290,11 +286,11 @@ impl<'py> OldNamePlanner<'py> {
                         ("action", action(&self.runtime, "NONE")?),
                         (
                             "target_name",
-                            native_field(history, "move")?.getattr("target_name")?,
+                            native_field(&native_field(history, "move")?, "target_name")?,
                         ),
                         (
                             "migration_event_id",
-                            native_field(history, "move")?.getattr("event_id")?,
+                            native_field(&native_field(history, "move")?, "event_id")?,
                         ),
                         ("reason", reason),
                     ],
@@ -302,7 +298,7 @@ impl<'py> OldNamePlanner<'py> {
                 .map(Some);
             }
         }
-        let retention = native_field(history, "required")?.getattr("view_retention")?;
+        let retention = native_field(&native_field(history, "required")?, "view_retention")?;
         let duration = record_class(py, RecordId::Duration)?.call_method1(
             "parse",
             (if retention.is_truthy()? {
@@ -340,7 +336,7 @@ impl<'py> OldNamePlanner<'py> {
                 ("action", action(&self.runtime, action_name)?),
                 (
                     "target_name",
-                    native_field(history, "move")?.getattr("target_name")?,
+                    native_field(&native_field(history, "move")?, "target_name")?,
                 ),
                 ("retention", retention),
                 ("expires_at", expires_at),
@@ -358,7 +354,7 @@ impl<'py> OldNamePlanner<'py> {
                 ),
                 (
                     "migration_event_id",
-                    native_field(history, "move")?.getattr("event_id")?,
+                    native_field(&native_field(history, "move")?, "event_id")?,
                 ),
                 (
                     "grants_copied",

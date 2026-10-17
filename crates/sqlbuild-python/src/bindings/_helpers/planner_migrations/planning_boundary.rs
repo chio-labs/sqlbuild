@@ -36,7 +36,7 @@ pub(super) fn redirected_cursor_snapshots<'py>(
     let start = if config.is_none() {
         py.None().into_bound(py)
     } else {
-        native_field(&config, "cursors")?.getattr("start")?
+        native_field(&native_field(&config, "cursors")?, "start")?
     };
     let cursor_scope = native(
         py,

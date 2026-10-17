@@ -56,10 +56,8 @@ fn run_scenario_capture_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
     let stream: Bound<'_, PyAny> = py.import("sys")?.getattr("stdout")?;
     let planning: Bound<'_, PyAny> =
         write_headers(&stream, &project, (EXECUTION_COMMAND, 1, style))?;
-    let force: bool = request
-        .getattr("limit_inputs")?
-        .getattr("force")?
-        .is_truthy()?;
+    let force: bool =
+        native_field(&native_field(request, "limit_inputs")?, "force")?.is_truthy()?;
     write(&stream, &format!("{}\n\n", snapshot_capture_warning(force)))?;
     flush(&stream)?;
     let pipeline: Bound<'_, PyAny> = compile(
@@ -117,10 +115,10 @@ fn run_scenario_capture_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> P
             ("adapter", adapter.clone()),
             (
                 "project_name",
-                project
-                    .discovered
-                    .getattr("project_config")?
-                    .getattr("name")?,
+                native_field(
+                    &native_field(&project.discovered, "project_config")?,
+                    "name",
+                )?,
             ),
             ("settings", settings),
             ("connection_hooks", hooks),

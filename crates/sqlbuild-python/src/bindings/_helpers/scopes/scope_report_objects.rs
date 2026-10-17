@@ -26,7 +26,7 @@ type PyObject = Py<PyAny>;
 const PATHLIB_MODULE: &str = "pathlib";
 
 fn texts(item: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<String>> {
-    item.getattr(name)?
+    native_field(item, name)?
         .try_iter()?
         .map(|value| value?.str()?.extract())
         .collect()
@@ -462,7 +462,7 @@ fn read_declaration_reports(
     item: &Bound<'_, PyAny>,
     name: &str,
 ) -> PyResult<Vec<DeclarationReport>> {
-    item.getattr(name)?
+    native_field(item, name)?
         .try_iter()?
         .map(|report| read_declaration_report(&report?))
         .collect()
@@ -552,8 +552,7 @@ fn read_report(report: &Bound<'_, PyAny>) -> PyResult<ScopeReport> {
             directory: field(&resource, "directory")?,
             duplicate_count: field(&resource, "duplicate_count")?,
         },
-        scope_chain: report
-            .getattr("scope_chain")?
+        scope_chain: native_field(report, "scope_chain")?
             .try_iter()?
             .map(|entry| {
                 let entry: Bound<'_, PyAny> = entry?;
@@ -569,8 +568,7 @@ fn read_report(report: &Bound<'_, PyAny>) -> PyResult<ScopeReport> {
         relationship_scope: read_declaration_reports(report, "relationship_scope")?,
         nearby_unavailable: read_declaration_reports(report, "nearby_unavailable")?,
         filters: read_filters(&native_field(report, "filters")?)?,
-        sections: report
-            .getattr("sections")?
+        sections: native_field(report, "sections")?
             .try_iter()?
             .map(|section| read_section(&section?))
             .collect::<PyResult<_>>()?,
@@ -596,8 +594,7 @@ pub(crate) fn read_result(
     if result.is_instance(&classes.model(RecordId::ScopeBrowseResult)?)? {
         return Ok(ScopeResult::Browse(BrowseResult {
             folder: field(result, "folder")?,
-            folders: result
-                .getattr("folders")?
+            folders: native_field(result, "folders")?
                 .try_iter()?
                 .map(|folder| read_folder(&folder?))
                 .collect::<PyResult<_>>()?,

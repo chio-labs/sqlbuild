@@ -234,9 +234,7 @@ pub(crate) fn build_execution_plan<'py>(
             selected_keys: native_field(&inspection, "selected_keys")?.unbind(),
             sql_test_selection: native_field(&inspection, "sql_test_selection")?.unbind(),
         },
-        args.value("policies")?
-            .getattr("plan_sql_tests")?
-            .is_truthy()?,
+        native_field(&args.value("policies")?, "plan_sql_tests")?.is_truthy()?,
     )?;
     let planned = (|| {
         let catalog = call_with(

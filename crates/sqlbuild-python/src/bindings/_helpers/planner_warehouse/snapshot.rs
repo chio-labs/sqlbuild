@@ -72,7 +72,7 @@ pub(crate) fn destination_nodes<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut nodes: Vec<_> = Vec::new();
     for field in ["models", "seeds", "functions"] {
-        for node in project.getattr(field)?.try_iter()? {
+        for node in native_field(project, field)?.try_iter()? {
             nodes.push(node?);
         }
     }
@@ -103,7 +103,7 @@ fn resolve_database<'py>(
         if !selected_node(selected, &node)? {
             continue;
         }
-        let database = native_field(&node, "destination")?.getattr("database")?;
+        let database = native_field(&native_field(&node, "destination")?, "database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -120,7 +120,7 @@ fn target_schemas(
         if !selected_node(selected, &node)? {
             continue;
         }
-        let schema = native_field(&node, "destination")?.getattr("schema")?;
+        let schema = native_field(&native_field(&node, "destination")?, "schema")?;
         if !schema.is_none() {
             schemas.insert(schema.extract()?);
         }
@@ -157,11 +157,7 @@ fn model_upstream_names(
         }
         let lookup = if is_ref { models } else { seeds };
         if let Some(node) = lookup.get_item(&name)? {
-            names.insert(
-                native_field(&node, "destination")?
-                    .getattr("name")?
-                    .extract()?,
-            );
+            names.insert(native_field(&native_field(&node, "destination")?, "name")?.extract()?);
         }
     }
     Ok(names)
@@ -175,11 +171,9 @@ fn metadata_name_filter(
     let mut names: BTreeSet<String> = BTreeSet::new();
     if selected.is_none() {
         for field in ["models", "seeds"] {
-            for node in project.getattr(field)?.try_iter()? {
+            for node in native_field(project, field)?.try_iter()? {
                 names.insert(
-                    native_field(&node?, "destination")?
-                        .getattr("name")?
-                        .extract()?,
+                    native_field(&native_field(&node?, "destination")?, "name")?.extract()?,
                 );
             }
         }
@@ -209,11 +203,8 @@ fn metadata_name_filter(
                     &selected_names,
                 )?);
             } else if let Some(seed) = seeds.get_item(&name)? {
-                names.insert(
-                    native_field(&seed, "destination")?
-                        .getattr("name")?
-                        .extract()?,
-                );
+                names
+                    .insert(native_field(&native_field(&seed, "destination")?, "name")?.extract()?);
             } else if let Some(entry) = sources.get_item(&name)? {
                 names.insert(source_table_name(&entry)?);
             }
@@ -357,7 +348,7 @@ fn optional_names<'py>(
 fn location_identity<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = location.py();
     let part = |name: &str| -> PyResult<Bound<'py, PyAny>> {
-        let value = location.getattr(name)?;
+        let value = native_field(location, name)?;
         if value.is_none() {
             Ok(value)
         } else {
@@ -480,9 +471,7 @@ fn shares_unfiltered(project: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) ->
         if !names.contains(&model_reads::model_name(&model)?) {
             all_selected = false;
         }
-        if model
-            .getattr("config")?
-            .getattr("values")?
+        if native_field(&native_field(&model, "config")?, "values")?
             .call_method1("get", (MIGRATE_FROM_CONFIG_KEY,))?
             .is_instance_of::<PyString>()
         {
@@ -554,9 +543,7 @@ fn gather_fingerprints<'py>(
                 ),
                 (
                     "render_read_latest_sql",
-                    request
-                        .adapter
-                        .getattr("render_read_latest_fingerprints_sql")?,
+                    native_field(&request.adapter, "render_read_latest_fingerprints_sql")?,
                 ),
                 (
                     "node_names",
@@ -634,7 +621,7 @@ fn scope_field<'py>(scope: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py
     if scope.is_none() {
         Ok(scope.clone())
     } else {
-        scope.getattr(name)
+        native_field(scope, name)
     }
 }
 

@@ -196,10 +196,7 @@ pub(crate) fn macro_output(request: ExpansionRequest<'_>) -> PyResult<Option<Exp
             declarations.unbind(),
             request.consumer.map_or_else(|| py.None(), Bound::unbind),
         ),
-        request
-            .macro_context
-            .getattr("_enforce_explicit_references")?
-            .is_truthy()?,
+        native_field(&request.macro_context, "_enforce_explicit_references")?.is_truthy()?,
         macro_expansion_classes(py)?.unbind(),
     )?;
     let expansion: Bound<'_, NativeMacroExpansion> = Bound::new(py, expansion)?;

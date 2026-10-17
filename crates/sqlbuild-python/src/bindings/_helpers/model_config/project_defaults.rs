@@ -1,5 +1,6 @@
 //! The sparse mapping of a project's `[defaults]` that every model's config layers over.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyList};
 
@@ -44,7 +45,7 @@ pub(crate) fn project_defaults_mapping<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let values: Bound<'py, PyDict> = PyDict::new(defaults.py());
     for (key, falsy_unset) in DEFAULT_KEYS {
-        let value: Bound<'py, PyAny> = defaults.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(defaults, key)?;
         let unset: bool = if falsy_unset {
             !value.is_truthy()?
         } else {

@@ -67,12 +67,9 @@ pub(super) fn renames<'py>(
     state: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = runtime.py();
-    let target = runtime
-        .getattr("project")?
-        .getattr("effective_target_name")?;
+    let target = native_field(&native_field(runtime, "project")?, "effective_target_name")?;
     let ordered = PyList::empty(py);
-    let events: Vec<Bound<'py, PyAny>> = state
-        .getattr("events")?
+    let events: Vec<Bound<'py, PyAny>> = native_field(state, "events")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     for (index, event) in events.iter().enumerate() {
@@ -109,9 +106,7 @@ pub(super) fn resumed<'py>(
     state: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let result = PyDict::new(runtime.py());
-    let target = runtime
-        .getattr("project")?
-        .getattr("effective_target_name")?;
+    let target = native_field(&native_field(runtime, "project")?, "effective_target_name")?;
     let events = native_field(state, "events")?;
     for item in models {
         let name = native_field(item, "name")?;
@@ -124,8 +119,7 @@ pub(super) fn resumed<'py>(
             continue;
         }
         let event_target = native_field(&event, "target_name")?;
-        if event
-            .getattr("destination")?
+        if native_field(&event, "destination")?
             .call_method1("matches", (relation(&destination)?,))?
             .is_truthy()?
             && (event_target.is_none() || event_target.eq(&target)?)

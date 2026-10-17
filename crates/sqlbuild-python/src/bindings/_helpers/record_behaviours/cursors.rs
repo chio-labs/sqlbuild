@@ -128,9 +128,7 @@ pub(crate) fn finish_cursor_snapshot(
 
 /// `ModelCursorSnapshot.watermarks_available`: whether every physical watermark was read.
 pub(crate) fn snapshot_watermarks_available(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let available: bool = !instance
-        .getattr("unavailable_watermark_tags")?
-        .is_truthy()?;
+    let available: bool = !native_field(instance, "unavailable_watermark_tags")?.is_truthy()?;
     Ok(pyo3::types::PyBool::new(instance.py(), available)
         .to_owned()
         .into_any()

@@ -31,8 +31,7 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = source_freshness.py();
     let mut reasons: Vec<(String, Vec<String>)> = Vec::new();
-    for unknown in source_freshness
-        .getattr("unknown_sources")?
+    for unknown in native_field(source_freshness, "unknown_sources")?
         .call_method0("values")?
         .try_iter()?
     {
@@ -69,7 +68,7 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
 
 fn state_database<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     for node in destination_nodes(project)? {
-        let database = native_field(&node, "destination")?.getattr("database")?;
+        let database = native_field(&native_field(&node, "destination")?, "database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -83,7 +82,7 @@ fn state_schemas(
 ) -> PyResult<BTreeSet<String>> {
     let mut schemas: BTreeSet<_> = BTreeSet::new();
     for node in destination_nodes(project)? {
-        let schema = native_field(&node, "destination")?.getattr("schema")?;
+        let schema = native_field(&native_field(&node, "destination")?, "schema")?;
         if !schema.is_none() {
             schemas.insert(schema.extract()?);
         }
@@ -152,8 +151,7 @@ pub(crate) fn build_planner_source_freshness_result<'py>(
     }
     let sources = tuple(
         py,
-        relations
-            .getattr("source_read_map")?
+        native_field(relations, "source_read_map")?
             .call_method0("values")?
             .try_iter()?
             .collect::<PyResult<_>>()?,

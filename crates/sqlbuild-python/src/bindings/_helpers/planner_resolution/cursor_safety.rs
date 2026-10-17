@@ -5,6 +5,7 @@ use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::duration;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -63,11 +64,7 @@ pub(super) fn horizon<'py>(
     let (clock, grain) = clock_and_grain;
     let mut clock = utc_clock(clock)?;
     let date_only = discovered.is_instance(&record_class(py, RecordId::DateValue)?)?;
-    if date_only
-        || native_field(discovered, "value")?
-            .getattr("tzinfo")?
-            .is_none()
-    {
+    if date_only || native_field(&native_field(discovered, "value")?, "tzinfo")?.is_none() {
         clock = call_with(
             &native_field(&clock, "replace")?,
             &[("tzinfo", py.None().into_bound(py))],
@@ -91,6 +88,5 @@ pub(super) fn replace<'py>(
     object: &Bound<'py, PyAny>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(object.py(), "dataclasses", "replace")?
-        .call((object,), Some(&keywords(object.py(), fields)?))
+    replaced_keywords(object, &keywords(object.py(), fields)?)
 }

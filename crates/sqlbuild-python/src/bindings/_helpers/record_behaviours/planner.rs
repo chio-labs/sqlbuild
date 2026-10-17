@@ -60,7 +60,7 @@ pub(crate) fn old_name_runs_steps(instance: &Bound<'_, PyAny>) -> PyResult<Py<Py
 /// `PlanOutput.python_source_entries`: the source entries Python reads resolve.
 pub(crate) fn plan_python_source_entries(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     for name in ["python_source_read_map", "source_read_map"] {
-        let entries: Bound<'_, PyAny> = instance.getattr(name)?;
+        let entries: Bound<'_, PyAny> = native_field(instance, name)?;
         if entries.is_truthy()? {
             return Ok(entries.unbind());
         }
@@ -265,7 +265,7 @@ pub(crate) fn overrides_typed_as(
         return Ok(instance.clone().unbind());
     }
     let cursor_type: String = text(&call_argument((args, kwargs), "cursor_type", 0)?)?;
-    let field = |name: &str| instance.getattr(name);
+    let field = |name: &str| native_field(instance, name);
     let (start, end) = (field(OVERRIDE_FIELDS[4])?, field(OVERRIDE_FIELDS[5])?);
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     if cursor_type == INTEGER_CURSOR {
@@ -331,8 +331,7 @@ pub(crate) fn rename_hint_message(hint: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>
     } else {
         "similar to"
     };
-    let candidates: Vec<String> = hint
-        .getattr("candidate_columns")?
+    let candidates: Vec<String> = native_field(hint, "candidate_columns")?
         .try_iter()?
         .map(|candidate| Ok(candidate?.str()?.to_string()))
         .collect::<PyResult<_>>()?;

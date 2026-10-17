@@ -276,7 +276,7 @@ fn exceeded_message(evidence: &Bound<'_, PyAny>, non_idempotent: bool) -> PyResu
         rendered(&native_field(evidence, "physical_target_max")?)?,
         rendered(&native_field(evidence, "effective_start")?)?,
         rendered(&native_field(evidence, "maximum_allowed_start")?)?,
-        native_field(evidence, "action")?.getattr("value")?.str()?,
+        native_field(&native_field(evidence, "action")?, "value")?.str()?,
         native_field(evidence, "target_relation")?.str()?,
         native_field(evidence, "cursor_column")?.str()?,
     ))

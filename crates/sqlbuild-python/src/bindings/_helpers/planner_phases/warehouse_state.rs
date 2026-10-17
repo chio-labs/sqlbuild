@@ -73,7 +73,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
                 if config.is_none() {
                     py.None().into_bound(py)
                 } else {
-                    native_field(&config, "cursors")?.getattr("start")?
+                    native_field(&native_field(&config, "cursors")?, "start")?
                 },
             ),
             (
@@ -85,11 +85,13 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
     let stale_keys = pyo3::types::PyFrozenSet::new(
         py,
-        class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?
-            .getattr("all_keys")?
-            .call_method0("values")?
-            .try_iter()?
-            .collect::<PyResult<Vec<_>>>()?,
+        native_field(
+            &class_field(scopes, |s: &PlannerScopeResolution| &s.stale_warning_scope)?,
+            "all_keys",
+        )?
+        .call_method0("values")?
+        .try_iter()?
+        .collect::<PyResult<Vec<_>>>()?,
     )?
     .into_any();
     let snapshot = warehouse_snapshot(&SnapshotRequest {
@@ -126,11 +128,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     })?;
     let physical = PyDict::new(py);
     for entry in &migrations.entries {
-        if entry
-            .getattr("decision")?
-            .getattr("moves_data")?
-            .is_truthy()?
-        {
+        if native_field(&native_field(entry, "decision")?, "moves_data")?.is_truthy()? {
             let origin = native_field(entry, "origin")?;
             let qualified = native_field(&origin, "qualified_name")?;
             physical.set_item(

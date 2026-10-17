@@ -28,8 +28,8 @@ fn bounds<'py>(
     Ok(dict(
         evidence.py(),
         vec![
-            ("start", render(evidence.getattr(start)?)?),
-            ("end", render(evidence.getattr(end)?)?),
+            ("start", render(native_field(evidence, start)?)?),
+            ("end", render(native_field(evidence, end)?)?),
         ],
     )?
     .into_any())

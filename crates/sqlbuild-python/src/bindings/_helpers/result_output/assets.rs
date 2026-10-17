@@ -43,7 +43,10 @@ fn targets<'py>(
     };
     let py: Python<'py> = plan.py();
     let names: Bound<'py, PyDict> = PyDict::new(py);
-    for item in plan.getattr(field)?.call_method0("items")?.try_iter()? {
+    for item in native_field(plan, field)?
+        .call_method0("items")?
+        .try_iter()?
+    {
         let (name, location): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         names.set_item(name, native_field(&location, "qualified_name")?)?;
     }
@@ -64,20 +67,12 @@ fn target<'py>(
 
 fn last_recorded_sql<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = result.py();
-    if !result
-        .getattr("status")?
-        .getattr("value")?
-        .eq(FAILED_STATUS)?
-    {
+    if !native_field(&native_field(result, "status")?, "value")?.eq(FAILED_STATUS)? {
         return Ok(py.None().into_bound(py));
     }
     let events: Vec<Bound<'py, PyAny>> = items(&native_field(result, "lifecycle_events")?)?;
     for event in events.iter().rev() {
-        if event
-            .getattr("kind")?
-            .getattr("value")?
-            .eq(SQL_EVENT_KIND)?
-        {
+        if native_field(&native_field(event, "kind")?, "value")?.eq(SQL_EVENT_KIND)? {
             return native_field(event, "content");
         }
     }
@@ -96,7 +91,7 @@ fn microbatch<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         ("strategy", "microbatch_strategy"),
         ("reason", "microbatch_plan_reason"),
     ] {
-        let value: Bound<'py, PyAny> = result.getattr(field)?;
+        let value: Bound<'py, PyAny> = native_field(result, field)?;
         if !value.is_none() {
             state.set_item(key, value)?;
         }
@@ -140,7 +135,7 @@ fn microbatch<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             "microbatch_replay_requirement_state",
         ),
     ] {
-        state.set_item(key, result.getattr(field)?)?;
+        state.set_item(key, native_field(result, field)?)?;
     }
     let intervals: Bound<'py, PyList> = PyList::empty(py);
     for interval in items(&native_field(result, "microbatch_accounting_intervals")?)? {
@@ -154,7 +149,7 @@ fn microbatch<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             "event_id",
         ]
         .into_iter()
-        .map(|field| Ok((field, interval.getattr(field)?)))
+        .map(|field| Ok((field, native_field(&interval, field)?)))
         .collect::<PyResult<_>>()?;
         pyo3::types::PyListMethods::append(&intervals, dict(py, fields)?)?;
     }
@@ -173,12 +168,12 @@ fn microbatch<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 }
 
 fn value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    native_field(&result.getattr(field)?, "value")
+    native_field(&native_field(result, field)?, "value")
 }
 
 /// `<field>.value` when it is set.
 fn optional_value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    let value: Bound<'py, PyAny> = result.getattr(field)?;
+    let value: Bound<'py, PyAny> = native_field(result, field)?;
     if !value.is_truthy()? {
         return Ok(value.py().None().into_bound(value.py()));
     }

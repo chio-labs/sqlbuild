@@ -19,9 +19,7 @@ use sqlbuild_analysis::planner_migrations::main::compatibility_findings::compati
 use sqlbuild_analysis::planner_migrations::models::CompatibilityFinding;
 
 fn config(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
-    model
-        .getattr("config")?
-        .getattr("values")?
+    native_field(&native_field(model, "config")?, "values")?
         .call_method1("get", (key,))?
         .extract()
 }

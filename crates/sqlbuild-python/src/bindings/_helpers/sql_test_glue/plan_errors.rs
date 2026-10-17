@@ -21,10 +21,7 @@ fn cte_call_location<'py>(
     let call: Option<String> = call.extract()?;
     let located: CteLocation = sql_test_cte_location(
         &native_field(&test_file, "contents")?.extract::<String>()?,
-        &test
-            .getattr("test_block")?
-            .getattr("sql_body")?
-            .extract::<String>()?,
+        &native_field(&native_field(test, "test_block")?, "sql_body")?.extract::<String>()?,
         &cte.extract::<String>()?,
         call.as_deref(),
     );
@@ -49,9 +46,7 @@ pub(super) fn planning_error(
         for test in tests.try_iter()? {
             let test = test?;
             if native_field(&test, "name")?.eq(payload.get_item("testName")?)?
-                && test
-                    .getattr("test_file")?
-                    .getattr("relative_path")?
+                && native_field(&native_field(&test, "test_file")?, "relative_path")?
                     .str()?
                     .into_any()
                     .eq(payload.get_item("fileLabel")?)?

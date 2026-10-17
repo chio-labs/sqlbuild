@@ -71,9 +71,9 @@ pub(crate) fn planning_context(
         ("sources", "source_entry", SOURCE_REFERENCE_KIND, true),
         ("seeds", "schema_entry", SEED_REFERENCE_KIND, false),
     ] {
-        for resource in project.getattr(collection)?.try_iter()? {
+        for resource in native_field(project, collection)?.try_iter()? {
             let resource = resource?;
-            let entry = resource.getattr(entry)?;
+            let entry = native_field(&resource, entry)?;
             let columns: Vec<FixtureColumn> = columns(&native_field(&entry, "columns")?, false)?;
             let authoritative = if source {
                 native_field(&entry, "contract")?.eq("enforced")?

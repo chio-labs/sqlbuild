@@ -49,11 +49,11 @@ pub(super) fn migration_with_execution<'py>(
     let transient = if native_field(&adapter, "adapter_name")?.eq("snowflake")? {
         PyBool::new(
             py,
-            model
-                .getattr("config")?
-                .getattr("table_type")?
-                .getattr("value")?
-                .eq("transient")?,
+            native_field(
+                &native_field(&native_field(model, "config")?, "table_type")?,
+                "value",
+            )?
+            .eq("transient")?,
         )
         .to_owned()
         .into_any()

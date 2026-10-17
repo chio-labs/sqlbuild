@@ -198,8 +198,7 @@ pub(super) fn fixture_location(
     .map_err(value_error)?;
     Ok(format!(
         "{}:{line}",
-        test_file
-            .getattr("relative_path")?
+        native_field(&test_file, "relative_path")?
             .call_method0("as_posix")?
             .extract::<String>()?
     ))

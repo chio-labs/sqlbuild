@@ -1,10 +1,11 @@
 //! Validation and identity of the natively hosted source freshness state record.
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyResult, Python};
 use pyo3::types::PyDict;
 
 use crate::bindings::_helpers::freshness::observation::require_aware_utc_datetime;
 use crate::bindings::_helpers::records::construct::new_record;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// `SourceFreshnessRecord.observed_at` position.
@@ -32,7 +33,7 @@ pub(crate) fn freshness_record_identity(instance: &Bound<'_, PyAny>) -> PyResult
     let py: Python<'_> = instance.py();
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     for name in IDENTITY_FIELDS {
-        pyo3::types::PyDictMethods::set_item(&keywords, name, instance.getattr(name)?)?;
+        pyo3::types::PyDictMethods::set_item(&keywords, name, native_field(instance, name)?)?;
     }
     Ok(new_record(py, RecordId::SourceFreshnessIdentity, (), Some(&keywords))?.unbind())
 }

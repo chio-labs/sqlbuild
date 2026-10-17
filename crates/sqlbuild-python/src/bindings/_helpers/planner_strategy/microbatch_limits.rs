@@ -204,9 +204,7 @@ fn default_limit<'py>(
     configured: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = entry.py();
-    if entry
-        .getattr("microbatch_strategy")?
-        .eq(ROLLING_WINDOW_STRATEGY)?
+    if native_field(entry, "microbatch_strategy")?.eq(ROLLING_WINDOW_STRATEGY)?
         && !native_field(entry, "reason")?.eq(FULL_REFRESH_REASON)?
         && native_field(entry, "start_cursor_override")?.is_none()
         && native_field(entry, "end_cursor_override")?.is_none()
@@ -231,10 +229,7 @@ pub(crate) fn apply_configured_microbatch_limits<'py>(
     let py: Python<'py> = entry.py();
     let configured: Bound<'py, PyAny> = native_field(inputs, "max_microbatches")?;
     let configured_action: Bound<'py, PyAny> = native_field(inputs, "microbatch_limit_action")?;
-    if inputs
-        .getattr("max_microbatches_is_override")?
-        .is_truthy()?
-    {
+    if native_field(inputs, "max_microbatches_is_override")?.is_truthy()? {
         let error: Bound<'py, PyAny> = enum_member(py, RecordId::MicrobatchLimitAction, "ERROR")?;
         return with_warnings(limited(entry, configured, error)?, Vec::new());
     }

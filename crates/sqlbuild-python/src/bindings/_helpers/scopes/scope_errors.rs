@@ -22,7 +22,7 @@ pub(crate) fn report_scope_index_errors(index: &Bound<'_, PyAny>) -> PyResult<()
         {
             continue;
         }
-        let code: Bound<'_, PyAny> = native_field(&item, "code")?.getattr("value")?;
+        let code: Bound<'_, PyAny> = native_field(&native_field(&item, "code")?, "value")?;
         let message: Bound<'_, PyAny> = native_field(&item, "message")?;
         let path: Bound<'_, PyAny> = native_field(&item, "path")?;
         let declaration: Bound<'_, PyAny> = native_field(&item, "declaration")?;

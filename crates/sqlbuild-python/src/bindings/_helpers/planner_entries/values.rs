@@ -1,7 +1,8 @@
 //! Python boundary values shared by plan entry and plan output assembly.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
@@ -58,8 +59,7 @@ pub(super) fn replaced<'py>(
     object: &Bound<'py, PyAny>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(object.py(), "dataclasses", "replace")?
-        .call((object,), Some(&keywords(object.py(), fields)?))
+    replaced_keywords(object, &keywords(object.py(), fields)?)
 }
 
 /// `class(message, **fields)` from `module`, as a raised error.

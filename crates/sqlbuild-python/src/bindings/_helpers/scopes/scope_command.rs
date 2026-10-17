@@ -16,6 +16,7 @@ use sqlbuild_scopes::scope_text::models::ScopeTextRequest;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
@@ -191,11 +192,7 @@ fn replaced<'py>(
     report: &Bound<'py, PyAny>,
     changes: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    report
-        .py()
-        .import("dataclasses")?
-        .getattr("replace")?
-        .call((report,), Some(changes))
+    replaced_keywords(report, changes)
 }
 
 /// The report with extra diagnostics and a part of the result merged in.

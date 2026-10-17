@@ -202,7 +202,7 @@ fn completion_model(
         rejected_opt_out_file: if opt_out.is_none() {
             None
         } else {
-            Some(native_field(&opt_out, "path")?.getattr("name")?.extract()?)
+            Some(native_field(&native_field(&opt_out, "path")?, "name")?.extract()?)
         },
     })
 }

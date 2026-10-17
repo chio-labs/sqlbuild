@@ -14,6 +14,7 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::records::construct::new_record;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
@@ -87,8 +88,7 @@ fn extract_sql_test_ctes<'py>(
     file_label: &str,
     syntax: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let syntax: LexicalSyntax = syntax
-        .getattr("native_mapping")?
+    let syntax: LexicalSyntax = native_field(syntax, "native_mapping")?
         .extract::<LexicalSyntaxInput>()?
         .into();
     let outcome: TopLevelCtes = py

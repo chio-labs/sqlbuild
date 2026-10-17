@@ -73,7 +73,7 @@ pub(crate) fn sql_test_identity(
     test_name_field: &str,
 ) -> PyResult<String> {
     sql_test_resource_id(
-        &result.getattr(test_name_field)?.extract::<String>()?,
+        &native_field(result, test_name_field)?.extract::<String>()?,
         native_field(result, "source_path")?,
         native_field(result, "block_index")?.extract()?,
         native_field(result, "case_name")?.extract()?,

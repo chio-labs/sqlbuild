@@ -78,12 +78,10 @@ pub(crate) fn match_project_relation<'py>(
     default_schema: Option<String>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let name: String = python_casefold(&native_field(relation, "name")?.extract::<String>()?);
-    let schema: Option<String> = relation
-        .getattr("schema")?
+    let schema: Option<String> = native_field(relation, "schema")?
         .extract::<Option<String>>()?
         .or(default_schema);
-    let database: Option<String> = relation
-        .getattr("database")?
+    let database: Option<String> = native_field(relation, "database")?
         .extract::<Option<String>>()?
         .or(default_database);
     for candidate in native_field(index, "relations")?.try_iter()? {

@@ -18,6 +18,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::documents::format_scenario_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
@@ -52,7 +53,7 @@ pub(crate) struct TestRun<'py> {
 }
 
 fn flag(request: &Bound<'_, PyAny>, name: &str) -> PyResult<bool> {
-    request.getattr(name)?.is_truthy()
+    native_field(request, name)?.is_truthy()
 }
 
 fn prepare<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<TestRun<'py>> {
@@ -97,9 +98,11 @@ fn prepare<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<TestRu
     let style: CliStyle = style(request)?;
     let requested: Bound<'py, PyAny> = request.getattr("concurrency")?;
     let concurrency: i64 = if requested.is_none() {
-        build_effective_settings_config(&project.discovered.clone())?
-            .getattr("concurrency")?
-            .extract()?
+        native_field(
+            &build_effective_settings_config(&project.discovered.clone())?,
+            "concurrency",
+        )?
+        .extract()?
     } else {
         requested.extract()?
     };
@@ -215,11 +218,10 @@ fn run_scenarios(
             run.style,
         ),
     )?;
-    let project_name: Bound<'_, PyAny> = run
-        .project
-        .discovered
-        .getattr("project_config")?
-        .getattr("name")?;
+    let project_name: Bound<'_, PyAny> = native_field(
+        &native_field(&run.project.discovered, "project_config")?,
+        "name",
+    )?;
     let mut arguments: Vec<(&str, Bound<'_, PyAny>)> = vec![
         ("pipeline_result", pipeline.clone()),
         ("scenarios", scenarios.clone().into_any()),

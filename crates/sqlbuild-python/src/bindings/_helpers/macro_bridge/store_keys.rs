@@ -150,7 +150,7 @@ impl<'py> CanonicalTypes<'py> {
             let mut items: Vec<JsonValue> = vec![JsonValue::String("timedelta".to_owned())];
             for part in ["days", "seconds", "microseconds"] {
                 items.push(JsonValue::Integer(JsonInteger::from(
-                    value.getattr(part)?.extract::<i64>()?,
+                    native_field(value, part)?.extract::<i64>()?,
                 )));
             }
             return Ok(JsonValue::Array(items));
@@ -233,8 +233,7 @@ pub(crate) fn macro_store_token<'py>(
         let types: CanonicalTypes<'py> = CanonicalTypes::load(py)?;
         let name: JsonValue = text(native_field(&loaded, "name")?.downcast::<PyString>()?)?;
         let path: JsonValue = text(
-            loaded
-                .getattr("relative_path")?
+            native_field(&loaded, "relative_path")?
                 .call_method0("as_posix")?
                 .downcast::<PyString>()?,
         )?;
@@ -275,7 +274,10 @@ pub(crate) fn context_store_token<'py>(
             ];
             for name in ["inaccessible_constants", "inaccessible_enums"] {
                 let mut items: Vec<JsonValue> = Vec::new();
-                for item in sorted.call1((declarations.getattr(name)?,))?.try_iter()? {
+                for item in sorted
+                    .call1((native_field(&declarations, name)?,))?
+                    .try_iter()?
+                {
                     items.push(plain_json(&item?)?);
                 }
                 parts.push(JsonValue::Array(items));

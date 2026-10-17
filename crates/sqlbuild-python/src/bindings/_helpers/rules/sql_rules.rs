@@ -268,8 +268,7 @@ fn model_posix_path(model: &Bound<'_, PyAny>) -> PyResult<String> {
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return Ok(view.get().sql_rule_inputs(model.py(), false)?.posix_path);
     }
-    model
-        .getattr("relative_path")?
+    native_field(model, "relative_path")?
         .call_method0("as_posix")?
         .extract()
 }
@@ -277,9 +276,7 @@ fn model_posix_path(model: &Bound<'_, PyAny>) -> PyResult<String> {
 /// Whether the model's config values set `sql_analysis` to `False`.
 fn python_excluded(model: &Bound<'_, PyAny>) -> PyResult<bool> {
     let excluded: Bound<'_, PyAny> = false.into_bound_py_any(model.py())?;
-    Ok(model
-        .getattr("config")?
-        .getattr("values")?
+    Ok(native_field(&native_field(model, "config")?, "values")?
         .call_method1("get", ("sql_analysis",))?
         .is(&excluded))
 }

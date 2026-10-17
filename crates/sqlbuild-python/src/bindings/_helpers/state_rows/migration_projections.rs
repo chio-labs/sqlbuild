@@ -77,9 +77,7 @@ pub(crate) fn newest_column<'py>(
 }
 
 fn step(fact: &Bound<'_, PyAny>) -> PyResult<OldNameStep> {
-    let value: String = native_field(fact, "event_type")?
-        .getattr("value")?
-        .extract()?;
+    let value: String = native_field(&native_field(fact, "event_type")?, "value")?.extract()?;
     match value.as_str() {
         "required" => Ok(OldNameStep::Required),
         "origin_archived" => Ok(OldNameStep::OriginArchived),

@@ -54,8 +54,7 @@ impl AuthoredBody {
         Ok(Self {
             sql: sql.extract()?,
             contents: native_field(file, "contents")?.extract()?,
-            relative_path: file
-                .getattr("relative_path")?
+            relative_path: native_field(file, "relative_path")?
                 .call_method0("as_posix")?
                 .extract()?,
             file_label: native_field(file, "relative_path")?.str()?.extract()?,

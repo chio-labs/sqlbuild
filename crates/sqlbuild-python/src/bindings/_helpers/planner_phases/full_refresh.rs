@@ -11,10 +11,7 @@ use sqlbuild_analysis::planner_warehouse::main::full_rebuild_cause::full_rebuild
 use sqlbuild_analysis::planner_warehouse::models::FullRebuildFacts;
 
 fn configured_full_refresh<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    model
-        .getattr("config")?
-        .getattr("values")?
-        .call_method1("get", ("full_refresh",))
+    native_field(&native_field(model, "config")?, "values")?.call_method1("get", ("full_refresh",))
 }
 
 /// dbt-compatible nullable model full-refresh semantics.
@@ -56,8 +53,7 @@ pub(crate) fn describe_full_rebuild_cause(
 ) -> PyResult<String> {
     Ok(full_rebuild_cause(&FullRebuildFacts {
         full_refresh,
-        change_kind: change_result
-            .getattr("change_kind")?
+        change_kind: native_field(change_result, "change_kind")?
             .str()?
             .extract::<String>()?,
         query_changed: native_field(change_result, "query_changed")?.is_truthy()?,

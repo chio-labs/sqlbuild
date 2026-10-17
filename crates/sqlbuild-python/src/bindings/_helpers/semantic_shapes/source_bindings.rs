@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::constants::SOURCE_REBINDING_ANALYSES;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
@@ -28,7 +29,6 @@ use crate::bindings::_helpers::semantic_shapes::shapes::{
 use crate::bindings::models::BindingPositions;
 
 const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
-const DATACLASSES_MODULE: &str = "dataclasses";
 const GRAPHLIB_MODULE: &str = "graphlib";
 const REF_KIND: &str = "ref";
 const SOURCE_KIND: &str = "source";
@@ -47,10 +47,7 @@ pub(crate) fn source_binding_diagnostics<'py>(
     let py: Python<'py> = request.py();
     let project: Object<'py> = request.get("project")?;
     let columns: Object<'py> = request.get("columns")?;
-    if !project
-        .getattr("settings")?
-        .getattr("sql_analysis")?
-        .is_truthy()?
+    if !native_field(&native_field(&project, "settings")?, "sql_analysis")?.is_truthy()?
         || !columns.is_truthy()?
     {
         return Ok(PyTuple::empty(py));
@@ -164,9 +161,7 @@ fn rebound_models<'py>(
     let mut models: Vec<Object<'py>> = Vec::new();
     for name in order.try_iter()? {
         let model: Object<'py> = by_name.as_any().get_item(name?)?;
-        let opted: Object<'py> = model
-            .getattr("config")?
-            .getattr("values")?
+        let opted: Object<'py> = native_field(&native_field(&model, "config")?, "values")?
             .call_method1("get", ("sql_analysis",))?;
         if !selected_keys.contains(native_field(&model, "key")?)?
             || opted.is(PyBool::new(py, false))
@@ -274,9 +269,7 @@ fn validated_diagnostics<'py>(
         let query_sql: String = analysis_cursor_sql(
             py,
             &native_field(model, "query_sql")?.extract::<String>()?,
-            &model
-                .getattr("config")?
-                .getattr("values")?
+            &native_field(&native_field(model, "config")?, "values")?
                 .call_method1("get", ("cursor_type",))?,
         )?;
         requests.push(schema_validation_request(
@@ -296,8 +289,7 @@ fn validated_diagnostics<'py>(
     let results: Object<'py> =
         schema_validations(py, PyTuple::new(py, &requests)?.as_any())?.into_any();
     let expansions: Bound<'py, PyDict> = PyDict::new(py);
-    for item in project
-        .getattr("sql_expansions")?
+    for item in native_field(project, "sql_expansions")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -379,7 +371,7 @@ fn positions<'py>(
                     let fields: Vec<Object<'py>> =
                         ["source_start", "source_end", "output_start", "output_end"]
                             .into_iter()
-                            .map(|name| span.getattr(name))
+                            .map(|name| native_field(&span, name))
                             .collect::<PyResult<_>>()?;
                     rows.push(PyTuple::new(py, fields)?.into_any());
                 }
@@ -437,9 +429,7 @@ fn adds_physical_evidence(
 /// `{str(key): str(value)}` of a dict `placeholders` config, else None.
 fn placeholders<'py>(model: &Object<'py>) -> PyResult<Object<'py>> {
     let py: Python<'py> = model.py();
-    let values: Object<'py> = model
-        .getattr("config")?
-        .getattr("values")?
+    let values: Object<'py> = native_field(&native_field(model, "config")?, "values")?
         .call_method1("get", ("placeholders",))?;
     if !values.is_instance_of::<PyDict>() {
         return Ok(py.None().into_bound(py));
@@ -466,9 +456,7 @@ fn replaced<'py>(value: &Object<'py>, pairs: &[(&str, Object<'py>)]) -> PyResult
     for (name, item) in pairs {
         arguments.set_item(*name, item)?;
     }
-    py.import(DATACLASSES_MODULE)?
-        .getattr("replace")?
-        .call((value,), Some(&arguments))
+    replaced_keywords(value, &arguments)
 }
 
 fn call<'py>(callable: &Object<'py>, pairs: &[(&str, Object<'py>)]) -> PyResult<Object<'py>> {

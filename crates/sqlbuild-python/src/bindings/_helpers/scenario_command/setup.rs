@@ -38,6 +38,7 @@ use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_s
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -96,10 +97,7 @@ pub(crate) struct ScenarioProject<'py> {
 }
 
 fn config_namespace(config: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    config
-        .getattr("scenario")?
-        .getattr("run_namespace")?
-        .extract()
+    native_field(&native_field(config, "scenario")?, "run_namespace")?.extract()
 }
 
 /// `dataclasses.replace(value, **{name: replacement})`.
@@ -109,11 +107,7 @@ fn replaced<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let changes: Bound<'py, PyDict> = PyDict::new(value.py());
     changes.set_item(name, replacement)?;
-    value
-        .py()
-        .import("dataclasses")?
-        .getattr("replace")?
-        .call((value,), Some(&changes))
+    replaced_keywords(value, &changes)
 }
 
 /// Discover the project, reject unit-test selectors and apply the effective namespace.
@@ -323,11 +317,10 @@ pub(crate) fn selected_scenarios<'py>(
     (selectors, exclude, project_dir): (&[String], &[String], &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = pipeline.py();
-    let compiled: Vec<Bound<'py, PyAny>> = pipeline
-        .getattr("project")?
-        .getattr("sql_scenarios")?
-        .try_iter()?
-        .collect::<PyResult<_>>()?;
+    let compiled: Vec<Bound<'py, PyAny>> =
+        native_field(&native_field(pipeline, "project")?, "sql_scenarios")?
+            .try_iter()?
+            .collect::<PyResult<_>>()?;
     let mut files: Vec<ScenarioFile> = Vec::with_capacity(compiled.len());
     for scenario in &compiled {
         let file: Bound<'py, PyAny> = native_field(scenario, "scenario_file")?;
@@ -351,7 +344,7 @@ pub(crate) fn selected_scenarios<'py>(
 }
 
 fn optional_int(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<i64>> {
-    value.getattr(name)?.extract()
+    native_field(value, name)?.extract()
 }
 
 /// The snapshot capture limits from the request, the scenario config and the defaults.

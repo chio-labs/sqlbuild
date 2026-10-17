@@ -18,7 +18,7 @@ const COMPLETENESS_SECTIONS: [&str; 6] = [
 pub(crate) fn completeness_complete(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let mut complete: bool = true;
     for section in COMPLETENESS_SECTIONS {
-        complete = complete && instance.getattr(section)?.is_truthy()?;
+        complete = complete && native_field(instance, section)?.is_truthy()?;
     }
     complete.into_py_any(instance.py())
 }

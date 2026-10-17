@@ -48,7 +48,7 @@ pub(crate) fn type_cursor_overrides<'py>(
     }
     let mut models: Vec<(String, String)> = Vec::new();
     for model in selected {
-        let values = native_field(model, "config")?.getattr("values")?;
+        let values = native_field(&native_field(model, "config")?, "values")?;
         let config = |key: &str| -> PyResult<Bound<'_, PyAny>> {
             Ok(authored_config_str(&values, key)?.unwrap_or_else(|| py.None().into_bound(py)))
         };
@@ -63,7 +63,7 @@ pub(crate) fn type_cursor_overrides<'py>(
     let mut integer_literals = true;
     if models.is_empty() {
         for field in ["start", "end"] {
-            let value = overrides.getattr(field)?;
+            let value = native_field(overrides, field)?;
             if value.is_none() {
                 continue;
             }

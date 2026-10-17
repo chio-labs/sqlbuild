@@ -76,9 +76,7 @@ pub(super) fn overrides<'py>(
         if !model_payload(test)? {
             continue;
         }
-        let overrides = test
-            .getattr("payload")?
-            .getattr("model_query_overrides")?
+        let overrides = native_field(&native_field(test, "payload")?, "model_query_overrides")?
             .cast_into::<PyDict>()?;
         let chain = chains.get(&index);
         if chain.is_none()
@@ -145,7 +143,7 @@ pub(super) fn functions<'py>(
     let mut result: Vec<Bound<'py, PyTuple>> = Vec::new();
     for function in native_field(project, "functions")?.try_iter()? {
         let function = function?;
-        let target = native_field(&function, "destination")?.getattr("qualified_name")?;
+        let target = native_field(&native_field(&function, "destination")?, "qualified_name")?;
         if target.is_none() {
             continue;
         }

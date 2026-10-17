@@ -65,26 +65,26 @@ pub(crate) fn enum_text(value: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 pub(crate) fn value_of(item: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    native_field(&item.getattr(name)?, "value")?.extract()
+    native_field(&native_field(item, name)?, "value")?.extract()
 }
 
 pub(crate) fn field<'py, T: pyo3::FromPyObject<'py>>(
     item: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<T> {
-    item.getattr(name)?.extract()
+    native_field(item, name)?.extract()
 }
 
 pub(crate) fn optional_item<'py>(
     item: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let value: Bound<'py, PyAny> = item.getattr(name)?;
+    let value: Bound<'py, PyAny> = native_field(item, name)?;
     Ok(if value.is_none() { None } else { Some(value) })
 }
 
 fn items<'py>(item: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    item.getattr(name)?.try_iter()?.collect()
+    native_field(item, name)?.try_iter()?.collect()
 }
 
 /// A resource identity's `(kind, name)` row.
@@ -726,5 +726,5 @@ pub(crate) fn tuple_attribute<'py>(
     item: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    Ok(item.getattr(name)?.downcast_into::<PyTuple>()?)
+    Ok(native_field(item, name)?.downcast_into::<PyTuple>()?)
 }

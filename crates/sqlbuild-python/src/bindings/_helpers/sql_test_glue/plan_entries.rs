@@ -18,7 +18,7 @@ fn prefixed_names<'py>(test: &Bound<'py, PyAny>, prefix: &str) -> PyResult<Bound
     let py = test.py();
     let mut names: Vec<String> = if model_payload(test)? {
         prefixed_ctes(
-            &native_field(test, "payload")?.getattr("authored_ctes")?,
+            &native_field(&native_field(test, "payload")?, "authored_ctes")?,
             prefix,
         )?
         .keys()
@@ -49,9 +49,8 @@ fn function_deps<'py>(
             };
             for dep in native_field(&model, "deps")?.try_iter()? {
                 let dep = dep?;
-                let resource: String = native_field(&dep, "resource_type")?
-                    .getattr("value")?
-                    .extract()?;
+                let resource: String =
+                    native_field(&native_field(&dep, "resource_type")?, "value")?.extract()?;
                 if resource != UDF && resource != TABLE_FN {
                     continue;
                 }
@@ -65,21 +64,17 @@ fn function_deps<'py>(
         }
     } else {
         let payload = native_field(test, "payload")?;
-        let mode: String = native_field(&payload, "mode")?
-            .getattr("value")?
-            .extract()?;
+        let mode: String = native_field(&native_field(&payload, "mode")?, "value")?.extract()?;
         if mode == UDF || mode == TABLE_FN {
-            let names: std::collections::HashSet<String> = payload
-                .getattr("tested_resource_names")?
-                .extract::<Vec<String>>()?
-                .into_iter()
-                .collect();
+            let names: std::collections::HashSet<String> =
+                native_field(&payload, "tested_resource_names")?
+                    .extract::<Vec<String>>()?
+                    .into_iter()
+                    .collect();
             for function in native_field(project, "functions")?.try_iter()? {
                 let function = function?;
                 let key = native_field(&function, "key")?;
-                if key
-                    .getattr("resource_type")?
-                    .getattr("value")?
+                if native_field(&native_field(&key, "resource_type")?, "value")?
                     .extract::<String>()?
                     == mode
                     && names.contains(&native_field(&function, "name")?.extract::<String>()?)
@@ -113,7 +108,7 @@ pub(super) fn entry<'py>(
         "parameter_values",
         "scope_deps",
     ] {
-        fields.set_item(name, test.getattr(name)?)?;
+        fields.set_item(name, native_field(test, name)?)?;
     }
     for (field, prefix) in [
         ("mock_ref_names", "__ref__"),

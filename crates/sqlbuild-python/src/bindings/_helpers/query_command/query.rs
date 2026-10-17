@@ -204,8 +204,7 @@ fn run_sql<'py>(
 }
 
 fn rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Vec<Vec<Bound<'py, PyAny>>>> {
-    result
-        .getattr("rows")?
+    native_field(result, "rows")?
         .try_iter()?
         .map(|row| row?.try_iter()?.collect::<PyResult<Vec<_>>>())
         .collect()
@@ -248,8 +247,7 @@ fn render_json(
 /// The result in the requested format; a statement without columns prints `OK`.
 fn render(result: &Bound<'_, PyAny>, output_format: &str, limit: Option<i64>) -> PyResult<String> {
     let py: Python<'_> = result.py();
-    let columns: Vec<String> = result
-        .getattr("columns")?
+    let columns: Vec<String> = native_field(result, "columns")?
         .try_iter()?
         .map(|column| column?.extract())
         .collect::<PyResult<_>>()?;

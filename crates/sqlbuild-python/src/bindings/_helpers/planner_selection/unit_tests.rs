@@ -56,19 +56,19 @@ fn unit_test_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> 
 fn resource_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     for field in RESOURCE_PATH_FILES {
-        for file in discovered.getattr(field)?.try_iter()? {
+        for file in native_field(discovered, field)?.try_iter()? {
             names.insert(stem(&native_field(&file?, "file_path")?)?);
         }
     }
     for (field, entries) in RESOURCE_ENTRY_FILES {
-        for file in discovered.getattr(field)?.try_iter()? {
+        for file in native_field(discovered, field)?.try_iter()? {
             for entry in file?.getattr(entries)?.try_iter()? {
                 names.insert(native_field(&entry?, "name")?.extract()?);
             }
         }
     }
     for field in RESOURCE_NODES {
-        for node in discovered.getattr(field)?.try_iter()? {
+        for node in native_field(discovered, field)?.try_iter()? {
             names.insert(native_field(&node?, "name")?.extract()?);
         }
     }

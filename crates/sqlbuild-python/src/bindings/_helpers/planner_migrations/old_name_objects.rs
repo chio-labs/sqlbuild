@@ -24,9 +24,7 @@ pub(super) fn location<'py>(
         ("name", native_field(relation, "name")?),
     ];
     let qualified = call_with(
-        &runtime
-            .getattr("adapter")?
-            .getattr("render_qualified_name")?,
+        &native_field(&native_field(runtime, "adapter")?, "render_qualified_name")?,
         &fields,
     )?;
     fields.push(("qualified_name", qualified));
@@ -42,7 +40,10 @@ pub(super) fn retention<'py>(
     item: &Bound<'py, PyAny>,
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    old_name_retention(&native_field(item, "config")?.getattr("values")?, project)
+    old_name_retention(
+        &native_field(&native_field(item, "config")?, "values")?,
+        project,
+    )
 }
 
 pub(super) fn expires<'py>(

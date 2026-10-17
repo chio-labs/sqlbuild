@@ -23,8 +23,7 @@ pub(crate) fn macro_injects_context(instance: &Bound<'_, PyAny>) -> PyResult<Py<
     let inspect: Bound<'_, PyAny> = py.import("inspect")?.into_any();
     let parameters: Bound<'_, PyTuple> = PyTuple::new(
         py,
-        inspect
-            .getattr("signature")?
+        native_field(&inspect, "signature")?
             .call1((native_field(instance, "function")?,))?
             .getattr("parameters")?
             .call_method0("values")?
@@ -59,9 +58,8 @@ pub(crate) fn context_render_constant(
         )?);
     }
     let _ = native_field(instance, "constants")?.get_item(&name)?;
-    let declaration: Bound<'_, PyAny> = instance
-        .getattr("_constant_declarations")?
-        .call_method1("get", (&name,))?;
+    let declaration: Bound<'_, PyAny> =
+        native_field(instance, "_constant_declarations")?.call_method1("get", (&name,))?;
     if declaration.is_none() {
         return Err(compile_input_error(
             py,
@@ -89,8 +87,7 @@ pub(crate) fn context_render_enum_member(
     }
     let enum_name: Bound<'_, PyAny> = call_argument((args, kwargs), "enum_name", 0)?;
     let member_name: Bound<'_, PyAny> = call_argument((args, kwargs), "member_name", 1)?;
-    let value: Bound<'_, PyAny> = instance
-        .getattr("enums")?
+    let value: Bound<'_, PyAny> = native_field(instance, "enums")?
         .get_item(enum_name)?
         .get_item(member_name)?;
     render_enum_member_value(&value)?.into_py_any(instance.py())
@@ -146,13 +143,9 @@ fn resource_rows(
 
 /// A model's configured tags and folder.
 fn model_tags(model: &Bound<'_, PyAny>) -> PyResult<ResourceTags> {
-    let tags: Bound<'_, PyAny> = model
-        .getattr("config")?
-        .getattr("values")?
-        .call_method1("get", ("tags",))?;
-    let folder: String = model
-        .getattr("relative_path")?
-        .getattr("parent")?
+    let tags: Bound<'_, PyAny> =
+        native_field(&native_field(model, "config")?, "values")?.call_method1("get", ("tags",))?;
+    let folder: String = native_field(&native_field(model, "relative_path")?, "parent")?
         .str()?
         .extract()?;
     Ok((graph_tags(&tags)?, Some(folder)))
@@ -165,9 +158,7 @@ fn source_tags(_source: &Bound<'_, PyAny>) -> PyResult<ResourceTags> {
 
 /// A seed's schema entry tags.
 fn seed_tags(seed: &Bound<'_, PyAny>) -> PyResult<ResourceTags> {
-    let tags: Vec<String> = seed
-        .getattr("schema_entry")?
-        .getattr("tags")?
+    let tags: Vec<String> = native_field(&native_field(seed, "schema_entry")?, "tags")?
         .try_iter()?
         .map(|tag| tag?.extract())
         .collect::<PyResult<_>>()?;
@@ -176,8 +167,7 @@ fn seed_tags(seed: &Bound<'_, PyAny>) -> PyResult<ResourceTags> {
 
 /// A function's tags.
 fn function_tags(function: &Bound<'_, PyAny>) -> PyResult<ResourceTags> {
-    let tags: Vec<String> = function
-        .getattr("tags")?
+    let tags: Vec<String> = native_field(function, "tags")?
         .try_iter()?
         .map(|tag| tag?.extract())
         .collect::<PyResult<_>>()?;

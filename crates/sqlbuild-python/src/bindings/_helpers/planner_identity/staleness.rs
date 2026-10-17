@@ -123,11 +123,9 @@ fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>
 
 fn changed_seed_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>> {
     let recorded: Bound<'_, PyAny> =
-        native_field(&inputs.snapshot, "fingerprints")?.getattr("seeds")?;
+        native_field(&native_field(&inputs.snapshot, "fingerprints")?, "seeds")?;
     let mut changed: HashSet<String> = HashSet::new();
-    for item in inputs
-        .identities
-        .getattr("seed_version_hashes")?
+    for item in native_field(&inputs.identities, "seed_version_hashes")?
         .call_method0("items")?
         .try_iter()?
     {

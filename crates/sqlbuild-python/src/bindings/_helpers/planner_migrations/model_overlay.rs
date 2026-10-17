@@ -21,17 +21,14 @@ pub(super) fn overlay<'py>(
     }
     let runtime = phase.runtime.clone();
     let py = runtime.py();
-    let relations = snapshot
-        .getattr("existing_relations")?
+    let relations = native_field(&snapshot, "existing_relations")?
         .cast_into::<PyDict>()?
         .copy()?;
-    let columns = snapshot
-        .getattr("existing_columns")?
+    let columns = native_field(&snapshot, "existing_columns")?
         .cast_into::<PyDict>()?
         .copy()?;
     let fingerprints = native_field(&snapshot, "fingerprints")?;
-    let models = fingerprints
-        .getattr("models")?
+    let models = native_field(&fingerprints, "models")?
         .cast_into::<PyDict>()?
         .copy()?;
     let redirected = PyDict::new(py);
@@ -45,11 +42,7 @@ pub(super) fn overlay<'py>(
         } else {
             models.set_item(&name, handover)?;
         }
-        if !entry
-            .getattr("decision")?
-            .getattr("moves_data")?
-            .is_truthy()?
-        {
+        if !native_field(&native_field(entry, "decision")?, "moves_data")?.is_truthy()? {
             continue;
         }
         let origin = native_field(entry, "origin")?;
@@ -84,8 +77,7 @@ pub(super) fn overlay<'py>(
             redirected.set_item(name, qualified)?;
         }
     }
-    let cursors = snapshot
-        .getattr("cursor_snapshots")?
+    let cursors = native_field(&snapshot, "cursor_snapshots")?
         .cast_into::<PyDict>()?
         .copy()?;
     let gathered = super::planning_boundary::redirected_cursor_snapshots(
@@ -118,9 +110,11 @@ pub(super) fn overlay<'py>(
 }
 
 fn cursor_enabled(runtime: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyResult<bool> {
-    for item in runtime_field(runtime, |runtime| &runtime.project)?
-        .getattr("models")?
-        .try_iter()?
+    for item in native_field(
+        &runtime_field(runtime, |runtime| &runtime.project)?,
+        "models",
+    )?
+    .try_iter()?
     {
         let item = item?;
         if native_field(&item, "name")?.eq(name)? {

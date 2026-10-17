@@ -98,15 +98,13 @@ pub(crate) fn model_schema_scope_usages<'py>(
     }
     let mut records: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut record_rows: Vec<(IdentityRow, RecordRow)> = Vec::new();
-    let declarations = native_field(resolver, "lookup")?.getattr("declarations")?;
+    let declarations = native_field(&native_field(resolver, "lookup")?, "declarations")?;
     for item in declarations.call_method0("items")?.try_iter()? {
         let (identity, found): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
         if !found.is_truthy()?
             || !native_field(&identity, "owner")?.is_none()
             || !SCHEMA_USAGE_KINDS.contains(
-                &identity
-                    .getattr("kind")?
-                    .getattr("value")?
+                &native_field(&native_field(&identity, "kind")?, "value")?
                     .extract::<String>()?
                     .as_str(),
             )
@@ -117,9 +115,7 @@ pub(crate) fn model_schema_scope_usages<'py>(
         let recorded: Bound<'py, PyAny> = native_field(&record, "identity")?;
         record_rows.push((
             (
-                native_field(&recorded, "kind")?
-                    .getattr("value")?
-                    .extract()?,
+                native_field(&native_field(&recorded, "kind")?, "value")?.extract()?,
                 native_field(&recorded, "name")?.extract()?,
             ),
             record_row(&record)?,
@@ -168,20 +164,17 @@ fn record_row(record: &Bound<'_, PyAny>) -> PyResult<RecordRow> {
     let owner: Bound<'_, PyAny> = native_field(&identity, "owner")?;
     Ok((
         native_field(record, "path")?.extract()?,
-        native_field(record, "scope")?.getattr("value")?.extract()?,
+        native_field(&native_field(record, "scope")?, "value")?.extract()?,
         if owner.is_none() {
             None
         } else {
             Some((
-                native_field(&owner, "kind")?.getattr("value")?.extract()?,
+                native_field(&native_field(&owner, "kind")?, "value")?.extract()?,
                 native_field(&owner, "name")?.extract()?,
             ))
         },
         native_field(record, "owning_path")?.extract()?,
-        record
-            .getattr("ownership_root")?
-            .getattr("path")?
-            .extract()?,
+        native_field(&native_field(record, "ownership_root")?, "path")?.extract()?,
     ))
 }
 

@@ -35,7 +35,7 @@ fn declaration_identity<'py>(
     owner: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let (identity_class, kinds) = classes;
-    let kind: Bound<'py, PyAny> = kinds.getattr(kind)?;
+    let kind: Bound<'py, PyAny> = native_field(kinds, kind)?;
     match owner {
         Some(owner) => identity_class.call1((kind, name, owner)),
         None => identity_class.call1((kind, name)),
@@ -54,7 +54,7 @@ fn runtime_declarations<'py>(
     );
     let declarations: Bound<'py, PyDict> = PyDict::new(py);
     for (files, kind) in [("enum_files", "ENUM"), ("constant_files", "CONSTANT")] {
-        for file in discovered.getattr(files)?.try_iter()? {
+        for file in native_field(discovered, files)?.try_iter()? {
             for declaration in native_field(&file?, "declarations")?.try_iter()? {
                 let declaration: Bound<'py, PyAny> = declaration?;
                 let identity = declaration_identity(
@@ -70,13 +70,12 @@ fn runtime_declarations<'py>(
     let model_kind: Bound<'py, PyAny> = enum_member(py, RecordId::ResourceKind, "MODEL")?;
     for model_file in native_field(discovered, "model_files")?.try_iter()? {
         let model_file: Bound<'py, PyAny> = model_file?;
-        let name: Bound<'py, PyAny> = model_file
-            .getattr("header_values")?
-            .call_method1("get", ("name",))?;
+        let name: Bound<'py, PyAny> =
+            native_field(&model_file, "header_values")?.call_method1("get", ("name",))?;
         let name: Bound<'py, PyAny> = if name.is_instance_of::<PyString>() && name.is_truthy()? {
             name
         } else {
-            native_field(&model_file, "relative_path")?.getattr("stem")?
+            native_field(&native_field(&model_file, "relative_path")?, "stem")?
         };
         let owner: Bound<'py, PyAny> =
             new_record(py, RecordId::ResourceIdentity, (&model_kind, name), None)?;
@@ -84,7 +83,7 @@ fn runtime_declarations<'py>(
             ("enum_declarations", "ENUM"),
             ("constant_declarations", "CONSTANT"),
         ] {
-            for declaration in model_file.getattr(attribute)?.try_iter()? {
+            for declaration in native_field(&model_file, attribute)?.try_iter()? {
                 let declaration: Bound<'py, PyAny> = declaration?;
                 let identity = declaration_identity(
                     &classes,
@@ -118,7 +117,8 @@ fn resource_specific<'py>(scope_index: &Bound<'py, PyAny>) -> PyResult<Bound<'py
     let mut resources: Vec<Bound<'py, PyAny>> = Vec::new();
     for declaration in native_field(scope_index, "declarations")?.try_iter()? {
         let declaration: Bound<'py, PyAny> = declaration?;
-        let owner: Bound<'py, PyAny> = native_field(&declaration, "identity")?.getattr("owner")?;
+        let owner: Bound<'py, PyAny> =
+            native_field(&native_field(&declaration, "identity")?, "owner")?;
         if native_field(&declaration, "scope")?.is(&private) && !owner.is_none() {
             resources.push(owner);
         }
@@ -280,7 +280,7 @@ pub(crate) fn native_declaration_contexts<'py>(
     lookups.set_item("declarations", &lookup_declarations)?;
     lookups.set_item(
         "index_declarations",
-        native_field(lookup, "index")?.getattr("declarations")?,
+        native_field(&native_field(lookup, "index")?, "declarations")?,
     )?;
     for (name, class) in [
         ("resource_record", RecordId::ResourceRecord),
@@ -306,8 +306,7 @@ pub(crate) fn native_declaration_contexts<'py>(
     )?;
     let global_positions: Bound<'py, PyList> = PyList::new(
         py,
-        index
-            .getattr("global_positions")?
+        native_field(&index, "global_positions")?
             .try_iter()?
             .collect::<PyResult<Vec<_>>>()?,
     )?;
@@ -343,8 +342,7 @@ pub(crate) fn resolved_declaration_context<'py>(
     let py: Python<'py> = resolver.py();
     let resource: Bound<'py, PyAny> =
         resource.map_or_else(|| py.None().into_bound(py), Clone::clone);
-    resolver
-        .getattr("native_contexts")?
+    native_field(resolver, "native_contexts")?
         .call_method1("resolve", (resolver, file_path, resource))?
         .get_item(0)
 }
@@ -369,7 +367,7 @@ fn rendered_constant<'py>(
         "render_typed_object"
     };
     let rendered: String =
-        call_with(&value_renderer.getattr(method)?, &[("value", value)])?.extract()?;
+        call_with(&native_field(value_renderer, method)?, &[("value", value)])?.extract()?;
     let size: usize = rendered.len();
     if size > MAX_SQL_VALUE_SIZE {
         let context: String = format!(

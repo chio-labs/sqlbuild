@@ -88,7 +88,7 @@ fn optional<'py>(value: Bound<'py, PyAny>, attribute: &str) -> PyResult<Bound<'p
     if value.is_none() {
         Ok(value)
     } else {
-        value.getattr(attribute)
+        native_field(&value, attribute)
     }
 }
 
@@ -104,9 +104,9 @@ fn row_values<'py>(
     event: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = event.py();
-    let field = |name: &str| event.getattr(name);
+    let field = |name: &str| native_field(event, name);
     let relation = |name: &str| -> PyResult<[Bound<'py, PyAny>; 3]> {
-        let relation: Bound<'py, PyAny> = event.getattr(name)?;
+        let relation: Bound<'py, PyAny> = native_field(event, name)?;
         Ok([
             native_field(&relation, "database")?,
             native_field(&relation, "schema")?,
@@ -129,7 +129,7 @@ fn row_values<'py>(
             values.push(field("destination_column")?);
         }
         EventTable::OldName => {
-            values.push(field("event_type")?.getattr("value")?);
+            values.push(native_field(&field("event_type")?, "value")?);
             values.push(field("migration_event_id")?);
             values.push(field("destination_model")?);
             values.extend(relation("old")?);
@@ -152,8 +152,8 @@ fn row_values<'py>(
             return Ok(values);
         }
     }
-    values.push(field("discovery")?.getattr("value")?);
-    values.push(field("decision")?.getattr("value")?);
+    values.push(native_field(&field("discovery")?, "value")?);
+    values.push(native_field(&field("decision")?, "value")?);
     values.push(field("run_id")?);
     values.push(field("created_at")?);
     Ok(values)

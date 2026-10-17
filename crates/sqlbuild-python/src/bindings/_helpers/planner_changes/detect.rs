@@ -102,11 +102,9 @@ pub(crate) fn detect_changes<'py>(
     let functions: Bound<'py, PyDict> = PyDict::new(py);
     let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
     let recorded: Bound<'py, PyAny> =
-        native_field(snapshot, "fingerprints")?.getattr("functions")?;
-    let query_change_tracking: bool = project
-        .getattr("settings")?
-        .getattr("query_change_tracking")?
-        .is_truthy()?;
+        native_field(&native_field(snapshot, "fingerprints")?, "functions")?;
+    let query_change_tracking: bool =
+        native_field(&native_field(project, "settings")?, "query_change_tracking")?.is_truthy()?;
     let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
     for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
@@ -134,9 +132,7 @@ pub(crate) fn detect_changes<'py>(
                                 .extract::<String>()?,
                             dialect.as_deref(),
                         ),
-                    )? != fingerprint
-                        .getattr("definition_hash")?
-                        .extract::<String>()?
+                    )? != native_field(&fingerprint, "definition_hash")?.extract::<String>()?
                 {
                     "query_changed"
                 } else {
@@ -246,15 +242,13 @@ pub(crate) fn scope_model_changes<'py>(
     let py: Python<'py> = project.py();
     let tracking: bool = match query_change_tracking {
         Some(value) => value,
-        None => project
-            .getattr("settings")?
-            .getattr("query_change_tracking")?
-            .extract()?,
+        None => {
+            native_field(&native_field(project, "settings")?, "query_change_tracking")?.extract()?
+        }
     };
     let function_local_hashes: Bound<'py, PyAny> = function_local_hashes(
         &native_field(project, "functions")?,
-        project
-            .getattr("sql_analysis_dialect")?
+        native_field(project, "sql_analysis_dialect")?
             .extract::<Option<String>>()?
             .as_deref(),
     )?
@@ -340,13 +334,11 @@ pub(crate) fn model_change<'py>(
             "no_change",
         );
     }
-    let relation_exists: bool = snapshot
-        .getattr("existing_relations")?
-        .contains(&model_name)?;
-    let fingerprint: Bound<'py, PyAny> = snapshot
-        .getattr("fingerprints")?
-        .getattr("models")?
-        .call_method1("get", (&model_name,))?;
+    let relation_exists: bool =
+        native_field(snapshot, "existing_relations")?.contains(&model_name)?;
+    let fingerprint: Bound<'py, PyAny> =
+        native_field(&native_field(snapshot, "fingerprints")?, "models")?
+            .call_method1("get", (&model_name,))?;
     let recorded: Option<Recorded> = recorded_fingerprint(&fingerprint)?;
     let dialect: Bound<'py, PyAny> = native_field(snapshot, "column_dialect")?;
     let compiled_query_hash: Option<String> = if pass.query_change_tracking && recorded.is_some() {
@@ -446,7 +438,7 @@ pub(crate) fn model_change<'py>(
 fn replay_policy(model: &Bound<'_, PyAny>) -> PyResult<Backfill> {
     let py: Python<'_> = model.py();
     let raw: Option<String> = authored_config_str(
-        &native_field(model, "config")?.getattr("values")?,
+        &native_field(&native_field(model, "config")?, "values")?,
         REPLAY_CONFIG_KEY,
     )?
     .map(|value| value.extract())
@@ -533,9 +525,8 @@ fn model_schema_findings<'py>(
     model_name: &Bound<'py, PyAny>,
     dialect: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<SchemaFindingRow>> {
-    let warehouse: Bound<'py, PyAny> = snapshot
-        .getattr("existing_columns")?
-        .call_method1("get", (model_name,))?;
+    let warehouse: Bound<'py, PyAny> =
+        native_field(snapshot, "existing_columns")?.call_method1("get", (model_name,))?;
     if warehouse.is_none() {
         return Ok(Vec::new());
     }
@@ -550,8 +541,7 @@ fn model_schema_findings<'py>(
                 yml.push((native_field(&column, "name")?.extract()?, kind));
             }
         }
-        type_enforcement = schema_entry
-            .getattr("type_enforcement")?
+        type_enforcement = native_field(&schema_entry, "type_enforcement")?
             .extract::<Option<bool>>()?
             .unwrap_or(false);
         let families: Bound<'py, PyAny> = native_field(&schema_entry, "dynamic_columns")?;

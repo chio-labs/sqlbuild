@@ -128,9 +128,7 @@ fn called_macro<'py>(
         .invocation_context
         .call((), Some(&context_arguments))?;
     expansion.facts.borrow_mut().begin_rendering(approved);
-    let token: PyResult<Bound<'py, PyAny>> = run
-        .handle
-        .getattr("render_relation")
+    let token: PyResult<Bound<'py, PyAny>> = native_field(run.handle, "render_relation")
         .and_then(|renderer| classes.relation_renderer.call_method1("set", (renderer,)));
     let result: PyResult<Bound<'py, PyAny>> = token
         .as_ref()
@@ -291,13 +289,14 @@ fn call_arguments<'py>(
     }
     let mut references: Vec<ResourceRef> = Vec::with_capacity(arguments.typed_references.len());
     for (function, reference_name) in &arguments.typed_references {
-        let kind: String = run
-            .classes
-            .ref_kinds
-            .get_item(function)?
-            .ok_or_else(|| PyValueError::new_err(function.clone()))?
-            .getattr("value")?
-            .extract()?;
+        let kind: String = native_field(
+            &run.classes
+                .ref_kinds
+                .get_item(function)?
+                .ok_or_else(|| PyValueError::new_err(function.clone()))?,
+            "value",
+        )?
+        .extract()?;
         references.push((kind, reference_name.clone()));
     }
     run.expansion

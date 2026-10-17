@@ -320,12 +320,12 @@ pub(crate) fn build_seed_command_plan<'py>(
                 ("destination", native_field(&seed, "destination")?),
                 (
                     "file_path",
-                    native_field(&seed, "seed_file")?.getattr("file_path")?,
+                    native_field(&native_field(&seed, "seed_file")?, "file_path")?,
                 ),
                 ("columns", object(py, extract_seed_columns(&seed)?)?),
                 (
                     "csv_settings",
-                    native_field(&seed, "schema_entry")?.getattr("csv_settings")?,
+                    native_field(&native_field(&seed, "schema_entry")?, "csv_settings")?,
                 ),
                 ("fingerprint_definition", metadata_json.clone()),
                 ("fingerprint_version_hash", version_hash),
@@ -436,8 +436,7 @@ pub(crate) fn read_selected_seed_fingerprints<'py>(
         )?))?;
         let items = PyList::new(
             py,
-            latest
-                .getattr("fingerprints")?
+            native_field(&latest, "fingerprints")?
                 .call_method0("items")?
                 .try_iter()?
                 .collect::<PyResult<Vec<_>>>()?,

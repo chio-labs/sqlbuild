@@ -31,7 +31,7 @@ fn python_paths<'py>(
 ) -> PyResult<Vec<(Vec<String>, Bound<'py, PyAny>)>> {
     let mut paths: Vec<(Vec<String>, Bound<'py, PyAny>)> = Vec::new();
     for declarations in PYTHON_DECLARATIONS {
-        for item in discovered.getattr(declarations)?.try_iter()? {
+        for item in native_field(discovered, declarations)?.try_iter()? {
             let path: Bound<'py, PyAny> = native_field(&item?, "relative_path")?;
             let parts: Vec<String> = native_field(&path, "parts")?.extract()?;
             if !paths.iter().any(|(known, _)| *known == parts) {

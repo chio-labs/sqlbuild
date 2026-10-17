@@ -305,8 +305,10 @@ fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<O
         "Compiled project. ({:.2}s)",
         started.elapsed().as_secs_f64()
     ))?;
-    let names: HashMap<String, LineageKey> =
-        target_lookup(&native_field(&before.project, "graph")?.getattr("all_keys")?)?;
+    let names: HashMap<String, LineageKey> = target_lookup(&native_field(
+        &native_field(&before.project, "graph")?,
+        "all_keys",
+    )?)?;
     let lookup = |name: &str| names.get(name).cloned();
     let request: RefactorRequest =
         refactor_request_for_target(&target_request(&command.request)?, &lookup)

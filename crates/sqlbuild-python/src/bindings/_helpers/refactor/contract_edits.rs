@@ -123,16 +123,10 @@ fn edit_contract_source(
     overwrite: bool,
     contents: Option<String>,
 ) -> PyResult<(Option<String>, Option<String>)> {
-    let discovered_contents: String = source
-        .getattr("source_file")?
-        .getattr("contents")?
-        .extract()?;
+    let discovered_contents: String =
+        native_field(&native_field(source, "source_file")?, "contents")?.extract()?;
     let mut columns: Vec<(String, Option<String>)> = Vec::new();
-    for column in source
-        .getattr("source_entry")?
-        .getattr("columns")?
-        .try_iter()?
-    {
+    for column in native_field(&native_field(source, "source_entry")?, "columns")?.try_iter()? {
         let column: Bound<'_, PyAny> = column?;
         columns.push((
             native_field(&column, "name")?.extract()?,

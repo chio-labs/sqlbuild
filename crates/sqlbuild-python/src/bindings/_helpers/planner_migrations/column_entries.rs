@@ -126,9 +126,7 @@ pub(super) fn decide<'py>(
                     if done {
                         native_field(&newest, "target_name")?
                     } else {
-                        runtime
-                            .getattr("project")?
-                            .getattr("effective_target_name")?
+                        native_field(&native_field(runtime, "project")?, "effective_target_name")?
                     },
                 ),
                 (
@@ -154,9 +152,7 @@ pub(super) fn checked<'py>(
     let py = runtime.py();
     let mut pending = false;
     for entry in &entries {
-        pending |= native_field(entry, "decision")?
-            .getattr("renames")?
-            .is_truthy()?;
+        pending |= native_field(&native_field(entry, "decision")?, "renames")?.is_truthy()?;
     }
     if !pending {
         return Ok(CheckedColumns {
@@ -174,9 +170,10 @@ pub(super) fn checked<'py>(
         native_field(&destination, "name")?
     };
     let reason = call_with(
-        &runtime
-            .getattr("adapter")?
-            .getattr("column_rename_unavailable_reason")?,
+        &native_field(
+            &native_field(runtime, "adapter")?,
+            "column_rename_unavailable_reason",
+        )?,
         &[
             (
                 "connection",
@@ -194,10 +191,7 @@ pub(super) fn checked<'py>(
     let mut checked: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in entries {
-        if !native_field(&entry, "decision")?
-            .getattr("renames")?
-            .is_truthy()?
-        {
+        if !native_field(&native_field(&entry, "decision")?, "renames")?.is_truthy()? {
             checked.push(entry);
         } else if native_field(&entry, "discovery")?.eq("manual")? {
             checked.push(replace(

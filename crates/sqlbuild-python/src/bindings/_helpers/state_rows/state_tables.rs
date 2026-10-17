@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::state_literals::render_state_sql_literal;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MISSING_SCHEMA_MESSAGE: &str = "source freshness table requires a target schema";
 /// Each state value type a state table may declare and the framework type that renders it.
@@ -43,7 +44,7 @@ pub(crate) fn state_table_create_sql<'py>(
     let mut rendered: Vec<(&str, String)> = Vec::with_capacity(DECLARED_TYPES.len());
     for (declared, framework) in DECLARED_TYPES {
         let text: String = render_framework_type
-            .call1((framework_types.getattr(framework)?,))?
+            .call1((native_field(&framework_types, framework)?,))?
             .extract()?;
         rendered.push((declared, text));
     }
@@ -123,7 +124,7 @@ fn render_insert_source_freshness_records_sql<'py>(
         let row: Vec<String> = SOURCE_FRESHNESS_COLUMN_TYPES
             .iter()
             .map(|(column, declared)| {
-                render_state_sql_literal(py, &record.getattr(*column)?, declared)
+                render_state_sql_literal(py, &native_field(&record, column)?, declared)
             })
             .collect::<PyResult<_>>()?;
         rows.push(row);

@@ -41,7 +41,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
         ),
     )?;
     let scenario = args.value("scenario")?;
-    let project = args.value("pipeline_result")?.getattr("project")?;
+    let project = native_field(&args.value("pipeline_result")?, "project")?;
     let adapter = args.value("adapter")?;
     let (graph, warnings) = plan_scenario_graph(&scenario, &project, true, None)?;
     raise_for_warnings(warnings.as_any())?;
@@ -56,7 +56,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
                     ("scenarios", native_field(&project, "sql_scenarios")?),
                     (
                         "run_namespace",
-                        native_field(&project, "scenario")?.getattr("run_namespace")?,
+                        native_field(&native_field(&project, "scenario")?, "run_namespace")?,
                     ),
                 ],
             )?),
@@ -70,7 +70,7 @@ pub(crate) fn build_cli_scenario_plan<'py>(
         ("seed_names", "SEED"),
         ("model_names", "MODEL"),
     ] {
-        for name in graph.getattr(field)?.try_iter()? {
+        for name in native_field(&graph, field)?.try_iter()? {
             identities.push(new_record_with(
                 py,
                 RecordId::ScenarioArtifactIdentity,
@@ -143,7 +143,7 @@ fn namespace<'py>(
         models.set_item(model_reads::name_object(&model)?, model)?;
     }
     for field in ["target_model_names", "model_names"] {
-        for name in graph.getattr(field)?.try_iter()? {
+        for name in native_field(graph, field)?.try_iter()? {
             if let Some(model) = models.get_item(name?)? {
                 let destination = model_reads::destination(&model)?;
                 return Ok((

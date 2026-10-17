@@ -82,12 +82,12 @@ fn entries(values: Vec<(&str, Bound<'_, PyAny>)>) -> Checked<Entries> {
 }
 
 fn value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    native_field(&result.getattr(field)?, "value")
+    native_field(&native_field(result, field)?, "value")
 }
 
 /// `<field>.value` when it is truthy, else `None`.
 fn truthy_value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    let value: Bound<'py, PyAny> = result.getattr(field)?;
+    let value: Bound<'py, PyAny> = native_field(result, field)?;
     if !value.is_truthy()? {
         return Ok(result.py().None().into_bound(result.py()));
     }
@@ -104,7 +104,7 @@ fn planned_target<'py>(
     if plan.is_none() {
         return Ok(py.None().into_bound(py));
     }
-    let locations: Bound<'py, PyAny> = plan.getattr(field)?;
+    let locations: Bound<'py, PyAny> = native_field(plan, field)?;
     if !locations.contains(name)? {
         return Ok(py.None().into_bound(py));
     }
@@ -120,7 +120,7 @@ fn model_microbatch(result: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
     let values: Bound<'_, pyo3::types::PyDict> = pyo3::types::PyDict::new(py);
     pyo3::types::PyDictMethods::set_item(&values, "run_type", run_type)?;
     for (key, field) in MICROBATCH_FIELDS {
-        let item: Bound<'_, PyAny> = result.getattr(field)?;
+        let item: Bound<'_, PyAny> = native_field(result, field)?;
         if !item.is_none() {
             pyo3::types::PyDictMethods::set_item(&values, key, item)?;
         }
@@ -356,7 +356,7 @@ fn terminal_fields(terminal: &Bound<'_, PyAny>, event_sequence: usize) -> PyResu
     let payload: Bound<'_, PyAny> = native_field(terminal, "payload")?;
     let get = |key: &str| payload.call_method1("get", (key,));
     let attribute = |key: &str| -> PyResult<JsonValue> {
-        Ok(required_json(&terminal.getattr(key)?)?.unwrap_or(JsonValue::Null))
+        Ok(required_json(&native_field(terminal, key)?)?.unwrap_or(JsonValue::Null))
     };
     let mut fields: Entries = vec![
         (
@@ -377,7 +377,10 @@ fn terminal_fields(terminal: &Bound<'_, PyAny>, event_sequence: usize) -> PyResu
         ("invocation_id".to_owned(), attribute("invocation_id")?),
     ];
     for key in ["run_id", "resource_id", "resource_attempt_id"] {
-        fields.push((key.to_owned(), text_or_empty(&terminal.getattr(key)?)?));
+        fields.push((
+            key.to_owned(),
+            text_or_empty(&native_field(terminal, key)?)?,
+        ));
     }
     fields.push(("operation_id".to_owned(), attribute("operation_id")?));
     fields.push(("statement_id".to_owned(), attribute("statement_id")?));

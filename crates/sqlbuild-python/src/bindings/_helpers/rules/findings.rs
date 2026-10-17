@@ -84,8 +84,7 @@ pub(crate) fn finding_fault(finding: &Bound<'_, PyAny>) -> PyResult<Fault> {
     Ok(Fault {
         unevaluated: native_field(finding, "unevaluated")?.extract()?,
         code: native_field(finding, "code")?.extract()?,
-        path: finding
-            .getattr("path")?
+        path: native_field(finding, "path")?
             .call_method0("as_posix")?
             .extract()?,
         line: native_field(finding, "line")?.extract()?,

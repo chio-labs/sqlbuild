@@ -54,8 +54,7 @@ pub(crate) fn relation_key_row(
         }
         for audit in declared_audits.try_iter()? {
             let audit: Bound<'_, PyAny> = audit?;
-            let argument: Option<Bound<'_, PyAny>> = audit
-                .getattr("arguments")?
+            let argument: Option<Bound<'_, PyAny>> = native_field(&audit, "arguments")?
                 .downcast::<PyDict>()?
                 .get_item(UNIQUE_AUDIT_COLUMN_ARGUMENT)?;
             audits.push((

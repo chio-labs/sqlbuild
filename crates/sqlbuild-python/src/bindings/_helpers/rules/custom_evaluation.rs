@@ -21,6 +21,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compiled_project::records::compiled_project_record;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULES_CACHE_FILE,
@@ -94,11 +95,8 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     if custom.is_empty() {
         return outcome(py, (Vec::new(), 0, 0), (0, 0));
     }
-    let enabled: bool = run
-        .config
-        .getattr("cache")?
-        .getattr("enabled")?
-        .is_truthy()?;
+    let enabled: bool =
+        native_field(&native_field(run.config, "cache")?, "enabled")?.is_truthy()?;
     let mut rows: Vec<(String, Option<String>, Option<String>)> = Vec::new();
     for (code, rule) in &custom {
         let identity: Option<String> = if enabled {
@@ -319,7 +317,7 @@ fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
         "scope_index",
         new_record(py, RecordId::ScopeIndex, (), None)?,
     )?;
-    imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))
+    replaced_keywords(&record, &changes)
 }
 
 fn subject_value(rule: &Bound<'_, PyAny>) -> PyResult<Option<String>> {

@@ -511,8 +511,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     let schema_actions: Bound<'py, PyAny> =
         resolve_schema_actions(&native_field(change, "schema_findings")?, &policy)?.into_any();
     let enforcement: Bound<'py, PyAny> = type_enforcement(model)?;
-    let warehouse_columns: Bound<'py, PyAny> = snapshot
-        .getattr("existing_columns")?
+    let warehouse_columns: Bound<'py, PyAny> = native_field(snapshot, "existing_columns")?
         .call_method1("get", (&name, PyTuple::empty(py)))?;
     let warnings: Bound<'py, PyTuple> = model_warnings(
         request,
@@ -522,11 +521,13 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     let unique_key: Bound<'py, PyTuple> = string_list(&values, "unique_key")?;
     let merge_exclude: Bound<'py, PyTuple> = config_string_tuple(&values, "merge_exclude_columns")?
         .unwrap_or_else(|| PyTuple::empty(py));
-    let table_type: Bound<'py, PyAny> = model
-        .getattr("config")?
-        .getattr("table_type")?
-        .getattr("value")?
-        .getattr("value")?;
+    let table_type: Bound<'py, PyAny> = native_field(
+        &native_field(
+            &native_field(&native_field(model, "config")?, "table_type")?,
+            "value",
+        )?,
+        "value",
+    )?;
     let ddl: String = logical_ddl(
         request,
         (&unique_key, &merge_exclude),
@@ -541,7 +542,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     entry.set_item("logical_ddl", table_type_ddl(&ddl, &text(&table_type)?))?;
     passed_fields(request, &entry)?;
     for field in CHANGE_FIELDS {
-        entry.set_item(field, change.getattr(field)?)?;
+        entry.set_item(field, native_field(change, field)?)?;
     }
     config_fields(request, &values, &entry)?;
     entry.set_item("unique_key", unique_key)?;
@@ -552,10 +553,9 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     contract_fields(model, &values, &entry)?;
     entry.set_item("pre_hooks", &request.hooks.0)?;
     entry.set_item("post_hooks", &request.hooks.1)?;
-    let fingerprint: Bound<'py, PyAny> = snapshot
-        .getattr("fingerprints")?
-        .getattr("models")?
-        .call_method1("get", (&name,))?;
+    let fingerprint: Bound<'py, PyAny> =
+        native_field(&native_field(snapshot, "fingerprints")?, "models")?
+            .call_method1("get", (&name,))?;
     entry.set_item(
         "previous_query_sql",
         if fingerprint.is_none() {

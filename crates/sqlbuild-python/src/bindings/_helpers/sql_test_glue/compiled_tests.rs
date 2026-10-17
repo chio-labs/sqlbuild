@@ -112,7 +112,7 @@ fn copied<'py>(
 ) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
     fields
         .iter()
-        .map(|field| Ok((*field, source.getattr(*field)?)))
+        .map(|field| Ok((*field, native_field(source, field)?)))
         .collect()
 }
 
@@ -163,7 +163,7 @@ fn keyed_diagnostic<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = classes.py();
     let path: Bound<'py, PyAny> =
-        native_field(test_input, "test_file")?.getattr("relative_path")?;
+        native_field(&native_field(test_input, "test_file")?, "relative_path")?;
     let key: Bound<'py, PyTuple> = PyTuple::new(
         py,
         [
@@ -299,10 +299,11 @@ pub(crate) fn assemble_native_sql_tests<'py>(
     let request = AssemblyRequest {
         model_inputs: native_field(inputs, "model_inputs")?.extract()?,
         test_inputs: test_inputs.clone(),
-        lexical_syntax: inputs
-            .getattr("sql_lexical_syntax")?
-            .getattr("native_mapping")?
-            .extract()?,
+        lexical_syntax: native_field(
+            &native_field(inputs, "sql_lexical_syntax")?,
+            "native_mapping",
+        )?
+        .extract()?,
     };
     let rows: Vec<AssemblyRow> = assemble_compiled_sql_tests(py, request)?;
     if rows.len() != test_inputs.len() {

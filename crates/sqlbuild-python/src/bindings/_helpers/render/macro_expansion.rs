@@ -377,8 +377,7 @@ impl NativeMacroExpansion {
         let visibility: Bound<'py, PyAny> = if declarations.is_none() {
             PyTuple::empty(py).into_any()
         } else {
-            declarations
-                .getattr("macro_visibility")?
+            native_field(declarations, "macro_visibility")?
                 .call_method1("get", (name, PyTuple::empty(py)))?
         };
         let usages: Vec<Bound<'py, PyAny>> = if visibility.is_truthy()? {
@@ -547,8 +546,7 @@ impl NativeMacroExpansion {
     ) -> PyResult<Bound<'py, PyAny>> {
         let declarations: &Bound<'py, PyAny> = self.declarations.bind(py);
         if !declarations.is_none() {
-            return declarations
-                .getattr("macro_records")?
+            return native_field(declarations, "macro_records")?
                 .get_item(name)?
                 .getattr("identity");
         }
@@ -677,9 +675,7 @@ fn top_level_output(
 /// A `SqlResourceRef`'s kind value and name.
 pub(crate) fn resource_key(reference: &Bound<'_, PyAny>) -> PyResult<ResourceRef> {
     Ok((
-        native_field(reference, "kind")?
-            .getattr("value")?
-            .extract()?,
+        native_field(&native_field(reference, "kind")?, "value")?.extract()?,
         native_field(reference, "name")?.extract()?,
     ))
 }
@@ -706,9 +702,7 @@ fn relationship_consumer(
     if !consumer.is_instance(&classes.resource_identity)? {
         return Ok(false);
     }
-    let kind: String = native_field(consumer, "kind")?
-        .getattr("value")?
-        .extract()?;
+    let kind: String = native_field(&native_field(consumer, "kind")?, "value")?.extract()?;
     Ok(RELATIONSHIP_CONSUMER_KINDS.contains(&kind.as_str()))
 }
 

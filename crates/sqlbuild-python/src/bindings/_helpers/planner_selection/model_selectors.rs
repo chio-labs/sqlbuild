@@ -58,10 +58,8 @@ fn split_selector_expansion<'py>(raw: &Bound<'py, PyString>) -> PyResult<Bound<'
 }
 
 fn model_tags(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    let tags: Bound<'_, PyAny> = model
-        .getattr("config")?
-        .getattr("values")?
-        .call_method1("get", ("tags",))?;
+    let tags: Bound<'_, PyAny> =
+        native_field(&native_field(model, "config")?, "values")?.call_method1("get", ("tags",))?;
     if !tags.is_instance_of::<PyTuple>() && !tags.is_instance_of::<PyList>() {
         return Ok(Vec::new());
     }
@@ -72,9 +70,7 @@ fn selectable_model(model: &Bound<'_, PyAny>) -> PyResult<SelectableModel> {
     Ok(SelectableModel {
         name: native_field(model, "name")?.extract()?,
         tags: model_tags(model)?,
-        folder: model
-            .getattr("relative_path")?
-            .getattr("parent")?
+        folder: native_field(&native_field(model, "relative_path")?, "parent")?
             .call_method0("as_posix")?
             .extract()?,
     })
@@ -88,8 +84,7 @@ fn resolve_sqlbuild_model_selector_names<'py>(
     term: &Bound<'py, PyString>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = project.py();
-    let models: Vec<SelectableModel> = project
-        .getattr("models")?
+    let models: Vec<SelectableModel> = native_field(project, "models")?
         .try_iter()?
         .map(|model| selectable_model(&model?))
         .collect::<PyResult<_>>()?;

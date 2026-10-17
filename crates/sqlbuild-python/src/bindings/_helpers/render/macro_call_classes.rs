@@ -99,11 +99,7 @@ impl CallClassState {
         }
         let mut injects_context: bool = false;
         for name in tree_names {
-            if macros
-                .get_item(name)?
-                .getattr("injects_context")?
-                .is_truthy()?
-            {
+            if native_field(&macros.get_item(name)?, "injects_context")?.is_truthy()? {
                 injects_context = true;
                 break;
             }
@@ -166,15 +162,12 @@ impl CallClassState {
         let declarations: &Bound<'_, PyAny> = inputs.declarations;
         let visible: bool = !loaded.is_none()
             && (declarations.is_none()
-                || !declarations
-                    .getattr("inaccessible_macros")?
-                    .contains(name)?);
+                || !native_field(declarations, "inaccessible_macros")?.contains(name)?);
         let token: NameToken = if visible {
             let identity: Bound<'_, PyAny> = if declarations.is_none() {
                 py.None().into_bound(py)
             } else {
-                declarations
-                    .getattr("macro_records")?
+                native_field(declarations, "macro_records")?
                     .get_item(name)?
                     .getattr("identity")?
             };
@@ -253,14 +246,12 @@ fn identity_key(identity: &Bound<'_, PyAny>) -> PyResult<Option<IdentityKey>> {
         None
     } else {
         Some((
-            native_field(&owner, "kind")?.getattr("value")?.extract()?,
+            native_field(&native_field(&owner, "kind")?, "value")?.extract()?,
             native_field(&owner, "name")?.extract()?,
         ))
     };
     Ok(Some((
-        native_field(identity, "kind")?
-            .getattr("value")?
-            .extract()?,
+        native_field(&native_field(identity, "kind")?, "value")?.extract()?,
         native_field(identity, "name")?.extract()?,
         owner_key,
     )))

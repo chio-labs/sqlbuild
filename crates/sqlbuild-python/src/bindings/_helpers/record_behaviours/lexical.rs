@@ -29,7 +29,7 @@ fn sorted_texts(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 
 /// The lexical rules a `SqlLexicalSyntax` record holds.
 fn record_syntax(instance: &Bound<'_, PyAny>) -> PyResult<LexicalSyntax> {
-    let flag = |name: &str| -> PyResult<bool> { instance.getattr(name)?.is_truthy() };
+    let flag = |name: &str| -> PyResult<bool> { native_field(instance, name)?.is_truthy() };
     Ok(LexicalSyntax {
         backslash_escape_quotes: sorted_texts(&native_field(instance, "backslash_escape_quotes")?)?,
         escape_string_prefix: flag("escape_string_prefix")?,

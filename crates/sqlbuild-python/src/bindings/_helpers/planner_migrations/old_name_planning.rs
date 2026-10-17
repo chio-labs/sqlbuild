@@ -23,25 +23,25 @@ fn schemas<'py>(
     let snapshot = phase.snapshot.clone();
     let needed = PySet::empty(py)?;
     for item in selected {
-        let schema = native_field(item, "destination")?.getattr("schema")?;
+        let schema = native_field(&native_field(item, "destination")?, "schema")?;
         if !schema.is_none() {
             needed.add(schema)?;
         }
     }
     for entry in migration_entries.try_iter()? {
-        let schema = native_field(&entry?, "origin")?.getattr("schema")?;
+        let schema = native_field(&native_field(&entry?, "origin")?, "schema")?;
         if !schema.is_none() {
             needed.add(schema)?;
         }
     }
-    let mut include_project = runtime
-        .getattr("project")?
-        .getattr("unmatched_literal_sql_relations")?
-        .is_truthy()?;
+    let mut include_project = native_field(
+        &native_field(&runtime, "project")?,
+        "unmatched_literal_sql_relations",
+    )?
+    .is_truthy()?;
     if !include_project {
         for item in selected {
-            let existing = snapshot
-                .getattr("existing_relations")?
+            let existing = native_field(&snapshot, "existing_relations")?
                 .call_method1("get", (native_field(item, "name")?,))?;
             if !existing.is_none()
                 && host::entry(py, AdapterHost::NormalizeRelationType)?
@@ -74,8 +74,7 @@ pub(crate) fn plan_old_name_views<'py>(
     let runtime = phase.runtime.clone();
     let scope = phase.scope.clone();
     let project = runtime_field(&runtime, |runtime| &runtime.project)?;
-    let models: Vec<Bound<'py, PyAny>> = project
-        .getattr("models")?
+    let models: Vec<Bound<'py, PyAny>> = native_field(&project, "models")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let by_name = PyDict::new(py);
@@ -105,7 +104,7 @@ pub(crate) fn plan_old_name_views<'py>(
     let mut views: Vec<Bound<'py, PyAny>> = Vec::new();
     for history in native_field(&state, "old_name_histories")?.try_iter()? {
         let history = history?;
-        let history_target = native_field(&history, "move")?.getattr("target_name")?;
+        let history_target = native_field(&native_field(&history, "move")?, "target_name")?;
         if !history_target.is_none() && !history_target.eq(&target)? {
             continue;
         }

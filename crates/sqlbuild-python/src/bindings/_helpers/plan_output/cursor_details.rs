@@ -60,10 +60,7 @@ fn effective_grain(entry: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
         return Ok(declared);
     }
     let mut effective: String = declared.unwrap_or_else(|| SECOND_GRAIN.to_owned());
-    if entry
-        .getattr("microbatch_strategy")?
-        .eq(WATERMARK_STRATEGY)?
-    {
+    if native_field(entry, "microbatch_strategy")?.eq(WATERMARK_STRATEGY)? {
         return Ok(Some(effective));
     }
     for relation in native_field(entry, "cursor_input_relations")?.try_iter()? {

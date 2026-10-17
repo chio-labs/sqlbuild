@@ -83,7 +83,7 @@ pub(crate) fn build_source_load_entries<'py>(
             "cursor_column",
             "unique_key",
         ] {
-            kwargs.set_item(field, entry.getattr(field)?)?;
+            kwargs.set_item(field, native_field(&entry, field)?)?;
         }
         let table = native_field(&entry, "table")?;
         kwargs.set_item(
@@ -94,8 +94,7 @@ pub(crate) fn build_source_load_entries<'py>(
                 native_field(&entry, "name")?
             },
         )?;
-        let intermediate = entry
-            .getattr("meta")?
+        let intermediate = native_field(&entry, "meta")?
             .call_method1("get", ("sqlbuild_loader_node",))?
             .is(PyBool::new(py, true));
         kwargs.set_item(

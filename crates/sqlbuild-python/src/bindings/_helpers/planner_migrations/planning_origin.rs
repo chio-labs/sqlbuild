@@ -17,9 +17,7 @@ pub(super) fn location<'py>(
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
     let qualified = call_with(
-        &runtime
-            .getattr("adapter")?
-            .getattr("render_qualified_name")?,
+        &native_field(&native_field(runtime, "adapter")?, "render_qualified_name")?,
         fields,
     )?;
     let mut fields = fields.to_vec();
@@ -33,9 +31,11 @@ fn named<'py>(
     runtime: &Bound<'py, PyAny>,
     state: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
-    for item in runtime_field(runtime, |runtime| &runtime.project)?
-        .getattr("models")?
-        .try_iter()?
+    for item in native_field(
+        &runtime_field(runtime, |runtime| &runtime.project)?,
+        "models",
+    )?
+    .try_iter()?
     {
         let item = item?;
         if native_field(&item, "name")?.eq(name)? {
@@ -74,7 +74,7 @@ pub(super) fn planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bo
     let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let fallback = native_field(&project, "effective_target_database")?;
     for item in native_field(&project, "models")?.try_iter()? {
-        let database = native_field(&item?, "destination")?.getattr("database")?;
+        let database = native_field(&native_field(&item?, "destination")?, "database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -85,11 +85,13 @@ pub(super) fn planning_database<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bo
 /// The schemas the project's models write to.
 pub(super) fn project_schemas<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let schemas = PySet::empty(runtime.py())?;
-    for item in runtime_field(runtime, |runtime| &runtime.project)?
-        .getattr("models")?
-        .try_iter()?
+    for item in native_field(
+        &runtime_field(runtime, |runtime| &runtime.project)?,
+        "models",
+    )?
+    .try_iter()?
     {
-        let schema = native_field(&item?, "destination")?.getattr("schema")?;
+        let schema = native_field(&native_field(&item?, "destination")?, "schema")?;
         if !schema.is_none() {
             schemas.add(schema)?;
         }

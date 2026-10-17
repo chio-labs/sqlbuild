@@ -77,15 +77,14 @@ fn assembly_model(model: &Bound<'_, PyAny>) -> PyResult<SqlTestAssemblyModel> {
         None
     };
     Ok(SqlTestAssemblyModel {
-        name: model
-            .getattr("model_file")?
-            .getattr("file_path")?
-            .getattr("stem")?
-            .extract()?,
+        name: native_field(
+            &native_field(&native_field(model, "model_file")?, "file_path")?,
+            "stem",
+        )?
+        .extract()?,
         macro_deps,
         unscanned_macro_source,
-        references: model
-            .getattr("references")?
+        references: native_field(model, "references")?
             .try_iter()?
             .map(|reference| {
                 let reference = reference?;
@@ -115,20 +114,16 @@ fn assembly_test(test: &Bound<'_, PyAny>) -> PyResult<SqlTestAssemblyTest> {
             expected_ctes: ctes(&payload, "expected_ctes")?,
             assertion_ctes: ctes(&payload, "assertion_ctes")?,
             expected_model_names: native_field(&payload, "expected_model_names")?.extract()?,
-            assertion_target_model_names: payload
-                .getattr("assertion_target_model_names")?
+            assertion_target_model_names: native_field(&payload, "assertion_target_model_names")?
                 .extract()?,
-            reference_target_model_names: payload
-                .getattr("reference_target_model_names")?
+            reference_target_model_names: native_field(&payload, "reference_target_model_names")?
                 .extract()?,
             mock_model_names: native_field(&payload, "mock_model_names")?.extract()?,
         })
     };
     Ok(SqlTestAssemblyTest {
         block_name: native_field(&test_block, "name")?.extract()?,
-        file_stem: native_field(&test_file, "file_path")?
-            .getattr("stem")?
-            .extract()?,
+        file_stem: native_field(&native_field(&test_file, "file_path")?, "stem")?.extract()?,
         relative_path: relative_path.call_method0("as_posix")?.extract()?,
         relative_stem: native_field(&relative_path, "stem")?.extract()?,
         contents: native_field(&test_file, "contents")?.extract()?,
@@ -136,8 +131,7 @@ fn assembly_test(test: &Bound<'_, PyAny>) -> PyResult<SqlTestAssemblyTest> {
         block_index: native_field(&test_block, "test_index")?.extract()?,
         sql_body: native_field(test, "sql_body")?.extract()?,
         case_name: native_field(test, "case_name")?.extract()?,
-        parameter_schema: test
-            .getattr("parameter_schema")?
+        parameter_schema: native_field(test, "parameter_schema")?
             .try_iter()?
             .map(|parameter| {
                 let parameter = parameter?;
@@ -148,8 +142,7 @@ fn assembly_test(test: &Bound<'_, PyAny>) -> PyResult<SqlTestAssemblyTest> {
                 ))
             })
             .collect::<PyResult<_>>()?,
-        parameter_values: test
-            .getattr("parameter_values")?
+        parameter_values: native_field(test, "parameter_values")?
             .try_iter()?
             .map(|entry| {
                 let (name, value): (String, Bound<'_, PyAny>) = entry?.extract()?;
@@ -176,9 +169,7 @@ fn ctes(owner: &Bound<'_, PyAny>, attribute: &str) -> PyResult<Vec<SqlTestCte>> 
 
 /// One `SqlValue`, read by its logical kind; decimals keep `as_tuple()`'s digits.
 fn parameter_value(value: &Bound<'_, PyAny>) -> PyResult<SqlTestParameterValue> {
-    let kind: String = native_field(value, "logical_type")?
-        .getattr("kind")?
-        .extract()?;
+    let kind: String = native_field(&native_field(value, "logical_type")?, "kind")?.extract()?;
     let payload = native_field(value, "value")?;
     Ok(match kind.as_str() {
         "string" => SqlTestParameterValue::String(payload.extract()?),

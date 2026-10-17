@@ -40,10 +40,7 @@ pub(crate) fn config_value<'py>(
     model: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    model
-        .getattr("config")?
-        .getattr("values")?
-        .call_method1("get", (key,))
+    native_field(&native_field(model, "config")?, "values")?.call_method1("get", (key,))
 }
 
 /// The materialization type of a model's `materialized` config.
@@ -107,21 +104,19 @@ pub(crate) fn finding_rows(findings: &Bound<'_, PyAny>) -> PyResult<Vec<SchemaFi
 
 /// The parts of a `ChangeDetectionResult` the strategy reads.
 pub(crate) fn change_facts(change: &Bound<'_, PyAny>) -> PyResult<ChangeFacts> {
-    let backfill: String = text(&native_field(change, "backfill")?.getattr("action")?)?;
+    let backfill: String = text(&native_field(&native_field(change, "backfill")?, "action")?)?;
     Ok(ChangeFacts {
         kind: change_kind(&text(&native_field(change, "change_kind")?)?),
         backfill_full: backfill == FULL_BACKFILL,
         backfill_forward_only: backfill == FORWARD_ONLY_BACKFILL,
         query_changed: native_field(change, "query_changed")?.is_truthy()?,
-        changed_functions: change
-            .getattr("changed_functions")?
+        changed_functions: native_field(change, "changed_functions")?
             .try_iter()?
             .map(|name| text(&name?))
             .collect::<PyResult<_>>()?,
         config_changed: native_field(change, "config_changed")?.is_truthy()?,
         schema_findings: finding_rows(&native_field(change, "schema_findings")?)?,
-        recorded_build_relation_missing: change
-            .getattr("recorded_build_relation_missing")?
+        recorded_build_relation_missing: native_field(change, "recorded_build_relation_missing")?
             .is_truthy()?,
     })
 }

@@ -1,11 +1,12 @@
 //! Boundary helpers shared by the native planner phases.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::models::HostId;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -54,8 +55,7 @@ pub(crate) fn replace<'py>(
     value: &Bound<'py, PyAny>,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    imported(value.py(), "dataclasses", "replace")?
-        .call((value,), Some(&keywords(value.py(), fields)?))
+    replaced_keywords(value, &keywords(value.py(), fields)?)
 }
 
 /// A staying-Python enum member from its value.
@@ -149,7 +149,7 @@ pub(crate) fn by_name<'py>(
     field: &str,
 ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
     let nodes = pyo3::types::PyDict::new(project.py());
-    for node in project.getattr(field)?.try_iter()? {
+    for node in native_field(project, field)?.try_iter()? {
         let node = node?;
         pyo3::types::PyDictMethods::set_item(&nodes, native_field(&node, "name")?, node)?;
     }
@@ -158,9 +158,12 @@ pub(crate) fn by_name<'py>(
 
 /// A model config value as text, `None` when absent or not text.
 pub(crate) fn config_str(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
-    authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
-        .map(|value| value.extract())
-        .transpose()
+    authored_config_str(
+        &native_field(&native_field(model, "config")?, "values")?,
+        key,
+    )?
+    .map(|value| value.extract())
+    .transpose()
 }
 
 /// The compiled object key of the model `name`.

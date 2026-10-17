@@ -39,16 +39,14 @@ pub(crate) fn project_path_depth(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyA
 /// `Rule.project_wide`: whether the rule runs once for the compiled project.
 pub(crate) fn rule_project_wide(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let project: Bound<'_, PyAny> = enum_member(instance.py(), RecordId::RuleSubject, "PROJECT")?;
-    instance
-        .getattr("subject")?
+    native_field(instance, "subject")?
         .is(&project)
         .into_py_any(instance.py())
 }
 
 /// `RuleResult.finding_count`.
 pub(crate) fn rule_result_finding_count(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    instance
-        .getattr("findings")?
+    native_field(instance, "findings")?
         .len()?
         .into_py_any(instance.py())
 }

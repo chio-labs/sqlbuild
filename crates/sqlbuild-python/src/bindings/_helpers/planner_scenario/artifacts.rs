@@ -152,9 +152,11 @@ pub(crate) fn build_scenario_artifact_name(
     identifier_limit: i64,
 ) -> PyResult<String> {
     let py = kind.py();
-    let kind: String = enum_from_value(py, RecordId::ScenarioArtifactKind, kind)?
-        .getattr("value")?
-        .extract()?;
+    let kind: String = native_field(
+        &enum_from_value(py, RecordId::ScenarioArtifactKind, kind)?,
+        "value",
+    )?
+    .extract()?;
     build_scenario_artifact_physical_name(hash_prefix, &kind, logical_name, identifier_limit)
 }
 

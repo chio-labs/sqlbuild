@@ -91,7 +91,7 @@ pub(crate) fn validate_watermark_column<'py>(
                 (Some(WATERMARK_CONTRACT_CODE), None),
             ));
         }
-        let values = native_field(&upstream, "config")?.getattr("values")?;
+        let values = native_field(&native_field(&upstream, "config")?, "values")?;
         if !values.call_method1("get", ("contract",))?.eq("enforced")? {
             return Ok(());
         }
@@ -114,7 +114,10 @@ pub(crate) fn validate_watermark_column<'py>(
         let Some(seed) = seeds.get_item(&ref_name)? else {
             return Ok(());
         };
-        declared_columns(&native_field(&seed, "schema_entry")?.getattr("columns")?)?
+        declared_columns(&native_field(
+            &native_field(&seed, "schema_entry")?,
+            "columns",
+        )?)?
     } else {
         return Ok(());
     };

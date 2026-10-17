@@ -86,7 +86,7 @@ fn declaration_context<'py>(
                 if declarations.is_none() {
                     PyDict::new(py).into_any()
                 } else {
-                    declarations.getattr(*field)?
+                    native_field(declarations, field)?
                 },
             ))
         })
@@ -296,7 +296,7 @@ fn input_declarations<'py>(
         return Ok(declarations);
     }
     let merged = |field: &str| -> PyResult<Bound<'py, PyAny>> {
-        declarations.getattr(field)?.bitor(local.getattr(field)?)
+        native_field(&declarations, field)?.bitor(native_field(&local, field)?)
     };
     new_record_with(
         py,

@@ -171,7 +171,7 @@ pub(crate) fn compile_for_refactor<'py>(
                     ("adapter", native_field(&analysis, "adapter")?),
                     (
                         "project",
-                        native_field(&analysis, "graph")?.getattr("project")?,
+                        native_field(&native_field(&analysis, "graph")?, "project")?,
                     ),
                 ],
             )?),

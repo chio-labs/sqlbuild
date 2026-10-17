@@ -104,7 +104,7 @@ fn macro_argument_copy<'py>(
         if name == LOCATION_FIELD {
             continue;
         }
-        keywords.set_item(name, error.getattr(name)?)?;
+        keywords.set_item(name, native_field(error, name)?)?;
     }
     let help: Bound<'py, PyAny> = native_field(error, "help")?;
     if !help.is_truthy()? {

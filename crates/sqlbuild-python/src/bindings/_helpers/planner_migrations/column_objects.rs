@@ -1,12 +1,13 @@
 //! Boundary conversions for the column migration planner.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_identity::hashing::model_definition_hash;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -28,7 +29,7 @@ pub(super) fn replace<'py>(
     for (name, field) in fields {
         kwargs.set_item(name, field)?;
     }
-    imported(value.py(), "dataclasses", "replace")?.call((value,), Some(&kwargs))
+    replaced_keywords(value, &kwargs)
 }
 
 pub(super) fn model<'py>(
@@ -48,10 +49,11 @@ pub(super) fn native<'py>(
 }
 
 pub(super) fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    Ok(
-        authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
-            .unwrap_or_else(|| model.py().None().into_bound(model.py())),
-    )
+    Ok(authored_config_str(
+        &native_field(&native_field(model, "config")?, "values")?,
+        key,
+    )?
+    .unwrap_or_else(|| model.py().None().into_bound(model.py())))
 }
 
 pub(super) fn definition_hash<'py>(
@@ -64,8 +66,7 @@ pub(super) fn definition_hash<'py>(
             model.py(),
             &model_reads::name_object(model)?.extract::<String>()?,
             &model_reads::query_sql(model)?.extract::<String>()?,
-            snapshot
-                .getattr("column_dialect")?
+            native_field(snapshot, "column_dialect")?
                 .extract::<Option<String>>()?
                 .as_deref(),
         )?,

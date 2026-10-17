@@ -44,7 +44,7 @@ fn resolve_policy<'py>(
     } else {
         class.call0()?
     };
-    let values = native_field(model, "config")?.getattr("values")?;
+    let values = native_field(&native_field(model, "config")?, "values")?;
     let raw_distance = values.call_method1("get", (fields.distance_key,))?;
     let raw_action = values.call_method1("get", (fields.action_key,))?;
     let mut distance = configured.getattr(fields.distance)?;

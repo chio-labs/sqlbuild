@@ -12,10 +12,10 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
-const DATACLASSES_MODULE: &str = "dataclasses";
 const MODEL_RESOURCE: &str = "model";
 const SOURCE_RESOURCE: &str = "source";
 
@@ -23,7 +23,6 @@ const SOURCE_RESOURCE: &str = "source";
 struct Vocabulary<'py> {
     finding: Bound<'py, PyAny>,
     kinds: Bound<'py, PyAny>,
-    replace: Bound<'py, PyAny>,
 }
 
 impl<'py> Vocabulary<'py> {
@@ -31,7 +30,6 @@ impl<'py> Vocabulary<'py> {
         Ok(Self {
             finding: record_class(py, RecordId::ContractFinding)?,
             kinds: record_class(py, RecordId::ContractFindingKind)?,
-            replace: py.import(DATACLASSES_MODULE)?.getattr("replace")?,
         })
     }
 
@@ -62,11 +60,7 @@ impl<'py> Vocabulary<'py> {
         item: &Bound<'py, PyAny>,
         fields: Vec<(&str, Bound<'py, PyAny>)>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let keywords: Bound<'py, PyDict> = PyDict::new(self.py());
-        for (name, value) in fields {
-            keywords.set_item(name, value)?;
-        }
-        self.replace.call((item,), Some(&keywords))
+        replaced(item, &fields)
     }
 }
 
@@ -89,7 +83,7 @@ fn keyword_call<'py>(
 fn qualified(item: &Bound<'_, PyAny>) -> PyResult<String> {
     let mut parts: Vec<String> = Vec::new();
     for name in ["database", "schema", "relation"] {
-        let part: Option<String> = item.getattr(name)?.extract()?;
+        let part: Option<String> = native_field(item, name)?.extract()?;
         if let Some(part) = part.filter(|part| !part.is_empty()) {
             parts.push(part);
         }
@@ -200,7 +194,7 @@ fn source_evidence<'py>(
             ("physical_columns", py.None().into_bound(py)),
             (
                 "source_path",
-                native_field(source, "source_file")?.getattr("relative_path")?,
+                native_field(&native_field(source, "source_file")?, "relative_path")?,
             ),
             ("findings", PyTuple::new(py, findings)?.into_any()),
         ],
@@ -372,8 +366,7 @@ fn compared<'py>(
             vec![("findings", PyTuple::new(py, [finding])?.into_any())],
         );
     }
-    let declared: Vec<Bound<'py, PyAny>> = item
-        .getattr("declared_columns")?
+    let declared: Vec<Bound<'py, PyAny>> = native_field(item, "declared_columns")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let physical: Vec<Bound<'py, PyAny>> = physical_columns.try_iter()?.collect::<PyResult<_>>()?;

@@ -1,11 +1,12 @@
 //! Empty-window decisions and snapshot grain conversion.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::planner_resolution::values::string;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -46,10 +47,7 @@ fn decide_empty_cursor_inputs<'py>(
 pub(crate) fn cursor_inputs_without_rows<'py>(
     cursor_snapshot: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    if cursor_snapshot
-        .getattr("unreadable_input_names")?
-        .is_truthy()?
-    {
+    if native_field(cursor_snapshot, "unreadable_input_names")?.is_truthy()? {
         return new_record(
             cursor_snapshot.py(),
             RecordId::EmptyCursorInputDecision,
@@ -58,22 +56,14 @@ pub(crate) fn cursor_inputs_without_rows<'py>(
         );
     }
     let rows = native_field(cursor_snapshot, "upstream_maxes")?.is_truthy()?
-        || cursor_snapshot
-            .getattr("upstream_terminal_ends")?
-            .is_truthy()?
-        || cursor_snapshot
-            .getattr("upstream_availability_ends")?
-            .is_truthy()?;
+        || native_field(cursor_snapshot, "upstream_terminal_ends")?.is_truthy()?
+        || native_field(cursor_snapshot, "upstream_availability_ends")?.is_truthy()?;
     let start = !native_field(cursor_snapshot, "target_max")?.is_none()
         || native_field(cursor_snapshot, "upstream_mins")?.is_truthy()?
-        || cursor_snapshot
-            .getattr("upstream_terminal_starts")?
-            .is_truthy()?;
+        || native_field(cursor_snapshot, "upstream_terminal_starts")?.is_truthy()?;
     decide_empty_cursor_inputs(
         &native_field(cursor_snapshot, "empty_input_names")?,
-        !cursor_snapshot
-            .getattr("cursor_watermark_mode")?
-            .eq("any")?,
+        !native_field(cursor_snapshot, "cursor_watermark_mode")?.eq("any")?,
         rows,
         start,
     )
@@ -189,7 +179,7 @@ pub(crate) fn without_destination_cursor<'py>(
     for name in ["target_max", "physical_target_max", "target_eligible_max"] {
         kwargs.set_item(name, py.None())?;
     }
-    imported(py, "dataclasses", "replace")?.call((cursor_snapshot,), Some(&kwargs))
+    replaced_keywords(cursor_snapshot, &kwargs)
 }
 
 #[pyfunction]
@@ -248,7 +238,7 @@ pub(crate) fn normalize_cursor_snapshot_grain<'py>(
     };
     let kwargs = PyDict::new(py);
     for key in ["target_max", "target_eligible_max"] {
-        kwargs.set_item(key, normalize(cursor_snapshot.getattr(key)?)?)?;
+        kwargs.set_item(key, normalize(native_field(cursor_snapshot, key)?)?)?;
     }
     for key in ["upstream_mins", "upstream_maxes"] {
         let values = cursor_snapshot
@@ -273,7 +263,7 @@ pub(crate) fn normalize_cursor_snapshot_grain<'py>(
         ends.push((normalize(pair.get_item(0)?)?, pair.get_item(1)?));
     }
     kwargs.set_item("upstream_end_inputs", PyTuple::new(py, ends)?)?;
-    imported(py, "dataclasses", "replace")?.call((cursor_snapshot,), Some(&kwargs))
+    replaced_keywords(cursor_snapshot, &kwargs)
 }
 
 pub(super) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

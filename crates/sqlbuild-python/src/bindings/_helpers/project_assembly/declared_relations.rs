@@ -90,11 +90,10 @@ pub(crate) fn declared_relations<'py>(
             (schema.name, attached_columns(&model)?);
         types.set_item(&name, column_types(py, &columns, false)?)?;
         nulls.set_item(&name, column_nullability(&columns, &nullability)?)?;
-        let contract: Option<Bound<'py, PyAny>> = model
-            .getattr("config")?
-            .getattr("values")?
-            .downcast_into::<PyDict>()?
-            .get_item(CONTRACT_KEY)?;
+        let contract: Option<Bound<'py, PyAny>> =
+            native_field(&native_field(&model, "config")?, "values")?
+                .downcast_into::<PyDict>()?
+                .get_item(CONTRACT_KEY)?;
         let enforced: bool = match contract {
             Some(contract) => contract.eq(ENFORCED_CONTRACT)?,
             None => false,

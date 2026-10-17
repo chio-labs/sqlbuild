@@ -93,8 +93,7 @@ pub(super) fn candidates<'py>(
         }
         let event = newest(&native_field(state, "events")?, &location)?;
         if !event.is_none()
-            && event
-                .getattr("origin")?
+            && native_field(&event, "origin")?
                 .call_method1("matches", (relation(&location)?,))?
                 .is_truthy()?
         {
@@ -114,10 +113,7 @@ pub(super) fn automatic<'py>(
     let py = runtime.py();
     let mut requests: Vec<ModelMigrationRequest<'py>> = Vec::new();
     for item in models {
-        if !scope
-            .getattr("selected_keys")?
-            .contains(native_field(item, "key")?)?
-        {
+        if !native_field(scope, "selected_keys")?.contains(native_field(item, "key")?)? {
             continue;
         }
         let name = native_field(item, "name")?;
@@ -165,10 +161,7 @@ pub(super) fn warnings<'py>(
     let py = scope.py();
     let selected = PySet::empty(py)?;
     for item in models {
-        if scope
-            .getattr("selected_keys")?
-            .contains(native_field(item, "key")?)?
-        {
+        if native_field(scope, "selected_keys")?.contains(native_field(item, "key")?)? {
             selected.add(native_field(item, "name")?)?;
         }
     }

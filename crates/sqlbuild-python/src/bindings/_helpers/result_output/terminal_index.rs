@@ -70,7 +70,7 @@ fn payload_attempt_number(payload: &Bound<'_, PyAny>) -> PyResult<Option<i64>> {
 }
 
 fn optional_text(event: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
-    event.getattr(name)?.extract()
+    native_field(event, name)?.extract()
 }
 
 /// The facts of one lifecycle event that terminal indexing reads.

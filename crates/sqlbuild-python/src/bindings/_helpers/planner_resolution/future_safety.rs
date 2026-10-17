@@ -115,7 +115,7 @@ pub(crate) fn resolve_future_cursor_safety<'py>(
     };
     let determining_field = |field: &str| -> PyResult<Bound<'py, PyAny>> {
         if let Some((item, _)) = &determining {
-            item.getattr(field)
+            native_field(item, field)
         } else {
             Ok(py.None().into_bound(py))
         }

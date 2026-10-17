@@ -15,7 +15,7 @@ use sqlbuild_analysis::planner_identity::main::model_local_identity_hash::model_
 use sqlbuild_analysis::planner_identity::models::{GraphKey, IdentityGraph, IdentityNode};
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_identity::hashing::{graph_key, model_query_hash};
@@ -24,9 +24,8 @@ use crate::bindings::_helpers::planner_identity::metadata::{
 };
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
-
-const DATACLASSES_MODULE: &str = "dataclasses";
 
 fn key_of(kind: &str, name: &str) -> GraphKey {
     GraphKey {
@@ -236,8 +235,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
     let mut graph = IdentityGraph::default();
     let mut base_hashes: Vec<(GraphKey, String)> = Vec::new();
     let mut function_deps: HashMap<GraphKey, Vec<GraphKey>> = HashMap::new();
-    for item in scope
-        .getattr("upstream_deps")?
+    for item in native_field(&scope, "upstream_deps")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -264,7 +262,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         }
     }
     let recorded_seeds: Bound<'py, PyAny> =
-        native_field(&snapshot, "fingerprints")?.getattr("seeds")?;
+        native_field(&native_field(&snapshot, "fingerprints")?, "seeds")?;
     for (name, seed_hash) in string_pairs(&native_field(&identities, "seed_version_hashes")?)? {
         let seed_key: GraphKey = key_of(SEED_RESOURCE, &name);
         graph.nodes.insert(
@@ -283,8 +281,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         base_hashes.push((seed_key, write_hash));
     }
     let local_hashes: Bound<'py, PyAny> = native_field(&identities, "model_local_hashes")?;
-    for model in scope
-        .getattr("models_by_name")?
+    for model in native_field(&scope, "models_by_name")?
         .call_method0("values")?
         .try_iter()?
     {
@@ -299,7 +296,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         );
     }
     let recorded_models: Bound<'py, PyAny> =
-        native_field(&snapshot, "fingerprints")?.getattr("models")?;
+        native_field(&native_field(&snapshot, "fingerprints")?, "models")?;
     for item in recorded_models.call_method0("items")?.try_iter()? {
         let (name, fingerprint): (String, Bound<'py, PyAny>) = item?.extract()?;
         let version_hash: Bound<'py, PyAny> = native_field(&fingerprint, "version_hash")?;
@@ -318,11 +315,9 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         graph_write_identity_hashes(&graph, &selected, base_hashes)
             .into_iter()
             .collect();
-    let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;
     let model_changes: Bound<'py, PyDict> = PyDict::new(py);
     model_changes.update(
-        changes
-            .getattr("models")?
+        native_field(&changes, "models")?
             .downcast::<PyDict>()?
             .as_mapping(),
     )?;
@@ -352,7 +347,6 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
         model_changes.set_item(
             &name,
             replace_with(
-                &replace,
                 &change,
                 (
                     "fingerprint_version_hash",
@@ -361,7 +355,7 @@ pub(crate) fn with_honest_model_write_hashes<'py>(
             )?,
         )?;
     }
-    replace_with(&replace, &changes, ("models", model_changes.into_any()))
+    replace_with(&changes, ("models", model_changes.into_any()))
 }
 
 /// Resolved actions with recomputed model changes patched in where available.
@@ -372,11 +366,9 @@ pub(crate) fn merge_recomputed_model_changes<'py>(
     changes: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = resolved_actions.py();
-    let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;
     let recomputed: Bound<'py, PyAny> = native_field(changes, "models")?;
     let merged: Bound<'py, PyDict> = PyDict::new(py);
-    for item in resolved_actions
-        .getattr("models")?
+    for item in native_field(resolved_actions, "models")?
         .call_method0("items")?
         .try_iter()?
     {
@@ -385,19 +377,16 @@ pub(crate) fn merge_recomputed_model_changes<'py>(
         if change.is_none() {
             change = native_field(&resolved, "change")?;
         }
-        merged.set_item(name, replace_with(&replace, &resolved, ("change", change))?)?;
+        merged.set_item(name, replace_with(&resolved, ("change", change))?)?;
     }
-    replace_with(&replace, resolved_actions, ("models", merged.into_any()))
+    replace_with(resolved_actions, ("models", merged.into_any()))
 }
 
 fn replace_with<'py>(
-    replace: &Bound<'py, PyAny>,
     instance: &Bound<'py, PyAny>,
     (field, value): (&str, Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
-    let keywords: Bound<'py, PyDict> = PyDict::new(replace.py());
-    keywords.set_item(field, value)?;
-    replace.call((instance,), Some(&keywords))
+    replaced(instance, &[(field, value)])
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

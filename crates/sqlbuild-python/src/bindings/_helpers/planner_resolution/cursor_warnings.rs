@@ -13,7 +13,7 @@ const FUTURE_CAPPED_CODE: &str = "FUTURE_CURSOR_CAPPED";
 const START_CAPPED_CODE: &str = "AUTOMATIC_START_CAPPED";
 
 fn rendered(evidence: &Bound<'_, PyAny>, field: &str) -> PyResult<String> {
-    render_value(&evidence.getattr(field)?)
+    render_value(&native_field(evidence, field)?)
 }
 
 /// Render a prominent warning for applied future cursor policy.
@@ -58,7 +58,7 @@ pub(crate) fn maximum_start_message(bounds: &Bound<'_, PyAny>) -> PyResult<Optio
         rendered(&evidence, "physical_target_max")?,
         rendered(&evidence, "maximum_allowed_start")?,
         rendered(&evidence, "effective_start")?,
-        native_field(&evidence, "action")?.getattr("value")?.str()?,
+        native_field(&native_field(&evidence, "action")?, "value")?.str()?,
         native_field(&evidence, "target_relation")?.str()?,
         native_field(&evidence, "cursor_column")?.str()?,
     )))

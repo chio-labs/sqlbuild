@@ -120,7 +120,7 @@ fn test_window<'py>(
         let Some(block) = &block else {
             return Ok(None);
         };
-        let value = block.getattr(name)?;
+        let value = native_field(block, name)?;
         Ok((!value.is_none()).then_some(value))
     };
     let integer = cursor.type_name == INTEGER_CURSOR_TYPE;
@@ -238,7 +238,7 @@ fn ordering(left: &Bound<'_, PyAny>, right: &Bound<'_, PyAny>) -> PyResult<Order
 /// The cursor type and timestamp grain a model's config declares.
 fn model_cursor<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelCursor<'py>> {
     let py = model.py();
-    let values = native_field(model, "config")?.getattr("values")?;
+    let values = native_field(&native_field(model, "config")?, "values")?;
     let declared = config_str(&values, "cursor_type")?.filter(|value| {
         value
             .extract::<String>()
@@ -272,8 +272,6 @@ fn test_label(test: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(format!(
         "SQL test '{}' in '{}'",
         native_field(test, "name")?.str()?,
-        native_field(test, "test_file")?
-            .getattr("relative_path")?
-            .str()?
+        native_field(&native_field(test, "test_file")?, "relative_path")?.str()?
     ))
 }

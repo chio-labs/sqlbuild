@@ -194,7 +194,7 @@ pub(crate) fn finish_sql_test(
         let parent: Bound<'_, PyAny> = if block_name.is_truthy()? {
             block_name
         } else {
-            native_field(&test_file, "relative_path")?.getattr("stem")?
+            native_field(&native_field(&test_file, "relative_path")?, "stem")?
         };
         values[TEST_PARENT_NAME_FIELD] = parent.unbind();
     }
@@ -224,7 +224,7 @@ pub(crate) fn record_reference_rows(instance: &Bound<'_, PyAny>) -> PyResult<Py<
 
 /// The declared key facts of model `name` with `instance`'s config and schema entry.
 fn model_relation_key_row(instance: &Bound<'_, PyAny>, name: String) -> PyResult<Py<PyAny>> {
-    let values: Bound<'_, PyAny> = native_field(instance, "config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(&native_field(instance, "config")?, "values")?;
     entry_relation_key_row(
         "ref",
         name,
@@ -236,11 +236,11 @@ fn model_relation_key_row(instance: &Bound<'_, PyAny>, name: String) -> PyResult
 
 /// `CompileModelInput.relation_key_row`: keyed by the model file's stem.
 pub(crate) fn input_relation_key_row(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let name: String = instance
-        .getattr("model_file")?
-        .getattr("file_path")?
-        .getattr("stem")?
-        .extract()?;
+    let name: String = native_field(
+        &native_field(&native_field(instance, "model_file")?, "file_path")?,
+        "stem",
+    )?
+    .extract()?;
     model_relation_key_row(instance, name)
 }
 

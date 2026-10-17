@@ -54,9 +54,8 @@ fn resource_name<'py>(
     if !name.is_none() {
         return Ok(name);
     }
-    let pooled: Bound<'py, PyAny> = facts
-        .getattr("resource_name_indexes")?
-        .call_method1("get", (index, index))?;
+    let pooled: Bound<'py, PyAny> =
+        native_field(facts, "resource_name_indexes")?.call_method1("get", (index, index))?;
     native_field(facts, "string_pool")?.get_item(pooled)
 }
 
@@ -118,8 +117,7 @@ fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<
 
 /// `CompactLineageFacts.facts`: every row projected once, in order.
 pub(crate) fn facts_projected(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let projected: Vec<Py<PyAny>> = instance
-        .getattr("rows")?
+    let projected: Vec<Py<PyAny>> = native_field(instance, "rows")?
         .try_iter()?
         .map(|row| project_row(instance, &row?))
         .collect::<PyResult<_>>()?;

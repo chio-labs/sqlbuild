@@ -110,8 +110,7 @@ fn fingerprint_key(fingerprint: &Bound<'_, PyAny>) -> PyResult<FingerprintKey> {
     };
     Ok(FingerprintKey {
         order: FingerprintOrder {
-            timestamp: fingerprint
-                .getattr("ts")?
+            timestamp: native_field(fingerprint, "ts")?
                 .call_method0("isoformat")?
                 .extract()?,
             run_id: native_field(fingerprint, "run_id")?.extract()?,

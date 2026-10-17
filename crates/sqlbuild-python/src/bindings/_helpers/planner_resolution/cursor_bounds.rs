@@ -80,7 +80,7 @@ pub(super) fn duration(value: &Bound<'_, PyAny>) -> PyResult<Option<DurationSpan
     if parsed.is_none() {
         return Ok(None);
     }
-    let field = |name: &str| -> PyResult<i64> { parsed.getattr(name)?.extract() };
+    let field = |name: &str| -> PyResult<i64> { native_field(&parsed, name)?.extract() };
     Ok(Some(DurationSpan {
         months: field("years")? * 12 + field("months")?,
         days: field("days")?,

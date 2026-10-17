@@ -123,7 +123,7 @@ fn header_name<'py>(file: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 }
 
 fn items<'py>(item: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    item.getattr(name)?.try_iter()?.collect()
+    native_field(item, name)?.try_iter()?.collect()
 }
 
 impl<'py> Walk<'py> {
@@ -274,9 +274,7 @@ impl<'py> Walk<'py> {
             .map(|rendering| native_field(&rendering, "value"))
             .transpose()?;
         self.classes.model(RecordId::ConstantMetadata)?.call1((
-            declaration
-                .getattr("logical_type")?
-                .getattr("display_name")?,
+            native_field(&native_field(declaration, "logical_type")?, "display_name")?,
             if is_collection {
                 Some(native_field(&kind, "value")?)
             } else {
@@ -462,7 +460,7 @@ impl<'py> Walk<'py> {
             [None, None, None],
         );
         let fallback: Bound<'py, PyAny> = or_else(native_field(item, "declaration_root")?, || {
-            native_field(item, "relative_path")?.getattr("parent")
+            native_field(&native_field(item, "relative_path")?, "parent")
         })?;
         let placement = Self::file_placement(item, text(&fallback)?)?;
         self.add_declaration(values, placement)
@@ -472,7 +470,7 @@ impl<'py> Walk<'py> {
         let audit_kind: String = DeclarationKind::Audit.as_str().to_owned();
         for audit_file in items(inputs, "audit_files")? {
             let stem_name: Bound<'py, PyAny> =
-                native_field(&audit_file, "relative_path")?.getattr("stem")?;
+                native_field(&native_field(&audit_file, "relative_path")?, "stem")?;
             if value_of(&audit_file, "declaration_kind")? == audit_kind {
                 self.add_named(&audit_file, DeclarationKind::Audit, &stem_name)?;
                 continue;

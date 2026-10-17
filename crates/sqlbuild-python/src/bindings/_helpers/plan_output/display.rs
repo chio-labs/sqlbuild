@@ -32,7 +32,8 @@ use crate::bindings::_helpers::records::ids::RecordId;
 const DATETIME_MODULE: &str = "datetime";
 
 fn label_facts(entry: &Bound<'_, PyAny>) -> PyResult<ModelLabelFacts> {
-    let field = |name: &str| -> PyResult<Option<String>> { optional_text(&entry.getattr(name)?) };
+    let field =
+        |name: &str| -> PyResult<Option<String>> { optional_text(&native_field(entry, name)?) };
     Ok(ModelLabelFacts {
         materialization_type: text(&native_field(entry, "materialization_type")?)?,
         action: text(&native_field(entry, "action")?)?,
@@ -129,7 +130,7 @@ fn parsed_bound(value: &Bound<'_, PyAny>) -> PyResult<Option<ParsedBound>> {
         };
     let mut midnight: bool = true;
     for part in ["hour", "minute", "second", "microsecond"] {
-        midnight = midnight && parsed.getattr(part)?.extract::<i64>()? == 0;
+        midnight = midnight && native_field(&parsed, part)?.extract::<i64>()? == 0;
     }
     Ok(Some(ParsedBound {
         date: parsed

@@ -266,7 +266,7 @@ fn check_binding_diagnostics<'py>(
     let mut lines: Vec<String> = Vec::new();
     for diagnostic in &errors {
         let position = |field: &str| -> PyResult<String> {
-            let value = diagnostic.getattr(field)?;
+            let value = native_field(diagnostic, field)?;
             Ok(if value.is_truthy()? {
                 value.str()?.to_string()
             } else {

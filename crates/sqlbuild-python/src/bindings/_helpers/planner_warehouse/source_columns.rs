@@ -19,8 +19,7 @@ fn entries_of<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     match source_entries.filter(|entries| !entries.is_none()) {
         Some(entries) => entries.try_iter()?.collect(),
-        None => project
-            .getattr("sources")?
+        None => native_field(project, "sources")?
             .try_iter()?
             .map(|source| native_field(&source?, "source_entry"))
             .collect(),
@@ -110,8 +109,7 @@ pub(crate) fn source_inspection<'py>(
         if schema.is_none() {
             continue;
         }
-        let key: String = entry
-            .getattr("database")?
+        let key: String = native_field(entry, "database")?
             .extract::<Option<String>>()?
             .unwrap_or_default();
         let schema: String = schema.extract()?;

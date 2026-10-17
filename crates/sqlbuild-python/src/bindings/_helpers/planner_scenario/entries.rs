@@ -56,12 +56,12 @@ pub(super) fn seed_entries<'py>(
                 ("destination", destination),
                 (
                     "file_path",
-                    native_field(&seed, "seed_file")?.getattr("file_path")?,
+                    native_field(&native_field(&seed, "seed_file")?, "file_path")?,
                 ),
                 ("columns", extract_seed_columns(&seed)?.into_any()),
                 (
                     "csv_settings",
-                    native_field(&seed, "schema_entry")?.getattr("csv_settings")?,
+                    native_field(&native_field(&seed, "schema_entry")?, "csv_settings")?,
                 ),
             ],
         )?);
@@ -113,7 +113,7 @@ pub(super) fn function_entry<'py>(
         "arguments",
         "returns",
     ] {
-        fields.push((name, function.getattr(name)?));
+        fields.push((name, native_field(function, name)?));
     }
     fields.push(("body_sql", body));
     fields.push((
@@ -129,7 +129,7 @@ pub(super) fn function_entry<'py>(
         "entry_point",
         "packages",
     ] {
-        fields.push((name, function.getattr(name)?));
+        fields.push((name, native_field(function, name)?));
     }
     new_record_with(py, RecordId::FunctionPlanEntry, &fields)
 }

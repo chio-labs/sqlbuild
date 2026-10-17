@@ -35,7 +35,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::{IntoPyObject, PyErr};
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
+    let values: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?;
     let value: Option<Bound<'py, PyAny>> = if key == CURSOR_START {
         config_cursor_bound(&values, key)?
     } else {
@@ -57,8 +57,7 @@ fn unbounded(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn destination_exists(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let relation = snapshot
-        .getattr("existing_relations")?
+    let relation = native_field(snapshot, "existing_relations")?
         .call_method1("get", (model_reads::name_object(model)?,))?;
     if relation.is_none() {
         return Ok(false);
@@ -122,8 +121,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         return Ok(bounded);
     }
     let snapshot = &request.snapshot;
-    let mut cursor_snapshot = snapshot
-        .getattr("cursor_snapshots")?
+    let mut cursor_snapshot = native_field(snapshot, "cursor_snapshots")?
         .call_method1("get", (model_reads::name_object(&model)?,))?;
     let roles = resolve_cursor_input_roles(&model)?;
     let producers = class_field(context, |c: &ModelPlanContext| {
@@ -168,10 +166,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         if empty.is_truthy()? {
             return empty_cursor_window(&cursor_type, &config(&model, "cursor_start")?);
         }
-        if !cursor_snapshot
-            .getattr("watermarks_available")?
-            .is_truthy()?
-        {
+        if !native_field(&cursor_snapshot, "watermarks_available")?.is_truthy()? {
             let unreadable = native_field(&cursor_snapshot, "unreadable_input_names")?;
             let names = if unreadable.is_truthy()? {
                 unreadable

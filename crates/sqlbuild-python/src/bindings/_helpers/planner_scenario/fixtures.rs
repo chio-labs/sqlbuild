@@ -70,7 +70,7 @@ pub(super) fn fixture_plans<'py>(
         ),
     ] {
         let fixtures = extract_fixtures(scenario, &format!("__{kind}__"))?;
-        for name in graph.getattr(names)?.try_iter()? {
+        for name in native_field(graph, names)?.try_iter()? {
             let name: String = name?.extract()?;
             let target = required_target(&context.relations, locations, &name, kind)?;
             let Some(mut sql) = fixtures.get_item(&name)? else {

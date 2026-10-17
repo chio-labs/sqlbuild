@@ -208,7 +208,7 @@ fn compile_pipeline<'py>(
         },
     )?;
     for field in PIPELINE_FIELDS {
-        options.set_item(field, request.getattr(field)?)?;
+        options.set_item(field, native_field(request, field)?)?;
     }
     options.set_item("auto_load_sources", &invocation.load_sources)?;
     options.set_item(

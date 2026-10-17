@@ -27,7 +27,7 @@ use crate::bindings::_helpers::references::source_relations::render_source_relat
 
 /// A model's authored config values.
 pub(crate) fn model_values<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    native_field(model, "config")?.getattr("values")
+    native_field(&native_field(model, "config")?, "values")
 }
 
 /// Whether a model is incremental with a cursor column.
@@ -107,7 +107,10 @@ pub(crate) fn reject_unexposed_cursor_input_columns<'py>(
     let warehouse_columns: &Bound<'py, PyAny> = &lookups.source_warehouse_columns;
     let model_name: String = model_reads::model_name(model)?;
     for role in ["filter_inputs", "watermark_inputs"] {
-        for item in roles.getattr(role)?.call_method0("items")?.try_iter()? {
+        for item in native_field(&roles, role)?
+            .call_method0("items")?
+            .try_iter()?
+        {
             let (input_name, column): (String, String) = item?.extract()?;
             let reference: Bound<'py, PyAny> = resolve_lineage_reference(
                 model,

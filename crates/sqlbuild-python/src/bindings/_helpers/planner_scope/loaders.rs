@@ -54,7 +54,7 @@ pub(crate) fn loader_to_source_entry<'py>(
     kwargs.set_item("name", &name)?;
     kwargs.set_item("loader", &name)?;
     for field in ["database", "schema", "table"] {
-        kwargs.set_item(field, parts.getattr(field)?)?;
+        kwargs.set_item(field, native_field(&parts, field)?)?;
     }
     for field in [
         "write_strategy",
@@ -63,7 +63,7 @@ pub(crate) fn loader_to_source_entry<'py>(
         "contract",
         "columns",
     ] {
-        kwargs.set_item(field, loader.getattr(field)?)?;
+        kwargs.set_item(field, native_field(loader, field)?)?;
     }
     let meta = PyDict::new(py);
     meta.set_item("sqlbuild_loader_node", true)?;

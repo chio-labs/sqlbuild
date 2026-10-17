@@ -18,6 +18,7 @@ use sqlbuild_rules::project_tree::models::ProjectTreeEntry;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::records::construct::new_record;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -56,7 +57,7 @@ fn position<'py>(
         return Ok(explicit.clone());
     }
     let py: Python<'py> = node.py();
-    let value: Bound<'py, PyAny> = match node.getattr(attribute) {
+    let value: Bound<'py, PyAny> = match native_field(node, attribute) {
         Ok(value) => value,
         Err(error) if error.is_instance_of::<PyAttributeError>(py) => {
             DEFAULT_POSITION.into_pyobject(py)?.into_any()

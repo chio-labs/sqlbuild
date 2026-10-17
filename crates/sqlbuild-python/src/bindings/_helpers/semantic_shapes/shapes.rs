@@ -18,9 +18,9 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 
-const DATACLASSES_MODULE: &str = "dataclasses";
 const UNKNOWN: &str = "UNKNOWN";
 const GENERIC_DIALECT: &str = "generic";
 /// Snapshot validity start column when the model names none.
@@ -79,7 +79,7 @@ pub(crate) fn published_shape<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
     let shape: Bound<'py, PyDict> = binding_shape(model, columns, inputs, profile)?;
-    let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
+    let values: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?;
     let snapshot: Bound<'py, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
     if values
         .call_method1("get", ("materialized",))?
@@ -112,11 +112,7 @@ fn binding_shape<'py>(
     let dialect: Bound<'py, PyAny> = native_field(profile, "sql_analysis_dialect")?;
     let sensitive: bool = !dialect.is_none()
         && CASE_SENSITIVE_BINDING_DIALECTS.contains(&dialect.extract::<String>()?.as_str());
-    if profile
-        .getattr("quoted_identifiers_ignore_case")?
-        .is_truthy()?
-        || !sensitive
-    {
+    if native_field(profile, "quoted_identifiers_ignore_case")?.is_truthy()? || !sensitive {
         return Ok(columns.clone());
     }
     let mut catalog: Bound<'py, PyAny> = native_field(profile, "binding_catalog")?;
@@ -144,8 +140,7 @@ fn binding_shape<'py>(
     arguments.set_item("sql", sql)?;
     arguments.set_item("columns", columns)?;
     arguments.set_item("inputs", inputs)?;
-    Ok(catalog
-        .getattr("inferred_schema")?
+    Ok(native_field(&catalog, "inferred_schema")?
         .call((), Some(&arguments))?
         .downcast_into::<PyDict>()?)
 }
@@ -213,9 +208,7 @@ pub(crate) fn project_profile<'py>(
     };
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
     arguments.set_item("binding_catalog", native_field(project, "binding_catalog")?)?;
-    py.import(DATACLASSES_MODULE)?
-        .getattr("replace")?
-        .call((profile,), Some(&arguments))
+    replaced_keywords(&profile, &arguments)
 }
 
 /// Closed shapes by relation name; absence means open, never an empty physical table.
@@ -232,7 +225,7 @@ pub(crate) fn project_shapes<'py>(
             native_field(&seed, "name")?,
             declared_columns(
                 py,
-                &native_field(&seed, "schema_entry")?.getattr("columns")?,
+                &native_field(&native_field(&seed, "schema_entry")?, "columns")?,
             )?,
         )?;
     }
@@ -294,8 +287,7 @@ fn model_shapes<'py>(
     shapes: &Bound<'py, PyDict>,
 ) -> PyResult<()> {
     let py: Python<'py> = project.py();
-    let mut pending: Vec<Bound<'py, PyAny>> = project
-        .getattr("models")?
+    let mut pending: Vec<Bound<'py, PyAny>> = native_field(project, "models")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     while !pending.is_empty() {
@@ -305,10 +297,9 @@ fn model_shapes<'py>(
             let inferred: Option<Vec<InferredRow>> = inferred_rows(model)?;
             let rows: Bound<'py, PyAny> = native_field(model, "reference_rows")?;
             let relations: Vec<String> = relation_row_names(&rows)?;
-            let contract: Bound<'py, PyAny> = model
-                .getattr("config")?
-                .getattr("values")?
-                .call_method1("get", ("contract",))?;
+            let contract: Bound<'py, PyAny> =
+                native_field(&native_field(model, "config")?, "values")?
+                    .call_method1("get", ("contract",))?;
             if contract.eq(enforced)?
                 && let Some(declared) = &declared
                 && !dynamic_columns_declared(model)?

@@ -34,10 +34,7 @@ pub(crate) fn managed_source_upstream_keys<'py>(
     let mut managed: HashSet<String> = HashSet::new();
     for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        if !native_field(&source, "source_entry")?
-            .getattr("loader")?
-            .is_none()
-        {
+        if !native_field(&native_field(&source, "source_entry")?, "loader")?.is_none() {
             managed.insert(native_field(&source, "name")?.extract()?);
         }
     }

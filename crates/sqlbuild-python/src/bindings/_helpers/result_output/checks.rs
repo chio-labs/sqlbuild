@@ -20,11 +20,11 @@ const COLLECTION_KINDS: [&str; 2] = ["list", "set"];
 const ERROR_FIELDS: [&str; 3] = ["error_code", "error_help", "error_message"];
 
 fn value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    native_field(&result.getattr(field)?, "value")
+    native_field(&native_field(result, field)?, "value")
 }
 
 fn optional_value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    let value: Bound<'py, PyAny> = result.getattr(field)?;
+    let value: Bound<'py, PyAny> = native_field(result, field)?;
     if value.is_none() {
         return Ok(value);
     }
@@ -37,7 +37,7 @@ fn fields<'py>(
 ) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
     names
         .iter()
-        .map(|name| Ok((*name, result.getattr(*name)?)))
+        .map(|name| Ok((*name, native_field(result, name)?)))
         .collect()
 }
 
@@ -48,7 +48,7 @@ fn tuple_of<'py>(py: Python<'py>, entries: Vec<Bound<'py, PyDict>>) -> PyResult<
 /// A SQL value as plain JSON: decimals as text, collections as lists, structs as objects.
 fn sql_value_json<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    let kind: String = text(&native_field(value, "kind")?.getattr("value")?)?;
+    let kind: String = text(&native_field(&native_field(value, "kind")?, "value")?)?;
     let inner: Bound<'py, PyAny> = native_field(value, "value")?;
     if kind == DECIMAL_KIND {
         return Ok(inner.str()?.into_any());
@@ -247,7 +247,7 @@ pub(crate) fn measurement_thresholds<'py>(
     }
     let rendered: Bound<'py, PyDict> = PyDict::new(thresholds.py());
     for severity in ["warn", "error"] {
-        let bound: Bound<'py, PyAny> = thresholds.getattr(severity)?;
+        let bound: Bound<'py, PyAny> = native_field(thresholds, severity)?;
         if !bound.is_none() {
             rendered.set_item(severity, threshold_bound(&bound)?)?;
         }

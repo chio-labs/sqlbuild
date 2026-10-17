@@ -222,8 +222,7 @@ fn lookup_sql_rule_cache<'py>(
 }
 
 fn finding_payload(finding: &Bound<'_, PyAny>) -> PyResult<Value> {
-    let path: String = finding
-        .getattr("path")?
+    let path: String = native_field(finding, "path")?
         .call_method0("as_posix")?
         .extract()?;
     Ok(json!({

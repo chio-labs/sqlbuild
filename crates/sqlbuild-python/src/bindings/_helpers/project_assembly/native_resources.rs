@@ -123,7 +123,7 @@ fn variables<'py>(effective_vars: &Bound<'py, PyAny>) -> PyResult<RequestVariabl
 }
 
 fn optional_text(value: &Bound<'_, PyAny>, attribute: &str) -> PyResult<Option<String>> {
-    value.getattr(attribute)?.extract()
+    native_field(value, attribute)?.extract()
 }
 
 /// Python's own `os.environ` lookup of every name an `ENV:` template may read.
@@ -183,19 +183,12 @@ fn model_facts(model_input: &Bound<'_, PyAny>, checks: &Bound<'_, PyAny>) -> PyR
         syntax_checks.push(SyntaxCheck { sql, placeholders });
     }
     Ok(ModelFacts {
-        name: model_file
-            .getattr("file_path")?
-            .getattr("stem")?
-            .extract()?,
-        directory: model_file
-            .getattr("relative_path")?
-            .getattr("parent")?
+        name: native_field(&native_field(&model_file, "file_path")?, "stem")?.extract()?,
+        directory: native_field(&native_field(&model_file, "relative_path")?, "parent")?
             .str()?
             .to_string(),
         tags: tags(
-            &model_input
-                .getattr("config")?
-                .getattr("values")?
+            &native_field(&native_field(model_input, "config")?, "values")?
                 .call_method1("get", ("tags",))?,
         )?,
         references: references(reference_rows),
@@ -205,7 +198,7 @@ fn model_facts(model_input: &Bound<'_, PyAny>, checks: &Bound<'_, PyAny>) -> PyR
 
 /// Every item of `inputs.<attribute>`.
 fn items<'py>(inputs: &Bound<'py, PyAny>, attribute: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    inputs.getattr(attribute)?.try_iter()?.collect()
+    native_field(inputs, attribute)?.try_iter()?.collect()
 }
 
 /// The native assembly request for compile inputs, and the exceptions opaque vars raise.
@@ -227,7 +220,7 @@ fn project_request<'py>(
         })
     };
     let defaults: Bound<'py, PyAny> =
-        native_field(inputs, "project_config")?.getattr("defaults")?;
+        native_field(&native_field(inputs, "project_config")?, "defaults")?;
     let defaults = SeedDefaults {
         database: optional_text(&defaults, "database")?,
         schema: optional_text(&defaults, "schema")?,
@@ -240,8 +233,7 @@ fn project_request<'py>(
         let entry: Bound<'py, PyAny> = native_field(seed_input, "schema_entry")?;
         seeds.push(SeedFacts {
             name: native_field(&entry, "name")?.extract()?,
-            tags: entry
-                .getattr("tags")?
+            tags: native_field(&entry, "tags")?
                 .try_iter()?
                 .map(|tag| tag?.extract())
                 .collect::<PyResult<_>>()?,

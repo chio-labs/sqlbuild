@@ -199,10 +199,10 @@ pub(crate) fn history_status(
 
 /// `OldNameViewHistory.old`: the relation name the compatibility view occupies.
 pub(crate) fn history_old(history: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(native_field(history, "required")?.getattr("old")?.unbind())
+    Ok(native_field(&native_field(history, "required")?, "old")?.unbind())
 }
 
 /// `OldNameViewHistory.new`: the relation the compatibility view reads.
 pub(crate) fn history_new(history: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(native_field(history, "required")?.getattr("new")?.unbind())
+    Ok(native_field(&native_field(history, "required")?, "new")?.unbind())
 }

@@ -34,8 +34,7 @@ fn format_redundant_fixture_nulls<'py>(
     compiler_guard(|| {
         let py = files.py();
         let relations = fixture_schemas::relations(discovered_inputs)?;
-        let syntax: LexicalSyntax = sql_lexical_syntax
-            .getattr("native_mapping")?
+        let syntax: LexicalSyntax = native_field(sql_lexical_syntax, "native_mapping")?
             .extract::<LexicalSyntaxInput>()?
             .into();
         let updated = PyDict::new(py);
@@ -67,9 +66,7 @@ fn format_redundant_fixture_nulls<'py>(
                     let block = block?;
                     Ok(FixtureFormatBlock {
                         sql_body: native_field(&block, "sql_body")?.extract()?,
-                        model_mode: block
-                            .getattr("mode")?
-                            .getattr("value")?
+                        model_mode: native_field(&native_field(&block, "mode")?, "value")?
                             .extract::<String>()?
                             == MODEL_TEST_MODE,
                     })

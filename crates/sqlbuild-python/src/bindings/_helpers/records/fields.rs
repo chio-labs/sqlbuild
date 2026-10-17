@@ -60,11 +60,20 @@ pub(crate) fn replaced<'py>(
     value: &Bound<'py, PyAny>,
     changes: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = value.py();
-    let keywords: Bound<'py, PyDict> = PyDict::new(py);
+    let keywords: Bound<'py, PyDict> = PyDict::new(value.py());
     for (name, changed) in changes {
         keywords.set_item(*name, changed)?;
     }
+    replaced_keywords(value, &keywords)
+}
+
+/// `dataclasses.replace(value, **keywords)`: a native record is rebuilt from its own values.
+pub(crate) fn replaced_keywords<'py>(
+    value: &Bound<'py, PyAny>,
+    keywords: &Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = value.py();
+    let keywords: Bound<'py, PyDict> = keywords.copy()?;
     let Ok(record) = value.cast::<NativeRecord>() else {
         return imported(py, "dataclasses", "replace")?.call((value,), Some(&keywords));
     };

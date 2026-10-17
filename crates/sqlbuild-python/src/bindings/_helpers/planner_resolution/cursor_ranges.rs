@@ -82,10 +82,11 @@ pub(crate) struct CursorWindowInputs<'py> {
 
 /// One string-valued model configuration entry.
 pub(crate) fn config_str<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    Ok(
-        authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
-            .unwrap_or_else(|| model.py().None().into_bound(model.py())),
-    )
+    Ok(authored_config_str(
+        &native_field(&native_field(model, "config")?, "values")?,
+        key,
+    )?
+    .unwrap_or_else(|| model.py().None().into_bound(model.py())))
 }
 
 /// One cursor-bound model configuration entry as its token text.
@@ -95,7 +96,10 @@ pub(crate) fn config_bound<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     object(
         model.py(),
-        config_cursor_bound(&native_field(model, "config")?.getattr("values")?, key)?,
+        config_cursor_bound(
+            &native_field(&native_field(model, "config")?, "values")?,
+            key,
+        )?,
     )
 }
 
@@ -360,8 +364,7 @@ fn model_cursor_snapshot<'py>(
     model: &Bound<'py, PyAny>,
     snapshot: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    snapshot
-        .getattr("cursor_snapshots")?
+    native_field(snapshot, "cursor_snapshots")?
         .call_method1("get", (model_reads::name_object(model)?,))
 }
 
@@ -548,11 +551,11 @@ pub(crate) fn model_cursor_overrides<'py>(
         None
     };
     if let Some((start_field, end_field)) = typed_fields {
-        let typed_start = cursor_overrides.getattr(start_field)?;
+        let typed_start = native_field(cursor_overrides, start_field)?;
         if !typed_start.is_none() {
             resolved_start = token(py, &typed_start)?;
         }
-        let typed_end = cursor_overrides.getattr(end_field)?;
+        let typed_end = native_field(cursor_overrides, end_field)?;
         if !typed_end.is_none() {
             resolved_end = token(py, &typed_end)?;
         }

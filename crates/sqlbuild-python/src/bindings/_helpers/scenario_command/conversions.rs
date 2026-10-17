@@ -302,7 +302,7 @@ pub(crate) fn write_warehouse_runtime_target(
             .iter()
             .map(|value| {
                 Ok(NamedStatements {
-                    name: value.getattr(field)?.extract()?,
+                    name: native_field(value, field)?.extract()?,
                     statements: sql_statements(value)?,
                 })
             })

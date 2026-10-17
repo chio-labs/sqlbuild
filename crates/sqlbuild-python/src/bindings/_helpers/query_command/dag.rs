@@ -66,8 +66,7 @@ fn run_dag_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) ->
     let python_graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let dag_json: String = build_dag_json(
         &graph,
-        &native_field(&discovered, "project_config")?
-            .getattr("name")?
+        &native_field(&native_field(&discovered, "project_config")?, "name")?
             .extract::<String>()?,
         Some(&python_graph),
     )?;

@@ -88,14 +88,13 @@ pub(crate) fn build_execution_upstream_deps<'py>(
     let py: Python<'py> = project.py();
     let upstream: Bound<'py, PyDict> = PyDict::new(py);
     for collection in ["models", "sources", "seeds", "functions"] {
-        for resource in project.getattr(collection)?.try_iter()? {
+        for resource in native_field(project, collection)?.try_iter()? {
             let resource: Bound<'py, PyAny> = resource?;
             upstream.set_item(
                 native_field(&resource, "key")?,
                 PyList::new(
                     py,
-                    resource
-                        .getattr("deps")?
+                    native_field(&resource, "deps")?
                         .try_iter()?
                         .collect::<PyResult<Vec<_>>>()?,
                 )?,

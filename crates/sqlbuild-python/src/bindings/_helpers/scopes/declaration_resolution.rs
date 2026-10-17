@@ -11,6 +11,7 @@ use sqlbuild_scopes::scope_index::models::{
     DeclarationIdentity, IdentityFailure, QualifiedIdentity, ResourceIdentity, ScopePathFailure,
 };
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scopes::declaration_contexts::NativeDeclarationContexts;
 
 const PATH_CACHE_PREFIX: &str = "<path>";
@@ -276,11 +277,11 @@ impl NativeDeclarationContexts {
         let py: Python<'py> = context.py();
         let fields: Bound<'py, PyDict> = PyDict::new(py);
         for field in COPIED_FIELDS {
-            let mapping: Bound<'py, PyDict> = context.getattr(field)?.downcast_into()?;
+            let mapping: Bound<'py, PyDict> = native_field(context, field)?.downcast_into()?;
             fields.set_item(field, mapping.copy()?)?;
         }
         for field in VISIBILITY_FIELDS {
-            let mapping: Bound<'py, PyDict> = context.getattr(field)?.downcast_into()?;
+            let mapping: Bound<'py, PyDict> = native_field(context, field)?.downcast_into()?;
             fields.set_item(field, self.rebound_visibility(&mapping, consumer)?)?;
         }
         fields.set_item(intern!(py, "consumer"), consumer)?;

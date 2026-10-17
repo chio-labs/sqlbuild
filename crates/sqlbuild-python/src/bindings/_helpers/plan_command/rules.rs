@@ -16,6 +16,7 @@ use crate::bindings::_helpers::planner_selection::selectors::select_project_grap
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::catalogue::build_rule_catalogue;
 use crate::bindings::_helpers::rules::guidance::{format_rule, install_rules_skills};
@@ -100,7 +101,7 @@ fn list_rules(catalogue: &Bound<'_, PyAny>, json_output: bool) -> PyResult<i32> 
         let rule: Bound<'_, PyAny> = rule?;
         let item: Bound<'_, PyDict> = PyDict::new(py);
         for field in ["code", "family", "message", "custom"] {
-            item.set_item(field, rule.getattr(field)?)?;
+            item.set_item(field, native_field(&rule, field)?)?;
         }
         let subject: Bound<'_, PyAny> = native_field(&rule, "subject")?;
         item.set_item(
@@ -224,10 +225,7 @@ fn run_rule_selection(
             &[
                 ("graph", graph),
                 ("discovered_inputs", discovered),
-                (
-                    "config",
-                    imported(py, "dataclasses", "replace")?.call((config,), Some(&replaced))?,
-                ),
+                ("config", replaced_keywords(config, &replaced)?),
                 ("project_dir", project_dir.clone()),
                 (
                     "dialect",
@@ -255,7 +253,7 @@ fn run_rule_selection(
     }
     let fields: Bound<'_, PyDict> = PyDict::new(py);
     for field in RESULT_FIELDS {
-        fields.set_item(field, result.getattr(field)?)?;
+        fields.set_item(field, native_field(&result, field)?)?;
     }
     let text: String = format_rules_result(
         &new_record(py, RecordId::RulesResult, (), Some(&fields))?,

@@ -46,8 +46,7 @@ pub(crate) fn sql_test_columns<'py>(
         if !payload.is_instance(model_test_payload)? {
             continue;
         }
-        for cte in payload
-            .getattr("authored_ctes")?
+        for cte in native_field(&payload, "authored_ctes")?
             .try_iter()?
             .chain(native_field(&payload, "expected_ctes")?.try_iter()?)
         {
@@ -130,7 +129,8 @@ pub(crate) fn resource_sql_diagnostics<'py>(
     shapes: &Bound<'py, PyAny>,
     profile: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let native: Bound<'py, PyAny> = native_field(project, "binding_catalog")?.getattr("native")?;
+    let native: Bound<'py, PyAny> =
+        native_field(&native_field(project, "binding_catalog")?, "native")?;
     Ok(resource_sql_diagnostics_of(
         native.extract::<PyRef<'py, ProjectCatalog>>()?,
         project,

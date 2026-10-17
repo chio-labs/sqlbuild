@@ -261,9 +261,9 @@ fn create_indexes<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'
 fn deterministic_event_id(request: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
     let request = Request::new("deterministic_microbatch_event_id", request)?;
     let scope: Bound<'_, PyAny> = request.get("scope")?;
-    let field = |name: &str| -> PyResult<String> { scope.getattr(name)?.extract() };
+    let field = |name: &str| -> PyResult<String> { native_field(&scope, name)?.extract() };
     let optional =
-        |name: &str| -> PyResult<Option<String>> { optional_text(&scope.getattr(name)?) };
+        |name: &str| -> PyResult<Option<String>> { optional_text(&native_field(&scope, name)?) };
     let identity = MicrobatchEventIdentity {
         scope_kind: field("scope_kind")?,
         scope_key: field("scope_key")?,
@@ -272,7 +272,7 @@ fn deterministic_event_id(request: Option<&Bound<'_, PyDict>>) -> PyResult<Strin
         target_schema: optional("target_schema")?,
         target_name: field("target_name")?,
         physical_generation_id: field("physical_generation_id")?,
-        record_type: request.get("record_type")?.getattr("value")?.extract()?,
+        record_type: native_field(&request.get("record_type")?, "value")?.extract()?,
         partition_start: optional_text(&request.get("partition_start")?)?,
         partition_end: optional_text(&request.get("partition_end")?)?,
         completion_reason: request.get("completion_reason")?.extract()?,

@@ -179,9 +179,8 @@ pub(crate) fn plan_reference_renames<'py>(
         &native_field(&state, "inspect_migration_events")?,
         &[("schemas", inspected.into_any())],
     )?;
-    let target_name: Bound<'py, PyAny> = runtime
-        .getattr("project")?
-        .getattr("effective_target_name")?;
+    let target_name: Bound<'py, PyAny> =
+        native_field(&native_field(runtime, "project")?, "effective_target_name")?;
     let mut renames: Vec<Bound<'py, PyAny>> = Vec::new();
     for item in planned.call_method0("items")?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
@@ -232,7 +231,7 @@ fn changed_referencing_query(
         }
     }
     let recorded_models: Bound<'_, PyAny> =
-        native_field(snapshot, "fingerprints")?.getattr("models")?;
+        native_field(&native_field(snapshot, "fingerprints")?, "models")?;
     let ref_kind: Bound<'_, PyAny> = enum_member(py, RecordId::SqlReferenceKind, "REF")?;
     let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
     for model in selected {

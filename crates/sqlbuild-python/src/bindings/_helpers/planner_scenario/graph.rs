@@ -25,9 +25,7 @@ pub(crate) fn plan_scenario_graph<'py>(
     let mut input = ScenarioGraphInput {
         name: native_field(scenario, "name")?.extract()?,
         expected: native_field(scenario, "expected_model_names")?.extract()?,
-        assertions: scenario
-            .getattr("assertion_target_model_names")?
-            .extract()?,
+        assertions: native_field(scenario, "assertion_target_model_names")?.extract()?,
         targets: native_field(scenario, "target_model_names")?.extract()?,
         refs: native_field(scenario, "ref_fixture_names")?.extract()?,
         sources: native_field(scenario, "source_fixture_names")?.extract()?,
@@ -37,8 +35,7 @@ pub(crate) fn plan_scenario_graph<'py>(
     };
     for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
-        let deps = model
-            .getattr("deps")?
+        let deps = native_field(&model, "deps")?
             .try_iter()?
             .map(|dep| native_key(&dep?))
             .collect::<PyResult<_>>()?;

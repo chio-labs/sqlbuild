@@ -30,6 +30,7 @@ use crate::bindings::_helpers::planner_entries::command_plans::build_seed_comman
 use crate::bindings::_helpers::planner_entries::command_plans::read_selected_seed_fingerprints;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::result_output::documents::format_seed_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
@@ -44,7 +45,7 @@ fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
 }
 
 fn status_value(result: &Bound<'_, PyAny>) -> PyResult<String> {
-    native_field(result, "status")?.getattr("value")?.extract()
+    native_field(&native_field(result, "status")?, "value")?.extract()
 }
 
 /// Forward positional connection timing to a reporter that takes keywords.
@@ -140,10 +141,7 @@ impl SeedCompletionRelay {
                     py.import("builtins")?.getattr("int")?.call1((duration,))?;
                 let changes: Bound<'_, PyDict> = PyDict::new(py);
                 changes.set_item("duration_ms", milliseconds)?;
-                result = py
-                    .import("dataclasses")?
-                    .getattr("replace")?
-                    .call((result,), Some(&changes))?;
+                result = replaced_keywords(&result, &changes)?;
             }
         }
         let ordinal: usize = *self
@@ -289,9 +287,7 @@ fn compile_seeds<'py>(
 }
 
 fn seed_names(pipeline: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
-    pipeline
-        .getattr("plan_output")?
-        .getattr("seed_entries")?
+    native_field(&native_field(pipeline, "plan_output")?, "seed_entries")?
         .try_iter()?
         .map(|entry| native_field(&entry?, "name")?.extract())
         .collect()
@@ -402,9 +398,10 @@ fn load_seeds<'py>(
                 ("run_id", native_field(&project, "run_id")?),
                 (
                     "query_change_tracking",
-                    project
-                        .getattr("settings")?
-                        .getattr("query_change_tracking")?,
+                    native_field(
+                        &native_field(&project, "settings")?,
+                        "query_change_tracking",
+                    )?,
                 ),
                 (
                     "on_seed_complete",
@@ -442,11 +439,11 @@ fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
     let pipeline: Bound<'_, PyAny> = compile_seeds(request, &invocation)?;
     let requested: Bound<'_, PyAny> = native_field(request, "concurrency")?;
     let concurrency: i64 = if requested.is_none() {
-        pipeline
-            .getattr("project")?
-            .getattr("settings")?
-            .getattr("concurrency")?
-            .extract::<i64>()?
+        native_field(
+            &native_field(&native_field(&pipeline, "project")?, "settings")?,
+            "concurrency",
+        )?
+        .extract::<i64>()?
     } else {
         requested.extract::<i64>()?
     }

@@ -98,9 +98,7 @@ fn resource_kind(
         return Ok(None);
     }
     Ok(Some((
-        native_field(consumer, "kind")?
-            .getattr("value")?
-            .extract()?,
+        native_field(&native_field(consumer, "kind")?, "value")?.extract()?,
         native_field(consumer, "name")?.extract()?,
     )))
 }

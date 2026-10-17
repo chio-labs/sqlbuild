@@ -27,10 +27,11 @@ pub(super) fn chains<'py>(
     let request = ChainRequest {
         models: native_field(project, "models")?.extract()?,
         tests: tests.extract()?,
-        lexical_syntax: project
-            .getattr("sql_lexical_syntax")?
-            .getattr("native_mapping")?
-            .extract()?,
+        lexical_syntax: native_field(
+            &native_field(project, "sql_lexical_syntax")?,
+            "native_mapping",
+        )?
+        .extract()?,
     };
     let native =
         resolve_compiled_sql_test_chains(py, request).and_then(|chains| object(py, chains));
@@ -88,10 +89,11 @@ pub(crate) fn planned<'py>(
         requires_derived_table_aliases: adapter
             .call_method0("requires_derived_table_aliases")?
             .extract()?,
-        lexical_syntax: project
-            .getattr("sql_lexical_syntax")?
-            .getattr("native_mapping")?
-            .extract()?,
+        lexical_syntax: native_field(
+            &native_field(project, "sql_lexical_syntax")?,
+            "native_mapping",
+        )?
+        .extract()?,
         render_sql: artifact || options.render_sql,
         include_plan: !artifact && options.include_plan,
     };
@@ -215,10 +217,7 @@ pub(crate) fn sql_test_plan_error_messages<'py>(
     for warning in warnings.try_iter()? {
         let warning = warning?;
         let message: String = native_field(&warning, "message")?.extract()?;
-        if warning
-            .getattr("severity")?
-            .getattr("value")?
-            .extract::<String>()?
+        if native_field(&native_field(&warning, "severity")?, "value")?.extract::<String>()?
             == super::constants::ERROR_SEVERITY
             && seen.insert(message.clone())
         {

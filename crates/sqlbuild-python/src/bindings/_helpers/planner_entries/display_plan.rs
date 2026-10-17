@@ -41,10 +41,11 @@ fn display_action(
 }
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    Ok(
-        authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
-            .unwrap_or_else(|| model.py().None().into_bound(model.py())),
-    )
+    Ok(authored_config_str(
+        &native_field(&native_field(model, "config")?, "values")?,
+        key,
+    )?
+    .unwrap_or_else(|| model.py().None().into_bound(model.py())))
 }
 
 fn display_entry<'py>(

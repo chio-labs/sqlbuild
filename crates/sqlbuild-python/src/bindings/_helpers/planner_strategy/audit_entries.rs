@@ -60,7 +60,7 @@ fn audit_enum<'py>(
     default: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = audit.py();
-    let value = audit.getattr(attribute)?;
+    let value = native_field(audit, attribute)?;
     imported(py, AUDIT_TYPES_MODULE, enum_name)?.call1((if value.is_none() {
         PyString::new(py, default).into_any()
     } else {
@@ -146,7 +146,7 @@ fn plan_audit<'py>(
         "always_run",
         "description",
     ] {
-        values.set_item(field, audit.getattr(field)?)?;
+        values.set_item(field, native_field(&audit, field)?)?;
     }
     let measurement = native_field(&audit, "measurement_contract")?;
     for field in ["value_column", "sample_count_column", "sample_unit"] {
@@ -155,7 +155,7 @@ fn plan_audit<'py>(
             if measurement.is_none() {
                 py.None().into_bound(py)
             } else {
-                measurement.getattr(field)?
+                native_field(&measurement, field)?
             },
         )?;
     }
@@ -227,7 +227,7 @@ pub(crate) fn build_selected_audit_entries<'py>(
     let request = Request::new("build_selected_audit_entries", request)?;
     let py = request.py();
     let project = request.get("project")?;
-    let selected_keys = request.get("scope")?.getattr("selected_keys")?;
+    let selected_keys = native_field(&request.get("scope")?, "selected_keys")?;
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
     for audit in native_field(&project, "audits")?.try_iter()? {
         let audit = audit?;

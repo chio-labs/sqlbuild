@@ -171,14 +171,13 @@ pub(crate) fn add_storage_policies<'py>(
 ) -> PyResult<PlanOutputFields<'py>> {
     let py = runtime.py();
     let mut entries = output.field("model_entries")?;
-    if policies
-        .getattr("record_migration_fingerprints")?
-        .is_truthy()?
-    {
+    if native_field(policies, "record_migration_fingerprints")?.is_truthy()? {
         let models = PyDict::new(py);
-        for model in runtime_field(runtime, |runtime| &runtime.project)?
-            .getattr("models")?
-            .try_iter()?
+        for model in native_field(
+            &runtime_field(runtime, |runtime| &runtime.project)?,
+            "models",
+        )?
+        .try_iter()?
         {
             let model = model?;
             models.set_item(model_reads::name_object(&model)?, model)?;
@@ -200,8 +199,7 @@ pub(crate) fn add_storage_policies<'py>(
                         ),
                         (
                             "dialect",
-                            runtime
-                                .getattr("adapter")?
+                            native_field(runtime, "adapter")?
                                 .call_method0("sql_analysis_dialect")?,
                         ),
                     ],
@@ -332,11 +330,10 @@ fn freshness_metadata<'py>(source_freshness: &Bound<'py, PyAny>) -> PyResult<Bou
         if propagation.is_none() {
             return tuple(py, Vec::new());
         }
-        sorted_names(py, strings(&propagation.getattr(field)?)?)
+        sorted_names(py, strings(&native_field(&propagation, field)?)?)
     };
     let mut details: Vec<_> = Vec::new();
-    for unknown in source_freshness
-        .getattr("unknown_sources")?
+    for unknown in native_field(source_freshness, "unknown_sources")?
         .call_method0("values")?
         .try_iter()?
     {
@@ -345,7 +342,7 @@ fn freshness_metadata<'py>(source_freshness: &Bound<'py, PyAny>) -> PyResult<Bou
         detail.set_item("source_name", native_field(&unknown, "source_name")?)?;
         detail.set_item(
             "reason",
-            native_field(&unknown, "reason")?.getattr("value")?,
+            native_field(&native_field(&unknown, "reason")?, "value")?,
         )?;
         detail.set_item("message", native_field(&unknown, "message")?)?;
         details.push(detail.into_any());
