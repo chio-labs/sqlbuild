@@ -19,9 +19,9 @@ use crate::bindings::_helpers::janitor::janitor_planning::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const UNKNOWN_VIEW_CODE: &str = "C503";
 const UNKNOWN_VIEW_HELP: &str =
@@ -201,7 +201,7 @@ fn unknown_view_error(py: Python<'_>, requests: &Bound<'_, PyAny>) -> PyResult<P
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("code", UNKNOWN_VIEW_CODE)?;
     options.set_item("help", UNKNOWN_VIEW_HELP)?;
-    let error: Bound<'_, PyAny> = registry::error(py, ErrorId::CliUser)?.call(
+    let error: Bound<'_, PyAny> = error_class(py, ErrorId::CliUser)?.call(
         (format!(
             "no compatibility view is recorded at {}",
             names.join(", ")

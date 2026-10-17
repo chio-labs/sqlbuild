@@ -21,11 +21,11 @@ use crate::bindings::_helpers::diagnostics::trackers::current_tracker;
 use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progress};
 use crate::bindings::_helpers::rules::rule_dispatch::evaluate_rules;
 use crate::bindings::_helpers::rules::rules_config::load_rules_config;
@@ -196,7 +196,7 @@ fn reject_compile_errors(
     } else {
         py.None().into_bound(py)
     };
-    let error: Bound<'_, PyAny> = registry::error(py, ErrorId::CompileInput)?.call(
+    let error: Bound<'_, PyAny> = error_class(py, ErrorId::CompileInput)?.call(
         (lines.join("\n"),),
         Some(&keywords(
             py,
@@ -249,7 +249,7 @@ fn run_rules_gate<'py>(
     (project, graph): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<()> {
     let py: Python<'py> = discovered.py();
-    let rules_error: Bound<'py, PyAny> = registry::error(py, ErrorId::Rules)?;
+    let rules_error: Bound<'py, PyAny> = error_class(py, ErrorId::Rules)?;
     let project_dir: Bound<'py, PyAny> = native_field(discovered, "project_dir")?;
     if project_dir.is_none() {
         return Err(PyErr::from_value(

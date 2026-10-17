@@ -34,6 +34,7 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -492,7 +493,7 @@ fn artifact_diagnostics<'py>(
                 ("severity", "error".into_bound_py_any(py)?),
                 (
                     "code",
-                    registry::error(py, ErrorId::PlannerInput)?.getattr("code")?,
+                    error_class(py, ErrorId::PlannerInput)?.getattr("code")?,
                 ),
                 ("message", message?),
                 ("resource_type", "sql_test".into_bound_py_any(py)?),
@@ -702,7 +703,7 @@ pub(crate) fn publish_staged_target<'py>(
 
 /// `StagedArtifactsChangedError(message, help=...)`.
 pub(crate) fn staging_changed(py: Python<'_>, message: &str) -> PyResult<PyErr> {
-    let error: Bound<'_, PyAny> = registry::error(py, ErrorId::StagedArtifactsChanged)?.call(
+    let error: Bound<'_, PyAny> = error_class(py, ErrorId::StagedArtifactsChanged)?.call(
         (message,),
         Some(&keywords(
             py,

@@ -16,10 +16,10 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::audit_views::audit_reference_rows;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
@@ -348,7 +348,7 @@ fn python_diagnostic<'py>(
 fn failure_error(py: Python<'_>, failure: ResourceSqlFailure) -> PyResult<PyErr> {
     Ok(match failure {
         ResourceSqlFailure::CursorIntrinsic(message) => {
-            PyErr::from_value(registry::error(py, ErrorId::CompileInput)?.call1((message,))?)
+            PyErr::from_value(error_class(py, ErrorId::CompileInput)?.call1((message,))?)
         }
         ResourceSqlFailure::Normalization(message) | ResourceSqlFailure::Internal(message) => {
             compiler_error(message)

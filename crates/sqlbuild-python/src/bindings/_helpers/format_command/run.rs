@@ -16,9 +16,9 @@ use crate::bindings::_helpers::discovery::description_inputs::externally_describ
 use crate::bindings::_helpers::format_command::files::{
     FormatChange, file_dictionary, overlaid, persist_changes, sorted_items,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::dsl_headers::format_native_headers;
 use crate::bindings::_helpers::rules::dsl_headers::reject_unparseable_header_rewrites;
 use crate::bindings::_helpers::rules::dsl_headers::safe_format_files;
@@ -258,7 +258,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
                 native_field(adapter, "sql_lexical_syntax")?,
             )),
             (Some(_), None) => {
-                return Err(registry::error(py, ErrorId::Lint)?
+                return Err(error_class(py, ErrorId::Lint)?
                     .call1(("fixture-null formatting requires the project adapter",))
                     .map(pyo3::PyErr::from_value)?);
             }

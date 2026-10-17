@@ -1,7 +1,7 @@
 //! Canonical snake_case resource identity checks and SQL function node types.
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -34,7 +34,7 @@ pub(crate) fn validate_resource_identity(
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("help", help_text)?;
     let error: Bound<'_, PyAny> =
-        registry::error(py, ErrorId::ResourceIdentity)?.call((message,), Some(&keywords))?;
+        error_class(py, ErrorId::ResourceIdentity)?.call((message,), Some(&keywords))?;
     Err(PyErr::from_value(error))
 }
 

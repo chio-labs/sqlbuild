@@ -17,9 +17,9 @@ use sqlbuild_pysource::rule_evidence::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const PATHLIB_MODULE: &str = "pathlib";
 const INSPECT_MODULE: &str = "inspect";
@@ -132,9 +132,9 @@ fn custom_rule_test_evidence<'py>(
         .collect())
 }
 
-/// `error_class(message)` from the native module.
-fn rules_error(py: Python<'_>, error_class: ErrorId, message: String) -> PyErr {
-    match registry::error(py, error_class).and_then(|class| class.call1((message,))) {
+/// The native `error_id` exception raised with `message`.
+fn rules_error(py: Python<'_>, error_id: ErrorId, message: String) -> PyErr {
+    match error_class(py, error_id).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

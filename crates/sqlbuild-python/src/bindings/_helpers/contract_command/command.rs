@@ -30,10 +30,10 @@ use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_co
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::refactor::contract_compare::compare_contracts;
 
 const GENERATE_ACTION: &str = "generate";
@@ -43,7 +43,7 @@ fn user_error(py: Python<'_>, message: &str, code: &str) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
-        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),

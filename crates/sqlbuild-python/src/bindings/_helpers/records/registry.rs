@@ -13,8 +13,6 @@ use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 
 /// The extension module, imported once for attribute lookups.
 static MODULE: PyOnceLock<Py<PyModule>> = PyOnceLock::new();
-/// Each `ErrorId`'s interned attribute name, by variant position.
-static ERROR_NAMES: PyOnceLock<Vec<Py<PyString>>> = PyOnceLock::new();
 /// Each `NativeAttr`'s interned attribute name, by variant position.
 static ATTRIBUTE_NAMES: PyOnceLock<Vec<Py<PyString>>> = PyOnceLock::new();
 
@@ -94,16 +92,6 @@ pub(crate) fn verify_attributes(module: &Bound<'_, PyModule>) -> PyResult<()> {
         "the native module does not register: {}",
         missing.join(", ")
     )))
-}
-
-/// The native error class `id`, read now so a replaced attribute is seen.
-pub(crate) fn error(py: Python<'_>, id: ErrorId) -> PyResult<Bound<'_, PyAny>> {
-    attribute(
-        py,
-        &ERROR_NAMES,
-        ErrorId::ALL.iter().map(|id| id.name()),
-        id as usize,
-    )
 }
 
 /// The module attribute `id`, read now so a replaced attribute is seen.

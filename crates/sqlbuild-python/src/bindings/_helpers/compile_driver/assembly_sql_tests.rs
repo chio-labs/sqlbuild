@@ -8,10 +8,10 @@ use crate::bindings::_helpers::compile_driver::assembly_checks::test_model_query
 use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compile_driver::stage_work::{SQL_TEST_ASSEMBLY, count_stage};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::compiled_tests::assemble_native_sql_tests;
 
 const DECIMAL_MODULE: &str = "decimal";
@@ -85,8 +85,7 @@ fn assembly_error(
         native_field(failure, "message")?.extract()?
     };
     if kind == Some(SQL_TEST_INPUT_FAILURE) {
-        let error: Bound<'_, PyAny> =
-            registry::error(py, ErrorId::CompileInput)?.call1((message,))?;
+        let error: Bound<'_, PyAny> = error_class(py, ErrorId::CompileInput)?.call1((message,))?;
         return Ok(PyErr::from_value(error));
     }
     Ok(NativeCompilerError::new_err(message))

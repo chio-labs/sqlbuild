@@ -9,15 +9,13 @@ use sqlbuild_analysis::planner_changes::models::{
     Backfill, BackfillAction, ChangeKind, SchemaChangeKind, SchemaColumnSource, SchemaFindingRow,
 };
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 /// `PlannerInputError(message)` for an unknown replay policy.
 pub(crate) fn replay_policy_error(py: Python<'_>, error: UnknownReplayPolicy) -> PyErr {
-    match registry::error(py, ErrorId::PlannerInput)
-        .and_then(|class| class.call1((error.message(),)))
-    {
+    match error_class(py, ErrorId::PlannerInput).and_then(|class| class.call1((error.message(),))) {
         Ok(value) => PyErr::from_value(value),
         Err(error) => error,
     }

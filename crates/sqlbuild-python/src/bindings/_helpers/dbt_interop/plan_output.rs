@@ -19,11 +19,11 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::display_plan::build_display_only_sqlbuild_plan;
 use crate::bindings::_helpers::planner_entries::execution_plan::build_execution_plan;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const BUILD_OPTIONS: (&[&str], &[&str]) = (&["environment", "request", "hooks"], &[]);
 const ATTACH_OPTIONS: (&[&str], &[&str]) = (
@@ -225,7 +225,7 @@ pub(crate) fn build_sqlbuild_plan_output<'py>(
             )?),
         );
         match result {
-            Err(error) if error.is_instance(py, &registry::error(py, ErrorId::PlannerInput)?) => {
+            Err(error) if error.is_instance(py, &error_class(py, ErrorId::PlannerInput)?) => {
                 build_display_only_sqlbuild_plan(
                     &native_field(&environment, "project")?,
                     &selected,

@@ -1,10 +1,10 @@
 //! Python boundary values shared by plan entry and plan output assembly.
 
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyString;
@@ -69,7 +69,7 @@ pub(super) fn error_of(
     message: &str,
     fields: &[(&str, Bound<'_, PyAny>)],
 ) -> PyErr {
-    match registry::error(py, class)
+    match error_class(py, class)
         .and_then(|class| class.call((message,), Some(&keywords(py, fields)?)))
     {
         Ok(error) => PyErr::from_value(error),

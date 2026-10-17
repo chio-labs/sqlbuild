@@ -20,11 +20,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::{field, replaced};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::SAFE_RULE_FIX_CODES;
 use crate::bindings::_helpers::rules::fix_facts::compile_facts;
 use crate::bindings::_helpers::rules::fix_verdict::fix_verdict;
@@ -94,7 +94,7 @@ pub(crate) fn plan_rule_fixes<'py>(
     let inputs = args.value("discovered_inputs")?;
     if !adapter.is_instance(&host::entry(py, AdapterHost::BaseAdapter)?)? || inputs.is_none() {
         return Err(PyErr::from_value(
-            registry::error(py, ErrorId::ProjectCompile)?
+            error_class(py, ErrorId::ProjectCompile)?
                 .call1(("format --fix requires discovered compiler inputs and an adapter",))?,
         ));
     }
@@ -396,7 +396,7 @@ impl<'py> FixSession<'py> {
             Err(error)
                 if error
                     .value(py)
-                    .is_instance(&registry::error(py, ErrorId::CompileInput)?)? =>
+                    .is_instance(&error_class(py, ErrorId::CompileInput)?)? =>
             {
                 return Ok(RelationKeys::new());
             }

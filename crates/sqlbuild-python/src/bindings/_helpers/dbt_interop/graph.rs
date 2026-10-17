@@ -24,10 +24,10 @@ use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt
 use crate::bindings::_helpers::planner_selection::model_selectors::{
     resolve_sqlbuild_model_selector_names, split_selector_expansion,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const MODEL_RESOURCE_TYPE: &str = "model";
 const SELECTION_OPTIONS: (&[&str], &[&str]) = (
@@ -217,7 +217,7 @@ fn selection_error(py: Python<'_>, error: DbtSelectionError<PyErr>) -> PyErr {
             let raised = || -> PyResult<PyErr> {
                 let keywords: Bound<'_, PyDict> = PyDict::new(py);
                 keywords.set_item("code", PATH_SELECTOR_ERROR_CODE)?;
-                let error: Bound<'_, PyAny> = registry::error(py, ErrorId::DbtInteropArgument)?
+                let error: Bound<'_, PyAny> = error_class(py, ErrorId::DbtInteropArgument)?
                     .call((message,), Some(&keywords))?;
                 Ok(PyErr::from_value(error))
             };

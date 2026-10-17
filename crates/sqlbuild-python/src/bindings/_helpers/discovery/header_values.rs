@@ -6,9 +6,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::model_headers::{
     ColumnLocation, ParsedModelHeader, header_failure, model_output_columns, parse_model_headers,
 };
@@ -83,7 +83,7 @@ fn parse_header_values<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bo
     let statement: String = request.get("statement_name")?.extract()?;
     let error_class: Bound<'py, PyAny> = match request.optional("error_class")? {
         Some(class) if !class.is_none() => class,
-        _ => registry::error(py, ErrorId::ModelSqlParse)?,
+        _ => error_class(py, ErrorId::ModelSqlParse)?,
     };
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("help", help)?;

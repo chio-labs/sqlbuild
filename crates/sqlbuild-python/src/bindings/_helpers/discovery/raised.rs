@@ -10,9 +10,9 @@ use sqlbuild_discovery::models::{DiscoveryFailure, ReadFailure, StageFailure};
 use sqlbuild_discovery::tree::models::ProjectTree;
 
 use crate::bindings::_helpers::discovery::project_files::path_object;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const BUILTINS_MODULE: &str = "builtins";
 const OS_MODULE: &str = "os";
@@ -55,7 +55,7 @@ pub(crate) fn discovery_error(
     raised((|| {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("help", help)?;
-        registry::error(py, *class)?.call((message,), Some(&keywords))
+        error_class(py, *class)?.call((message,), Some(&keywords))
     })())
 }
 

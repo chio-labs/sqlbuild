@@ -10,9 +10,9 @@ use sqlbuild_sqltext::sql_scan::main::reads_differently_from_generic::reads_diff
 use sqlbuild_sqltext::sql_scan::main::unsupported_line_comment_prefixes::unsupported_line_comment_prefixes;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 /// `SqlLexicalSyntax.line_comment_prefixes` position.
 const LINE_COMMENT_PREFIXES_FIELD: usize = 5;
@@ -57,7 +57,7 @@ pub(crate) fn finish_lexical_syntax(
         PyList::new(py, &supported)?.repr()?
     );
     let error: Bound<'_, PyAny> =
-        registry::error(py, ErrorId::UnsupportedLexicalSyntax)?.call1((message,))?;
+        error_class(py, ErrorId::UnsupportedLexicalSyntax)?.call1((message,))?;
     Err(PyErr::from_value(error))
 }
 

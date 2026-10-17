@@ -20,9 +20,9 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::relationship_scan::{
     RelationshipScanSettings, ScenarioRow, TestFileRow, scanned_relationships,
 };
@@ -625,7 +625,7 @@ fn normalized(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<String> {
 
 fn unindexable(py: Python<'_>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::UnindexableScope)?.call1((UNINDEXABLE_SCOPE_MESSAGE,))?,
+        error_class(py, ErrorId::UnindexableScope)?.call1((UNINDEXABLE_SCOPE_MESSAGE,))?,
     ))
 }
 

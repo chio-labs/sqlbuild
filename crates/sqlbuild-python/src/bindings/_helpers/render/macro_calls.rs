@@ -10,8 +10,8 @@ use sqlbuild_render::macro_calls::main::splice_macro_calls::splice_macro_calls a
 use sqlbuild_render::macro_calls::models::{MacroCallScan, MacroScanFailure};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::macro_call_memo::MacroCallMemo;
 use crate::bindings::_helpers::render::macro_call_rows::{SiteRow, SpanRow, site_row, span_row};
 use crate::bindings::_helpers::render::macro_expansion::raised;
@@ -60,7 +60,7 @@ pub(crate) fn top_level_macro_call_names<'py>(
                 .collect::<Vec<String>>(),
         ),
         Err(error) => Err(raised(
-            &registry::error(py, ErrorId::CompileInput)?,
+            &error_class(py, ErrorId::CompileInput)?,
             error.message(),
         )),
     }

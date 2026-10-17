@@ -49,6 +49,7 @@ use crate::bindings::_helpers::planner_selection::selectors::{
 };
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -103,7 +104,7 @@ fn user_error(py: Python<'_>, error: LineageError) -> PyErr {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", error.code)?;
         options.set_item("help", error.help)?;
-        registry::error(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -584,7 +585,7 @@ fn selector_failure(
     error: PyErr,
 ) -> PyErr {
     let check = || -> PyResult<()> {
-        let planner_error: Bound<'_, PyAny> = registry::error(py, ErrorId::PlannerInput)?;
+        let planner_error: Bound<'_, PyAny> = error_class(py, ErrorId::PlannerInput)?;
         if !matches!(source, LineageSource::Cached(_))
             || !error.is_instance(py, &planner_error)
             || native_field(error.value(py), "code")?.extract::<String>()?

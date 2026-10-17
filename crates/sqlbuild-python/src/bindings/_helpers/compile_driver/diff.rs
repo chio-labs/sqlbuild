@@ -17,10 +17,10 @@ use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::graph::views::project_lineage_views;
 use crate::bindings::_helpers::records::construct::enum_member;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Indexes of the `CompiledObjectKey`s a diff graph names, assigned on first sight.
 struct KeyIndexes<'py> {
@@ -113,7 +113,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
 /// The `PlannerInputError` a rejected selector raises.
 fn selector_error(py: Python<'_>, error: SelectorError) -> PyErr {
     let raised: PyResult<Bound<'_, PyAny>> = (|| {
-        registry::error(py, ErrorId::PlannerInput)?.call(
+        error_class(py, ErrorId::PlannerInput)?.call(
             (error.message,),
             Some(&keywords(
                 py,

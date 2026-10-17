@@ -41,10 +41,10 @@ use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::result_output::documents::format_load_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
@@ -139,7 +139,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
 }
 
 fn user_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::CliUser).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::CliUser).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

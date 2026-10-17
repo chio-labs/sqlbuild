@@ -6,9 +6,9 @@ use crate::bindings::_helpers::sql_test_glue::plan_values::{model_payload, strin
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::SENTINEL;
 use crate::bindings::_helpers::sql_test_glue::cursor_window::{
     declared_window_cursor_models, declares_cursor_window, render_test_cursor_intrinsics,
@@ -162,7 +162,7 @@ pub(super) fn functions<'py>(
                 .filter(|(_, suffix)| !suffix.contains(SENTINEL))
             else {
                 return Err(PyErr::from_value(
-                    registry::error(py, ErrorId::NativeSqlTestPlanning)?
+                    error_class(py, ErrorId::NativeSqlTestPlanning)?
                         .call1(("adapter SQL function call template is not deterministic",))?,
                 ));
             };

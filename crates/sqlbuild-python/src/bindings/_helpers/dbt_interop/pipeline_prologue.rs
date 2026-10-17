@@ -22,9 +22,9 @@ use crate::bindings::_helpers::dbt_interop::reference_resolver::DbtCompileRefere
 use crate::bindings::_helpers::dbt_interop::runtime_config::{
     interop_adapter, manifest_path, parse_dbt_execution_args, plan_options, vars_mapping,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
 
@@ -159,7 +159,7 @@ pub(crate) fn load_compiled_dbt_manifest<'py>(
     )?;
     if native_field(&result, "returncode")?.extract::<i64>()? != 0 {
         let detail = dbt_failure_detail(&result)?;
-        let error = registry::error(py, ErrorId::DbtInteropRuntime)?.call(
+        let error = error_class(py, ErrorId::DbtInteropRuntime)?.call(
             ("dbt compile failed",),
             Some(&keywords(py, &[("help", detail)])?),
         )?;

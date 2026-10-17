@@ -22,6 +22,7 @@ use crate::bindings::_helpers::dbt_interop::pipeline_phases::run_dbt_sqlbuild_wo
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::runner::DbtRunner;
 use crate::bindings::_helpers::dbt_interop::runtime_config::config_overrides;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -118,7 +119,7 @@ fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64>
     let kind = record_class(py, RecordId::DbtInteropCommand)?;
     if !command.eq(native_field(&kind, "RUN")?)? && !command.eq(native_field(&kind, "BUILD")?)? {
         return Err(PyErr::from_value(
-            registry::error(py, ErrorId::DbtInteropArgument)?.call1((format!(
+            error_class(py, ErrorId::DbtInteropArgument)?.call1((format!(
                 "unsupported dbt interop execution command: {}",
                 command.str()?
             ),))?,

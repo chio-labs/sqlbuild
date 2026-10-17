@@ -11,10 +11,10 @@ use crate::bindings::_helpers::planner_migrations::model_handover::{
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationDecisionRequest,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyBool;
@@ -80,7 +80,7 @@ pub(super) fn decide<'py>(
     if key(&origin)? == key(&destination)? {
         let name: String = native_field(&item, "name")?.extract()?;
         return Err(pyo3::PyErr::from_value(
-            registry::error(py, ErrorId::PlannerInput)?.call1((format!(
+            error_class(py, ErrorId::PlannerInput)?.call1((format!(
                 "model '{name}': migrate_from names the model's own relation"
             ),))?,
         ));

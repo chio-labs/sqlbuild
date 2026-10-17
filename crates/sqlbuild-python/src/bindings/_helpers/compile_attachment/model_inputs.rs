@@ -26,9 +26,9 @@ use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_c
 
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 /// The explicit reference call kinds and the `SqlResourceRefKind` member each resolves to.
 const EXPLICIT_REFERENCE_KINDS: [(&str, &str); 3] =
@@ -97,7 +97,7 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ),
             (
                 "macro_argument_error",
-                registry::error(py, ErrorId::MacroArgument)?,
+                error_class(py, ErrorId::MacroArgument)?,
             ),
             ("expansion", macro_expansion_classes(py)?.into_any()),
             (

@@ -13,10 +13,10 @@ use crate::bindings::_helpers::planner_resolution::cursor_safety::{
     horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
 };
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -225,7 +225,7 @@ pub(crate) fn apply_maximum_start_policy<'py>(
     )?;
     let error = |non_idempotent: bool| -> PyResult<Bound<'py, PyAny>> {
         Err(PyErr::from_value(call_with(
-            &registry::error(py, ErrorId::MaximumAutomaticStart)?,
+            &error_class(py, ErrorId::MaximumAutomaticStart)?,
             &[
                 (
                     "message",

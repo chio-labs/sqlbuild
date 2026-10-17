@@ -24,9 +24,9 @@ use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::project_assembly::models::{
     NativeProjectResources, NativeResourceFailure,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const OS_MODULE: &str = "os";
@@ -334,15 +334,14 @@ fn failure_error<'py>(
     held: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     match error {
-        AssemblyError::CompileInput { message, help } => {
-            registry::error(py, ErrorId::CompileInput)?.call(
+        AssemblyError::CompileInput { message, help } => error_class(py, ErrorId::CompileInput)?
+            .call(
                 (message,),
                 Some(&keywords(
                     py,
                     &[("help", help.into_pyobject(py)?.into_any())],
                 )?),
-            )
-        }
+            ),
         AssemblyError::Value(message) => {
             Ok(PyValueError::new_err(message).value(py).clone().into_any())
         }

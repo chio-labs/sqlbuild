@@ -10,9 +10,9 @@ use sqlbuild_scopes::scope_index::models::{
     OwnershipRoot, OwnershipRootKind, RejectedPath, ResourceIdentity, ResourceKind, ResourceRecord,
 };
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::{
     NativeScopeLookup, ResolvedRows, TargetRows, path_message, scope_path_error,
 };
@@ -51,7 +51,7 @@ fn target_query<'py>(
         native_lookup(lookup)?.get().target(row, &raw)?;
     if let Some(message) = identity_error {
         return Err(PyErr::from_value(
-            registry::error(py, ErrorId::InvalidQualifiedIdentity)?.call1((message,))?,
+            error_class(py, ErrorId::InvalidQualifiedIdentity)?.call1((message,))?,
         ));
     }
     if let Some(message) = path_error {

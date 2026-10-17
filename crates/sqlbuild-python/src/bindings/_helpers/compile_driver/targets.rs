@@ -42,9 +42,9 @@ use crate::bindings::_helpers::compile_attachment::effective_config::build_effec
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::discovery::guidance::setting_help;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const DEFAULTS_SECTION: &str = "defaults";
@@ -57,7 +57,7 @@ type TargetNamespaces = (Vec<(String, String)>, Vec<Namespace>);
 /// A `PlannerInputError` with `message`, `code` and optional `help`.
 fn planner_error(py: Python<'_>, message: String, code: &str, help: Option<String>) -> PyErr {
     let raised: PyResult<Bound<'_, PyAny>> = (|| {
-        registry::error(py, ErrorId::PlannerInput)?.call(
+        error_class(py, ErrorId::PlannerInput)?.call(
             (message,),
             Some(&keywords(
                 py,

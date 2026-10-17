@@ -13,20 +13,24 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::header_metadata::{ContractClasses, audit_tuple};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
-/// A resource identity error as `ResourceIdentityError`, anything else as `error_class(message)`.
-fn raised(py: Python<'_>, error: ConfigError, error_class: &Bound<'_, PyAny>) -> PyResult<PyErr> {
+/// A resource identity error as `ResourceIdentityError`, anything else as `fallback_class(message)`.
+fn raised(
+    py: Python<'_>,
+    error: ConfigError,
+    fallback_class: &Bound<'_, PyAny>,
+) -> PyResult<PyErr> {
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     let class: Bound<'_, PyAny> = match error.class {
         ErrorClass::ResourceIdentity => {
             if let Some(help) = error.help {
                 keywords.set_item("help", help)?;
             }
-            registry::error(py, ErrorId::ResourceIdentity)?
+            error_class(py, ErrorId::ResourceIdentity)?
         }
-        _ => error_class.clone(),
+        _ => fallback_class.clone(),
     };
     Ok(PyErr::from_value(
         class.call((error.message,), Some(&keywords))?,

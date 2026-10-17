@@ -40,10 +40,10 @@ use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::command_plans::build_test_command_plan;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::result_output::documents::format_test_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
@@ -306,7 +306,7 @@ fn unknown_case(py: Python<'_>, message: String) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", UNKNOWN_CASE_CODE)?;
-        registry::error(py, ErrorId::PlannerInput)?.call((message,), Some(&options))
+        error_class(py, ErrorId::PlannerInput)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),

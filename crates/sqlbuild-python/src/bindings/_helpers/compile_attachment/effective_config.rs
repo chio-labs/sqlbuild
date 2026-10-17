@@ -16,10 +16,10 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 use crate::bindings::_helpers::model_config::template_data::{
     expanded_effective_vars, expanded_template_data, run_id,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const CONNECTION_LABEL: &str = "effective connection";
 
@@ -39,7 +39,7 @@ pub(crate) fn build_effective_connection<'py>(
             .extract()?;
     if connection.is_none() {
         let raised: Bound<'py, PyAny> =
-            registry::error(py, ErrorId::CompileInput)?.call1((error.unwrap_or_default(),))?;
+            error_class(py, ErrorId::CompileInput)?.call1((error.unwrap_or_default(),))?;
         return Err(PyErr::from_value(raised));
     }
     expanded_template_data(

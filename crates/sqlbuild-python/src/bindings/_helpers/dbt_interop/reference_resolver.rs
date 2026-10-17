@@ -16,10 +16,10 @@ use crate::bindings::_helpers::dbt_interop::manifest::validate_compile_dbt_model
 use crate::bindings::_helpers::dbt_interop::manifest::validate_compile_dbt_model_reference;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const VALIDATE_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -37,7 +37,7 @@ const SEED_CONFLICT_CODE: &str = "C217";
 
 fn compile_input_error(py: Python<'_>, message: String, code: &str) -> PyErr {
     let created = || -> PyResult<PyErr> {
-        let error: Bound<'_, PyAny> = registry::error(py, ErrorId::CompileInput)?.call(
+        let error: Bound<'_, PyAny> = error_class(py, ErrorId::CompileInput)?.call(
             (message,),
             Some(&keywords(
                 py,

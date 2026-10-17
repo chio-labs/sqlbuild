@@ -15,9 +15,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const COMPILE_FIRST_MESSAGE: &str = "compiler-integrated Rules check the SQL your project \
     actually produces, so the project must compile first";
@@ -121,14 +121,14 @@ fn expansion_inputs(sources: LintExpansionSources<'_>) -> PyResult<SqlExpansionI
 fn compile_first_error(py: Python<'_>, error: PyErr) -> PyResult<PyErr> {
     let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
     let reported: bool = value.is_instance(&host::entry(py, AdapterHost::AdapterUserError)?)?
-        || value.is_instance(&registry::error(py, ErrorId::CompileInput)?)?
-        || value.is_instance(&registry::error(py, ErrorId::Discovery)?)?;
+        || value.is_instance(&error_class(py, ErrorId::CompileInput)?)?
+        || value.is_instance(&error_class(py, ErrorId::Discovery)?)?;
     if !reported {
         return Ok(error);
     }
     let message: String = format!("{COMPILE_FIRST_MESSAGE}: {}", value.str()?);
     let raised: PyErr =
-        PyErr::from_value(registry::error(py, ErrorId::ProjectCompile)?.call1((message,))?);
+        PyErr::from_value(error_class(py, ErrorId::ProjectCompile)?.call1((message,))?);
     raised.set_cause(py, Some(error));
     Ok(raised)
 }

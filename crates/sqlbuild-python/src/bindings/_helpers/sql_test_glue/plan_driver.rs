@@ -4,10 +4,10 @@ use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timi
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestPlanOptions;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
 use crate::bindings::_helpers::sql_test_glue::planning::{
@@ -127,7 +127,7 @@ pub(crate) fn planned<'py>(
             let sql = native_field(&plan, "sql")?;
             if sql.is_none() {
                 return Err(PyErr::from_value(
-                    registry::error(py, ErrorId::NativeSqlTestPlanning)?
+                    error_class(py, ErrorId::NativeSqlTestPlanning)?
                         .call1(("native SQL-test planning omitted rendered SQL",))?,
                 ));
             }

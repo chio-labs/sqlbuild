@@ -14,9 +14,9 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 const LOCAL_CONFIG_FILENAME: &str = "sqlbuild_local.toml";
@@ -35,7 +35,7 @@ fn project_config_error(py: Python<'_>, message: &str, help: Option<&str>) -> Py
     let raised = (|| -> PyResult<Bound<'_, PyAny>> {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("help", help)?;
-        registry::error(py, ErrorId::ProjectConfig)?.call((message,), Some(&keywords))
+        error_class(py, ErrorId::ProjectConfig)?.call((message,), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),
@@ -171,7 +171,7 @@ fn reject_invalid_target_connections(config: &ProjectConfiguration<'_, '_>) -> P
     names.extend(target_names(config.local_config)?);
     names.sort();
     names.dedup();
-    let spec_error: Bound<'_, PyAny> = registry::error(py, ErrorId::SpecConfig)?;
+    let spec_error: Bound<'_, PyAny> = error_class(py, ErrorId::SpecConfig)?;
     for name in names {
         let resolved: PyResult<Bound<'_, PyAny>> = resolve_target_config(
             py,

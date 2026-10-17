@@ -17,17 +17,17 @@ use sqlbuild_rules::project_tree::main::project_tree_entries::project_tree_entri
 use sqlbuild_rules::project_tree::models::ProjectTreeEntry;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const BUILTINS_MODULE: &str = "builtins";
 const DEFAULT_POSITION: i64 = 1;
 
 /// `RuleUsageError(message)`.
 fn usage_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }
@@ -40,7 +40,7 @@ pub(crate) fn usage_error_for(prefix: &str, value: &Bound<'_, PyAny>) -> PyErr {
         .str()
         .and_then(|text| PyString::new(py, prefix).as_any().add(text));
     match message.and_then(|message| {
-        registry::error(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,)))
+        error_class(py, ErrorId::RuleUsage).and_then(|class| class.call1((message,)))
     }) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,

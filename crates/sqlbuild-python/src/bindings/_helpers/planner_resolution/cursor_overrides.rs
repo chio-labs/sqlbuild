@@ -5,9 +5,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_resolution::values::{method, string};
 use crate::bindings::_helpers::records::construct::enum_from_value;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -77,7 +77,7 @@ pub(crate) fn type_cursor_overrides<'py>(
         }
     }
     let kind = override_kind(&models, integer_literals).map_err(|message| {
-        match registry::error(py, ErrorId::PlannerInput).and_then(|class| call_with(&class, &[
+        match error_class(py, ErrorId::PlannerInput).and_then(|class| call_with(&class, &[
             ("message", string(py, &message)), ("code", string(py, "S303")),
             ("help", string(py, "select models with one cursor type, or set each type explicitly with --start-cursor-ts/--end-cursor-ts and --start-cursor-int/--end-cursor-int")),
         ])) { Ok(error) => PyErr::from_value(error), Err(error) => error }

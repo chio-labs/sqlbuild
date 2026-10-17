@@ -23,10 +23,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const SKILLS_DIRECTORY: &str = ".agents/skills/sqlbuild";
 const TEMPLATES_DIRECTORY: &str = "playground_templates";
@@ -50,7 +50,7 @@ fn raised(py: Python<'_>, error: WorkspaceError) -> PyErr {
                 keywords.set_item("code", code)?;
                 keywords.set_item("help", help)?;
                 let instance: Bound<'_, PyAny> =
-                    registry::error(py, ErrorId::CliUser)?.call((message,), Some(&keywords))?;
+                    error_class(py, ErrorId::CliUser)?.call((message,), Some(&keywords))?;
                 Ok(PyErr::from_value(instance))
             };
             created().unwrap_or_else(|failure| failure)

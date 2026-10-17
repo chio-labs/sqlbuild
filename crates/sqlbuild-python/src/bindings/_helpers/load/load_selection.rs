@@ -18,11 +18,11 @@ use crate::bindings::_helpers::contracts::spec_resolution::loader_destination_pa
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
 const LOADER_TABLE_PREFIX: &str = "__loader__";
@@ -207,7 +207,7 @@ fn unknown_selector(py: Python<'_>, error: &UnknownLoadSelector) -> PyErr {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", UNKNOWN_SELECTOR_CODE)?;
         options.set_item("help", UNKNOWN_SELECTOR_HELP)?;
-        registry::error(py, ErrorId::CliUser)?.call(
+        error_class(py, ErrorId::CliUser)?.call(
             (format!(
                 "sqb load selector '{}' does not match any managed source or loader",
                 error.name

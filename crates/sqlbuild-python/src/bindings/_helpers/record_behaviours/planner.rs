@@ -12,12 +12,12 @@ use sqlbuild_core::migration_values::models::{DecisionTraits, ModelMigrationFact
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{
     enum_from_value, enum_member, new_record, record_class,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const DECREASING_DIRECTIONS: [&str; 2] = ["decrease", "mixed"];
 const STEP_ACTIONS: [&str; 2] = ["archive_and_view", "view_only"];
@@ -157,7 +157,7 @@ pub(crate) fn column_migration_blocks_build(entry: &Bound<'_, PyAny>) -> PyResul
 
 /// The `PlannerInputError` carrying `message`.
 fn planner_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::PlannerInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

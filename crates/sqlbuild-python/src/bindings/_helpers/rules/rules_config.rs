@@ -13,9 +13,9 @@ use sqlbuild_rules::configuration::main::load_rules_config::load_rules_config as
 use sqlbuild_rules::models::RulesConfig;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 struct Models<'py> {
     py: Python<'py>,
@@ -224,7 +224,7 @@ fn config_object<'py>(py: Python<'py>, config: &RulesConfig) -> PyResult<Bound<'
 
 fn rules_error(py: Python<'_>, class: ErrorId, message: String, help: Option<String>) -> PyErr {
     let raised = || -> PyResult<PyErr> {
-        let error_class: Bound<'_, PyAny> = registry::error(py, class)?;
+        let error_class: Bound<'_, PyAny> = error_class(py, class)?;
         let error: Bound<'_, PyAny> = match help {
             Some(help) => {
                 let arguments: Bound<'_, PyDict> = PyDict::new(py);
@@ -294,7 +294,7 @@ pub(crate) fn rules_config_of(
 fn valid_rules_config(py: Python<'_>, project_dir: PathBuf) -> PyResult<Option<Py<PyAny>>> {
     match load_rules_config(py, project_dir) {
         Ok(config) => Ok(Some(config)),
-        Err(error) if error.is_instance(py, &registry::error(py, ErrorId::Rules)?) => Ok(None),
+        Err(error) if error.is_instance(py, &error_class(py, ErrorId::Rules)?) => Ok(None),
         Err(error) => Err(error),
     }
 }

@@ -11,8 +11,8 @@ use sqlbuild_sqltext::compiler::main::model_header_parsing::parse_batch;
 use sqlbuild_sqltext::compiler::models::{AuthoredValue, HeaderWord};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::model_headers::header_failure;
 
 /// The path header rules report header syntax errors at.
@@ -32,8 +32,8 @@ pub(crate) fn rejection(py: Python<'_>, failure: ParseFailure) -> PyErr {
     let raised: PyResult<PyErr> = (|| {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("help", failure.help)?;
-        let error: Bound<'_, PyAny> = registry::error(py, ErrorId::ModelSqlParse)?
-            .call((failure.message,), Some(&keywords))?;
+        let error: Bound<'_, PyAny> =
+            error_class(py, ErrorId::ModelSqlParse)?.call((failure.message,), Some(&keywords))?;
         Ok(PyErr::from_value(error))
     })();
     raised.unwrap_or_else(|error| error)

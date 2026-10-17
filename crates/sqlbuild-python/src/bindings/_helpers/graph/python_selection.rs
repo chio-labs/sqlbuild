@@ -18,9 +18,9 @@ use sqlbuild_analysis::python_selection::models::{
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 type NameRows = Vec<(String, Vec<String>)>;
 /// `(name, tags, POSIX relative path, upstream node names)` of one discovered node.
@@ -40,7 +40,7 @@ fn planner_error(py: Python<'_>, error: SelectorError) -> PyErr {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("code", error.code)?;
         keywords.set_item("help", error.help)?;
-        registry::error(py, ErrorId::PlannerInput)?.call((error.message,), Some(&keywords))
+        error_class(py, ErrorId::PlannerInput)?.call((error.message,), Some(&keywords))
     })();
     match raised {
         Ok(instance) => PyErr::from_value(instance),

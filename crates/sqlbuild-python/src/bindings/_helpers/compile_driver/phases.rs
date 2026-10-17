@@ -15,10 +15,10 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::manifest::builder::build_manifest;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const EMPTY_DAG_PATH: &str = "";
 const TARGET_DIRECTORY: &str = "target";
@@ -164,13 +164,13 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
         Ok(diagnostics) => return Ok(diagnostics),
         Err(error) => error,
     };
-    let compile_input_error: Bound<'py, PyAny> = registry::error(py, ErrorId::CompileInput)?;
-    let planner_input_error: Bound<'py, PyAny> = registry::error(py, ErrorId::PlannerInput)?;
+    let compile_input_error: Bound<'py, PyAny> = error_class(py, ErrorId::CompileInput)?;
+    let planner_input_error: Bound<'py, PyAny> = error_class(py, ErrorId::PlannerInput)?;
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
     if !(value.is_instance(&compile_input_error)? || value.is_instance(&planner_input_error)?) {
         return Err(error);
     }
-    let reference_error: Bound<'py, PyAny> = registry::error(py, ErrorId::SqlTestReference)?;
+    let reference_error: Bound<'py, PyAny> = error_class(py, ErrorId::SqlTestReference)?;
     let location: Bound<'py, PyAny> = if value.is_instance(&reference_error)? {
         native_field(&value, "location")?
     } else {

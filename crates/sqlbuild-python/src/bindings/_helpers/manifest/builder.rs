@@ -21,9 +21,9 @@ use crate::bindings::_helpers::manifest::rows::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const DATETIME_MODULE: &str = "datetime";
 
@@ -54,7 +54,7 @@ impl NativeManifest {
 
 fn python_error(error: ManifestError, py: Python<'_>) -> PyErr {
     match error {
-        ManifestError::QueryFingerprint(message) => registry::error(py, ErrorId::QueryFingerprint)
+        ManifestError::QueryFingerprint(message) => error_class(py, ErrorId::QueryFingerprint)
             .and_then(|class| class.call1((message,)))
             .map_or_else(|error| error, PyErr::from_value),
         ManifestError::MissingParameterType(name) => PyKeyError::new_err(name),

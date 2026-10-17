@@ -36,9 +36,9 @@ use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::lineage::lineage_index::lineage_key;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::refactor::offline_compile::{OfflineCompile, compile_for_refactor};
 use crate::bindings::_helpers::refactor::refactor_facts::{
     declaration_placement, model_facts, refactor_facts,
@@ -59,7 +59,7 @@ fn user_error(py: Python<'_>, (message, code, help): (String, &str, Option<Strin
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
         options.set_item("help", help)?;
-        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),
@@ -70,7 +70,7 @@ fn user_error(py: Python<'_>, (message, code, help): (String, &str, Option<Strin
 /// The Python exception a native refactoring failure becomes.
 fn refactor_error(py: Python<'_>, error: RefactorError) -> PyErr {
     let class = |name: ErrorId| -> PyErr {
-        match registry::error(py, name).and_then(|class| class.call1((error.message.clone(),))) {
+        match error_class(py, name).and_then(|class| class.call1((error.message.clone(),))) {
             Ok(raised) => PyErr::from_value(raised),
             Err(failure) => failure,
         }

@@ -15,10 +15,10 @@ use sqlbuild_scopes::scope_index::models::ResourceIdentity;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::records::construct::enum_member;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::compile_usages::{
     MergeRows, SourceRow, UsageRow, merged_usage_rows, model_schema_scope_usages,
 };
@@ -403,7 +403,7 @@ pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("diagnostics", PyTuple::new(py, errors)?)?;
     Err(PyErr::from_value(
-        registry::error(py, ErrorId::ScopeValidation)?.call((message,), Some(&options))?,
+        error_class(py, ErrorId::ScopeValidation)?.call((message,), Some(&options))?,
     ))
 }
 

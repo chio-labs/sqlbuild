@@ -21,12 +21,12 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{
     enum_from_value, new_record_with, record_class,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const DBT_EXECUTABLE_ENV_VAR: &str = "DBT_EXECUTABLE";
 const COMMAND_ARGV_OPTIONS: (&[&str], &[&str]) =
@@ -257,7 +257,7 @@ pub(crate) fn raised(py: Python<'_>, class_name: ErrorId, error: DbtCliError) ->
             keywords.set_item("help", help)?;
         }
         let instance: Bound<'_, PyAny> =
-            registry::error(py, class_name)?.call((error.message,), Some(&keywords))?;
+            error_class(py, class_name)?.call((error.message,), Some(&keywords))?;
         Ok(PyErr::from_value(instance))
     };
     created().unwrap_or_else(|failure| failure)

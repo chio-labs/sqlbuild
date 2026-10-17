@@ -10,10 +10,10 @@ use crate::bindings::_helpers::discovery::python_module_files::discover_python_m
 use crate::bindings::_helpers::event_exporting::scope::current_scope;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 
 /// One project directory under discovery.
@@ -111,7 +111,7 @@ pub(crate) fn discovered<'py>(
 
 /// `sqlbuild._native.<class_name>(message)`.
 pub(crate) fn discovery_error(py: Python<'_>, class_name: ErrorId, message: String) -> PyErr {
-    registry::error(py, class_name)
+    error_class(py, class_name)
         .and_then(|class| class.call1((message,)))
         .map_or_else(|error| error, PyErr::from_value)
 }

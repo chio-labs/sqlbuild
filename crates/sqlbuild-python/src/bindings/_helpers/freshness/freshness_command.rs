@@ -33,9 +33,9 @@ use crate::bindings::_helpers::result_output::documents::write_execution_json_ou
 
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME as STATE_TABLE_NAME;
 const STALE_REQUIRES_STATE_MESSAGE: &str = "freshness --fail-on-stale requires --state";
 const STALE_REQUIRES_STATE_CODE: &str = "C238";
@@ -59,7 +59,7 @@ fn user_error(py: Python<'_>, (message, code): (&str, &str)) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", code)?;
-        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),

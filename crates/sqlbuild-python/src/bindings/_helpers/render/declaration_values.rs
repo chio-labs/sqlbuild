@@ -9,6 +9,7 @@ use pyo3::{IntoPyObject, pyclass, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{
     enum_member, new_record, new_record_with, record_class,
 };
@@ -298,12 +299,9 @@ pub(crate) fn native_declaration_contexts<'py>(
     )?;
     lookups.set_item(
         "identity_error",
-        registry::error(py, ErrorId::InvalidQualifiedIdentity)?,
+        error_class(py, ErrorId::InvalidQualifiedIdentity)?,
     )?;
-    lookups.set_item(
-        "path_error",
-        registry::error(py, ErrorId::InvalidScopePath)?,
-    )?;
+    lookups.set_item("path_error", error_class(py, ErrorId::InvalidScopePath)?)?;
     let global_positions: Bound<'py, PyList> = PyList::new(
         py,
         native_field(&index, "global_positions")?
@@ -415,7 +413,7 @@ pub(crate) fn constant_declaration_sql<'py>(
         None => relative_path.str()?.to_string(),
     };
     let compile_error: Bound<'py, PyAny> =
-        registry::error(py, ErrorId::CompileInput)?.call1((format!(
+        error_class(py, ErrorId::CompileInput)?.call1((format!(
             "{} constant '{}' could not be rendered in '{}' by adapter '{}' as {}: {}",
             relative_path.str()?,
             native_field(declaration, "name")?.str()?,

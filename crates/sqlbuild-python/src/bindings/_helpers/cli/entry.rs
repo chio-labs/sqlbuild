@@ -27,10 +27,10 @@ use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::workspace_commands::commands::maintain_sqlbuild_skills;
 use sqlbuild_cli::launcher::constants::LAUNCH_RECORD_OPTION;
 use sqlbuild_core::cli_text::main::format_coded_error::format_coded_error;
@@ -246,7 +246,7 @@ fn write_diff_machine_error<'py>(
             }
             let keywords: Bound<'py, PyDict> = PyDict::new(py);
             keywords.set_item("code", DIFF_PUBLICATION_CODE)?;
-            let publication: Bound<'py, PyAny> = registry::error(py, ErrorId::QueryDiffExecution)?
+            let publication: Bound<'py, PyAny> = error_class(py, ErrorId::QueryDiffExecution)?
                 .call(
                     (format!(
                         "failed to publish query diff output: {}",
@@ -291,12 +291,12 @@ fn exit<'py>(py: Python<'py>, code: i64) -> PyResult<Bound<'py, PyAny>> {
 
 /// The kind of expected failure `error` is, or `None` when it propagates.
 fn failure_kind(py: Python<'_>, error: &Bound<'_, PyAny>) -> PyResult<Option<CommandFailure>> {
-    if error.is_instance(&registry::error(py, ErrorId::CliUser)?)?
-        || error.is_instance(&registry::error(py, ErrorId::Rules)?)?
+    if error.is_instance(&error_class(py, ErrorId::CliUser)?)?
+        || error.is_instance(&error_class(py, ErrorId::Rules)?)?
     {
         return Ok(Some(CommandFailure::User));
     }
-    if error.is_instance(&registry::error(py, ErrorId::Lint)?)? {
+    if error.is_instance(&error_class(py, ErrorId::Lint)?)? {
         return Ok(Some(CommandFailure::Lint));
     }
     if error.is_instance_of::<pyo3::exceptions::PyValueError>() {
@@ -308,7 +308,7 @@ fn failure_kind(py: Python<'_>, error: &Bound<'_, PyAny>) -> PyResult<Option<Com
         }
     }
     for native in EXPECTED_NATIVE_FAILURES {
-        if error.is_instance(&registry::error(py, native)?)? {
+        if error.is_instance(&error_class(py, native)?)? {
             return Ok(Some(CommandFailure::Command));
         }
     }
@@ -324,7 +324,7 @@ fn report_failure<'py>(
     let py: Python<'py> = invocation.py();
     let (fallback_code, log_message) = failure_report(kind);
     log_failure(py, log_message, &error)?;
-    let user_error_class: Bound<'py, PyAny> = registry::error(py, ErrorId::CliUser)?;
+    let user_error_class: Bound<'py, PyAny> = error_class(py, ErrorId::CliUser)?;
     let is_user_error: bool = error.is_instance(&user_error_class)?;
     let effective: Bound<'py, PyAny> = if is_user_error {
         write_diff_machine_error(invocation, &error)?.unwrap_or(error)
@@ -332,7 +332,7 @@ fn report_failure<'py>(
         error
     };
     write_compile_machine_error(invocation, &effective, fallback_code)?;
-    if effective.is_instance(&registry::error(py, ErrorId::QueryDiffOutcome)?)? {
+    if effective.is_instance(&error_class(py, ErrorId::QueryDiffOutcome)?)? {
         let line: Bound<'py, PyAny> = PyString::new(py, DIFF_OUTCOME_PREFIX)
             .into_any()
             .add(native_field(&effective, "status")?.str()?)?;
@@ -360,7 +360,7 @@ fn report_skill_freshness(invocation: &Invocation<'_>, policy: InvocationPolicy)
             Ok(result) => result,
             Err(error) => {
                 let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
-                if value.is_instance(&registry::error(py, ErrorId::CliUser)?)?
+                if value.is_instance(&error_class(py, ErrorId::CliUser)?)?
                     || value.is_instance_of::<pyo3::exceptions::PyOSError>()
                     || value.is_instance_of::<pyo3::exceptions::PyUnicodeError>()
                 {

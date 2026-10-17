@@ -14,11 +14,11 @@ use sqlbuild_scopes::scope_text::main::scope_result_failed::scope_result_failed;
 use sqlbuild_scopes::scope_text::models::ScopeTextRequest;
 
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_loading::load_or_build_scope_index;
 use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_objects::ScopeClasses;
@@ -51,7 +51,7 @@ fn user_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     options.set_item("code", TARGET_ERROR_CODE)?;
     options.set_item("help", BARE_USAGE)?;
     let error: Bound<'_, PyAny> =
-        registry::error(py, ErrorId::CliUser)?.call((message,), Some(&options))?;
+        error_class(py, ErrorId::CliUser)?.call((message,), Some(&options))?;
     Ok(PyErr::from_value(error))
 }
 

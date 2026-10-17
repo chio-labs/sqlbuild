@@ -8,8 +8,8 @@ use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::v
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
 const CURSOR_START: &str = "__cursor_start";
@@ -37,7 +37,7 @@ pub(crate) fn reserved_cursor_markers() -> Vec<String> {
 /// A `CompileInputError` carrying `message`.
 pub(crate) fn compile_input_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
+        error_class(py, ErrorId::CompileInput)?.call1((message,))?,
     ))
 }
 

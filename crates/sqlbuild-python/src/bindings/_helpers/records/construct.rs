@@ -8,12 +8,15 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::PyDict;
 
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 /// Each `RecordId`'s class, captured when the extension module is initialised.
 static CLASSES: PyOnceLock<Vec<Py<PyAny>>> = PyOnceLock::new();
 
-/// Hold every registered record class and string enum, read once while the module initialises.
+/// Each `ErrorId`'s exception class, captured when the extension module is initialised.
+static ERROR_CLASSES: PyOnceLock<Vec<Py<PyAny>>> = PyOnceLock::new();
+
+/// Hold every registered record class, string enum and error class, read once while the module initialises.
 pub(crate) fn capture(module: &Bound<'_, PyModule>) -> PyResult<()> {
     CLASSES.get_or_try_init(module.py(), || {
         RecordId::ALL
@@ -21,7 +24,21 @@ pub(crate) fn capture(module: &Bound<'_, PyModule>) -> PyResult<()> {
             .map(|id| module.getattr(id.name()).map(Bound::unbind))
             .collect::<PyResult<Vec<Py<PyAny>>>>()
     })?;
+    ERROR_CLASSES.get_or_try_init(module.py(), || {
+        ErrorId::ALL
+            .iter()
+            .map(|id| module.getattr(id.name()).map(Bound::unbind))
+            .collect::<PyResult<Vec<Py<PyAny>>>>()
+    })?;
     Ok(())
+}
+
+/// The native error class `id` as registered, ignoring later attribute replacement.
+pub(crate) fn error_class(py: Python<'_>, id: ErrorId) -> PyResult<Bound<'_, PyAny>> {
+    let classes: &Vec<Py<PyAny>> = ERROR_CLASSES
+        .get(py)
+        .ok_or_else(|| PyRuntimeError::new_err("native error classes are not registered"))?;
+    Ok(classes[id as usize].bind(py).clone())
 }
 
 /// The native record class or string enum `id` as registered, ignoring later attribute replacement.

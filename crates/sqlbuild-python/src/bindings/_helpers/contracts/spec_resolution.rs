@@ -15,10 +15,10 @@ use sqlbuild_model_config::name_patterns::models::NamePattern;
 use crate::bindings::_helpers::contracts::effective_config::{
     effective_config_target_fields, effective_config_target_name,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const TARGET_GROUPS: [(&str, RecordId); 4] = [
     ("clone", RecordId::ClonePolicy),
@@ -43,7 +43,7 @@ thread_local! {
 
 fn spec_error<'py>(py: Python<'py>, message: Bound<'py, PyString>) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::SpecConfig)?.call1((message,))?,
+        error_class(py, ErrorId::SpecConfig)?.call1((message,))?,
     ))
 }
 

@@ -7,8 +7,8 @@ use sqlbuild_model_config::errors::{ConfigError, ErrorClass};
 
 use crate::bindings::_helpers::model_config::config_values::config_value_type_error;
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const EXPECTED_STRING: &str = "a string";
 
@@ -88,7 +88,7 @@ impl NativeConfigError {
                 ErrorId::CompileInput
             }
         };
-        registry::error(py, class)?.call((&self.message,), Some(&keywords))
+        error_class(py, class)?.call((&self.message,), Some(&keywords))
     }
 }
 

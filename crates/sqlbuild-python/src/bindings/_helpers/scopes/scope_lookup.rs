@@ -17,9 +17,9 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::placement::{QualifiedRow, qualified_identity};
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, read_index, report_records, resource_identity_object, tuple_attribute,
@@ -263,7 +263,7 @@ fn visibility_index<'py>(
 
 pub(crate) fn scope_path_error(py: Python<'_>, message: String) -> PyResult<PyErr> {
     Ok(PyErr::from_value(
-        registry::error(py, ErrorId::InvalidScopePath)?.call1((message,))?,
+        error_class(py, ErrorId::InvalidScopePath)?.call1((message,))?,
     ))
 }
 

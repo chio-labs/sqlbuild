@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -14,7 +14,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 /// `CompileInputError(message)`.
 fn compile_input_error(py: Python<'_>, message: String) -> PyErr {
-    match registry::error(py, ErrorId::CompileInput).and_then(|class| class.call1((message,))) {
+    match error_class(py, ErrorId::CompileInput).and_then(|class| class.call1((message,))) {
         Ok(error) => PyErr::from_value(error),
         Err(error) => error,
     }

@@ -4,11 +4,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keyword
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::models::HostId;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyString, PyTuple};
 use pyo3::{BoundObject, IntoPyObject};
@@ -82,7 +82,7 @@ pub(crate) fn planner_error(
     message: &str,
     (code, help): (Option<&str>, Option<&str>),
 ) -> PyErr {
-    let raised = registry::error(py, ErrorId::PlannerInput).and_then(|class| {
+    let raised = error_class(py, ErrorId::PlannerInput).and_then(|class| {
         let fields = keywords(
             py,
             &[

@@ -26,6 +26,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -171,7 +172,7 @@ pub(crate) fn attach_resources<'py>(
             .into_iter()
             .map(Bound::unbind)
             .collect(),
-        &registry::error(py, ErrorId::CompileInput)?,
+        &error_class(py, ErrorId::CompileInput)?,
     )?;
     let defaults: Bound<'py, PyAny> = discovered_inputs
         .getattr("project_config")?
@@ -514,7 +515,7 @@ fn diagnostic_settings<'py>(
         "compiler_diagnostic",
         record_class(py, RecordId::CompilerDiagnostic)?,
     )?;
-    settings.set_item("compile_error", registry::error(py, ErrorId::CompileInput)?)?;
+    settings.set_item("compile_error", error_class(py, ErrorId::CompileInput)?)?;
     settings.set_item(
         "source_location",
         record_class(py, RecordId::SourceLocation)?,

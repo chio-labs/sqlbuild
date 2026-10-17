@@ -19,8 +19,8 @@ use crate::bindings::_helpers::model_config::config_templates::{
     resolve_effective_vars,
 };
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const UUID_MODULE: &str = "uuid";
 const ENVIRONMENT_READ: &str = "env";
@@ -83,7 +83,7 @@ pub(crate) fn expanded_effective_vars<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw_values.py();
     if let Some((name, path, byte_offset)) = lone_surrogate_site(raw_values)? {
-        let error: Bound<'py, PyAny> = registry::error(py, ErrorId::CompileInput)?.call(
+        let error: Bound<'py, PyAny> = error_class(py, ErrorId::CompileInput)?.call(
             (format!(
                 "Variable '{name}' holds a lone surrogate in {path} at UTF-8 byte \
                      {byte_offset}, which is not valid Unicode text"

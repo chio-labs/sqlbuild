@@ -6,8 +6,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
 use sqlbuild_analysis::graph::errors::SelectorError;
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 const PRIVATE_USE: std::ops::Range<u32> = 0xF0000..0xFFFFE;
 
@@ -107,7 +107,7 @@ impl<'py> Carrier<'py> {
             .map(|help| self.back(help))
             .transpose()?;
         keywords.set_item("help", help)?;
-        registry::error(self.py, ErrorId::PlannerInput)?
+        error_class(self.py, ErrorId::PlannerInput)?
             .call((self.back(&error.message)?,), Some(&keywords))
     }
 

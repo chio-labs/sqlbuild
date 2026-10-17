@@ -4,9 +4,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_config::command_connection::errors::CommandConnectionError;
 
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::records::registry;
 
 /// The `CliUserError` or `ProjectConfigError` for `error`.
 pub(crate) fn raised(py: Python<'_>, error: CommandConnectionError) -> PyErr {
@@ -20,10 +20,10 @@ pub(crate) fn raised(py: Python<'_>, error: CommandConnectionError) -> PyErr {
                 let keywords: Bound<'_, PyDict> = PyDict::new(py);
                 keywords.set_item("code", code)?;
                 keywords.set_item("help", help)?;
-                registry::error(py, ErrorId::CliUser)?.call((message,), Some(&keywords))?
+                error_class(py, ErrorId::CliUser)?.call((message,), Some(&keywords))?
             }
             CommandConnectionError::ProjectConfig(message) => {
-                registry::error(py, ErrorId::ProjectConfig)?.call1((message,))?
+                error_class(py, ErrorId::ProjectConfig)?.call1((message,))?
             }
         };
         Ok(PyErr::from_value(instance))
@@ -33,16 +33,14 @@ pub(crate) fn raised(py: Python<'_>, error: CommandConnectionError) -> PyErr {
 
 /// Whether `error` is a `CompileInputError` or a `CliUserError`, the failures resolution reports.
 pub(crate) fn expected_resolution_error(py: Python<'_>, error: &PyErr) -> PyResult<bool> {
-    Ok(
-        error.is_instance(py, &registry::error(py, ErrorId::CliUser)?)
-            || error.is_instance(py, &registry::error(py, ErrorId::CompileInput)?),
-    )
+    Ok(error.is_instance(py, &error_class(py, ErrorId::CliUser)?)
+        || error.is_instance(py, &error_class(py, ErrorId::CompileInput)?))
 }
 
 /// The message a resolution error shows: `CliUserError.message`, else `str(error)`.
 pub(crate) fn resolution_message(py: Python<'_>, error: &PyErr) -> PyResult<String> {
     let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
-    if error.is_instance(py, &registry::error(py, ErrorId::CliUser)?) {
+    if error.is_instance(py, &error_class(py, ErrorId::CliUser)?) {
         return native_field(&value, "message")?.str()?.extract();
     }
     value.str()?.extract()

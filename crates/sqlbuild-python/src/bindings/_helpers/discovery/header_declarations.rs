@@ -18,21 +18,20 @@ use sqlbuild_model_config::sql_values::models::RawSqlValue;
 use crate::bindings::_helpers::contracts::sql_values::{
     SqlValueClasses, raw_value, sql_value, sql_value_error,
 };
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 fn declaration_error(py: Python<'_>, failure: DeclarationFailure) -> PyResult<PyErr> {
     Ok(match failure {
         DeclarationFailure::Parse(message) => {
-            PyErr::from_value(registry::error(py, ErrorId::DeclarationParse)?.call1((message,))?)
+            PyErr::from_value(error_class(py, ErrorId::DeclarationParse)?.call1((message,))?)
         }
         DeclarationFailure::Identity(message, help) => {
             let keywords = PyDict::new(py);
             keywords.set_item("help", help)?;
             PyErr::from_value(
-                registry::error(py, ErrorId::ResourceIdentity)?
-                    .call((message,), Some(&keywords))?,
+                error_class(py, ErrorId::ResourceIdentity)?.call((message,), Some(&keywords))?,
             )
         }
         DeclarationFailure::DecimalOverflow => {

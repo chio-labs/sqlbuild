@@ -36,11 +36,11 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const METADATA_MODULE: &str = "importlib.metadata";
 const DISTRIBUTION_NAME: &str = "sqlbuild";
@@ -60,7 +60,7 @@ pub(crate) fn cli_user_error(py: Python<'_>, error: ScenarioCommandError) -> PyE
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", error.code)?;
         options.set_item("help", error.help)?;
-        registry::error(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),

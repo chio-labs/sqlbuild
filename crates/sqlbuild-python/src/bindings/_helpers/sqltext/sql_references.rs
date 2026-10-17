@@ -13,12 +13,12 @@ use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{
     enum_from_value, enum_member, new_record_with,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
@@ -108,7 +108,7 @@ fn scanned<'py>(
         ReferenceExtraction::Extracted(scan) => scan,
         ReferenceExtraction::Failed(failure) => {
             let error: Bound<'py, PyAny> =
-                registry::error(py, ErrorId::CompileInput)?.call1((failure.message,))?;
+                error_class(py, ErrorId::CompileInput)?.call1((failure.message,))?;
             return Err(PyErr::from_value(error));
         }
     };

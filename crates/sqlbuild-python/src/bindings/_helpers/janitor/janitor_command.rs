@@ -31,10 +31,10 @@ use crate::bindings::_helpers::janitor::janitor_phases::{
 use crate::bindings::_helpers::janitor::janitor_plan::{janitor_plan_text, janitor_result_counts};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 const COMMAND_NAME: &str = "janitor";
 
@@ -57,7 +57,7 @@ fn settings_error(py: Python<'_>, error: JanitorSettingsError) -> PyErr {
     let raised = (|| {
         let options: Bound<'_, PyDict> = PyDict::new(py);
         options.set_item("code", error.code)?;
-        registry::error(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
+        error_class(py, ErrorId::CliUser)?.call((error.message,), Some(&options))
     })();
     match raised {
         Ok(error) => PyErr::from_value(error),

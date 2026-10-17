@@ -29,10 +29,10 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::graph::execution_gates::model_python_hook_names;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 const EXPLICIT_REFERENCES_CONTEXT: &str = "native explicit-reference checks";
@@ -141,7 +141,7 @@ pub(crate) fn explicit_reference_report<'py>(
     {
         Ok(report) => python_report(py, &report, &owners),
         Err(ReferenceFailure::CompileInput(message)) => Err(PyErr::from_value(
-            registry::error(py, ErrorId::CompileInput)?.call1((message,))?,
+            error_class(py, ErrorId::CompileInput)?.call1((message,))?,
         )),
         Err(ReferenceFailure::UnknownDialect(message)) => Err(compiler_error(message)),
         Err(ReferenceFailure::Internal(reason)) => Err(compiler_error(native_failure(
