@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.157.1](https://github.com/chio-labs/sqlbuild/compare/v0.157.0...v0.157.1) (2026-10-17)
+
+
+### Performance Improvements
+
+* cut serial compile work and duplicated parsing on dense projects ([#1130](https://github.com/chio-labs/sqlbuild/issues/1130)) ([409e328](https://github.com/chio-labs/sqlbuild/commit/409e3286f06725fae9bd678c33c566000de4845e))
+
 ## [0.157.0](https://github.com/chio-labs/sqlbuild/compare/v0.156.1...v0.157.0) (2026-10-17)
 
 
