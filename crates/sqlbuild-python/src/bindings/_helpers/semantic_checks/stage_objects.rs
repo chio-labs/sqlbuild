@@ -41,7 +41,7 @@ impl<'py> StageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         let types = py.import(COMPILE_TYPES_MODULE)?;
         let severity = registry::class(types.py(), RecordId::DiagnosticSeverity)?;
-        let resource = native_field(&types, "CompiledResourceType")?;
+        let resource = registry::class(py, RecordId::CompiledResourceType)?;
         let kinds = registry::class(py, RecordId::SqlReferenceKind)?;
         Ok(Self {
             diagnostic: registry::class(py, RecordId::CompilerDiagnostic)?,

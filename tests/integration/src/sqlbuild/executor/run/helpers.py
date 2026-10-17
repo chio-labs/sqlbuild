@@ -11,6 +11,7 @@ from sqlbuild._native import (
     AuditPlanEntry,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     DiscoveredHookFunction,
     MaterializationType,
     ModelPlanEntry,
@@ -24,7 +25,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.run.main._execute import execute_table_entry
 from sqlbuild.executor.run.models import (
     HookContext,

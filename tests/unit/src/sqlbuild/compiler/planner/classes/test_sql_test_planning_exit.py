@@ -10,10 +10,12 @@ from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import Plannin
 _SLOW_TEST_PLANNING: str = dedent(
     """
     import sys
+    import threading
     import time
     import types
 
     import sqlbuild._native as native
+    from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 
 
     class SlowFinalizer:
@@ -25,15 +27,16 @@ _SLOW_TEST_PLANNING: str = dedent(
     holder = types.ModuleType("holder")
     holder.finalizer = SlowFinalizer()
     sys.modules["holder"] = holder
-    plan_tests = native.plan_selected_sql_tests
+    set_difference_operator = DuckDbAdapter.render_set_difference_operator
 
 
-    def slow_plan_selected_sql_tests(**arguments):
-        time.sleep(1.0)
-        return plan_tests(**arguments)
+    def slow_set_difference_operator(self):
+        if threading.current_thread() is not threading.main_thread():
+            time.sleep(1.0)
+        return set_difference_operator(self)
 
 
-    native.plan_selected_sql_tests = slow_plan_selected_sql_tests
+    DuckDbAdapter.render_set_difference_operator = slow_set_difference_operator
     """
 )
 _FAILED_BUILD: str = dedent(
@@ -47,8 +50,16 @@ _UNJOINED_PLANNING: str = dedent(
     """
     from sqlbuild._native import SqlTestSelection
 
+
+    class SlowSqlTestsProject:
+        @property
+        def sql_tests(self):
+            time.sleep(1.0)
+            return ()
+
+
     native.start_sql_test_planning(
-        project=None,
+        project=SlowSqlTestsProject(),
         adapter=None,
         selected_keys=frozenset(),
         sql_test_selection=SqlTestSelection(),
@@ -97,6 +108,12 @@ def test_given_sql_test_planning_running_when_interpreter_finalizes_then_process
     (project_dir / "models" / "orders.sql").write_text(
         "MODEL (description 'Test model orders.', materialized table);\n\n"
         'SELECT * FROM __source("raw_orders")\n',
+        encoding="utf-8",
+    )
+    (project_dir / "tests" / "unit").mkdir(parents=True)
+    (project_dir / "tests" / "unit" / "test_orders.sql").write_text(
+        "TEST ();\n\nWITH\n__source__raw_orders AS (\n  SELECT 21 AS order_id\n),\n"
+        "__expected__orders AS (\n  SELECT 21 AS order_id\n)\nSELECT 1\n",
         encoding="utf-8",
     )
     script: Path = tmp_path / "planning_exit.py"

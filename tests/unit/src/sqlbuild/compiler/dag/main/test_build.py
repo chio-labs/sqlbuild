@@ -319,8 +319,8 @@ def test_given_qualified_loader_destination_when_building_dag_then_parses_loader
     test_case: DagLoaderDestinationTestCase,
 ) -> None:
     graph: ProjectGraph = build_dag_artifact_test_graph()
-    graph = replace(
-        graph,
+    graph = ProjectGraph(
+        native=graph.native,
         project=project_with(
             project=graph.project,
             effective_target_database="default_db",

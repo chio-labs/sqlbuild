@@ -15,6 +15,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSource,
     CompileModelConfig,
     DiscoveredAssetFunction,
@@ -38,7 +39,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
     CompiledSourceView,
 )
 from sqlbuild.providers import Provider

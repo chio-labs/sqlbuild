@@ -7,13 +7,15 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestPlanOptions;
 use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
-use crate::bindings::_helpers::sql_test_glue::planning::resolve_compiled_sql_test_chains;
+use crate::bindings::_helpers::sql_test_glue::planning::{
+    ChainRequest, PlanningRequest, plan_compiled_sql_tests, resolve_compiled_sql_test_chains,
+};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
-use pyo3::types::{PyBool, PyDict, PyTuple};
+use pyo3::types::{PyDict, PyTuple};
 
 pub(super) fn chains<'py>(
     project: &Bound<'py, PyAny>,
@@ -23,23 +25,16 @@ pub(super) fn chains<'py>(
     if !tests.is_truthy()? {
         return Ok(PyTuple::empty(py).into_any());
     }
-    let request = call_with(
-        &registry::class(py, RecordId::NativeSqlTestChainRequest)?,
-        &[
-            ("models", native_field(project, "models")?),
-            ("tests", tests.clone()),
-            (
-                "lexical_syntax",
-                project
-                    .getattr("sql_lexical_syntax")?
-                    .getattr("native_mapping")?,
-            ),
-        ],
-    )?;
-    let native = request
-        .extract()
-        .and_then(|request| resolve_compiled_sql_test_chains(py, request))
-        .and_then(|chains| object(py, chains));
+    let request = ChainRequest {
+        models: native_field(project, "models")?.extract()?,
+        tests: tests.extract()?,
+        lexical_syntax: project
+            .getattr("sql_lexical_syntax")?
+            .getattr("native_mapping")?
+            .extract()?,
+    };
+    let native =
+        resolve_compiled_sql_test_chains(py, request).and_then(|chains| object(py, chains));
     let native = match native {
         Ok(value) => value,
         Err(error) if error.is_instance_of::<pyo3::exceptions::PyValueError>(py) => {
@@ -80,57 +75,34 @@ pub(crate) fn planned<'py>(
     let model_sql = super::plan_rendering::models(project, adapter)?;
     let functions = super::plan_rendering::functions(project, adapter)?;
     let overrides = super::plan_rendering::overrides(project, tests, adapter)?;
-    let request = call_with(
-        &registry::class(py, RecordId::NativeSqlTestPlanningRequest)?,
-        &[
-            ("models", native_field(project, "models")?),
-            ("rendered_model_sql", model_sql.into_any()),
-            ("functions", functions.into_any()),
-            ("tests", tests.clone()),
-            ("rendered_test_overrides", overrides.into_any()),
-            ("sql_analysis_enabled", options.sql_analysis_enabled.clone()),
-            (
-                "sql_analysis_dialect",
-                adapter.call_method0("sql_analysis_dialect")?,
-            ),
-            (
-                "set_difference_operator",
-                adapter.call_method0("render_set_difference_operator")?,
-            ),
-            (
-                "requires_derived_table_aliases",
-                adapter.call_method0("requires_derived_table_aliases")?,
-            ),
-            (
-                "lexical_syntax",
-                project
-                    .getattr("sql_lexical_syntax")?
-                    .getattr("native_mapping")?,
-            ),
-            (
-                "render_sql",
-                PyBool::new(py, artifact || options.render_sql)
-                    .to_owned()
-                    .into_any(),
-            ),
-            (
-                "include_plan",
-                PyBool::new(py, !artifact && options.include_plan)
-                    .to_owned()
-                    .into_any(),
-            ),
-        ],
-    )?;
-    let native = registry::native(py, NativeAttr::PlanCompiledSqlTests)?.call1((request,));
-    let native = match native {
+    let request = PlanningRequest {
+        models: native_field(project, "models")?.extract()?,
+        rendered_model_sql: model_sql.extract()?,
+        functions: functions.extract()?,
+        tests: tests.extract()?,
+        rendered_test_overrides: overrides.extract()?,
+        sql_analysis_enabled: options.sql_analysis_enabled.extract()?,
+        sql_analysis_dialect: adapter.call_method0("sql_analysis_dialect")?.extract()?,
+        set_difference_operator: adapter
+            .call_method0("render_set_difference_operator")?
+            .extract()?,
+        requires_derived_table_aliases: adapter
+            .call_method0("requires_derived_table_aliases")?
+            .extract()?,
+        lexical_syntax: project
+            .getattr("sql_lexical_syntax")?
+            .getattr("native_mapping")?
+            .extract()?,
+        render_sql: artifact || options.render_sql,
+        include_plan: !artifact && options.include_plan,
+    };
+    let (rows, planning_ns, rendering_ns) = match plan_compiled_sql_tests(py, request) {
         Ok(value) => value,
         Err(error) if error.is_instance_of::<pyo3::exceptions::PyValueError>(py) => {
             return Err(super::plan_errors::planning_error(py, error, tests)?);
         }
         Err(error) => return Err(error),
     };
-    let planning_ns: u64 = native.get_item(1)?.extract()?;
-    let rendering_ns: u64 = native.get_item(2)?.extract()?;
     let end: u64 = imported(py, "time", "perf_counter_ns")?
         .call0()?
         .extract()?;
@@ -148,8 +120,8 @@ pub(crate) fn planned<'py>(
         add_compile_timing(phase, elapsed);
     }
     let mut plans: Vec<Bound<'py, PyAny>> = Vec::new();
-    for row in native.get_item(0)?.try_iter()? {
-        let plan = super::plan_rows::plan(&row?)?;
+    for row in rows {
+        let plan = super::plan_rows::plan(py, row)?;
         if artifact {
             let sql = native_field(&plan, "sql")?;
             if sql.is_none() {

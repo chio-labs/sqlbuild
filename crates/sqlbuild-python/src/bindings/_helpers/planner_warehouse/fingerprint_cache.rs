@@ -4,22 +4,24 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::planner_changes::metadata::without_declared_columns_hash;
+use crate::bindings::_helpers::planner_migrations::fingerprint::fingerprint;
 use crate::bindings::_helpers::planner_migrations::fingerprint::migration_fingerprint_ref_names;
 use crate::bindings::_helpers::planner_phases::objects::object;
-use crate::bindings::_helpers::planner_phases::objects::{optional_text, text};
+use crate::bindings::_helpers::planner_warehouse::models::FingerprintWork;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use pyo3::PyRefMut;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyList, PyListMethods, PyTuple};
-use pyo3::{pyclass, pymethods};
+use pyo3::{pyclass, pyfunction, pymethods};
 use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_entry::fingerprint_cache_entry;
 use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_key::fingerprint_cache_key;
 use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_lookup::fingerprint_cache_lookup;
 use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_shared_digest::fingerprint_cache_shared_digest;
 use sqlbuild_analysis::planner_warehouse::models::FingerprintCacheKey;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 const CACHE_DIRECTORY_NAME: &str = "migration-fingerprints-v1";
 const CACHE_DATABASE_NAME: &str = "migration-fingerprints.sqlite3";
@@ -30,6 +32,39 @@ const INSERT_SQL: &str =
 const SELECT_SQL: &str = "SELECT payload FROM migration_fingerprint WHERE cache_key = ?";
 
 type MemoKey = (String, String, Option<String>, Vec<(String, String)>);
+
+static FINGERPRINT_WORK: PyOnceLock<Py<FingerprintWork>> = PyOnceLock::new();
+
+fn fingerprint_work(py: Python<'_>) -> PyResult<PyRefMut<'_, FingerprintWork>> {
+    Ok(FINGERPRINT_WORK
+        .get_or_try_init(py, || Py::new(py, FingerprintWork::default()))?
+        .bind(py)
+        .borrow_mut())
+}
+
+fn count_computation(py: Python<'_>, key: &MemoKey) -> PyResult<()> {
+    let mut hasher = DefaultHasher::new();
+    key.hash(&mut hasher);
+    let mut work = fingerprint_work(py)?;
+    work.computations += 1;
+    work.distinct.insert(hasher.finish());
+    Ok(())
+}
+
+/// Report migration fingerprints computed and distinct requests among them, optionally resetting.
+#[pyfunction]
+#[pyo3(signature = (*, reset = false))]
+pub(crate) fn migration_fingerprint_work_info(
+    py: Python<'_>,
+    reset: bool,
+) -> PyResult<(u64, usize)> {
+    let mut work = fingerprint_work(py)?;
+    let info = (work.computations, work.distinct.len());
+    if reset {
+        *work = FingerprintWork::default();
+    }
+    Ok(info)
+}
 
 /// Reuse migration fingerprints across rename maps, planning phases and invocations.
 #[pyclass(module = "sqlbuild._native")]
@@ -313,20 +348,10 @@ impl MigrationFingerprintCache {
         let stored = match self.stored(py, &cache_key)? {
             Some(stored) => stored,
             None => {
-                let identities = PyDict::new(py);
-                for (name, identity) in &key.3 {
-                    pyo3::types::PyDictMethods::set_item(&identities, name, identity)?;
-                }
-                let computed: Option<String> = call_with(
-                    &registry::native(py, NativeAttr::BuildMigrationFingerprint)?,
-                    &[
-                        ("query_sql", text(py, &key.0)),
-                        ("metadata_json", text(py, &key.1)),
-                        ("ref_identities", identities.into_any()),
-                        ("dialect", optional_text(py, key.2.as_deref())),
-                    ],
-                )?
-                .extract()?;
+                count_computation(py, &key)?;
+                let identities: BTreeMap<String, String> = key.3.iter().cloned().collect();
+                let computed: Option<String> =
+                    fingerprint(&key.0, &key.1, &identities, key.2.as_deref())?;
                 self.remember(&cache_key, computed.as_deref())?;
                 computed
             }

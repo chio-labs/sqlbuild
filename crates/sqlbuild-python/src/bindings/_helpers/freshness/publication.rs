@@ -8,11 +8,12 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::cost_telemetry::context::CostContext;
 use crate::bindings::_helpers::freshness::state_io::write_source_freshness_records;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 /// Observed records grouped by `(database, schema)` in first-seen order.
@@ -187,7 +188,6 @@ fn write_records<'py>(
     grouped: &RecordsByLocation<'py>,
 ) -> PyResult<()> {
     let py: Python<'py> = adapter.py();
-    let cost_context: Bound<'py, PyAny> = registry::native(py, NativeAttr::CostContext)?;
     for ((database, schema), records) in grouped {
         let mut by_source: Vec<(Bound<'py, PyAny>, Vec<Bound<'py, PyAny>>)> = Vec::new();
         for record in records {
@@ -205,17 +205,24 @@ fn write_records<'py>(
             }
         }
         for (source_name, source_records) in by_source {
-            let scope: Bound<'py, PyAny> = call_with(
-                &native_field(&cost_context, "resource_scope")?,
-                &[
-                    ("resource_type", PyString::new(py, "source").into_any()),
-                    ("resource_name", source_name),
-                    (
-                        "phase",
-                        PyString::new(py, "freshness_finalization").into_any(),
-                    ),
-                ],
-            )?;
+            let scope: Bound<'py, PyAny> = Bound::new(
+                py,
+                CostContext::resource_scope(
+                    py,
+                    Some(keywords(
+                        py,
+                        &[
+                            ("resource_type", PyString::new(py, "source").into_any()),
+                            ("resource_name", source_name),
+                            (
+                                "phase",
+                                PyString::new(py, "freshness_finalization").into_any(),
+                            ),
+                        ],
+                    )?),
+                )?,
+            )?
+            .into_any();
             within(&scope, |_| {
                 write_source_freshness_records(
                     py,

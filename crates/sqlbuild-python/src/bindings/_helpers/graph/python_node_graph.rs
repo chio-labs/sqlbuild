@@ -32,7 +32,6 @@ struct Vocabulary<'py> {
     node: Bound<'py, PyAny>,
     kinds: Bound<'py, PyAny>,
     sql_ref: Bound<'py, PyAny>,
-    identity: Bound<'py, PyAny>,
     providers: Bound<'py, PyDict>,
 }
 
@@ -47,13 +46,69 @@ fn optional_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     native_field(value, "value")
 }
 
-/// The kind-specific decorator configuration and metadata record of one discovered function.
-fn kind_parts<'py>(
+/// The decorator configuration the identity of one node of `kind` hashes, read through `get`.
+fn decorator_config<'py>(
+    py: Python<'py>,
+    (kind, documented): (&str, bool),
+    get: &dyn Fn(&str) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let config: Bound<'py, PyDict> = PyDict::new(py);
+    match kind {
+        "LOADER" => {
+            config.set_item("columns", get("columns")?)?;
+            config.set_item("contract", get("contract")?)?;
+            config.set_item("cursor_column", get("cursor_column")?)?;
+            config.set_item("destination", get("destination")?)?;
+            config.set_item("unique_key", get("unique_key")?)?;
+            config.set_item("write_strategy", optional_value(&get("write_strategy")?)?)?;
+        }
+        "ASSET" => {
+            config.set_item("columns", get("columns")?)?;
+            config.set_item("column_lineage", get("column_lineage")?)?;
+        }
+        "CHECK" => {
+            config.set_item("severity", get("severity")?.getattr("value")?)?;
+        }
+        _ => {}
+    }
+    if documented {
+        for field in ["description", "group", "meta", "tags"] {
+            config.set_item(field, get(field)?)?;
+        }
+    }
+    Ok(config)
+}
+
+/// The identity of one discovered node of `(kind, documented)`, hashed once by the user-code host.
+pub(crate) fn node_identity<'py>(
+    py: Python<'py>,
+    (kind, documented): (&str, bool),
+    get: &dyn Fn(&str) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kind_value: Bound<'py, PyAny> = host::entry(py, UserCodeHost::PythonNodeKind)?
+        .getattr(kind)?
+        .getattr("value")?;
+    call_with(
+        &host::entry(py, UserCodeHost::PythonNodeIdentity)?,
+        &[
+            ("kind", kind_value),
+            ("name", get("name")?),
+            ("function", get("function")?),
+            ("file_path", get("file_path")?),
+            (
+                "decorator_config",
+                decorator_config(py, (kind, documented), get)?.into_any(),
+            ),
+        ],
+    )
+}
+
+/// The kind's metadata field and record of one discovered function.
+fn kind_metadata<'py>(
     py: Python<'py>,
     kind: &str,
     discovered: &Bound<'py, PyAny>,
-) -> PyResult<(Bound<'py, PyDict>, &'static str, Bound<'py, PyAny>)> {
-    let config: Bound<'py, PyDict> = PyDict::new(py);
+) -> PyResult<(&'static str, Bound<'py, PyAny>)> {
     let get = |name: &str| attribute_value(discovered, name);
     let metadata = |class: RecordId, fields: &[&str]| -> PyResult<Bound<'py, PyAny>> {
         let pairs: Vec<(&str, Bound<'py, PyAny>)> = fields
@@ -63,14 +118,9 @@ fn kind_parts<'py>(
         call_with(&registry::class(py, class)?, &pairs)
     };
     Ok(match kind {
-        "LOADER" => {
-            config.set_item("columns", get("columns")?)?;
-            config.set_item("contract", get("contract")?)?;
-            config.set_item("cursor_column", get("cursor_column")?)?;
-            config.set_item("destination", get("destination")?)?;
-            config.set_item("unique_key", get("unique_key")?)?;
-            config.set_item("write_strategy", optional_value(&get("write_strategy")?)?)?;
-            let record = metadata(
+        "LOADER" => (
+            "loader",
+            metadata(
                 RecordId::DiscoveredPythonLoaderMetadata,
                 &[
                     "destination",
@@ -81,28 +131,23 @@ fn kind_parts<'py>(
                     "contract",
                     "connection_mode",
                 ],
-            )?;
-            (config, "loader", record)
-        }
+            )?,
+        ),
         "TASK" => (
-            config,
             "task",
             metadata(RecordId::DiscoveredPythonTaskMetadata, &["retry"])?,
         ),
-        "ASSET" => {
-            config.set_item("columns", get("columns")?)?;
-            config.set_item("column_lineage", get("column_lineage")?)?;
-            let record = metadata(
+        "ASSET" => (
+            "asset",
+            metadata(
                 RecordId::DiscoveredPythonAssetMetadata,
                 &["columns", "column_lineage", "retry"],
-            )?;
-            (config, "asset", record)
-        }
-        _ => {
-            config.set_item("severity", get("severity")?.getattr("value")?)?;
-            let record = metadata(RecordId::DiscoveredPythonCheckMetadata, &["severity"])?;
-            (config, "check", record)
-        }
+            )?,
+        ),
+        _ => (
+            "check",
+            metadata(RecordId::DiscoveredPythonCheckMetadata, &["severity"])?,
+        ),
     })
 }
 
@@ -114,24 +159,13 @@ fn python_node<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let get = |name: &str| attribute_value(discovered, name);
-    let (config, metadata_field, metadata) = kind_parts(py, kind, discovered)?;
-    if documented {
-        for field in ["description", "group", "meta", "tags"] {
-            config.set_item(field, get(field)?)?;
-        }
-    }
+    let (metadata_field, metadata) = kind_metadata(py, kind, discovered)?;
     let kind_member: Bound<'py, PyAny> = vocabulary.kinds.getattr(kind)?;
     let usages: Bound<'py, PyAny> = provider_usages(&get("function")?, &vocabulary.providers)?;
-    let identity: Bound<'py, PyAny> = call_with(
-        &vocabulary.identity,
-        &[
-            ("kind", native_field(&kind_member, "value")?),
-            ("name", get("name")?),
-            ("function", get("function")?),
-            ("file_path", get("file_path")?),
-            ("decorator_config", config.into_any()),
-        ],
-    )?;
+    let mut identity: Bound<'py, PyAny> = get("identity")?;
+    if identity.is_none() {
+        identity = node_identity(py, (kind, documented), &get)?;
+    }
     let depends_on: Bound<'py, PyAny> = get("depends_on")?;
     let mut sql_deps: Vec<Bound<'py, PyAny>> = Vec::new();
     for dependency in depends_on.try_iter()? {
@@ -224,7 +258,6 @@ pub(crate) fn python_node_graph<'py>(
         node: registry::class(py, RecordId::DiscoveredPythonNode)?,
         kinds: host::entry(py, UserCodeHost::PythonNodeKind)?,
         sql_ref: host::entry(py, UserCodeHost::SqlResourceRef)?,
-        identity: host::entry(py, UserCodeHost::PythonNodeIdentity)?,
         providers,
     };
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();

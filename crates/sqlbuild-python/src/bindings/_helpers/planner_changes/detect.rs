@@ -48,7 +48,6 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const CHANGES_LOGGER: &str = "sqlbuild.planner.changes";
 const REPLAY_CONFIG_KEY: &str = "replay_on_change";
 
@@ -236,7 +235,7 @@ pub(crate) fn detect_model_changes<'py>(
     )
 }
 
-fn scope_model_changes<'py>(
+pub(crate) fn scope_model_changes<'py>(
     (project, scope, snapshot): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
     query_change_tracking: Option<bool>,
     (version_hashes, metadata_jsons): (Bound<'py, PyAny>, Bound<'py, PyAny>),
@@ -275,7 +274,7 @@ fn scope_model_changes<'py>(
         hook_version_hashes: hook_version_hashes.into_any(),
     };
     let model_kind: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
     let models_by_name: Bound<'py, PyAny> = native_field(scope, "models_by_name")?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);

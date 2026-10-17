@@ -1,10 +1,15 @@
-from sqlbuild._native import ChainStep, CompiledObjectKey, SqlTestAssertionStep, SqlTestPlanEntry
+from sqlbuild._native import (
+    ChainStep,
+    CompiledObjectKey,
+    CompiledResourceType,
+    SqlTestAssertionStep,
+    SqlTestPlanEntry,
+)
 from sqlbuild.adapters.bigquery.classes.bigquery_adapter import BigQueryAdapter
 from sqlbuild.adapters.databricks.classes.databricks_adapter import DatabricksAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
-from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
 def build_comparison_test_entry(*, sql_analysis_enabled: bool = True) -> SqlTestPlanEntry:

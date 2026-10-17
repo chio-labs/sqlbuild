@@ -5,12 +5,13 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     CompiledSqlScenario,
     CompiledSqlTest,
     DiscoveredSqlScenarioFile,
     project_with,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType, SqlTestMode
+from sqlbuild.compiler.compile.types import CompiledProjectView, SqlTestMode
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
     NativeFactPayloadTestCase,
 )

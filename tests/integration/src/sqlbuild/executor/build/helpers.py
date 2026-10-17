@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
 import duckdb
+import pytest
 
 from sqlbuild._native import (
     CompilePipelineOptions,
@@ -23,6 +25,7 @@ from sqlbuild._native import (
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.executor.build.classes.build_scheduler import BuildScheduler
 from sqlbuild.executor.build.main._execute import execute_build_plan
 from sqlbuild.executor.build.models import (
     BuildExecutionResult,
@@ -474,20 +477,19 @@ def verify_warehouse_state(
         assert cursor.fetchone() is None, f"Relation {relation} should not exist but was found"
 
 
-def drift_for_models(
-    *, model_names: tuple[str, ...]
-) -> Callable[..., tuple[TableTypePlanEntry, ...]]:
-    """Return a planner stand-in reporting permanent-desired drift for the named models."""
+def drift_for_models(*, model_names: tuple[str, ...], monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hand the build scheduler a plan reporting permanent-desired drift for the named models."""
 
-    def plan_table_types(
-        *, runtime: Any, warehouse: Any, scope: Any
-    ) -> tuple[TableTypePlanEntry, ...]:
-        del warehouse, scope
-        models_by_name: dict[str, Any] = {model.name: model for model in runtime.project.models}
-        return tuple(
+    original: Callable[..., None] = BuildScheduler.__init__
+
+    def drifted_init(self: BuildScheduler, *, plan: PlanOutput, **kwargs: Any) -> None:
+        destinations: dict[str, Any] = {
+            entry.name: entry.destination for entry in plan.model_entries
+        }
+        entries: tuple[TableTypePlanEntry, ...] = tuple(
             TableTypePlanEntry(
                 model_name=name,
-                destination=models_by_name[name].destination,
+                destination=destinations[name],
                 copy_name=f"__sqb_type_swap__{name}",
                 desired_type="permanent",
                 actual_type="transient",
@@ -497,8 +499,9 @@ def drift_for_models(
             )
             for name in model_names
         )
+        original(self, plan=replace(plan, table_type_entries=entries), **kwargs)
 
-    return plan_table_types
+    monkeypatch.setattr(BuildScheduler, "__init__", drifted_init)
 
 
 def recording_table_type_conversion(*, conversions: list[tuple[str, int]]) -> Callable[..., None]:

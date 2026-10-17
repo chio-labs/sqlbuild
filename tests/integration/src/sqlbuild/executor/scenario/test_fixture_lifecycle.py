@@ -8,6 +8,7 @@ import pytest
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     DiscoveredHookFunction,
     PythonHookEntry,
     ScenarioExecutionPlan,
@@ -17,7 +18,6 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.build.models import SeedExecutionResult
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scenario._helpers.execution.model_execution import execute_scenario_models

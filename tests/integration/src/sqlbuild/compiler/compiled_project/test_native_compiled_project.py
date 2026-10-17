@@ -27,7 +27,6 @@ from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import
     ModelPathScopeErrorTestCase,
     RetainedRulesRowsTestCase,
     SharedInferredColumnsTestCase,
-    UnretainedRulesRowsTestCase,
     ZeroMaterializationTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
@@ -48,7 +47,6 @@ from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     expected_summary,
     forbid_hand_built_projects,
     inputs_summary,
-    skip_model_retention,
 )
 from tests.integration.src.sqlbuild.compiler.graph.helpers import ORDERS_PROJECT_FILES, write_files
 
@@ -120,32 +118,6 @@ def test_given_compiled_project_when_evaluating_rules_then_retained_model_facts_
     payload: dict[str, Any] = json.loads(capsys.readouterr().out)
 
     assert tuple(item["code"] for item in payload["diagnostics"]) == test_case.expected_codes
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        UnretainedRulesRowsTestCase(
-            description="models the compile-input stage did not retain",
-            expected_error="compiled model 'orders' has no retained compile facts",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_unretained_model_facts_when_evaluating_rules_then_compile_reports_it(
-    test_case: UnretainedRulesRowsTestCase,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    write_files(project_dir=tmp_path, files=TYPE_PROOF_FILES)
-    skip_model_retention(monkeypatch=monkeypatch)
-
-    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--no-cache"])
-    output: str = "".join(capsys.readouterr())
-
-    assert exit_code == 1
-    assert test_case.expected_error in output
 
 
 @pytest.mark.parametrize(

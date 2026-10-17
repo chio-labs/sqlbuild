@@ -872,12 +872,6 @@ class ExpectedCountTestCase:
 
 
 @dataclass(frozen=True)
-class ExpectedMessageTestCase:
-    description: str
-    expected_message: str
-
-
-@dataclass(frozen=True)
 class LoadTargetRetentionPoliciesTestCase:
     description: str
     target_lines: tuple[str, ...]

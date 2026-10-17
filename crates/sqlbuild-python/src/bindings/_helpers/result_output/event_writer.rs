@@ -115,7 +115,7 @@ fn write(stream: &Bound<'_, PyAny>, line: &str) -> PyResult<()> {
 impl ExecutionEventWriter {
     #[new]
     #[pyo3(signature = (*, path = None))]
-    fn new(py: Python<'_>, path: Option<Bound<'_, PyAny>>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>, path: Option<Bound<'_, PyAny>>) -> PyResult<Self> {
         let configured: Bound<'_, PyAny> = py
             .import("os")?
             .getattr("environ")?

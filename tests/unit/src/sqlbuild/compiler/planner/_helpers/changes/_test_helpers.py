@@ -14,6 +14,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     Fingerprint,
     FunctionArgument,
@@ -30,7 +31,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
     FunctionLanguage,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers.changes._test_types import (

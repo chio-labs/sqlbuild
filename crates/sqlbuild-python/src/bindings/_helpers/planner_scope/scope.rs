@@ -2,11 +2,18 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::graph::keys::KeyCache;
+use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+use crate::bindings::_helpers::graph::views::lineage_graph_names;
+use crate::bindings::_helpers::planner_identity::graph::{
+    build_downstream_deps, build_execution_edge_origins, build_execution_upstream_deps,
+    topologically_order_keys,
+};
 use crate::bindings::_helpers::planner_scope::loaders::expand_selected_loader_dependencies;
 use crate::bindings::_helpers::planner_scope::values::{edges, keys};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
+use crate::bindings::_helpers::planner_selection::selectors::resolve_graph_selection;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::PyDictMethods;
@@ -67,22 +74,14 @@ pub(crate) fn build_planner_scope<'py>(
     let select = default_tuple(&args.value("select")?);
     let exclude = default_tuple(&args.value("exclude")?);
     let auto_load = args.value("auto_load_sources")?.is_truthy()?;
-    let mut upstream =
-        registry::native(py, NativeAttr::BuildExecutionUpstreamDeps)?.call1((&project,))?;
-    let mut downstream =
-        registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
-    let lineage = native_field(&project, "lineage_graph")?;
-    let all_keys = registry::native(py, NativeAttr::LineageGraphNames)?.call1((&lineage,))?;
+    let mut upstream = build_execution_upstream_deps(&project)?.into_any();
+    let mut downstream = build_downstream_deps(&upstream)?.into_any();
+    let lineage: Bound<'py, NativeProjectGraph> =
+        native_field(&project, "lineage_graph")?.cast_into()?;
+    let all_keys = lineage_graph_names(py, lineage.borrow())?.into_any();
     let mut selected = args.value("selected_keys")?;
     if selected.is_none() {
-        selected = call_with(
-            &registry::native(py, NativeAttr::ResolveGraphSelection)?,
-            &[
-                ("graph", lineage),
-                ("select", select.clone()),
-                ("exclude", exclude),
-            ],
-        )?;
+        selected = resolve_graph_selection(lineage.borrow(), &select, &exclude)?.into_any();
     }
     let names: Vec<(String, (String, String))> = all_keys
         .call_method0("items")?
@@ -118,17 +117,10 @@ pub(crate) fn build_planner_scope<'py>(
             expand_selected_loader_dependencies(&project, &selected, &upstream, Some(&executable))?;
         selected = expanded.into_any();
         upstream = deps.into_any();
-        downstream = registry::native(py, NativeAttr::BuildDownstreamDeps)?.call1((&upstream,))?;
+        downstream = build_downstream_deps(&upstream)?.into_any();
     }
-    let origins =
-        registry::native(py, NativeAttr::BuildExecutionEdgeOrigins)?.call1((&project,))?;
-    let order = call_with(
-        &registry::native(py, NativeAttr::TopologicallyOrderKeys)?,
-        &[
-            ("upstream", upstream.clone()),
-            ("injected_edge_origins", origins),
-        ],
-    )?;
+    let origins = build_execution_edge_origins(&project)?.into_any();
+    let order = topologically_order_keys(&upstream, Some(origins))?.into_any();
     let models = PyDict::new(py);
     for model in native_field(&project, "models")?.try_iter()? {
         let model = model?;

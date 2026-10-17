@@ -7,6 +7,7 @@ from sqlbuild._native import (
     ColumnTransformKind,
     CompiledLineageColumnFact,
     CompiledLineageSourceFact,
+    CompiledResourceType,
     CompileSqlReference,
     InferredColumn,
     InferredNullability,
@@ -17,7 +18,6 @@ from sqlbuild._native import (
     substitute_placeholder_defaults,
 )
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.compile._helpers._test_types import (
     InferColumnsTestCase,
     PolyglotAnalysisTestCase,

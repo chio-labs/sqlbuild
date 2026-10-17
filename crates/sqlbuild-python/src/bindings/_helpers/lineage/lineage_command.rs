@@ -33,6 +33,7 @@ use sqlbuild_core::cli_text::models::CliStyle;
 
 use crate::bindings::_helpers::build_progress::transient_status::maybe_status;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::lineage::lineage_cache::{
     lineage_fingerprint, read_lineage_cache, write_lineage_cache,
 };
@@ -136,7 +137,7 @@ fn discover<'py>(
     options.set_item("project_dir", project_dir)?;
     options.set_item("sql_analysis_enabled_override", analysis_override)?;
     options.set_item("extract_output_column_locations", false)?;
-    registry::native(py, NativeAttr::DiscoverProjectInputs)?.call((), Some(&options))
+    discover_project_inputs(py, Some(options))
 }
 
 fn reject_unit_tests(

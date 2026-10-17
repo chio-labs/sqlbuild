@@ -172,12 +172,7 @@ pub(crate) fn model_key<'py>(
         &[
             (
                 "resource_type",
-                imported(
-                    py,
-                    "sqlbuild.compiler.compile.types",
-                    "CompiledResourceType",
-                )?
-                .getattr("MODEL")?,
+                registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?,
             ),
             ("name", name.clone()),
         ],

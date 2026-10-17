@@ -6,10 +6,9 @@ import json
 import shutil
 from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -46,7 +45,7 @@ from sqlbuild.compiler.compile.types import (
 from tests.integration.src.sqlbuild.compiler.graph.helpers import write_files
 
 if TYPE_CHECKING:
-    from sqlbuild._native import CompileInputsView, ModelInput
+    from sqlbuild._native import CompileInputsView
 
 TYPE_PROOF_FILES: dict[str, str] = {
     "sqlbuild_project.toml": (
@@ -81,30 +80,6 @@ def forbid_hand_built_projects(*, monkeypatch: pytest.MonkeyPatch) -> None:
 
     for module in _FACTS_CONSUMERS:
         monkeypatch.setattr(module, "compiled_project_facts", retained_only)
-
-
-def skip_model_retention(*, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run the native model loop into a throwaway project instead of the compile's own.
-
-    The compile's own project still runs the loop over no models, so it keeps the loop that
-    attaches its other resources.
-    """
-
-    build_inputs: Callable[..., tuple[ModelInput, ...]] = cast(
-        "Callable[..., tuple[ModelInput, ...]]", _native.build_model_inputs
-    )
-
-    def discarded(**kwargs: Any) -> tuple[ModelInput, ...]:
-        discovered: DiscoveredProjectInputs = kwargs["discovered_inputs"]
-        without_models: dict[str, Any] = {
-            **kwargs,
-            "discovered_inputs": replace(discovered, model_files=()),
-        }
-        _ = build_inputs(**without_models)
-        throwaway: dict[str, Any] = {**kwargs, "native_project": _native.NativeCompiledProject()}
-        return build_inputs(**throwaway)
-
-    monkeypatch.setattr(_native, "build_model_inputs", discarded)
 
 
 LEGACY_PROJECT_TYPES: tuple[str, ...] = (

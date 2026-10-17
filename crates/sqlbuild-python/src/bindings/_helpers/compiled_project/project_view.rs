@@ -6,13 +6,17 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{pyclass, pymethods};
 
+use crate::bindings::_helpers::compile_driver::stage_work::{LINEAGE_GRAPH_BUILDS, count_stage};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     NativeCompiledModel, model_graph_row,
 };
+use crate::bindings::_helpers::compiled_project::function_views::NativeCompiledFunction;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, authored_expansion, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::seed_views::NativeCompiledSeed;
+use crate::bindings::_helpers::compiled_project::source_views::NativeCompiledSource;
 use crate::bindings::_helpers::graph::project_graph::{
     NativeProjectGraph, ResourceRow, project_graph,
 };
@@ -521,21 +525,36 @@ impl NativeProjectView {
                 }
                 let compiler: &CompilerHandles = &self.fields.compiler;
                 for source in compiler.sources.bind(py).try_iter()? {
-                    rows.push(resource_row(&source?, None)?);
+                    let source: Bound<'_, PyAny> = source?;
+                    rows.push(match source.cast::<NativeCompiledSource>() {
+                        Ok(native) => native.get().graph_row(py)?,
+                        Err(_) => resource_row(&source, None)?,
+                    });
                 }
                 for seed in compiler.seeds.bind(py).try_iter()? {
                     let seed: Bound<'_, PyAny> = seed?;
-                    let tags: Bound<'_, PyAny> = seed
-                        .getattr(SCHEMA_ENTRY_ATTRIBUTE)?
-                        .getattr(TAGS_ATTRIBUTE)?;
-                    rows.push(resource_row(&seed, Some(&tags))?);
+                    rows.push(match seed.cast::<NativeCompiledSeed>() {
+                        Ok(native) => native.get().graph_row(py)?,
+                        Err(_) => {
+                            let tags: Bound<'_, PyAny> = seed
+                                .getattr(SCHEMA_ENTRY_ATTRIBUTE)?
+                                .getattr(TAGS_ATTRIBUTE)?;
+                            resource_row(&seed, Some(&tags))?
+                        }
+                    });
                 }
                 for function in compiler.functions.bind(py).try_iter()? {
                     let function: Bound<'_, PyAny> = function?;
-                    let tags: Bound<'_, PyAny> = function.getattr(TAGS_ATTRIBUTE)?;
-                    rows.push(resource_row(&function, Some(&tags))?);
+                    rows.push(match function.cast::<NativeCompiledFunction>() {
+                        Ok(native) => native.get().graph_row(py)?,
+                        Err(_) => {
+                            let tags: Bound<'_, PyAny> = function.getattr(TAGS_ATTRIBUTE)?;
+                            resource_row(&function, Some(&tags))?
+                        }
+                    });
                 }
                 self.owner.bind(py).borrow_mut().record_graph_build();
+                count_stage(py, LINEAGE_GRAPH_BUILDS, 1)?;
                 Py::new(py, project_graph(rows)?)
             })
             .map(|graph| graph.clone_ref(py))

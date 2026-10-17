@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-import sqlbuild._native as native_module
-
 ORDERS_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": 'name = "orders"\nadapter = "duckdb"\n',
     "models/staging/stg_orders.sql": (
@@ -28,23 +24,6 @@ def write_files(*, project_dir: Path, files: dict[str, str]) -> None:
         path: Path = project_dir / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
-
-
-def record_compile_owners(
-    *, monkeypatch: pytest.MonkeyPatch
-) -> list[native_module.NativeCompiledProject]:
-    """Record every native compiled project the compile creates, to read its graph builds."""
-
-    owners: list[native_module.NativeCompiledProject] = []
-    owner_type: type[native_module.NativeCompiledProject] = native_module.NativeCompiledProject
-
-    def recorded() -> native_module.NativeCompiledProject:
-        owner: native_module.NativeCompiledProject = owner_type()
-        owners.append(owner)
-        return owner
-
-    monkeypatch.setattr(native_module, "NativeCompiledProject", recorded)
-    return owners
 
 
 def compiled_models(*, stdout: str) -> dict[str, bool]:

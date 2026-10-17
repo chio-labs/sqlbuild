@@ -11,6 +11,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     ModelPlanEntry,
     PlanAction,
@@ -19,7 +20,7 @@ from sqlbuild._native import (
     build_display_only_sqlbuild_plan,
     format_plan,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.compiler.planner.main.execution._test_types import (
     DisplayFullRefreshTestCase,
 )

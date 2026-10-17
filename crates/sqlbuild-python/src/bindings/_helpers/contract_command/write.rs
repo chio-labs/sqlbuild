@@ -4,12 +4,14 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const UTF8: &str = "utf-8";
 
 /// The repository the edits apply to and how they apply.
@@ -32,7 +34,7 @@ pub(crate) fn write_contracts<'py>(
     let models: Bound<'py, PyDict> = by_name(&native_field(&project, "models")?)?;
     let sources: Bound<'py, PyDict> = by_name(&native_field(&project, "sources")?)?;
     let model_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let updates: Bound<'py, PyDict> = PyDict::new(py);
     let updated_evidence: Bound<'py, PyList> = PyList::empty(py);
     for evidence in native_field(result, "evidence")?.try_iter()? {
@@ -130,27 +132,30 @@ fn applied<'py>(
 ) -> PyResult<()> {
     let py: Python<'py> = result.py();
     write_all(updates)?;
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", write.project_dir.clone())],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", write.project_dir.clone())])?),
     )?;
     if write.adapter.is_none() {
         return Ok(());
     }
-    let keywords: Bound<'py, PyDict> = PyDict::new(py);
-    keywords.set_item("no_cache", true)?;
-    let selection: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompileAnalysisSelection)?.call((), Some(&keywords))?;
-    call_with(
-        &registry::native(py, NativeAttr::BuildCompiledProject)?,
-        &[
-            ("discovered_inputs", discovered),
-            ("adapter", write.adapter.clone()),
-            ("selected_target", native_field(result, "from_target")?),
-            ("resolved_connection", write.resolved_connection.clone()),
-            ("cli_vars", write.cli_vars.clone()),
-            ("analysis_selection", selection),
-        ],
+    let selection_keywords: Bound<'py, PyDict> = PyDict::new(py);
+    selection_keywords.set_item("no_cache", true)?;
+    let selection: Bound<'py, PyAny> = registry::class(py, RecordId::CompileAnalysisSelection)?
+        .call((), Some(&selection_keywords))?;
+    build_compiled_project(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered),
+                ("adapter", write.adapter.clone()),
+                ("selected_target", native_field(result, "from_target")?),
+                ("resolved_connection", write.resolved_connection.clone()),
+                ("cli_vars", write.cli_vars.clone()),
+                ("analysis_selection", selection),
+            ],
+        )?),
     )?;
     Ok(())
 }

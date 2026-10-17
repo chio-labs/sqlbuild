@@ -20,6 +20,9 @@ use crate::bindings::_helpers::analysis_session::session::{
     infer_expression_source_shapes, prove_dynamic_column_contracts,
 };
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    EXPRESSION_SHAPE_BATCHES, EXPRESSION_SHAPES_INFERRED, count_stage,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
@@ -105,9 +108,16 @@ fn infer_native_expression_source_shapes<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("infer_native_expression_source_shapes", request)?;
-    let py: Python<'py> = request.py();
-    let expressions: Bound<'py, PyAny> = request.get("expressions")?;
-    let profile: Bound<'py, PyAny> = request.get("profile")?;
+    expression_source_shapes(&request.get("expressions")?, &request.get("profile")?)
+}
+
+/// One shape per expression, cached on `profile`'s binding catalog; a failure raises.
+pub(crate) fn expression_source_shapes<'py>(
+    expressions: &Bound<'py, PyAny>,
+    profile: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = profile.py();
+    let profile: Bound<'py, PyAny> = profile.clone();
     let dialect: String = aliased_dialect(py, profile_dialect(&profile)?)?;
     let catalog: Bound<'py, PyAny> = profile_catalog(&profile, &dialect)?;
     let cache: Bound<'py, PyAny> = native_field(&catalog, "expression_shapes")?;
@@ -119,6 +129,8 @@ fn infer_native_expression_source_shapes<'py>(
         }
     }
     if !pending.is_empty() {
+        count_stage(py, EXPRESSION_SHAPE_BATCHES, 1)?;
+        count_stage(py, EXPRESSION_SHAPES_INFERRED, pending.len() as u64)?;
         let (rules, adapter_rules) = nullability_rules(&profile)?;
         let native: PyRef<'py, ProjectCatalog> = native_field(&catalog, "native")?.extract()?;
         let pending_names: Vec<String> = pending
@@ -169,10 +181,20 @@ fn prove_native_dynamic_contracts<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("prove_native_dynamic_contracts", request)?;
-    let py: Python<'py> = request.py();
-    let session: Bound<'py, PyAny> = request.get("session")?;
-    let tables: Bound<'py, PyAny> = request.get("tables")?;
-    let models: Bound<'py, PyAny> = request.get("models")?;
+    dynamic_contract_proofs(
+        &request.get("session")?,
+        &request.get("tables")?,
+        &request.get("models")?,
+    )
+}
+
+/// The proof row per `(sql, families)` model from `session`, or from `tables` without one.
+pub(crate) fn dynamic_contract_proofs<'py>(
+    session: &Bound<'py, PyAny>,
+    tables: &Bound<'py, PyAny>,
+    models: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = models.py();
     if !models.is_truthy()? {
         return Ok(PyTuple::empty(py));
     }
@@ -182,7 +204,7 @@ fn prove_native_dynamic_contracts<'py>(
         rows.push((sql, family_rows(&families)?));
     }
     let contracts: Vec<ContractRow> = if session.is_none() {
-        let by_table: Bound<'py, PyAny> = native_field(&tables, "dynamic_families_by_table")?;
+        let by_table: Bound<'py, PyAny> = native_field(tables, "dynamic_families_by_table")?;
         let mut families: Vec<(String, Vec<FamilyRow>)> = Vec::new();
         for item in by_table.call_method0("items")?.try_iter()? {
             let (name, declared): (String, Bound<'py, PyAny>) = item?.extract()?;
@@ -191,13 +213,13 @@ fn prove_native_dynamic_contracts<'py>(
         prove_dynamic_column_contracts(
             py,
             (
-                dialect_or_generic(&native_field(&tables, "dialect")?)?,
-                shape_rows(&native_field(&tables, "column_types_by_table")?)?,
+                dialect_or_generic(&native_field(tables, "dialect")?)?,
+                shape_rows(&native_field(tables, "column_types_by_table")?)?,
                 shape_rows(&native_field(
-                    &tables,
+                    tables,
                     "authoritative_column_types_by_table",
                 )?)?,
-                shape_rows(&native_field(&tables, "column_nullability_by_table")?)?,
+                shape_rows(&native_field(tables, "column_nullability_by_table")?)?,
                 families,
                 rows,
             ),

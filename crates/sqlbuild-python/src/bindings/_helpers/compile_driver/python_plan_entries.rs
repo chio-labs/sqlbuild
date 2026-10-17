@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -31,8 +32,8 @@ impl<'py> NodeKinds<'py> {
     fn load(py: Python<'py>) -> PyResult<Self> {
         let kinds: Bound<'py, PyAny> = host::entry(py, UserCodeHost::PythonNodeKind)?;
         Ok(Self {
-            task: kinds.getattr("TASK")?,
-            asset: kinds.getattr("ASSET")?,
+            task: native_field(&kinds, "TASK")?,
+            asset: native_field(&kinds, "ASSET")?,
         })
     }
 
@@ -89,14 +90,14 @@ pub(crate) fn python_read_source_names_for<'py>(
         host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
     for reference in call_with(
-        &graph.getattr("selected_sql_refs")?,
+        &native_field(&graph, "selected_sql_refs")?,
         &[("selected_names", selected)],
     )?
     .try_iter()?
     {
         let reference: Bound<'py, PyAny> = reference?;
-        if reference.getattr("kind")?.eq(&source)? {
-            names.push(reference.getattr("name")?);
+        if native_field(&reference, "kind")?.eq(&source)? {
+            names.push(native_field(&reference, "name")?);
         }
     }
     frozenset.call1((PyTuple::new(py, names)?,))
@@ -158,7 +159,7 @@ pub(crate) fn build_python_run_plan_outputs<'py>(
     let selection: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::PythonSqlRunSelection)?,
         &[
-            ("sql_keys", plan_output.getattr("selected_keys")?),
+            ("sql_keys", native_field(&plan_output, "selected_keys")?),
             ("python_node_names", selected.clone()),
         ],
     )?;
@@ -166,7 +167,7 @@ pub(crate) fn build_python_run_plan_outputs<'py>(
     let entries: Bound<'py, PyTuple> = plan_entries(
         &lifecycle,
         (&graph, &kinds),
-        &plan_output.getattr("python_identity_fingerprints")?,
+        &native_field(&plan_output, "python_identity_fingerprints")?,
     )?;
     call_with(
         &outputs,
@@ -217,7 +218,7 @@ fn plan_entries<'py>(
     let phases: Bound<'py, PyAny> = registry::class(py, RecordId::PythonRunPhase)?;
     let entry_class: Bound<'py, PyAny> = registry::class(py, RecordId::PythonPlanEntry)?;
     let upstream: HashMap<String, Vec<String>> = upstream_names(graph)?;
-    let nodes: Bound<'py, PyAny> = graph.getattr("nodes_by_name")?;
+    let nodes: Bound<'py, PyAny> = native_field(graph, "nodes_by_name")?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for (attribute, phase) in [
         ("ingress_python_node_names", "PRE_SQL_INGRESS"),
@@ -230,11 +231,11 @@ fn plan_entries<'py>(
             .collect::<PyResult<_>>()?;
         for name in ordered_python_names(&selected, &upstream) {
             let node: Bound<'py, PyAny> = nodes.get_item(name.as_str())?;
-            let kind: Bound<'py, PyAny> = node.getattr("kind")?;
+            let kind: Bound<'py, PyAny> = native_field(&node, "kind")?;
             if !kinds.runs(&kind)? {
                 continue;
             }
-            let identity: Bound<'py, PyAny> = node.getattr("identity")?;
+            let identity: Bound<'py, PyAny> = native_field(&node, "identity")?;
             let previous: Bound<'py, PyAny> = previous_identity(&identity, previous_identities)?;
             let attribute_or_none = |value: &Bound<'py, PyAny>, name: &str| {
                 if value.is_none() {
@@ -246,7 +247,7 @@ fn plan_entries<'py>(
             entries.push(call_with(
                 &entry_class,
                 &[
-                    ("name", node.getattr("name")?),
+                    ("name", native_field(&node, "name")?),
                     ("kind", kind),
                     ("phase", phases.getattr(phase)?),
                     (
@@ -269,7 +270,7 @@ fn plan_entries<'py>(
                         "previous_metadata_json",
                         attribute_or_none(&previous, "metadata_json")?,
                     ),
-                    ("provider_usages", node.getattr("provider_usages")?),
+                    ("provider_usages", native_field(&node, "provider_usages")?),
                 ],
             )?);
         }
@@ -288,8 +289,8 @@ fn previous_identity<'py>(
     let key: Bound<'py, PyTuple> = PyTuple::new(
         identity.py(),
         [
-            identity.getattr("node_type")?,
-            identity.getattr("node_name")?,
+            native_field(identity, "node_type")?,
+            native_field(identity, "node_name")?,
         ],
     )?;
     previous_identities.call_method1("get", (key,))
@@ -303,19 +304,19 @@ fn identity_status<'py>(
     let statuses: Bound<'py, PyAny> =
         registry::class(identity.py(), RecordId::PythonIdentityStatus)?;
     if identity.is_none() {
-        return statuses.getattr("UNKNOWN");
+        return native_field(&statuses, "UNKNOWN");
     }
     let previous: Bound<'py, PyAny> = previous_identity(identity, previous_identities)?;
     if previous.is_none() {
-        return statuses.getattr("NEW");
+        return native_field(&statuses, "NEW");
     }
     if previous
         .getattr("version_hash")?
-        .eq(identity.getattr("version_hash")?)?
+        .eq(native_field(identity, "version_hash")?)?
     {
-        return statuses.getattr("UNCHANGED");
+        return native_field(&statuses, "UNCHANGED");
     }
-    statuses.getattr("CHANGED")
+    native_field(&statuses, "CHANGED")
 }
 
 /// Warnings for skipped task/asset deps of planned source loaders.
@@ -326,15 +327,15 @@ fn skipped_ingress_warnings<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = plan_output.py();
     let mut loaders: Vec<String> = Vec::new();
-    for entry in plan_output.getattr("source_load_entries")?.try_iter()? {
-        let loader: String = entry?.getattr("loader")?.extract()?;
+    for entry in native_field(plan_output, "source_load_entries")?.try_iter()? {
+        let loader: String = native_field(&entry?, "loader")?.extract()?;
         if !loaders.contains(&loader) {
             loaders.push(loader);
         }
     }
     loaders.sort();
-    let nodes: Bound<'py, PyAny> = graph.getattr("nodes_by_name")?;
-    let selected: Bound<'py, PyAny> = run_selection.getattr("python_node_names")?;
+    let nodes: Bound<'py, PyAny> = native_field(graph, "nodes_by_name")?;
+    let selected: Bound<'py, PyAny> = native_field(run_selection, "python_node_names")?;
     let upstream: HashMap<String, Vec<String>> = upstream_names(graph)?;
     let warning_class: Bound<'py, PyAny> = registry::class(py, RecordId::PlanWarning)?;
     let severity: Bound<'py, PyAny> =
@@ -349,7 +350,7 @@ fn skipped_ingress_warnings<'py>(
                 continue;
             }
             let kind: Bound<'py, PyAny> =
-                nodes.get_item(upstream_name.as_str())?.getattr("kind")?;
+                native_field(&nodes.get_item(upstream_name.as_str())?, "kind")?;
             if !kinds.runs(&kind)? {
                 continue;
             }
@@ -357,7 +358,7 @@ fn skipped_ingress_warnings<'py>(
                 "Source loader '{loader}' has unselected upstream {} '{upstream_name}'. SQLBuild \
                  will not run it and cannot verify side effects or payload availability; use \
                  +source:{loader} to refresh upstream ingress dependencies.",
-                kind.getattr("value")?.str()?
+                native_field(&kind, "value")?.str()?
             );
             warnings.push(call_with(
                 &warning_class,

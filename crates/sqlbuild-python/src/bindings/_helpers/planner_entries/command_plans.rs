@@ -92,7 +92,7 @@ fn base_plan_output<'py>(
 /// Resolve command selection through the canonical build selector phase.
 #[pyfunction]
 #[pyo3(signature = (*, project, selection, auto_load_sources = false))]
-fn resolve_static_command_scope<'py>(
+pub(crate) fn resolve_static_command_scope<'py>(
     project: &Bound<'py, PyAny>,
     selection: &Bound<'py, PyAny>,
     auto_load_sources: bool,
@@ -113,7 +113,7 @@ fn resolve_static_command_scope<'py>(
 /// Resolve canonical locations and source routing without warehouse inventory.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn resolve_static_relation_context<'py>(
+pub(crate) fn resolve_static_relation_context<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

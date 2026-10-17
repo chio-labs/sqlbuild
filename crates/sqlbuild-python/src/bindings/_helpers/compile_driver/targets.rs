@@ -42,6 +42,7 @@ use crate::bindings::_helpers::compile_attachment::effective_config::build_effec
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::discovery::guidance::setting_help;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
@@ -128,8 +129,8 @@ pub(crate) fn named_target_schema_strategy(
     {
         return Ok(());
     }
-    let project_config: Bound<'_, PyAny> = discovered.getattr("project_config")?;
-    let local_config: Bound<'_, PyAny> = discovered.getattr("local_config")?;
+    let project_config: Bound<'_, PyAny> = native_field(discovered, "project_config")?;
+    let local_config: Bound<'_, PyAny> = native_field(discovered, "local_config")?;
     let target_name: Bound<'_, PyAny> = resolve_target_name(
         py,
         &project_config.clone(),
@@ -143,7 +144,7 @@ pub(crate) fn named_target_schema_strategy(
     let target_config: Bound<'_, PyAny> =
         resolve_target_config(py, &project_config, &local_config, &target_name.clone())
             .and_then(|value| value.into_bound_py_any(py))?;
-    let schema: Option<String> = text_or_none(&target_config.getattr("schema")?)?;
+    let schema: Option<String> = text_or_none(&native_field(&target_config, "schema")?)?;
     if schema.is_some_and(|schema| !python_strip(&schema).is_empty()) {
         return Ok(());
     }
@@ -185,10 +186,10 @@ pub(crate) fn managed_loader_target_isolation(
 ) -> PyResult<()> {
     let py: Python<'_> = discovered.py();
     let mut managed_sources: Vec<Bound<'_, PyAny>> = Vec::new();
-    for source_file in discovered.getattr("source_files")?.try_iter()? {
-        for entry in source_file?.getattr("source_entries")?.try_iter()? {
+    for source_file in native_field(discovered, "source_files")?.try_iter()? {
+        for entry in native_field(&source_file?, "source_entries")?.try_iter()? {
             let entry: Bound<'_, PyAny> = entry?;
-            if entry.getattr("managed")?.is_truthy()? {
+            if native_field(&entry, "managed")?.is_truthy()? {
                 managed_sources.push(entry);
             }
         }
@@ -196,11 +197,11 @@ pub(crate) fn managed_loader_target_isolation(
     if managed_sources.is_empty() {
         return Ok(());
     }
-    let project_config: Bound<'_, PyAny> = discovered.getattr("project_config")?;
-    let local_config: Bound<'_, PyAny> = discovered.getattr("local_config")?;
+    let project_config: Bound<'_, PyAny> = native_field(discovered, "project_config")?;
+    let local_config: Bound<'_, PyAny> = native_field(discovered, "local_config")?;
     let mut target_names: Vec<String> = Vec::new();
     for config in [&project_config, &local_config] {
-        for name in config.getattr("targets")?.try_iter()? {
+        for name in native_field(config, "targets")?.try_iter()? {
             let name: String = name?.extract()?;
             if !target_names.contains(&name) {
                 target_names.push(name);
@@ -261,8 +262,8 @@ fn target_namespaces(
     let name: Bound<'_, PyAny> = PyString::new(py, target_name).into_any();
     let target_config: Bound<'_, PyAny> = resolve_target_config(
         py,
-        &discovered.getattr("project_config")?,
-        &discovered.getattr("local_config")?,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
         &name.clone(),
     )
     .and_then(|value| value.into_bound_py_any(py))?;
@@ -329,17 +330,17 @@ fn managed_source_namespace(
     let py: Python<'_> = source_entry.py();
     let database: Bound<'_, PyAny> = first_truthy(
         &[
-            source_entry.getattr("database")?,
-            target_config.getattr("database")?,
+            native_field(source_entry, "database")?,
+            native_field(target_config, "database")?,
             connection.call_method1("get", ("database",))?,
         ],
         || adapter.call_method0("default_database"),
     )?;
     let schema: Bound<'_, PyAny> = first_truthy(
         &[
-            source_entry.getattr("schema")?,
-            target_config.getattr("loader_schema")?,
-            target_config.getattr("schema")?,
+            native_field(source_entry, "schema")?,
+            native_field(target_config, "loader_schema")?,
+            native_field(target_config, "schema")?,
             connection.call_method1("get", ("schema",))?,
         ],
         || adapter.call_method0("default_schema"),
@@ -405,8 +406,11 @@ pub(crate) fn project_targets(
         let mut targets: Vec<(String, Bound<'_, PyAny>)> = Vec::new();
         for resource in project.getattr(attribute)?.try_iter()? {
             let resource: Bound<'_, PyAny> = resource?;
-            let resource_name: String = resource.getattr("name")?.str()?.to_cow()?.into_owned();
-            let destination: Bound<'_, PyAny> = resource.getattr("destination")?;
+            let resource_name: String = native_field(&resource, "name")?
+                .str()?
+                .to_cow()?
+                .into_owned();
+            let destination: Bound<'_, PyAny> = native_field(&resource, "destination")?;
             match targets
                 .iter_mut()
                 .find(|(existing, _)| *existing == resource_name)
@@ -429,8 +433,8 @@ fn required_target_parts(
     target: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'_> = target.py();
-    let database: Option<String> = optional_text(&target.getattr("database")?)?;
-    let schema: Option<String> = optional_text(&target.getattr("schema")?)?;
+    let database: Option<String> = optional_text(&native_field(target, "database")?)?;
+    let schema: Option<String> = optional_text(&native_field(target, "schema")?)?;
     let missing: Vec<&str> = missing_target_parts(database.as_deref(), schema.as_deref());
     let Some(first) = missing.first() else {
         return Ok(());
@@ -516,24 +520,27 @@ pub(crate) fn managed_write_schemas(
         for resource in project.getattr(attribute)?.try_iter()? {
             let resource: Bound<'_, PyAny> = resource?;
             managed_write_schema(
-                &format!("{label} '{}'", resource.getattr("name")?.str()?.to_cow()?),
-                &resource.getattr("destination")?.getattr("schema")?,
+                &format!(
+                    "{label} '{}'",
+                    native_field(&resource, "name")?.str()?.to_cow()?
+                ),
+                &native_field(&resource, "destination")?.getattr("schema")?,
                 connection_schema.as_deref(),
             )?;
         }
     }
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source: Bound<'_, PyAny> = source?;
-        let entry: Bound<'_, PyAny> = source.getattr("source_entry")?;
-        if !entry.getattr("managed")?.is_truthy()? {
+        let entry: Bound<'_, PyAny> = native_field(&source, "source_entry")?;
+        if !native_field(&entry, "managed")?.is_truthy()? {
             continue;
         }
         managed_write_schema(
             &format!(
                 "Managed source '{}'",
-                source.getattr("name")?.str()?.to_cow()?
+                native_field(&source, "name")?.str()?.to_cow()?
             ),
-            &entry.getattr("schema")?,
+            &native_field(&entry, "schema")?,
             connection_schema.as_deref(),
         )?;
     }

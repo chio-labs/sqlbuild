@@ -1,7 +1,5 @@
 //! A `CompiledModel` for a model input built outside the native compile-input stage.
 
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
-use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -68,7 +66,7 @@ pub(crate) fn compiled_model<'py>(
         inferred = native_field(&proof, "fixed_columns")?;
         has_star = true_object(py);
     }
-    let resource_type: Object<'py> = host::entry(py, FacadeHost::CompiledResourceType)?;
+    let resource_type: Object<'py> = registry::class(py, RecordId::CompiledResourceType)?;
     let key_class: Object<'py> = registry::class(py, RecordId::CompiledObjectKey)?;
     let mut dependency_keys: Vec<Object<'py>> = Vec::new();
     for dependency in deps.try_iter()? {
@@ -262,7 +260,8 @@ fn located<'py>(
     let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let location_class: Object<'py> = registry::class(py, RecordId::SourceLocation)?;
     let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
-    let model: Object<'py> = host::entry(py, FacadeHost::CompiledResourceType)?.getattr("MODEL")?;
+    let model: Object<'py> =
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let name: Object<'py> = native_field(&model_file, "file_path")?.getattr("stem")?;
     let mut built: Vec<Object<'py>> = Vec::new();
     for row in located.try_iter()? {

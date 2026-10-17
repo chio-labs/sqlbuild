@@ -7,9 +7,10 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use crate::bindings::_helpers::compile_attachment::storage_policies::inherited_storage;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::loop_classes::table_backed;
+use crate::bindings::_helpers::model_config::model_config_builder::NativeModelConfigBuilder;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 /// Capture the project inputs every model's native config build and validation read.
@@ -39,27 +40,24 @@ pub(crate) fn native_model_config_session<'py>(
         .map(|class| registry::class(py, *class))
         .collect::<PyResult<Vec<_>>>()?,
     )?;
-    let target_namespace: Bound<'py, PyAny> = if target.is_none() {
-        target.clone()
+    let target_namespace: Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = if target.is_none() {
+        None
     } else {
-        PyTuple::new(
-            py,
-            [
-                native_field(&target, "database")?,
-                native_field(&target, "schema")?,
-            ],
-        )?
-        .into_any()
+        Some((
+            native_field(&target, "database")?,
+            native_field(&target, "schema")?,
+        ))
     };
-    let builder: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeModelConfigBuilder)?
-        .call1((
+    let builder: Bound<'py, PyAny> = Bound::new(
+        py,
+        NativeModelConfigBuilder::new(
             (
                 native_field(&project_config, "defaults")?,
-                native_field(&project_config, "path_defaults")?,
+                native_field(&project_config, "path_defaults")?.downcast_into()?,
                 hook_entries,
             ),
             (
-                native_field(inputs, "effective_vars")?,
+                native_field(inputs, "effective_vars")?.downcast_into()?,
                 unicode_environment(py)?,
             ),
             (
@@ -69,7 +67,9 @@ pub(crate) fn native_model_config_session<'py>(
                 ),
                 target_namespace,
             ),
-        ))?;
+        )?,
+    )?
+    .into_any();
     let inherited: Bound<'py, PyDict> = PyDict::new(py);
     let mut materializations: Vec<Bound<'py, PyAny>> = vec![py.None().into_bound(py)];
     materializations.extend(table_backed(py)?);

@@ -1,8 +1,7 @@
 //! What each model, seed, source and table function declares about its columns before analysis.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
-use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 
 use crate::bindings::_helpers::compiled_project::model_input_view::{
@@ -22,7 +21,8 @@ const NON_NULL_MEMBER: &str = "NON_NULL";
 const UNKNOWN_MEMBER: &str = "UNKNOWN";
 
 /// The three per-relation declaration maps the analysis starts from.
-type DeclaredRelations<'py> = (Bound<'py, PyDict>, Bound<'py, PyDict>, Bound<'py, PyDict>);
+pub(crate) type DeclaredRelations<'py> =
+    (Bound<'py, PyDict>, Bound<'py, PyDict>, Bound<'py, PyDict>);
 
 /// `{column.name: column.type or "UNKNOWN"}`, or the declared type unchanged when `exact`.
 fn column_types<'py>(
@@ -73,8 +73,9 @@ fn table_function_name(function: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 /// Declared column types, declared nullability and the authoritative binding schemas.
-#[pyfunction]
-fn declared_relations<'py>(inputs: Bound<'py, PyAny>) -> PyResult<DeclaredRelations<'py>> {
+pub(crate) fn declared_relations<'py>(
+    inputs: Bound<'py, PyAny>,
+) -> PyResult<DeclaredRelations<'py>> {
     let py: Python<'py> = inputs.py();
     let nullability: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
     let types: Bound<'py, PyDict> = PyDict::new(py);
@@ -145,8 +146,4 @@ fn declared_relations<'py>(inputs: Bound<'py, PyAny>) -> PyResult<DeclaredRelati
         complete.set_item(&name, column_types(py, &columns, true)?)?;
     }
     Ok((types, nulls, complete))
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(declared_relations, module)?)
 }

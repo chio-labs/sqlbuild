@@ -18,6 +18,7 @@ from sqlbuild._native import (
     CompiledModelSqlTestPayload,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompiledSqlTest,
     CompilerDiagnostic,
     CompileSqlReference,
@@ -67,7 +68,6 @@ from sqlbuild.compiler.compile.models import MacroContext
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 
 if TYPE_CHECKING:

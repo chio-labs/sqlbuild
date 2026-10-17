@@ -11,6 +11,7 @@ from sqlbuild._native import (
     AuditPlanEntry,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     SchemaAuditInstance,
     SourceEntry,
     parse_audit_instances,
@@ -22,7 +23,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
 def build_render_adapter(adapter_name: str | None) -> BaseAdapter | None:

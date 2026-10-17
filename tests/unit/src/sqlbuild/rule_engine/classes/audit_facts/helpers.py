@@ -3,10 +3,11 @@ from pathlib import Path
 from sqlbuild._native import (
     CompiledAudit,
     CompiledObjectKey,
+    CompiledResourceType,
     DiscoveredAuditBlock,
     DiscoveredAuditFile,
 )
-from sqlbuild.compiler.compile.types import CompiledAuditView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledAuditView
 
 
 def build_audit(*, name: str, attached_target_name: str | None) -> CompiledAuditView:

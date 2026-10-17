@@ -19,10 +19,9 @@ use sqlbuild_model_config::templates::models::{
 };
 use sqlbuild_model_config::templates::types::TemplateHost;
 
+use crate::bindings::_helpers::authored_values::project_vars::project_var_text;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 const TEMPLATE_OPEN_TOKEN: &str = "${";
 const ENVIRONMENT_READ: &str = "env";
@@ -241,15 +240,8 @@ impl<'py> TemplateHost for PythonHost<'py> {
         if value.is_exact_instance_of::<PyString>() {
             return self.text_of(value);
         }
-        let rendered =
-            registry::native(self.py, NativeAttr::RenderProjectVarText).and_then(|render| {
-                let arguments = PyDict::new(self.py);
-                arguments.set_item("value", value)?;
-                arguments.set_item("label", label)?;
-                render.call((), Some(&arguments))
-            });
-        match rendered {
-            Ok(text) => self.text_of(&text),
+        match project_var_text(value, label) {
+            Ok(text) => Ok(text),
             Err(error) if error.is_instance_of::<PyValueError>(self.py) => Err(
                 TemplateFailure::Invalid(TemplateError::Message(error.value(self.py).to_string())),
             ),

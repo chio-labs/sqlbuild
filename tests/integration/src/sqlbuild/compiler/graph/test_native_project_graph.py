@@ -14,7 +14,6 @@ from tests.integration.src.sqlbuild.compiler.graph.helpers import (
     MODEL_NAMES,
     ORDERS_PROJECT_FILES,
     compiled_models,
-    record_compile_owners,
     write_files,
 )
 
@@ -53,12 +52,9 @@ def test_given_compile_selection_when_compiling_then_native_graph_selects_models
     test_case: NativeGraphSelectionTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     write_files(project_dir=tmp_path, files=ORDERS_PROJECT_FILES)
-    owners: list[native_module.NativeCompiledProject] = record_compile_owners(
-        monkeypatch=monkeypatch
-    )
+    _ = native_module.compile_stage_work_info(reset=True)
 
     exit_code: int = main(
         ["--project-dir", str(tmp_path), "--no-color", "compile", "--no-cache", *test_case.select]
@@ -68,7 +64,10 @@ def test_given_compile_selection_when_compiling_then_native_graph_selects_models
     assert compiled_models(stdout=capsys.readouterr().out) == {
         name: name in test_case.expected_models for name in sorted(MODEL_NAMES)
     }
-    assert sum(owner.graph_builds() for owner in owners) == test_case.expected_graph_builds
+    assert (
+        native_module.compile_stage_work_info()["lineage_graph_builds"]
+        == test_case.expected_graph_builds
+    )
 
 
 @pytest.mark.parametrize(

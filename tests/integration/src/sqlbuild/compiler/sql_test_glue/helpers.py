@@ -10,13 +10,14 @@ from itertools import chain, compress
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-import pytest
-
 import sqlbuild._native as native_module
 from sqlbuild._native import (
+    CollectionRendering,
+    CompileAdapterContext,
     CompiledSqlTest,
     NativeSqlTestAssembly,
     NativeSqlTestFailure,
+    build_compile_inputs,
     build_project_graph,
     discover_project_inputs,
 )
@@ -438,6 +439,14 @@ def _helper_mock_test(*, rng: random.Random, index: int) -> str:
     return f'TEST (name "helper_mock_{index}");\n\nWITH\n{comment}{ctes}\nSELECT 1\n'
 
 
+_ADAPTER_CONTEXT: CompileAdapterContext = CompileAdapterContext(
+    value_renderer=DuckDbAdapter(),
+    collection_rendering=CollectionRendering.VALUE_LIST,
+    python_functions_inherit_default_namespace=True,
+    sql_lexical_syntax=DuckDbAdapter.sql_lexical_syntax,
+)
+
+
 def write_project(*, project_dir: Path, files: dict[str, str]) -> None:
     """Write a project's files below `project_dir`."""
 
@@ -461,29 +470,28 @@ def _compiled_tests_and_diagnostics(*, project_dir: Path) -> tuple[object, objec
     return project.sql_tests, project.diagnostics
 
 
-def record_native_assemblies(*, monkeypatch: pytest.MonkeyPatch) -> Counter[str]:
-    """Count tests compile takes from the native assembly, with diagnostics, cases or failures.
+def native_assembly_answers(*, project_dir: Path) -> Counter[str]:
+    """Count tests the native assembly answers for a project, with diagnostics, cases or failures.
 
     A test whose assembly raises counts under `failed_<kind>`.
     """
 
+    inputs: CompileInputsView = build_compile_inputs(
+        discovered_inputs=discover_project_inputs(project_dir=project_dir),
+        adapter_context=_ADAPTER_CONTEXT,
+        run_id="integration_run",
+    )
+    assemblies: tuple[NativeSqlTestAssembly, ...] = native_module.assemble_native_sql_tests(
+        inputs=inputs
+    )
     answers: Counter[str] = Counter()
-    seam: Callable[..., tuple[NativeSqlTestAssembly, ...]] = native_module.assemble_native_sql_tests
-
-    def counted_assemblies(*, inputs: CompileInputsView) -> tuple[NativeSqlTestAssembly, ...]:
-        assemblies: tuple[NativeSqlTestAssembly, ...] = seam(inputs=inputs)
-        failures: list[NativeSqlTestFailure | None] = [item.failure for item in assemblies]
-        answers.update(f"failed_{failure.kind}" for failure in filter(None, failures))
-        tests: list[CompiledSqlTest | None] = [item.test for item in assemblies]
-        native: list[CompiledSqlTest] = list(filter(None, tests))
-        answers["native_assembled"] += len(native)
-        answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in assemblies)
-        answers["native_case_fingerprints"] += sum(
-            test.case_fingerprint is not None for test in native
-        )
-        return assemblies
-
-    monkeypatch.setattr(native_module, "assemble_native_sql_tests", counted_assemblies)
+    failures: list[NativeSqlTestFailure | None] = [item.failure for item in assemblies]
+    answers.update(f"failed_{failure.kind}" for failure in filter(None, failures))
+    tests: list[CompiledSqlTest | None] = [item.test for item in assemblies]
+    native: list[CompiledSqlTest] = list(filter(None, tests))
+    answers["native_assembled"] += len(native)
+    answers["native_with_diagnostics"] += sum(bool(item.diagnostics) for item in assemblies)
+    answers["native_case_fingerprints"] += sum(test.case_fingerprint is not None for test in native)
     return answers
 
 

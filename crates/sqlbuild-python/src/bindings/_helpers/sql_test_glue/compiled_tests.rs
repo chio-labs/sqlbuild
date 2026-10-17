@@ -12,7 +12,6 @@ use crate::bindings::_helpers::sql_test_glue::assembly::{
     AssemblyRequest, AssemblyRow, DiagnosticRow, FactsRow, assemble_compiled_sql_tests,
 };
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 /// Fields a direct-logic compiled payload copies from its input payload, in order.
 const DIRECT_PAYLOAD_FIELDS: [&str; 5] = [
     "mode",
@@ -61,10 +60,9 @@ struct Classes<'py> {
 
 impl<'py> Classes<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
-        let types: Bound<'py, PyModule> = py.import(COMPILE_TYPES_MODULE)?;
         Ok(Self {
             direct_input: registry::class(py, RecordId::CompileDirectLogicSqlTestInputPayload)?,
-            resource_type: native_field(&types, "CompiledResourceType")?,
+            resource_type: registry::class(py, RecordId::CompiledResourceType)?,
             phase: registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?,
             severity: registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
             assembly: registry::class(py, RecordId::NativeSqlTestAssembly)?,
@@ -293,7 +291,7 @@ fn assembly<'py>(
 /// One assembly per test input, with the error its assembly raises, if any.
 #[pyfunction]
 #[pyo3(signature = (*, inputs))]
-fn assemble_native_sql_tests<'py>(
+pub(crate) fn assemble_native_sql_tests<'py>(
     py: Python<'py>,
     inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {

@@ -205,12 +205,7 @@ fn complete_fixtures<'py>(
         ("MODEL", "__ref__"),
         ("SEED", "__seed__"),
     ] {
-        let kind = imported(
-            py,
-            "sqlbuild.compiler.compile.types",
-            "CompiledResourceType",
-        )?
-        .getattr(kind)?;
+        let kind = registry::class(py, RecordId::CompiledResourceType)?.getattr(kind)?;
         groups.push(PyTuple::new(
             py,
             [kind, extract_fixtures(scenario, prefix)?.into_any()],

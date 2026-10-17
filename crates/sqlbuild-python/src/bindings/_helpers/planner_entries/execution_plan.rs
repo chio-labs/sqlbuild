@@ -2,7 +2,7 @@
 
 use crate::bindings::_helpers::build_command::support::utc_now;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, within,
+    KeywordArguments, call_with, within,
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
@@ -11,7 +11,7 @@ use crate::bindings::_helpers::planner_changes::detect::detect_changes;
 use crate::bindings::_helpers::planner_entries::test_planning::{
     PlanningRequest, SqlTestPlanning, start_planning,
 };
-use crate::bindings::_helpers::planner_entries::values::{COMPILE_TYPES, native, replaced};
+use crate::bindings::_helpers::planner_entries::values::{native, replaced};
 use crate::bindings::_helpers::planner_phases::buildability::check_selected_scope_buildability;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::execution_changes::{
@@ -33,6 +33,7 @@ use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor
 use crate::bindings::_helpers::planner_warehouse::source_freshness::build_planner_source_freshness_result;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -52,7 +53,7 @@ fn scopes_and_cursor_overrides<'py>(
     )?;
     let selected = class_field(&scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let models_by_name = native_field(&selected, "models_by_name")?;
-    let model_type = imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("MODEL")?;
+    let model_type = registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in native_field(&selected, "selected_keys")?.try_iter()? {
         let key = key?;

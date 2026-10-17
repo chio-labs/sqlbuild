@@ -17,7 +17,6 @@ import sys
 import time
 import zipfile
 from bisect import bisect_left
-from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
@@ -44,7 +43,7 @@ from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_
 from sqlbuild._native import ContractValidationResult, compiler_cache_directory
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
-from sqlbuild.adapter.contract.types import TypeDialect
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from sqlbuild.compiler.macro_bridge.constants import MACRO_CALL_STORE_FILE_NAME
 from sqlbuild.observability import EventDispatcher, LifecycleEvent
@@ -3350,16 +3349,16 @@ def write_before_reuse_store(
 ) -> None:
     """Let another writer change target/ once, after a compile wrote it and before it stores."""
 
-    original: Callable[..., None] = native_module.write_reusable_compile
     pending: list[Callable[[Path], None]] = [write]
 
-    def write_then_store(**kwargs: Any) -> None:
-        for action in tuple(pending):
-            action(project_dir)
-        pending.clear()
-        original(**kwargs)
+    class WrittenThenChanged(native_module.PreparedCompileArtifacts):
+        def __exit__(self, *exception: object) -> None:
+            super().__exit__(*exception)
+            for action in tuple(pending):
+                action(project_dir)
+            pending.clear()
 
-    monkeypatch.setattr(native_module, "write_reusable_compile", write_then_store)
+    monkeypatch.setattr(native_module, "PreparedCompileArtifacts", WrittenThenChanged)
 
 
 def rewrite_compiled_model_unchanged(project_dir: Path) -> None:
@@ -4807,11 +4806,6 @@ def full_macro_call_runs(
 
 _ANALYSIS_SEAMS: tuple[tuple[ModuleType, str], ...] = (
     (native_module, "infer_native_expression_source_shapes"),
-    (native_module, "assemble_native_sql_tests"),
-    (native_module, "complete_semantic_project"),
-    (native_module, "evaluate_model_contracts"),
-    (native_module, "promotion_conflict_diagnostics"),
-    (native_module, "build_project_column_lineage"),
     (plan_artifacts_module, "plan_compiled_sql_test_artifacts"),
 )
 
@@ -4853,6 +4847,7 @@ def seam_recording_compile(
         }.items():
             patch.setenv(name, value)
         seams: dict[str, list[object]] = record_analysis_seams(monkeypatch=patch)
+        _ = native_module.compile_stage_work_info(reset=True)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     return run, seams
 
@@ -4874,35 +4869,31 @@ def type_system_compile(
     """Compile in this process; return the run and what native types answered."""
 
     normalized: list[bool] = []
-    statuses: Counter[str] = Counter()
     normalize: Callable[[str, str], object] = native_module.normalize_type
-    evaluate_contracts: Callable[..., ContractValidationResult] = (
-        native_module.evaluate_model_contracts
-    )
 
     def recorded(type_sql: str, dialect: str) -> object:
         result: object = normalize(type_sql, dialect)
         normalized.append(result is not None)
         return result
 
-    def recorded_contracts(
-        *, project: CompiledProjectView, dialect: TypeDialect | str | None
-    ) -> ContractValidationResult:
-        result: ContractValidationResult = evaluate_contracts(project=project, dialect=dialect)
-        statuses.update(contract_statuses(project=project, result=result))
-        return result
-
     type_normalization.normalize_type.cache_clear()
     with monkeypatch.context() as patch:
         patch.setattr(native_module, "normalize_type", recorded)
-        patch.setattr(native_module, "evaluate_model_contracts", recorded_contracts)
         for name, value in {REUSE_DISABLE_ENV_VAR: "1"}.items():
             patch.setenv(name, value)
         run: CompileReuseRun = in_process_reuse_run(project_dir=project_dir, capsys=capsys)
     type_normalization.normalize_type.cache_clear()
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    project: CompiledProjectView = native_module.build_project_graph(
+        discovered_inputs=native_module.discover_project_inputs(project_dir=project_dir),
+        adapter=adapter,
+    ).project
+    result: ContractValidationResult = native_module.evaluate_model_contracts(
+        project=project, dialect=adapter.sql_analysis_dialect()
+    )
     return run, NativeTypeAnswers(
         normalized=normalized,
-        typed_comparisons=statuses["typed_comparisons"],
+        typed_comparisons=contract_statuses(project=project, result=result)["typed_comparisons"],
     )
 
 
@@ -4975,6 +4966,8 @@ _SLOW_LINT_MACRO: str = (
     "import time\n\n\n"
     "def slow_total(amount: str) -> str:\n"
     '    """Return the amount, pausing for the macro tests that only SQL lint expands."""\n'
+    "    if amount == 'model_amount':\n"
+    "        time.sleep(2.0)\n"
     "    if amount == 'slow_amount':\n"
     "        with open(os.environ['SLOW_MACRO_MARKER'], 'a', encoding='utf-8') as marker:\n"
     "            marker.write('expanding\\n')\n"
@@ -4994,7 +4987,8 @@ def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
         ),
         "models/slow_total.sql": (
             'MODEL (description "Slow total");\n'
-            'SELECT @slow_total("amount") AS amount FROM (SELECT 5 AS amount) AS input_values\n'
+            'SELECT @slow_total("model_amount") AS amount\n'
+            "FROM (SELECT 5 AS model_amount) AS input_values\n"
         ),
         **{
             f"tests/slow_total_{index}.sql": (
@@ -5010,3 +5004,9 @@ def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
             for index in range(model_count)
         },
     }
+
+
+def restore_default_interrupt() -> None:
+    """Give a spawned command default Ctrl-C handling even when its parent ignores SIGINT."""
+
+    _ = signal.signal(signal.SIGINT, signal.SIG_DFL)

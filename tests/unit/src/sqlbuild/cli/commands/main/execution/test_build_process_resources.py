@@ -7,7 +7,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from sqlbuild._native import BuildCommandRequest, CliUserError, run_build_command
+from sqlbuild._native import (
+    BuildCommandRequest,
+    CliUserError,
+    ProviderDiscoveryError,
+    run_build_command,
+)
 from tests.unit.src.sqlbuild.cli.commands.main.execution._test_types import (
     BuildDurationLimitTestCase,
     BuildProcessReportTestCase,
@@ -20,13 +25,15 @@ from tests.unit.src.sqlbuild.cli.commands.main.execution.helpers import fail_bui
     [
         BuildProcessReportTestCase(
             description="failed debug build reports resources and partial timings",
-            error_type=RuntimeError,
+            provider_source='raise RuntimeError("provider import failed")\n',
+            error_type=ProviderDiscoveryError,
             verbose=False,
             expected_fragments=("Phase timings", "total"),
             expected_absent_fragments=("compile", "planning", "execution"),
         ),
         BuildProcessReportTestCase(
             description="interrupted debug build reports resources and partial timings",
+            provider_source="raise KeyboardInterrupt\n",
             error_type=KeyboardInterrupt,
             verbose=True,
             expected_fragments=("Phase timings", "total"),
@@ -41,7 +48,9 @@ def test_given_failed_debug_build_when_unwinding_then_reports_resources_and_part
     capsys: pytest.CaptureFixture[str],
     tmp_path: Path,
 ) -> None:
-    reporter: Mock = fail_build_discovery(monkeypatch=monkeypatch, error=test_case.error_type())
+    reporter: Mock = fail_build_discovery(
+        monkeypatch=monkeypatch, project_dir=tmp_path, provider_source=test_case.provider_source
+    )
 
     with pytest.raises(test_case.error_type):
         run_build_command(

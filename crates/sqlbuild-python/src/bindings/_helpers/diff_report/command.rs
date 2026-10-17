@@ -17,7 +17,9 @@ use sqlbuild_cli::diff_report::types::QueryDiffPhase;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, StdlibJsonOptions};
 
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::diff_report::facts::diff_facts;
 use crate::bindings::_helpers::diff_report::query::{
     execute_query_diff, execution_options, prepare_query_diff, project_adapter,
@@ -83,9 +85,9 @@ fn resolve_invocation<'py>(
     let discovered: Bound<'py, PyAny> = if query_mode {
         discover_project_configuration(py, &project_dir)?
     } else {
-        call(
-            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-            &[("project_dir", &project_dir)],
+        discover_project_inputs(
+            py,
+            Some(keywords(py, &[("project_dir", project_dir.clone())])?),
         )?
     };
     call(

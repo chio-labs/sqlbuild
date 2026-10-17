@@ -8,6 +8,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::cli::progress_reporters::{
+    ConnectionProgressReporter, PlanningProgressReporter,
+};
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
@@ -17,7 +20,7 @@ use crate::bindings::_helpers::janitor::janitor_planning::{
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
 const UNKNOWN_VIEW_CODE: &str = "C503";
@@ -69,18 +72,11 @@ pub(crate) fn compile_janitor_project<'py>(
         true,
     )?;
     let started: Instant = Instant::now();
-    let status: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
-        &[
-            ("stream", stdout(py)?),
-            (
-                "use_color",
-                PyBool::new(py, use_color(invocation)?)
-                    .to_owned()
-                    .into_any(),
-            ),
-        ],
-    )?;
+    let status: Bound<'py, PyAny> = Bound::new(
+        py,
+        PlanningProgressReporter::new(py, &stdout(py)?, use_color(invocation)?)?,
+    )?
+    .into_any();
     let as_target: Bound<'py, PyAny> = native_field(invocation, "as_target")?;
     let target: Bound<'py, PyAny> = if as_target.is_none() {
         native_field(invocation, "selected_target")?
@@ -139,19 +135,26 @@ pub(crate) fn connect_janitor_warehouse<'py>(
     compiled: &JanitorCompiled<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
-    let progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", compiled.adapter_name.clone()),
-            ("stream", stdout(py)?),
-            (
-                "use_color",
-                PyBool::new(py, use_color(invocation)?)
-                    .to_owned()
-                    .into_any(),
-            ),
-        ],
-    )?;
+    let progress: Bound<'py, PyAny> = Bound::new(
+        py,
+        ConnectionProgressReporter::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter_name", compiled.adapter_name.clone()),
+                    ("stream", stdout(py)?),
+                    (
+                        "use_color",
+                        PyBool::new(py, use_color(invocation)?)
+                            .to_owned()
+                            .into_any(),
+                    ),
+                ],
+            )?),
+        )?,
+    )?
+    .into_any();
     let started: Instant = Instant::now();
     progress.call_method1("on_connection_start", (1,))?;
     let connected: PyResult<Bound<'py, PyAny>> = within(

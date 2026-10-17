@@ -5,25 +5,35 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTu
 
 use sqlbuild_analysis::assembly::project::main::configured_namespace::configured_namespace;
 
-use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
+use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
     AnalysisContext, analysis_context, and_not,
 };
 use crate::bindings::_helpers::compile_driver::assembly_checks::compiled_sql_scenarios;
-use crate::bindings::_helpers::compile_driver::assembly_facts::native_project_facts;
+use crate::bindings::_helpers::compile_driver::assembly_facts::{
+    native_project_facts, pivot_tables,
+};
 use crate::bindings::_helpers::compile_driver::assembly_models::{
     binding_rows, compiled_models, project_binding_diagnostics,
 };
 use crate::bindings::_helpers::compile_driver::assembly_sql_tests::assembled_sql_tests;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
-use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::stage_work::{SEMANTIC_COMPLETION, count_stage};
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::contracts::spec_resolution::{
+    resolve_effective_adapter_name, resolve_effective_scenario_config,
+};
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
+use crate::bindings::_helpers::semantic_checks::stage::{
+    SemanticCompletion, completed_semantic_project,
+};
 use pyo3::IntoPyObjectExt;
 
 const SOURCE_SLOT: &str = "source";
@@ -84,13 +94,23 @@ pub(crate) fn assembled_project<'py>(
             || py.None().into_bound(py),
             |session| session.clone().into_any(),
         );
+    request.before_stage(AssemblyStage::ModelFacts, || {
+        keywords(
+            py,
+            &[
+                ("profile", context.profile.clone()),
+                ("session", native_session.clone()),
+                ("tables", pivot_tables(&context)?),
+            ],
+        )
+    })?;
     let native: Bound<'py, PyAny> = native_project_facts(inputs, &context, names, &native_session)?;
-    let resources: Bound<'py, PyAny> = native.getattr("resources")?;
+    let resources: Bound<'py, PyAny> = native_field(&native, "resources")?;
     let scope_index: Bound<'py, PyAny> = scope_index_with_compile_usages(inputs)?;
     report_scope_index_errors(&scope_index)?;
     let target_values: Bound<'py, PyAny> = effective_target_values(inputs)?;
     let models: Bound<'py, PyTuple> =
-        compiled_models(inputs, &context, (&native.getattr("models")?, names))?;
+        compiled_models(inputs, &context, (&native_field(&native, "models")?, names))?;
     let fields: Bound<'py, PyDict> = project_fields(
         inputs,
         &context,
@@ -99,22 +119,30 @@ pub(crate) fn assembled_project<'py>(
     )?;
     let project: Bound<'py, PyAny> = project_view(inputs, &fields, &models)?;
     let binding_results: Bound<'py, PyDict> = binding_rows(py, context.analyses.as_ref())?;
-    call_with(
-        &registry::native(py, NativeAttr::CompleteSemanticProject)?,
-        &[
-            ("project", project),
-            ("profile", context.profile.clone()),
-            (
-                "resource_sql_analysis",
-                and_not(
-                    &context.sql_analysis_enabled,
-                    &inputs.getattr("no_sql_validation")?,
-                )?,
-            ),
-            ("session", native_session),
-            ("binding_results", binding_results.into_any()),
-        ],
-    )
+    let resource_sql_analysis: Bound<'py, PyAny> = and_not(
+        &context.sql_analysis_enabled,
+        &native_field(inputs, "no_sql_validation")?,
+    )?;
+    request.before_stage(AssemblyStage::SemanticCompletion, || {
+        keywords(
+            py,
+            &[
+                ("project", project.clone()),
+                ("profile", context.profile.clone()),
+                ("resource_sql_analysis", resource_sql_analysis.clone()),
+                ("session", native_session.clone()),
+                ("binding_results", binding_results.clone().into_any()),
+            ],
+        )
+    })?;
+    count_stage(py, SEMANTIC_COMPLETION, 1)?;
+    completed_semantic_project(SemanticCompletion {
+        project,
+        profile: context.profile.clone(),
+        binding_results: binding_results.into_any(),
+        resource_sql_analysis: resource_sql_analysis.extract()?,
+        session: Some(native_session),
+    })
 }
 
 /// `value.strip()` when `value` is a string with non-blank text, else `None`.
@@ -130,7 +158,7 @@ fn str_or_none<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 
 /// The selected target's `field`, or `None` without a selected target.
 fn target_field<'py>(inputs: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    let target: Bound<'py, PyAny> = inputs.getattr("effective_target")?;
+    let target: Bound<'py, PyAny> = native_field(inputs, "effective_target")?;
     if target.is_none() {
         return Ok(target);
     }
@@ -140,7 +168,7 @@ fn target_field<'py>(inputs: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<
 /// The target database and schema, with connection fallbacks, resolved as early model templates.
 fn effective_target_values<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
-    let connection: Bound<'py, PyAny> = inputs.getattr("effective_connection")?;
+    let connection: Bound<'py, PyAny> = native_field(inputs, "effective_connection")?;
     let database: Bound<'py, PyAny> = target_field(inputs, "database")?;
     let database: Bound<'py, PyAny> = if database.is_truthy()? {
         database
@@ -155,10 +183,10 @@ fn effective_target_values<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     };
     early_model_templates(
         keywords(py, &[("database", database), ("schema", schema)])?.as_any(),
-        &inputs.getattr("effective_vars")?,
+        &native_field(inputs, "effective_vars")?,
         (
-            &inputs.getattr("effective_target_name")?,
-            &inputs.getattr("run_id")?,
+            &native_field(inputs, "effective_target_name")?,
+            &native_field(inputs, "run_id")?,
         ),
     )
 }
@@ -170,8 +198,8 @@ fn connection_database_fallback<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
     let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
-        &inputs.getattr("project_config")?,
-        &inputs.getattr("local_config")?,
+        &native_field(inputs, "project_config")?,
+        &native_field(inputs, "local_config")?,
     )
     .and_then(|value| value.into_bound_py_any(py))?;
     if adapter_name.eq(host::entry(py, AdapterHost::BuiltinAdapter)?.getattr("DUCKDB")?)? {
@@ -192,25 +220,25 @@ fn project_fields<'py>(
     target_values: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = inputs.py();
-    let discovered: Bound<'py, PyAny> = inputs.getattr("discovered_inputs")?;
-    let project_config: Bound<'py, PyAny> = inputs.getattr("project_config")?;
+    let discovered: Bound<'py, PyAny> = native_field(inputs, "discovered_inputs")?;
+    let project_config: Bound<'py, PyAny> = native_field(inputs, "project_config")?;
     let fields: Bound<'py, PyDict> = keywords(
         py,
         &[
             (
                 "binding_catalog",
-                context.profile.getattr("binding_catalog")?,
+                native_field(&context.profile, "binding_catalog")?,
             ),
-            ("run_id", inputs.getattr("run_id")?),
+            ("run_id", native_field(inputs, "run_id")?),
             (
                 "effective_target_name",
-                inputs.getattr("effective_target_name")?,
+                native_field(inputs, "effective_target_name")?,
             ),
             (
                 "effective_connection",
-                inputs.getattr("effective_connection")?,
+                native_field(inputs, "effective_connection")?,
             ),
-            ("effective_vars", inputs.getattr("effective_vars")?),
+            ("effective_vars", native_field(inputs, "effective_vars")?),
             (
                 "effective_target_database",
                 str_or_none(&target_values.call_method1("get", ("database",))?)?,
@@ -221,19 +249,22 @@ fn project_fields<'py>(
             ),
             (
                 "sql_analysis_dialect",
-                context.profile.getattr("sql_analysis_dialect")?,
+                native_field(&context.profile, "sql_analysis_dialect")?,
             ),
-            ("sql_lexical_syntax", inputs.getattr("sql_lexical_syntax")?),
-            ("compile_cache_dir", inputs.getattr("compile_cache_dir")?),
-            ("settings", inputs.getattr("effective_settings")?),
+            (
+                "sql_lexical_syntax",
+                native_field(inputs, "sql_lexical_syntax")?,
+            ),
+            (
+                "compile_cache_dir",
+                native_field(inputs, "compile_cache_dir")?,
+            ),
+            ("settings", native_field(inputs, "effective_settings")?),
             (
                 "scenario",
-                call_with(
-                    &registry::native(py, NativeAttr::ResolveEffectiveScenarioConfig)?,
-                    &[
-                        ("project_config", project_config.clone()),
-                        ("local_config", inputs.getattr("local_config")?),
-                    ],
+                resolve_effective_scenario_config(
+                    &project_config,
+                    &native_field(inputs, "local_config")?,
                 )?,
             ),
             ("models", models.clone().into_any()),
@@ -275,7 +306,7 @@ fn project_fields<'py>(
     fields.set_item("diagnostics", PyTuple::new(py, diagnostics)?)?;
     fields.set_item(
         "external_sql_reference_resolver",
-        inputs.getattr("external_sql_reference_resolver")?,
+        native_field(inputs, "external_sql_reference_resolver")?,
     )?;
     fields.set_item("scope_index", scope_index)?;
     Ok(fields)
@@ -292,7 +323,7 @@ fn compiled_resources<'py>(
     if count == 0 {
         return Ok(PyTuple::empty(py));
     }
-    let owner: Bound<'py, PyAny> = inputs.getattr("native_project")?;
+    let owner: Bound<'py, PyAny> = native_field(inputs, "native_project")?;
     let facts: Bound<'py, PyAny> = resources.getattr(kind.facts)?;
     owner.call_method1(
         kind.record,
@@ -317,12 +348,12 @@ fn native_resource<'py>(
     (slot, items): (&str, &Bound<'py, PyAny>),
     index: usize,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let failure: Bound<'py, PyAny> = resources.getattr("failure")?;
+    let failure: Bound<'py, PyAny> = native_field(resources, "failure")?;
     if !failure.is_none()
-        && failure.getattr("slot")?.eq(slot)?
-        && failure.getattr("index")?.eq(index)?
+        && native_field(&failure, "slot")?.eq(slot)?
+        && native_field(&failure, "index")?.eq(index)?
     {
-        return Err(PyErr::from_value(failure.getattr("error")?));
+        return Err(PyErr::from_value(native_field(&failure, "error")?));
     }
     items.get_item(index)
 }
@@ -334,11 +365,10 @@ fn project_view<'py>(
     models: &Bound<'py, PyTuple>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
-    let owner: Bound<'py, PyAny> = inputs.getattr("native_project")?;
-    let native_model: Bound<'py, PyAny> = registry::native(py, NativeAttr::NativeCompiledModel)?;
+    let owner: Bound<'py, PyAny> = native_field(inputs, "native_project")?;
     let mut all_native: bool = true;
     for model in models.as_any().try_iter()? {
-        if !model?.is_instance(&native_model)? {
+        if !model?.is_instance_of::<NativeCompiledModel>() {
             all_native = false;
             break;
         }
@@ -350,12 +380,12 @@ fn project_view<'py>(
         return owner.call_method1("project_view", (view_fields,));
     }
     let sql_expansions: Bound<'py, PyDict> = PyDict::new(py);
-    for model_input in inputs.getattr("model_inputs")?.try_iter()? {
+    for model_input in native_field(inputs, "model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
-        let expansion: Bound<'py, PyAny> = model_input.getattr("sql_expansion")?;
+        let expansion: Bound<'py, PyAny> = native_field(&model_input, "sql_expansion")?;
         if !expansion.is_none() {
             sql_expansions.set_item(
-                model_input.getattr("model_file")?.getattr("file_path")?,
+                native_field(&model_input, "model_file")?.getattr("file_path")?,
                 expansion,
             )?;
         }

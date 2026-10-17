@@ -12,14 +12,13 @@ use crate::bindings::_helpers::clone::clone_command::Invocation;
 use crate::bindings::_helpers::clone::clone_progress::{
     CloneFingerprintReporter, CloneItemPrinter,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
-const COMPILE_TYPES: &str = "sqlbuild.compiler.compile.types";
 const DESTINATION_ENTRY_GROUPS: [&str; 4] = [
     "destination_source_entries",
     "destination_model_entries",
@@ -125,7 +124,7 @@ fn dependency_locations<'py>(
     let location_class: Bound<'py, PyAny> =
         registry::class(py, RecordId::CompiledRelationLocation)?;
     let source_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
     for pair in source_map.call_method0("items")?.try_iter()? {
         let (name, source): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let table: Bound<'py, PyAny> = native_field(&source, "table")?;

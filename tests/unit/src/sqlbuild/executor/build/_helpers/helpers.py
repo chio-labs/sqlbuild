@@ -9,6 +9,7 @@ from unittest.mock import Mock
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     DiscoveredLoaderFunction,
     MaterializationType,
     ModelPlanEntry,
@@ -29,7 +30,6 @@ from sqlbuild.compiler.auditing.types import (
     AuditRunScope,
     AuditSeverity,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 
 

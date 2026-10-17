@@ -68,7 +68,6 @@ from tests.integration.src.sqlbuild.compiler.semantic_checks.helpers import (
 def test_given_generated_projects_when_checking_metadata_natively_then_matches_recorded_python(
     test_case: GeneratedMetadataParityTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
     families: Counter[str] = Counter()
@@ -82,7 +81,6 @@ def test_given_generated_projects_when_checking_metadata_natively_then_matches_r
                 rng=rng,
                 non_ascii=test_case.non_ascii,
             ),
-            monkeypatch=monkeypatch,
         )
         views: dict[str, object] = {
             str(dialect): semantic_outcome(

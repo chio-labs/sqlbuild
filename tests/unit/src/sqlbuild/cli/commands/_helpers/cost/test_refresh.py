@@ -86,9 +86,8 @@ def test_given_pending_run_when_showing_detail_then_persisted_summary_is_refresh
         project_dir=tmp_path,
         record=replace(record, cost=replace(record.cost, status=test_case.initial_status)),
     )
-    monkeypatch.setattr(
-        "sqlbuild._native.discover_project_inputs",
-        lambda **kwargs: SimpleNamespace(project_config=object(), local_config=object()),
+    _ = (tmp_path / "sqlbuild_project.toml").write_text(
+        'name = "shop"\nadapter = "snowflake"\n', encoding="utf-8"
     )
     monkeypatch.setattr(
         "sqlbuild._native.resolve_effective_adapter_name",

@@ -53,7 +53,6 @@ from sqlbuild.compiler.compile.types import (
     CompiledFunctionView,
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
     CompiledSeedView,
     CompiledSourceView,
     ExternalSqlReferenceResolver,
@@ -310,31 +309,6 @@ type ProofRow = tuple[
 ]
 
 type QueryColumnsMode = Literal["batch", "reanalysis", "parse", "legacy"]
-
-type CtePairRow = tuple[str, str]
-
-type NativeChainStepRow = tuple[
-    str,
-    str,
-    str | None,
-    list[CtePairRow],
-    str | None,
-    list[str] | None,
-    list[CtePairRow],
-]
-
-type NativeAssertionStepRow = tuple[str, str, list[CtePairRow], str | None]
-
-type NativePlanWarningRow = tuple[str | None, str, str]
-
-type NativeSqlTestPlanRow = tuple[
-    str | None,
-    list[NativeChainStepRow],
-    list[NativeAssertionStepRow],
-    list[str],
-    list[NativePlanWarningRow],
-    list[str],
-]
 
 type SqlTestAssemblyFailureKind = Literal["input", "internal", "decimal_overflow"]
 
@@ -3931,6 +3905,9 @@ def simplify_fixture_null_projections(*, sql: str, relation: Any) -> str: ...
 def is_empty_fixture_query(sql: str) -> bool: ...
 def fixture_read_cache_info(*, reset: bool = False) -> tuple[int, int]: ...
 def fixture_planning_work_info(*, reset: bool = False) -> tuple[int, int]: ...
+def planner_identity_work_info(*, reset: bool = False) -> tuple[int, dict[str, int]]: ...
+def compile_stage_work_info(*, reset: bool = False) -> dict[str, int]: ...
+def migration_fingerprint_work_info(*, reset: bool = False) -> tuple[int, int]: ...
 def build_relation_fixture_context(
     *, project: CompiledProjectView, models_by_name: dict[str, CompiledModelView] | None = None
 ) -> RelationFixturePlanningContext: ...
@@ -4104,6 +4081,16 @@ def assemble_project(
     analysis_cache_dir: Path | None = None,
     analysis_model_names: frozenset[str] | None = None,
 ) -> CompiledProjectView: ...
+def assembly_stage_inputs(
+    stage: Literal["expression_shapes", "model_facts", "semantic_completion"],
+    *,
+    inputs: CompileInputsView,
+    inference_profile: ExpressionInferenceProfile | None = None,
+    skip_column_inference: bool = False,
+    column_lineage_mode: ColumnLineageMode = ...,
+    analysis_cache_dir: Path | None = None,
+    analysis_model_names: frozenset[str] | None = None,
+) -> dict[str, Any] | None: ...
 def build_project_graph_with_analysis_selection(
     *,
     discovered_inputs: DiscoveredProjectInputs,
@@ -4300,16 +4287,6 @@ def validate_sql_syntax(
     parsing: tuple[dict[str, str] | None, str | None] = (None, None),
 ) -> None: ...
 def hook_sql_statements(value: object) -> list[str]: ...
-def declared_relations(
-    inputs: CompileInputsView,
-) -> tuple[
-    dict[str, dict[str, str]],
-    dict[str, dict[str, InferredNullability]],
-    dict[str, dict[str, str]],
-]: ...
-def externally_described_models(
-    inputs: DiscoveredProjectInputs, model_schemas: dict[str, ModelSchemaDeclaration]
-) -> list[Path]: ...
 def analyze_resolved_column_reads(
     *, query_sql: str, references: Sequence[CompileSqlReference], dialect: str | None
 ) -> tuple[CompiledLineageSourceFact, ...]: ...
@@ -5427,10 +5404,6 @@ def semantic_coverage(project: Any, /) -> dict[str, tuple[str, ...]]: ...
 def source_binding_diagnostics(
     *, project: Any, columns: Mapping[str, Any], profile: Any, selected_keys: frozenset[Any]
 ) -> tuple[Any, ...]: ...
-def known_function_names(functions: Sequence[Any], /) -> tuple[str, ...]: ...
-def known_declared_types(
-    *, functions: Sequence[Any], column_types: Mapping[str, Mapping[str, str]]
-) -> tuple[str, ...]: ...
 def complete_semantic_project(
     *,
     project: Any,
@@ -6020,10 +5993,6 @@ def render_janitor_completion(
 ) -> str: ...
 
 # Native analysis: SQL test planning glue.
-def plan_compiled_sql_tests(
-    request: NativeSqlTestPlanningRequest, /
-) -> tuple[list[NativeSqlTestPlanRow], int, int]: ...
-def resolve_compiled_sql_test_chains(request: NativeSqlTestChainRequest, /) -> list[list[str]]: ...
 def assemble_native_sql_tests(
     *, inputs: CompileInputsView
 ) -> tuple[NativeSqlTestAssembly, ...]: ...
@@ -10242,50 +10211,6 @@ class ManualLocation(NativeRecord):
         reason: str,
     ) -> None: ...
 
-class NativeSqlTestPlanningRequest(NativeRecord):
-    """Compiled models and tests to plan, with the adapter facts native planning cannot derive."""
-
-    models: tuple[CompiledModelView, ...]
-    rendered_model_sql: dict[int, str]
-    functions: tuple[tuple[str, str, str, str, str], ...]
-    tests: tuple[CompiledSqlTest, ...]
-    rendered_test_overrides: dict[int, dict[str, str]]
-    sql_analysis_enabled: bool
-    sql_analysis_dialect: str | None
-    set_difference_operator: str
-    requires_derived_table_aliases: bool
-    lexical_syntax: dict[str, object]
-    render_sql: bool
-    include_plan: bool
-    def __init__(
-        self,
-        models: tuple[CompiledModelView, ...],
-        rendered_model_sql: dict[int, str],
-        functions: tuple[tuple[str, str, str, str, str], ...],
-        tests: tuple[CompiledSqlTest, ...],
-        rendered_test_overrides: dict[int, dict[str, str]],
-        sql_analysis_enabled: bool,
-        sql_analysis_dialect: str | None,
-        set_difference_operator: str,
-        requires_derived_table_aliases: bool,
-        lexical_syntax: dict[str, object],
-        render_sql: bool,
-        include_plan: bool,
-    ) -> None: ...
-
-class NativeSqlTestChainRequest(NativeRecord):
-    """Compiled models and the tests whose unmocked model chains to resolve."""
-
-    models: tuple[CompiledModelView, ...]
-    tests: tuple[CompiledSqlTest, ...]
-    lexical_syntax: dict[str, object]
-    def __init__(
-        self,
-        models: tuple[CompiledModelView, ...],
-        tests: tuple[CompiledSqlTest, ...],
-        lexical_syntax: dict[str, object],
-    ) -> None: ...
-
 class NativeSqlTestFailure(NativeRecord):
     """The error one test's assembly raises: its kind and message."""
 
@@ -10554,6 +10479,17 @@ class DiagnosticSeverity(StrEnum):
     ERROR = "error"
     WARNING = "warning"
     INFO = "info"
+
+class CompiledResourceType(StrEnum):
+    MODEL = "model"
+    SOURCE = "source"
+    SEED = "seed"
+    UDF = "udf"
+    TABLE_FN = "table_fn"
+    DBT_REF = "dbt_ref"
+    AUDIT = "audit"
+    SQL_TEST = "sql_test"
+    SQL_SCENARIO = "sql_scenario"
 
 class InferredNullability(StrEnum):
     """Conservative nullability state inferred for an output column."""
@@ -16532,6 +16468,7 @@ class DiscoveredLoaderFunction(NativeRecord):
     description: str | None
     connection_mode: LoaderConnectionMode
     provider_usages: tuple[DiscoveredProviderUsage, ...]
+    identity: PythonNodeIdentity | None
     def __init__(
         self,
         file_path: Path,
@@ -16548,6 +16485,7 @@ class DiscoveredLoaderFunction(NativeRecord):
         description: str | None = ...,
         connection_mode: LoaderConnectionMode = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        identity: PythonNodeIdentity | None = ...,
     ) -> None: ...
 
 class DiscoveredTaskFunction(NativeRecord):
@@ -16564,6 +16502,7 @@ class DiscoveredTaskFunction(NativeRecord):
     meta: dict[str, object] | None
     retry: RetryPolicy | None
     provider_usages: tuple[DiscoveredProviderUsage, ...]
+    identity: PythonNodeIdentity | None
     def __init__(
         self,
         file_path: Path,
@@ -16577,6 +16516,7 @@ class DiscoveredTaskFunction(NativeRecord):
         meta: dict[str, object] | None = ...,
         retry: RetryPolicy | None = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        identity: PythonNodeIdentity | None = ...,
     ) -> None: ...
 
 class DiscoveredAssetFunction(NativeRecord):
@@ -16595,6 +16535,7 @@ class DiscoveredAssetFunction(NativeRecord):
     column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None
     retry: RetryPolicy | None
     provider_usages: tuple[DiscoveredProviderUsage, ...]
+    identity: PythonNodeIdentity | None
     def __init__(
         self,
         file_path: Path,
@@ -16610,6 +16551,7 @@ class DiscoveredAssetFunction(NativeRecord):
         column_lineage: dict[str, tuple[ColumnLineageRef, ...]] | None = ...,
         retry: RetryPolicy | None = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        identity: PythonNodeIdentity | None = ...,
     ) -> None: ...
 
 class DiscoveredCheckFunction(NativeRecord):
@@ -16626,6 +16568,7 @@ class DiscoveredCheckFunction(NativeRecord):
     description: str | None
     meta: dict[str, object] | None
     provider_usages: tuple[DiscoveredProviderUsage, ...]
+    identity: PythonNodeIdentity | None
     def __init__(
         self,
         file_path: Path,
@@ -16639,6 +16582,7 @@ class DiscoveredCheckFunction(NativeRecord):
         description: str | None = ...,
         meta: dict[str, object] | None = ...,
         provider_usages: tuple[DiscoveredProviderUsage, ...] = ...,
+        identity: PythonNodeIdentity | None = ...,
     ) -> None: ...
 
 class DiscoveredHookFunction(NativeRecord):
@@ -16879,16 +16823,19 @@ class DiscoveredRuntimeExtensions(NativeRecord):
         lifecycle_shutdown_timeout_seconds: int | None = ...,
     ) -> None: ...
 
-class ProjectGraph(NativeRecord):
+class ProjectGraph:
     """Static compiled project graph held natively; dict views are built only when read."""
 
-    project: CompiledProjectView
-    native: NativeProjectGraph
     def __init__(
         self,
+        *,
         project: CompiledProjectView,
         native: NativeProjectGraph,
     ) -> None: ...
+    @property
+    def project(self) -> CompiledProjectView: ...
+    @property
+    def native(self) -> NativeProjectGraph: ...
     @property
     def lineage_views(self) -> LineageGraphViews: ...
     @property

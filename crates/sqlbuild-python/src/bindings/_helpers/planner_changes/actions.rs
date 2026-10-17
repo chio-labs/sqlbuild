@@ -4,12 +4,11 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
 const CREATE_TABLE_ACTION: &str = "create_table";
 
@@ -22,7 +21,7 @@ pub(crate) fn resolve_model_actions<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = scope.py();
     let model_kind: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let action_class: Bound<'py, PyAny> = registry::class(py, RecordId::ResolvedModelAction)?;
     let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
     let models_by_name: Bound<'py, PyAny> = native_field(scope, "models_by_name")?;

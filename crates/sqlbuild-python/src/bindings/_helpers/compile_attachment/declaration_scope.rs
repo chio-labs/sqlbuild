@@ -5,6 +5,7 @@ use pyo3::pyfunction;
 use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::stage_work::{DECLARATION_SCOPES, count_stage};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -50,6 +51,7 @@ pub(crate) fn build_declaration_scope<'py>(
     compile_cache_dir: Option<Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered_inputs.py();
+    count_stage(py, DECLARATION_SCOPES, 1)?;
     let scan_cache: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::SqlTestScanCache)?,
         &[(

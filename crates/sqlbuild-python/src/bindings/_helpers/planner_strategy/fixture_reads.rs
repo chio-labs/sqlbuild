@@ -18,13 +18,10 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::analysis::model_reads::{lineage_facts, proven_inputs, star_flags};
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::constants::HIGH_CONFIDENCE;
-use crate::bindings::_helpers::planner_strategy::models::{
-    FixtureReadCacheHost, RelationFixturePlanningContext,
-};
+use crate::bindings::_helpers::planner_strategy::fixture_context::work_counts;
+use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
 
 /// The columns each fixture must supply for the chain's models, and the fixtures read through a star.
@@ -84,8 +81,7 @@ pub(crate) fn required_fixture_columns(
             stars: model_stars(&model, &schema, adapter)?,
         });
     }
-    let owner =
-        registry::native(py, NativeAttr::FixtureReadCache)?.cast_into::<FixtureReadCacheHost>()?;
+    let owner = work_counts(py)?;
     let mut owner = owner.borrow_mut();
     let cache = std::mem::take(&mut owner.cache);
     let (cache, result) = catch_compiler_panic(|| {
@@ -175,10 +171,6 @@ fn model_stars(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add(
-        "_fixture_read_cache",
-        pyo3::Py::new(module.py(), FixtureReadCacheHost::default())?,
-    )?;
     module.add_function(wrap_pyfunction!(fixture_read_cache_info, module)?)
 }
 
@@ -186,8 +178,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyfunction]
 #[pyo3(signature = (*, reset = false))]
 fn fixture_read_cache_info(py: pyo3::Python<'_>, reset: bool) -> PyResult<(u64, usize)> {
-    let owner =
-        registry::native(py, NativeAttr::FixtureReadCache)?.cast_into::<FixtureReadCacheHost>()?;
+    let owner = work_counts(py)?;
     let mut owner = owner.borrow_mut();
     if reset {
         owner.cache = Default::default();

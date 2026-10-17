@@ -6,8 +6,6 @@ use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-
 /// One `CompiledObjectKey` per native pair, so shared keys convert once.
 pub(crate) struct KeyCache<'py> {
     key_type: Bound<'py, PyAny>,
@@ -19,9 +17,7 @@ impl<'py> KeyCache<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
             key_type: registry::class(py, RecordId::CompiledObjectKey)?,
-            resource_type: py
-                .import(COMPILE_TYPES_MODULE)?
-                .getattr("CompiledResourceType")?,
+            resource_type: registry::class(py, RecordId::CompiledResourceType)?,
             keys: PyDict::new(py),
         })
     }

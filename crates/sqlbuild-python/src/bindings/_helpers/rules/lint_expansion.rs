@@ -9,12 +9,14 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::{
     ExpansionSources, SqlExpansionInputs, present, sql_expansion_inputs,
 };
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
 const COMPILE_FIRST_MESSAGE: &str = "compiler-integrated Rules check the SQL your project \
@@ -76,13 +78,16 @@ fn expansion_inputs(sources: LintExpansionSources<'_>) -> PyResult<SqlExpansionI
         Some(discovered) => discovered,
         None => {
             let no: Bound<'_, PyAny> = PyBool::new(py, false).to_owned().into_any();
-            call_with(
-                &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-                &[
-                    ("project_dir", project_dir.clone()),
-                    ("sql_analysis_enabled_override", no.clone()),
-                    ("extract_output_column_locations", no),
-                ],
+            discover_project_inputs(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("project_dir", project_dir.clone()),
+                        ("sql_analysis_enabled_override", no.clone()),
+                        ("extract_output_column_locations", no),
+                    ],
+                )?),
             )?
         }
     };

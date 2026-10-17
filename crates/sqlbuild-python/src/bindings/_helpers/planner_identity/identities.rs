@@ -78,16 +78,29 @@ pub(crate) fn build_direct_model_version_identities<'py>(
             &["seeds", "source_version_hashes", "hook_functions"],
         ),
     )?;
-    let functions: Bound<'py, PyAny> = arguments.value("functions")?;
-    let scope: Bound<'py, PyAny> = arguments.value("scope")?;
-    let dialect: Option<String> = arguments.value("dialect")?.extract()?;
-    let function_hashes: Bound<'py, PyDict> =
-        function_local_hashes(&functions, dialect.as_deref())?;
-    let hooks: Bound<'py, PyAny> = arguments.value("hook_functions")?;
+    direct_model_version_identities(
+        (&arguments.value("functions")?, &arguments.value("scope")?),
+        arguments.value("dialect")?.extract()?,
+        (
+            &arguments.value("seeds")?,
+            &arguments.value("source_version_hashes")?,
+            &arguments.value("hook_functions")?,
+        ),
+    )
+}
+
+/// Current direct model identities of `(functions, scope)` with optional seeds, source hashes and hooks.
+pub(crate) fn direct_model_version_identities<'py>(
+    (functions, scope): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    dialect: Option<String>,
+    (seeds, source_hashes, hooks): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = functions.py();
+    let function_hashes: Bound<'py, PyDict> = function_local_hashes(functions, dialect.as_deref())?;
     let hook_hashes: Bound<'py, PyDict> = if hooks.is_none() {
         PyDict::new(py)
     } else {
-        hook_version_hashes(&hooks)?
+        hook_version_hashes(hooks)?
     };
     let mut graph = IdentityGraph::default();
     for function in functions.try_iter()? {
@@ -106,7 +119,6 @@ pub(crate) fn build_direct_model_version_identities<'py>(
     }
     let seed_hashes: Bound<'py, PyDict> = PyDict::new(py);
     let seed_metadata: Bound<'py, PyDict> = PyDict::new(py);
-    let seeds: Bound<'py, PyAny> = arguments.value("seeds")?;
     if !seeds.is_none() {
         for seed in seeds.try_iter()? {
             let seed: Bound<'py, PyAny> = seed?;
@@ -125,9 +137,8 @@ pub(crate) fn build_direct_model_version_identities<'py>(
             },
         );
     }
-    let source_hashes: Bound<'py, PyAny> = arguments.value("source_version_hashes")?;
     if source_hashes.is_truthy()? {
-        for (name, source_hash) in string_pairs(&source_hashes)? {
+        for (name, source_hash) in string_pairs(source_hashes)? {
             graph.nodes.insert(
                 key_of(SOURCE_RESOURCE, &name),
                 IdentityNode {
@@ -139,8 +150,8 @@ pub(crate) fn build_direct_model_version_identities<'py>(
     }
     let model_metadata: Bound<'py, PyDict> = PyDict::new(py);
     let model_local: Bound<'py, PyDict> = PyDict::new(py);
-    let models_by_name: Bound<'py, PyAny> = native_field(&scope, "models_by_name")?;
-    for key in native_field(&scope, "execution_order")?.try_iter()? {
+    let models_by_name: Bound<'py, PyAny> = native_field(scope, "models_by_name")?;
+    for key in native_field(scope, "execution_order")?.try_iter()? {
         let key: Bound<'py, PyAny> = key?;
         let order_key: GraphKey = graph_key(&key)?;
         graph.execution_order.push(order_key.clone());

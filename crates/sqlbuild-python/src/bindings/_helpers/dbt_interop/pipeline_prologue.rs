@@ -1,5 +1,8 @@
 //! Discover, compile and resolve the combined dbt pipeline through its existing boundaries.
 
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -78,9 +81,9 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
         &[("command", command), ("parsed", parsed)],
     )?;
     let project_dir = native_field(request, "project_dir")?;
-    let discovered = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     let dbt_args: Vec<String> = routed
         .getattr("dbt_args")?
@@ -150,12 +153,7 @@ fn load_compiled_dbt_manifest<'py>(
         let detail = registry::native(py, NativeAttr::DbtFailureDetail)?.call1((result,))?;
         let error = registry::error(py, ErrorId::DbtInteropRuntime)?.call(
             ("dbt compile failed",),
-            Some(
-                &crate::bindings::_helpers::compile_driver::python_calls::keywords(
-                    py,
-                    &[("help", detail)],
-                )?,
-            ),
+            Some(&keywords(py, &[("help", detail)])?),
         )?;
         return Err(PyErr::from_value(error));
     }
@@ -199,15 +197,18 @@ fn compile_dbt_interop_project<'py>(
         DbtCompileReferenceResolver::new(Some(args.value("manifest")?.unbind())),
     )?
     .into_any();
-    let project = call_with(
-        &registry::native(py, NativeAttr::BuildCompiledProject)?,
-        &[
-            ("discovered_inputs", discovered),
-            ("adapter", adapter.clone()),
-            ("no_sql_validation", args.value("no_sql_validation")?),
-            ("cli_vars", args.value("dbt_vars")?),
-            ("external_sql_reference_resolver", resolver),
-        ],
+    let project = build_compiled_project(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered),
+                ("adapter", adapter.clone()),
+                ("no_sql_validation", args.value("no_sql_validation")?),
+                ("cli_vars", args.value("dbt_vars")?),
+                ("external_sql_reference_resolver", resolver),
+            ],
+        )?),
     )?;
     completed(&callback, "Compiled SQLBuild project.", start)?;
     call_with(

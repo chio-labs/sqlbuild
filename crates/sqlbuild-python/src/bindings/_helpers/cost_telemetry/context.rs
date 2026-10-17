@@ -139,7 +139,10 @@ impl CostContext {
 
     #[staticmethod]
     #[pyo3(signature = (**options))]
-    fn resource_scope(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<CostScope> {
+    pub(crate) fn resource_scope(
+        py: Python<'_>,
+        options: Option<Bound<'_, PyDict>>,
+    ) -> PyResult<CostScope> {
         let arguments: KeywordArguments<'_> = KeywordArguments::read(
             py,
             "resource_scope",

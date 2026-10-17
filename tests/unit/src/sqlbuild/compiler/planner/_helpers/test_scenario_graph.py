@@ -6,12 +6,12 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     CompiledSqlScenario,
     ScenarioGraphPlan,
     WarningSeverity,
     plan_scenario_graph,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     PlanScenarioGraphErrorTestCase,
     PlanScenarioGraphTestCase,

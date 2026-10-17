@@ -13,6 +13,7 @@ use sqlbuild_core::build_command::errors::BuildCommandError;
 
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -586,30 +587,32 @@ pub(crate) fn run_defer_clone_boundary_prephase(
     }
     let adapter: Bound<'_, PyAny> = native_field(invocation, "adapter")?;
     let project_dir: Bound<'_, PyAny> = native_field(invocation, "effective_project_dir")?;
-    let project: Bound<'_, PyAny> = native(
+    let project: Bound<'_, PyAny> = build_compiled_project(
         py,
-        NativeAttr::BuildCompiledProject,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("adapter", adapter.clone()),
-            ("selected_target", native_field(request, "selected_target")?),
-            (
-                "no_sql_validation",
-                native_field(request, "no_sql_validation")?,
-            ),
-            (
-                "analysis_selection",
-                call_with(
-                    &registry::class(py, RecordId::CompileAnalysisSelection)?,
-                    &[("no_cache", native_field(request, "no_cache")?)],
-                )?,
-            ),
-            ("cli_vars", native_field(request, "cli_vars")?),
-            (
-                "external_sql_reference_resolver",
-                external_resolver(&project_dir, &discovered)?,
-            ),
-        ],
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("adapter", adapter.clone()),
+                ("selected_target", native_field(request, "selected_target")?),
+                (
+                    "no_sql_validation",
+                    native_field(request, "no_sql_validation")?,
+                ),
+                (
+                    "analysis_selection",
+                    call_with(
+                        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+                        &[("no_cache", native_field(request, "no_cache")?)],
+                    )?,
+                ),
+                ("cli_vars", native_field(request, "cli_vars")?),
+                (
+                    "external_sql_reference_resolver",
+                    external_resolver(&project_dir, &discovered)?,
+                ),
+            ],
+        )?),
     )?;
     let scope: Bound<'_, PyAny> = native(
         py,

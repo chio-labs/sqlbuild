@@ -15,7 +15,6 @@ pub(crate) enum FacadeHost {
     AuditSeverity,
     ThresholdOperator,
     AttachedAuditTargetKind,
-    CompiledResourceType,
     FunctionLanguage,
     SqlTestMode,
     CursorAlgebraError,
@@ -71,11 +70,6 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
     },
     HostEntry {
         name: "AttachedAuditTargetKind",
-        kind: HostKind::Class,
-        edge: HostEdge::Facade,
-    },
-    HostEntry {
-        name: "CompiledResourceType",
         kind: HostKind::Class,
         edge: HostEdge::Facade,
     },

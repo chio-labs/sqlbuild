@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     compile_json_payload,
     diagnostic_location_keys,
+    restore_default_interrupt,
     slow_lint_model_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project
@@ -132,6 +133,7 @@ def test_given_slow_background_lint_when_interrupted_then_compile_stops_promptly
             "SLOW_MACRO_MARKER": str(marker),
             "SLOW_MACRO_SECONDS": str(test_case.macro_seconds),
         },
+        preexec_fn=restore_default_interrupt,
     )
     deadline: float = time.monotonic() + 60.0
     while not marker.exists() and time.monotonic() < deadline and process.poll() is None:

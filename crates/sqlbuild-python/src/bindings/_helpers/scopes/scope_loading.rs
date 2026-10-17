@@ -9,6 +9,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyBool, PyCFunction, PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::inputs::{InputsRequest, attached_inputs};
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
@@ -20,7 +21,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_cache::{
     project_fingerprint, read_scope_index_cache, write_scope_index_cache,
@@ -57,8 +58,7 @@ fn project_adapter<'py>(
     let discover_keywords: Bound<'py, PyDict> = PyDict::new(py);
     discover_keywords.set_item("project_dir", project_dir)?;
     discover_keywords.set_item("extract_output_column_locations", false)?;
-    let discovered: Bound<'py, PyAny> = registry::native(py, NativeAttr::DiscoverProjectInputs)?
-        .call((), Some(&discover_keywords))?;
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(py, Some(discover_keywords))?;
     let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
         &native_field(&discovered, "project_config")?,
         &native_field(&discovered, "local_config")?,

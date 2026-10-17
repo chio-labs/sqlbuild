@@ -1,12 +1,20 @@
 //! Model description resolution for header-only tooling, without importing project Python.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyCFunction, PyFrozenSet};
+use pyo3::types::{PyCFunction, PyDict, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::contracts::project_config::load_project_config_file;
+use crate::bindings::_helpers::discovery::declaration_records::discover_model_schema_files;
+use crate::bindings::_helpers::discovery::model_records::{
+    ModelFileSelection, discovered_model_files,
+};
+use crate::bindings::_helpers::discovery::snapshot::in_snapshot;
+use crate::bindings::_helpers::model_config::described_models::externally_described_models as described_models;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::render::declaration_indexes::public_model_schema_index;
 
 /// Models and model schemas, skipping files that cannot be read.
 #[pyfunction]
@@ -15,20 +23,14 @@ pub(crate) fn discover_model_description_inputs<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
-    let native = |name: NativeAttr| registry::native(py, name);
     let project_config: Bound<'py, PyAny> =
-        native(NativeAttr::LoadProjectConfigFile)?.call1((project_dir,))?;
+        load_project_config_file(py, project_dir)?.into_bound(py);
     let skip: Bound<'py, PyAny> =
         PyCFunction::new_closure(py, None, None, |_arguments, _keywords| -> PyResult<()> {
             Ok(())
         })?
         .into_any();
-    let disabled: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
-    let scope: Bound<'py, PyAny> = call_with(
-        &native(NativeAttr::DirectorySnapshotScope)?,
-        &[("project_dir", project_dir.clone())],
-    )?;
-    within(&scope, |_| {
+    in_snapshot(project_dir, || {
         call_with(
             &registry::class(py, RecordId::DiscoveredProjectInputs)?,
             &[
@@ -39,22 +41,19 @@ pub(crate) fn discover_model_description_inputs<'py>(
                 ),
                 (
                     "model_files",
-                    call_with(
-                        &native(NativeAttr::DiscoverModelFiles)?,
-                        &[
-                            ("project_dir", project_dir.clone()),
-                            ("extract_implicit_alias_columns", disabled.clone()),
-                            ("extract_output_column_locations", disabled),
-                            ("on_fault", skip.clone()),
-                        ],
-                    )?,
+                    discovered_model_files(
+                        project_dir,
+                        (false, false),
+                        ModelFileSelection {
+                            selected_model_names: None,
+                            on_fault: Some(skip.clone()),
+                        },
+                    )?
+                    .into_any(),
                 ),
                 (
                     "model_schema_files",
-                    call_with(
-                        &native(NativeAttr::DiscoverModelSchemaFiles)?,
-                        &[("project_dir", project_dir.clone()), ("on_fault", skip)],
-                    )?,
+                    discover_model_schema_files(project_dir, Some(skip))?.into_any(),
                 ),
             ],
         )
@@ -67,11 +66,8 @@ pub(crate) fn externally_described_models<'py>(
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let py: Python<'py> = project_dir.py();
     let inputs: Bound<'py, PyAny> = discover_model_description_inputs(project_dir)?;
-    let schemas: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::PublicModelSchemaIndex)?.call1((&inputs,))?;
-    let described: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::ExternallyDescribedModels)?.call1((&inputs, schemas))?;
-    PyFrozenSet::new(py, described.try_iter()?.collect::<PyResult<Vec<_>>>()?)
+    let schemas: Bound<'py, PyDict> = public_model_schema_index(inputs.clone())?;
+    PyFrozenSet::new(py, described_models(inputs, schemas)?)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -12,6 +12,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     DiscoveredLoaderFunction,
     SourceEntry,
@@ -28,7 +29,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (

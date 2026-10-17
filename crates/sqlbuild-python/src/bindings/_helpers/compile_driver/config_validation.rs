@@ -6,10 +6,16 @@ use sqlbuild_config::project::main::unsupported_target_warehouse::unsupported_ta
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 
-use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::contracts::project_config::{
+    resolve_config_file_path, validate_local_sql_analysis,
+};
+use crate::bindings::_helpers::contracts::spec_resolution::{
+    resolve_effective_adapter_name, resolve_target_config,
+};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
+use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -49,7 +55,7 @@ fn target_names(config: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 /// Reject a local SQL analysis opt-out the project forbids.
 fn reject_local_sql_analysis_opt_out(config: &ProjectConfiguration<'_, '_>) -> PyResult<()> {
     let py: Python<'_> = config.project_dir.py();
-    let local_settings: Bound<'_, PyAny> = config.local_config.getattr("settings")?;
+    let local_settings: Bound<'_, PyAny> = native_field(config.local_config, "settings")?;
     let flags: Bound<'_, PyTuple> = PyTuple::new(
         py,
         [
@@ -65,18 +71,16 @@ fn reject_local_sql_analysis_opt_out(config: &ProjectConfiguration<'_, '_>) -> P
             local_settings.getattr(SQL_ANALYSIS_KEY)?,
         ],
     )?;
-    registry::native(py, NativeAttr::ValidateLocalSqlAnalysis)?
-        .call1((config.project_dir, flags))?;
-    Ok(())
+    validate_local_sql_analysis(py, config.project_dir, flags.extract()?)
 }
 
 /// The first target, by name, that selects a command-group warehouse.
 fn first_configured_group(config: &Bound<'_, PyAny>) -> PyResult<Option<(String, String, String)>> {
-    let targets: Bound<'_, PyAny> = config.getattr("targets")?;
+    let targets: Bound<'_, PyAny> = native_field(config, "targets")?;
     let mut names: Vec<String> = target_names(config)?;
     names.sort();
     for name in names {
-        let warehouses: Bound<'_, PyAny> = targets.get_item(&name)?.getattr("warehouses")?;
+        let warehouses: Bound<'_, PyAny> = native_field(&targets.get_item(&name)?, "warehouses")?;
         for group in WAREHOUSE_GROUPS {
             let value: Bound<'_, PyAny> = warehouses.getattr(group)?;
             if !value.is_none() {
@@ -109,8 +113,7 @@ fn reject_group(
     (target, group, value): (String, String, String),
 ) -> PyErr {
     let raised = (|| -> PyResult<PyErr> {
-        let file_path: String = registry::native(py, NativeAttr::ResolveConfigFilePath)?
-            .call1((project_dir, local))?
+        let file_path: String = resolve_config_file_path(py, project_dir, local)?
             .str()?
             .extract()?;
         let file_name: &str = if local {
@@ -132,7 +135,7 @@ fn reject_group(
 fn reject_unsupported_target_warehouses(config: &ProjectConfiguration<'_, '_>) -> PyResult<()> {
     let py: Python<'_> = config.project_dir.py();
     if let Some(group) = first_configured_group(config.project_config)? {
-        let adapter_name: Bound<'_, PyAny> = config.project_config.getattr("adapter")?;
+        let adapter_name: Bound<'_, PyAny> = native_field(config.project_config, "adapter")?;
         if !session_warehouse_support(py, &adapter_name, config.project_dir)? {
             return Err(reject_group(
                 py,
@@ -168,16 +171,13 @@ fn reject_invalid_target_connections(config: &ProjectConfiguration<'_, '_>) -> P
     names.extend(target_names(config.local_config)?);
     names.sort();
     names.dedup();
-    let resolve: Bound<'_, PyAny> = registry::native(py, NativeAttr::ResolveTargetConfig)?;
     let spec_error: Bound<'_, PyAny> = registry::error(py, ErrorId::SpecConfig)?;
     for name in names {
-        let resolved: PyResult<Bound<'_, PyAny>> = call_with(
-            &resolve,
-            &[
-                ("project_config", config.project_config.clone()),
-                ("local_config", config.local_config.clone()),
-                ("target_name", PyString::new(py, &name).into_any()),
-            ],
+        let resolved: PyResult<Bound<'_, PyAny>> = resolve_target_config(
+            py,
+            config.project_config,
+            config.local_config,
+            PyString::new(py, &name).as_any(),
         );
         let Err(error) = resolved else {
             continue;

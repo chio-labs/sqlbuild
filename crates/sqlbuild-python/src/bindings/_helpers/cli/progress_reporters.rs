@@ -48,7 +48,7 @@ impl ConnectionProgressReporter {
 impl ConnectionProgressReporter {
     #[new]
     #[pyo3(signature = (**options))]
-    fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
+    pub(crate) fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
         let arguments: KeywordArguments<'_> = KeywordArguments::read(
             py,
             "ConnectionProgressReporter",
@@ -133,7 +133,11 @@ impl PlanningProgressReporter {
 impl PlanningProgressReporter {
     #[new]
     #[pyo3(signature = (*, stream, use_color = false))]
-    fn new(py: Python<'_>, stream: &Bound<'_, PyAny>, use_color: bool) -> PyResult<Self> {
+    pub(crate) fn new(
+        py: Python<'_>,
+        stream: &Bound<'_, PyAny>,
+        use_color: bool,
+    ) -> PyResult<Self> {
         let status: Bound<'_, PyAny> = status_reporter(stream, use_color)?;
         Ok(Self {
             status: status.unbind(),

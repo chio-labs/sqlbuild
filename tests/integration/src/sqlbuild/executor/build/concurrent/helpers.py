@@ -215,8 +215,7 @@ def extract_upstream_model_deps(
 ) -> dict[str, frozenset[str]]:
     """Extract upstream model dependency names for each model in the plan."""
 
-    from sqlbuild._native import CompiledObjectKey
-    from sqlbuild.compiler.compile.types import CompiledResourceType
+    from sqlbuild._native import CompiledObjectKey, CompiledResourceType
 
     dependencies_by_resource_type: dict[object, dict[str, frozenset[str]]] = {
         resource_type: {} for resource_type in CompiledResourceType

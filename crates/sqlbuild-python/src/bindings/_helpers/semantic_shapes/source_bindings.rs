@@ -22,8 +22,6 @@ use crate::bindings::_helpers::semantic_shapes::shapes::{
     model_inputs, project_shapes, published_shape,
 };
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
-
 const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
 const DATACLASSES_MODULE: &str = "dataclasses";
 const GRAPHLIB_MODULE: &str = "graphlib";
@@ -303,11 +301,11 @@ fn validated_diagnostics<'py>(
         expansions.set_item(native_field(&path, "stem")?, expansion)?;
     }
     let skipped: Object<'py> = PyString::new(py, BINDING_UNKNOWN_TABLE_INTERNAL_CODE).into_any();
-    let types = py.import(COMPILE_TYPES_MODULE)?;
     let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
     let severity_class: Object<'py> = registry::class(py, RecordId::DiagnosticSeverity)?;
     let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
-    let model_type: Object<'py> = native_field(&types, "CompiledResourceType")?.getattr("MODEL")?;
+    let model_type: Object<'py> =
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let mut diagnostics: Vec<Object<'py>> = Vec::new();
     for ((model, request), result) in models.iter().zip(&requests).zip(results.try_iter()?) {
         let result: Object<'py> = result?;

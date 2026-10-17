@@ -3,6 +3,8 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
@@ -23,9 +25,9 @@ pub(crate) fn project_adapter<'py>(
         Some(path) => path,
         None => imported(py, "pathlib", "Path")?.call_method0("cwd")?,
     };
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     let adapter_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,

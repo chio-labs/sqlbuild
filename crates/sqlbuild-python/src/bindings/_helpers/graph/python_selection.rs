@@ -17,7 +17,7 @@ use sqlbuild_analysis::python_selection::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
@@ -101,9 +101,8 @@ fn selection_graph(graph: &Bound<'_, PyAny>) -> PyResult<PythonSelectionGraph> {
 }
 
 /// `(name, loader)` of every source in the compiled project.
-fn project_sources(project_graph: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>)>> {
-    project_graph
-        .getattr("project")?
+fn project_sources(project: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>)>> {
+    project
         .getattr("sources")?
         .try_iter()?
         .map(|source| {
@@ -168,9 +167,9 @@ pub(crate) fn resolve_python_sql_run_selection(
     exclude: Vec<String>,
 ) -> PyResult<(Vec<ObjectKey>, Vec<String>)> {
     let py: Python<'_> = project_graph.py();
-    let native: Bound<'_, NativeProjectGraph> =
-        native_field(project_graph, "native")?.downcast_into()?;
-    let sources: Vec<(String, Option<String>)> = project_sources(project_graph)?;
+    let project_graph: &Bound<'_, CompiledProjectGraph> = project_graph.cast()?;
+    let native: &Bound<'_, NativeProjectGraph> = project_graph.get().native(py);
+    let sources: Vec<(String, Option<String>)> = project_sources(project_graph.get().project(py))?;
     let nodes: PythonSelectionGraph = selection_graph(python_graph)?;
     let selection: RunSelection = compiler_guard(|| {
         Ok(run_selection(

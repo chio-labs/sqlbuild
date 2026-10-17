@@ -7,6 +7,7 @@ from sqlbuild._native import (
     ChainStep,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CostContext,
     MaterializationType,
     ModelPlanEntry,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.cost.models import CostResourceContext
 
 

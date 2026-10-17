@@ -3,10 +3,8 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_strategy::constants::MODEL_REFERENCE_KIND;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
-use crate::bindings::_helpers::sql_test_glue::constants::COMPILE_TYPES;
 use crate::bindings::_helpers::sql_test_glue::constants::{TABLE_FN, UDF};
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
 use sqlbuild_analysis::compiler::main::missing_expected_columns::missing_expected_columns;
@@ -149,7 +147,7 @@ pub(super) fn expected_diagnostics(
         return Ok(result);
     };
     let py = test.py();
-    let resource_types = imported(py, COMPILE_TYPES, "CompiledResourceType")?;
+    let resource_types = registry::class(py, RecordId::CompiledResourceType)?;
     for step in native_field(plan, "chain")?.try_iter()? {
         let step = step?;
         let name = native_field(&step, "model_name")?;

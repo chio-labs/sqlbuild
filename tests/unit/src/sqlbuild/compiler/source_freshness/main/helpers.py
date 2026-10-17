@@ -8,6 +8,7 @@ from typing import Any
 from sqlbuild._native import (
     SOURCE_FRESHNESS_TABLE_NAME,
     CompiledObjectKey,
+    CompiledResourceType,
     SourceEntry,
     SourceFreshnessConfig,
     SourceFreshnessIdentity,
@@ -27,7 +28,6 @@ from sqlbuild.adapter.contract.models import (
 from sqlbuild.adapter.contract.types import FrameworkType
 from sqlbuild.adapter.relations.main.relation_lookup import build_relation_lookup
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
 def state_table_exists_map(

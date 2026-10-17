@@ -1,6 +1,7 @@
 import pytest
 
 from sqlbuild._native import (
+    CompiledResourceType,
     ContractEvidence,
     SchemaDynamicColumnFamily,
     compare_contract_evidence,
@@ -8,7 +9,7 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.compiler.contract_adoption._helpers._test_types import (
     DynamicContractAdoptionTestCase,
 )

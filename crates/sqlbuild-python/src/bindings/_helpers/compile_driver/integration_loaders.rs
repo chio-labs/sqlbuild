@@ -8,6 +8,7 @@ use sqlbuild_discovery::yaml_entries::main::integration_loader_name::integration
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -43,15 +44,18 @@ pub(crate) fn integration_loader_functions<'py>(
         let factory: Bound<'py, PyAny> = host::entry(py, integration.loader_factory)?;
         for source_file in source_files.try_iter()? {
             let source_file: Bound<'py, PyAny> = source_file?;
-            for source_entry in source_file.getattr("source_entries")?.try_iter()? {
+            for source_entry in native_field(&source_file, "source_entries")?.try_iter()? {
                 let source_entry: Bound<'py, PyAny> = source_entry?;
-                let declared: Bound<'py, PyAny> = source_entry.getattr("integration_loader")?;
-                if declared.is_none() || declared.getattr("kind")?.extract::<String>()? != kind {
+                let declared: Bound<'py, PyAny> =
+                    native_field(&source_entry, "integration_loader")?;
+                if declared.is_none()
+                    || native_field(&declared, "kind")?.extract::<String>()? != kind
+                {
                     continue;
                 }
                 let name: String = integration_loader_name(
                     &kind,
-                    &source_entry.getattr("name")?.extract::<String>()?,
+                    &native_field(&source_entry, "name")?.extract::<String>()?,
                 );
                 let function: Bound<'py, PyAny> = call_with(
                     &factory,
@@ -63,8 +67,11 @@ pub(crate) fn integration_loader_functions<'py>(
                 loaders.push(call_with(
                     &record_class,
                     &[
-                        ("file_path", source_file.getattr("file_path")?),
-                        ("relative_path", source_file.getattr("relative_path")?),
+                        ("file_path", native_field(&source_file, "file_path")?),
+                        (
+                            "relative_path",
+                            native_field(&source_file, "relative_path")?,
+                        ),
                         ("name", name.into_pyobject(py)?.into_any()),
                         ("function", function),
                         ("connection_mode", external.clone()),

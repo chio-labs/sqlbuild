@@ -6,19 +6,13 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::sqltext::model_headers::{
+    ColumnLocation, ParsedModelHeader, header_failure, model_output_columns, parse_model_headers,
+};
 
 const HEADER_CACHE_SIZE: usize = 4096;
-
-/// `(name, line, column, end line, end column)`.
-type LocationRow<'py> = (
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-);
 
 /// Parsed headers by text: `(values or None, error or None)`.
 static HEADER_CACHE: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
@@ -49,14 +43,9 @@ fn prepare_model_header_tokens(headers: &Bound<'_, PyAny>) -> PyResult<()> {
         cache.clear();
     }
     let names: Bound<'_, PyList> = missing.keys();
-    let parsed: Bound<'_, PyAny> =
-        registry::native(py, NativeAttr::ParseModelHeaders)?.call1((&names,))?;
-    for (header, row) in names.iter().zip(parsed.try_iter()?) {
-        let row: Bound<'_, PyAny> = row?;
-        cache.set_item(
-            header,
-            PyTuple::new(py, [row.get_item(0)?, row.get_item(2)?])?,
-        )?;
+    let parsed: Vec<ParsedModelHeader> = parse_model_headers(py, names.extract()?)?;
+    for (header, (values, _offsets, error)) in names.iter().zip(parsed) {
+        cache.set_item(header, (values, error))?;
     }
     Ok(())
 }
@@ -79,11 +68,12 @@ fn parse_header_values<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bo
         copied.update(values.downcast()?.as_mapping())?;
         return Ok(copied);
     }
-    let header_line: Bound<'py, PyAny> = request.get("header_line")?;
-    let (detail, help, line): (String, Option<String>, Option<usize>) =
-        registry::native(py, NativeAttr::ModelHeaderFailure)?
-            .call1((error.str()?, &header, &header_line))?
-            .extract()?;
+    let header_line: Option<usize> = request.get("header_line")?.extract()?;
+    let (detail, help, line): (String, Option<String>, Option<usize>) = header_failure(
+        &error.str()?.extract::<String>()?,
+        &header.extract::<String>()?,
+        header_line,
+    );
     let file_path: String = request.get("file_path")?.str()?.extract()?;
     let location: String = match line {
         Some(line) => format!("{file_path}:{line}"),
@@ -107,14 +97,13 @@ fn parse_header_values<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bo
 
 /// `{name: SourceLocation}` from native `(name, line, column, end line, end column)` rows.
 fn source_locations<'py>(
-    rows: &Bound<'py, PyAny>,
+    rows: Vec<ColumnLocation>,
     relative_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let py: Python<'py> = rows.py();
+    let py: Python<'py> = relative_path.py();
     let location_class: Bound<'py, PyAny> = registry::class(py, RecordId::SourceLocation)?;
     let locations: Bound<'py, PyDict> = PyDict::new(py);
-    for row in rows.try_iter()? {
-        let (name, line, column, end_line, end_column): LocationRow<'py> = row?.extract()?;
+    for (name, line, column, end_line, end_column) in rows {
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
         arguments.set_item("path", relative_path)?;
         arguments.set_item("line", line)?;
@@ -133,14 +122,13 @@ fn model_output_column_locations<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let request = Request::new("model_output_column_locations", request)?;
-    let py: Python<'py> = request.py();
     let implicit: bool = match request.optional("extract_implicit_alias_columns")? {
         Some(value) => value.is_truthy()?,
         None => true,
     };
-    let rows: Bound<'py, PyAny> = registry::native(py, NativeAttr::ModelOutputColumns)?
-        .call1((request.get("contents")?, implicit))?;
-    source_locations(&rows, &request.get("relative_path")?)
+    let contents: String = request.get("contents")?.extract()?;
+    let rows: Vec<ColumnLocation> = model_output_columns(&contents, implicit)?;
+    source_locations(rows, &request.get("relative_path")?)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

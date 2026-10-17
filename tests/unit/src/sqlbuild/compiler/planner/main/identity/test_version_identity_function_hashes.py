@@ -7,11 +7,11 @@ import pytest
 from sqlbuild._native import (
     CompiledFunction,
     CompiledObjectKey,
+    CompiledResourceType,
     DirectModelVersionIdentities,
     FunctionReturnColumn,
     build_function_local_hashes,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from tests.unit.src.sqlbuild.compiler.planner._helpers.helpers import build_compiled_function
 from tests.unit.src.sqlbuild.compiler.planner.main.identity._test_types import (
     FunctionReturnContractIdentityTestCase,

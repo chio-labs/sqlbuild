@@ -33,7 +33,7 @@ pub(crate) fn plan_rule_run<'py>(
     let py: Python<'py> = options.py();
     let graph: Bound<'py, PyAny> = options.get("graph")?;
     let project: Bound<'py, PyAny> = field(&graph, "project")?;
-    freed_memory_released(py);
+    freed_memory_released(py)?;
     let effective_config: Bound<'py, PyAny> =
         resolved_ignore_selectors(&options.get("config")?, &project)?;
     let project_dir: Bound<'py, PyAny> = options.get("project_dir")?.call_method0("resolve")?;

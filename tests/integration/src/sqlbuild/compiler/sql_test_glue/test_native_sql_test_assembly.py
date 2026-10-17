@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native_module
 from tests.integration.src.sqlbuild.compiler.helpers import (
     GoldenEntry,
     golden_differences,
@@ -39,8 +40,8 @@ from tests.integration.src.sqlbuild.compiler.sql_test_glue.helpers import (
     assembly_outcome,
     edge_sql_test_files,
     generated_sql_test_assembly_files,
+    native_assembly_answers,
     outcome_kind,
-    record_native_assemblies,
     write_project,
 )
 
@@ -72,10 +73,10 @@ from tests.integration.src.sqlbuild.compiler.sql_test_glue.helpers import (
 def test_given_generated_sql_tests_when_assembling_natively_then_compiled_tests_match_python(
     test_case: GeneratedSqlTestAssemblyParityTestCase,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     rng: random.Random = random.Random(test_case.seed)
-    native_assemblies: Counter[str] = record_native_assemblies(monkeypatch=monkeypatch)
+    native_assemblies: Counter[str] = Counter()
+    _ = native_module.compile_stage_work_info(reset=True)
     entries: list[GoldenEntry] = []
     outcomes: Counter[str] = Counter()
     for index in range(test_case.count):
@@ -87,6 +88,7 @@ def test_given_generated_sql_tests_when_assembling_natively_then_compiled_tests_
             ),
         )
         actual: PlanningCallOutcome = assembly_outcome(project_dir=project_dir)
+        native_assemblies.update(native_assembly_answers(project_dir=project_dir))
         entries.append(assembly_golden_entry(outcome=actual, project_dir=project_dir))
         outcomes[outcome_kind(actual)] += 1
 
@@ -95,7 +97,8 @@ def test_given_generated_sql_tests_when_assembling_natively_then_compiled_tests_
             read_golden(golden_name("sql_test_assembly", test_case.description)), entries
         ),
         dict(native_assemblies),
-    ) == ([], test_case.expected_native_assemblies), outcomes
+        native_module.compile_stage_work_info()["assemble_native_sql_tests"],
+    ) == ([], test_case.expected_native_assemblies, test_case.count), outcomes
 
 
 @pytest.mark.parametrize(

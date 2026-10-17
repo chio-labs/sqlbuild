@@ -9,6 +9,7 @@ import sqlbuild._native as sql_test_assembly
 from sqlbuild import _native as fixture_completion
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     CompiledSqlTest,
     CompileSqlReference,
     PlanWarning,
@@ -25,7 +26,6 @@ from sqlbuild._native import (
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     CompleteFixturePlanningTestCase,

@@ -826,6 +826,7 @@ class NativeAnalysisSeamTestCase:
 
     description: str
     expected_native_returns: dict[str, list[object]]
+    expected_stage_work: dict[str, int]
 
 
 @dataclass(frozen=True)

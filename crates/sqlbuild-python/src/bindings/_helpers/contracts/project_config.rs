@@ -186,7 +186,7 @@ pub(crate) fn load_local_config_file(
 
 /// The project or local configuration file path, rejecting an unconverted legacy file.
 #[pyfunction]
-fn resolve_config_file_path<'py>(
+pub(crate) fn resolve_config_file_path<'py>(
     py: Python<'py>,
     project_dir: &Bound<'py, PyAny>,
     local: bool,
@@ -200,7 +200,7 @@ fn resolve_config_file_path<'py>(
 
 /// `validate_local_sql_analysis_policy` from the project requirement and the local setting.
 #[pyfunction]
-fn validate_local_sql_analysis(
+pub(crate) fn validate_local_sql_analysis(
     py: Python<'_>,
     project_dir: &Bound<'_, PyAny>,
     flags: (bool, bool, bool),

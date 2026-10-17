@@ -15,6 +15,7 @@ from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     CursorBounds,
     CursorInputRelation,
@@ -24,7 +25,7 @@ from sqlbuild._native import (
     compute_plan_cursor_bounds,
 )
 from sqlbuild._native import cursor_sentinel_to_token as sentinel_to_token
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.compiler.planner._helpers._test_types import (
     AuthoritativeCursorOverrideTestCase,
     MicrobatchCursorEndPlanTestCase,

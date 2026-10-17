@@ -9,6 +9,7 @@ from sqlbuild._native import (
     FINGERPRINT_TABLE_NAME,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     Fingerprint,
     FingerprintSet,
     MaterializationType,
@@ -19,7 +20,6 @@ from sqlbuild._native import (
     SeedPlanEntry,
 )
 from sqlbuild.adapter.contract.models import RelationInfo
-from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
 class CloneFingerprintAdapter:

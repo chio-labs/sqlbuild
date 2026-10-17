@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from sqlbuild._native import (
+    CompiledResourceType,
     RelationFixtureCompletion,
     RelationFixturePlanningContext,
     build_compiled_project,
@@ -12,7 +13,7 @@ from sqlbuild._native import (
     discover_project_inputs,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.planner._helpers.fixtures._test_types import (
     FixtureTypeScopeTestCase,
 )

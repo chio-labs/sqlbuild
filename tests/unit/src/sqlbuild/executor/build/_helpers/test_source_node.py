@@ -6,9 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild._native import CompiledObjectKey, PlanOutput
+from sqlbuild._native import CompiledObjectKey, CompiledResourceType, PlanOutput
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.build._helpers.source_node import execute_build_source_node
 from sqlbuild.executor.build.models import BuildCallbacks, BuildRuntimeParams
 from sqlbuild.executor.load.models import LoadExecutionResult

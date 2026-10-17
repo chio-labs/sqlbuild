@@ -8,13 +8,13 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     DiscoveredLoaderFunction,
     LoaderConnectionMode,
     PlanOutput,
     SourceEntry,
     SourceLoadPlanEntry,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.build._helpers.external_source_loads import (
     run_external_source_loads_before_connections,
 )

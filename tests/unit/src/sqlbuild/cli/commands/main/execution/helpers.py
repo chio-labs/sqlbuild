@@ -12,27 +12,28 @@ import pytest
 from sqlbuild import _native as native
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     CompiledSqlScenario,
-    DiscoveredProjectInputs,
     DiscoveredSqlScenarioFile,
-    LocalConfig,
-    ProjectConfig,
 )
 from sqlbuild.adapter.discovery.main import resolve_adapter as adapters_module
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.diagnostics.main import process_resource_reporting as resource_reporting_module
 from sqlbuild.executor.pipeline.main import run as executor_run_module
 from tests.unit.src.sqlbuild.presentation.helpers import use_plain_terminal
 
 
-def fail_build_discovery(*, monkeypatch: pytest.MonkeyPatch, error: BaseException) -> Mock:
-    """Make project discovery raise and record the debug resource reporter calls."""
+def fail_build_discovery(
+    *, monkeypatch: pytest.MonkeyPatch, project_dir: Path, provider_source: str
+) -> Mock:
+    """Make project discovery fail in a provider module and record debug resource reporting."""
 
-    def discover(**_kwargs: object) -> DiscoveredProjectInputs:
-        raise error
-
+    providers: Path = project_dir / "providers"
+    providers.mkdir(parents=True)
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "shop"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    _ = (providers / "failing.py").write_text(provider_source, encoding="utf-8")
     reporter: Mock = Mock(return_value=nullcontext())
-    monkeypatch.setattr(native, "discover_project_inputs", discover)
     monkeypatch.setattr(resource_reporting_module, "process_resource_reporting", reporter)
     return reporter
 
@@ -53,16 +54,15 @@ def configure_native_scenario_command(
     monkeypatch: pytest.MonkeyPatch,
     stream: ScenarioProgressStream,
     compile_project: Any,
+    project_dir: Path,
 ) -> None:
-    """Isolate the native scenario command from discovery, adapters and the warehouse."""
+    """Isolate the native scenario command from adapters and the warehouse in an empty project."""
 
-    discovered_inputs: DiscoveredProjectInputs = DiscoveredProjectInputs(
-        project_config=ProjectConfig(name="project", adapter="duckdb"),
-        local_config=LocalConfig(),
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "project"\nadapter = "duckdb"\n', encoding="utf-8"
     )
     monkeypatch.setattr(sys, "stdout", stream)
     use_plain_terminal(monkeypatch)
-    monkeypatch.setattr(native, "discover_project_inputs", lambda **_: discovered_inputs)
     monkeypatch.setattr(native, "resolve_project_connection_config", lambda **_: {})
     monkeypatch.setattr(native, "run_compile_only_pipeline", compile_project)
     monkeypatch.setattr(adapters_module, "resolve_adapter", lambda **_: Mock())

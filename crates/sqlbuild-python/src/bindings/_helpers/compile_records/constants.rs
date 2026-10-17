@@ -944,6 +944,12 @@ const R_DISCOVERED_LOADER_FUNCTION: RecordSpec = RecordSpec {
             FieldDefault::NativeMember(RecordId::LoaderConnectionMode, "SQLBUILD"),
         ),
         FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+        FieldSpec {
+            name: "identity",
+            default: FieldDefault::None,
+            compared: false,
+            shown: false,
+        },
     ],
 };
 const R_DISCOVERED_TASK_FUNCTION: RecordSpec = RecordSpec {
@@ -961,6 +967,12 @@ const R_DISCOVERED_TASK_FUNCTION: RecordSpec = RecordSpec {
         FieldSpec::new("meta", FieldDefault::None),
         FieldSpec::new("retry", FieldDefault::None),
         FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+        FieldSpec {
+            name: "identity",
+            default: FieldDefault::None,
+            compared: false,
+            shown: false,
+        },
     ],
 };
 const R_DISCOVERED_ASSET_FUNCTION: RecordSpec = RecordSpec {
@@ -980,6 +992,12 @@ const R_DISCOVERED_ASSET_FUNCTION: RecordSpec = RecordSpec {
         FieldSpec::new("column_lineage", FieldDefault::None),
         FieldSpec::new("retry", FieldDefault::None),
         FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+        FieldSpec {
+            name: "identity",
+            default: FieldDefault::None,
+            compared: false,
+            shown: false,
+        },
     ],
 };
 const R_DISCOVERED_CHECK_FUNCTION: RecordSpec = RecordSpec {
@@ -1000,6 +1018,12 @@ const R_DISCOVERED_CHECK_FUNCTION: RecordSpec = RecordSpec {
         FieldSpec::new("description", FieldDefault::None),
         FieldSpec::new("meta", FieldDefault::None),
         FieldSpec::new("provider_usages", FieldDefault::EmptyTuple),
+        FieldSpec {
+            name: "identity",
+            default: FieldDefault::None,
+            compared: false,
+            shown: false,
+        },
     ],
 };
 const R_DISCOVERED_HOOK_FUNCTION: RecordSpec = RecordSpec {

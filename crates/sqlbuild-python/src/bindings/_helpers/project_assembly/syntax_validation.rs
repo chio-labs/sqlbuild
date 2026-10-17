@@ -18,7 +18,7 @@ use crate::bindings::_helpers::records::registry;
 const GENERIC_DIALECT: &str = "generic";
 
 /// `(placeholder defaults, dialect)` a statement parses with.
-type ParseOptions = (Option<HashMap<String, String>>, Option<String>);
+pub(crate) type ParseOptions = (Option<HashMap<String, String>>, Option<String>);
 
 /// What every statement of one model is parsed with.
 struct SyntaxContext<'a, 'py> {
@@ -145,7 +145,7 @@ fn check_hook_value(
 /// Validate the SQL of one model's hook value, raising the first parse failure.
 #[pyfunction]
 #[pyo3(signature = (value, hook_name, model, parsing=(None, None)))]
-fn validate_hook_sql_syntax(
+pub(crate) fn validate_hook_sql_syntax(
     value: Bound<'_, PyAny>,
     hook_name: &str,
     model: (String, Bound<'_, PyAny>),
@@ -179,7 +179,7 @@ fn validate_hook_sql_syntax(
 /// Validate that a model's query parses, raising its syntax error.
 #[pyfunction]
 #[pyo3(signature = (query_sql, model, parsing=(None, None)))]
-fn validate_sql_syntax(
+pub(crate) fn validate_sql_syntax(
     py: Python<'_>,
     query_sql: &str,
     model: (String, Bound<'_, PyAny>),

@@ -14,6 +14,7 @@ use crate::bindings::_helpers::discovery::imported_modules::{
 use crate::bindings::_helpers::discovery::imported_providers;
 
 use crate::bindings::_helpers::discovery::python_hook_files::discover_python_hook_files;
+use crate::bindings::_helpers::graph::python_node_graph::node_identity;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -33,6 +34,8 @@ struct NodeKind {
     reader: UserCodeHost,
     record: RecordId,
     bucket: usize,
+    /// The node kind and whether its identity hashes documentation fields.
+    identity: (&'static str, bool),
     fields: &'static [&'static str],
 }
 
@@ -42,6 +45,7 @@ const NODE_KINDS: [NodeKind; 4] = [
         reader: UserCodeHost::ReadLoaderDefinition,
         record: RecordId::DiscoveredLoaderFunction,
         bucket: 0,
+        identity: ("LOADER", false),
         fields: &[
             "depends_on",
             "destination",
@@ -57,6 +61,7 @@ const NODE_KINDS: [NodeKind; 4] = [
         reader: UserCodeHost::ReadTaskDefinition,
         record: RecordId::DiscoveredTaskFunction,
         bucket: 1,
+        identity: ("TASK", true),
         fields: &[
             "depends_on",
             "tags",
@@ -70,6 +75,7 @@ const NODE_KINDS: [NodeKind; 4] = [
         reader: UserCodeHost::ReadAssetDefinition,
         record: RecordId::DiscoveredAssetFunction,
         bucket: 2,
+        identity: ("ASSET", true),
         fields: &[
             "depends_on",
             "tags",
@@ -85,6 +91,7 @@ const NODE_KINDS: [NodeKind; 4] = [
         reader: UserCodeHost::ReadCheckDefinition,
         record: RecordId::DiscoveredCheckFunction,
         bucket: 3,
+        identity: ("CHECK", true),
         fields: &[
             "depends_on",
             "severity",
@@ -131,6 +138,14 @@ impl<'py> Buckets<'py> {
                 pairs.push((field, read.getattr(*field)?));
             }
             pairs.push(("provider_usages", provider_usages(function, providers)?));
+            let get = |name: &str| -> PyResult<Bound<'py, PyAny>> {
+                match pairs.iter().find(|(field, _)| *field == name) {
+                    Some((_, value)) => Ok(value.clone()),
+                    None => Ok(py.None().into_bound(py)),
+                }
+            };
+            let identity: Bound<'py, PyAny> = node_identity(py, kind.identity, &get)?;
+            pairs.push(("identity", identity));
             self.nodes[kind.bucket].push(discovered(py, kind.record, &pairs)?);
             return Ok(true);
         }

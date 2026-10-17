@@ -142,7 +142,7 @@ fn split_python<'py>(
 /// Move unit-test selectors out of resource selectors, or reject them for this command.
 #[pyfunction]
 #[pyo3(signature = (*, select, exclude, discovered_inputs, accepts_unit_tests))]
-fn split_project_unit_test_selectors<'py>(
+pub(crate) fn split_project_unit_test_selectors<'py>(
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
     discovered_inputs: &Bound<'py, PyAny>,

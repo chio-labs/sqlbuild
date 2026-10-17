@@ -1,13 +1,13 @@
 //! Loader dependency mapping and synthetic source boundary construction.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::contracts::spec_resolution::loader_parts;
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::views::edge_dict;
 use crate::bindings::_helpers::planner_scope::values::{
     dependency_names, edges, keys, loader_graph, loader_names, project_graph,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
@@ -42,19 +42,13 @@ pub(crate) fn loader_to_source_entry<'py>(
             .into_pyobject(py)?
             .into_any();
     }
-    let parts = call_with(
-        &registry::native(py, NativeAttr::LoaderDestinationPartsFunction)?,
-        &[
-            ("destination", destination),
-            (
-                "default_database",
-                native_field(project, "effective_target_database")?,
-            ),
-            (
-                "default_schema",
-                native_field(project, "effective_target_schema")?,
-            ),
-        ],
+    let parts = loader_parts(
+        py,
+        &destination.extract::<String>()?,
+        (
+            Some(native_field(project, "effective_target_database")?),
+            Some(native_field(project, "effective_target_schema")?),
+        ),
     )?;
     let kwargs = PyDict::new(py);
     kwargs.set_item("name", &name)?;

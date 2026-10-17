@@ -15,12 +15,13 @@ use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const SELECTION_CODE: &str = "S007";
 
 /// The adapter, the selected files when a selector scopes the run, and the discovered inputs.
@@ -171,7 +172,7 @@ fn model_paths(
         ],
     )?;
     let model_type: Bound<'_, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let mut names: BTreeSet<String> = BTreeSet::new();
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
@@ -334,13 +335,16 @@ pub(crate) fn resolve_lint_inputs<'py>(
         return path_scoped_inputs(project_dir, &directory, paths);
     }
     let disabled: Bound<'py, PyAny> = PyBool::new(py, false).to_owned().into_any();
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[
-            ("project_dir", project_dir.clone()),
-            ("sql_analysis_enabled_override", disabled.clone()),
-            ("extract_output_column_locations", disabled),
-        ],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_dir", project_dir.clone()),
+                ("sql_analysis_enabled_override", disabled.clone()),
+                ("extract_output_column_locations", disabled),
+            ],
+        )?),
     )?;
     call_with(
         &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,

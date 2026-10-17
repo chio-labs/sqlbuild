@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::{pyclass, pymethods};
 use sqlbuild_analysis::assembly::project::types::ObjectKey;
 use sqlbuild_analysis::graph::errors::SelectorError;
@@ -20,6 +21,7 @@ use sqlbuild_analysis::graph::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::graph::views::lineage_graph_views;
 
 /// `(key, deps, tags, model folder)`.
 pub(crate) type ResourceRow = (ObjectKey, Vec<ObjectKey>, Vec<String>, Option<String>);
@@ -43,6 +45,14 @@ type KeysOutcome = (Option<Vec<ObjectKey>>, Option<FailureRow>);
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct NativeProjectGraph {
     graph: ProjectGraph,
+}
+
+/// Static compiled project graph held natively; dict views are built only when read.
+#[pyclass(name = "ProjectGraph", module = "sqlbuild._native", frozen)]
+pub(crate) struct CompiledProjectGraph {
+    project: Py<PyAny>,
+    native: Py<NativeProjectGraph>,
+    views: PyOnceLock<Py<PyAny>>,
 }
 
 fn dependency_edges(key: &ObjectKey, deps: &[ObjectKey]) -> Vec<(ObjectKey, ObjectKey)> {
@@ -69,6 +79,85 @@ impl NativeProjectGraph {
     /// Wrap a graph another native stage built, such as project assembly.
     pub(crate) fn new(graph: ProjectGraph) -> Self {
         Self { graph }
+    }
+}
+
+impl CompiledProjectGraph {
+    /// The graph of `project` over its native lineage graph.
+    pub(crate) fn new(project: Py<PyAny>, native: Py<NativeProjectGraph>) -> Self {
+        Self {
+            project,
+            native,
+            views: PyOnceLock::new(),
+        }
+    }
+
+    /// The compiled project this graph indexes.
+    pub(crate) fn project<'py>(&self, py: Python<'py>) -> &Bound<'py, PyAny> {
+        self.project.bind(py)
+    }
+
+    /// The native lineage graph.
+    pub(crate) fn native<'py>(&self, py: Python<'py>) -> &Bound<'py, NativeProjectGraph> {
+        self.native.bind(py)
+    }
+
+    fn view(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyAny>> {
+        Ok(self.lineage_views(py)?.bind(py).getattr(name)?.unbind())
+    }
+}
+
+#[pymethods]
+impl CompiledProjectGraph {
+    #[new]
+    #[pyo3(signature = (*, project, native))]
+    fn py_new(project: Py<PyAny>, native: Py<NativeProjectGraph>) -> Self {
+        Self::new(project, native)
+    }
+
+    #[getter(project)]
+    fn project_attribute(&self, py: Python<'_>) -> Py<PyAny> {
+        self.project.clone_ref(py)
+    }
+
+    #[getter(native)]
+    fn native_attribute(&self, py: Python<'_>) -> Py<NativeProjectGraph> {
+        self.native.clone_ref(py)
+    }
+
+    /// Lineage edges and selector indexes, converted once.
+    #[getter]
+    fn lineage_views(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.views
+            .get_or_try_init(py, || {
+                Ok(lineage_graph_views(py, self.native.bind(py).borrow())?.unbind())
+            })
+            .map(|views| views.clone_ref(py))
+    }
+
+    #[getter]
+    fn upstream_deps(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.view(py, "upstream_deps")
+    }
+
+    #[getter]
+    fn downstream_deps(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.view(py, "downstream_deps")
+    }
+
+    #[getter]
+    fn tag_index(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.view(py, "tag_index")
+    }
+
+    #[getter]
+    fn path_index(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.view(py, "path_index")
+    }
+
+    #[getter]
+    fn all_keys(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.view(py, "all_keys")
     }
 }
 
@@ -220,5 +309,6 @@ impl NativeProjectGraph {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_class::<NativeProjectGraph>()
+    module.add_class::<NativeProjectGraph>()?;
+    module.add_class::<CompiledProjectGraph>()
 }

@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 
 const TABLE_FUNCTION_TYPE: &str = "table_fn";
 const SCALAR_FUNCTION_TYPE: &str = "udf";
@@ -424,6 +425,25 @@ impl NativeCompiledFunction {
         Self::defaulted(owner, index, None)
     }
 
+    /// The function's project graph row: its key, the resources it reads and its tags.
+    pub(crate) fn graph_row(&self, py: Python<'_>) -> PyResult<ResourceRow> {
+        read_function(&self.owner, self.index, py, |function, _| {
+            let deps: &[ObjectKeyRow] = function
+                .deps
+                .as_deref()
+                .ok_or_else(|| PyRuntimeError::new_err(NOT_ASSEMBLED))?;
+            Ok((
+                (
+                    function.attached.node_type().to_owned(),
+                    function.attached.name.clone(),
+                ),
+                deps.to_vec(),
+                function.attached.tags.clone(),
+                None,
+            ))
+        })
+    }
+
     fn defaulted(
         owner: Py<NativeCompiledProject>,
         index: usize,
@@ -535,7 +555,7 @@ function_getters!(NativeCompiledFunction, {
     }
 
     /// This function with target defaults; a non-inheriting Python function is name-qualified.
-    fn with_target_defaults(
+    pub(crate) fn with_target_defaults(
         &self,
         py: Python<'_>,
         defaults: (Option<String>, Option<String>),

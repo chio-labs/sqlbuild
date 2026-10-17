@@ -8,6 +8,7 @@ from sqlbuild._native import (
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     FunctionPlanEntry,
     MaterializationType,
@@ -22,7 +23,6 @@ from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 
 

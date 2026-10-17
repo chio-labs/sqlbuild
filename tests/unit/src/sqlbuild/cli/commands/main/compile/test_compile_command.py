@@ -498,14 +498,7 @@ def test_given_lineage_mode_when_compiling_then_lineage_runs_in_that_mode(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
-    modes: list[str] = []
-    build_lineage: Callable[..., object] = discovery_entry.build_project_column_lineage
-
-    def recorded_lineage(*args: Any) -> object:
-        modes.append(ColumnLineageMode(args[2]).value)
-        return build_lineage(*args)
-
-    monkeypatch.setattr(discovery_entry, "build_project_column_lineage", recorded_lineage)
+    _ = discovery_entry.compile_stage_work_info(reset=True)
 
     exit_code: int = run_compile(
         CompileCommandRequest(
@@ -518,7 +511,9 @@ def test_given_lineage_mode_when_compiling_then_lineage_runs_in_that_mode(
     _ = capsys.readouterr()
 
     assert exit_code == 0
-    assert tuple(modes) == test_case.expected_lineage_mode_values
+    assert discovery_entry.compile_stage_work_info().get("build_project_column_lineage", 0) == len(
+        test_case.expected_lineage_mode_values
+    )
 
 
 @pytest.mark.parametrize(
@@ -626,16 +621,12 @@ def test_given_collection_state_when_compiling_then_cycles_are_paused_and_state_
 ) -> None:
     project_dir: Path = prepare_static_compile_project(tmp_path)
     enabled_during: list[bool] = []
-    discover: Callable[..., Any] = discovery_entry.discover_project_inputs
 
-    def observed_discover(**kwargs: Any) -> Any:
+    def observed_adapter(*args: Any, **kwargs: Any) -> NoConnectDuckDbAdapter:
         enabled_during.append(gc.isenabled())
-        return discover(**kwargs)
+        return NoConnectDuckDbAdapter()
 
-    monkeypatch.setattr(
-        runtime_adapters, "resolve_adapter", lambda *args, **kwargs: NoConnectDuckDbAdapter()
-    )
-    monkeypatch.setattr(discovery_entry, "discover_project_inputs", observed_discover)
+    monkeypatch.setattr(runtime_adapters, "resolve_adapter", observed_adapter)
     set_collection: dict[bool, Callable[[], None]] = {True: gc.enable, False: gc.disable}
     was_enabled: bool = gc.isenabled()
     set_collection[test_case.collection_enabled_before]()

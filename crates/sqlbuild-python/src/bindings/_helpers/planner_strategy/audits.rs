@@ -28,7 +28,7 @@ fn object_key<'py>(py: Python<'py>, kind: &str, name: &str) -> PyResult<Bound<'p
         &[
             (
                 "resource_type",
-                imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.call1((kind,))?,
+                registry::class(py, RecordId::CompiledResourceType)?.call1((kind,))?,
             ),
             ("name", PyString::new(py, name).into_any()),
         ],

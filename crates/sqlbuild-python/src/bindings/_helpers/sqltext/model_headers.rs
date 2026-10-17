@@ -7,14 +7,17 @@ use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::sqltext::authored_values::optional_authored_value_to_python;
 use crate::bindings::types::CompilerDetach;
 
-type ParsedModelHeader = (
+pub(crate) type ParsedModelHeader = (
     Option<Py<PyAny>>,
     Option<Vec<(String, usize, usize)>>,
     Option<String>,
 );
 
 #[pyfunction]
-fn parse_model_headers(py: Python<'_>, headers: Vec<String>) -> PyResult<Vec<ParsedModelHeader>> {
+pub(crate) fn parse_model_headers(
+    py: Python<'_>,
+    headers: Vec<String>,
+) -> PyResult<Vec<ParsedModelHeader>> {
     let parsed = py
         .compiler_detach(|| {
             sqlbuild_sqltext::compiler::main::model_header_parsing::parse_batch(&headers)
@@ -72,7 +75,10 @@ pub(crate) fn location_rows(
 
 /// Simple top-level SELECT output names and their authored locations.
 #[pyfunction]
-fn model_output_columns(contents: &str, implicit_aliases: bool) -> PyResult<Vec<ColumnLocation>> {
+pub(crate) fn model_output_columns(
+    contents: &str,
+    implicit_aliases: bool,
+) -> PyResult<Vec<ColumnLocation>> {
     compiler_guard(|| {
         Ok(location_rows(
             sqlbuild_sqltext::compiler::main::model_output_columns::model_output_columns(

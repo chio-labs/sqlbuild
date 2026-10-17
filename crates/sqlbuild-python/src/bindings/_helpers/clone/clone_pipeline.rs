@@ -5,7 +5,9 @@ use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -39,30 +41,33 @@ fn compiled_environment<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_name.py();
     let options: &Bound<'py, PyAny> = &pipeline.options;
-    call_with(
-        &registry::native(py, NativeAttr::BuildCompiledProject)?,
-        &[
-            ("discovered_inputs", pipeline.discovered.clone()),
-            ("adapter", pipeline.adapter.clone()),
-            ("selected_target", target_name.clone()),
-            (
-                "resolved_connection",
-                native_field(&pipeline.connection, "config")?,
-            ),
-            (
-                "no_sql_validation",
-                native_field(options, "no_sql_validation")?,
-            ),
-            (
-                "analysis_selection",
-                call_with(
-                    &registry::class(py, RecordId::CompileAnalysisSelection)?,
-                    &[("no_cache", native_field(options, "no_cache")?)],
-                )?,
-            ),
-            ("cli_vars", native_field(options, "cli_vars")?),
-            ("external_sql_reference_resolver", pipeline.resolver.clone()),
-        ],
+    build_compiled_project(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", pipeline.discovered.clone()),
+                ("adapter", pipeline.adapter.clone()),
+                ("selected_target", target_name.clone()),
+                (
+                    "resolved_connection",
+                    native_field(&pipeline.connection, "config")?,
+                ),
+                (
+                    "no_sql_validation",
+                    native_field(options, "no_sql_validation")?,
+                ),
+                (
+                    "analysis_selection",
+                    call_with(
+                        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+                        &[("no_cache", native_field(options, "no_cache")?)],
+                    )?,
+                ),
+                ("cli_vars", native_field(options, "cli_vars")?),
+                ("external_sql_reference_resolver", pipeline.resolver.clone()),
+            ],
+        )?),
     )
 }
 

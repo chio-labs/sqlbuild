@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     MaterializationType,
     ModelPlanEntry,
     PlanAction,
@@ -17,7 +18,6 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.models import RetentionRequest
 from sqlbuild.adapter.contract.types import RetentionScope
-from sqlbuild.compiler.compile.types import CompiledResourceType
 
 
 def build_snapshot_full_refresh_entry(

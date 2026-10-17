@@ -4,6 +4,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyBool;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -73,9 +75,9 @@ fn invocation_context<'py>(
     } else {
         requested
     };
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     let adapter_context: Bound<'py, PyAny> = resolve_adapter_connection_context(
         &discovered,

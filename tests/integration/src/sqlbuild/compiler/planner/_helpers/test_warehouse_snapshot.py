@@ -9,6 +9,7 @@ import pytest
 from sqlbuild._native import (
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CursorOverrides,
     CursorSnapshotScope,
     Fingerprint,
@@ -29,7 +30,6 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.compiler.compile.types import (
     CompiledModelView,
     CompiledProjectView,
-    CompiledResourceType,
 )
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
     GatherCursorSnapshotTestCase,

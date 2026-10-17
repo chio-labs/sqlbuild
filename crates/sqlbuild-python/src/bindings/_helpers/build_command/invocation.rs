@@ -10,6 +10,8 @@ use sqlbuild_core::build_command::models::DurationLimit;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -105,12 +107,15 @@ pub(crate) fn resolve_build_context<'py>(
     let project_dir: Bound<'py, PyAny> = or_none(native_field(request, "project_dir")?, || {
         imported(py, "pathlib", "Path")?.call_method0("cwd")
     })?;
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[
-            ("project_dir", project_dir.clone()),
-            ("extract_output_column_locations", boolean(py, false)),
-        ],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_dir", project_dir.clone()),
+                ("extract_output_column_locations", boolean(py, false)),
+            ],
+        )?),
     )?;
     let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
     let target_name: Bound<'py, PyAny> = call_with(

@@ -13,6 +13,7 @@ from sqlbuild._native import (
     BackfillResult,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     CompileModelInput,
     CompileProjectInputs,
@@ -39,7 +40,7 @@ from sqlbuild._native import (
     extract_sql_references,
     transitive_closure,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledProjectView
 
 _GENERIC_SQL_SYNTAX: SqlLexicalSyntax = SqlLexicalSyntax()
 

@@ -16,6 +16,8 @@ use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -27,8 +29,6 @@ use crate::bindings::_helpers::format_command::selection::{LintInputs, resolve_l
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
 const DEFAULT_DIALECT: &str = "generic";
@@ -117,9 +117,9 @@ fn resolve_inputs<'py>(
         }
     }
     if fix {
-        resolved.discovered = Some(call_with(
-            &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-            &[("project_dir", project_dir.clone())],
+        resolved.discovered = Some(discover_project_inputs(
+            py,
+            Some(keywords(py, &[("project_dir", project_dir.clone())])?),
         )?);
     }
     Ok(resolved)

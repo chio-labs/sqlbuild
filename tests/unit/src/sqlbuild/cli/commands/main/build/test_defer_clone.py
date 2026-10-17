@@ -8,11 +8,12 @@ from sqlbuild._native import (
     CompiledModel,
     CompiledObjectKey,
     CompiledRelationLocation,
+    CompiledResourceType,
     CompileModelConfig,
     PlannerScope,
     resolve_defer_clone_selection,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.cli.commands.main.build._test_types import (
     DeferCloneBoundaryTestCase,
     DeferCloneModelCountTestCase,

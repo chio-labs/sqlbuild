@@ -20,6 +20,9 @@ use sqlbuild_core::contract_command::models::{
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
@@ -80,19 +83,22 @@ fn select_resources<'py>(
         &registry::class(py, RecordId::CompileAnalysisSelection)?,
         &[("no_cache", PyBool::new(py, true).to_owned().into_any())],
     )?;
-    let project: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildCompiledProject)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("adapter", native_field(context, "adapter")?),
-            ("selected_target", native_field(request, "from_target")?),
-            ("cli_vars", native_field(request, "cli_vars")?),
-            (
-                "resolved_connection",
-                native_field(context, "connection_config")?,
-            ),
-            ("analysis_selection", analysis),
-        ],
+    let project: Bound<'py, PyAny> = build_compiled_project(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("adapter", native_field(context, "adapter")?),
+                ("selected_target", native_field(request, "from_target")?),
+                ("cli_vars", native_field(request, "cli_vars")?),
+                (
+                    "resolved_connection",
+                    native_field(context, "connection_config")?,
+                ),
+                ("analysis_selection", analysis),
+            ],
+        )?),
     )?;
     let graph: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::BuildProjectGraphFromCompiledProject)?,
@@ -366,9 +372,9 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     } else {
         imported(py, "pathlib", "Path")?.call_method0("cwd")?
     };
-    let discovered: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered: Bound<'_, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     call_with(
         &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,

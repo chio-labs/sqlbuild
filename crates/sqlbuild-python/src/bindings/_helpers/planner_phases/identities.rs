@@ -1,33 +1,60 @@
 //! Expected version identities and stale-warning change detection.
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::planner_changes::detect::scope_model_changes;
+use crate::bindings::_helpers::planner_identity::identities::direct_model_version_identities;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;
+use crate::bindings::_helpers::planner_phases::models::IdentityWork;
 use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, replace};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use pyo3::IntoPyObject;
+use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
+use pyo3::sync::PyOnceLock;
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyDict, PyDictMethods};
-use std::collections::HashSet;
+use pyo3::{Py, PyRefMut, Python};
+use std::collections::{BTreeMap, HashSet};
+
+static IDENTITY_WORK: PyOnceLock<Py<IdentityWork>> = PyOnceLock::new();
+
+fn identity_work(py: Python<'_>) -> PyResult<PyRefMut<'_, IdentityWork>> {
+    Ok(IDENTITY_WORK
+        .get_or_try_init(py, || Py::new(py, IdentityWork::default()))?
+        .bind(py)
+        .borrow_mut())
+}
+
+/// Report identity builds and per-model stale-warning change detections, optionally resetting them.
+#[pyfunction]
+#[pyo3(signature = (*, reset = false))]
+pub(crate) fn planner_identity_work_info(
+    py: Python<'_>,
+    reset: bool,
+) -> PyResult<(u64, BTreeMap<String, u64>)> {
+    let mut work = identity_work(py)?;
+    let info = (work.identity_builds, work.stale_detections.clone());
+    if reset {
+        *work = IdentityWork::default();
+    }
+    Ok(info)
+}
 
 fn version_identities<'py>(
     project: &Bound<'py, PyAny>,
     scope: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    native(
-        project.py(),
-        NativeAttr::BuildDirectModelVersionIdentities,
-        &[
-            ("functions", native_field(project, "functions")?),
-            ("seeds", native_field(project, "seeds")?),
-            ("scope", scope),
-            ("hook_functions", native_field(project, "hook_functions")?),
-            ("dialect", native_field(project, "sql_analysis_dialect")?),
-        ],
+    identity_work(project.py())?.identity_builds += 1;
+    direct_model_version_identities(
+        (&native_field(project, "functions")?, &scope),
+        native_field(project, "sql_analysis_dialect")?.extract()?,
+        (
+            &native_field(project, "seeds")?,
+            &project.py().None().into_bound(project.py()),
+            &native_field(project, "hook_functions")?,
+        ),
     )
 }
 
@@ -153,32 +180,29 @@ pub(crate) fn detect_stale_warning_changes<'py>(
     let stale_identities = class_field(identities, |i: &PlannerIdentityContext| {
         &i.stale_warning_identities
     })?;
-    let remaining_changes = native(
-        py,
-        NativeAttr::DetectModelChangesInScope,
-        &[
-            ("project", project.clone()),
-            (
-                "scope",
-                replace(
-                    &stale_scope,
-                    &[("selected_keys", frozenset(py, &remaining)?)],
-                )?,
-            ),
-            ("snapshot", snapshot.clone()),
-            (
-                "query_change_tracking",
-                true.into_pyobject(py)?.to_owned().into_any(),
-            ),
-            (
-                "expected_version_hashes",
-                native_field(&stale_identities, "model_version_hashes")?,
-            ),
-            (
-                "expected_metadata_jsons",
-                native_field(&stale_identities, "model_metadata_jsons")?,
-            ),
-        ],
+    {
+        let mut work = identity_work(py)?;
+        for key in &remaining {
+            *work
+                .stale_detections
+                .entry(native_field(key, "name")?.extract()?)
+                .or_default() += 1;
+        }
+    }
+    let remaining_changes = scope_model_changes(
+        (
+            project,
+            &replace(
+                &stale_scope,
+                &[("selected_keys", frozenset(py, &remaining)?)],
+            )?,
+            snapshot,
+        ),
+        Some(true),
+        (
+            native_field(&stale_identities, "model_version_hashes")?,
+            native_field(&stale_identities, "model_metadata_jsons")?,
+        ),
     )?;
     let models = PyDict::new(py);
     for (name, change) in execution_changes
@@ -190,7 +214,7 @@ pub(crate) fn detect_stale_warning_changes<'py>(
             models.set_item(name, change)?;
         }
     }
-    for (name, change) in remaining_changes.downcast::<PyDict>()?.iter() {
+    for (name, change) in remaining_changes.iter() {
         models.set_item(name, change)?;
     }
     native(

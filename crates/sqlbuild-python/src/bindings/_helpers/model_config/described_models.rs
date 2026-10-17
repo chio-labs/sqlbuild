@@ -1,8 +1,7 @@
 //! Which models `[defaults]`, `[path_defaults]` or a reusable model schema describe.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyString};
-use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_model_config::path_defaults::main::select_path_default::select_path_default;
 use sqlbuild_model_config::path_defaults::models::PathDefaultChoice;
 
@@ -24,8 +23,7 @@ fn non_empty_text(value: Option<Bound<'_, PyAny>>) -> PyResult<bool> {
 }
 
 /// The file path of each model whose layered config or model schema gives it a description.
-#[pyfunction]
-fn externally_described_models<'py>(
+pub(crate) fn externally_described_models<'py>(
     inputs: Bound<'py, PyAny>,
     model_schemas: Bound<'py, PyDict>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
@@ -73,8 +71,4 @@ fn externally_described_models<'py>(
         }
     }
     Ok(described)
-}
-
-pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(externally_described_models, module)?)
 }

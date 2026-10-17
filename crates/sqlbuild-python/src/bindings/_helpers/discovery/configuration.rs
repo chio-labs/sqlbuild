@@ -1,12 +1,15 @@
 //! Project inputs holding only the project and local configuration.
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, PyAny, PyResult, Python};
 use pyo3::types::PyString;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::contracts::project_config::{
+    load_local_config_file, load_project_config_file,
+};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 /// `DiscoveredProjectInputs` with the loaded configuration, inside the project discovery lifecycle.
@@ -31,12 +34,11 @@ pub(crate) fn discover_project_configuration<'py>(
                 ("project_dir", project_dir.clone()),
                 (
                     "project_config",
-                    registry::native(py, NativeAttr::LoadProjectConfigFile)?
-                        .call1((project_dir,))?,
+                    load_project_config_file(py, project_dir)?.into_bound(py),
                 ),
                 (
                     "local_config",
-                    registry::native(py, NativeAttr::LoadLocalConfigFile)?.call1((project_dir,))?,
+                    load_local_config_file(py, project_dir)?.into_bound(py),
                 ),
             ],
         )

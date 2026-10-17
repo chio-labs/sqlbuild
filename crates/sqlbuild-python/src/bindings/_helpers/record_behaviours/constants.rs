@@ -17,8 +17,7 @@ use crate::bindings::_helpers::record_behaviours::cursors::{
     snapshot_watermarks_available,
 };
 use crate::bindings::_helpers::record_behaviours::discovery::{
-    constant_logical_type, constant_scalar_type, graph_all_keys, graph_downstream_deps,
-    graph_lineage_views, graph_path_index, graph_tag_index, graph_upstream_deps,
+    constant_logical_type, constant_scalar_type,
 };
 use crate::bindings::_helpers::record_behaviours::durations::{
     duration_add_to, duration_fixed_seconds, duration_has_calendar_component,
@@ -212,11 +211,6 @@ pub(crate) const BEHAVIOUR_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
     ),
     ("ConstantDeclaration", "logical_type", constant_logical_type),
     ("ConstantDeclaration", "scalar_type", constant_scalar_type),
-    ("ProjectGraph", "upstream_deps", graph_upstream_deps),
-    ("ProjectGraph", "downstream_deps", graph_downstream_deps),
-    ("ProjectGraph", "tag_index", graph_tag_index),
-    ("ProjectGraph", "path_index", graph_path_index),
-    ("ProjectGraph", "all_keys", graph_all_keys),
     ("CompilerDiagnostic", "is_error", diagnostic_is_error),
     (
         "ModelInputBuildContext",
@@ -267,7 +261,6 @@ pub(crate) const BEHAVIOUR_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
 ];
 /// Computed attributes of compiler shapes that a record computes once and keeps.
 pub(crate) const BEHAVIOUR_CACHED_PROPERTIES: &[(&str, &str, ClassProperty)] = &[
-    ("ProjectGraph", "lineage_views", graph_lineage_views),
     ("LoadedMacro", "injects_context", macro_injects_context),
     ("CompactLineageFacts", "facts", facts_projected),
     ("CompiledProject", "lineage_graph", project_lineage_graph),

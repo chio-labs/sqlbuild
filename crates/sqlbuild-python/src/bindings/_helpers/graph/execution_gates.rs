@@ -12,7 +12,6 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 const PATHLIB_MODULE: &str = "pathlib";
 /// The model config keys whose entries are hooks, in lifecycle order.
 const MODEL_HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
@@ -123,9 +122,7 @@ pub(crate) fn sql_ref_key<'py>(
     py: Python<'py>,
     reference: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let resource_type: Bound<'py, PyAny> = py
-        .import(COMPILE_TYPES_MODULE)?
-        .getattr("CompiledResourceType")?
+    let resource_type: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledResourceType)?
         .call1((native_field(reference, "kind")?.getattr("value")?,))?;
     keyword_call(
         &registry::class(py, RecordId::CompiledObjectKey)?,

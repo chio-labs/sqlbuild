@@ -711,7 +711,6 @@ _TARGETS: dict[str, tuple[str, str]] = {
     "AuditSeverity": ("sqlbuild.compiler.auditing.types", "AuditSeverity"),
     "ThresholdOperator": ("sqlbuild.compiler.auditing.types", "ThresholdOperator"),
     "AttachedAuditTargetKind": ("sqlbuild.compiler.compile.types", "AttachedAuditTargetKind"),
-    "CompiledResourceType": ("sqlbuild.compiler.compile.types", "CompiledResourceType"),
     "FunctionLanguage": ("sqlbuild.compiler.compile.types", "FunctionLanguage"),
     "SqlTestMode": ("sqlbuild.compiler.compile.types", "SqlTestMode"),
     "CursorAlgebraError": ("sqlbuild.cursor_algebra.exceptions", "CursorAlgebraError"),

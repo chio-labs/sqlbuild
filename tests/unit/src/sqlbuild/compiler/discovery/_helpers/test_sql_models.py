@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-import sqlbuild._native as native_module
 from sqlbuild._native import (
     AuthoredSqlSet,
     AuthoredSqlValueCall,
@@ -21,7 +20,6 @@ from tests.unit.src.sqlbuild.compiler.discovery._helpers._test_types import (
     DeferredModelOutputLocationTestCase,
     ExpectedBooleanTestCase,
     ExpectedCountTestCase,
-    ExpectedMessageTestCase,
     ModelHeaderColumnLocationTestCase,
     ModelOutputColumnLocationTestCase,
     ParseModelSqlErrorTestCase,
@@ -67,29 +65,6 @@ def test_given_unique_model_headers_when_discovering_then_header_values_and_loca
     assert discovered[0].header_column_locations["café"] == SourceLocation(
         path=Path("models/first.sql"), line=1, column=36, end_line=1, end_column=40
     )
-
-
-@pytest.mark.parametrize(
-    "test_case",
-    [
-        ExpectedMessageTestCase(
-            description="native worker error remains authoritative",
-            expected_message="MODEL header worker pool construction failed",
-        )
-    ],
-    ids=lambda case: case.description,
-)
-def test_given_native_pool_construction_error_when_preparing_headers_then_error_is_authoritative(
-    monkeypatch: pytest.MonkeyPatch,
-    test_case: ExpectedMessageTestCase,
-) -> None:
-    def rejecting_tokenize(_headers: list[str]) -> object:
-        raise ValueError("MODEL header worker pool construction failed")
-
-    monkeypatch.setattr(native_module, "parse_model_headers", rejecting_tokenize)
-
-    with pytest.raises(ValueError, match=test_case.expected_message):
-        native_module.prepare_model_header_tokens(["pool_error_marker value"])
 
 
 @pytest.mark.parametrize(

@@ -9,6 +9,8 @@ use pyo3::wrap_pyfunction;
 use crate::bindings::_helpers::build_command::support::keyword_relay;
 use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -64,12 +66,15 @@ fn resolve_invocation<'py>(request: &Bound<'py, PyAny>) -> PyResult<PlanInvocati
     } else {
         requested_dir
     };
-    let discovered: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[
-            ("project_dir", project_dir.clone()),
-            ("extract_output_column_locations", flag(py, false)),
-        ],
+    let discovered: Bound<'py, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_dir", project_dir.clone()),
+                ("extract_output_column_locations", flag(py, false)),
+            ],
+        )?),
     )?;
     let preview: Bound<'py, PyDict> = PyDict::new(py);
     preview.set_item("discovered_inputs", &discovered)?;

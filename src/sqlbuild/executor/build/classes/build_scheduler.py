@@ -18,6 +18,7 @@ from typing import Any, cast
 from sqlbuild._native import (
     AuditPlanEntry,
     CompiledObjectKey,
+    CompiledResourceType,
     CostContext,
     DiscoveredLoaderFunction,
     FunctionPlanEntry,
@@ -38,7 +39,6 @@ from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecord
 from sqlbuild.adapter.contract.models import RelationInfo
 from sqlbuild.adapter.contract.types import TablePromotionMode
 from sqlbuild.compiler.auditing.types import AuditOutcome
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.cost.models import StatementExecutionTelemetry
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.diagnostics.main.log_debug_event import log_debug_event

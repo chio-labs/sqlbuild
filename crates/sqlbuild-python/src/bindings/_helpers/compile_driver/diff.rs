@@ -14,14 +14,12 @@ use sqlbuild_analysis::diff_selection::models::DiffGraph;
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, imported, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::graph::views::project_lineage_views;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
-
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 
 /// Indexes of the `CompiledObjectKey`s a diff graph names, assigned on first sight.
 struct KeyIndexes<'py> {
@@ -67,15 +65,16 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
     for attribute in ["models", "sources", "seeds"] {
         for resource in project.getattr(attribute)?.try_iter()? {
             let resource: Bound<'py, PyAny> = resource?;
-            let name: String = resource.getattr("name")?.extract()?;
+            let name: String = native_field(&resource, "name")?.extract()?;
             graph
                 .names
-                .push((name, keys.index(&resource.getattr("key")?)?));
+                .push((name, keys.index(&native_field(&resource, "key")?)?));
         }
     }
-    let upstream: Vec<(usize, Vec<usize>)> = adjacency(&lineage.getattr("upstream_deps")?, keys)?;
+    let upstream: Vec<(usize, Vec<usize>)> =
+        adjacency(&native_field(&lineage, "upstream_deps")?, keys)?;
     let downstream: Vec<(usize, Vec<usize>)> =
-        adjacency(&lineage.getattr("downstream_deps")?, keys)?;
+        adjacency(&native_field(&lineage, "downstream_deps")?, keys)?;
     for item in lineage
         .getattr("tag_index")?
         .call_method0("items")?
@@ -163,16 +162,16 @@ fn diff_model_names<'py>(
     let selected: HashSet<usize> = resolve_diff_selection(&graph, (&select, &exclude))
         .map_err(|error| selector_error(py, error))?;
     let model_type: Bound<'py, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let key: Bound<'py, PyAny> = model_reads::model_key(&model)?;
         let chosen: bool = match keys.indexes.get_item(&key)? {
             Some(index) => selected.contains(&index.extract::<usize>()?),
             None => false,
         };
-        if chosen && key.getattr("resource_type")?.eq(&model_type)? {
+        if chosen && native_field(&key, "resource_type")?.eq(&model_type)? {
             names.push(model_reads::name_object(&model)?);
         }
     }

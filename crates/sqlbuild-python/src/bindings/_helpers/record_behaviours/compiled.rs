@@ -4,14 +4,11 @@ use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::relation_keys::entry_relation_key_row;
 
-/// Module of the compiled resource type enum.
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 /// `CompilerDiagnostic` positions.
 const DIAGNOSTIC_PHASE_FIELD: usize = 0;
 const DIAGNOSTIC_SEVERITY_FIELD: usize = 1;
@@ -36,13 +33,6 @@ const TEST_BLOCK_INDEX_FIELD: usize = 10;
 const TEST_EXPLICIT_NAME_FIELD: usize = 11;
 const TEST_PARENT_NAME_FIELD: usize = 12;
 
-/// `class(value)`.
-fn coerce(py: Python<'_>, value: &Py<PyAny>, (module, class): (&str, &str)) -> PyResult<Py<PyAny>> {
-    Ok(imported(py, module, class)?
-        .call1((value.bind(py),))?
-        .unbind())
-}
-
 /// The native string enum `class(value)`.
 fn coerce_native(py: Python<'_>, value: &Py<PyAny>, class: RecordId) -> PyResult<Py<PyAny>> {
     Ok(registry::class(py, class)?
@@ -55,7 +45,7 @@ fn coerce_resource_type(py: Python<'_>, value: &Py<PyAny>) -> PyResult<Py<PyAny>
     if value.is_none(py) {
         return Ok(value.clone_ref(py));
     }
-    coerce(py, value, (COMPILE_TYPES_MODULE, "CompiledResourceType"))
+    coerce_native(py, value, RecordId::CompiledResourceType)
 }
 
 /// `CompilerDiagnostic`: enum fields coerced, and its location and path, line and column aligned.
@@ -124,11 +114,7 @@ pub(crate) fn finish_resource_typed(
     py: Python<'_>,
     mut values: Vec<Py<PyAny>>,
 ) -> PyResult<Vec<Py<PyAny>>> {
-    values[0] = coerce(
-        py,
-        &values[0],
-        (COMPILE_TYPES_MODULE, "CompiledResourceType"),
-    )?;
+    values[0] = coerce_native(py, &values[0], RecordId::CompiledResourceType)?;
     Ok(values)
 }
 

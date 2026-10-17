@@ -6,23 +6,21 @@ use pyo3::types::{PyDict, PyString};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::freshness::exception_types::{
+    SourceFreshnessInputError, SourceFreshnessObservationError,
+};
 use crate::bindings::_helpers::state_rows::timestamps::{date_time_typed, in_utc, offset_aware};
 
-pub(crate) const OBSERVATION_ERROR: NativeAttr = NativeAttr::SourceFreshnessObservationError;
-pub(crate) const INPUT_ERROR: NativeAttr = NativeAttr::SourceFreshnessInputError;
+pub(crate) const OBSERVATION_ERROR: fn(String) -> PyErr = SourceFreshnessObservationError::new_err;
+pub(crate) const INPUT_ERROR: fn(String) -> PyErr = SourceFreshnessInputError::new_err;
 
 /// The native error `class(message)` as a raisable error, with an optional `__cause__`.
 pub(crate) fn freshness_error(
     py: Python<'_>,
-    (class, message): (NativeAttr, &str),
+    (class, message): (fn(String) -> PyErr, &str),
     cause: Option<PyErr>,
 ) -> PyErr {
-    let error: PyErr = match registry::native(py, class).and_then(|class| class.call1((message,))) {
-        Ok(error) => PyErr::from_value(error),
-        Err(error) => return error,
-    };
+    let error: PyErr = class(message.to_owned());
     if let Some(cause) = cause {
         error.set_cause(py, Some(cause));
     }

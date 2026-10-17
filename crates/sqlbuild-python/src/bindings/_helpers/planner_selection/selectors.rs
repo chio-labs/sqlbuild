@@ -17,7 +17,7 @@ use sqlbuild_analysis::planner_selection::main::unit_test_selector_rejection::un
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::graph::keys::KeyCache;
-use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
 use crate::bindings::_helpers::graph::views::{GraphViewMappings, graph_from_view_mappings};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -148,8 +148,11 @@ pub(crate) fn select_project_graph<'py>(
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
-    let native: PyRef<'py, NativeProjectGraph> = native_field(graph, "native")?.extract()?;
-    resolved(native.graph(), (select, exclude))
+    let graph: &Bound<'py, CompiledProjectGraph> = graph.cast()?;
+    resolved(
+        graph.get().native(graph.py()).get().graph(),
+        (select, exclude),
+    )
 }
 
 /// Model, source, seed and function selectors resolved against compiled graph mappings.

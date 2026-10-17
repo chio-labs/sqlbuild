@@ -11,13 +11,13 @@ from sqlbuild._native import (
     BuildProgressCallbacks,
     ChainStep,
     CompiledObjectKey,
+    CompiledResourceType,
     NativeProgressProjector,
     PlanOutput,
     SqlTestPlanEntry,
     TerminalEventIndex,
     terminal_event_index_scope,
 )
-from sqlbuild.compiler.compile.types import CompiledResourceType
 from sqlbuild.executor.run.models import ModelExecutionResult
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult

@@ -9,7 +9,6 @@ use sqlbuild_analysis::planner_fixtures::main::{
 };
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::planner_strategy::constants::MODEL_REFERENCE_KIND;
 use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fixtures;
 use crate::bindings::_helpers::planner_strategy::fixture_sql::{
@@ -18,7 +17,9 @@ use crate::bindings::_helpers::planner_strategy::fixture_sql::{
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::sql_test_glue::constants::{COMPILE_TYPES, FIXTURE_PREFIXES};
+use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::sql_test_glue::constants::FIXTURE_PREFIXES;
 
 /// Report every statically provable fixture defect or return the completed fixture SQL groups.
 pub(super) fn validated_fixtures<'py>(
@@ -30,7 +31,7 @@ pub(super) fn validated_fixtures<'py>(
     let py = test.py();
     let (chain, [refs, sources, seeds, expected]) = request;
     let adapter = inputs.1;
-    let resource_types = imported(py, COMPILE_TYPES, "CompiledResourceType")?;
+    let resource_types = registry::class(py, RecordId::CompiledResourceType)?;
     let model = native_field(&resource_types, "MODEL")?;
     let kinds = [
         model.clone(),

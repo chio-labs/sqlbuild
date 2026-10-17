@@ -1,7 +1,7 @@
 //! Project assembly's inference profile, binding catalog, source shapes and model analysis.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
+use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
 
 use sqlbuild_analysis::assembly::analysis_session::main::native_dialect::native_dialect;
 
@@ -9,17 +9,26 @@ use crate::bindings::_helpers::analysis::binding_catalog::{BindingCatalog, ignor
 use crate::bindings::_helpers::analysis_session::model_analyses::{
     ModelAnalyses, ModelAnalysisRequest, analyze_models,
 };
+use crate::bindings::_helpers::analysis_session::stage_functions::expression_source_shapes;
 use crate::bindings::_helpers::compile_driver::analysis_cache::analysis_cache_context;
-use crate::bindings::_helpers::compile_driver::assembly::AssemblyRequest;
+use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
 use crate::bindings::_helpers::compile_driver::compile_timings::{
     record_compile_cpu_timing, record_compile_timing,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    EXPRESSION_SHAPES, MODEL_ANALYSIS, count_stage,
+};
 use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::project_assembly::declared_relations::{
+    DeclaredRelations, declared_relations,
+};
+use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 
 const GENERIC_DIALECT: &str = "generic";
 const UDF_PREFIX: &str = "__sqlbuild_udf_";
@@ -78,11 +87,17 @@ pub(crate) fn analysis_context<'py>(
             .getattr("sql_analysis")?,
         request.skip_column_inference.bind(py),
     )?;
-    let relations: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::DeclaredRelations)?.call1((inputs,))?;
-    let column_types: Bound<'py, PyAny> = relations.get_item(0)?;
-    let nullability: Bound<'py, PyAny> = relations.get_item(1)?;
-    let complete_schemas: Bound<'py, PyAny> = relations.get_item(2)?;
+    let (column_types, nullability, complete_schemas): DeclaredRelations<'py> =
+        declared_relations(inputs.clone())?;
+    let (column_types, nullability, complete_schemas): (
+        Bound<'py, PyAny>,
+        Bound<'py, PyAny>,
+        Bound<'py, PyAny>,
+    ) = (
+        column_types.into_any(),
+        nullability.into_any(),
+        complete_schemas.into_any(),
+    );
     let dynamic_families: Bound<'py, PyAny> = dynamic_families_by_table(inputs)?.into_any();
     let profile: Bound<'py, PyAny> =
         profile_with_catalog(inputs, request.inference_profile.bind(py), &column_types)?;
@@ -96,9 +111,9 @@ pub(crate) fn analysis_context<'py>(
         analyses: None,
     };
     if context.sql_analysis_enabled.is_truthy()? {
-        record_expression_shapes(inputs, &context)?;
+        record_expression_shapes(request, &context)?;
     }
-    let catalog: Bound<'py, PyAny> = context.profile.getattr("binding_catalog")?;
+    let catalog: Bound<'py, PyAny> = native_field(&context.profile, "binding_catalog")?;
     catalog
         .getattr("native")?
         .call_method1("update_relations", (&context.complete_schemas,))?;
@@ -115,7 +130,7 @@ fn dynamic_families_by_table<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<
     let enforced: Bound<'py, PyAny> =
         registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
     let families: Bound<'py, PyDict> = PyDict::new(py);
-    for model_input in inputs.getattr("model_inputs")?.try_iter()? {
+    for model_input in native_field(inputs, "model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
         let contract: Bound<'py, PyAny> = model_input
             .getattr("config")?
@@ -140,16 +155,10 @@ pub(crate) fn declared_names<'py>(
     column_types: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = inputs.py();
-    let functions: Bound<'py, PyAny> = inputs.getattr("sql_function_inputs")?;
-    let names: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::KnownFunctionNames)?.call1((functions.clone(),))?;
-    let types: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::KnownDeclaredTypes)?,
-        &[
-            ("functions", functions),
-            ("column_types", column_types.clone()),
-        ],
-    )?;
+    let functions: Bound<'py, PyAny> = native_field(inputs, "sql_function_inputs")?;
+    let names: Bound<'py, PyAny> = PyTuple::new(py, function_names(&functions)?)?.into_any();
+    let types: Bound<'py, PyAny> =
+        PyTuple::new(py, declared_types(&functions, column_types)?)?.into_any();
     Ok((names, types))
 }
 
@@ -168,10 +177,10 @@ fn profile_with_catalog<'py>(
     };
     let (known_functions, known_types): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
         declared_names(inputs, column_types)?;
-    let dialect: Bound<'py, PyAny> = profile.getattr("sql_analysis_dialect")?;
+    let dialect: Bound<'py, PyAny> = native_field(&profile, "sql_analysis_dialect")?;
     let ignore_case: Bound<'py, PyAny> = PyBool::new(
         py,
-        ignores_quoted_case(&inputs.getattr("effective_connection")?, &dialect)?,
+        ignores_quoted_case(&native_field(inputs, "effective_connection")?, &dialect)?,
     )
     .to_owned()
     .into_any();
@@ -200,7 +209,7 @@ fn profile_with_catalog<'py>(
             ],
         )?),
     )?;
-    let dialect: Bound<'py, PyAny> = profile.getattr("sql_analysis_dialect")?;
+    let dialect: Bound<'py, PyAny> = native_field(&profile, "sql_analysis_dialect")?;
     let dialect: String = if dialect.is_truthy()? {
         dialect.extract()?
     } else {
@@ -215,8 +224,8 @@ fn profile_with_catalog<'py>(
                 profile
                     .getattr("quoted_identifiers_ignore_case")?
                     .extract()?,
-                profile.getattr("semantic_known_functions")?.extract()?,
-                profile.getattr("semantic_known_types")?.extract()?,
+                native_field(&profile, "semantic_known_functions")?.extract()?,
+                native_field(&profile, "semantic_known_types")?.extract()?,
             ),
             PyDict::new(py).as_any(),
         )?,
@@ -235,19 +244,19 @@ fn function_return_types<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = inputs.py();
     let types: Bound<'py, PyDict> = PyDict::new(py);
-    types.call_method1("update", (profile.getattr("function_return_types")?,))?;
+    types.call_method1("update", (native_field(profile, "function_return_types")?,))?;
     let scalar: Bound<'py, PyDict> = PyDict::new(py);
-    for function in inputs.getattr("sql_function_inputs")?.try_iter()? {
+    for function in native_field(inputs, "sql_function_inputs")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        if function.getattr("return_columns")?.is_truthy()? {
+        if native_field(&function, "return_columns")?.is_truthy()? {
             continue;
         }
-        let name: Bound<'py, PyAny> = function.getattr("name")?.str()?.into_any();
+        let name: Bound<'py, PyAny> = native_field(&function, "name")?.str()?.into_any();
         let key: Bound<'py, PyAny> = PyString::new(py, UDF_PREFIX)
             .into_any()
             .add(name)?
             .call_method0("upper")?;
-        scalar.set_item(key, function.getattr("returns")?)?;
+        scalar.set_item(key, native_field(&function, "returns")?)?;
     }
     types.update(scalar.as_mapping())?;
     Ok(types)
@@ -255,13 +264,14 @@ fn function_return_types<'py>(
 
 /// Record each expression source's analysed shape as its declared relation.
 fn record_expression_shapes<'py>(
-    inputs: &Bound<'py, PyAny>,
+    request: &AssemblyRequest,
     context: &AnalysisContext<'py>,
 ) -> PyResult<()> {
-    let py: Python<'py> = inputs.py();
+    let py: Python<'py> = context.profile.py();
+    let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let mut sources: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
-    for source_input in inputs.getattr("source_inputs")?.try_iter()? {
+    for source_input in native_field(inputs, "source_inputs")?.try_iter()? {
         let source_input: Bound<'py, PyAny> = source_input?;
         let expression: Bound<'py, PyAny> = source_input
             .getattr("source_entry")?
@@ -271,15 +281,20 @@ fn record_expression_shapes<'py>(
             expressions.push(expression);
         }
     }
-    let shapes: Vec<Bound<'py, PyAny>> = call_with(
-        &registry::native(py, NativeAttr::InferNativeExpressionSourceShapes)?,
-        &[
-            ("expressions", PyTuple::new(py, expressions)?.into_any()),
-            ("profile", context.profile.clone()),
-        ],
-    )?
-    .try_iter()?
-    .collect::<PyResult<_>>()?;
+    let expressions: Bound<'py, PyAny> = PyTuple::new(py, expressions)?.into_any();
+    request.before_stage(AssemblyStage::ExpressionShapes, || {
+        keywords(
+            py,
+            &[
+                ("expressions", expressions.clone()),
+                ("profile", context.profile.clone()),
+            ],
+        )
+    })?;
+    count_stage(py, EXPRESSION_SHAPES, 1)?;
+    let shapes: Vec<Bound<'py, PyAny>> = expression_source_shapes(&expressions, &context.profile)?
+        .iter()
+        .collect();
     if shapes.len() != sources.len() {
         let relation: &str = if shapes.len() < sources.len() {
             "shorter"
@@ -296,7 +311,8 @@ fn record_expression_shapes<'py>(
         if shape.is_none() {
             continue;
         }
-        let name: Bound<'py, PyAny> = source_input.getattr("source_entry")?.getattr("name")?;
+        let name: Bound<'py, PyAny> =
+            native_field(source_input, "source_entry")?.getattr("name")?;
         let declared_types: Bound<'py, PyAny> = context
             .column_types
             .call_method1("get", (&name, PyDict::new(py)))?;
@@ -336,8 +352,8 @@ fn model_analyses<'py>(
     let names: &Bound<'py, PyAny> = request.analysis_model_names.bind(py);
     let mode: &Bound<'py, PyAny> = request.column_lineage_mode.bind(py);
     let lineage_mode: Bound<'py, PyAny> = registry::class(py, RecordId::ColumnLineageMode)?;
-    let rich: bool = mode.eq(lineage_mode.getattr("RICH")?)?;
-    let allow_compact: bool = mode.eq(lineage_mode.getattr("FAST")?)? || rich;
+    let rich: bool = mode.eq(native_field(&lineage_mode, "RICH")?)?;
+    let allow_compact: bool = mode.eq(native_field(&lineage_mode, "FAST")?)? || rich;
     let flags: (Bound<'py, PyAny>, Bound<'py, PyAny>) = (
         PyBool::new(py, allow_compact).to_owned().into_any(),
         PyBool::new(py, rich).to_owned().into_any(),
@@ -350,14 +366,15 @@ fn model_analyses<'py>(
     record_compile_timing("model_analysis_ms", || {
         record_compile_cpu_timing(py, "model_analysis_cpu_ms", || {
             let mut model_inputs: Vec<Bound<'py, PyAny>> = Vec::new();
-            for model_input in inputs.getattr("model_inputs")?.try_iter()? {
+            for model_input in native_field(inputs, "model_inputs")?.try_iter()? {
                 let model_input: Bound<'py, PyAny> = model_input?;
-                if model_input.getattr("sql_validation_enabled")?.is_truthy()?
+                if native_field(&model_input, "sql_validation_enabled")?.is_truthy()?
                     && selected_for_analysis(&model_input, names)?
                 {
                     model_inputs.push(model_input);
                 }
             }
+            count_stage(py, MODEL_ANALYSIS, 1)?;
             analyze_models(&ModelAnalysisRequest {
                 model_inputs,
                 profile: context.profile.clone(),
@@ -388,8 +405,8 @@ fn analysis_cache<'py>(
         &[
             ("known_functions", known_functions),
             ("known_types", known_types),
-            ("target", inputs.getattr("effective_target_name")?),
-            ("vars", inputs.getattr("effective_vars")?),
+            ("target", native_field(inputs, "effective_target_name")?),
+            ("vars", native_field(inputs, "effective_vars")?),
         ],
     )?;
     Ok(analysis_cache_context(

@@ -17,12 +17,12 @@ use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{
     native, replace, sorted_names, strings, text, tuple,
 };
-use crate::bindings::_helpers::planner_phases::retention::plan_retention;
+use crate::bindings::_helpers::planner_phases::retention::{plan_retention, plan_table_types};
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
@@ -228,15 +228,7 @@ pub(crate) fn add_storage_policies<'py>(
         ],
     )?;
     let selected = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
-    let table_types = native(
-        py,
-        NativeAttr::PlanTableTypes,
-        &[
-            ("runtime", runtime.clone()),
-            ("warehouse", warehouse.clone()),
-            ("scope", selected.clone()),
-        ],
-    )?;
+    let table_types = plan_table_types(runtime, warehouse, &selected)?;
     let retention = plan_retention(runtime, warehouse, &selected)?;
     output.set("model_entries", entries);
     output.set("migration_entries", migration_entries);

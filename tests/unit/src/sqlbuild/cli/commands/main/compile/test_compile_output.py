@@ -8,6 +8,7 @@ import pytest
 
 from sqlbuild._native import (
     CompiledObjectKey,
+    CompiledResourceType,
     CompileLineageMode,
     CompileModelConfig,
     ProjectColumnLineage,
@@ -19,7 +20,7 @@ from sqlbuild._native import (
     format_compile_text,
     project_with,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledResourceType
+from sqlbuild.compiler.compile.types import CompiledModelView
 from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileJsonExecutionLayersTestCase,
     CompileJsonLargeIntegerTestCase,
@@ -64,7 +65,9 @@ def test_given_large_hook_integer_when_formatting_json_then_preserves_value(
             }
         ),
     )
-    graph = replace(graph, project=project_with(project=graph.project, models=(model,)))
+    graph = ProjectGraph(
+        project=project_with(project=graph.project, models=(model,)), native=graph.native
+    )
 
     payload: dict[str, object] = json.loads(
         format_compile_json(

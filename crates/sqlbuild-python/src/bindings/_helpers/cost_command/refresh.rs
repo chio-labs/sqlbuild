@@ -10,6 +10,8 @@ use sqlbuild_core::cost_command::main::accepts_cost_refresh::accepts_cost_refres
 use sqlbuild_core::cost_command::models::CostCoverage;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
@@ -107,9 +109,9 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
         return Ok(());
     }
     let target_name: Bound<'_, PyAny> = native_field(&record, "target_name")?;
-    let discovered: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
-        &[("project_dir", project_dir.clone())],
+    let discovered: Bound<'_, PyAny> = discover_project_inputs(
+        py,
+        Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
     let target_config: Bound<'_, PyAny> = call_with(
         &registry::native(py, NativeAttr::BuildEffectiveTargetConfig)?,

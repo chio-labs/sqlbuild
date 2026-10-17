@@ -27,9 +27,9 @@ use crate::bindings::_helpers::planner_selection::selectors::{
 };
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 
-const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -81,7 +81,7 @@ fn source_names_for_keys(
     let mut names: BTreeSet<String> = BTreeSet::new();
     let py: Python<'_> = graph.py();
     let source_type: Bound<'_, PyAny> =
-        imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("SOURCE")?;
+        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
     let upstream_deps: Bound<'_, PyAny> = native_field(graph, "upstream_deps")?;
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
