@@ -272,3 +272,9 @@ pub(crate) struct SpeculativeStopTestCase {
     pub(crate) end: fn(crate::models::SpeculativeRows, &std::path::Path) -> Result<bool, String>,
     pub(crate) expected_stopped: bool,
 }
+
+pub(crate) struct SpeculativeOutcomeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) outcome: fn() -> crate::engine::_helpers::memo::SpeculativeOutcome,
+    pub(crate) expected_clean: bool,
+}

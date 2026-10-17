@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use pyo3::exceptions::{PyException, PyRuntimeError};
+use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_rules::engine::main::answer_speculative_rows::answer_speculative_rows;
 use sqlbuild_rules::engine::main::discard_speculative_rows::discard_speculative_rows;
@@ -164,7 +164,7 @@ pub(crate) fn start_early_rules(project: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = project.py();
     let started: Option<EarlyBuiltinRules> =
         match record_compile_timing(BUILD_PHASE, || early_request(project, &settings)) {
-            Ok(Some(rows)) => Some(EarlyBuiltinRules::spawn(rows)?),
+            Ok(Some(rows)) => EarlyBuiltinRules::spawn(rows),
             Ok(None) => None,
             Err(error) if error.is_instance_of::<PyException>(py) => None,
             Err(error) => return Err(error),
@@ -216,12 +216,15 @@ pub(crate) struct EarlyBuiltinRules {
 }
 
 impl EarlyBuiltinRules {
-    fn spawn(rows: RowsRequest) -> PyResult<Self> {
-        Ok(Self {
-            speculative: start_speculative_rows(rows)
-                .map_err(|error| PyRuntimeError::new_err(error.to_string()))?,
-            report: Arc::new(EarlyRulesReport::default()),
-        })
+    /// The started speculation, or `None` when its thread cannot start.
+    fn spawn(rows: RowsRequest) -> Option<Self> {
+        match start_speculative_rows(rows) {
+            Ok(speculative) => Some(Self {
+                speculative,
+                report: Arc::new(EarlyRulesReport::default()),
+            }),
+            Err(_) => None,
+        }
     }
 
     /// The outcome report the rules phase records once it has used or discarded these rules.

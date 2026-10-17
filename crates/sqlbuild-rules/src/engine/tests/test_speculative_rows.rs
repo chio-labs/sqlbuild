@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicBool;
 use serde_json::Value;
 use tempfile::TempDir;
 
+use crate::engine::_helpers::memo::SpeculativeOutcome;
 use crate::engine::main::answer_speculative_rows::answer_speculative_rows;
 use crate::engine::main::evaluate_rows::evaluate_rows;
 use crate::engine::main::start_speculative_rows::start_speculative_rows;
@@ -11,7 +12,9 @@ use crate::engine::tests::helpers::{
     SPECULATIVE_CACHE_FILE, answer_after_stop, changed_orders_models, discard_after_running,
     drop_at_once, evaluation_summary, orders_models, speculative_rows_request, written_rules_files,
 };
-use crate::engine::tests::test_types::{SpeculativeRowsTestCase, SpeculativeStopTestCase};
+use crate::engine::tests::test_types::{
+    SpeculativeOutcomeTestCase, SpeculativeRowsTestCase, SpeculativeStopTestCase,
+};
 use crate::models::SpeculativeAnswer;
 
 #[test]
@@ -133,4 +136,41 @@ fn given_speculative_rows_when_discarded_or_stopped_then_nothing_is_written() ->
         );
     }
     Ok(())
+}
+
+#[test]
+fn given_speculative_outcome_when_checked_then_only_failed_evaluations_are_retried() {
+    let test_cases = [
+        SpeculativeOutcomeTestCase {
+            description: "memo reuse is kept",
+            outcome: || SpeculativeOutcome::Reused("{}".to_owned()),
+            expected_clean: true,
+        },
+        SpeculativeOutcomeTestCase {
+            description: "evaluated response is kept",
+            outcome: || SpeculativeOutcome::Evaluated {
+                bucket: None,
+                response: Ok("{}".to_owned()),
+                memo: None,
+            },
+            expected_clean: true,
+        },
+        SpeculativeOutcomeTestCase {
+            description: "failed evaluation is retried by the real request",
+            outcome: || SpeculativeOutcome::Evaluated {
+                bucket: None,
+                response: Err("worker pool unavailable".to_owned()),
+                memo: None,
+            },
+            expected_clean: false,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            (test_case.outcome)().evaluated_cleanly(),
+            test_case.expected_clean,
+            "{}",
+            test_case.description
+        );
+    }
 }

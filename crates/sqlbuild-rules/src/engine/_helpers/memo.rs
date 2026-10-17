@@ -105,6 +105,19 @@ pub(crate) fn speculate(prepared: PreparedRows, cancel: &AtomicBool) -> Speculat
 }
 
 /// Make a speculative evaluation's pending writes in order and answer as `evaluate_prepared` would.
+impl SpeculativeOutcome {
+    /// Whether the speculation produced a response, so a failure is retried by the real request.
+    pub(crate) fn evaluated_cleanly(&self) -> bool {
+        !matches!(
+            self,
+            Self::Evaluated {
+                response: Err(_),
+                ..
+            }
+        )
+    }
+}
+
 pub(crate) fn commit(speculative: SpeculativeOutcome) -> Result<RowsEvaluation, RowsError> {
     match speculative {
         SpeculativeOutcome::Reused(response) => decode(&response, true),

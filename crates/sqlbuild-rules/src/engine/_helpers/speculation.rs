@@ -68,7 +68,7 @@ pub(crate) fn answer(
                 return SpeculativeAnswer::Stopped;
             }
             match speculative.thread.take().map(std::thread::JoinHandle::join) {
-                Some(Ok(Ok(outcome))) => outcome,
+                Some(Ok(Ok(outcome))) => outcome.filter(SpeculativeOutcome::evaluated_cleanly),
                 _ => None,
             }
         } else {
