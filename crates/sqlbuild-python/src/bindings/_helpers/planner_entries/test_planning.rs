@@ -13,6 +13,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::PyDict;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
+use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
@@ -159,15 +160,17 @@ pub(crate) struct PlanningRequest {
     pub(crate) sql_test_selection: Py<PyAny>,
 }
 
-/// Plan the request's selected SQL tests.
+/// Plan the request's selected SQL tests, reporting a panic as a native compiler error.
 fn plan(py: Python<'_>, request: &PlanningRequest) -> Planned {
-    plan_selected_sql_tests(
-        request.project.bind(py),
-        request.adapter.bind(py),
-        request.selected_keys.bind(py),
-        request.sql_test_selection.bind(py),
-    )
-    .map(Bound::unbind)
+    compiler_guard(|| {
+        plan_selected_sql_tests(
+            request.project.bind(py),
+            request.adapter.bind(py),
+            request.selected_keys.bind(py),
+            request.sql_test_selection.bind(py),
+        )
+        .map(Bound::unbind)
+    })
 }
 
 /// Plan on a native thread when `enabled`, or resolve at once to no planned tests.

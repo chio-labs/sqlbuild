@@ -745,7 +745,7 @@ note = "Shape rule: data exceptions only (SqlValueRenderingError), no logic; con
 [[stays]]
 path = "compiler/compile/types.py"
 rule = 1
-note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectView, CompiledModelView, CompiledResourceType, AuditInput, ...), no logic; consumed by executor/pipeline/_helpers/testing.py, executor/scenario/_helpers/local/execution.py and project audit factories that annotate AuditInput."
+note = "Shape rule: typing protocols, enums and aliases only (CompiledProjectView, CompiledModelView, AuditInput, ...), no logic; consumed by executor/pipeline/_helpers/testing.py, executor/scenario/_helpers/local/execution.py and project audit factories that annotate AuditInput."
 
 [[stays]]
 path = "rule_engine/types.py"
