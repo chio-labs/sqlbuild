@@ -169,6 +169,8 @@ crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/event_stream.rs	DbtEven
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/orchestration.rs	DbtInteropCommand.value
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/orchestration.rs	DbtRunner.ls
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/pipeline.rs	DbtRunner.debug
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/plan_output.rs	ConnectionProgressReporter.on_connection_complete
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/plan_output.rs	ConnectionProgressReporter.on_connection_error
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/plan_output.rs	ConnectionProgressReporter.on_connection_start
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/plan.rs	DbtInteropSkipReason.value
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/runtime_execution.rs	CliStyle.use_color
