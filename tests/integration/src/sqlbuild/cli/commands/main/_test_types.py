@@ -1148,3 +1148,22 @@ class ProviderAnnotationToleranceTestCase:
     annotation: str
     expected_exit_code: int
     expected_annotation_class_name: str | None
+
+
+@dataclass(frozen=True)
+class FirstModelErrorTestCase:
+    """Model files in path order and the one error compile reports for them."""
+
+    description: str
+    models: dict[str, str]
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class HeaderColumnAuditBuildTestCase:
+    """Accepted values of a second model and whether its audits pass in DuckDB."""
+
+    description: str
+    accepted_values: str
+    expected_exit_code: int
+    expected_failed_models: tuple[str, ...]
