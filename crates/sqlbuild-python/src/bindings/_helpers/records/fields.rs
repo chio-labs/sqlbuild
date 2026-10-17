@@ -1,5 +1,8 @@
 //! Construction, comparison and display of native record field values.
 
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyAttributeError, PyRuntimeError, PyTypeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -14,11 +17,13 @@ use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{
-    FROZEN_INSTANCE_ERROR, ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
+    CACHED_PROPERTIES, CLASS_PROPERTIES, FROZEN_INSTANCE_ERROR, ORDERED_RECORDS, RECORD_FINISHERS,
+    RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::getters::getter_field;
 use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
+use crate::bindings::_helpers::records::types::ClassProperty;
 
 /// Every registered record spec, in registration order.
 pub(crate) fn all_specs() -> impl Iterator<Item = &'static RecordSpec> {
@@ -41,8 +46,8 @@ pub(crate) fn record_spec(cls: &Bound<'_, PyType>) -> PyResult<&'static RecordSp
 
 /// A declared field of a native record read from its values; any other attribute, or object, by `getattr`.
 pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    if let Ok(record) = value.cast::<NativeRecord>() {
-        let record: &NativeRecord = record.get();
+    if let Ok(cell) = value.cast::<NativeRecord>() {
+        let record: &NativeRecord = cell.get();
         if let Some(found) = record
             .spec
             .fields
@@ -52,10 +57,49 @@ pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Boun
         {
             return Ok(found.bind(value.py()).clone());
         }
+        if let Some(&(property, cached_name)) = record_properties().get(&(record.spec.name, name)) {
+            return property_value(cell, property, cached_name)
+                .map(|found| found.into_bound(value.py()));
+        }
     } else if let Some(found) = getter_field(value, name) {
         return found;
     }
     value.getattr(name)
+}
+
+/// Record properties by class and attribute name, each with its cache key when cached.
+type PropertyTable = HashMap<(&'static str, &'static str), (ClassProperty, Option<&'static str>)>;
+
+/// A record property's function by class and attribute name, with its cache key when cached.
+fn record_properties() -> &'static PropertyTable {
+    static TABLE: OnceLock<PropertyTable> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut table: PropertyTable = HashMap::new();
+        for &(class, name, property) in CLASS_PROPERTIES.iter().flat_map(|group| group.iter()) {
+            let _ = table.insert((class, name), (property, None));
+        }
+        for &(class, name, property) in CACHED_PROPERTIES.iter().flat_map(|group| group.iter()) {
+            let _ = table.insert((class, name), (property, Some(name)));
+        }
+        table
+    })
+}
+
+/// A record property computed as its descriptor computes it, cached ones computed once.
+fn property_value(
+    record: &Bound<'_, NativeRecord>,
+    property: ClassProperty,
+    cached_name: Option<&'static str>,
+) -> PyResult<Py<PyAny>> {
+    let Some(cached_name) = cached_name else {
+        return property(record.as_any());
+    };
+    if let Some(value) = cached_value(record, cached_name)? {
+        return Ok(value);
+    }
+    let value: Py<PyAny> = property(record.as_any())?;
+    store_cached(record, cached_name, &value)?;
+    Ok(value)
 }
 
 /// `dataclasses.replace(value, **changes)`: a native record is rebuilt from its own values.
