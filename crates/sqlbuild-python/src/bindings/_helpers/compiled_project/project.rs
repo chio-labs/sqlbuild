@@ -167,7 +167,7 @@ impl NativeCompiledProject {
                     .to_string(),
                 (
                     schema.audits.bind(py),
-                    (schema.columns.bind(py), &fact.columns),
+                    (schema.columns.as_ref(), &fact.columns),
                 ),
             )?);
         }

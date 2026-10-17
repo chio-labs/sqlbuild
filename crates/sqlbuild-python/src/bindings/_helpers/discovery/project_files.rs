@@ -76,17 +76,20 @@ pub(crate) fn model_record<'py>(
         Err(error) => return Err(error),
     };
     let (enum_declarations, constant_declarations) = declarations;
-    let record: NativeModelFile = NativeModelFile::discovered(ModelFileParts {
-        file_path: file_path.unbind(),
-        relative_path: relative_path.unbind(),
-        contents: PyString::new(py, &model.contents).unbind(),
-        header_values: header_values.unbind(),
-        header_column_locations: model.header_column_locations,
-        output_column_locations: model.output_column_locations,
-        query_sql: PyString::new(py, &model.query_sql).unbind(),
-        declarations: (enum_declarations.unbind(), constant_declarations.unbind()),
-        extract_implicit_alias_columns,
-    });
+    let record: NativeModelFile = NativeModelFile::discovered(
+        py,
+        ModelFileParts {
+            file_path: file_path.unbind(),
+            relative_path: relative_path.unbind(),
+            contents: PyString::new(py, &model.contents).unbind(),
+            header_values: header_values.unbind(),
+            header_column_locations: model.header_column_locations,
+            output_column_locations: model.output_column_locations,
+            query_sql: PyString::new(py, &model.query_sql).unbind(),
+            declarations: (enum_declarations.unbind(), constant_declarations.unbind()),
+            extract_implicit_alias_columns,
+        },
+    )?;
     Ok(Ok(record.into_py_any(py)?))
 }
 

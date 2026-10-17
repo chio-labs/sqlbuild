@@ -1,5 +1,7 @@
 //! A discovered SQL model file as a native record whose Python attributes are built on demand.
 
+use std::path::PathBuf;
+
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::exceptions::PyTypeError;
@@ -89,6 +91,8 @@ impl Locations {
 #[pyclass(module = "sqlbuild._native", name = "DiscoveredSqlModelFile", frozen)]
 pub(crate) struct NativeModelFile {
     file_path: Py<PyAny>,
+    /// `file_path` as a native path, read once so hot paths need not call back into `pathlib`.
+    native_file_path: PathBuf,
     relative_path: Py<PyAny>,
     contents: Py<PyString>,
     header_values: Py<PyDict>,
@@ -133,9 +137,10 @@ struct ModelFileFields {
 }
 
 impl NativeModelFile {
-    pub(crate) fn discovered(parts: ModelFileParts) -> Self {
+    pub(crate) fn discovered(py: Python<'_>, parts: ModelFileParts) -> PyResult<Self> {
         let (enum_declarations, constant_declarations) = parts.declarations;
-        Self {
+        Ok(Self {
+            native_file_path: parts.file_path.bind(py).extract()?,
             file_path: parts.file_path,
             relative_path: parts.relative_path,
             contents: parts.contents,
@@ -146,7 +151,7 @@ impl NativeModelFile {
             enum_declarations,
             constant_declarations,
             extract_implicit_alias_columns: parts.extract_implicit_alias_columns,
-        }
+        })
     }
 
     pub(crate) fn header_locations<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
@@ -165,6 +170,11 @@ impl NativeModelFile {
             self.enum_declarations.bind(py),
             self.constant_declarations.bind(py),
         )
+    }
+
+    /// The file path as a native path.
+    pub(crate) fn file_path_buf(&self) -> PathBuf {
+        self.native_file_path.clone()
     }
 
     pub(crate) fn paths<'py>(&self, py: Python<'py>) -> (&Bound<'py, PyAny>, &Bound<'py, PyAny>) {
@@ -218,6 +228,7 @@ impl NativeModelFile {
         }
         let fields: ModelFileFields = fields.extract()?;
         Ok(Self {
+            native_file_path: fields.file_path.bind(py).extract()?,
             file_path: fields.file_path,
             relative_path: fields.relative_path,
             contents: fields.contents,
@@ -243,6 +254,7 @@ impl NativeModelFile {
         query_sql: Py<PyString>,
     ) -> Self {
         Self {
+            native_file_path: self.native_file_path.clone(),
             file_path: self.file_path.clone_ref(py),
             relative_path: self.relative_path.clone_ref(py),
             contents,

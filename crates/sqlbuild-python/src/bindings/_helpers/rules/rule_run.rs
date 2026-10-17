@@ -88,8 +88,10 @@ pub(crate) fn finish_rule_run<'py>(
         .map(|finding| finding.path.clone())
         .collect();
     let mut unevaluated_models: i64 = 0;
-    for model in project_models(&record_field(plan, "project")?)? {
-        unevaluated_models += i64::from(unevaluated.contains(&model.posix));
+    if !unevaluated.is_empty() {
+        for model in project_models(&record_field(plan, "project")?)? {
+            unevaluated_models += i64::from(unevaluated.contains(&model.posix));
+        }
     }
     let findings: Vec<Bound<'py, PyAny>> = grouped
         .into_iter()

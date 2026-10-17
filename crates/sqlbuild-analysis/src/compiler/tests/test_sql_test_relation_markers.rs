@@ -7,6 +7,18 @@ use crate::compiler::tests::test_types::{RelationMarkerOracleTestCase, RelationM
 fn given_parsed_statements_when_collecting_relation_markers_then_json_walk_order_is_reproduced() {
     let test_cases = [
         RelationMarkersTestCase {
+            description: "nested CTEs preserve relation order and ignore escaped marker lookalikes",
+            dialect: "postgres",
+            sql: r#"WITH "recent" AS (WITH nested AS (SELECT * FROM __source("orders")) SELECT * FROM nested) SELECT '__ref("ignored")''s' AS note, $$__seed("ignored")$$ AS body FROM recent JOIN __ref("customers") ON TRUE /* __ref("ignored") */"#,
+            expected_calls: &[("__ref", "customers"), ("__source", "orders")],
+        },
+        RelationMarkersTestCase {
+            description: "function markers require column arguments even inside nested relations",
+            dialect: "duckdb",
+            sql: r#"SELECT __udf("projected") FROM __table_fn("orders") JOIN __udf("lookup") ON TRUE JOIN (SELECT * FROM __ref('literal') JOIN __ref(COALESCE("a", "b")) ON TRUE) t ON TRUE"#,
+            expected_calls: &[("__table_fn", "orders"), ("__udf", "lookup")],
+        },
+        RelationMarkersTestCase {
             description: "plain reference",
             dialect: "duckdb",
             sql: "SELECT * FROM __ref(\"orders\")",

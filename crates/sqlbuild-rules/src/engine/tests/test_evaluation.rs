@@ -8,6 +8,106 @@ use crate::engine::tests::test_types;
 use crate::rules::_helpers::evaluation::normalize_rules_sql;
 
 #[test]
+fn given_dependency_tokens_when_classifying_imports_then_preserves_dialect_and_original_sql()
+-> Result<(), String> {
+    let test_cases = [
+        test_types::DependencyTokenTestCase {
+            description: "comments and escaped literals retain canonical arguments",
+            expected_columns: &[1],
+            dialect: "duckdb",
+            query_sql: "WITH imported AS (SELECT * FROM __ReF /* __ref('ignored') */ ('Order''s')) SELECT '__source(''ignored'')' AS label FROM imported",
+            expected_messages: &[
+                "each __ref/__source must appear once in its own top-level import CTE",
+            ],
+        },
+        test_types::DependencyTokenTestCase {
+            description: "quoted function names are not dependency calls",
+            expected_columns: &[],
+            dialect: "duckdb",
+            query_sql: "SELECT * FROM \"__ref\"('orders')",
+            expected_messages: &[],
+        },
+        test_types::DependencyTokenTestCase {
+            description: "backtick quoting and comment-separated source arguments",
+            expected_columns: &[],
+            dialect: "bigquery",
+            query_sql: "WITH imported AS (SELECT * FROM __source /* ignored */ (`Orders`)) SELECT order_id FROM imported",
+            expected_messages: &[],
+        },
+        test_types::DependencyTokenTestCase {
+            description: "dollar strings do not contribute spurious calls",
+            expected_columns: &[],
+            dialect: "postgres",
+            query_sql: "WITH imported AS (SELECT * FROM __ref('orders')) SELECT $$__ref('ignored')$$ AS label FROM imported",
+            expected_messages: &[],
+        },
+        test_types::DependencyTokenTestCase {
+            description: "generic fallback retains original dialect dependencies",
+            expected_columns: &[],
+            dialect: "postgres",
+            query_sql: "WITH imported AS (SELECT * FROM __ref('orders')) SELECT payload:order_id FROM imported",
+            expected_messages: &[],
+        },
+        test_types::DependencyTokenTestCase {
+            description: "normalization must not erase dependency calls",
+            expected_columns: &[1],
+            dialect: "snowflake",
+            query_sql: "SELECT * EXCLUDE (__ref('orders')) FROM orders",
+            expected_messages: &[
+                "each __ref/__source must appear once in its own top-level import CTE",
+            ],
+        },
+        test_types::DependencyTokenTestCase {
+            description: "duplicate dependencies remain ordered findings",
+            expected_columns: &[1, 55],
+            dialect: "duckdb",
+            query_sql: "WITH first_import AS (SELECT * FROM __ref('orders')), second_import AS (SELECT * FROM __REF('orders') WHERE order_id > 0) SELECT order_id FROM first_import",
+            expected_messages: &[
+                "each __ref/__source must appear once in its own top-level import CTE",
+                "import CTE \"second_import\" contains transformation logic",
+            ],
+        },
+    ];
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let config = json!({"select": ["SQBRMODEL101"], "cache": {"enabled": false}});
+    for test_case in test_cases {
+        let mut request: Value = serde_json::from_str(&helpers::request(&project_dir, &config))
+            .map_err(|error| error.to_string())?;
+        request["dialect"] = json!(test_case.dialect);
+        request["models"][0]["query_sql"] = json!(test_case.query_sql);
+        // Authored SQL can differ after expansion: dependency classification has
+        // always used query_sql, while literal decisions use authored_sql.
+        request["models"][0]["authored_sql"] = json!("SELECT @orders()");
+        let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+            .map_err(|error| error.to_string())?;
+        let faults = result["faults"].as_array().ok_or("missing faults")?;
+        let messages: Vec<&str> = faults
+            .iter()
+            .filter_map(|fault| fault["message"].as_str())
+            .collect();
+        assert_eq!(
+            messages, test_case.expected_messages,
+            "{}: {result}",
+            test_case.description
+        );
+        assert!(
+            faults.iter().all(|fault| fault["unevaluated"] != true),
+            "{}: {result}",
+            test_case.description
+        );
+        for (fault, expected_column) in faults.iter().zip(test_case.expected_columns) {
+            assert_eq!(fault["line"], 1, "{}", test_case.description);
+            assert_eq!(
+                fault["column"], *expected_column,
+                "{}",
+                test_case.description
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn given_conflicting_model_identity_when_evaluating_layer_rules_then_reports_independent_findings()
 -> Result<(), String> {
     let test_cases = [test_types::ModelLayerRulesTestCase {

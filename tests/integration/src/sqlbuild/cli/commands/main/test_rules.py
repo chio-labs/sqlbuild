@@ -29,6 +29,7 @@ from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomRuleCacheSequenceTestCase,
     DynamicPivotRulesIntegrationTestCase,
     EarlyLintInputsTestCase,
+    EmptyRuleSelectionTestCase,
     ExplicitContractOutputRuleIntegrationTestCase,
     ImplicitAliasRuleIntegrationTestCase,
     NumericRangeDecisionIntegrationTestCase,
@@ -2843,6 +2844,75 @@ def required_prefix(*, model: Model, ctx: RuleContext) -> list[Finding]:
 
     assert exit_code == test_case.expected_exit_code
     assert payload["diagnostics"] == []
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EmptyRuleSelectionTestCase(
+            "valid exception for an unevaluated rule compiles",
+            "[[rules.rule_exceptions]]\n"
+            'rule = "SQBRCONTRACT101"\npath = "models/orders.sql"\nreason = "Legacy."\n',
+            0,
+            (),
+        ),
+        EmptyRuleSelectionTestCase(
+            "unknown exception rule is rejected",
+            '[[rules.rule_exceptions]]\nrule = "SQBRNOPE999"\npath = "models/orders.sql"\n'
+            'reason = "Legacy."\n',
+            1,
+            ("rule exceptions target unknown rules: SQBRNOPE999",),
+        ),
+        EmptyRuleSelectionTestCase(
+            "missing exception path is rejected",
+            '[[rules.rule_exceptions]]\nrule = "SQBRCONTRACT101"\npath = "models/missing.sql"\n'
+            'reason = "Legacy."\n',
+            1,
+            ("rule exception path does not exist: models/missing.sql",),
+        ),
+        EmptyRuleSelectionTestCase(
+            "ignore selector matching no rule is rejected",
+            '[[rules.rule_ignores]]\nrules = ["SQBRZZZ"]\npaths = ["models/orders.sql"]\n'
+            'reason = "Legacy."\n',
+            1,
+            ("rule-ignore selector matches no rules: SQBRZZZ",),
+        ),
+        EmptyRuleSelectionTestCase(
+            "unknown built-in rule option is rejected",
+            "[rules.rule_options.SQBRSQL004]\nnope = 3\n",
+            1,
+            ("rule SQBRSQL004 has unknown options: nope",),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_empty_rule_selection_when_compiling_then_only_configuration_is_validated(
+    test_case: EmptyRuleSelectionTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "sqlbuild_project.toml").write_text(
+        f'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = []\n\n{test_case.configuration}',
+        encoding="utf-8",
+    )
+    model: Path = tmp_path / "models" / "orders.sql"
+    model.parent.mkdir()
+    model.write_text(
+        "MODEL (description 'Test model orders.');\nSELECT 1 AS order_id\n", encoding="utf-8"
+    )
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json"])
+    payload: dict[str, Any] = json.loads(capsys.readouterr().out)
+    timings: dict[str, int] = payload.get("compile_timings", {})
+
+    assert exit_code == test_case.expected_exit_code
+    assert [diagnostic["message"] for diagnostic in payload["diagnostics"]] == list(
+        test_case.expected_messages
+    )
+    assert not rules_bulk_cache_path(
+        project_dir=tmp_path, file_name="native-response.json"
+    ).exists()
+    assert (timings.get("rule_cache_hits", 0), timings.get("rule_cache_misses", 0)) == (0, 0)
 
 
 @pytest.mark.parametrize(

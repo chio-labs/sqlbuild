@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     ExpansionRecord, ModelInputRecord, NativeModelInput, model_relation_key_row,
 };
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledExpansion, CompiledSource, span_pass,
@@ -34,11 +35,11 @@ pub(crate) fn model_key_row(model: &Bound<'_, PyAny>) -> PyResult<RelationKeyRow
 
 /// The model file path of a native input record.
 fn record_path(record: &ModelInputRecord, py: Python<'_>) -> PyResult<PathBuf> {
-    record
-        .model_file
-        .bind(py)
-        .getattr(FILE_PATH_ATTRIBUTE)?
-        .extract()
+    let model_file: &Bound<'_, PyAny> = record.model_file.bind(py);
+    match model_file.downcast::<NativeModelFile>() {
+        Ok(native) => Ok(native.get().file_path_buf()),
+        Err(_) => model_file.getattr(FILE_PATH_ATTRIBUTE)?.extract(),
+    }
 }
 
 /// The record's shared texts with the given passes, read only when their file is linted.

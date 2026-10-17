@@ -36,7 +36,7 @@ use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
 use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules;
 use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
 use crate::bindings::_helpers::rules::rows::{
-    NativeRulesRequest, build_rules_request, evaluate_rules_request,
+    NativeRulesRequest, build_rules_request, evaluate_rules_request, selectionless_rules_request,
 };
 use crate::bindings::_helpers::rules::rule_plan::plan_rule_run;
 use crate::bindings::_helpers::rules::rule_run::finish_rule_run;
@@ -268,27 +268,32 @@ pub(crate) fn evaluate_rules<'py>(
     ];
     let native_dialect: String = run.dialect.clone();
     let native_cancel: HostCancel = run.cancel.clone();
-    let native_thread: PhaseThread = PhaseThread::spawn(RULES_THREAD, move || {
-        Python::attach(|py| {
-            let [project, config, project_dir, catalogue, payloads] = native_run;
-            let run: NativeRun<'_> = NativeRun {
-                project: project.into_bound(py),
-                config: config.into_bound(py),
-                project_dir: project_dir.into_bound(py),
-                catalogue: catalogue.into_bound(py),
-                dialect: native_dialect,
-                verify_determinism: false,
-                initial_findings: None,
-                cancel: native_cancel,
-            };
-            evaluate_native(
-                &run,
-                (true, Some(payloads.into_bound(py))),
-                CustomSource::Started(custom),
-            )
-            .map(Bound::unbind)
-        })
-    })?;
+    let selectionless: bool = custom.is_none() && field(&plan, "selected")?.len()? == 0;
+    let native_thread: Option<PhaseThread> = if selectionless {
+        None
+    } else {
+        Some(PhaseThread::spawn(RULES_THREAD, move || {
+            Python::attach(|py| {
+                let [project, config, project_dir, catalogue, payloads] = native_run;
+                let run: NativeRun<'_> = NativeRun {
+                    project: project.into_bound(py),
+                    config: config.into_bound(py),
+                    project_dir: project_dir.into_bound(py),
+                    catalogue: catalogue.into_bound(py),
+                    dialect: native_dialect,
+                    verify_determinism: false,
+                    initial_findings: None,
+                    cancel: native_cancel,
+                };
+                evaluate_native(
+                    &run,
+                    (true, Some(payloads.into_bound(py))),
+                    CustomSource::Started(custom),
+                )
+                .map(Bound::unbind)
+            })
+        })?)
+    };
     let sql_result: PyResult<Bound<'py, PyAny>> = run_planned_sql_rules(Some(&keywords(
         py,
         &[
@@ -300,7 +305,10 @@ pub(crate) fn evaluate_rules<'py>(
         ],
     )?));
     cancel_on_interrupt(py, &sql_result, &run.cancel);
-    let result: PyResult<Bound<'py, PyAny>> = joined(py, native_thread, &run.cancel);
+    let result: PyResult<Bound<'py, PyAny>> = match native_thread {
+        Some(native_thread) => joined(py, native_thread, &run.cancel),
+        None => selectionless_result(&run, &payloads),
+    };
     let sql_result: Bound<'py, PyAny> = sql_result?;
     let result: Bound<'py, PyAny> = result?;
     finish_rule_run(&plan, &sql_result, &result)
@@ -333,6 +341,36 @@ fn evaluate_native<'py>(
         Some(handle) => joined(py, handle, &run.cancel),
         None => outcome(py, (Vec::new(), 0, 0), (0, 0)),
     };
+    rules_result(run, defer_suppressions, evaluated, custom)
+}
+
+/// The built-in rules result of a run that selects no rules, without building its models.
+fn selectionless_result<'py>(
+    run: &NativeRun<'py>,
+    payloads: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = run.project.py();
+    let request: Bound<'py, NativeRulesRequest> = Bound::new(
+        py,
+        selectionless_rules_request(&run.config, &run.project_dir, &run.dialect, payloads)?,
+    )?;
+    let evaluated: PyResult<Bound<'py, PyAny>> = evaluate_rules_request(py, &request);
+    rules_result(
+        run,
+        true,
+        evaluated,
+        outcome(py, (Vec::new(), 0, 0), (0, 0)),
+    )
+}
+
+/// Combine one native evaluation with its custom-rule outcome into a `RulesResult`.
+fn rules_result<'py>(
+    run: &NativeRun<'py>,
+    defer_suppressions: bool,
+    evaluated: PyResult<Bound<'py, PyAny>>,
+    custom: PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = run.project.py();
     let native_result: Bound<'py, PyAny> = evaluated?;
     let custom: Bound<'py, PyAny> = custom?;
     let combined: Vec<Bound<'py, PyAny>> = field(&native_result, "findings")?

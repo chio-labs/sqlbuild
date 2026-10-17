@@ -3,7 +3,9 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef, PyResult, Python,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyFrozenSetMethods, PyList, PyTuple};
+use pyo3::types::{
+    PyDict, PyDictMethods, PyFrozenSet, PyFrozenSetMethods, PyList, PyTuple, PyType,
+};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::compiled_project::models::CompiledModelFacts;
 
@@ -16,6 +18,7 @@ use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView
 use crate::bindings::_helpers::compiled_project::schema_facts::entry_schema_fact;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::record_spec;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -44,12 +47,8 @@ fn record<'py>(value: &Bound<'py, PyAny>, class: RecordId) -> PyResult<Bound<'py
         return Ok(value.clone());
     }
     let fields: Bound<'py, PyDict> = PyDict::new(py);
-    for field in imported(py, DATACLASSES_MODULE, "fields")?
-        .call1((&class,))?
-        .try_iter()?
-    {
-        let name: Bound<'py, PyAny> = native_field(&field?, "name")?;
-        fields.set_item(&name, native_field(value, &name.extract::<String>()?)?)?;
+    for field in record_spec(class.cast::<PyType>()?)?.fields {
+        fields.set_item(field.name, native_field(value, field.name)?)?;
     }
     class.call((), Some(&fields))
 }

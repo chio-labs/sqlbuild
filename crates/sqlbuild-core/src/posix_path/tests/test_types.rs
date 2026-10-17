@@ -7,3 +7,10 @@ pub(super) struct PosixPathTestCase {
     /// `suffix` under Python 3.12 and under Python 3.14.
     pub(super) expected_suffix: &'static str,
 }
+
+pub(super) struct PosixAbspathTestCase {
+    pub(super) description: &'static str,
+    pub(super) cwd: &'static str,
+    pub(super) path: &'static str,
+    pub(super) expected_path: &'static str,
+}

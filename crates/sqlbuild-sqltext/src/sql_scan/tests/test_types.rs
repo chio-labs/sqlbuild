@@ -15,6 +15,20 @@ pub(crate) struct NonCodeEndTestCase {
     pub(crate) expected_end: Result<Option<usize>, Unclosed>,
 }
 
+pub(crate) struct DispatchTestCase {
+    pub(crate) description: String,
+    pub(crate) sql: Vec<u8>,
+    pub(crate) index: usize,
+    pub(crate) policy: QuotePolicy,
+    pub(crate) expected_end: Result<Option<usize>, Unclosed>,
+}
+
+pub(crate) struct DispatchInputTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static [u8],
+    pub(crate) expected_cases: fn(&[u8]) -> Vec<DispatchTestCase>,
+}
+
 pub(crate) struct DialectNonCodeEndTestCase {
     pub(crate) description: &'static str,
     pub(crate) sql: &'static str,

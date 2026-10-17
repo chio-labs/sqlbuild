@@ -6,6 +6,16 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class HeaderProjectionTestCase:
+    """Native header columns projected after real compilation and audit attachment."""
+
+    description: str
+    files: dict[str, str]
+    model_name: str
+    expected_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RetainedRulesRowsTestCase:
     """A real compile whose rules request reads model facts the compile-input stage retained."""
 

@@ -1,5 +1,7 @@
 //! A model's compile input, read from the native compiled project that owns it.
 
+use std::sync::Arc;
+
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
@@ -12,6 +14,7 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
+use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
 use crate::bindings::_helpers::rules::relation_keys::{RelationKeyRow, relation_key_row};
@@ -33,7 +36,7 @@ pub(crate) struct InputViewClasses<'py> {
 /// A model's attached header schema; its specs carry user-authored audit arguments.
 pub(crate) struct SchemaRecord {
     pub(crate) description: Option<String>,
-    pub(crate) columns: Py<PyTuple>,
+    pub(crate) columns: Arc<HeaderColumns>,
     pub(crate) audits: Py<PyTuple>,
     pub(crate) dynamic_columns: Py<PyTuple>,
     pub(crate) type_enforcement: bool,
@@ -417,7 +420,7 @@ pub(crate) fn schema_entry(
             fields.set_item("model_schema", &schema.model_schema)?;
             fields.set_item("description", &schema.description)?;
             fields.set_item("type_enforcement", schema.type_enforcement.then_some(true))?;
-            fields.set_item("columns", schema.columns.bind(py))?;
+            fields.set_item("columns", schema.columns.project(py)?)?;
             fields.set_item("dynamic_columns", schema.dynamic_columns.bind(py))?;
             fields.set_item("audits", schema.audits.bind(py))?;
             Ok(classes.schema_model_entry.call((), Some(&fields))?.unbind())

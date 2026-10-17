@@ -480,8 +480,7 @@ fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
                 attached.push((None, audit));
             }
             for (index, name) in audited {
-                let column: Bound<'_, PyAny> = columns.bind(py).get_item(index)?;
-                for audit in native_field(&column, "audits")?.try_iter()? {
+                for audit in columns.specs[index].field(py, "audits")?.try_iter()? {
                     attached.push((Some(name.clone()), audit?));
                 }
             }

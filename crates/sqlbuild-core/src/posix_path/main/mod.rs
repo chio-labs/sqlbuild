@@ -1,3 +1,4 @@
+pub mod posix_abspath;
 pub mod posix_join;
 pub mod posix_name;
 pub mod posix_parent;

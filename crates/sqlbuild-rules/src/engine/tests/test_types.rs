@@ -252,3 +252,10 @@ pub(crate) struct CachePruningTestCase {
     pub(crate) description: &'static str,
     pub(crate) expected_paths: &'static [&'static str],
 }
+pub(crate) struct DependencyTokenTestCase {
+    pub description: &'static str,
+    pub dialect: &'static str,
+    pub query_sql: &'static str,
+    pub expected_messages: &'static [&'static str],
+    pub expected_columns: &'static [usize],
+}

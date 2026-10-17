@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
@@ -671,10 +672,7 @@ fn header_text(header: &Bound<'_, PyDict>, key: &str) -> PyResult<Option<String>
 pub(crate) fn model_owner<'py>(
     name: String,
     path: String,
-    schema: (
-        &Bound<'py, PyTuple>,
-        (&Bound<'py, PyTuple>, &[SchemaColumnFact]),
-    ),
+    schema: (&Bound<'py, PyTuple>, (&HeaderColumns, &[SchemaColumnFact])),
 ) -> PyResult<AttachmentOwner<'py>> {
     let (audits, (columns, facts)) = schema;
     let mut instances: Vec<(String, Option<String>, Bound<'py, PyAny>)> = Vec::new();
@@ -686,7 +684,10 @@ pub(crate) fn model_owner<'py>(
             continue;
         }
         let column_owner: &str = fact.location_path.as_deref().unwrap_or(&path);
-        for audit in native_field(&columns.get_item(index)?, "audits")?.try_iter()? {
+        for audit in columns.specs[index]
+            .field(audits.py(), "audits")?
+            .try_iter()?
+        {
             let audit: Bound<'py, PyAny> = audit?;
             let owner_file: String =
                 location_path(&audit)?.unwrap_or_else(|| column_owner.to_owned());

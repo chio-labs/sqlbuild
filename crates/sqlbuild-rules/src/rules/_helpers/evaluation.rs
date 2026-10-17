@@ -155,8 +155,13 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         return Ok(faults.into_inner());
     }
     let parser_sql = normalize_rules_sql(&request.dialect, &model.query_sql);
-    let mut statements = parse_rule_statements(&parser_sql, &request.dialect)
-        .map_err(|error| format!("could not parse {} for rules: {error}", model.relative_path))?;
+    let mut dependencies = None;
+    let mut statements = parse_rule_statements_with_dependencies(
+        &parser_sql,
+        &request.dialect,
+        (parser_sql == model.query_sql).then_some(&mut dependencies),
+    )
+    .map_err(|error| format!("could not parse {} for rules: {error}", model.relative_path))?;
     if statements.len() != 1 {
         return Err(format!(
             "could not parse {} for rules: expected one statement",
@@ -172,7 +177,11 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     };
     let query = *query;
     let quote_policy = rules_quote_policy(&request.dialect);
-    let classification = classify_model(&query, model, &request.dialect)?;
+    let dependencies = match dependencies {
+        Some(dependencies) => dependencies,
+        None => dependency_calls(&model.query_sql, &request.dialect)?,
+    };
+    let classification = classify_model(&query, model, dependencies);
     let parsed = ParsedModel {
         query,
         model,
@@ -285,12 +294,20 @@ pub(super) fn parse_rule_statements(
     sql: &str,
     dialect_name: &str,
 ) -> Result<Vec<Statement>, ParserError> {
+    parse_rule_statements_with_dependencies(sql, dialect_name, None)
+}
+
+fn parse_rule_statements_with_dependencies(
+    sql: &str,
+    dialect_name: &str,
+    dependencies: Option<&mut Option<Vec<String>>>,
+) -> Result<Vec<Statement>, ParserError> {
     let dialect = rules_dialect(dialect_name);
-    match parse_with_dialect(sql, dialect.as_ref()) {
+    match parse_with_dialect(sql, dialect.as_ref(), dependencies) {
         Ok(statements) => Ok(statements),
         Err(primary) if !dialect_name.eq_ignore_ascii_case("generic") => {
             let fallback_sql = normalize_generic_fallback(sql);
-            parse_with_dialect(&fallback_sql, &GenericDialect {}).map_err(|fallback| {
+            parse_with_dialect(&fallback_sql, &GenericDialect {}, None).map_err(|fallback| {
                 ParserError::ParserError(format!(
                     "{primary}; generic fallback also failed: {fallback}"
                 ))
@@ -331,11 +348,21 @@ fn normalize_generic_fallback(sql: &str) -> String {
     String::from_utf8(bytes).unwrap_or_else(|_| sql.to_owned())
 }
 
-fn parse_with_dialect(sql: &str, dialect: &dyn Dialect) -> Result<Vec<Statement>, ParserError> {
+fn parse_with_dialect(
+    sql: &str,
+    dialect: &dyn Dialect,
+    dependencies: Option<&mut Option<Vec<String>>>,
+) -> Result<Vec<Statement>, ParserError> {
+    let tokens = Tokenizer::new(dialect, sql).tokenize_with_location()?;
+    if let Some(dependencies) = dependencies {
+        *dependencies = Some(dependency_calls_from_tokens(
+            tokens.iter().map(|token| &token.token),
+        ));
+    }
     let mut parser = Parser::new(dialect)
         .with_options(ParserOptions::new().with_trailing_commas(true))
         .with_recursion_limit(RULES_PARSER_RECURSION_LIMIT)
-        .try_with_sql(sql)?;
+        .with_tokens_with_locations(tokens);
     parser.parse_statements()
 }
 
@@ -692,9 +719,8 @@ pub(super) fn sole_table_name(query: &Query) -> Option<String> {
 fn classify_model(
     query: &Query,
     model: &Model,
-    dialect_name: &str,
-) -> Result<ModelClassification, String> {
-    let authored_dependencies = dependency_calls(&model.query_sql, dialect_name)?;
+    authored_dependencies: Vec<String>,
+) -> ModelClassification {
     let mut logical_seen = false;
     let ctes = top_ctes(query)
         .iter()
@@ -738,11 +764,11 @@ fn classify_model(
                 && root_select(query).is_some_and(|select| plain_select(select, true))
         });
 
-    Ok(ModelClassification {
+    ModelClassification {
         authored_dependencies,
         ctes,
         passthrough,
-    })
+    }
 }
 
 fn dependency_calls(source: &str, dialect_name: &str) -> Result<Vec<String>, String> {
@@ -750,8 +776,11 @@ fn dependency_calls(source: &str, dialect_name: &str) -> Result<Vec<String>, Str
     let tokens = Tokenizer::new(dialect.as_ref(), source)
         .tokenize()
         .map_err(|error| format!("could not tokenize model dependencies: {error}"))?;
+    Ok(dependency_calls_from_tokens(tokens.iter()))
+}
+
+fn dependency_calls_from_tokens<'a>(tokens: impl Iterator<Item = &'a Token>) -> Vec<String> {
     let tokens = tokens
-        .iter()
         .filter(|token| !matches!(token, Token::Whitespace(_)))
         .collect::<Vec<_>>();
     let mut calls: Vec<String> = Vec::new();
@@ -794,7 +823,7 @@ fn dependency_calls(source: &str, dialect_name: &str) -> Result<Vec<String>, Str
         }
         index = cursor;
     }
-    Ok(calls)
+    calls
 }
 
 fn query_dependency_calls(query: &Query) -> Vec<String> {

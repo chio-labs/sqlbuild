@@ -87,6 +87,63 @@ _MISMATCH_FRAGMENT: str = (
     "test_case",
     [
         CommentedFixtureE2ETestCase(
+            description="bounded CTE casts joins and unions execute with mocked sources",
+            test_files={
+                "macros/status.py": "",
+                "models/orders.sql": (
+                    "MODEL (description 'Orders through projected CTEs.');\n"
+                    'WITH imported AS (SELECT * FROM __source("raw_orders")),\n'
+                    "projected AS (SELECT CAST(COALESCE(b.order_id, 0) + 0 AS INTEGER) AS order_id,\n"
+                    "b.status AS status FROM imported AS b\n"
+                    "LEFT JOIN imported AS c ON c.order_id = b.order_id),\n"
+                    "combined AS (SELECT order_id, status FROM projected\n"
+                    "UNION ALL BY NAME SELECT order_id, status FROM projected WHERE order_id = 0),\n"
+                    "final AS (SELECT CAST(order_id AS INTEGER) AS order_id, status FROM combined)\n"
+                    "SELECT order_id, status FROM final\n"
+                ),
+                "tests/unit/test_orders.sql": (
+                    'TEST (name "projected_orders");\nWITH\n'
+                    "__source__raw_orders AS (\n"
+                    "SELECT 1 AS order_id, 'paid' AS status UNION ALL SELECT 2, 'void'\n"
+                    "),\n" + _LINE_COMMENTED_EXPECTED
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("PASS=1", "FAIL=0"),
+        ),
+        CommentedFixtureE2ETestCase(
+            description="nested model CTEs and marker lookalikes preserve mocked source results",
+            test_files={
+                "macros/status.py": "",
+                "models/_macros/status.py": _PROJECT_FILES["macros/status.py"],
+                "models/orders.sql": (
+                    "MODEL (description 'Orders through nested CTEs.');\n"
+                    'WITH "recent" AS (\n'
+                    "  WITH nested AS (SELECT order_id, status, '__ref(\"ignored\")''s' AS note\n"
+                    '    FROM __source("raw_orders"))\n'
+                    "  SELECT order_id, status FROM nested\n"
+                    ")\n"
+                    'SELECT order_id, @normalize_status("status") AS status\n'
+                    'FROM "recent" /* __seed("ignored") */\n'
+                ),
+                "tests/unit/test_orders.sql": (
+                    'TEST (name "nested_orders");\nWITH\n'
+                    + _LINE_COMMENTED_SOURCE
+                    + _LINE_COMMENTED_EXPECTED
+                ),
+                "tests/unit/test_order_counts.sql": (
+                    'TEST (name "nested_order_counts");\nWITH\n'
+                    + _LINE_COMMENTED_SOURCE
+                    + "__expected__order_counts AS (\n"
+                    "  SELECT 'paid' AS status, CAST(1 AS BIGINT) AS order_count\n"
+                    "  UNION ALL SELECT 'void' AS status, CAST(1 AS BIGINT) AS order_count\n"
+                    ") SELECT 1\n"
+                ),
+            },
+            expected_exit_code=0,
+            expected_output_fragments=("PASS=2", "FAIL=0"),
+        ),
+        CommentedFixtureE2ETestCase(
             description="line and block comments around fixture branches pass",
             test_files={
                 "tests/unit/test_orders_line_comments.sql": (

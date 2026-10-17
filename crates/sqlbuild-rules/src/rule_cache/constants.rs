@@ -1,7 +1,7 @@
 //! The SQL rule result cache format and the inputs its keys separate.
 
 /// Bumped whenever key derivation or the stored finding shape changes.
-pub(crate) const CACHE_VERSION: &str = "sql-rules-v6";
+pub(crate) const CACHE_VERSION: &str = "sql-rules-v7";
 pub(crate) const MODEL_KEY_KIND: &str = "model";
 pub(crate) const FILE_KEY_KIND: &str = "file";
 pub(crate) const LINT_KEY_KIND: &str = "lint";

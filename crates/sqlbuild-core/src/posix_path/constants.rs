@@ -6,3 +6,5 @@ pub(crate) const ROOT: &str = "/";
 pub(crate) const DOUBLE_ROOT: &str = "//";
 pub(crate) const CURRENT: &str = ".";
 pub(crate) const SUFFIX_MARK: char = '.';
+/// The parent-directory component `normpath` removes lexically.
+pub(crate) const PARENT: &str = "..";

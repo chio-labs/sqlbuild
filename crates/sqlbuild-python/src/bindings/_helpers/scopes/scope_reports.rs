@@ -32,9 +32,9 @@ use crate::bindings::_helpers::scopes::scope_objects::{
     read_declaration, read_index,
 };
 use crate::bindings::_helpers::scopes::scope_report_objects::{
-    browse_object, diagnostics_object, explanation_object, json_to_python, list_object,
-    move_object, read_declaration_target, read_filters, read_optional_target, read_result,
-    read_target, report_object,
+    browse_object, diagnostics_object, explanation_object, json_to_plain, json_to_python,
+    list_object, move_object, read_declaration_target, read_filters, read_optional_target,
+    read_result, read_target, report_object,
 };
 
 type PyObject = Py<PyAny>;
@@ -318,9 +318,17 @@ pub(crate) fn serialize_scope_report(
 #[pyfunction]
 #[pyo3(name = "scope_metadata_projection", signature = (*, index))]
 pub(crate) fn metadata_projection(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+    json_to_python(py, projection_json(index)?, false)
+}
+
+/// `plain_value` of `scope_metadata_projection(index=index)`, without a Python round trip.
+pub(crate) fn metadata_projection_value(index: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
+    json_to_plain(projection_json(index)?)
+}
+
+fn projection_json(index: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
     let index: ProjectionIndex = projection_index(read_index(index)?);
-    let projection: JsonValue = scope_metadata_projection(&index);
-    json_to_python(py, projection, false)
+    Ok(scope_metadata_projection(&index))
 }
 
 fn optional<'py>(

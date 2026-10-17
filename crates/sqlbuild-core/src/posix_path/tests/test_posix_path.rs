@@ -1,9 +1,10 @@
+use crate::posix_path::main::posix_abspath::posix_abspath;
 use crate::posix_path::main::posix_join::posix_join;
 use crate::posix_path::main::posix_name::posix_name;
 use crate::posix_path::main::posix_parent::posix_parent;
 use crate::posix_path::main::posix_parts::posix_parts;
 use crate::posix_path::main::posix_suffix::posix_suffix;
-use crate::posix_path::tests::test_types::PosixPathTestCase;
+use crate::posix_path::tests::test_types::{PosixAbspathTestCase, PosixPathTestCase};
 
 #[test]
 fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
@@ -135,6 +136,123 @@ fn given_paths_when_reading_pure_posix_parts_then_they_match_pathlib() {
         assert_eq!(
             posix_parts(&posix_join(&parts)),
             parts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_relative_and_absolute_paths_when_making_them_absolute_then_they_match_posixpath_abspath() {
+    let test_cases = [
+        PosixAbspathTestCase {
+            description: "a relative artifact path",
+            cwd: "/home/u/proj",
+            path: "target/compiled/a.sql",
+            expected_path: "/home/u/proj/target/compiled/a.sql",
+        },
+        PosixAbspathTestCase {
+            description: "an absolute path ignores the working directory",
+            cwd: "/home/u/proj",
+            path: "/abs/x.sql",
+            expected_path: "/abs/x.sql",
+        },
+        PosixAbspathTestCase {
+            description: "current and empty components are dropped",
+            cwd: "/home/u/proj",
+            path: "./a//b/",
+            expected_path: "/home/u/proj/a/b",
+        },
+        PosixAbspathTestCase {
+            description: "a parent component climbs out of the working directory",
+            cwd: "/home/u/proj",
+            path: "../up/x",
+            expected_path: "/home/u/up/x",
+        },
+        PosixAbspathTestCase {
+            description: "parents stop at the root",
+            cwd: "/home/u/proj",
+            path: "a/../../../../x",
+            expected_path: "/x",
+        },
+        PosixAbspathTestCase {
+            description: "a root working directory",
+            cwd: "/",
+            path: "rel",
+            expected_path: "/rel",
+        },
+        PosixAbspathTestCase {
+            description: "a parent of the root stays at the root",
+            cwd: "/",
+            path: "../x",
+            expected_path: "/x",
+        },
+        PosixAbspathTestCase {
+            description: "a working directory with a trailing slash",
+            cwd: "/home/u/",
+            path: "x",
+            expected_path: "/home/u/x",
+        },
+        PosixAbspathTestCase {
+            description: "exactly two leading slashes are kept",
+            cwd: "/home/u/proj",
+            path: "//net/x",
+            expected_path: "//net/x",
+        },
+        PosixAbspathTestCase {
+            description: "three leading slashes collapse to one",
+            cwd: "/home/u/proj",
+            path: "///three/x",
+            expected_path: "/three/x",
+        },
+        PosixAbspathTestCase {
+            description: "a double-slash working directory keeps its root",
+            cwd: "//net/share",
+            path: "x/../y",
+            expected_path: "//net/share/y",
+        },
+        PosixAbspathTestCase {
+            description: "an empty path is the working directory",
+            cwd: "/home/u/proj",
+            path: "",
+            expected_path: "/home/u/proj",
+        },
+        PosixAbspathTestCase {
+            description: "a dot is the working directory",
+            cwd: "/home/u/proj",
+            path: ".",
+            expected_path: "/home/u/proj",
+        },
+        PosixAbspathTestCase {
+            description: "dots between components are dropped",
+            cwd: "/home/u/proj",
+            path: "a/./b/./",
+            expected_path: "/home/u/proj/a/b",
+        },
+        PosixAbspathTestCase {
+            description: "climbing past the root gives the root",
+            cwd: "/home/u/proj",
+            path: "/a/b/../../..",
+            expected_path: "/",
+        },
+        PosixAbspathTestCase {
+            description: "climbing past a double-slash root keeps it",
+            cwd: "/home/u/proj",
+            path: "//a/../..",
+            expected_path: "//",
+        },
+        PosixAbspathTestCase {
+            description: "three dots are an ordinary name",
+            cwd: "/home/u/proj",
+            path: "x/.../y",
+            expected_path: "/home/u/proj/x/.../y",
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            posix_abspath(test_case.cwd, test_case.path),
+            test_case.expected_path,
             "{}",
             test_case.description
         );

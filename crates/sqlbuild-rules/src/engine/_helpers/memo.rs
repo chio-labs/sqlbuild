@@ -3,7 +3,6 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
 use crate::constants::{API_VERSION, NATIVE_ROWS_MEMO_VERSION};
 use crate::engine::_helpers::evaluation::evaluate_request;
@@ -37,10 +36,11 @@ pub(crate) fn evaluate_rows(rows: RowsRequest) -> Result<RowsEvaluation, RowsErr
     decode(&response, was_reused)
 }
 
-/// `model` with the digest of its exact facts, which keys its cached findings.
+/// `model` with the BLAKE3 digest of its exact facts, which keys its cached findings.
 fn digested(mut model: Model) -> Result<Model, RowsError> {
-    let bytes: Vec<u8> = serde_json::to_vec(&model).map_err(rules_error)?;
-    model.payload_digest = Some(format!("{:x}", Sha256::digest(&bytes)));
+    let mut hasher: blake3::Hasher = blake3::Hasher::new();
+    serde_json::to_writer(&mut hasher, &model).map_err(rules_error)?;
+    model.payload_digest = Some(hasher.finalize().to_hex().to_string());
     Ok(model)
 }
 
@@ -50,14 +50,14 @@ fn identity(
     models: &[Model],
     code_identity: &str,
 ) -> Result<String, RowsError> {
-    let mut hasher: Sha256 = Sha256::new();
+    let mut hasher: blake3::Hasher = blake3::Hasher::new();
     for part in [NATIVE_ROWS_MEMO_VERSION, code_identity] {
         hasher.update(part.as_bytes());
         hasher.update(b"\0");
     }
-    hasher.update(serde_json::to_vec(request).map_err(rules_error)?);
+    serde_json::to_writer(&mut hasher, request).map_err(rules_error)?;
     hasher.update(b"\0");
-    hasher.update((models.len() as u64).to_le_bytes());
+    hasher.update(&(models.len() as u64).to_le_bytes());
     for model in models {
         hasher.update(
             model
@@ -68,7 +68,7 @@ fn identity(
         );
         hasher.update(b"\0");
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(hasher.finalize().to_hex().to_string())
 }
 
 /// The stored response for exactly `identity`; an unreadable or foreign memo answers nothing.
