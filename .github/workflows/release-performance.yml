@@ -32,11 +32,13 @@ on:
 permissions:
   contents: read
 
-# One run per main commit: a newer push cancels the comparison of an older one. Manual runs are
-# never cancelled by pushes.
+# Every main commit gets its own comparison, so a later push never cancels the run that would
+# report an earlier regression. Pull request runs supersede older runs of the same pull request.
 concurrency:
-  group: release-performance-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: >-
+    release-performance-${{ github.event_name }}-${{
+    github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   compare:
@@ -103,9 +105,12 @@ jobs:
           if [[ -n "${BASELINE}" ]]; then
             args+=(--baseline "${BASELINE}")
           fi
-          status=0
+          # The comparison's own exit status, not tee's, decides the outcome.
+          set +e
           uv run python -m scripts.compare_release_performance "${args[@]}" \
-            | tee "${evidence}/release-performance.md" || status=$?
+            | tee "${evidence}/release-performance.md"
+          status="${PIPESTATUS[0]}"
+          set -e
           regressed=false
           if [[ "${status}" != "0" && -f "${evidence}/release-performance.json" ]] && \
              jq -e 'any(.verdicts[]; .regressed)' "${evidence}/release-performance.json" > /dev/null; then
