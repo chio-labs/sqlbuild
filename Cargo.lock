@@ -1311,6 +1311,7 @@ dependencies = [
 name = "sqlbuild-rules"
 version = "0.157.0"
 dependencies = [
+ "blake3",
  "fensu-policy",
  "globset",
  "polyglot-sql",

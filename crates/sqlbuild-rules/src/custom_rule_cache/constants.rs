@@ -1,7 +1,7 @@
 //! The custom-rule result cache format and the inputs its identities separate.
 
 /// Bumped whenever identity derivation or the stored entry shape changes.
-pub(crate) const CACHE_VERSION: &str = "custom-rules-native-v1";
+pub(crate) const CACHE_VERSION: &str = "custom-rules-native-v2";
 pub(crate) const RULE_KIND: &str = "rule";
 pub(crate) const PROJECT_SUBJECT_KIND: &str = "project";
 pub(crate) const MODEL_SUBJECT_KIND: &str = "model";

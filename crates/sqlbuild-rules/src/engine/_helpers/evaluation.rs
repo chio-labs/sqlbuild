@@ -20,7 +20,6 @@ use fensu_policy::lifecycle::models::{
 #[cfg(test)]
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::Instant;
@@ -382,13 +381,13 @@ fn model_cache_identities(
 
 /// Key one model's findings by payload, model-rules fingerprint, and derived test counts.
 fn model_cache_identity(model: &crate::models::Model, model_rules: &str) -> Result<String, String> {
-    let mut digest = Sha256::new();
+    let mut digest = blake3::Hasher::new();
     digest.update(MODEL_RULES_IDENTITY_SEED);
-    digest.update([0]);
+    digest.update(&[0]);
     digest.update(NATIVE_BUILD_IDENTITY.as_bytes());
-    digest.update([0]);
+    digest.update(&[0]);
     digest.update(model_rules.as_bytes());
-    digest.update([0]);
+    digest.update(&[0]);
     match &model.payload_digest {
         Some(payload) => {
             digest.update(b"payload:");
@@ -396,12 +395,12 @@ fn model_cache_identity(model: &crate::models::Model, model_rules: &str) -> Resu
         }
         None => {
             digest.update(b"model:");
-            digest.update(serde_json::to_vec(model).map_err(|error| error.to_string())?);
+            serde_json::to_writer(&mut digest, model).map_err(|error| error.to_string())?;
         }
     }
-    digest.update([0]);
-    digest.update(model.empty_input_only_test_count.to_le_bytes());
-    Ok(format!("{:x}", digest.finalize()))
+    digest.update(&[0]);
+    digest.update(&model.empty_input_only_test_count.to_le_bytes());
+    Ok(digest.finalize().to_hex().to_string())
 }
 
 fn validate_suppression_codes(
