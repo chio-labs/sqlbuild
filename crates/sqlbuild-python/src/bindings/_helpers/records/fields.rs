@@ -16,8 +16,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{
     FROZEN_INSTANCE_ERROR, ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
-use crate::bindings::_helpers::records::registry;
 
 /// Every registered record spec, in registration order.
 pub(crate) fn all_specs() -> impl Iterator<Item = &'static RecordSpec> {
@@ -166,8 +166,8 @@ fn default_value<'py>(
         FieldDefault::EmptyFrozenset => Ok(PyFrozenSet::empty(py)?.into_any()),
         FieldDefault::Member(module, class, member) => imported(py, module, class)?.getattr(member),
         FieldDefault::HostMember(class, member) => host::entry(py, class)?.getattr(member),
-        FieldDefault::NativeMember(class, member) => registry::class(py, class)?.getattr(member),
-        FieldDefault::NativeCall(class) => registry::class(py, class)?.call0(),
+        FieldDefault::NativeMember(class, member) => enum_member(py, class, member),
+        FieldDefault::NativeCall(class) => new_record(py, class, (), None),
         FieldDefault::Factory(factory) => factory(py),
         FieldDefault::CallText(module, name, text) => imported(py, module, name)?.call1((text,)),
     }
