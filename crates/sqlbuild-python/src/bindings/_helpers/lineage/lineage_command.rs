@@ -41,7 +41,6 @@ use crate::bindings::_helpers::lineage::lineage_cache::{
 };
 use crate::bindings::_helpers::lineage::lineage_index::{graph_index, index_views, lineage_keys};
 use crate::bindings::_helpers::lineage::project_lineage::build_direct_semantic_uses;
-use crate::bindings::_helpers::lineage::project_lineage::build_project_column_lineage;
 use crate::bindings::_helpers::planner_selection::selectors::resolve_project_selector_tokens;
 use crate::bindings::_helpers::planner_selection::selectors::resolve_project_selectors;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
@@ -52,7 +51,7 @@ use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_s
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const UNKNOWN_SELECTOR_ERROR_CODE: &str = "S007";
@@ -374,13 +373,12 @@ fn column_lineage<'py>(
         py,
         (&message, rich && count >= RICH_STATUS_MODEL_THRESHOLD),
         || {
-            build_project_column_lineage(
-                &native_field(graph, "project")?,
-                None,
+            registry::native(py, NativeAttr::BuildProjectColumnLineage)?.call1((
+                native_field(graph, "project")?,
+                py.None(),
                 mode,
-                Some(PyFrozenSet::new(py, &candidates.model_names)?.as_any()),
-            )
-            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
+                PyFrozenSet::new(py, &candidates.model_names)?,
+            ))
         },
     )
 }
