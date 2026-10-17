@@ -5,7 +5,7 @@ use std::sync::{Arc, OnceLock};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 use sqlbuild_discovery::model_files::main::header_facts::header_facts;
 use sqlbuild_discovery::model_files::models::{EntryFacts, HeaderFacts};
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
@@ -16,7 +16,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_host::ModelLoopRow;
 const PREPASS_WORKERS: usize = 4;
 const WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
 
-static POOL: OnceLock<Result<ThreadPool, String>> = OnceLock::new();
+static POOL: OnceLock<Result<ThreadPool, ThreadPoolBuildError>> = OnceLock::new();
 
 /// A model's native header values and the relative path parse messages name.
 pub(crate) type NativeHeader = (Arc<[(String, AuthoredValue)]>, String);
@@ -42,22 +42,19 @@ pub(crate) fn own_entry<'a, 'py>(
         .map(|_| entry))
 }
 
-/// Each model's header facts, computed on the compile pool; `None` where no native header exists.
-pub(crate) fn all_header_facts(
-    headers: &[Option<NativeHeader>],
-) -> Result<Vec<Option<HeaderFacts>>, String> {
-    let pool: &ThreadPool = POOL
-        .get_or_init(|| {
-            ThreadPoolBuilder::new()
-                .num_threads(PREPASS_WORKERS)
-                .stack_size(WORKER_STACK_BYTES)
-                .thread_name(|index| format!("sqlbuild-model-prepass-{index}"))
-                .build()
-                .map_err(|error| error.to_string())
-        })
-        .as_ref()
-        .map_err(Clone::clone)?;
-    Ok(pool.install(|| headers.par_iter().map(facts_of).collect()))
+/// Each model's header facts on the compile pool, or in turn when the pool cannot start.
+pub(crate) fn all_header_facts(headers: &[Option<NativeHeader>]) -> Vec<Option<HeaderFacts>> {
+    let pool: &Result<ThreadPool, ThreadPoolBuildError> = POOL.get_or_init(|| {
+        ThreadPoolBuilder::new()
+            .num_threads(PREPASS_WORKERS)
+            .stack_size(WORKER_STACK_BYTES)
+            .thread_name(|index| format!("sqlbuild-model-prepass-{index}"))
+            .build()
+    });
+    match pool {
+        Ok(pool) => pool.install(|| headers.par_iter().map(facts_of).collect()),
+        Err(_) => headers.iter().map(facts_of).collect(),
+    }
 }
 
 fn facts_of(header: &Option<NativeHeader>) -> Option<HeaderFacts> {

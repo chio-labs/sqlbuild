@@ -393,7 +393,7 @@ impl NativeModelLoop {
         let mut models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
         let headers: Vec<Option<NativeHeader>> = models.iter().map(native_header).collect();
         let facts: Vec<Option<HeaderFacts>> = py
-            .compiler_detach(|| all_header_facts(&headers))
+            .compiler_detach(|| Ok(all_header_facts(&headers)))
             .map_err(compiler_error)?;
         for (row, facts) in models.iter_mut().zip(facts) {
             row.header = facts;

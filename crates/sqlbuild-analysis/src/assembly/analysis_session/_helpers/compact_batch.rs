@@ -617,20 +617,21 @@ impl SessionCatalog {
             query_indexes.push(query_index);
             let references: Map<String, Value> = lineage_resources(member, share.as_ref());
             let declared: Value = json!(declared_column_order(member, batch.nullability));
-            // Batch-wide fields are identical for every member, so they stay out of the dedup key.
-            let identity: String =
+            let member_template_identity: String =
                 json!([query_index, references, declared, member.recover_cte_facts]).to_string();
-            let template_index: usize = *template_keys.entry(identity).or_insert_with(|| {
-                templates.push(json!({
-                    "queryIndex": query_index,
-                    "references": references,
-                    "functionReturnTypes": function_return_types,
-                    "declaredColumnOrder": declared,
-                    "recoverCteFacts": member.recover_cte_facts,
-                    "richTypeInference": batch.rich_type_inference,
-                }));
-                templates.len() - 1
-            });
+            let template_index: usize = *template_keys
+                .entry(member_template_identity)
+                .or_insert_with(|| {
+                    templates.push(json!({
+                        "queryIndex": query_index,
+                        "references": references,
+                        "functionReturnTypes": function_return_types,
+                        "declaredColumnOrder": declared,
+                        "recoverCteFacts": member.recover_cte_facts,
+                        "richTypeInference": batch.rich_type_inference,
+                    }));
+                    templates.len() - 1
+                });
             let resource_names: Map<String, Value> = member
                 .lineage_references
                 .iter()
