@@ -15,6 +15,7 @@ use sqlbuild_refactor::refactoring::models::{
 use sqlbuild_refactor::refactoring::types::PhysicalColumn;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -172,11 +173,11 @@ fn remaining_contract_findings<'py>(
         keywords.set_item("resource_name", native_field(first, "resource_name")?)?;
         keywords.set_item(
             "kind",
-            registry::class(py, RecordId::ContractFindingKind)?.getattr("OWNERSHIP_CONFLICT")?,
+            enum_member(py, RecordId::ContractFindingKind, "OWNERSHIP_CONFLICT")?,
         )?;
         keywords.set_item("message", conflict)?;
         let ownership: Bound<'py, PyAny> =
-            registry::class(py, RecordId::ContractFinding)?.call((), Some(&keywords))?;
+            new_record(py, RecordId::ContractFinding, (), Some(&keywords))?;
         let mut remaining: Vec<Bound<'py, PyAny>> = findings.clone();
         remaining.push(ownership);
         return PyTuple::new(py, remaining);

@@ -36,6 +36,7 @@ use sqlbuild_rules::sql_lint::types::PreparedSql;
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -317,9 +318,9 @@ pub(crate) struct ViolationClasses<'py> {
 impl<'py> ViolationClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            violation: registry::class(py, RecordId::LintViolation)?,
-            edit: registry::class(py, RecordId::LintEdit)?,
-            severity: registry::class(py, RecordId::LintSeverity)?,
+            violation: record_class(py, RecordId::LintViolation)?,
+            edit: record_class(py, RecordId::LintEdit)?,
+            severity: record_class(py, RecordId::LintSeverity)?,
         })
     }
 
@@ -416,8 +417,9 @@ impl LintOutcome {
         for (file, message) in &self.unexpandable {
             unexpandable.set_item(&paths[*file], message)?;
         }
-        call_with(
-            &registry::class(py, RecordId::LintRunResult)?,
+        new_record_with(
+            py,
+            RecordId::LintRunResult,
             &[
                 (
                     "files_checked",

@@ -1,15 +1,8 @@
 import dataclasses
-from collections.abc import Callable
 from itertools import product
 from pathlib import Path
-from typing import Any
 
-import pytest
-
-import sqlbuild._native as compile_models
 from sqlbuild._native import (
-    CompiledModel,
-    CompiledProject,
     Model,
     build_compiled_project,
     custom_rule_fact_digest,
@@ -160,26 +153,3 @@ def fact_digests(*, project: CompiledProjectView, root: Path) -> dict[FactKey, s
         key: custom_rule_fact_digest(project=project, project_dir=root, key=key)
         for key in every_fact_key(project)
     }
-
-
-def record_trimmed_fields(
-    monkeypatch: pytest.MonkeyPatch,
-) -> dict[type[object], set[str]]:
-    """Record replaced fields and omitted constructor fields while the host payload is trimmed."""
-
-    trimmed: dict[type[object], set[str]] = {CompiledProject: set(), CompiledModel: set()}
-    replace: Callable[..., Any] = dataclasses.replace
-
-    def recording_replace(obj: Any, /, **changes: object) -> Any:
-        trimmed.setdefault(type(obj), set()).update(changes)
-        return replace(obj, **changes)
-
-    def recording_model(**values: Any) -> CompiledModel:
-        trimmed[CompiledModel].update(
-            {field.name for field in dataclasses.fields(CompiledModel)} - values.keys()
-        )
-        return CompiledModel(**values)
-
-    monkeypatch.setattr(dataclasses, "replace", recording_replace)
-    monkeypatch.setattr(compile_models, "CompiledModel", recording_model)
-    return trimmed

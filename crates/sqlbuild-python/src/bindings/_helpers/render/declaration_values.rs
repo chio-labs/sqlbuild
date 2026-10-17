@@ -9,6 +9,9 @@ use pyo3::{IntoPyObject, pyclass, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{
+    enum_member, new_record, new_record_with, record_class,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -45,8 +48,8 @@ fn runtime_declarations<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = discovered.py();
     let classes = (
-        registry::class(py, RecordId::DeclarationIdentity)?,
-        registry::class(py, RecordId::DeclarationKind)?,
+        record_class(py, RecordId::DeclarationIdentity)?,
+        record_class(py, RecordId::DeclarationKind)?,
     );
     let declarations: Bound<'py, PyDict> = PyDict::new(py);
     for (files, kind) in [("enum_files", "ENUM"), ("constant_files", "CONSTANT")] {
@@ -63,9 +66,7 @@ fn runtime_declarations<'py>(
             }
         }
     }
-    let resource_identity: Bound<'py, PyAny> = registry::class(py, RecordId::ResourceIdentity)?;
-    let model_kind: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ResourceKind)?.getattr("MODEL")?;
+    let model_kind: Bound<'py, PyAny> = enum_member(py, RecordId::ResourceKind, "MODEL")?;
     for model_file in native_field(discovered, "model_files")?.try_iter()? {
         let model_file: Bound<'py, PyAny> = model_file?;
         let name: Bound<'py, PyAny> = model_file
@@ -76,7 +77,8 @@ fn runtime_declarations<'py>(
         } else {
             native_field(&model_file, "relative_path")?.getattr("stem")?
         };
-        let owner: Bound<'py, PyAny> = resource_identity.call1((&model_kind, name))?;
+        let owner: Bound<'py, PyAny> =
+            new_record(py, RecordId::ResourceIdentity, (&model_kind, name), None)?;
         for (attribute, kind) in [
             ("enum_declarations", "ENUM"),
             ("constant_declarations", "CONSTANT"),
@@ -111,8 +113,7 @@ fn runtime_declarations<'py>(
 /// Resources whose declarations differ from their directory's: private owners and grantees.
 fn resource_specific<'py>(scope_index: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyFrozenSet>> {
     let py: Python<'py> = scope_index.py();
-    let private: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ScopeKind)?.getattr("PRIVATE")?;
+    let private: Bound<'py, PyAny> = enum_member(py, RecordId::ScopeKind, "PRIVATE")?;
     let mut resources: Vec<Bound<'py, PyAny>> = Vec::new();
     for declaration in native_field(scope_index, "declarations")?.try_iter()? {
         let declaration: Bound<'py, PyAny> = declaration?;
@@ -140,8 +141,9 @@ pub(crate) fn declaration_scope_resolver<'py>(
     } else {
         lookup.clone()
     };
-    let projection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::DeclarationRuntimeProjection)?,
+    let projection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::DeclarationRuntimeProjection,
         &[(
             "declarations",
             imported(py, TYPES_MODULE, "MappingProxyType")?.call1((&declarations,))?,
@@ -149,8 +151,9 @@ pub(crate) fn declaration_scope_resolver<'py>(
     )?;
     let native_contexts: Bound<'py, PyAny> =
         native_declaration_contexts(&lookup, declarations.as_any())?;
-    call_with(
-        &registry::class(py, RecordId::DeclarationScopeResolver)?,
+    new_record_with(
+        py,
+        RecordId::DeclarationScopeResolver,
         &[
             ("project_dir", native_field(discovered, "project_dir")?),
             ("lookup", lookup),
@@ -206,15 +209,15 @@ pub(crate) fn native_declaration_contexts<'py>(
     declarations: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = lookup.py();
-    let kind_type: Bound<'py, PyAny> = registry::class(py, RecordId::DeclarationKind)?;
+    let kind_type: Bound<'py, PyAny> = record_class(py, RecordId::DeclarationKind)?;
     let kinds: Vec<Bound<'py, PyAny>> = DECLARATION_KINDS
         .iter()
-        .map(|kind| kind_type.getattr(*kind))
+        .map(|kind| enum_member(py, RecordId::DeclarationKind, kind))
         .collect::<PyResult<_>>()?;
     let value_classes: Vec<Bound<'py, PyAny>> = vec![
-        registry::class(py, RecordId::EnumDeclaration)?,
-        registry::class(py, RecordId::ConstantDeclaration)?,
-        registry::class(py, RecordId::LoadedMacro)?,
+        record_class(py, RecordId::EnumDeclaration)?,
+        record_class(py, RecordId::ConstantDeclaration)?,
+        record_class(py, RecordId::LoadedMacro)?,
     ];
     let index: Bound<'py, PyAny> = native_field(lookup, "visibility_index")?;
     let lookup_declarations: Bound<'py, PyAny> = native_field(lookup, "declarations")?;
@@ -243,18 +246,18 @@ pub(crate) fn native_declaration_contexts<'py>(
         )?);
     }
     let reasons: Bound<'py, PyDict> = PyDict::new(py);
-    for reason in registry::class(py, RecordId::VisibilityReason)?.try_iter()? {
+    for reason in record_class(py, RecordId::VisibilityReason)?.try_iter()? {
         let reason: Bound<'py, PyAny> = reason?;
         reasons.set_item(native_field(&reason, "value")?, reason)?;
     }
     let classes: Bound<'py, PyDict> = PyDict::new(py);
     classes.set_item(
         "visibility_record",
-        registry::class(py, RecordId::VisibilityRecord)?,
+        record_class(py, RecordId::VisibilityRecord)?,
     )?;
     classes.set_item(
         "resolution_context",
-        registry::class(py, RecordId::DeclarationResolutionContext)?,
+        record_class(py, RecordId::DeclarationResolutionContext)?,
     )?;
     classes.set_item("reasons", reasons)?;
     let keys: Bound<'py, PyDict> = PyDict::new(py);
@@ -284,16 +287,13 @@ pub(crate) fn native_declaration_contexts<'py>(
         ("resource_identity", RecordId::ResourceIdentity),
         ("declaration_identity", RecordId::DeclarationIdentity),
     ] {
-        lookups.set_item(name, registry::class(py, class)?)?;
+        lookups.set_item(name, record_class(py, class)?)?;
     }
-    lookups.set_item(
-        "resource_kind",
-        registry::class(py, RecordId::ResourceKind)?,
-    )?;
+    lookups.set_item("resource_kind", record_class(py, RecordId::ResourceKind)?)?;
     lookups.set_item("declaration_kind", kind_type)?;
     lookups.set_item(
         "private_scope",
-        registry::class(py, RecordId::ScopeKind)?.getattr("PRIVATE")?,
+        enum_member(py, RecordId::ScopeKind, "PRIVATE")?,
     )?;
     lookups.set_item(
         "identity_error",

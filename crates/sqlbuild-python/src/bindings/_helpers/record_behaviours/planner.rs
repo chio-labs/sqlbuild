@@ -12,6 +12,9 @@ use sqlbuild_core::migration_values::models::{DecisionTraits, ModelMigrationFact
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, enum_member, new_record, record_class,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -211,7 +214,7 @@ fn override_integer<'py>(
     }
     let parsed: Bound<'py, PyAny> =
         parse_value(value, &PyString::new(py, INTEGER_CURSOR).into_any())?;
-    if parsed.is_instance(&registry::class(py, RecordId::IntegerValue)?)? {
+    if parsed.is_instance(&record_class(py, RecordId::IntegerValue)?)? {
         return Ok(parsed);
     }
     Err(invalid())
@@ -305,9 +308,9 @@ pub(crate) fn forward_only_backfill(py: Python<'_>) -> PyResult<Bound<'_, PyAny>
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item(
         "action",
-        registry::class(py, RecordId::BackfillAction)?.getattr("FORWARD_ONLY")?,
+        enum_member(py, RecordId::BackfillAction, "FORWARD_ONLY")?,
     )?;
-    registry::class(py, RecordId::BackfillResult)?.call((), Some(&keywords))
+    new_record(py, RecordId::BackfillResult, (), Some(&keywords))
 }
 
 /// `ScenarioArtifactIdentity.kind` coerced to `ScenarioArtifactKind`.
@@ -316,9 +319,7 @@ pub(crate) fn finish_scenario_artifact_kind(
     mut values: Vec<Py<PyAny>>,
 ) -> PyResult<Vec<Py<PyAny>>> {
     if let Some(kind) = values.first_mut() {
-        *kind = registry::class(py, RecordId::ScenarioArtifactKind)?
-            .call1((kind.bind(py),))?
-            .unbind();
+        *kind = enum_from_value(py, RecordId::ScenarioArtifactKind, kind.bind(py))?.unbind();
     }
     Ok(values)
 }

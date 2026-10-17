@@ -10,8 +10,8 @@ use sqlbuild_rules::rules::main::selected_sql_codes::selected_sql_codes;
 use sqlbuild_rules::rules::models::{BuiltinOption, BuiltinOptionKind};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const FAMILY_SUFFIX_LENGTH: usize = 3;
 
@@ -55,13 +55,15 @@ fn rule<'py>(
     check: &Bound<'py, PyAny>,
     metadata: RuleMetadata,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let option_class: Bound<'py, PyAny> = registry::class(py, RecordId::RuleOption)?;
+    let option_class: Bound<'py, PyAny> = record_class(py, RecordId::RuleOption)?;
     let options: Vec<Bound<'py, PyAny>> = builtin_options(&metadata.code)
         .into_iter()
         .map(|declared| option(&option_class, declared))
         .collect::<PyResult<_>>()?;
     let guidance: Bound<'py, PyAny> = match metadata.guidance {
-        Some(guidance) => registry::class(py, RecordId::RuleGuidance)?.call(
+        Some(guidance) => new_record(
+            py,
+            RecordId::RuleGuidance,
             (),
             Some(&keywords(
                 py,
@@ -110,7 +112,7 @@ fn rule<'py>(
             ("guidance", guidance),
         ],
     )?;
-    registry::class(py, RecordId::Rule)?.call((), Some(&arguments))
+    new_record(py, RecordId::Rule, (), Some(&arguments))
 }
 
 /// Every built-in rule as a `Rule` whose `check` is the given placeholder.
@@ -118,7 +120,7 @@ pub(crate) fn builtin_rules<'py>(
     py: Python<'py>,
     check: Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    let subjects: Bound<'py, PyAny> = registry::class(py, RecordId::RuleSubject)?;
+    let subjects: Bound<'py, PyAny> = record_class(py, RecordId::RuleSubject)?;
     compiler_guard(|| Ok(catalogue()))?
         .into_iter()
         .map(|metadata| rule(py, &subjects, &check, metadata))

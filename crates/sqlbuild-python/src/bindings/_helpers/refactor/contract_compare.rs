@@ -9,6 +9,7 @@ use sqlbuild_core::text::main::python_casefold::python_casefold;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -28,8 +29,8 @@ struct Vocabulary<'py> {
 impl<'py> Vocabulary<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            finding: registry::class(py, RecordId::ContractFinding)?,
-            kinds: registry::class(py, RecordId::ContractFindingKind)?,
+            finding: record_class(py, RecordId::ContractFinding)?,
+            kinds: record_class(py, RecordId::ContractFindingKind)?,
             replace: py.import(DATACLASSES_MODULE)?.getattr("replace")?,
         })
     }
@@ -117,7 +118,7 @@ fn column_infos<'py>(
 }
 
 fn resource_type<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, RecordId::CompiledResourceType)?.call1((value,))
+    enum_from_value(py, RecordId::CompiledResourceType, value)
 }
 
 /// The evidence a model's authored contract offers, before inspection.
@@ -134,7 +135,7 @@ fn model_evidence<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
         )
     };
     keyword_call(
-        &registry::class(py, RecordId::ContractEvidence)?,
+        &record_class(py, RecordId::ContractEvidence)?,
         vec![
             ("resource_type", resource_type(py, MODEL_RESOURCE)?),
             ("resource_name", native_field(model, "name")?),
@@ -185,7 +186,7 @@ fn source_evidence<'py>(
         text(py, &relation)
     };
     keyword_call(
-        &registry::class(py, RecordId::ContractEvidence)?,
+        &record_class(py, RecordId::ContractEvidence)?,
         vec![
             ("resource_type", resource),
             ("resource_name", name),

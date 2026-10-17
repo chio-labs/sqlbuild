@@ -12,10 +12,9 @@ use sqlbuild_rules::dsl_headers::main::sql_body_ranges::sql_body_ranges as body_
 use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderSpan, HeaderViolation};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
 use crate::bindings::_helpers::rules::native_header_parser::NativeHeaderParser;
 
@@ -71,12 +70,12 @@ fn scan_headers<'py>(
     first_only: bool,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = contents.py();
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::HeaderSpan)?;
     let headers: Vec<Bound<'py, PyAny>> = scan(&text(contents)?, first_only)
         .into_iter()
         .map(|header| {
-            call_with(
-                &class,
+            new_record_with(
+                py,
+                RecordId::HeaderSpan,
                 &[
                     ("kind", PyString::new(py, &header.kind).into_any()),
                     ("start", header.start.into_pyobject(py)?.into_any()),

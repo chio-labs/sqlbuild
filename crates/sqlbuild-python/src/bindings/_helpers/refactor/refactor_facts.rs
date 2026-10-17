@@ -11,6 +11,7 @@ use sqlbuild_refactor::refactoring::models::{
     SchemaColumnFacts, SqlFileRole,
 };
 
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -336,13 +337,10 @@ pub(crate) fn declaration_placement(
         None
     } else {
         let options: Bound<'_, PyDict> = PyDict::new(py);
-        options.set_item(
-            "kind",
-            registry::class(py, RecordId::ResourceKind)?.getattr("MODEL")?,
-        )?;
+        options.set_item("kind", enum_member(py, RecordId::ResourceKind, "MODEL")?)?;
         options.set_item("name", model)?;
         let resource: Bound<'_, PyAny> =
-            registry::class(py, RecordId::ResourceIdentity)?.call((), Some(&options))?;
+            new_record(py, RecordId::ResourceIdentity, (), Some(&options))?;
         let records: Option<Py<PyTuple>> =
             scope_relocated_declarations(py, &index, &resource, destination)?;
         if let Some(records) = records {

@@ -17,6 +17,7 @@ use sqlbuild_rules::project_tree::main::project_tree_entries::project_tree_entri
 use sqlbuild_rules::project_tree::models::ProjectTreeEntry;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -152,7 +153,6 @@ fn escapes(path: &Bound<'_, PyAny>) -> PyResult<bool> {
 fn project_tree_paths<'py>(root: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = root.py();
     let root: PathBuf = root.extract()?;
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::ProjectPath)?;
     let mut paths: Vec<(Bound<'py, PyAny>, bool)> = project_tree_entries(&root)
         .into_iter()
         .map(|ProjectTreeEntry { relative, is_file }| {
@@ -179,7 +179,7 @@ fn project_tree_paths<'py>(root: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTu
             keywords.set_item("value", value)?;
             keywords.set_item("is_file", is_file)?;
             keywords.set_item("is_dir", !is_file)?;
-            class.call((), Some(&keywords))
+            new_record(py, RecordId::ProjectPath, (), Some(&keywords))
         })
         .collect::<PyResult<_>>()?;
     PyTuple::new(py, nodes)

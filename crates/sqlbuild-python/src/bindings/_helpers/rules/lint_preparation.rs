@@ -6,10 +6,10 @@ use pyo3::types::{PyBool, PyDict, PyTuple};
 use sqlbuild_rules::lint_text::models::{ExpansionSpan, LintSqlBody};
 
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     BodyRole, SingleBody, SingleBodyRequest, prepare_single_body,
 };
@@ -36,7 +36,7 @@ fn pass_objects<'py>(
     py: Python<'py>,
     passes: &[Vec<ExpansionSpan>],
 ) -> PyResult<Bound<'py, PyTuple>> {
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::ExpansionSpan)?;
+    let class: Bound<'py, PyAny> = record_class(py, RecordId::ExpansionSpan)?;
     let passes: Vec<Bound<'py, PyTuple>> = passes
         .iter()
         .map(|spans| span_objects(&class, spans))
@@ -86,8 +86,9 @@ pub(crate) fn prepare_lint_body<'py>(
     })?;
     let body: &LintSqlBody = &prepared.body;
     let flag = |value: bool| PyBool::new(py, value).to_owned().into_any();
-    call_with(
-        &registry::class(py, RecordId::LintBody)?,
+    new_record_with(
+        py,
+        RecordId::LintBody,
         &[
             ("file_path", file_path.clone()),
             ("body_start", body.body_start.into_pyobject(py)?.into_any()),

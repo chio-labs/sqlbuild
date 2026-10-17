@@ -8,9 +8,9 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -66,10 +66,9 @@ fn substituted<'py>(
 
 /// `ExpansionSpan` objects for span rows, in order.
 fn span_objects<'py>(py: Python<'py>, spans: &[SpanRow]) -> PyResult<Bound<'py, PyTuple>> {
-    let span_class: Bound<'py, PyAny> = registry::class(py, RecordId::ExpansionSpan)?;
     let objects: Vec<Bound<'py, PyAny>> = spans
         .iter()
-        .map(|span| span_class.call1(*span))
+        .map(|span| new_record(py, RecordId::ExpansionSpan, *span, None))
         .collect::<PyResult<_>>()?;
     PyTuple::new(py, objects)
 }
@@ -92,10 +91,7 @@ fn declaration_context<'py>(
             ))
         })
         .collect::<PyResult<_>>()?;
-    call_with(
-        &registry::class(py, RecordId::DeclarationResolutionContext)?,
-        &fields,
-    )
+    new_record_with(py, RecordId::DeclarationResolutionContext, &fields)
 }
 
 /// `sql` with natively scanned enum and constant references spliced, and their spans.
@@ -119,7 +115,7 @@ fn declarations_expanded<'py>(
         collection_rendering.clone().unbind(),
     );
     let classes = ExpansionClasses {
-        usage_record: registry::class(py, RecordId::UsageRecord)?,
+        usage_record: record_class(py, RecordId::UsageRecord)?,
         compile_error: registry::error(py, ErrorId::CompileInput)?,
     };
     let path: String = file_path.str()?.extract()?;
@@ -280,12 +276,11 @@ fn input_declarations<'py>(
     file_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = file_path.py();
-    let resolution_class: Bound<'py, PyAny> =
-        registry::class(py, RecordId::DeclarationResolutionContext)?;
     let resolver: &Bound<'py, PyAny> = inputs.declaration_resolver.bind(py);
     let declarations: Bound<'py, PyAny> = if resolver.is_none() {
-        call_with(
-            &resolution_class,
+        new_record_with(
+            py,
+            RecordId::DeclarationResolutionContext,
             &[
                 ("enums", inputs.enums.bind(py).clone()),
                 ("constants", inputs.constants.bind(py).clone()),
@@ -303,8 +298,9 @@ fn input_declarations<'py>(
     let merged = |field: &str| -> PyResult<Bound<'py, PyAny>> {
         declarations.getattr(field)?.bitor(local.getattr(field)?)
     };
-    call_with(
-        &resolution_class,
+    new_record_with(
+        py,
+        RecordId::DeclarationResolutionContext,
         &[
             ("enums", merged("enums")?),
             ("constants", merged("constants")?),

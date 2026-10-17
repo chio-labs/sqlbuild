@@ -10,9 +10,9 @@ use sqlbuild_core::migration_values::main::plan_label::plan_label;
 use sqlbuild_core::migration_values::models::{ColumnDecisionTraits, DecisionTraits};
 
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 fn value(member: &Bound<'_, PyAny>) -> PyResult<String> {
     member.str()?.extract()
@@ -194,9 +194,7 @@ pub(crate) fn history_status(
     } else {
         "PENDING_ARCHIVE"
     };
-    Ok(registry::class(py, RecordId::OldNameViewStatus)?
-        .getattr(status)?
-        .unbind())
+    Ok(enum_member(py, RecordId::OldNameViewStatus, status)?.unbind())
 }
 
 /// `OldNameViewHistory.old`: the relation name the compatibility view occupies.

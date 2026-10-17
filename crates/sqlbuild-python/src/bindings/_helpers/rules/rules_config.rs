@@ -13,6 +13,7 @@ use sqlbuild_rules::configuration::main::load_rules_config::load_rules_config as
 use sqlbuild_rules::models::RulesConfig;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -30,7 +31,7 @@ impl<'py> Models<'py> {
         for (name, value) in fields {
             arguments.set_item(name, value)?;
         }
-        registry::class(self.py, class)?.call((), Some(&arguments))
+        new_record(self.py, class, (), Some(&arguments))
     }
 }
 

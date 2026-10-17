@@ -10,6 +10,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::{field, replaced};
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -97,8 +98,9 @@ pub(crate) fn plan_rule_run<'py>(
             ("ignore", PyTuple::empty(py).into_any()),
         ],
     )?;
-    call_with(
-        &registry::class(py, RecordId::RuleRunPlan)?,
+    new_record_with(
+        py,
+        RecordId::RuleRunPlan,
         &[
             ("effective_config", effective_config),
             ("project_dir", project_dir),

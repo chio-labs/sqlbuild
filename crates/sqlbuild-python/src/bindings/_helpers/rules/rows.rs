@@ -34,6 +34,7 @@ use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::records::compiled_project_facts;
 use crate::bindings::_helpers::compiled_project::records::declaration_rows;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -249,8 +250,9 @@ fn evaluated<'py>(
         .into_iter()
         .map(|fault| classes.finding_of_fault(fault, false))
         .collect::<PyResult<_>>()?;
-    call_with(
-        &registry::class(py, RecordId::NativeRulesEvaluation)?,
+    new_record_with(
+        py,
+        RecordId::NativeRulesEvaluation,
         &[
             ("findings", PyTuple::new(py, findings)?.into_any()),
             (

@@ -7,9 +7,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// One cursor value conversion.
 type Conversion = for<'py> fn(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>;
@@ -26,7 +26,7 @@ const CURSOR_ALGEBRA_ERROR: &str = "CursorAlgebraError";
 pub(crate) fn inferred<'py>(raw: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = raw.py();
     for class in SCALAR_CLASSES {
-        if raw.is_instance(&registry::class(py, class)?)? {
+        if raw.is_instance(&record_class(py, class)?)? {
             return Ok(raw.clone());
         }
     }
@@ -121,7 +121,7 @@ pub(crate) fn finish_cursor_snapshot(
         .collect::<PyResult<_>>()?;
     values[13] = PyTuple::new(py, pairs)?.into_any().unbind();
     let mode: Bound<'_, PyAny> =
-        registry::class(py, RecordId::CursorWatermarkMode)?.call1((values[10].bind(py),))?;
+        enum_from_value(py, RecordId::CursorWatermarkMode, values[10].bind(py))?;
     values[10] = mode.unbind();
     Ok(values)
 }
@@ -178,7 +178,7 @@ pub(crate) fn finish_input_relation(
 ) -> PyResult<Vec<Py<PyAny>>> {
     if !values[2].bind(py).is_none() {
         let grain: Bound<'_, PyAny> =
-            registry::class(py, RecordId::CursorGrain)?.call1((values[2].bind(py),))?;
+            enum_from_value(py, RecordId::CursorGrain, values[2].bind(py))?;
         values[2] = grain.unbind();
     }
     converted(py, values, (&[5, 6], optional_inferred))

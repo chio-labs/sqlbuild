@@ -4,8 +4,8 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyDict;
 
 use crate::bindings::_helpers::freshness::observation::require_aware_utc_datetime;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// `SourceFreshnessRecord.observed_at` position.
 const OBSERVED_AT_FIELD: usize = 9;
@@ -34,7 +34,5 @@ pub(crate) fn freshness_record_identity(instance: &Bound<'_, PyAny>) -> PyResult
     for name in IDENTITY_FIELDS {
         pyo3::types::PyDictMethods::set_item(&keywords, name, instance.getattr(name)?)?;
     }
-    Ok(registry::class(py, RecordId::SourceFreshnessIdentity)?
-        .call((), Some(&keywords))?
-        .unbind())
+    Ok(new_record(py, RecordId::SourceFreshnessIdentity, (), Some(&keywords))?.unbind())
 }

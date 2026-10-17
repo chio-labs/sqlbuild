@@ -9,8 +9,8 @@ use pyo3::types::{PyBool, PyString, PyTuple};
 
 use crate::bindings::_helpers::compile_command::target_writer::static_sql_test_planning_diagnostics;
 use crate::bindings::_helpers::compile_driver::analysis::analyze_compile_project;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -21,10 +21,6 @@ const DEFAULT_ERROR_CODE: &str = "E001";
 pub(crate) struct OfflineCompile<'py> {
     pub(crate) project: Bound<'py, PyAny>,
     pub(crate) errors: Vec<Bound<'py, PyAny>>,
-}
-
-fn enum_member<'py>(py: Python<'py>, class: RecordId, member: &str) -> PyResult<Bound<'py, PyAny>> {
-    registry::member(py, class, member)
 }
 
 fn matches_any_class(py: Python<'_>, error: &PyErr, classes: &[ErrorId]) -> PyResult<bool> {
@@ -49,8 +45,9 @@ fn compile_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bou
     } else {
         value.str()?.into_any()
     };
-    call_with(
-        &registry::class(py, RecordId::CompilerDiagnostic)?,
+    new_record_with(
+        py,
+        RecordId::CompilerDiagnostic,
         &[
             (
                 "phase",
@@ -75,8 +72,9 @@ fn planning_error_diagnostic<'py>(py: Python<'py>, error: &PyErr) -> PyResult<Bo
         } else {
             py.None().into_bound(py)
         };
-    call_with(
-        &registry::class(py, RecordId::CompilerDiagnostic)?,
+    new_record_with(
+        py,
+        RecordId::CompilerDiagnostic,
         &[
             ("phase", enum_member(py, RecordId::DiagnosticPhase, "TEST")?),
             (
@@ -107,8 +105,9 @@ fn analyzed<'py>(
     project_dir: &Path,
     no_cache: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let selection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+    let selection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompileAnalysisSelection,
         &[("no_cache", PyBool::new(py, no_cache).to_owned().into_any())],
     )?;
     analyze_compile_project(
@@ -124,12 +123,12 @@ fn analyzed<'py>(
                 ("selected_target", py.None().into_bound(py)),
                 (
                     "lineage_mode",
-                    registry::class(py, RecordId::CompileLineageMode)?.getattr("NONE")?,
+                    enum_member(py, RecordId::CompileLineageMode, "NONE")?,
                 ),
                 ("cli_vars", py.None().into_bound(py)),
                 (
                     "profile_flags",
-                    registry::class(py, RecordId::CompileProfileFlags)?.call0()?,
+                    new_record(py, RecordId::CompileProfileFlags, (), None)?,
                 ),
                 ("analysis_selection", selection),
                 ("status", py.None().into_bound(py)),
@@ -191,8 +190,9 @@ pub(crate) fn compile_for_refactor<'py>(
             Err(error) => return Err(error),
         }
     }
-    let project: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::RefactorProject)?,
+    let project: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::RefactorProject,
         &[
             ("project_dir", project_dir.into_pyobject(py)?.into_any()),
             ("graph", native_field(&analysis, "graph")?),

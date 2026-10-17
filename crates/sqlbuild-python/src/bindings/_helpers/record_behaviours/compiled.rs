@@ -4,6 +4,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -35,9 +36,7 @@ const TEST_PARENT_NAME_FIELD: usize = 12;
 
 /// The native string enum `class(value)`.
 fn coerce_native(py: Python<'_>, value: &Py<PyAny>, class: RecordId) -> PyResult<Py<PyAny>> {
-    Ok(registry::class(py, class)?
-        .call1((value.bind(py),))?
-        .unbind())
+    Ok(new_record(py, class, (value.bind(py),), None)?.unbind())
 }
 
 /// `value` coerced to `CompiledResourceType` unless it is `None`.
@@ -78,7 +77,7 @@ pub(crate) fn finish_compiler_diagnostic(
         keywords.set_item("line", values[DIAGNOSTIC_LINE_FIELD].bind(py))?;
         keywords.set_item("column", values[DIAGNOSTIC_COLUMN_FIELD].bind(py))?;
         let location: Bound<'_, PyAny> =
-            registry::class(py, RecordId::SourceLocation)?.call((), Some(&keywords))?;
+            new_record(py, RecordId::SourceLocation, (), Some(&keywords))?;
         values[DIAGNOSTIC_LOCATION_FIELD] = location.unbind();
     }
     let location: Bound<'_, PyAny> = values[DIAGNOSTIC_LOCATION_FIELD].bind(py).clone();
@@ -93,8 +92,7 @@ pub(crate) fn finish_compiler_diagnostic(
 /// `CompilerDiagnostic.is_error`: whether the diagnostic fails the command.
 pub(crate) fn diagnostic_is_error(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = instance.py();
-    let error: Bound<'_, PyAny> =
-        registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?;
+    let error: Bound<'_, PyAny> = enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?;
     native_field(instance, "severity")?
         .eq(error)?
         .into_py_any(py)
@@ -362,8 +360,12 @@ pub(crate) fn build_context_declaration_expansion(
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item(
         "declarations",
-        registry::class(py, RecordId::DeclarationResolutionContext)?
-            .call((), Some(&declarations))?,
+        new_record(
+            py,
+            RecordId::DeclarationResolutionContext,
+            (),
+            Some(&declarations),
+        )?,
     )?;
     keywords.set_item("value_renderer", native_field(instance, "value_renderer")?)?;
     keywords.set_item(
@@ -371,9 +373,13 @@ pub(crate) fn build_context_declaration_expansion(
         native_field(instance, "collection_rendering")?,
     )?;
     keywords.set_item("resolver", native_field(instance, "declaration_resolver")?)?;
-    Ok(registry::class(py, RecordId::DeclarationExpansionContext)?
-        .call((), Some(&keywords))?
-        .unbind())
+    Ok(new_record(
+        py,
+        RecordId::DeclarationExpansionContext,
+        (),
+        Some(&keywords),
+    )?
+    .unbind())
 }
 
 /// A `CompileInputError` carrying `message`.

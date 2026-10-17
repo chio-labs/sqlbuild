@@ -20,6 +20,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -351,8 +352,9 @@ fn evaluate_native<'py>(
     let native_misses: i64 = field(&native_result, "cache_misses")?.extract()?;
     let custom_hits: i64 = field(&custom, "cache_hits")?.extract()?;
     let custom_misses: i64 = field(&custom, "cache_misses")?.extract()?;
-    call_with(
-        &registry::class(py, RecordId::RulesResult)?,
+    new_record_with(
+        py,
+        RecordId::RulesResult,
         &[
             ("findings", findings),
             (

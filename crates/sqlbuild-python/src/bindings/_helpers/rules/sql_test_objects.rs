@@ -13,9 +13,9 @@ use sqlbuild_rules::models::{
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compiled_project::records::plain_typed_value;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DESCRIPTION_KEY: &str = "description";
 
@@ -88,7 +88,7 @@ fn tested_resources(test: &Bound<'_, PyAny>) -> PyResult<Vec<TestedResource>> {
 fn with_payload(test: &Bound<'_, PyAny>, mut fact: SqlTestFact) -> PyResult<SqlTestFact> {
     let payload: Bound<'_, PyAny> = field(test, "payload")?;
     let model_payload: Bound<'_, PyAny> =
-        registry::class(test.py(), RecordId::CompiledModelSqlTestPayload)?;
+        record_class(test.py(), RecordId::CompiledModelSqlTestPayload)?;
     if !payload.is_instance(&model_payload)? {
         return Ok(fact);
     }
