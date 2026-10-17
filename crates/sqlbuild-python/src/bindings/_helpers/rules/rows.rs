@@ -42,7 +42,7 @@ use crate::bindings::_helpers::rules::fact_replay::{project_attribute, project_m
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
 use crate::bindings::_helpers::rules::selection::rules_error;
 use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test_fact};
-use crate::bindings::_helpers::scopes::scope_reports::metadata_projection;
+use crate::bindings::_helpers::scopes::scope_reports::metadata_projection_value;
 use crate::bindings::_helpers::type_system::equality::types_equal;
 use crate::bindings::types::CompilerDetach;
 
@@ -155,9 +155,8 @@ fn request_header(
         "config": config_value(config)?,
     });
     if let Some(project) = project {
-        header["scope_index"] = plain_value(
-            metadata_projection(py, &project_attribute(project, "scope_index")?)?.bind(py),
-        )?;
+        header["scope_index"] =
+            metadata_projection_value(&project_attribute(project, "scope_index")?)?;
     }
     header["defer_suppressions"] = Value::Bool(true);
     header["custom_rules"] = plain_value(custom_payloads)?;
