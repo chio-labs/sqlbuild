@@ -8,6 +8,7 @@ pub(crate) mod custom_hosts;
 pub(crate) mod custom_rule_cache;
 pub(crate) mod custom_rule_evidence;
 pub(crate) mod dsl_headers;
+pub(crate) mod early_builtin_rules;
 pub(crate) mod early_sql_lint;
 pub(crate) mod evaluation;
 pub(crate) mod fact_encoder;

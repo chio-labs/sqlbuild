@@ -131,6 +131,14 @@ impl NativeCompiledProject {
         &self.facts
     }
 
+    /// A project holding only `facts`, which analyses can be recorded into apart from the compile's.
+    pub(crate) fn with_facts(facts: CompiledProjectFacts) -> Self {
+        Self {
+            facts,
+            ..Self::default()
+        }
+    }
+
     /// Retain facts a producer finished natively.
     pub(crate) fn retain(&mut self, facts: CompiledModelFacts) {
         record_model(&mut self.facts, facts);

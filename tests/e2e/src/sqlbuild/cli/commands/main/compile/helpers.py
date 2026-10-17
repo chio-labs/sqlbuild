@@ -2964,6 +2964,31 @@ def compile_json_payload(*, project_dir: Path) -> tuple[int, dict[str, Any]]:
     return result.returncode, json.loads(result.stdout)
 
 
+def compile_json_with(
+    *, project_dir: Path, arguments: tuple[str, ...]
+) -> tuple[int, dict[str, Any]]:
+    """Run one JSON compile with extra arguments through the CLI and return its exit and payload."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile", "--json", *arguments), project_dir=project_dir
+    )
+    return result.returncode, json.loads(result.stdout)
+
+
+def early_rules_outcome(payload: dict[str, Any]) -> tuple[int, int]:
+    """The early built-in rules hits and misses one compile payload reports."""
+
+    timings: dict[str, Any] = payload["compile_timings"]
+    return timings["early_rules_hits"], timings["early_rules_misses"]
+
+
+def rule_cache_outcome(payload: dict[str, Any]) -> tuple[int, int]:
+    """The rule cache hits and misses one compile payload reports."""
+
+    timings: dict[str, Any] = payload["compile_timings"]
+    return timings["rule_cache_hits"], timings["rule_cache_misses"]
+
+
 def diagnostic_location_keys(payload: dict[str, Any]) -> tuple[tuple[str, str, int, int], ...]:
     """Sorted code, path, line, and column of every diagnostic in a compile payload."""
 

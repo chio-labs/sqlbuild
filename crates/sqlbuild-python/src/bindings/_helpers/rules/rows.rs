@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
 
 use pyo3::exceptions::{PyOSError, PyTypeError, PyValueError};
 use pyo3::prelude::{
@@ -38,6 +39,7 @@ use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::config_json::asdict_json;
+use crate::bindings::_helpers::rules::early_builtin_rules::EarlyBuiltinRules;
 use crate::bindings::_helpers::rules::fact_replay::{project_attribute, project_models};
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
 use crate::bindings::_helpers::rules::selection::rules_error;
@@ -107,7 +109,34 @@ pub(crate) fn build_rules_request(
 ) -> PyResult<NativeRulesRequest> {
     let request = Request::new("build_rules_request", options)?;
     let py: Python<'_> = request.py();
-    as_rules_error(py, built_request(&request))
+    as_rules_error(
+        py,
+        built_request(&request, None).map(|request| NativeRulesRequest {
+            request: Mutex::new(Some(request)),
+        }),
+    )
+}
+
+/// `build_rules_request`'s request, reading model facts from `facts` instead of the project.
+pub(crate) fn rules_request_over(
+    options: &Bound<'_, PyDict>,
+    facts: &Bound<'_, NativeCompiledProject>,
+) -> PyResult<RowsRequest> {
+    built_request(
+        &Request::new("build_rules_request", Some(options))?,
+        Some(facts),
+    )
+}
+
+/// The built request `request` holds, which only one evaluation may take.
+pub(crate) fn taken_rows(request: &Bound<'_, NativeRulesRequest>) -> PyResult<RowsRequest> {
+    request
+        .borrow()
+        .request
+        .lock()
+        .map_err(|_| value_error("rules request lock is poisoned"))?
+        .take()
+        .ok_or_else(|| value_error("rules request was already evaluated"))
 }
 
 /// The model-free request of a run selecting no rules, which only validates its configuration.
@@ -167,7 +196,10 @@ fn request_header(
     Ok(header)
 }
 
-fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
+fn built_request(
+    options: &Request<'_, '_>,
+    facts: Option<&Bound<'_, NativeCompiledProject>>,
+) -> PyResult<RowsRequest> {
     let py: Python<'_> = options.py();
     let project: Bound<'_, PyAny> = options.get("project")?;
     let config: Bound<'_, PyAny> = options.get("config")?;
@@ -227,7 +259,10 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
             .collect::<PyResult<_>>()?,
         dialect,
     };
-    let facts: Bound<'_, NativeCompiledProject> = compiled_project_facts(&project)?;
+    let facts: Bound<'_, NativeCompiledProject> = match facts {
+        Some(facts) => facts.clone(),
+        None => compiled_project_facts(&project)?,
+    };
     let names: Vec<String> = project_models(&project)?
         .into_iter()
         .map(|model| model.name)
@@ -262,9 +297,7 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
             .memo
             .take()
             .map(|(identity, path)| (identity, PathBuf::from(path)));
-        Ok(NativeRulesRequest {
-            request: Mutex::new(Some(RowsRequest { request, memo })),
-        })
+        Ok(RowsRequest { request, memo })
     })
 }
 
@@ -274,27 +307,35 @@ pub(crate) fn evaluate_rules_request<'py>(
     py: Python<'py>,
     request: &Bound<'py, NativeRulesRequest>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    as_rules_error(py, evaluated(py, request))
+    as_rules_error(py, evaluated(py, request, None))
+}
+
+/// `evaluate_rules_request`, answered by `early` when identical; `interrupted` stops the wait.
+pub(crate) fn evaluate_rules_request_with<'py>(
+    py: Python<'py>,
+    request: &Bound<'py, NativeRulesRequest>,
+    early: EarlyBuiltinRules,
+    interrupted: &AtomicBool,
+) -> PyResult<Bound<'py, PyAny>> {
+    as_rules_error(py, evaluated(py, request, Some((early, interrupted))))
 }
 
 fn evaluated<'py>(
     py: Python<'py>,
     request: &Bound<'py, NativeRulesRequest>,
+    early: Option<(EarlyBuiltinRules, &AtomicBool)>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let request: RowsRequest = request
-        .borrow()
-        .request
-        .lock()
-        .map_err(|_| value_error("rules request lock is poisoned"))?
-        .take()
-        .ok_or_else(|| value_error("rules request was already evaluated"))?;
-    let evaluation: RowsEvaluation = py
-        .compiler_detach(|| Ok(evaluate_rows(request)))
-        .map_err(value_error)?
-        .map_err(|error| match error {
-            RowsError::Rules(message) => value_error(message),
-            RowsError::Io(error) => PyOSError::new_err(error.to_string()),
-        })?;
+    let request: RowsRequest = taken_rows(request)?;
+    let evaluation: Result<RowsEvaluation, RowsError> = match early {
+        None => py
+            .compiler_detach(|| Ok(evaluate_rows(request)))
+            .map_err(value_error)?,
+        Some((early, interrupted)) => early.answer(py, request, interrupted)?,
+    };
+    let evaluation: RowsEvaluation = evaluation.map_err(|error| match error {
+        RowsError::Rules(message) => value_error(message),
+        RowsError::Io(error) => PyOSError::new_err(error.to_string()),
+    })?;
     let classes = FindingClasses::new(py)?;
     let findings: Vec<Bound<'py, PyAny>> = evaluation
         .faults

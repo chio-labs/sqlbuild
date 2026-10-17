@@ -1023,3 +1023,28 @@ class DollarQuotedProjectVarCompileCase:
     description: str
     model_sql: str
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class EarlyBuiltinRulesTestCase:
+    """A rules-enabled project, the compile arguments and the early rules outcome it must report."""
+
+    description: str
+    repo_files: dict[str, str]
+    compile_arguments: tuple[str, ...]
+    expected_exit_code: int
+    expected_diagnostics: tuple[tuple[str, str, int, int], ...]
+    expected_early_hits: int
+    expected_early_misses: int
+
+
+@dataclass(frozen=True)
+class EarlyBuiltinRulesEditTestCase:
+    """A model edit between compiles and the early rules and rule cache outcomes of each compile."""
+
+    description: str
+    edited_path: str
+    edited_sql: str
+    expected_diagnostics: tuple[tuple[str, str, int, int], ...]
+    expected_early_outcomes: tuple[tuple[int, int], ...]
+    expected_rule_cache_outcomes: tuple[tuple[int, int], ...]

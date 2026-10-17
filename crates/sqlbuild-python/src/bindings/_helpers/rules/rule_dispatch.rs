@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, keywords,
 };
 use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
+use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::new_record_with;
@@ -34,14 +35,20 @@ use crate::bindings::_helpers::rules::custom_evaluation::{
 };
 use crate::bindings::_helpers::rules::custom_hosts::HostCancel;
 use crate::bindings::_helpers::rules::custom_rule_evidence::verify_custom_rules;
+use crate::bindings::_helpers::rules::early_builtin_rules::{
+    EarlyBuiltinRules, EarlyRulesReport, take_early_rules,
+};
 use crate::bindings::_helpers::rules::rows::finalize_rule_findings_rows;
 use crate::bindings::_helpers::rules::rows::{
-    NativeRulesRequest, build_rules_request, evaluate_rules_request, selectionless_rules_request,
+    NativeRulesRequest, build_rules_request, evaluate_rules_request, evaluate_rules_request_with,
+    rules_request_over, selectionless_rules_request,
 };
 use crate::bindings::_helpers::rules::rule_plan::plan_rule_run;
 use crate::bindings::_helpers::rules::rule_run::finish_rule_run;
 use crate::bindings::_helpers::rules::selection::{rule_selected, selected_rule_codes};
 use crate::bindings::_helpers::rules::sql_rules::run_planned_sql_rules;
+use sqlbuild_rules::models::RowsRequest;
+use std::sync::Arc;
 
 const CUSTOM_THREAD: &str = "sqlbuild-custom-rules";
 const GENERIC_DIALECT: &str = "generic";
@@ -159,7 +166,7 @@ fn evaluate_project_rules<'py>(
         initial_findings: None,
         cancel: HostCancel::default(),
     };
-    evaluate_native(&run, (false, None), CustomSource::Deferred)
+    evaluate_native(&run, (false, None), CustomSource::Deferred, None)
 }
 
 /// Evaluate built-in rules natively with the catalogue's selected custom rules beside them.
@@ -183,7 +190,12 @@ fn evaluate_native_rules<'py>(
         initial_findings: (!initial_findings.is_none()).then_some(initial_findings),
         cancel: HostCancel::default(),
     };
-    evaluate_native(&run, (defer_suppressions, None), CustomSource::Deferred)
+    evaluate_native(
+        &run,
+        (defer_suppressions, None),
+        CustomSource::Deferred,
+        None,
+    )
 }
 
 /// Evaluate custom rules through their incremental cache.
@@ -269,7 +281,12 @@ pub(crate) fn evaluate_rules<'py>(
     let native_dialect: String = run.dialect.clone();
     let native_cancel: HostCancel = run.cancel.clone();
     let selectionless: bool = custom.is_none() && field(&plan, "selected")?.len()? == 0;
+    let early: Option<EarlyBuiltinRules> = take_early_rules();
+    let early_report: Option<Arc<EarlyRulesReport>> = early.as_ref().map(EarlyBuiltinRules::report);
     let native_thread: Option<PhaseThread> = if selectionless {
+        if let Some(early) = early {
+            early.discard(py);
+        }
         None
     } else {
         Some(PhaseThread::spawn(RULES_THREAD, move || {
@@ -289,6 +306,7 @@ pub(crate) fn evaluate_rules<'py>(
                     &run,
                     (true, Some(payloads.into_bound(py))),
                     CustomSource::Started(custom),
+                    early,
                 )
                 .map(Bound::unbind)
             })
@@ -309,16 +327,20 @@ pub(crate) fn evaluate_rules<'py>(
         Some(native_thread) => joined(py, native_thread, &run.cancel),
         None => selectionless_result(&run, &payloads),
     };
+    if let Some(report) = early_report {
+        report.record();
+    }
     let sql_result: Bound<'py, PyAny> = sql_result?;
     let result: Bound<'py, PyAny> = result?;
     finish_rule_run(&plan, &sql_result, &result)
 }
 
-/// Evaluate built-in rules natively while custom rules run beside them.
+/// Evaluate built-in rules natively, or from `early` when identical, beside the custom rules.
 fn evaluate_native<'py>(
     run: &NativeRun<'py>,
     (defer_suppressions, custom_payloads): (bool, Option<Bound<'py, PyAny>>),
     custom: CustomSource,
+    early: Option<EarlyBuiltinRules>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = run.project.py();
     let prepared: PyResult<(Bound<'py, PyAny>, Bound<'py, NativeRulesRequest>)> =
@@ -334,8 +356,19 @@ fn evaluate_native<'py>(
         (CustomSource::Deferred, Ok((payloads, _))) => start_custom_rules(run, payloads)?,
         (CustomSource::Deferred, Err(_)) => None,
     };
-    let (_, request): (Bound<'py, PyAny>, Bound<'py, NativeRulesRequest>) = prepared?;
-    let evaluated: PyResult<Bound<'py, PyAny>> = evaluate_rules_request(py, &request);
+    let (_, request): (Bound<'py, PyAny>, Bound<'py, NativeRulesRequest>) = match prepared {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            if let Some(early) = early {
+                early.discard(py);
+            }
+            return Err(error);
+        }
+    };
+    let evaluated: PyResult<Bound<'py, PyAny>> = match early {
+        Some(early) => evaluate_rules_request_with(py, &request, early, &run.cancel),
+        None => evaluate_rules_request(py, &request),
+    };
     cancel_on_interrupt(py, &evaluated, &run.cancel);
     let custom: PyResult<Bound<'py, PyAny>> = match custom {
         Some(handle) => joined(py, handle, &run.cancel),
@@ -448,34 +481,65 @@ fn native_request<'py>(
             ],
         )?,
     };
+    let request: Bound<'py, NativeRulesRequest> = Bound::new(
+        py,
+        build_rules_request(Some(&request_options(run, &payloads)?))?,
+    )?;
+    Ok((payloads, request))
+}
+
+/// The `build_rules_request` options of one native evaluation with its custom-rule payloads.
+fn request_options<'py>(
+    run: &NativeRun<'py>,
+    payloads: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = run.project.py();
     let mut include_type_proof: bool = false;
     for code in TYPE_PROOF_RULE_CODES {
         include_type_proof = include_type_proof || rule_selected(&run.config, code)?;
     }
-    let request: Bound<'py, NativeRulesRequest> = Bound::new(
+    keywords(
         py,
-        build_rules_request(Some(&keywords(
-            py,
-            &[
-                ("project", run.project.clone()),
-                ("config", run.config.clone()),
-                ("project_dir", run.project_dir.clone()),
-                ("dialect", run.dialect.clone().into_bound_py_any(py)?),
-                (
-                    "initial_findings",
-                    run.initial_findings
-                        .clone()
-                        .unwrap_or_else(|| PyTuple::empty(py).into_any()),
-                ),
-                ("custom_payloads", payloads.clone()),
-                (
-                    "include_type_proof",
-                    include_type_proof.into_bound_py_any(py)?,
-                ),
-            ],
-        )?))?,
-    )?;
-    Ok((payloads, request))
+        &[
+            ("project", run.project.clone()),
+            ("config", run.config.clone()),
+            ("project_dir", run.project_dir.clone()),
+            ("dialect", run.dialect.clone().into_bound_py_any(py)?),
+            (
+                "initial_findings",
+                run.initial_findings
+                    .clone()
+                    .unwrap_or_else(|| PyTuple::empty(py).into_any()),
+            ),
+            ("custom_payloads", payloads.clone()),
+            (
+                "include_type_proof",
+                include_type_proof.into_bound_py_any(py)?,
+            ),
+        ],
+    )
+}
+
+/// The request `evaluate_rules` would build for `plan`, reading model facts from `facts`.
+pub(crate) fn speculative_rules_request<'py>(
+    plan: &Bound<'py, PyAny>,
+    dialect: &str,
+    facts: &Bound<'py, NativeCompiledProject>,
+) -> PyResult<RowsRequest> {
+    let run: NativeRun<'py> = NativeRun {
+        project: field(plan, "project")?,
+        config: field(plan, "config")?,
+        project_dir: field(plan, "project_dir")?,
+        catalogue: field(plan, "catalogue")?,
+        dialect: dialect.to_owned(),
+        verify_determinism: false,
+        initial_findings: None,
+        cancel: HostCancel::default(),
+    };
+    rules_request_over(
+        &request_options(&run, &field(plan, "custom_payloads")?)?,
+        facts,
+    )
 }
 
 /// Start the selected custom rules on their thread after digesting installed code here.

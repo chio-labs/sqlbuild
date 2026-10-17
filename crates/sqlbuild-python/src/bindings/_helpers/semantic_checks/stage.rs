@@ -11,6 +11,7 @@ use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSes
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::rules::early_builtin_rules::start_early_rules;
 use crate::bindings::_helpers::semantic_checks::completion::completed_diagnostics;
 use crate::bindings::_helpers::semantic_checks::metadata::metadata_diagnostics;
 use crate::bindings::_helpers::semantic_checks::stage_objects::StageClasses;
@@ -71,6 +72,7 @@ pub(crate) fn completed_semantic_project<'py>(
     };
     let recovered: Bound<'py, PyAny> =
         recovered_types(&classes, &project, &binding_results, &shared)?;
+    start_early_rules(&recovered)?;
     let metadata: Vec<Bound<'py, PyAny>> = metadata_diagnostics(
         &classes,
         (&recovered, &profile),
