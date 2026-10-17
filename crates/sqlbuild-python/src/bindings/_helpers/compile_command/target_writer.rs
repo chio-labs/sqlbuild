@@ -732,7 +732,7 @@ fn write_static_compile_target<'py>(
 /// Write the planner's compiled output files under `target_dir`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn write_compile_target<'py>(
+pub(crate) fn write_compile_target<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

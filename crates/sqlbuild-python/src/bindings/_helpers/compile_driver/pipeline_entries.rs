@@ -121,7 +121,7 @@ pub(crate) fn project_graph<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<
 /// Return whether a planned build has runtime work to execute.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_has_executable_work<'py>(
+pub(crate) fn plan_has_executable_work<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<bool> {

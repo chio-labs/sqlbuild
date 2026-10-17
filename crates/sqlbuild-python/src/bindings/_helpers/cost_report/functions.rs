@@ -36,7 +36,7 @@ fn optional_record<'py>(
 /// Atomically persist one run's cost artifact and return its path.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, record))]
-fn write_cost_run(
+pub(crate) fn write_cost_run(
     py: Python<'_>,
     project_dir: PathBuf,
     record: &Bound<'_, PyAny>,
@@ -47,7 +47,7 @@ fn write_cost_run(
 /// Read the run stored under an exact run ID, or `None`.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, run_id))]
-fn read_cost_run<'py>(
+pub(crate) fn read_cost_run<'py>(
     py: Python<'py>,
     project_dir: PathBuf,
     run_id: &str,
@@ -59,14 +59,17 @@ fn read_cost_run<'py>(
 /// Every readable persisted run, newest first.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir))]
-fn list_cost_runs<'py>(py: Python<'py>, project_dir: PathBuf) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn list_cost_runs<'py>(
+    py: Python<'py>,
+    project_dir: PathBuf,
+) -> PyResult<Bound<'py, PyAny>> {
     Ok(record_tuple(py, &store::list(py, &project_dir)?)?.into_any())
 }
 
 /// The latest finished run, or the only run whose ID starts with the selector.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, selector))]
-fn resolve_cost_run<'py>(
+pub(crate) fn resolve_cost_run<'py>(
     py: Python<'py>,
     project_dir: PathBuf,
     selector: &str,
@@ -84,7 +87,7 @@ fn format_cost_json(record: &Bound<'_, PyAny>) -> PyResult<String> {
 /// `sqb cost history --json` text of the shown runs.
 #[pyfunction]
 #[pyo3(signature = (*, records, matching_count = None))]
-fn format_cost_history_json(
+pub(crate) fn format_cost_history_json(
     records: &Bound<'_, PyAny>,
     matching_count: Option<usize>,
 ) -> PyResult<String> {
@@ -94,7 +97,10 @@ fn format_cost_history_json(
 /// The `sqb cost --json` document of one run, as a dictionary.
 #[pyfunction]
 #[pyo3(signature = (*, record))]
-fn cost_output_payload(py: Python<'_>, record: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+pub(crate) fn cost_output_payload(
+    py: Python<'_>,
+    record: &Bound<'_, PyAny>,
+) -> PyResult<Py<PyAny>> {
     json_to_python(py, output_payload(&cost_run(record)?), false)
 }
 
@@ -134,7 +140,7 @@ fn format_cost_breakdown(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> 
 /// The aligned human history of the shown runs.
 #[pyfunction]
 #[pyo3(signature = (*, records, matching_count, use_color))]
-fn format_cost_history(
+pub(crate) fn format_cost_history(
     records: &Bound<'_, PyAny>,
     matching_count: usize,
     use_color: bool,

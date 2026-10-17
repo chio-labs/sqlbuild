@@ -21,15 +21,19 @@ use sqlbuild_core::contract_command::models::{
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_graph_from_compiled_project;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
+use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::refactor::contract_compare::compare_contracts;
 
 const GENERATE_ACTION: &str = "generate";
 
@@ -102,18 +106,16 @@ fn select_resources<'py>(
             ],
         )?),
     )?;
-    let graph: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildProjectGraphFromCompiledProject)?,
-        &[("project", project)],
+    let graph: Bound<'py, PyAny> = build_project_graph_from_compiled_project(
+        py,
+        Some(keywords(py, &[("project", project)])?),
     )?;
-    let selected: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::SelectProjectGraph)?,
-        &[
-            ("graph", graph.clone()),
-            ("select", native_field(request, "select")?),
-            ("exclude", native_field(request, "exclude")?),
-        ],
-    )?;
+    let selected: Bound<'py, PyAny> = select_project_graph(
+        &graph.clone(),
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let compiled: Bound<'py, PyAny> = native_field(&graph, "project")?;
     let models: Bound<'py, PyTuple> = selected_of(native_field(&compiled, "models")?, &selected)?;
     let sources: Bound<'py, PyTuple> = selected_of(native_field(&compiled, "sources")?, &selected)?;
@@ -209,15 +211,17 @@ fn compare<'py>(
                 },
             ),),
         )?;
-        let evidence: Bound<'py, PyAny> = match call_with(
-            &registry::native(py, NativeAttr::CompareContracts)?,
+        let evidence: Bound<'py, PyAny> = match compare_contracts(Some(&keywords(
+            py,
             &[
                 ("adapter", adapter.clone()),
                 ("connection", connection.clone()),
                 ("models", selection.models.clone().into_any()),
                 ("sources", selection.sources.clone().into_any()),
             ],
-        ) {
+        )?))
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
+        {
             Ok(evidence) => evidence,
             Err(error) => {
                 if exception(py, &error) {
@@ -378,13 +382,10 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
         py,
         Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", native_field(request, "select")?),
-            ("exclude", native_field(request, "exclude")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    reject_unit_test_selectors(
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
+        &discovered.clone(),
     )?;
     let from_target: Bound<'_, PyAny> = native_field(request, "from_target")?;
     if !discovered

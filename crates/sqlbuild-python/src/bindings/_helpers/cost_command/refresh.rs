@@ -13,6 +13,9 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::cost_report::functions::read_cost_run;
+use crate::bindings::_helpers::cost_report::functions::resolve_cost_run;
+use crate::bindings::_helpers::cost_report::functions::write_cost_run;
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -43,24 +46,22 @@ fn refresh_record<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
     let resolve = || {
-        call_with(
-            &registry::native(py, NativeAttr::ResolveCostRun)?,
-            &[
-                ("project_dir", project_dir.clone()),
-                ("selector", selector.clone()),
-            ],
+        resolve_cost_run(
+            py,
+            project_dir.clone().extract::<std::path::PathBuf>()?,
+            &selector.clone().extract::<String>()?,
         )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
     };
     if selector.extract::<String>()? == LATEST_SELECTOR {
         return resolve();
     }
-    let exact: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ReadCostRun)?,
-        &[
-            ("project_dir", project_dir.clone()),
-            ("run_id", selector.clone()),
-        ],
-    )?;
+    let exact: Bound<'py, PyAny> = read_cost_run(
+        py,
+        project_dir.clone().extract::<std::path::PathBuf>()?,
+        &selector.clone().extract::<String>()?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     if !exact.is_none() {
         return Ok(exact);
     }
@@ -179,10 +180,8 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
     changes.set_item("cost", summary)?;
     let refreshed: Bound<'_, PyAny> =
         imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteCostRun)?,
-        &[("project_dir", project_dir), ("record", refreshed)],
-    )?;
+    write_cost_run(py, project_dir.extract::<std::path::PathBuf>()?, &refreshed)
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(())
 }
 

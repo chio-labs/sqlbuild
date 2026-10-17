@@ -292,7 +292,7 @@ fn deferred_relations<'py>(
 /// Resolve native target locations and warehouse relations for model deferral.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_model_deferral_inputs<'py>(
+pub(crate) fn resolve_model_deferral_inputs<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

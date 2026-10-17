@@ -234,7 +234,7 @@ fn blank(text: &str) -> bool {
 /// Parse a one-, two-, or three-part loader destination.
 #[pyfunction]
 #[pyo3(signature = (*, destination, default_database, default_schema))]
-fn loader_destination_parts<'py>(
+pub(crate) fn loader_destination_parts<'py>(
     py: Python<'py>,
     destination: &str,
     default_database: Option<Bound<'py, PyAny>>,
