@@ -134,11 +134,11 @@ command that needs a feature newer than a compared version declares `minimum_ver
 as skipped, with the reason, in the job summary; any other failure of either version fails the
 check.
 
-Release Please dispatches `.github/workflows/release-performance.yml` with the metadata and version
-checks and posts the required `Verify` status only after it passes, so a regressed release pull
-request cannot auto-merge. Each dispatch carries a request id in its run name, and Release Please
-waits only on the runs it started. After a transient failure, use **Re-run failed jobs** on the
-Release Please run: it re-dispatches all three checks and repaints `Verify` on the current head.
+`.github/workflows/release-performance.yml` runs on every push to `main` and does not gate release
+pull requests. A commit that bumps the version is compared with the release before it; any other
+commit is compared with the release whose version it still carries. A newer push cancels the
+comparison of an older commit. A regression fails the run and opens an issue labelled
+`performance-regression`, or comments on the open one, with the commit and the comparison summary.
 Run the comparison manually with an optional `baseline` input, or locally:
 
 ```bash

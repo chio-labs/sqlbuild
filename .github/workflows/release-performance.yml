@@ -1,19 +1,18 @@
 name: Release Performance
 run-name: >-
-  ${{ inputs.request_id && format('{0} [{1}]', github.workflow, inputs.request_id)
-  || github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
+  ${{ github.event.pull_request.title || github.event.head_commit.message || github.workflow }}
 
-# Release Please dispatches this workflow for each release pull request and reports its result
-# through the required Verify status. Pull requests that change the comparison itself run it too.
+# Every push to main compares main with the latest release on the same runner. A regression fails
+# the run and opens or updates one issue labelled performance-regression; it does not gate the
+# release pull request. Pull requests that change the comparison itself run it too.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       baseline:
         description: "Published sqlbuild version to compare against (default: the release before the candidate)"
-        required: false
-        type: string
-      request_id:
-        description: "Release Please attempt that dispatched this run; leave empty for manual runs"
         required: false
         type: string
   pull_request:
@@ -33,15 +32,19 @@ on:
 permissions:
   contents: read
 
+# One run per main commit: a newer push cancels the comparison of an older one. Manual runs are
+# never cancelled by pushes.
 concurrency:
-  group: release-performance-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: release-performance-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   compare:
     name: Compare with the previous release
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    outputs:
+      regressed: ${{ steps.compare.outputs.regressed }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,32 +68,101 @@ jobs:
         run: |
           uv build --wheel --out-dir "${RUNNER_TEMP}/candidate"
           uv build --wheel crates/sqlbuild-cli --out-dir "${RUNNER_TEMP}/candidate"
+      # A release tag created while the candidate built names the baseline's benchmark generator.
+      - name: Fetch release tags
+        run: git fetch --tags --force --quiet origin
       # Temporary: one-model edit compiles use MAX_EDIT_COMPILE_TIME_RATIO (1.35x) because an edited
       # model recompiles uncached; tighten it back to 1.15x once native rendering is the default.
       - name: Compare candidate and previous release on this runner
+        id: compare
         env:
           BASELINE: ${{ inputs.baseline }}
-          REQUEST_ID: ${{ inputs.request_id }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [[ -n "${REQUEST_ID}" && -n "${BASELINE}" ]]; then
-            echo "Release Please runs always compare with the previous release; drop baseline" >&2
-            exit 1
+          # A main commit that is not itself a release still carries the latest release's version,
+          # so it is compared with that release rather than the one before it. A release commit
+          # bumps the version and is compared with the release before it.
+          if [[ "${EVENT_NAME}" == "push" && -z "${BASELINE}" ]]; then
+            project_version() {
+              python3 -c 'import sys, tomllib; print(tomllib.loads(sys.stdin.read())["project"]["version"])'
+            }
+            version="$(project_version < pyproject.toml)"
+            previous="$(git show HEAD^:pyproject.toml | project_version)" || previous=""
+            if [[ "${version}" == "${previous}" ]]; then
+              BASELINE="${version}"
+            fi
           fi
           wheels=("${RUNNER_TEMP}"/candidate/sqlbuild-*.whl)
+          evidence="${RUNNER_TEMP}/release-performance"
+          mkdir -p "${evidence}"
           args=(
             --candidate "${wheels[0]}"
-            --work-dir "${RUNNER_TEMP}/release-performance"
-            --output "${RUNNER_TEMP}/release-performance.json"
+            --work-dir "${RUNNER_TEMP}/release-performance-work"
+            --output "${evidence}/release-performance.json"
           )
           if [[ -n "${BASELINE}" ]]; then
             args+=(--baseline "${BASELINE}")
           fi
-          uv run python -m scripts.compare_release_performance "${args[@]}"
+          status=0
+          uv run python -m scripts.compare_release_performance "${args[@]}" \
+            | tee "${evidence}/release-performance.md" || status=$?
+          regressed=false
+          if [[ "${status}" != "0" && -f "${evidence}/release-performance.json" ]] && \
+             jq -e 'any(.verdicts[]; .regressed)' "${evidence}/release-performance.json" > /dev/null; then
+            regressed=true
+          fi
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          echo "regressed=${regressed}" >> "${GITHUB_OUTPUT}"
       - name: Upload comparison evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-performance-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-performance.json
+          path: ${{ runner.temp }}/release-performance
           if-no-files-found: warn
           retention-days: 90
+      - name: Fail on a regression or comparison error
+        if: steps.compare.outputs.status != '0'
+        env:
+          STATUS: ${{ steps.compare.outputs.status }}
+        run: |
+          echo "The release performance comparison failed with exit status ${STATUS:-unknown}" >&2
+          exit 1
+
+  report:
+    name: Report regression
+    needs: compare
+    if: ${{ always() && github.event_name == 'push' && needs.compare.outputs.regressed == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-performance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence
+      - name: Open or update the performance regression issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          LABEL: performance-regression
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "Release performance regressed at ${GITHUB_SHA} on main."
+            echo
+            echo "Comparison run: ${RUN_URL}"
+            echo
+            cat evidence/release-performance.md
+          } > report.md
+          gh label create "${LABEL}" --color B60205 \
+            --description "Main is slower or larger than the latest release" 2>/dev/null || true
+          issue="$(gh issue list --label "${LABEL}" --state open --limit 1 \
+            --json number --jq '.[0].number // empty')"
+          if [[ -n "${issue}" ]]; then
+            gh issue comment "${issue}" --body-file report.md
+            echo "Updated issue #${issue}" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            gh issue create --title "Release performance regression on main" \
+              --label "${LABEL}" --body-file report.md
+          fi

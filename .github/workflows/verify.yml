@@ -37,6 +37,8 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           write_scope() {
             {
@@ -68,6 +70,51 @@ jobs:
             exit 0
           fi
 
+          # Succeeds when every change is a release metadata change: the manifest, the changelog,
+          # or version lines of the package and lock files, so no dependency or build setting
+          # moves. Keep the file list in sync with the release checks in release-please.yml.
+          release_metadata_only() {
+            local path diff offending changed_any=false
+            local metadata_paths="${RUNNER_TEMP}/release-metadata-paths"
+            local version='[0-9]+\.[0-9]+\.[0-9]+'
+            local version_line="^[-+](version = \"${version}\""
+            version_line+="|  \"[a-z0-9_-]+==${version}\",  # x-release-please-version)\$"
+            git diff --name-only --no-renames -z "${BASE_SHA}...${HEAD_SHA}" > "${metadata_paths}" \
+              || return 1
+            while IFS= read -r -d '' path; do
+              changed_any=true
+              case "${path}" in
+                .release-please-manifest.json|CHANGELOG.md) ;;
+                Cargo.toml|Cargo.lock|pyproject.toml|uv.lock)
+                  diff="$(git diff -U0 --no-color --no-renames "${BASE_SHA}...${HEAD_SHA}" -- "${path}")" \
+                    || return 1
+                  offending="$(awk '/^@@/ { hunk = 1; next } hunk && /^[-+]/' <<< "${diff}" \
+                    | grep -Ev "${version_line}" || true)"
+                  if [[ -n "${offending}" ]]; then
+                    echo "${path} changes more than version lines:" >&2
+                    echo "${offending}" >&2
+                    return 1
+                  fi
+                  ;;
+                *) return 1 ;;
+              esac
+            done < "${metadata_paths}"
+            [[ "${changed_any}" == "true" ]]
+          }
+
+          # Release Please pull requests change only release metadata on top of product code that
+          # already passed every suite before it reached main, so the suites are skipped. Their
+          # required Verify status is posted by the trusted release checks in release-please.yml
+          # after the metadata, version and distribution checks pass.
+          if [[ "${EVENT_NAME}" == "pull_request" \
+                && "${HEAD_REPOSITORY}" == "${GITHUB_REPOSITORY}" \
+                && "${HEAD_REF}" == release-please--branches--* ]] && release_metadata_only; then
+            echo "Release Please pull request changes only release metadata; skipping the suites" \
+              | tee -a "${GITHUB_STEP_SUMMARY}"
+            write_scope false false false false false false false false
+            exit 0
+          fi
+
           duckdb=false
           postgres=false
           performance=false
@@ -91,7 +138,7 @@ jobs:
               *) docs_only=false ;;
             esac
             case "${path}" in
-              crates/*|Cargo.toml|Cargo.lock|pyproject.toml|.github/workflows/verify.yml)
+              crates/*|Cargo.toml|Cargo.lock|pyproject.toml|.github/workflows/verify.yml|.github/workflows/build-distributions.yml)
                 wheels=true
                 ;;
             esac
@@ -806,67 +853,12 @@ jobs:
           -vv --color=yes -n auto --dist loadfile
 
   wheels:
-    # Keep the platform matrix and maturin settings in sync with publish.yml.
-    name: Build wheel (${{ matrix.platform.name }})
+    name: Wheels
     needs: [changes]
     if: needs.changes.outputs.wheels == 'true'
-    runs-on: ${{ matrix.platform.runner }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - name: linux-x86_64
-            runner: ubuntu-24.04
-            target: x86_64
-          - name: linux-aarch64
-            runner: ubuntu-24.04-arm
-            target: aarch64
-          - name: macos-x86_64
-            runner: macos-15-intel
-            target: x86_64
-          - name: macos-arm64
-            runner: macos-15
-            target: aarch64
-          - name: windows-x86_64
-            runner: windows-2025
-            target: x86_64
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: --release --out dist --features extension-module
-          target: ${{ matrix.platform.target }}
-          manylinux: auto
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: --release --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
-          target: ${{ matrix.platform.target }}
-          manylinux: auto
-      - name: Smoke test installed wheels and native console entry points
-        shell: bash
-        run: |
-          python -m venv "${RUNNER_TEMP}/wheel-smoke"
-          if [[ -x "${RUNNER_TEMP}/wheel-smoke/Scripts/python.exe" ]]; then
-            smoke_python="${RUNNER_TEMP}/wheel-smoke/Scripts/python.exe"
-          else
-            smoke_python="${RUNNER_TEMP}/wheel-smoke/bin/python"
-          fi
-          "${smoke_python}" -m pip install --find-links dist dist/*.whl
-          cd "${RUNNER_TEMP}"
-          "${smoke_python}" -c "import sqlbuild._native"
-          smoke_scripts="$(dirname "${smoke_python}")"
-          "${smoke_scripts}/sqb" --version
-          "${smoke_scripts}/sqb" --help
-          "${smoke_scripts}/sqlbuild" --help
+    uses: ./.github/workflows/build-distributions.yml
+    with:
+      sdist: false
 
   verify:
     name: Verify

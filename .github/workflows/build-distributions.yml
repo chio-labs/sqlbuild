@@ -1,0 +1,259 @@
+name: Build Distributions
+
+# The single owner of the wheel platform matrix, the maturin settings and the distribution smoke
+# tests. Verify builds the wheels for pull requests that touch the native build, Release
+# Distributions builds and keeps every distribution for a release pull request, and Publish either
+# smoke tests and reuses those distributions or builds them here from the release tag.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit, tag or branch to build; empty builds the triggering commit"
+        required: false
+        type: string
+        default: ""
+      sdist:
+        description: "Also build the source distributions"
+        required: false
+        type: boolean
+        default: true
+      upload:
+        description: "Upload the distributions and a manifest recording their source commit and tree"
+        required: false
+        type: boolean
+        default: false
+      prebuilt-run-id:
+        description: >-
+          Release Distributions run whose distributions are smoke tested and uploaded instead of
+          building; its manifest must record the tree of ref. The caller grants actions: read.
+        required: false
+        type: string
+        default: ""
+      retention-days:
+        description: "Retention of uploaded artifacts in days; 0 uses the repository default"
+        required: false
+        type: number
+        default: 0
+    outputs:
+      sha:
+        description: "Commit the distributions were built from"
+        value: ${{ jobs.source.outputs.sha }}
+      tree:
+        description: "Tree of the commit the distributions were built from"
+        value: ${{ jobs.source.outputs.tree }}
+
+jobs:
+  source:
+    name: Resolve source
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      tree: ${{ steps.source.outputs.tree }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Pin the source commit
+        id: source
+        run: |
+          sha="$(git rev-parse HEAD)"
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          echo "sha=${sha}" >> "${GITHUB_OUTPUT}"
+          echo "tree=${tree}" >> "${GITHUB_OUTPUT}"
+          echo "Distributions for commit ${sha} with tree ${tree}" >> "${GITHUB_STEP_SUMMARY}"
+      - name: Download the prebuilt manifest
+        if: inputs.prebuilt-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: release-manifest
+          path: ${{ runner.temp }}/prebuilt
+          run-id: ${{ inputs.prebuilt-run-id }}
+          github-token: ${{ github.token }}
+      - name: Require prebuilt distributions from this exact tree
+        if: inputs.prebuilt-run-id != ''
+        env:
+          MANIFEST: ${{ runner.temp }}/prebuilt/release-manifest.json
+          PREBUILT_RUN_ID: ${{ inputs.prebuilt-run-id }}
+          TREE: ${{ steps.source.outputs.tree }}
+        run: |
+          recorded="$(jq -r '.tree // empty' "${MANIFEST}")"
+          if [[ "${recorded}" != "${TREE}" ]]; then
+            echo "Run ${PREBUILT_RUN_ID} built tree ${recorded:-<none>}, not ${TREE}" >&2
+            exit 1
+          fi
+          echo "Reusing distributions of run ${PREBUILT_RUN_ID}, built from tree ${TREE}" \
+            >> "${GITHUB_STEP_SUMMARY}"
+
+  wheels:
+    name: Build wheel (${{ matrix.platform.name }})
+    needs: source
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+            target: x86_64
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64
+          - name: macos-x86_64
+            runner: macos-15-intel
+            target: x86_64
+          - name: macos-arm64
+            runner: macos-15
+            target: aarch64
+          - name: windows-x86_64
+            runner: windows-2025
+            target: x86_64
+    steps:
+      - uses: actions/checkout@v4
+        if: inputs.prebuilt-run-id == ''
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@master
+        if: inputs.prebuilt-run-id == ''
+        with:
+          toolchain: stable
+      - uses: PyO3/maturin-action@v1
+        if: inputs.prebuilt-run-id == ''
+        with:
+          command: build
+          args: --release --out dist --features extension-module
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+      - uses: PyO3/maturin-action@v1
+        if: inputs.prebuilt-run-id == ''
+        with:
+          command: build
+          args: --release --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
+          target: ${{ matrix.platform.target }}
+          manylinux: auto
+      - name: Download prebuilt wheels
+        if: inputs.prebuilt-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-wheel-${{ matrix.platform.name }}
+          path: dist
+          run-id: ${{ inputs.prebuilt-run-id }}
+          github-token: ${{ github.token }}
+      - name: Smoke test installed wheels and native console entry points
+        shell: bash
+        run: |
+          python -m venv "${RUNNER_TEMP}/wheel-smoke"
+          if [[ -x "${RUNNER_TEMP}/wheel-smoke/Scripts/python.exe" ]]; then
+            smoke_python="${RUNNER_TEMP}/wheel-smoke/Scripts/python.exe"
+          else
+            smoke_python="${RUNNER_TEMP}/wheel-smoke/bin/python"
+          fi
+          "${smoke_python}" -m pip install --find-links dist dist/*.whl
+          cd "${RUNNER_TEMP}"
+          "${smoke_python}" -c "import sqlbuild._native"
+          smoke_scripts="$(dirname "${smoke_python}")"
+          "${smoke_scripts}/sqb" --version
+          "${smoke_scripts}/sqb" --help
+          "${smoke_scripts}/sqlbuild" --help
+      - name: Check wheel contents and run a native command
+        if: matrix.platform.name == 'linux-x86_64'
+        run: |
+          wheel="$(ls dist/sqlbuild-[0-9]*.whl)"
+          if unzip -l "${wheel}" | grep -E '(__pycache__/|\.pyc$|\.tmp$)'; then
+            echo "Wheel contains generated or temporary script files"
+            exit 1
+          fi
+          unzip -l "${wheel}" | grep 'sqlbuild/.agents/skills/sqlbuild/references/docs/CONTENTS.md'
+          smoke="${RUNNER_TEMP}/wheel-smoke/bin"
+          project="${RUNNER_TEMP}/sqlbuild-scope-smoke"
+          cd "${RUNNER_TEMP}"
+          "${smoke}/python" -c \
+            "import sqlbuild._native as native; assert native.semantic_help_catalogue()"
+          mkdir -p "${project}/models"
+          printf 'name = "scope_smoke"\nadapter = "duckdb"\n' > "${project}/sqlbuild_project.toml"
+          printf 'MODEL();\nSELECT 1 AS id\n' > "${project}/models/orders.sql"
+          "${smoke}/sqb" --project-dir "${project}" scope model:orders --json
+          "${smoke}/sqlbuild" --project-dir "${project}" scope model:orders
+      - uses: actions/upload-artifact@v4
+        if: inputs.upload
+        with:
+          name: dist-wheel-${{ matrix.platform.name }}
+          path: dist
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  sdist:
+    name: Build sdist
+    needs: source
+    if: inputs.sdist
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        if: inputs.prebuilt-run-id == ''
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+      - uses: dtolnay/rust-toolchain@master
+        if: inputs.prebuilt-run-id == ''
+        with:
+          toolchain: stable
+      - uses: PyO3/maturin-action@v1
+        if: inputs.prebuilt-run-id == ''
+        with:
+          command: sdist
+          args: --out dist
+      - uses: PyO3/maturin-action@v1
+        if: inputs.prebuilt-run-id == ''
+        with:
+          command: sdist
+          args: --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
+      - name: Download prebuilt source distributions
+        if: inputs.prebuilt-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-sdist
+          path: dist
+          run-id: ${{ inputs.prebuilt-run-id }}
+          github-token: ${{ github.token }}
+      - name: Inspect source distribution contents
+        run: |
+          for archive in dist/*.tar.gz; do
+            tar -tzf "$archive" > "${RUNNER_TEMP}/archive-contents.txt"
+            if grep -E '(__pycache__/|\.pyc$|\.tmp$)' "${RUNNER_TEMP}/archive-contents.txt"; then
+              echo "Source distribution contains generated or temporary script files"
+              exit 1
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: inputs.upload
+        with:
+          name: dist-sdist
+          path: dist
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
+
+  manifest:
+    name: Record distribution source
+    needs: [source, wheels, sdist]
+    if: >-
+      ${{ !cancelled() && inputs.upload && needs.wheels.result == 'success'
+      && (needs.sdist.result == 'success' || needs.sdist.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Write the manifest
+        env:
+          SHA: ${{ needs.source.outputs.sha }}
+          TREE: ${{ needs.source.outputs.tree }}
+        run: |
+          jq -n --arg sha "${SHA}" --arg tree "${TREE}" --arg run_id "${GITHUB_RUN_ID}" \
+            '{sha: $sha, tree: $tree, run_id: $run_id}' \
+            > "${RUNNER_TEMP}/release-manifest.json"
+          cat "${RUNNER_TEMP}/release-manifest.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest
+          path: ${{ runner.temp }}/release-manifest.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}
