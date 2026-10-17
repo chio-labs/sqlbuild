@@ -15,133 +15,92 @@ jobs:
   release-tag:
     name: Resolve release tag
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
     outputs:
       tag: ${{ steps.release-tag.outputs.tag }}
+      tree: ${{ steps.prebuilt.outputs.tree }}
+      prebuilt-run-id: ${{ steps.prebuilt.outputs.run_id }}
     steps:
       - name: Resolve release tag
         id: release-tag
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
-          tag="${{ inputs.tag }}"
-
-          case "$tag" in
+          case "${TAG}" in
             v0*) ;;
             *)
-              echo "Refusing to publish tag '$tag'. PyPI publishing is limited to v0* tags."
+              echo "Refusing to publish tag '${TAG}'. PyPI publishing is limited to v0* tags."
               exit 1
               ;;
           esac
 
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-  wheels:
-    # Keep the platform matrix and maturin settings in sync with verify.yml.
-    name: Build wheel (${{ matrix.platform.name }})
-    needs: release-tag
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - name: linux-x86_64
-            runner: ubuntu-24.04
-            target: x86_64
-          - name: linux-aarch64
-            runner: ubuntu-24.04-arm
-            target: aarch64
-          - name: macos-x86_64
-            runner: macos-15-intel
-            target: x86_64
-          - name: macos-arm64
-            runner: macos-15
-            target: aarch64
-          - name: windows-x86_64
-            runner: windows-2025
-            target: x86_64
-    steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-tag.outputs.tag }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: --release --out dist --features extension-module
-          target: ${{ matrix.platform.target }}
-          manylinux: auto
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: --release --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
-          target: ${{ matrix.platform.target }}
-          manylinux: auto
-      - name: Smoke test installed wheel and console entry points
-        if: matrix.platform.name == 'linux-x86_64'
-        run: |
-          if unzip -l dist/sqlbuild-[0-9]*.whl | grep -E '(__pycache__/|\.pyc$|\.tmp$)'; then
-            echo "Wheel contains generated or temporary script files"
-            exit 1
-          fi
-          unzip -l dist/sqlbuild-[0-9]*.whl | grep 'sqlbuild/.agents/skills/sqlbuild/references/docs/CONTENTS.md'
-          python -m venv /tmp/sqlbuild-wheel-smoke
-          /tmp/sqlbuild-wheel-smoke/bin/python -m pip install --find-links dist dist/sqlbuild-[0-9]*.whl
-          /tmp/sqlbuild-wheel-smoke/bin/python -c "import sqlbuild._native as native; assert native.semantic_help_catalogue()"
-          /tmp/sqlbuild-wheel-smoke/bin/sqb --version
-          /tmp/sqlbuild-wheel-smoke/bin/sqb --help
-          /tmp/sqlbuild-wheel-smoke/bin/sqlbuild --help
-          mkdir -p /tmp/sqlbuild-scope-smoke/models
-          printf 'name = "scope_smoke"\nadapter = "duckdb"\n' > /tmp/sqlbuild-scope-smoke/sqlbuild_project.toml
-          printf 'MODEL();\nSELECT 1 AS id\n' > /tmp/sqlbuild-scope-smoke/models/orders.sql
-          /tmp/sqlbuild-wheel-smoke/bin/sqb --project-dir /tmp/sqlbuild-scope-smoke scope model:orders --json
-          /tmp/sqlbuild-wheel-smoke/bin/sqlbuild --project-dir /tmp/sqlbuild-scope-smoke scope model:orders
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheel-${{ matrix.platform.name }}
-          path: dist
+          ref: ${{ steps.release-tag.outputs.tag }}
 
-  sdist:
-    name: Build sdist
-    needs: release-tag
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.release-tag.outputs.tag }}
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: sdist
-          args: --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
-      - name: Inspect source distribution contents
+      # Release Distributions builds every distribution on the release pull request. Its run is
+      # reused only when it succeeded and its commit has exactly the release tag's tree, so the
+      # reused distributions come from the same sources and the same reviewed build workflow.
+      - name: Find distributions built from the release tree
+        id: prebuilt
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          for archive in dist/*.tar.gz; do
-            tar -tzf "$archive" > archive-contents.txt
-            if grep -E '(__pycache__/|\.pyc$|\.tmp$)' archive-contents.txt; then
-              echo "Source distribution contains generated or temporary script files"
-              exit 1
+          tree="$(git rev-parse 'HEAD^{tree}')"
+          echo "tree=${tree}" >> "${GITHUB_OUTPUT}"
+          runs="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-distributions.yml/runs?event=workflow_dispatch&status=success&per_page=50" \
+            --jq '.workflow_runs[]
+              | select(.conclusion == "success" and .event == "workflow_dispatch")
+              | "\(.id) \(.head_sha)"')" || runs=""
+          run_id=""
+          while read -r candidate head_sha; do
+            [[ -n "${candidate}" ]] || continue
+            candidate_tree="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${head_sha}" \
+              --jq .tree.sha 2>/dev/null)" || continue
+            [[ "${candidate_tree}" == "${tree}" ]] || continue
+            artifacts="$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}/artifacts?per_page=100")" \
+              || continue
+            if ! jq -e '([.artifacts[] | select(.expired)] | length == 0)
+                and ([.artifacts[].name] | index("release-manifest") and index("dist-sdist"))' \
+                <<< "${artifacts}" > /dev/null; then
+              echo "Run ${candidate} built tree ${tree}, but its artifacts are incomplete or expired"
+              continue
             fi
-          done
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sdist
-          path: dist
+            run_id="${candidate}"
+            break
+          done <<< "${runs}"
+          echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+          if [[ -n "${run_id}" ]]; then
+            echo "Publishing distributions prebuilt by run ${run_id} from tree ${tree}" \
+              | tee -a "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "No prebuilt distributions for tree ${tree}; building from the tag" \
+              | tee -a "${GITHUB_STEP_SUMMARY}"
+          fi
+
+  distributions:
+    name: Distributions
+    needs: release-tag
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/build-distributions.yml
+    with:
+      ref: ${{ needs.release-tag.outputs.tag }}
+      upload: true
+      prebuilt-run-id: ${{ needs.release-tag.outputs.prebuilt-run-id }}
 
   pypi:
     name: Publish to PyPI
     needs:
       - release-tag
-      - wheels
-      - sdist
+      - distributions
     runs-on: ubuntu-24.04
     environment: pypi
     permissions:
@@ -150,8 +109,38 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          pattern: dist-*
           path: dist
           merge-multiple: true
+      - name: Check distributions match the release tag
+        env:
+          TAG: ${{ needs.release-tag.outputs.tag }}
+          TREE: ${{ needs.release-tag.outputs.tree }}
+          BUILT_TREE: ${{ needs.distributions.outputs.tree }}
+        run: |
+          if [[ -z "${TREE}" || "${BUILT_TREE}" != "${TREE}" ]]; then
+            echo "Distributions were built from tree ${BUILT_TREE:-<none>}, not ${TREE:-<none>}" >&2
+            exit 1
+          fi
+          version="${TAG#v}"
+          shopt -s nullglob
+          files=(dist/*)
+          if (( ${#files[@]} == 0 )); then
+            echo "No distributions were downloaded" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            name="$(basename "${file}")"
+            case "${name}" in
+              sqlbuild-"${version}"-*.whl|sqlbuild-"${version}".tar.gz) ;;
+              sqlbuild_cli-"${version}"-*.whl|sqlbuild_cli-"${version}".tar.gz) ;;
+              *)
+                echo "Unexpected distribution ${name} for ${TAG}" >&2
+                exit 1
+                ;;
+            esac
+          done
+          printf '%s\n' "${files[@]}"
       - name: Publish distributions
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

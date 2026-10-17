@@ -50,6 +50,18 @@
 - Before attributing a regression to a cause, prove it with an on/off experiment (a temporary
   kill switch or a revert) on the same machine. Profiles identify suspects; experiments convict.
   Remove experiment switches before committing.
+- Profile native code with a native sampling profiler and call graphs (for example `perf` with frame
+  pointers). Python-level samplers misattribute time inside the extension.
+- Before building an optimisation, confirm from the profile or code that the target path actually
+  runs on the benchmark workload under its dialect and configuration.
+- Estimate the ceiling first from a per-second CPU timeline. Removing CPU from a phase that already
+  saturates every core saves little wall time; single-core phases bound what parallelism can save.
+  Do not build changes whose ceiling is small.
+- Check output identity (compiled files and compile JSON excluding timings) before timing a change,
+  and force the path under test: for example, edit one model so per-model caches are consulted
+  instead of whole-project reuse.
+- Measure each change against the current integrated baseline; independent savings do not simply
+  add up. Report only measured results or profile-derived ceilings, never projected savings.
 - Measure the modes users run: cold without cache, cold writing the cache, and warm. A change that
   affects analysis, validation, or caching must report all three.
 - Performance fixes must not reduce coverage. Show that diagnostics are unchanged or a strict,
