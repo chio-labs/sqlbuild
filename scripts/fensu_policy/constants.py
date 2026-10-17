@@ -320,7 +320,15 @@ NATIVE_TEST_FILE_NAME: str = "tests.rs"
 NATIVE_TEST_FILE_PREFIX: str = "test_"
 NATIVE_LINE_COMMENT: str = "//"
 NATIVE_STRING_QUOTE: str = '"'
-NATIVE_SKIPPED_LINE_PREFIXES: tuple[str, ...] = ("//", "use ", "pub use ", "pub(crate) use ")
+NATIVE_SKIPPED_LINE_PREFIXES: tuple[str, ...] = (
+    "//",
+    "use ",
+    "pub use ",
+    "pub(crate) use ",
+    "const ",
+    "pub(crate) const ",
+    "pub const ",
+)
 NATIVE_BUDGET_SEPARATOR: str = "="
 NATIVE_EDGE_PATHS: RuleOption[tuple[str, ...]] = RuleOption.string_list(
     name="edge_paths",

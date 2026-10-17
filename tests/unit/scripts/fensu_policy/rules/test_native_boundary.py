@@ -130,6 +130,7 @@ def test_given_test_module_when_checking_native_patches_then_matches_contract(
             source=dedent(
                 """
                 use pyo3::types::PyAnyMethods;
+                const JSON_MODULE: &str = "dataclasses";
                 // value.getattr("name")
                 fn read() {}
 
