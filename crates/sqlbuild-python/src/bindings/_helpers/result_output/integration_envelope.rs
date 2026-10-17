@@ -173,12 +173,12 @@ impl IntegrationResultEnvelope {
     }
 
     #[getter]
-    fn asset(&self, py: Python<'_>) -> Option<Py<IntegrationAssetResult>> {
+    pub(crate) fn asset(&self, py: Python<'_>) -> Option<Py<IntegrationAssetResult>> {
         self.asset.as_ref().map(|asset| asset.clone_ref(py))
     }
 
     #[getter]
-    fn checks(&self, py: Python<'_>) -> Py<PyTuple> {
+    pub(crate) fn checks(&self, py: Python<'_>) -> Py<PyTuple> {
         self.checks.clone_ref(py)
     }
 

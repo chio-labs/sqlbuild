@@ -165,46 +165,46 @@ pub(crate) fn view_classes<'py>(
 #[pymethods]
 impl NativeModelInput {
     #[getter]
-    fn model_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn model_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| Ok(record.model_file.clone_ref(py)))
     }
 
     #[getter]
-    fn config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn config(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| Ok(record.config.clone_ref(py)))
     }
 
     #[getter]
-    fn query_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
+    pub(crate) fn query_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
         self.read(py, |record, py| Ok(record.query_sql.clone_ref(py)))
     }
 
     #[getter]
-    fn macro_source_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
+    pub(crate) fn macro_source_sql(&self, py: Python<'_>) -> PyResult<Py<PyString>> {
         self.read(py, |record, py| Ok(record.macro_source_sql.clone_ref(py)))
     }
 
     #[getter]
-    fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, _| references(&classes, record))
     }
 
     #[getter]
-    fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, _| schema_entry(&classes, record))
     }
 
     /// Each reference as `(kind, name, package, call argument count)`.
     #[getter]
-    fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
+    pub(crate) fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
         self.read(py, |record, _| Ok(record.references.clone()))
     }
 
     /// The model's declared key facts, for deriving its unique keys.
     #[getter]
-    fn relation_key_row(&self, py: Python<'_>) -> PyResult<RelationKeyRow> {
+    pub(crate) fn relation_key_row(&self, py: Python<'_>) -> PyResult<RelationKeyRow> {
         self.read_with_owner(py, |owner, record| {
             model_relation_key_row(owner, record, py)
         })
@@ -212,54 +212,54 @@ impl NativeModelInput {
 
     /// The name of the schema entry attached to the model, or `None`.
     #[getter]
-    fn attached_schema_name(&self, py: Python<'_>) -> PyResult<Option<String>> {
+    pub(crate) fn attached_schema_name(&self, py: Python<'_>) -> PyResult<Option<String>> {
         self.read(py, |record, _| Ok(attached_schema_name(record)))
     }
 
     #[getter]
-    fn schema_file(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn schema_file(&self, py: Python<'_>) -> Py<PyAny> {
         py.None()
     }
 
     #[getter]
-    fn sql_validation_enabled(&self, py: Python<'_>) -> PyResult<bool> {
+    pub(crate) fn sql_validation_enabled(&self, py: Python<'_>) -> PyResult<bool> {
         self.read(py, |record, _| Ok(record.sql_validation_enabled))
     }
 
     #[getter]
-    fn rejected_sql_analysis_opt_out(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn rejected_sql_analysis_opt_out(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| Ok(rejected_opt_out(record, py)))
     }
 
     #[getter]
-    fn enum_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn enum_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| Ok(record.enum_declarations.clone_ref(py)))
     }
 
     #[getter]
-    fn constant_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn constant_declarations(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| {
             Ok(record.constant_declarations.clone_ref(py))
         })
     }
 
     #[getter]
-    fn enum_columns(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+    pub(crate) fn enum_columns(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         self.read(py, |record, py| Ok(record.enum_columns.clone_ref(py)))
     }
 
     #[getter]
-    fn macro_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn macro_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         self.read(py, |record, py| PyTuple::new(py, &record.macro_deps))
     }
 
     #[getter]
-    fn macro_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn macro_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| Ok(record.macro_usages.clone_ref(py)))
     }
 
     #[getter]
-    fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.read(py, |record, py| Ok(record.declaration_usages.clone_ref(py)))
     }
 
@@ -281,14 +281,14 @@ impl NativeModelInput {
 
     /// The authored-to-expanded passes, when interpolation left the authored query unchanged.
     #[getter]
-    fn sql_expansion(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn sql_expansion(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, _| authored_expansion(&classes, record))
     }
 
     /// The whole expansion, variables included, which early SQL lint reuses.
     #[getter]
-    fn lint_expansion(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn lint_expansion(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, py| {
             record

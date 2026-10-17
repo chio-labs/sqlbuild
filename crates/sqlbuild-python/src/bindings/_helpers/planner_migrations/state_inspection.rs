@@ -255,25 +255,25 @@ impl MigrationStateInspection {
 
     /// The database whose namespaces this inspection reads.
     #[getter]
-    fn database(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn database(&self, py: Python<'_>) -> Py<PyAny> {
         self.database.clone_ref(py)
     }
 
     /// Every migration event read so far.
     #[getter]
-    fn events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         tuple_of(py, &self.events)
     }
 
     /// Every column migration event read so far.
     #[getter]
-    fn column_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn column_events<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         tuple_of(py, &self.column_events)
     }
 
     /// The old-name history of every move read by `inspect_old_name_views`.
     #[getter]
-    fn old_name_histories<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn old_name_histories<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         old_name_views(
             tuple_of(py, &self.old_name_moves)?.as_any(),
             tuple_of(py, &self.old_name_facts)?.as_any(),

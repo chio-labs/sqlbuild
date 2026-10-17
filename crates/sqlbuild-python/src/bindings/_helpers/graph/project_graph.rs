@@ -117,18 +117,18 @@ impl CompiledProjectGraph {
     }
 
     #[getter(project)]
-    fn project_attribute(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn project_attribute(&self, py: Python<'_>) -> Py<PyAny> {
         self.project.clone_ref(py)
     }
 
     #[getter(native)]
-    fn native_attribute(&self, py: Python<'_>) -> Py<NativeProjectGraph> {
+    pub(crate) fn native_attribute(&self, py: Python<'_>) -> Py<NativeProjectGraph> {
         self.native.clone_ref(py)
     }
 
     /// Lineage edges and selector indexes, converted once.
     #[getter]
-    fn lineage_views(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn lineage_views(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.views
             .get_or_try_init(py, || {
                 Ok(lineage_graph_views(py, self.native.bind(py).borrow())?.unbind())
@@ -137,27 +137,27 @@ impl CompiledProjectGraph {
     }
 
     #[getter]
-    fn upstream_deps(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn upstream_deps(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.view(py, "upstream_deps")
     }
 
     #[getter]
-    fn downstream_deps(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn downstream_deps(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.view(py, "downstream_deps")
     }
 
     #[getter]
-    fn tag_index(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn tag_index(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.view(py, "tag_index")
     }
 
     #[getter]
-    fn path_index(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn path_index(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.view(py, "path_index")
     }
 
     #[getter]
-    fn all_keys(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn all_keys(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.view(py, "all_keys")
     }
 }

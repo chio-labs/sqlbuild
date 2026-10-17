@@ -585,7 +585,7 @@ impl PostgresExecutionHistory {
 
     /// The number of incremental projection calls.
     #[getter]
-    fn project_calls(&self) -> i64 {
+    pub(crate) fn project_calls(&self) -> i64 {
         self.project_calls.load(Ordering::SeqCst)
     }
 

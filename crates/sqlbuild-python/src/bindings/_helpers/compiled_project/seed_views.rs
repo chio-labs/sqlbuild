@@ -153,21 +153,21 @@ impl NativeSeedInput {
 #[pymethods]
 impl NativeSeedInput {
     #[getter]
-    fn seed_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn seed_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
             Ok(seed.seed_file.clone_ref(py))
         })
     }
 
     #[getter]
-    fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
             Ok(seed.schema_entry.clone_ref(py))
         })
     }
 
     #[getter]
-    fn schema_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn schema_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
             Ok(seed.schema_file.clone_ref(py))
         })
@@ -226,7 +226,7 @@ impl NativeCompiledSeed {
 impl NativeCompiledSeed {
     /// The seed's planner-facing `CompiledObjectKey`.
     #[getter]
-    fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         read_seed(&self.owner, self.index, py, |seed, py| {
             seed.key
@@ -238,31 +238,31 @@ impl NativeCompiledSeed {
     }
 
     #[getter]
-    fn deps<'py>(&self, py: Python<'py>) -> Bound<'py, PyTuple> {
+    pub(crate) fn deps<'py>(&self, py: Python<'py>) -> Bound<'py, PyTuple> {
         PyTuple::empty(py)
     }
 
     #[getter]
-    fn name(&self, py: Python<'_>) -> PyResult<String> {
+    pub(crate) fn name(&self, py: Python<'_>) -> PyResult<String> {
         read_seed(&self.owner, self.index, py, |seed, _| Ok(seed.name.clone()))
     }
 
     #[getter]
-    fn seed_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn seed_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
             Ok(seed.seed_file.clone_ref(py))
         })
     }
 
     #[getter]
-    fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
             Ok(seed.schema_entry.clone_ref(py))
         })
     }
 
     #[getter]
-    fn schema_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn schema_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_seed(&self.owner, self.index, py, |seed, py| {
             Ok(seed.schema_file.clone_ref(py))
         })
@@ -270,7 +270,7 @@ impl NativeCompiledSeed {
 
     /// The seed's planner-facing `CompiledRelationLocation`.
     #[getter]
-    fn destination(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn destination(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.destination
             .get_or_try_init(py, || {
@@ -297,7 +297,7 @@ impl NativeCompiledSeed {
     }
 
     #[getter(external)]
-    fn is_external(&self) -> bool {
+    pub(crate) fn is_external(&self) -> bool {
         false
     }
 }

@@ -376,7 +376,7 @@ impl PreparedCompileArtifacts {
     }
 
     #[getter]
-    fn enabled(&self) -> bool {
+    pub(crate) fn enabled(&self) -> bool {
         self.enabled
     }
 

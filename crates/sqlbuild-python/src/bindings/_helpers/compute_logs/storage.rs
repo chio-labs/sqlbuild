@@ -169,7 +169,7 @@ impl LocalFilesystemComputeLogStorage {
 
     /// Return the resolved configured log root.
     #[getter]
-    fn root<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    pub(crate) fn root<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         imported(py, "pathlib", "Path")?.call1((self.root.as_path(),))
     }
 

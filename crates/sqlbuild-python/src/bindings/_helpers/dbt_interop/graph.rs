@@ -67,7 +67,7 @@ impl DbtCombinedGraph {
 impl DbtCombinedGraph {
     /// Every node's stable ID.
     #[getter]
-    fn nodes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
+    pub(crate) fn nodes<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
         PyFrozenSet::new(
             py,
             self.graph.upstream.order.iter().map(|key| key.stable_id()),
@@ -76,13 +76,13 @@ impl DbtCombinedGraph {
 
     /// Upstream edges by stable ID.
     #[getter]
-    fn upstream_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub(crate) fn upstream_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         stable_edges(py, &self.graph.upstream)
     }
 
     /// Downstream edges by stable ID.
     #[getter]
-    fn downstream_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub(crate) fn downstream_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         stable_edges(py, &self.graph.downstream)
     }
 

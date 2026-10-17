@@ -69,7 +69,7 @@ impl CollectedCompileDiagnostics {
 
     /// The recorded diagnostics in deterministic key order.
     #[getter]
-    fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn diagnostics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let by_key: &Bound<'py, PyDict> = self.by_key.bind(py);
         let keys: Bound<'py, PyAny> = imported(py, "builtins", "sorted")?.call1((by_key,))?;
         let diagnostics: Vec<Bound<'py, PyAny>> = keys

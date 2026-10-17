@@ -98,7 +98,7 @@ impl DbtCompileReferenceResolver {
     }
 
     #[getter(_dbt_manifest)]
-    fn dbt_manifest<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
+    pub(crate) fn dbt_manifest<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
         self.dbt_manifest.as_ref().map_or_else(
             || py.None().into_bound(py),
             |manifest| manifest.bind(py).clone(),

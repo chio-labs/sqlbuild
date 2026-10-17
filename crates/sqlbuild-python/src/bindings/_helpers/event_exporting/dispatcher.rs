@@ -712,12 +712,12 @@ impl EventExporterDispatcher {
     }
 
     #[getter]
-    fn thread(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn thread(&self, py: Python<'_>) -> Py<PyAny> {
         self.thread.clone_ref(py)
     }
 
     #[getter]
-    fn notification_thread(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+    pub(crate) fn notification_thread(&self, py: Python<'_>) -> Option<Py<PyAny>> {
         self.notification_thread
             .as_ref()
             .map(|thread| thread.clone_ref(py))

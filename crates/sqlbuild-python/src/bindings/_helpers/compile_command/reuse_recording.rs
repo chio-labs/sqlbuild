@@ -82,7 +82,7 @@ impl CompileArtifactWrites {
 impl CompileArtifactWrites {
     /// Every recorded artifact by absolute path, as `(digest, size, mtime_ns)`.
     #[getter]
-    fn artifacts<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    pub(crate) fn artifacts<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let rows: Bound<'py, PyDict> = PyDict::new(py);
         for (path, artifact) in self.locked().iter() {
             match artifact {
@@ -243,7 +243,7 @@ impl RecordedCompileOutput {
     }
 
     #[getter]
-    fn stderr_lines(&self, py: Python<'_>) -> Vec<Py<PyString>> {
+    pub(crate) fn stderr_lines(&self, py: Python<'_>) -> Vec<Py<PyString>> {
         self.locked()
             .0
             .iter()
@@ -252,7 +252,7 @@ impl RecordedCompileOutput {
     }
 
     #[getter]
-    fn stdout(&self, py: Python<'_>) -> Option<Py<PyString>> {
+    pub(crate) fn stdout(&self, py: Python<'_>) -> Option<Py<PyString>> {
         self.locked().1.as_ref().map(|text| text.clone_ref(py))
     }
 }

@@ -57,27 +57,27 @@ pub(crate) struct BoundEventExporter {
 #[pymethods]
 impl EventExporterCounts {
     #[getter]
-    fn accepted(&self) -> u64 {
+    pub(crate) fn accepted(&self) -> u64 {
         self.counts.accepted
     }
 
     #[getter]
-    fn filtered(&self) -> u64 {
+    pub(crate) fn filtered(&self) -> u64 {
         self.counts.filtered
     }
 
     #[getter]
-    fn delivered(&self) -> u64 {
+    pub(crate) fn delivered(&self) -> u64 {
         self.counts.delivered
     }
 
     #[getter]
-    fn failed(&self) -> u64 {
+    pub(crate) fn failed(&self) -> u64 {
         self.counts.failed
     }
 
     #[getter]
-    fn dropped(&self) -> u64 {
+    pub(crate) fn dropped(&self) -> u64 {
         self.counts.dropped
     }
 
@@ -89,12 +89,12 @@ impl EventExporterCounts {
 #[pymethods]
 impl EventExporterAccounting {
     #[getter]
-    fn exporter_name(&self) -> &str {
+    pub(crate) fn exporter_name(&self) -> &str {
         &self.exporter_name
     }
 
     #[getter]
-    fn counts(&self) -> EventExporterCounts {
+    pub(crate) fn counts(&self) -> EventExporterCounts {
         EventExporterCounts {
             counts: self.counts,
         }
@@ -108,14 +108,14 @@ impl EventExporterAccounting {
 #[pymethods]
 impl EventExportSummary {
     #[getter]
-    fn aggregate(&self) -> EventExporterCounts {
+    pub(crate) fn aggregate(&self) -> EventExporterCounts {
         EventExporterCounts {
             counts: self.snapshot.aggregate,
         }
     }
 
     #[getter]
-    fn per_exporter<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn per_exporter<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let items: Vec<EventExporterAccounting> = self
             .snapshot
             .per_exporter
@@ -129,42 +129,42 @@ impl EventExportSummary {
     }
 
     #[getter]
-    fn queue_depth(&self) -> usize {
+    pub(crate) fn queue_depth(&self) -> usize {
         self.snapshot.queue_depth
     }
 
     #[getter]
-    fn queue_capacity(&self) -> usize {
+    pub(crate) fn queue_capacity(&self) -> usize {
         self.snapshot.queue_capacity
     }
 
     #[getter]
-    fn flush_complete(&self) -> bool {
+    pub(crate) fn flush_complete(&self) -> bool {
         self.snapshot.flush_complete
     }
 
     #[getter]
-    fn accepted(&self) -> u64 {
+    pub(crate) fn accepted(&self) -> u64 {
         self.snapshot.aggregate.accepted
     }
 
     #[getter]
-    fn filtered(&self) -> u64 {
+    pub(crate) fn filtered(&self) -> u64 {
         self.snapshot.aggregate.filtered
     }
 
     #[getter]
-    fn delivered(&self) -> u64 {
+    pub(crate) fn delivered(&self) -> u64 {
         self.snapshot.aggregate.delivered
     }
 
     #[getter]
-    fn failed(&self) -> u64 {
+    pub(crate) fn failed(&self) -> u64 {
         self.snapshot.aggregate.failed
     }
 
     #[getter]
-    fn dropped(&self) -> u64 {
+    pub(crate) fn dropped(&self) -> u64 {
         self.snapshot.aggregate.dropped
     }
 
@@ -197,22 +197,22 @@ impl EventExportSummary {
 #[pymethods]
 impl EventExporterFailure {
     #[getter]
-    fn exporter_name(&self) -> &str {
+    pub(crate) fn exporter_name(&self) -> &str {
         &self.exporter_name
     }
 
     #[getter]
-    fn error_type(&self) -> &str {
+    pub(crate) fn error_type(&self) -> &str {
         &self.error_type
     }
 
     #[getter]
-    fn event_kind(&self) -> &str {
+    pub(crate) fn event_kind(&self) -> &str {
         &self.event_kind
     }
 
     #[getter]
-    fn event_severity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    pub(crate) fn event_severity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         severity_object(py, self.event_severity)
     }
 
@@ -254,27 +254,27 @@ impl BoundEventExporter {
     }
 
     #[getter]
-    fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.name
     }
 
     #[getter]
-    fn function(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn function(&self, py: Python<'_>) -> Py<PyAny> {
         self.function.clone_ref(py)
     }
 
     #[getter]
-    fn provider_arguments(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn provider_arguments(&self, py: Python<'_>) -> Py<PyAny> {
         self.provider_arguments.clone_ref(py)
     }
 
     #[getter]
-    fn event_kinds<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
+    pub(crate) fn event_kinds<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
         PyFrozenSet::new(py, self.filter.event_kinds.iter())
     }
 
     #[getter]
-    fn min_severity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    pub(crate) fn min_severity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         severity_object(py, self.filter.min_severity)
     }
 }

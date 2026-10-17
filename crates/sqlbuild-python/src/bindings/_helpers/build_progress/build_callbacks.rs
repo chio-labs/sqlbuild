@@ -450,7 +450,7 @@ impl BuildProgressCallbacks {
     }
 
     #[getter]
-    fn elapsed(&self) -> f64 {
+    pub(crate) fn elapsed(&self) -> f64 {
         self.started.elapsed().as_secs_f64()
     }
 

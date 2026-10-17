@@ -261,7 +261,7 @@ impl NativeModelAnalysisSession {
 
     /// `(shared members, shared members re-analysed alone)` as of the last step.
     #[getter]
-    fn sharing(&self) -> (usize, usize) {
+    pub(crate) fn sharing(&self) -> (usize, usize) {
         self.sharing
     }
 }

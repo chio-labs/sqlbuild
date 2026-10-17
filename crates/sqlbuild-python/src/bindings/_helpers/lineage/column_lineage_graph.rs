@@ -131,7 +131,7 @@ impl ProjectColumnLineage {
 
     /// Return model lineage, expanding compact model facts on first access.
     #[getter]
-    fn models(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn models(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyAny>> {
         let py: Python<'_> = slf.py();
         if !slf.compact.is_empty() {
             let classes: LineageClasses<'_> = LineageClasses::new(py)?;
@@ -154,7 +154,7 @@ impl ProjectColumnLineage {
 
     /// Return all graph edges, expanding compact edge records on first access.
     #[getter]
-    fn edges(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn edges(mut slf: PyRefMut<'_, Self>) -> PyResult<Py<PyAny>> {
         let py: Python<'_> = slf.py();
         if let Some(edges) = &slf.edges {
             return Ok(edges.clone_ref(py));

@@ -552,7 +552,7 @@ impl SqliteExecutionHistory {
 
     /// The database path, or `None` for an in-memory database.
     #[getter]
-    fn path<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+    pub(crate) fn path<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let path: &str = self.database_path();
         if path == MEMORY_PATH {
             return Ok(py.None().into_bound(py));
@@ -562,7 +562,7 @@ impl SqliteExecutionHistory {
 
     /// The number of incremental projection calls.
     #[getter]
-    fn project_calls(&self) -> i64 {
+    pub(crate) fn project_calls(&self) -> i64 {
         self.project_calls.load(Ordering::SeqCst)
     }
 

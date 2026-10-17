@@ -130,28 +130,28 @@ macro_rules! audit_getters {
             $($extra)*
 
             #[getter]
-            fn audit_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            pub(crate) fn audit_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(audit.attached.audit_file.clone_ref(py))
                 })
             }
 
             #[getter]
-            fn audit_block(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            pub(crate) fn audit_block(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(audit.attached.audit_block.clone_ref(py))
                 })
             }
 
             #[getter]
-            fn sql_body(&self, py: Python<'_>) -> PyResult<String> {
+            pub(crate) fn sql_body(&self, py: Python<'_>) -> PyResult<String> {
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     Ok(audit.attached.sql_body.clone())
                 })
             }
 
             #[getter]
-            fn evaluation_mode(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            pub(crate) fn evaluation_mode(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(audit
                         .attached
@@ -163,7 +163,7 @@ macro_rules! audit_getters {
             }
 
             #[getter]
-            fn measurement_contract(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            pub(crate) fn measurement_contract(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(audit
                         .attached
@@ -175,21 +175,21 @@ macro_rules! audit_getters {
             }
 
             #[getter]
-            fn thresholds(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            pub(crate) fn thresholds(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(audit.attached.thresholds.clone_ref(py))
                 })
             }
 
             #[getter]
-            fn minimum_samples(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            pub(crate) fn minimum_samples(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(audit.attached.minimum_samples.clone_ref(py))
                 })
             }
 
             #[getter]
-            fn measure_sql(&self, py: Python<'_>) -> PyResult<Option<String>> {
+            pub(crate) fn measure_sql(&self, py: Python<'_>) -> PyResult<Option<String>> {
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     Ok(audit
                         .attached
@@ -199,21 +199,21 @@ macro_rules! audit_getters {
             }
 
             #[getter]
-            fn evidence_sql(&self, py: Python<'_>) -> PyResult<Option<String>> {
+            pub(crate) fn evidence_sql(&self, py: Python<'_>) -> PyResult<Option<String>> {
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     Ok(audit.attached.evidence_sql.clone())
                 })
             }
 
             #[getter]
-            fn evidence_limit(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+            pub(crate) fn evidence_limit(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     Ok(audit.attached.evidence_limit.clone_ref(py))
                 })
             }
 
             #[getter]
-            fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+            pub(crate) fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
                 let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     reference_tuple(&classes, &audit.attached.references, &audit.references)
@@ -221,7 +221,7 @@ macro_rules! audit_getters {
             }
 
             #[getter]
-            fn attached_target_kind<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+            pub(crate) fn attached_target_kind<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
                 let classes: AuditClasses<'py> = audit_classes(&self.owner, py)?;
                 read_audit(&self.owner, self.index, py, |audit, py| {
                     match &audit.attached.target {
@@ -239,7 +239,7 @@ macro_rules! audit_getters {
             }
 
             #[getter]
-            fn attached_column_name(&self, py: Python<'_>) -> PyResult<Option<String>> {
+            pub(crate) fn attached_column_name(&self, py: Python<'_>) -> PyResult<Option<String>> {
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     Ok(audit
                         .attached
@@ -250,7 +250,7 @@ macro_rules! audit_getters {
             }
 
             #[getter]
-            fn severity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+            pub(crate) fn severity<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
                 let classes: AuditClasses<'py> = audit_classes(&self.owner, py)?;
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     classes.audit_severity.call1((audit.attached.severity,))
@@ -258,21 +258,21 @@ macro_rules! audit_getters {
             }
 
             #[getter]
-            fn run_scope(&self, py: Python<'_>) -> PyResult<String> {
+            pub(crate) fn run_scope(&self, py: Python<'_>) -> PyResult<String> {
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     Ok(audit.attached.run_scope.clone())
                 })
             }
 
             #[getter]
-            fn always_run(&self, py: Python<'_>) -> PyResult<bool> {
+            pub(crate) fn always_run(&self, py: Python<'_>) -> PyResult<bool> {
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     Ok(audit.attached.always_run)
                 })
             }
 
             #[getter]
-            fn description(&self, py: Python<'_>) -> PyResult<Option<String>> {
+            pub(crate) fn description(&self, py: Python<'_>) -> PyResult<Option<String>> {
                 read_audit(&self.owner, self.index, py, |audit, _| {
                     Ok(audit.attached.description.clone())
                 })
@@ -296,14 +296,14 @@ impl NativeAuditInput {
 
 audit_getters!(NativeAuditInput, {
     #[getter]
-    fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         read_audit(&self.owner, self.index, py, |audit, py| {
             Ok(audit.attached.usages.clone_ref(py))
         })
     }
 
     #[getter]
-    fn name(&self, py: Python<'_>) -> PyResult<Option<String>> {
+    pub(crate) fn name(&self, py: Python<'_>) -> PyResult<Option<String>> {
         read_audit(&self.owner, self.index, py, |audit, _| {
             Ok(audit.attached.name.clone())
         })
@@ -311,7 +311,7 @@ audit_getters!(NativeAuditInput, {
 
     /// `(references as (kind, name, package), attached (kind, name))` for project assembly.
     #[getter]
-    fn assembly_row(&self, py: Python<'_>) -> PyResult<AuditAssemblyRow> {
+    pub(crate) fn assembly_row(&self, py: Python<'_>) -> PyResult<AuditAssemblyRow> {
         read_audit(&self.owner, self.index, py, |audit, _| {
             let attached: &AttachedAudit = &audit.attached;
             Ok((
@@ -345,7 +345,7 @@ impl NativeCompiledAudit {
 audit_getters!(NativeCompiledAudit, {
     /// The audit's planner-facing `CompiledObjectKey`.
     #[getter]
-    fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         read_audit(&self.owner, self.index, py, |audit, py| {
             audit
@@ -363,7 +363,7 @@ audit_getters!(NativeCompiledAudit, {
 
     /// The planner-facing keys of the resources the audit is selected with.
     #[getter]
-    fn scope_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn scope_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         read_audit(&self.owner, self.index, py, |audit, py| {
             let deps: &[ObjectKeyRow] = audit
@@ -379,14 +379,14 @@ audit_getters!(NativeCompiledAudit, {
     }
 
     #[getter]
-    fn name(&self, py: Python<'_>) -> PyResult<String> {
+    pub(crate) fn name(&self, py: Python<'_>) -> PyResult<String> {
         read_audit(&self.owner, self.index, py, |audit, _| {
             Ok(audit.attached.compiled_name().to_owned())
         })
     }
 
     #[getter]
-    fn definition_name(&self, py: Python<'_>) -> PyResult<String> {
+    pub(crate) fn definition_name(&self, py: Python<'_>) -> PyResult<String> {
         read_audit(&self.owner, self.index, py, |audit, _| {
             Ok(audit.attached.definition_name.clone())
         })

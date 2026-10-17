@@ -17,6 +17,7 @@ use crate::bindings::_helpers::records::constants::{
     FROZEN_INSTANCE_ERROR, ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
+use crate::bindings::_helpers::records::getters::getter_field;
 use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
 
 /// Every registered record spec, in registration order.
@@ -51,6 +52,8 @@ pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Boun
         {
             return Ok(found.bind(value.py()).clone());
         }
+    } else if let Some(found) = getter_field(value, name) {
+        return found;
     }
     value.getattr(name)
 }

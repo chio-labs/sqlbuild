@@ -482,7 +482,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn deps(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn deps(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         self.compiled(py, |compiled, py| {
             compiled
                 .projections
@@ -538,14 +538,14 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn references(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, _| references(&classes, record))
     }
 
     /// Each reference as `(kind, name, package, call argument count)`.
     #[getter]
-    fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
+    pub(crate) fn reference_rows(&self, py: Python<'_>) -> PyResult<Vec<ReferenceRow>> {
         self.read(py, |record, _| Ok(record.references.clone()))
     }
 
@@ -573,7 +573,7 @@ impl NativeCompiledModel {
 
     /// `(database, schema, name)` of the model's destination.
     #[getter]
-    fn destination_row(&self, py: Python<'_>) -> PyResult<DestinationRow> {
+    pub(crate) fn destination_row(&self, py: Python<'_>) -> PyResult<DestinationRow> {
         self.compiled(py, |compiled, _| {
             let destination: &DestinationFact = self
                 .overlay
@@ -638,7 +638,7 @@ impl NativeCompiledModel {
 
     /// Inferred columns, else the attached schema's declared columns, else zero.
     #[getter]
-    fn output_column_count(&self, py: Python<'_>) -> PyResult<usize> {
+    pub(crate) fn output_column_count(&self, py: Python<'_>) -> PyResult<usize> {
         self.read(py, |record, py| {
             if let Some(rows) = &compiled_of(record)?.analysis.inferred {
                 return Ok(rows.len());
@@ -651,13 +651,13 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn schema_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, _| schema_entry(&classes, record))
     }
 
     #[getter]
-    fn inferred_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn inferred_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.compiled(py, |compiled, py| {
             self.projections
                 .inferred_columns
@@ -688,7 +688,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn fast_lineage_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn fast_lineage_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.compiled(py, |compiled, py| {
             compiled.analysis.lineage_object(py, &classes.compiled)
@@ -711,22 +711,22 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn authored_query_sql(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn authored_query_sql(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.model_file_attribute(py, "query_sql")
     }
 
     #[getter]
-    fn output_column_locations(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn output_column_locations(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.model_file_attribute(py, "output_column_locations")
     }
 
     #[getter]
-    fn extract_implicit_alias_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn extract_implicit_alias_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.model_file_attribute(py, "extract_implicit_alias_columns")
     }
 
     #[getter]
-    fn macro_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    pub(crate) fn macro_deps<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
         self.compiled(py, |compiled, py| PyTuple::new(py, &compiled.macro_deps))
     }
 
@@ -743,12 +743,12 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn enum_columns(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+    pub(crate) fn enum_columns(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         self.read(py, |record, py| Ok(record.enum_columns.clone_ref(py)))
     }
 
     #[getter]
-    fn binding_diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn binding_diagnostics(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         if let Some(diagnostics) = &self.overlay.binding_diagnostics {
             return Ok(diagnostics.clone_ref(py));
         }
@@ -768,7 +768,7 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn dynamic_column_contract(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn dynamic_column_contract(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.compiled(py, |compiled, py| {
             compiled.analysis.proof_object(py, &classes.compiled)
@@ -776,12 +776,15 @@ impl NativeCompiledModel {
     }
 
     #[getter]
-    fn unchecked_output_columns<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyFrozenSet>> {
+    pub(crate) fn unchecked_output_columns<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyFrozenSet>> {
         PyFrozenSet::new(py, &self.overlay.poisoned)
     }
 
     #[getter]
-    fn rejected_sql_analysis_opt_out(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn rejected_sql_analysis_opt_out(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.read(py, |record, py| Ok(rejected_opt_out(record, py)))
     }
 

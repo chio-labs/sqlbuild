@@ -150,21 +150,21 @@ impl NativeSourceInput {
 #[pymethods]
 impl NativeSourceInput {
     #[getter]
-    fn source_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn source_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_source(&self.owner, self.index, py, |source, py| {
             source.attached_entry(py)
         })
     }
 
     #[getter]
-    fn source_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn source_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_source(&self.owner, self.index, py, |source, py| {
             Ok(source.attached.source_file.clone_ref(py))
         })
     }
 
     #[getter]
-    fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
+    pub(crate) fn declaration_usages(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
         read_source(&self.owner, self.index, py, |source, py| {
             Ok(source.attached.usages.clone_ref(py))
         })
@@ -172,7 +172,7 @@ impl NativeSourceInput {
 
     /// `(name, has a loader, database, schema)`, what project assembly resolves a namespace from.
     #[getter]
-    fn assembly_row(
+    pub(crate) fn assembly_row(
         &self,
         py: Python<'_>,
     ) -> PyResult<(String, bool, Option<String>, Option<String>)> {
@@ -217,7 +217,7 @@ impl NativeCompiledSource {
 impl NativeCompiledSource {
     /// The source's planner-facing `CompiledObjectKey`.
     #[getter]
-    fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn key(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         read_source(&self.owner, self.index, py, |source, py| {
             source
@@ -230,26 +230,26 @@ impl NativeCompiledSource {
     }
 
     #[getter]
-    fn deps<'py>(&self, py: Python<'py>) -> Bound<'py, PyTuple> {
+    pub(crate) fn deps<'py>(&self, py: Python<'py>) -> Bound<'py, PyTuple> {
         PyTuple::empty(py)
     }
 
     #[getter]
-    fn name(&self, py: Python<'_>) -> PyResult<String> {
+    pub(crate) fn name(&self, py: Python<'_>) -> PyResult<String> {
         read_source(&self.owner, self.index, py, |source, _| {
             Ok(source.attached.name.clone())
         })
     }
 
     #[getter]
-    fn source_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn source_entry(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_source(&self.owner, self.index, py, |source, py| {
             source.assembled_entry(py)
         })
     }
 
     #[getter]
-    fn source_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn source_file(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_source(&self.owner, self.index, py, |source, py| {
             Ok(source.attached.source_file.clone_ref(py))
         })

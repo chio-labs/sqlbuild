@@ -821,13 +821,13 @@ fn scenario_row(scenario: &Bound<'_, PyAny>) -> PyResult<ScenarioRow> {
 impl NativeScopeIndex {
     /// The static index, without grants.
     #[getter]
-    fn index(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn index(&self, py: Python<'_>) -> Py<PyAny> {
         self.index.clone_ref(py)
     }
 
     /// Whether any macro, enum or constant is scoped, which makes relationship grants matter.
     #[getter]
-    fn has_scoped_relationship_declarations(&self) -> bool {
+    pub(crate) fn has_scoped_relationship_declarations(&self) -> bool {
         self.native.has_scoped_relationship_declarations
     }
 

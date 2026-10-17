@@ -218,22 +218,22 @@ impl EventExporterCommandScope {
     }
 
     #[getter]
-    fn dispatcher(&self, py: Python<'_>) -> Py<PyAny> {
+    pub(crate) fn dispatcher(&self, py: Python<'_>) -> Py<PyAny> {
         self.dispatcher.clone_ref(py)
     }
 
     #[getter]
-    fn provider_session(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn provider_session(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         Ok(optional(py, self.locked()?.provider_session.as_ref()))
     }
 
     #[getter]
-    fn project_dir(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn project_dir(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         Ok(optional(py, self.locked()?.project_dir.as_ref()))
     }
 
     #[getter]
-    fn providers(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn providers(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let state = self.locked()?;
         Ok(state
             .providers
@@ -242,7 +242,7 @@ impl EventExporterCommandScope {
     }
 
     #[getter]
-    fn event_exporters(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn event_exporters(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let state = self.locked()?;
         Ok(state
             .event_exporters
@@ -251,7 +251,7 @@ impl EventExporterCommandScope {
     }
 
     #[getter]
-    fn command_output_sinks(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    pub(crate) fn command_output_sinks(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let state = self.locked()?;
         Ok(state
             .command_output_sinks
