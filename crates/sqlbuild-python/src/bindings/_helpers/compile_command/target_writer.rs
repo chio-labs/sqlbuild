@@ -778,7 +778,7 @@ pub(crate) fn static_sql_test_planning_diagnostics<'py>(
 /// Plan every SQL test whose cached artifact under `target_dir` cannot be reused.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_static_sql_tests<'py>(
+pub(crate) fn plan_static_sql_tests<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<PlannedStaticSqlTests> {

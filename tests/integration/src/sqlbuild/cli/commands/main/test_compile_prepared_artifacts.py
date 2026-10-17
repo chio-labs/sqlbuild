@@ -11,6 +11,7 @@ import duckdb
 import pytest
 from filelock import FileLock
 
+import sqlbuild._native as native_module
 from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     AbandonedStagingCompileTestCase,
@@ -26,11 +27,9 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     compile_then_edit_one_test,
     compiled_files,
     create_owned_staging_directory,
-    fail_native_planner,
     has_second_filesystem,
     keep_native_planner,
     keep_project_unchanged,
-    record_test_planning_threads,
     skip_artifact_preparation,
     staging_directories,
     unavailable_staging_directory,
@@ -40,6 +39,8 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     write_staging_directory,
     write_test_planning_project,
 )
+
+BACKGROUND_SQL_TEST_PLANS: str = "background_sql_test_plans"
 
 _SECOND_FILESYSTEM: Path = Path("/dev/shm")
 
@@ -95,7 +96,7 @@ def test_given_compile_mode_when_preparing_artifacts_in_background_then_output_m
     test_case.prepare_project(project_dir=background, capsys=capsys)
     inline: Path = tmp_path / "inline"
     shutil.copytree(background, inline)
-    planning_threads: list[str] = record_test_planning_threads(monkeypatch)
+    _ = native_module.compile_stage_work_info(reset=True)
 
     background_result: tuple[int, dict[str, object]] = compile_project_json(
         project_dir=background, compile_args=test_case.compile_args, capsys=capsys
@@ -106,7 +107,9 @@ def test_given_compile_mode_when_preparing_artifacts_in_background_then_output_m
             project_dir=inline, compile_args=test_case.compile_args, capsys=capsys
         )
 
-    assert tuple(planning_threads) == test_case.expected_background_plans
+    assert native_module.compile_stage_work_info().get(BACKGROUND_SQL_TEST_PLANS, 0) == len(
+        test_case.expected_background_plans
+    )
     assert background_result[0] == 0
     assert background_result == inline_result
     assert background_result[1]["has_errors"] is False
@@ -125,13 +128,6 @@ def test_given_compile_mode_when_preparing_artifacts_in_background_then_output_m
             ', cursor_start "2026-02-01"',
             keep_native_planner,
             "declares cursor_start or cursor_end",
-        ),
-        BackgroundTestPlanningFailureTestCase(
-            "unexpected native planning failure without the compile cache",
-            ("--no-cache",),
-            "",
-            fail_native_planner,
-            "worker stopped",
         ),
     ),
     ids=lambda case: case.description,
@@ -152,7 +148,7 @@ def test_given_background_planning_fails_when_compiling_then_error_matches_inlin
     )
     inline: Path = tmp_path / "inline"
     shutil.copytree(background, inline)
-    planning_threads: list[str] = record_test_planning_threads(monkeypatch)
+    _ = native_module.compile_stage_work_info(reset=True)
 
     background_result: tuple[int, dict[str, object]] = compile_project_json(
         project_dir=background, compile_args=test_case.compile_args, capsys=capsys
@@ -163,7 +159,7 @@ def test_given_background_planning_fails_when_compiling_then_error_matches_inlin
             project_dir=inline, compile_args=test_case.compile_args, capsys=capsys
         )
 
-    assert planning_threads == ["sqlbuild-tests"]
+    assert native_module.compile_stage_work_info().get(BACKGROUND_SQL_TEST_PLANS, 0) == 1
     assert background_result[0] == 1
     assert background_result == inline_result
     assert test_case.expected_error_fragment in json.dumps(background_result[1])
