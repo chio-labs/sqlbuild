@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use crate::bindings::_helpers::cli::launch_state::withhold_launch_record;
 use crate::bindings::_helpers::command_runtime::warehouse_scope::command_warehouse_scope;
 use crate::bindings::_helpers::diff_report::support::cli_error;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
@@ -176,7 +177,7 @@ fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn class_object<'py>(py: Python<'py>, class: ClassRef) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, registry::record_named(class.name)?)
+    record_class(py, registry::record_named(class.name)?)
 }
 
 fn tuple_of<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -217,7 +218,6 @@ fn selector_inputs<'py>(
         .getattr("select")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    let summary_class: Bound<'py, PyAny> = registry::class(py, RecordId::SelectorFileSummary)?;
     let mut files: Vec<Bound<'py, PyAny>> = Vec::new();
     for raw_path in native_field(args, "select_file")?.try_iter()? {
         let path: Bound<'py, PyAny> = path_class(py)?.call1((raw_path?,))?;
@@ -236,8 +236,9 @@ fn selector_inputs<'py>(
             selectors.push(PyString::new(py, stripped).into_any());
             count += 1;
         }
-        files.push(call_with(
-            &summary_class,
+        files.push(new_record_with(
+            py,
+            RecordId::SelectorFileSummary,
             &[
                 ("path", path),
                 ("selector_count", count.into_bound_py_any(py)?),

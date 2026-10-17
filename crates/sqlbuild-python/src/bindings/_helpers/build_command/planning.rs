@@ -17,6 +17,7 @@ use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -46,8 +47,9 @@ fn request_options<'py>(context: &BuildContext<'py>) -> PyResult<Bound<'py, PyAn
             ("discovered_inputs", context.get("discovered_inputs")?),
         ],
     )?;
-    call_with(
-        &registry::class(py, RecordId::CompilePipelineOptions)?,
+    new_record_with(
+        py,
+        RecordId::CompilePipelineOptions,
         &[
             ("no_sql_validation", field("no_sql_validation")?),
             ("no_cache", field("no_cache")?),

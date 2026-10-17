@@ -26,6 +26,7 @@ use crate::bindings::_helpers::cost_report::degradation::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -78,10 +79,8 @@ pub(crate) fn finalize_build_cost<'py>(
         ("use_color", boolean(py, context.use_color)),
     ];
     fields.extend(cost.overrides);
-    let finalization: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::BuildCostFinalization)?,
-        &fields,
-    )?;
+    let finalization: Bound<'py, PyAny> =
+        new_record_with(py, RecordId::BuildCostFinalization, &fields)?;
     finalize_cost(&finalization)
 }
 

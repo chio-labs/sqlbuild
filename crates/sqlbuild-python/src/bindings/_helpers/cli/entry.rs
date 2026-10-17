@@ -22,6 +22,7 @@ use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -164,7 +165,7 @@ fn write_compile_machine_error(
         .getattr_opt("location")?
         .unwrap_or_else(|| py.None().into_bound(py));
     let location: Bound<'_, PyAny> =
-        if location.is_instance(&registry::class(py, RecordId::SourceLocation)?)? {
+        if location.is_instance(&record_class(py, RecordId::SourceLocation)?)? {
             location
         } else {
             py.None().into_bound(py)

@@ -8,6 +8,7 @@ use crate::bindings::_helpers::compile_driver::discovery::discover_project_input
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -54,8 +55,9 @@ pub(crate) fn resolve_adapter_connection_context<'py>(
             ("require_connection", boolean(py, require_connection)),
         ],
     )?;
-    call_with(
-        &registry::class(py, RecordId::AdapterConnectionContext)?,
+    new_record_with(
+        py,
+        RecordId::AdapterConnectionContext,
         &[
             ("adapter_name", adapter_name),
             ("adapter", adapter),

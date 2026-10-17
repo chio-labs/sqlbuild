@@ -15,6 +15,7 @@ use crate::bindings::_helpers::clone::clone_progress::{
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -120,11 +121,7 @@ fn dependency_locations<'py>(
     } else {
         native_field(&plan, "source_map")?
     };
-    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
-    let location_class: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledRelationLocation)?;
-    let source_type: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
+    let source_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
     for pair in source_map.call_method0("items")?.try_iter()? {
         let (name, source): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         let table: Bound<'py, PyAny> = native_field(&source, "table")?;
@@ -144,11 +141,15 @@ fn dependency_locations<'py>(
             table
         };
         let [database, schema, table] = place;
-        let location: Bound<'py, PyAny> = call_with(
-            &location_class,
+        let location: Bound<'py, PyAny> = new_record_with(
+            py,
+            RecordId::CompiledRelationLocation,
             &[database, schema, table, ("qualified_name", qualified)],
         )?;
-        locations.set_item(key_class.call1((&source_type, name))?, location)?;
+        locations.set_item(
+            new_record(py, RecordId::CompiledObjectKey, (&source_type, name), None)?,
+            location,
+        )?;
     }
     Ok(locations)
 }
@@ -209,7 +210,7 @@ fn execution_input<'py>(
     )?;
     let allow_decrease: bool = config
         .getattr("time_travel_retention_decrease")?
-        .eq(registry::class(py, RecordId::RetentionDecreasePolicy)?.getattr("ALLOW")?)?;
+        .eq(enum_member(py, RecordId::RetentionDecreasePolicy, "ALLOW")?)?;
     let source_entries: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::CloneSourceEntries)?,
         &[

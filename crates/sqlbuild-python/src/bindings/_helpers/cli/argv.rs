@@ -13,10 +13,9 @@ use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 
 use crate::bindings::_helpers::cli::namespace::new_cli_namespace;
 use crate::bindings::_helpers::cli::surrogates::{python_text, rust_text, uses_placeholders};
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const INT_CONVERTER: &str = "int";
 const POSITIVE_INTEGER_CONVERTER: &str = "_positive_integer";
@@ -258,10 +257,10 @@ pub(crate) fn parse_cli_invocation<'py>(
         .extract()?;
     let settings: ArgvSettings = ArgvSettings { columns, use_color };
     let (rows, exit_code): ParsedRows = parse_cli_arguments(&argv, &defaults, settings)?;
-    let parsed: Bound<'py, PyAny> = registry::class(py, RecordId::ParsedCliInvocation)?;
     let Some(rows) = rows else {
-        return call_with(
-            &parsed,
+        return new_record_with(
+            py,
+            RecordId::ParsedCliInvocation,
             &[
                 ("args", py.None().into_bound(py)),
                 ("exit_code", exit_code.into_bound_py_any(py)?),
@@ -271,8 +270,9 @@ pub(crate) fn parse_cli_invocation<'py>(
     for (name, value) in rows {
         args.setattr(name.as_str(), value)?;
     }
-    call_with(
-        &parsed,
+    new_record_with(
+        py,
+        RecordId::ParsedCliInvocation,
         &[("args", args), ("exit_code", py.None().into_bound(py))],
     )
 }

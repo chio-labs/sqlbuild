@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compile_driver::discovery::discover_project_input
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -77,7 +78,7 @@ fn execution_limits<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let limits: Bound<'py, PyAny> = if target_name.is_none() {
-        registry::class(py, RecordId::ExecutionLimitsConfig)?.call0()?
+        new_record(py, RecordId::ExecutionLimitsConfig, (), None)?
     } else {
         native_field(&target_config(discovered, target_name)?, "execution_limits")?
     };
@@ -209,8 +210,9 @@ pub(crate) fn resolve_build_context<'py>(
         } else {
             load_sources.is_truthy()?
         };
-    let invocation: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::BuildInvocation)?,
+    let invocation: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::BuildInvocation,
         &[
             ("effective_project_dir", project_dir),
             ("discovered_inputs", discovered),

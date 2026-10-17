@@ -27,6 +27,7 @@ use crate::bindings::_helpers::discovery::configuration::discover_project_config
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -102,8 +103,9 @@ fn resolved_warehouse<'py>(
     warehouse: Option<&str>,
     source: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(py, RecordId::ResolvedWarehouse)?,
+    new_record_with(
+        py,
+        RecordId::ResolvedWarehouse,
         &[
             (
                 "warehouse",

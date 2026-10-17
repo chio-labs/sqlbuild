@@ -9,6 +9,7 @@ use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -59,8 +60,9 @@ fn compiled_environment<'py>(
                 ),
                 (
                     "analysis_selection",
-                    call_with(
-                        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+                    new_record_with(
+                        py,
+                        RecordId::CompileAnalysisSelection,
                         &[("no_cache", native_field(options, "no_cache")?)],
                     )?,
                 ),
@@ -137,10 +139,7 @@ pub(crate) fn prepared_clone_pipeline<'py>(
     for (index, name) in PLANNED_FIELDS.iter().enumerate() {
         fields.push((*name, planned.get_item(index)?));
     }
-    call_with(
-        &registry::class(py, RecordId::ClonePipelineResult)?,
-        &fields,
-    )
+    new_record_with(py, RecordId::ClonePipelineResult, &fields)
 }
 
 /// Run a clone pipeline with explicit compilation controls.

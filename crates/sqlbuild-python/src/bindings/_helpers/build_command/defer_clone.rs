@@ -17,6 +17,7 @@ use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -262,7 +263,7 @@ fn clone_input<'py>(
     )?;
     let allow_decrease: bool = target
         .getattr("time_travel_retention_decrease")?
-        .eq(registry::class(py, RecordId::RetentionDecreasePolicy)?.getattr("ALLOW")?)?;
+        .eq(enum_member(py, RecordId::RetentionDecreasePolicy, "ALLOW")?)?;
     let sources: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::CloneSourceEntries)?,
         &[
@@ -436,8 +437,9 @@ fn clone_boundaries<'py>(
             ("destination_target_name", prephase.destination.clone()),
             (
                 "destination_connection",
-                call_with(
-                    &registry::class(py, RecordId::ClonePipelineConnection)?,
+                new_record_with(
+                    py,
+                    RecordId::ClonePipelineConnection,
                     &[
                         (
                             "config",
@@ -449,8 +451,9 @@ fn clone_boundaries<'py>(
             ),
             (
                 "options",
-                call_with(
-                    &registry::class(py, RecordId::ClonePipelineOptions)?,
+                new_record_with(
+                    py,
+                    RecordId::ClonePipelineOptions,
                     &[
                         (
                             "no_sql_validation",
@@ -601,8 +604,9 @@ pub(crate) fn run_defer_clone_boundary_prephase(
                 ),
                 (
                     "analysis_selection",
-                    call_with(
-                        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+                    new_record_with(
+                        py,
+                        RecordId::CompileAnalysisSelection,
                         &[("no_cache", native_field(request, "no_cache")?)],
                     )?,
                 ),

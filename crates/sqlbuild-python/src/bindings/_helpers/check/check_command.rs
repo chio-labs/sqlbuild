@@ -15,6 +15,7 @@ use crate::bindings::_helpers::planner_entries::command_plans::build_relation_co
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_selection::selectors::parse_project_selector;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
@@ -87,7 +88,7 @@ fn empty_tuple(py: Python<'_>) -> Bound<'_, PyAny> {
 
 /// Refuse `+`, `~` and path selectors, splitting selectors as Python's `split` does.
 fn refuse_graph_selectors(py: Python<'_>, selectors: &[Bound<'_, PyAny>]) -> PyResult<()> {
-    let path_selector: Bound<'_, PyAny> = registry::class(py, RecordId::PathSelector)?;
+    let path_selector: Bound<'_, PyAny> = record_class(py, RecordId::PathSelector)?;
     for selector in selectors {
         for token in selector.call_method0("split")?.try_iter()? {
             for part in token?.call_method1("split", (",",))?.try_iter()? {
@@ -199,9 +200,7 @@ fn compile_pipeline<'py>(
         }
     }
     let loaders: Bound<'py, PyFrozenSet> = PyFrozenSet::new(py, loaders)?;
-    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
-    let source_type: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
+    let source_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for reference in required_refs.try_iter()? {
         keys.push(sql_ref_key(py, &reference?)?);
@@ -210,8 +209,9 @@ fn compile_pipeline<'py>(
         for source in native_field(&source_file?, "source_entries")?.try_iter()? {
             let source: Bound<'py, PyAny> = source?;
             if loaders.contains(native_field(&source, "loader")?)? {
-                keys.push(call_with(
-                    &key_class,
+                keys.push(new_record_with(
+                    py,
+                    RecordId::CompiledObjectKey,
                     &[
                         ("resource_type", source_type.clone()),
                         ("name", native_field(&source, "name")?),
@@ -225,8 +225,9 @@ fn compile_pipeline<'py>(
         native_field(invocation, "effective_project_dir")?,
         discovered.clone(),
     )?;
-    let options: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilePipelineOptions)?,
+    let options: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompilePipelineOptions,
         &[
             ("selected_target", native_field(request, "selected_target")?),
             (
@@ -318,8 +319,9 @@ fn prepare<'py>(
             check_functions.push(check);
         }
     }
-    let selection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::PythonSqlRunSelection)?,
+    let selection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::PythonSqlRunSelection,
         &[
             ("sql_keys", PyFrozenSet::empty(py)?.into_any()),
             ("python_node_names", PyFrozenSet::empty(py)?.into_any()),
@@ -652,7 +654,7 @@ fn complete<'py>(
 fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &registry::class(py, RecordId::CheckInvocation)?,
+        &record_class(py, RecordId::CheckInvocation)?,
         true,
     )?;
     let stream: Bound<'_, PyAny> = native_field(&invocation, "progress_stream")?;

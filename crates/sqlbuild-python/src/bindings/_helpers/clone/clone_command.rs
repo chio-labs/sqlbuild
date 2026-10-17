@@ -30,6 +30,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within}
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -256,12 +257,14 @@ fn prepare<'py>(
                     ("discovered_inputs", invocation.discovered.clone()),
                 ],
             )?;
-            let destination_connection: Bound<'py, PyAny> = call_with(
-                &registry::class(py, RecordId::ClonePipelineConnection)?,
+            let destination_connection: Bound<'py, PyAny> = new_record_with(
+                py,
+                RecordId::ClonePipelineConnection,
                 &[("config", config.clone()), ("handle", connection.clone())],
             )?;
-            let options: Bound<'py, PyAny> = call_with(
-                &registry::class(py, RecordId::ClonePipelineOptions)?,
+            let options: Bound<'py, PyAny> = new_record_with(
+                py,
+                RecordId::ClonePipelineOptions,
                 &[
                     (
                         "no_sql_validation",

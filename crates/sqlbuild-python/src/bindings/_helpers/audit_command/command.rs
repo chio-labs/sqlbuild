@@ -15,6 +15,7 @@ use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_com
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -114,8 +115,9 @@ fn compile_audits<'py>(
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
-    let options: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilePipelineOptions)?,
+    let options: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompilePipelineOptions,
         &[
             ("selected_target", native_field(request, "selected_target")?),
             (
@@ -496,7 +498,7 @@ fn complete(
 fn run_audit_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &registry::class(py, RecordId::AuditInvocation)?,
+        &record_class(py, RecordId::AuditInvocation)?,
         true,
     )?;
     let pipeline: Bound<'_, PyAny> = compile_audits(request, &invocation)?;

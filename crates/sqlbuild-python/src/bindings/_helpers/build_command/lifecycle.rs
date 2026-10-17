@@ -18,6 +18,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -303,8 +304,9 @@ fn lifecycle_plan<'py>(
     let py: Python<'py> = discovered.py();
     let plan_output: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
     let graph: Bound<'py, PyAny> = python_node_graph(discovered)?;
-    let selection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::PythonSqlRunSelection)?,
+    let selection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::PythonSqlRunSelection,
         &[
             (
                 "sql_keys",
@@ -321,13 +323,12 @@ fn lifecycle_plan<'py>(
         &registry::native(py, NativeAttr::BuildPythonSqlRunLifecycle)?,
         &[("selection", selection), ("python_graph", graph.clone())],
     )?;
-    let source_type: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("SOURCE")?;
-    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
+    let source_type: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SOURCE")?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for name in native_field(&plan, "ingress_loader_names")?.try_iter()? {
-        keys.push(call_with(
-            &key_class,
+        keys.push(new_record_with(
+            py,
+            RecordId::CompiledObjectKey,
             &[("name", name?), ("resource_type", source_type.clone())],
         )?);
     }

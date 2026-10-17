@@ -24,6 +24,7 @@ use crate::bindings::_helpers::freshness::publication::append_freshness_records;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -186,7 +187,7 @@ fn cursors<'py>(
         )?;
     }
     if !overrides.is_truthy()? {
-        overrides = registry::class(py, RecordId::CursorOverrides)?.call0()?;
+        overrides = new_record(py, RecordId::CursorOverrides, (), None)?;
     }
     Ok([
         cursor_timestamp(&native_field(&overrides, "start_ts")?)?,
