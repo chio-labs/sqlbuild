@@ -13,9 +13,9 @@ use sqlbuild_analysis::manifest::models::{
 use sqlbuild_analysis::python_values::models::PythonValue;
 
 use crate::bindings::_helpers::python_values::values::python_value;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DECIMAL_KIND: &str = "decimal";
 const MACRO_KIND: &str = "macro";
@@ -149,8 +149,8 @@ fn hooks(value: &Bound<'_, PyAny>) -> PyResult<Option<Vec<ManifestHookInput>>> {
     if !(value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>()) {
         return Ok(None);
     }
-    let sql_class: Bound<'_, PyAny> = registry::class(value.py(), RecordId::SqlHookEntry)?;
-    let python_class: Bound<'_, PyAny> = registry::class(value.py(), RecordId::PythonHookEntry)?;
+    let sql_class: Bound<'_, PyAny> = record_class(value.py(), RecordId::SqlHookEntry)?;
+    let python_class: Bound<'_, PyAny> = record_class(value.py(), RecordId::PythonHookEntry)?;
     value
         .try_iter()?
         .map(|entry| hook(&entry?, (&sql_class, &python_class)))

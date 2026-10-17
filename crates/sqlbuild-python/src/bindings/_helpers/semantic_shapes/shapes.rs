@@ -14,6 +14,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{DeclaredRow, InferredRow};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -78,8 +79,7 @@ pub(crate) fn published_shape<'py>(
     let py: Python<'py> = model.py();
     let shape: Bound<'py, PyDict> = binding_shape(model, columns, inputs, profile)?;
     let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
-    let snapshot: Bound<'py, PyAny> =
-        registry::class(py, RecordId::MaterializationType)?.getattr("SNAPSHOT")?;
+    let snapshot: Bound<'py, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
     if values
         .call_method1("get", ("materialized",))?
         .eq(snapshot)?
@@ -251,8 +251,7 @@ pub(crate) fn project_shapes<'py>(
             shapes.set_item(format!("{TABLE_FUNCTION_PREFIX}{name}"), shape)?;
         }
     }
-    let enforced: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
+    let enforced: Bound<'py, PyAny> = enum_member(py, RecordId::ContractPolicy, "ENFORCED")?;
     let mut expression_names: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
     for source in native_field(project, "sources")?.try_iter()? {

@@ -5,13 +5,13 @@ use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::planner_strategy::constants::MODEL_REFERENCE_KIND;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
+use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::sql_test_glue::constants::{TABLE_FN, UDF};
 use crate::bindings::_helpers::sql_test_glue::plan_values::model_payload;
 use sqlbuild_analysis::compiler::main::missing_expected_columns::missing_expected_columns;
 
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::authored_ctes::prefixed_ctes;
 
 fn prefixed_names<'py>(test: &Bound<'py, PyAny>, prefix: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -134,7 +134,7 @@ pub(super) fn entry<'py>(
     fields.set_item("chain", native_field(plan, "chain")?)?;
     fields.set_item("assertions", native_field(plan, "assertions")?)?;
     fields.set_item("sql_analysis_enabled", analysis)?;
-    registry::class(py, RecordId::SqlTestPlanEntry)?.call((), Some(&fields))
+    new_record(py, RecordId::SqlTestPlanEntry, (), Some(&fields))
 }
 
 pub(super) fn expected_diagnostics(
@@ -147,7 +147,7 @@ pub(super) fn expected_diagnostics(
         return Ok(result);
     };
     let py = test.py();
-    let resource_types = registry::class(py, RecordId::CompiledResourceType)?;
+    let resource_types = record_class(py, RecordId::CompiledResourceType)?;
     for step in native_field(plan, "chain")?.try_iter()? {
         let step = step?;
         let name = native_field(&step, "model_name")?;

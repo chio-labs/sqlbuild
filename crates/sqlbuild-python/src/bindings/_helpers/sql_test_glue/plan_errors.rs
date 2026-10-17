@@ -1,6 +1,7 @@
 //! Project native planning failures into existing located diagnostic exceptions.
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -33,7 +34,7 @@ fn cte_call_location<'py>(
     arguments.set_item("column", located.column)?;
     arguments.set_item("end_line", located.end_line)?;
     arguments.set_item("end_column", located.end_column)?;
-    registry::class(py, RecordId::SourceLocation)?.call((), Some(&arguments))
+    new_record(py, RecordId::SourceLocation, (), Some(&arguments))
 }
 
 pub(super) fn planning_error(

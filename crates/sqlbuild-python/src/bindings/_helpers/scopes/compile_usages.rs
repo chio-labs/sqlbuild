@@ -19,6 +19,7 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -150,13 +151,12 @@ pub(crate) fn model_schema_scope_usages<'py>(
         ));
     }
     report_inaccessible(py, diagnostics)?;
-    let usage_record = registry::class(py, RecordId::UsageRecord)?;
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(usages.len());
     for (consumer, used) in usages {
         let fields: Bound<'py, PyDict> = PyDict::new(py);
         fields.set_item("consumer", native_field(&records[consumer], "identity")?)?;
         fields.set_item("declaration", native_field(&records[used], "identity")?)?;
-        built.push(usage_record.call((), Some(&fields))?);
+        built.push(new_record(py, RecordId::UsageRecord, (), Some(&fields))?);
     }
     PyTuple::new(py, built)
 }
@@ -190,7 +190,6 @@ fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyRes
         return Ok(());
     }
     let report = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
-    let compiler_diagnostic = registry::class(py, RecordId::CompilerDiagnostic)?;
     let path_class = py.import("pathlib")?.getattr("Path")?;
     for (key, message, path, help) in diagnostics {
         let fields: Bound<'_, PyDict> = PyDict::new(py);
@@ -202,7 +201,10 @@ fn report_inaccessible(py: Python<'_>, diagnostics: Vec<DiagnosticRow>) -> PyRes
         fields.set_item("help", help)?;
         let arguments: Bound<'_, PyDict> = PyDict::new(py);
         arguments.set_item("key", PyTuple::new(py, key)?)?;
-        arguments.set_item("diagnostic", compiler_diagnostic.call((), Some(&fields))?)?;
+        arguments.set_item(
+            "diagnostic",
+            new_record(py, RecordId::CompilerDiagnostic, (), Some(&fields))?,
+        )?;
         report.call((), Some(&arguments))?;
     }
     Ok(())

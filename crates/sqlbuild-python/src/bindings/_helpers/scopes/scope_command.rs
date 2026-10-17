@@ -14,6 +14,7 @@ use sqlbuild_scopes::scope_text::main::scope_result_failed::scope_result_failed;
 use sqlbuild_scopes::scope_text::models::ScopeTextRequest;
 
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -160,10 +161,9 @@ fn report_filters<'py>(
     py: Python<'py>,
     request: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let kind_class: Bound<'_, PyAny> = registry::class(py, RecordId::DeclarationKind)?;
     let mut kinds: Vec<Bound<'_, PyAny>> = Vec::new();
     for kind in native_field(request, "kinds")?.try_iter()? {
-        kinds.push(kind_class.call1((kind?,))?);
+        kinds.push(enum_from_value(py, RecordId::DeclarationKind, kind?)?);
     }
     let options: Bound<'_, PyDict> = keywords(
         py,
@@ -183,7 +183,7 @@ fn report_filters<'py>(
             ("globals", native_field(request, "globals")?),
         ],
     )?;
-    registry::class(py, RecordId::ScopeReportFilters)?.call((), Some(&options))
+    new_record(py, RecordId::ScopeReportFilters, (), Some(&options))
 }
 
 /// `dataclasses.replace(report, **changes)`.

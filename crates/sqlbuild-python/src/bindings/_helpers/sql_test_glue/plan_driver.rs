@@ -1,11 +1,10 @@
 //! Host SQL-test request preparation, native planning, and Python result conversion.
 
 use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timing;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -130,8 +129,9 @@ pub(crate) fn planned<'py>(
                         .call1(("native SQL-test planning omitted rendered SQL",))?,
                 ));
             }
-            plans.push(call_with(
-                &registry::class(py, RecordId::NativeSqlTestArtifact)?,
+            plans.push(new_record_with(
+                py,
+                RecordId::NativeSqlTestArtifact,
                 &[
                     ("sql", sql),
                     ("model_names", native_field(&plan, "model_names")?),

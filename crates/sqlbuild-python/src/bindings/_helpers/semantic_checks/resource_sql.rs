@@ -16,6 +16,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::audit_views::audit_reference_rows;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -55,8 +56,8 @@ pub(crate) fn resource_sql_diagnostics_of<'py>(
         Err(failure) => return Err(failure_error(py, failure)?),
     };
     let classes = DiagnosticClasses {
-        compiler_diagnostic: registry::class(py, RecordId::CompilerDiagnostic)?,
-        source_location: registry::class(py, RecordId::SourceLocation)?,
+        compiler_diagnostic: record_class(py, RecordId::CompilerDiagnostic)?,
+        source_location: record_class(py, RecordId::SourceLocation)?,
         path: py.import("pathlib")?.getattr("Path")?,
     };
     let built: Vec<Bound<'py, PyAny>> = diagnostics
@@ -72,7 +73,7 @@ fn request(
     profile: &Bound<'_, PyAny>,
 ) -> PyResult<ResourceSqlRequest> {
     let py: Python<'_> = project.py();
-    let reference_class: Bound<'_, PyAny> = registry::class(py, RecordId::CompileSqlReference)?;
+    let reference_class: Bound<'_, PyAny> = record_class(py, RecordId::CompileSqlReference)?;
     let mut audits: Vec<AuditSqlInput> = Vec::new();
     for audit in native_field(project, "audits")?.try_iter()? {
         audits.push(audit_input(&audit?, &reference_class)?);

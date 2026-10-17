@@ -14,6 +14,7 @@ use crate::bindings::_helpers::analysis::schema_request::{
 };
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -153,9 +154,8 @@ fn rebound_models<'py>(
         .getattr("TopologicalSorter")?
         .call1((graph,))?
         .call_method0("static_order")?;
-    let query_class: Object<'py> = registry::class(py, RecordId::NativeColumnQuery)?;
-    let unknown: Object<'py> =
-        registry::class(py, RecordId::InferredNullability)?.getattr("UNKNOWN")?;
+    let query_class: Object<'py> = record_class(py, RecordId::NativeColumnQuery)?;
+    let unknown: Object<'py> = enum_member(py, RecordId::InferredNullability, "UNKNOWN")?;
     let infer: Object<'py> = registry::native(py, NativeAttr::InferNativeQueryColumns)?;
     let mut affected: HashSet<String> = HashSet::new();
     let mut models: Vec<Object<'py>> = Vec::new();
@@ -301,11 +301,9 @@ fn validated_diagnostics<'py>(
         expansions.set_item(native_field(&path, "stem")?, expansion)?;
     }
     let skipped: Object<'py> = PyString::new(py, BINDING_UNKNOWN_TABLE_INTERNAL_CODE).into_any();
-    let diagnostic_class: Object<'py> = registry::class(py, RecordId::CompilerDiagnostic)?;
-    let severity_class: Object<'py> = registry::class(py, RecordId::DiagnosticSeverity)?;
-    let phase: Object<'py> = registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?;
-    let model_type: Object<'py> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let diagnostic_class: Object<'py> = record_class(py, RecordId::CompilerDiagnostic)?;
+    let phase: Object<'py> = enum_member(py, RecordId::DiagnosticPhase, "COMPILE")?;
+    let model_type: Object<'py> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let mut diagnostics: Vec<Object<'py>> = Vec::new();
     for ((model, request), result) in models.iter().zip(&requests).zip(results.try_iter()?) {
         let result: Object<'py> = result?;
@@ -338,7 +336,11 @@ fn validated_diagnostics<'py>(
                     ("phase", phase.clone()),
                     (
                         "severity",
-                        severity_class.call1((native_field(&diagnostic, "severity")?,))?,
+                        enum_from_value(
+                            py,
+                            RecordId::DiagnosticSeverity,
+                            native_field(&diagnostic, "severity")?,
+                        )?,
                     ),
                     ("code", native_field(&diagnostic, "code")?),
                     ("message", native_field(&diagnostic, "message")?),

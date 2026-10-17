@@ -28,9 +28,9 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::command_plans::build_seed_command_plan;
 use crate::bindings::_helpers::planner_entries::command_plans::read_selected_seed_fingerprints;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::result_output::documents::format_seed_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
@@ -209,8 +209,9 @@ fn compile_seeds<'py>(
         native_field(invocation, "effective_project_dir")?,
         discovered.clone(),
     )?;
-    let options: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilePipelineOptions)?,
+    let options: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompilePipelineOptions,
         &[
             ("selected_target", native_field(request, "selected_target")?),
             ("select", native_field(request, "select")?),
@@ -437,7 +438,7 @@ fn load_seeds<'py>(
 #[pyo3(signature = (*, request))]
 fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let invocation: Bound<'_, PyAny> =
-        resolve_command_invocation(request, &registry::class(py, RecordId::SeedInvocation)?)?;
+        resolve_command_invocation(request, &record_class(py, RecordId::SeedInvocation)?)?;
     let pipeline: Bound<'_, PyAny> = compile_seeds(request, &invocation)?;
     let requested: Bound<'_, PyAny> = native_field(request, "concurrency")?;
     let concurrency: i64 = if requested.is_none() {

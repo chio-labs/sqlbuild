@@ -8,9 +8,9 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     attached_columns, attached_schema,
 };
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
+use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const UNKNOWN_TYPE: &str = "UNKNOWN";
 const NOT_NULL_AUDIT_NAME: &str = "not_null";
@@ -77,7 +77,7 @@ pub(crate) fn declared_relations<'py>(
     inputs: Bound<'py, PyAny>,
 ) -> PyResult<DeclaredRelations<'py>> {
     let py: Python<'py> = inputs.py();
-    let nullability: Bound<'py, PyAny> = registry::class(py, RecordId::InferredNullability)?;
+    let nullability: Bound<'py, PyAny> = record_class(py, RecordId::InferredNullability)?;
     let types: Bound<'py, PyDict> = PyDict::new(py);
     let nulls: Bound<'py, PyDict> = PyDict::new(py);
     let complete: Bound<'py, PyDict> = PyDict::new(py);
@@ -140,7 +140,10 @@ pub(crate) fn declared_relations<'py>(
         types.set_item(&name, column_types(py, &columns, true)?)?;
         let unknown: Bound<'py, PyDict> = PyDict::new(py);
         for column in &columns {
-            unknown.set_item(&column.name, nullability.getattr(UNKNOWN_MEMBER)?)?;
+            unknown.set_item(
+                &column.name,
+                enum_member(py, RecordId::InferredNullability, UNKNOWN_MEMBER)?,
+            )?;
         }
         nulls.set_item(&name, unknown)?;
         complete.set_item(&name, column_types(py, &columns, true)?)?;

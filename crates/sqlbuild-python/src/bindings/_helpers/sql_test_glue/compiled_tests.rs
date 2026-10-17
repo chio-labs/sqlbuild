@@ -5,9 +5,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::assembly::{
     AssemblyRequest, AssemblyRow, DiagnosticRow, FactsRow, assemble_compiled_sql_tests,
 };
@@ -61,13 +61,13 @@ struct Classes<'py> {
 impl<'py> Classes<'py> {
     fn new(py: Python<'py>) -> PyResult<Self> {
         Ok(Self {
-            direct_input: registry::class(py, RecordId::CompileDirectLogicSqlTestInputPayload)?,
-            resource_type: registry::class(py, RecordId::CompiledResourceType)?,
-            phase: registry::class(py, RecordId::DiagnosticPhase)?.getattr("COMPILE")?,
-            severity: registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
-            assembly: registry::class(py, RecordId::NativeSqlTestAssembly)?,
-            failure: registry::class(py, RecordId::NativeSqlTestFailure)?,
-            location: registry::class(py, RecordId::SourceLocation)?,
+            direct_input: record_class(py, RecordId::CompileDirectLogicSqlTestInputPayload)?,
+            resource_type: record_class(py, RecordId::CompiledResourceType)?,
+            phase: enum_member(py, RecordId::DiagnosticPhase, "COMPILE")?,
+            severity: enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?,
+            assembly: record_class(py, RecordId::NativeSqlTestAssembly)?,
+            failure: record_class(py, RecordId::NativeSqlTestFailure)?,
+            location: record_class(py, RecordId::SourceLocation)?,
             code: PyString::new(py, super::constants::SQL_TEST_HELPER_REFERENCE_CODE).into_any(),
         })
     }
@@ -77,7 +77,7 @@ impl<'py> Classes<'py> {
     }
 
     fn model(&self, name: RecordId) -> PyResult<Bound<'py, PyAny>> {
-        registry::class(self.py(), name)
+        record_class(self.py(), name)
     }
 
     fn object_key(&self, resource_type: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {

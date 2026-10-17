@@ -40,6 +40,7 @@ use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::command_plans::build_test_command_plan;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::result_output::documents::format_test_execution_json;
@@ -160,12 +161,12 @@ fn outcome_status(outcome: &Bound<'_, PyAny>) -> PyResult<&'static str> {
 /// Nested `expect` rows of a completed test, one per step.
 fn expectation_rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = result.py();
-    let row_class: Bound<'py, PyAny> = registry::class(py, RecordId::NestedProgressChildRow)?;
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::new();
     for step in result.getattr("step_results")?.try_iter()? {
         let step: Bound<'py, PyAny> = step?;
-        rows.push(call_with(
-            &row_class,
+        rows.push(new_record_with(
+            py,
+            RecordId::NestedProgressChildRow,
             &[
                 ("label", text(py, EXPECT_LABEL)),
                 (
@@ -327,8 +328,9 @@ fn compile_tests<'py>(
         invocation.getattr("effective_project_dir")?,
         discovered.clone(),
     )?;
-    let options: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilePipelineOptions)?,
+    let options: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompilePipelineOptions,
         &[
             ("selected_target", request.getattr("selected_target")?),
             ("no_sql_validation", request.getattr("no_sql_validation")?),
@@ -647,7 +649,7 @@ fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
     let inspect_only: bool = request.getattr("inspect")?.is_truthy()?;
     let invocation: Bound<'_, PyAny> = resolve_reported_command_invocation(
         request,
-        &registry::class(py, RecordId::TestInvocation)?,
+        &record_class(py, RecordId::TestInvocation)?,
         !inspect_only,
     )?;
     let pipeline: Bound<'_, PyAny> = compile_tests(request, &invocation)?;

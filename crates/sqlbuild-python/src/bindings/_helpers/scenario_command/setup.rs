@@ -36,6 +36,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -292,10 +293,7 @@ pub(crate) fn compile<'py>(
     )?;
     let mut pairs: Vec<(&str, Bound<'py, PyAny>)> = options.to_vec();
     pairs.push(("external_sql_reference_resolver", resolver));
-    let options: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilePipelineOptions)?,
-        &pairs,
-    )?;
+    let options: Bound<'py, PyAny> = new_record_with(py, RecordId::CompilePipelineOptions, &pairs)?;
     let lifecycle: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::OperationLifecycle)?,
         &[

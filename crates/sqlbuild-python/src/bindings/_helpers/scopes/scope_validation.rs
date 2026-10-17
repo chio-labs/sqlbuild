@@ -14,6 +14,7 @@ use sqlbuild_scopes::placement::models::{
 use sqlbuild_scopes::scope_index::models::ResourceIdentity;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -384,8 +385,7 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
 #[pyo3(signature = (*, index))]
 pub(crate) fn validate_scope_index(index: &Bound<'_, PyAny>) -> Result<(), PyErr> {
     let py: Python<'_> = index.py();
-    let error: Bound<'_, PyAny> =
-        registry::class(py, RecordId::ScopeDiagnosticSeverity)?.getattr("ERROR")?;
+    let error: Bound<'_, PyAny> = enum_member(py, RecordId::ScopeDiagnosticSeverity, "ERROR")?;
     let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
     for item in native_field(index, "diagnostics")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;

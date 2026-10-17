@@ -18,9 +18,9 @@ use sqlbuild_core::scenario_command::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::enum_from_value;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const SUCCESS_STATUS: &str = "success";
 const FAILED_STATUS: &str = "failed";
@@ -93,13 +93,16 @@ fn assertion_row(assertion: &Bound<'_, PyAny>) -> PyResult<AssertionRow> {
 
 fn retained_relations(relation_map: &Bound<'_, PyAny>) -> PyResult<Vec<RetainedRelation>> {
     let py: Python<'_> = relation_map.py();
-    let kinds: Bound<'_, PyAny> = registry::class(py, RecordId::ScenarioArtifactKind)?;
     items(&native_field(relation_map, "artifacts")?)?
         .iter()
         .map(|artifact| {
             let identity: Bound<'_, PyAny> = native_field(artifact, "identity")?;
             Ok(RetainedRelation {
-                kind: enum_value(&kinds.call1((native_field(&identity, "kind")?,))?)?,
+                kind: enum_value(&enum_from_value(
+                    py,
+                    RecordId::ScenarioArtifactKind,
+                    native_field(&identity, "kind")?,
+                )?)?,
                 logical_name: native_field(&identity, "logical_name")?.extract()?,
                 physical_name: native_field(artifact, "physical_name")?.extract()?,
             })

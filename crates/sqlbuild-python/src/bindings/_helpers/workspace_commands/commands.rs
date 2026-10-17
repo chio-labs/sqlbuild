@@ -23,6 +23,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -120,7 +121,7 @@ fn update_sqlbuild_skills<'py>(
     let written: Vec<PathBuf> = install(py, &request)?;
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("written_paths", PyTuple::new(py, written)?)?;
-    registry::class(py, RecordId::SkillUpdateResult)?.call((), Some(&keywords))
+    new_record(py, RecordId::SkillUpdateResult, (), Some(&keywords))
 }
 
 /// Check or refresh generated project skills without changing command success.
@@ -131,7 +132,7 @@ fn maintain_sqlbuild_skills(py: Python<'_>, project_dir: PathBuf) -> PyResult<Bo
         .map_err(|error| raised(py, error))?;
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
     keywords.set_item("message", message)?;
-    registry::class(py, RecordId::SkillMaintenanceResult)?.call((), Some(&keywords))
+    new_record(py, RecordId::SkillMaintenanceResult, (), Some(&keywords))
 }
 
 /// Return every packaged skill file keyed by skill-relative path, with generated markers.

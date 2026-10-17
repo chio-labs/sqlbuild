@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -40,15 +41,14 @@ pub(crate) struct StageClasses<'py> {
 impl<'py> StageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         let types = py.import(COMPILE_TYPES_MODULE)?;
-        let severity = registry::class(types.py(), RecordId::DiagnosticSeverity)?;
-        let resource = registry::class(py, RecordId::CompiledResourceType)?;
-        let kinds = registry::class(py, RecordId::SqlReferenceKind)?;
+        let severity = record_class(types.py(), RecordId::DiagnosticSeverity)?;
+        let resource = record_class(py, RecordId::CompiledResourceType)?;
+        let kinds = record_class(py, RecordId::SqlReferenceKind)?;
         Ok(Self {
-            diagnostic: registry::class(py, RecordId::CompilerDiagnostic)?,
-            location: registry::class(py, RecordId::SourceLocation)?,
-            model_test_payload: registry::class(py, RecordId::CompiledModelSqlTestPayload)?,
-            compile_phase: registry::class(types.py(), RecordId::DiagnosticPhase)?
-                .getattr("COMPILE")?,
+            diagnostic: record_class(py, RecordId::CompilerDiagnostic)?,
+            location: record_class(py, RecordId::SourceLocation)?,
+            model_test_payload: record_class(py, RecordId::CompiledModelSqlTestPayload)?,
+            compile_phase: enum_member(types.py(), RecordId::DiagnosticPhase, "COMPILE")?,
             error: native_field(&severity, "ERROR")?,
             warning: native_field(&severity, "WARNING")?,
             model_resource: native_field(&resource, "MODEL")?,

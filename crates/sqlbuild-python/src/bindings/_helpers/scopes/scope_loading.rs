@@ -20,9 +20,9 @@ use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, bridg
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_cache::{
     project_fingerprint, read_scope_index_cache, write_scope_index_cache,
 };
@@ -82,8 +82,9 @@ fn compiled_index<'py>(
     let collection_rendering: Bound<'py, PyAny> =
         resolve_effective_collection_rendering(&project_config, &py.None().into_bound(py))
             .and_then(|value| value.into_bound_py_any(py))?;
-    let adapter_context: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompileAdapterContext)?,
+    let adapter_context: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompileAdapterContext,
         &[
             ("value_renderer", adapter.clone()),
             ("collection_rendering", collection_rendering),
@@ -186,7 +187,7 @@ fn load_or_build_scope_index<'py>(
             return Ok(cached.into_bound(py));
         }
     }
-    let mut syntax: Bound<'py, PyAny> = registry::class(py, RecordId::SqlLexicalSyntax)?.call0()?;
+    let mut syntax: Bound<'py, PyAny> = new_record(py, RecordId::SqlLexicalSyntax, (), None)?;
     let compiled: PyResult<Bound<'py, PyAny>> = match project_adapter(&resolved) {
         Ok((discovered, adapter)) => {
             syntax = native_field(&adapter, "sql_lexical_syntax")?;

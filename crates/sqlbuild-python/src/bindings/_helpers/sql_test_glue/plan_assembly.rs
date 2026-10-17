@@ -4,12 +4,12 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::{SqlTestAssembly, SqlTestPlanOptions};
 use crate::bindings::_helpers::sql_test_glue::plan_driver::planned as planned_tests;
 
@@ -94,12 +94,12 @@ pub(crate) fn assemble_sql_test_plans<'py>(
         let model = model?;
         models.set_item(model_reads::name_object(&model)?, model)?;
     }
-    let result_class = registry::class(py, RecordId::SqlTestPlanResult)?;
     let mut results: Vec<Bound<'py, PyAny>> = Vec::new();
     for (index, test) in tests.iter().enumerate() {
         if let Some(diagnostic) = diagnostics.get(&index) {
-            results.push(call_with(
-                &result_class,
+            results.push(new_record_with(
+                py,
+                RecordId::SqlTestPlanResult,
                 &[
                     ("entry", py.None().into_bound(py)),
                     ("fixture_diagnostics", diagnostic.clone()),
@@ -119,8 +119,9 @@ pub(crate) fn assemble_sql_test_plans<'py>(
             context.as_ref().map(Bound::get),
         )?);
         if !errors.is_empty() {
-            results.push(call_with(
-                &result_class,
+            results.push(new_record_with(
+                py,
+                RecordId::SqlTestPlanResult,
                 &[
                     ("entry", py.None().into_bound(py)),
                     ("fixture_diagnostics", PyTuple::new(py, errors)?.into_any()),
@@ -128,8 +129,9 @@ pub(crate) fn assemble_sql_test_plans<'py>(
             )?);
             continue;
         }
-        results.push(call_with(
-            &result_class,
+        results.push(new_record_with(
+            py,
+            RecordId::SqlTestPlanResult,
             &[
                 (
                     "entry",
