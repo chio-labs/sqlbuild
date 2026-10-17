@@ -3,21 +3,22 @@
 use std::collections::HashSet;
 
 use polyglot_sql::Dialect;
+use polyglot_sql::parser::NO_PAREN_FUNCTION_NAMES;
 use polyglot_sql::tokens::{Token, TokenType};
 
 use crate::compiler::_helpers::sql_tests::constants::{
-    MAX_TEMPLATE_DEPTH, SIMPLE_TEMPLATE_DIALECT,
+    MAX_TEMPLATE_DEPTH, SIMPLE_TEMPLATE_DIALECTS,
 };
 use crate::compiler::_helpers::sql_tests::planning::{AnalysisTemplate, DBT_REF_FUNCTION};
 use crate::compiler::_helpers::sql_tests::relation_markers::MarkerCall;
 
-/// Recognize the bounded DuckDB subset; every other dialect retains the existing parser.
+/// Recognize bounded DuckDB/Snowflake productions; other syntax retains the existing parser.
 pub(crate) fn simple_analysis_template(
     sql: &str,
     dialect_name: &str,
     dialect: &Dialect,
 ) -> Option<AnalysisTemplate> {
-    if dialect_name != SIMPLE_TEMPLATE_DIALECT || sql.contains("/*") {
+    if !SIMPLE_TEMPLATE_DIALECTS.contains(&dialect_name) || sql.contains("/*") {
         return None;
     }
     let tokens = match dialect.tokenize(sql) {
@@ -160,10 +161,10 @@ impl<'a> TemplateReader<'a> {
             ) {
                 return None;
             }
-            let mut target = self.identifier()?.to_owned();
+            let mut target = self.marker_argument()?.to_owned();
             if function == DBT_REF_FUNCTION && self.take(TokenType::Comma) {
                 target.push_str("__");
-                target.push_str(self.identifier()?);
+                target.push_str(self.marker_argument()?);
             }
             self.require(TokenType::RParen)?;
             Some((function, target))
@@ -174,6 +175,17 @@ impl<'a> TemplateReader<'a> {
             self.identifier()?;
         }
         Some(call)
+    }
+
+    /// Require quoted Columns; unquoted arguments can invoke private dialect-specific function rules.
+    fn marker_argument(&mut self) -> Option<&'a str> {
+        let token = self.tokens.get(self.position)?;
+        if token.token_type != TokenType::QuotedIdentifier
+            || NO_PAREN_FUNCTION_NAMES.contains(token.text.to_ascii_uppercase().as_str())
+        {
+            return None;
+        }
+        self.identifier()
     }
 
     fn condition(&mut self, depth: usize) -> Option<()> {

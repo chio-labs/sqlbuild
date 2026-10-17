@@ -195,6 +195,7 @@ pub(crate) struct SimpleTemplateTestCase {
 
 pub(crate) struct SimpleTemplateCorpusTestCase {
     pub description: &'static str,
+    pub dialect: &'static str,
     pub expected_min_recognized: usize,
     pub expected_mismatches: &'static [&'static str],
 }

@@ -1,11 +1,48 @@
 use polyglot_sql::Dialect;
+use polyglot_sql::parser::NO_PAREN_FUNCTION_NAMES;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
-use crate::compiler::_helpers::sql_tests::planning::{AnalysisTemplate, parsed_analysis_template};
+use crate::compiler::_helpers::sql_tests::planning::{
+    AnalysisTemplate, analysis_template, parsed_analysis_template,
+};
 use crate::compiler::_helpers::sql_tests::simple_template::simple_analysis_template;
 use crate::compiler::tests::test_types::SimpleTemplateCorpusOutcome;
 
-pub(crate) fn simple_template_corpus_outcome() -> SimpleTemplateCorpusOutcome {
-    let dialect = Dialect::get_by_name("duckdb").expect("DuckDB dialect");
+pub(crate) fn no_paren_marker_mismatches(dialect_name: &str) -> Vec<String> {
+    let dialect = Dialect::get_by_name(dialect_name).expect("supported test dialect");
+    let cache = Mutex::new(HashMap::new());
+    NO_PAREN_FUNCTION_NAMES
+        .iter()
+        .flat_map(|name| [name.to_string(), name.to_ascii_lowercase()])
+        .flat_map(|name| [name.clone(), format!("\"{name}\"")])
+        .flat_map(|argument| {
+            [
+                format!("__ref({argument})"),
+                format!("__source({argument})"),
+                format!("__seed({argument})"),
+                format!("__dbt_ref({argument})"),
+                format!("__dbt_ref({argument}, \"orders\")"),
+                format!("__dbt_ref(\"orders\", {argument})"),
+            ]
+        })
+        .filter_map(|relation| {
+            let sql = format!("SELECT id FROM {relation}");
+            let fast = simple_analysis_template(&sql, dialect_name, &dialect);
+            let expected = parsed_analysis_template(&sql, &dialect);
+            let actual = analysis_template(&sql, dialect_name, &cache).expect("template cache");
+            (fast.is_some()
+                || actual != expected
+                || expected
+                    .as_ref()
+                    .is_some_and(|facts| !facts.marker_calls.is_empty()))
+            .then(|| format!("{sql}: fast={fast:?}, actual={actual:?}, expected={expected:?}"))
+        })
+        .collect()
+}
+
+pub(crate) fn simple_template_corpus_outcome(dialect_name: &str) -> SimpleTemplateCorpusOutcome {
+    let dialect = Dialect::get_by_name(dialect_name).expect("supported test dialect");
     let mut queries: Vec<String> = Vec::new();
     for projection in [
         "id",
@@ -60,7 +97,7 @@ pub(crate) fn simple_template_corpus_outcome() -> SimpleTemplateCorpusOutcome {
     let recognized: Vec<(String, AnalysisTemplate)> = queries
         .into_iter()
         .filter_map(|sql| {
-            simple_analysis_template(&sql, "duckdb", &dialect).map(|facts| (sql, facts))
+            simple_analysis_template(&sql, dialect_name, &dialect).map(|facts| (sql, facts))
         })
         .collect();
     SimpleTemplateCorpusOutcome {

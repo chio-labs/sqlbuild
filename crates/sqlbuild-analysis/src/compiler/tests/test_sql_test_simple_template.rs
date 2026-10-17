@@ -7,12 +7,108 @@ use crate::compiler::_helpers::sql_tests::planning::{
     analysis_template, parsed_analysis_template, take_template_ast_parse_count,
 };
 use crate::compiler::_helpers::sql_tests::simple_template::simple_analysis_template;
-use crate::compiler::tests::simple_template_helpers::simple_template_corpus_outcome;
-use crate::compiler::tests::test_types::{SimpleTemplateCorpusTestCase, SimpleTemplateTestCase};
+use crate::compiler::tests::simple_template_helpers::{
+    no_paren_marker_mismatches, simple_template_corpus_outcome,
+};
+use crate::compiler::tests::test_types::{
+    RelationMarkerOracleTestCase, SimpleTemplateCorpusTestCase, SimpleTemplateTestCase,
+};
+
+#[test]
+fn given_registered_no_paren_arguments_when_planning_then_all_marker_positions_use_the_parser() {
+    let test_cases = [
+        RelationMarkerOracleTestCase {
+            description: "all registry names in quoted and unquoted marker argument positions",
+            dialect: "duckdb",
+            expected_mismatches: &[],
+        },
+        RelationMarkerOracleTestCase {
+            description: "all Snowflake registry names in quoted and unquoted marker argument positions",
+            dialect: "snowflake",
+            expected_mismatches: &[],
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            no_paren_marker_mismatches(test_case.dialect),
+            test_case.expected_mismatches,
+            "{}",
+            test_case.description
+        );
+    }
+}
 
 #[test]
 fn given_bounded_and_fallback_queries_when_planning_then_facts_and_ast_counts_match() {
     let test_cases = [
+        SimpleTemplateTestCase {
+            description: "Snowflake dense projections and union remove the template AST",
+            dialect: "snowflake",
+            sql: r#"WITH imported AS (SELECT * FROM __ref("orders")),
+projected AS (SELECT CAST(b.id AS INTEGER) AS id,
+CAST(COALESCE(b.amount, 0) + CAST(b.id AS DOUBLE) AS DOUBLE) AS amount FROM imported AS b),
+combined AS (SELECT id, amount FROM projected UNION ALL BY NAME SELECT id, amount FROM projected WHERE id = 0),
+final AS (SELECT CAST(id AS INTEGER) AS id, CAST(amount AS DOUBLE) AS amount FROM combined)
+SELECT id, amount FROM final"#,
+            expected_ast_parses: 0,
+        },
+        SimpleTemplateTestCase {
+            description: "Snowflake dense UDF projection retains the template AST",
+            dialect: "snowflake",
+            sql: r#"WITH imported AS (SELECT * FROM __ref("orders")),
+projected AS (SELECT CAST(b.id AS INTEGER) AS id,
+CAST(__udf("amount")(b.amount) AS DOUBLE) AS amount FROM imported AS b)
+SELECT id, amount FROM projected"#,
+            expected_ast_parses: 1,
+        },
+        SimpleTemplateTestCase {
+            description: "Snowflake QUALIFY remains on the full parser",
+            dialect: "snowflake",
+            sql: "SELECT id FROM __ref(\"orders\") QUALIFY ROW_NUMBER() OVER (ORDER BY id) = 1",
+            expected_ast_parses: 1,
+        },
+        SimpleTemplateTestCase {
+            description: "quoted no-paren source argument retains parser Function classification",
+            dialect: "duckdb",
+            sql: "SELECT id FROM __source(\"now\")",
+            expected_ast_parses: 1,
+        },
+        SimpleTemplateTestCase {
+            description: "unquoted no-paren reference argument retains parser Function classification",
+            dialect: "duckdb",
+            sql: "SELECT id FROM __ref(NOW)",
+            expected_ast_parses: 1,
+        },
+        SimpleTemplateTestCase {
+            description: "first dbt argument with no-paren name retains parser classification",
+            dialect: "duckdb",
+            sql: "SELECT id FROM __dbt_ref(\"pi\", \"orders\")",
+            expected_ast_parses: 1,
+        },
+        SimpleTemplateTestCase {
+            description: "second dbt argument with no-paren name retains parser classification",
+            dialect: "duckdb",
+            sql: "SELECT id FROM __dbt_ref(\"orders\", \"getdate\")",
+            expected_ast_parses: 1,
+        },
+        SimpleTemplateTestCase {
+            description: "unquoted ordinary argument conservatively retains full parser",
+            dialect: "duckdb",
+            sql: "SELECT id FROM __seed(orders)",
+            expected_ast_parses: 1,
+        },
+        SimpleTemplateTestCase {
+            description: "unquoted dialect-specific user argument retains full parser",
+            dialect: "duckdb",
+            sql: "SELECT id FROM __source(user)",
+            expected_ast_parses: 1,
+        },
+        SimpleTemplateTestCase {
+            description: "quoted user is an ordinary Column in the pinned parser",
+            dialect: "duckdb",
+            sql: "SELECT id FROM __source(\"user\")",
+            expected_ast_parses: 0,
+        },
         SimpleTemplateTestCase {
             description: "dense CTE projections joins and union remove one cold template AST",
             dialect: "duckdb",
@@ -149,10 +245,10 @@ SELECT id, amount FROM final"#,
             expected_ast_parses: 1,
         },
         SimpleTemplateTestCase {
-            description: "snowflake quoted names retain its parser",
+            description: "snowflake ordinary quoted names use recognized facts",
             dialect: "snowflake",
             sql: "SELECT id FROM __ref(\"orders\")",
-            expected_ast_parses: 1,
+            expected_ast_parses: 0,
         },
         SimpleTemplateTestCase {
             description: "bigquery backtick names retain its parser",
@@ -213,13 +309,22 @@ SELECT id, amount FROM final"#,
 
 #[test]
 fn given_generated_and_mutated_queries_when_recognized_then_every_fact_matches_the_ast() {
-    let test_cases = [SimpleTemplateCorpusTestCase {
-        description: "combinations and token deletions preserve parser acceptance and facts",
-        expected_min_recognized: 200,
-        expected_mismatches: &[],
-    }];
+    let test_cases = [
+        SimpleTemplateCorpusTestCase {
+            description: "combinations and token deletions preserve parser acceptance and facts",
+            dialect: "duckdb",
+            expected_min_recognized: 200,
+            expected_mismatches: &[],
+        },
+        SimpleTemplateCorpusTestCase {
+            description: "Snowflake token productions preserve parser acceptance and facts",
+            dialect: "snowflake",
+            expected_min_recognized: 200,
+            expected_mismatches: &[],
+        },
+    ];
     for test_case in test_cases {
-        let outcome = simple_template_corpus_outcome();
+        let outcome = simple_template_corpus_outcome(test_case.dialect);
         assert!(
             outcome.recognized >= test_case.expected_min_recognized,
             "{}: {} recognized",
