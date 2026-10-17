@@ -35,7 +35,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_opt_out::{
     OptOut, OptOutModel, reject_unparseable_query, rejected_opt_out,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_prepass::{
-    HeaderFacts, all_header_facts,
+    NativeHeader, all_header_facts,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_python_hooks::{
     HookClasses, HookSignatures,
@@ -89,6 +89,7 @@ use sqlbuild_attachments::cursor_intrinsics::main::validated_model_intrinsics::v
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 use sqlbuild_attachments::functions::models::KnownResources;
 use sqlbuild_attachments::test_targets::models::TargetCatalog;
+use sqlbuild_discovery::model_files::models::HeaderFacts;
 use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
 use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
@@ -97,7 +98,6 @@ use std::sync::Arc;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::types::CompilerDetach;
-use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 const MATERIALIZED_KEY: &str = "materialized";
 const CURSOR_KEY: &str = "cursor";
@@ -395,7 +395,7 @@ impl NativeModelLoop {
         let py: Python<'py> = slf.py();
         let classes: LoopClasses<'py> = slf.get().loop_classes.bind(py).extract()?;
         let mut models: Vec<ModelLoopRow> = prepared_rows(py, &classes, model_files)?;
-        let headers: Vec<Option<(Arc<[(String, AuthoredValue)]>, String)>> = models
+        let headers: Vec<Option<NativeHeader>> = models
             .iter()
             .map(|row| {
                 row.model_file

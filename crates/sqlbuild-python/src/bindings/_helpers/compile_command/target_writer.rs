@@ -1,7 +1,7 @@
 //! Write compiled project output to `target/`: models, functions, audits, SQL tests, manifest.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
@@ -35,6 +35,7 @@ use crate::bindings::_helpers::compile_outputs::artifacts::{
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     compiled_sql_test_path, planned_sql_test_path,
 };
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::plan_output::sql_test_model_chain_names_by_key;
@@ -83,6 +84,27 @@ fn model_output_path<'py>(relative_path: &Bound<'py, PyAny>) -> PyResult<Bound<'
         return path_class(py)?.call1(parts);
     }
     path_class(py)?.call1((MODELS_DIR,))?.div(relative_path)
+}
+
+/// `compiled / model_output_path(relative_path)` for a `/`-separated relative path.
+fn native_model_output_path(compiled: &Path, relative_path: &str) -> PathBuf {
+    let mut path: PathBuf = compiled.to_path_buf();
+    let mut segments = relative_path
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .peekable();
+    if segments.peek() != Some(&MODELS_DIR) {
+        path.push(MODELS_DIR);
+    }
+    for segment in segments {
+        path.push(segment);
+    }
+    path
+}
+
+/// Each path object as a native path.
+fn extracted(paths: &[Bound<'_, PyAny>]) -> PyResult<Vec<PathBuf>> {
+    paths.iter().map(|path| path.extract()).collect()
 }
 
 /// `relative_path` under `functions/<language>/`, as a `.sql` file.
@@ -152,13 +174,9 @@ fn function_sql(adapter: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyRe
 }
 
 /// Delete compiled files no write group manages.
-fn remove_stale(target_dir: &Bound<'_, PyAny>, managed: &[Bound<'_, PyAny>]) -> PyResult<()> {
+fn remove_stale(target_dir: &Bound<'_, PyAny>, managed: Vec<PathBuf>) -> PyResult<()> {
     let py: Python<'_> = target_dir.py();
     let compiled: PathBuf = joined(target_dir, &[COMPILED_DIR])?.extract()?;
-    let managed: Vec<PathBuf> = managed
-        .iter()
-        .map(|path| path.extract())
-        .collect::<PyResult<_>>()?;
     record_compile_timing("stale_traversal_ms", || {
         remove_stale_artifacts(py, compiled, managed).map(|_| ())
     })
@@ -289,7 +307,7 @@ fn write_planned_target<'py>(
     }
     batch.flush(py)?;
     if remove_stale_files {
-        remove_stale(target_dir, &managed)?;
+        remove_stale(target_dir, extracted(&managed)?)?;
     }
     write_manifest(target_dir, manifest, None)?;
     written_target(
@@ -573,9 +591,18 @@ pub(crate) fn write_static_target<'py>(
     let remove_stale_files: bool = prepared_target(target_dir)?;
     let mut batch: ArtifactBatch = ArtifactBatch::new(remove_stale_files, prepared.recorder);
     let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut managed_models: Vec<PathBuf> = Vec::new();
     let compiled: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR])?;
+    let compiled_dir: PathBuf = compiled.extract()?;
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
+        if let Ok(native) = model.cast::<NativeCompiledModel>() {
+            let (relative_path, query_sql) = native.get().output_texts(py)?;
+            let path: PathBuf = native_model_output_path(&compiled_dir, &relative_path);
+            batch.queue_sql_at(py, path.clone(), &query_sql)?;
+            managed_models.push(path);
+            continue;
+        }
         let path: Bound<'py, PyAny> =
             compiled.div(model_output_path(&native_field(&model, "relative_path")?)?)?;
         batch.queue_sql(
@@ -616,7 +643,9 @@ pub(crate) fn write_static_target<'py>(
         write_static_tests(target_dir, (adapter, project), prepared, &mut batch)?;
     managed.extend(test_paths);
     if remove_stale_files {
-        remove_stale(target_dir, &managed)?;
+        let mut paths: Vec<PathBuf> = managed_models;
+        paths.extend(extracted(&managed)?);
+        remove_stale(target_dir, paths)?;
     }
     write_manifest(target_dir, manifest, prepared.recorder)?;
     written_target(
@@ -688,7 +717,7 @@ pub(crate) fn publish_staged_target<'py>(
             managed.push(path_class(py)?.call1((path,))?);
         }
         if existed {
-            remove_stale(target_dir, &managed)?;
+            remove_stale(target_dir, extracted(&managed)?)?;
         }
     }
     write_manifest(target_dir, manifest, recorder)?;

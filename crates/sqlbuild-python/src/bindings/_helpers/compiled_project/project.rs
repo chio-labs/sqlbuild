@@ -622,9 +622,9 @@ pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFact
     Ok(CompiledModelFacts {
         name,
         relative_path,
-        query_sql,
-        authored_query_sql,
-        authored_sql,
+        query_sql: query_sql.into(),
+        authored_query_sql: authored_query_sql.into(),
+        authored_sql: authored_sql.into(),
         config: ModelConfigFacts {
             values: config_values.0,
             encoding_error: config_values.1,

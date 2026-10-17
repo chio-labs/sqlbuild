@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
-use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
+use crate::bindings::_helpers::discovery::model_file_record::{NativeModelFile, projected_text};
 use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
@@ -89,6 +89,7 @@ pub(crate) struct ModelInputRecord {
 
 /// A model input's Python attribute projections, each built once on first access.
 pub(crate) struct InputProjections {
+    query_sql: PyOnceLock<Py<PyString>>,
     references: PyOnceLock<Py<PyTuple>>,
     schema_entry: PyOnceLock<Py<PyAny>>,
     sql_expansion: PyOnceLock<Py<PyAny>>,
@@ -98,6 +99,7 @@ pub(crate) struct InputProjections {
 impl Default for InputProjections {
     fn default() -> Self {
         Self {
+            query_sql: PyOnceLock::new(),
             references: PyOnceLock::new(),
             schema_entry: PyOnceLock::new(),
             sql_expansion: PyOnceLock::new(),
@@ -182,7 +184,7 @@ impl NativeModelInput {
 
     #[getter]
     pub(crate) fn query_sql<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
-        self.read(py, |record, py| Ok(PyString::new(py, &record.query_sql)))
+        self.read(py, |record, py| Ok(query_sql_text(py, record)))
     }
 
     #[getter]
@@ -317,6 +319,18 @@ impl NativeModelInput {
                 .map(|expansion| expansion.clone_ref(py))
         })
     }
+}
+
+/// The compiled query as the Python string every reader shares; the authored query's when equal.
+pub(crate) fn query_sql_text<'py>(
+    py: Python<'py>,
+    record: &ModelInputRecord,
+) -> Bound<'py, PyString> {
+    let model_file: &NativeModelFile = record.model_file.get();
+    if Arc::ptr_eq(&record.query_sql, model_file.query_text()) {
+        return model_file.query_sql(py);
+    }
+    projected_text(py, &record.projections.query_sql, &record.query_sql)
 }
 
 /// The authored-to-expanded passes, when interpolation left the authored query unchanged.

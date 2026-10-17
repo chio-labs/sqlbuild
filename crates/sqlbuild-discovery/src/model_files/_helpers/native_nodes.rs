@@ -1,6 +1,7 @@
 //! Native authored header values read as the Python objects discovery projects them to.
 
 use std::cell::Cell;
+use std::collections::HashMap;
 
 use sqlbuild_model_config::types::{AuthoredNode, NodeKind};
 use sqlbuild_sqltext::compiler::main::header_word_value::header_word_value;
@@ -195,10 +196,14 @@ impl AuthoredNode for NativeNode<'_> {
 /// Entries as the Python dict built from them holds them: first position, last value.
 pub(crate) fn dict_entries(entries: &[(String, AuthoredValue)]) -> Vec<(&str, &AuthoredValue)> {
     let mut kept: Vec<(&str, &AuthoredValue)> = Vec::with_capacity(entries.len());
+    let mut positions: HashMap<&str, usize> = HashMap::with_capacity(entries.len());
     for (key, value) in entries {
-        match kept.iter_mut().find(|(name, _)| *name == key.as_str()) {
-            Some(entry) => entry.1 = value,
-            None => kept.push((key, value)),
+        match positions.get(key.as_str()) {
+            Some(&index) => kept[index].1 = value,
+            None => {
+                positions.insert(key, kept.len());
+                kept.push((key, value));
+            }
         }
     }
     kept

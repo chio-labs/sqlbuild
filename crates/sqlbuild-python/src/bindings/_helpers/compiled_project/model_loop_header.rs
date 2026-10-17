@@ -22,7 +22,6 @@ use crate::bindings::_helpers::compiled_project::model_loop_contracts::{
     EnumColumns, dynamic_family_objects, enum_columns, factory_audits,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::present;
-use crate::bindings::_helpers::compiled_project::model_loop_prepass::HeaderFacts;
 use crate::bindings::_helpers::compiled_project::model_loop_schema::{
     DeclaredColumns, ModelSchema, merged_columns, schema_enums,
 };
@@ -32,10 +31,11 @@ use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::column_migrations::column_migration_error;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::header_metadata::{
-    HeaderColumn, HeaderColumns, NativeColumn, NativeColumnSpec, audit_instances,
-    native_schema_column, parsed_audit_identity,
+    HeaderColumn, HeaderColumns, NativeColumnSpec, audit_instances, native_schema_column,
+    parsed_audit_identity,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use sqlbuild_discovery::model_files::models::{HeaderFacts, NativeColumn};
 
 const DESCRIPTION_KEY: &str = "description";
 const COLUMNS_KEY: &str = "columns";

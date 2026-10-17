@@ -18,8 +18,8 @@ use crate::bindings::_helpers::compiled_project::compiled_model_analysis::{
     AnalysisRecord, ProofArgument, SessionArgument, analysis_record,
 };
 use crate::bindings::_helpers::compiled_project::model_input_view::{
-    InputViewClasses, ModelInputRecord, model_relation_key_row, read_input, read_input_with_owner,
-    references, rejected_opt_out, schema_entry, view_classes,
+    InputViewClasses, ModelInputRecord, model_relation_key_row, query_sql_text, read_input,
+    read_input_with_owner, references, rejected_opt_out, schema_entry, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
@@ -409,8 +409,8 @@ impl NativeCompiledModel {
             let key = keyed
                 .then(|| -> PyResult<SqlRuleKey> {
                     Ok(SqlRuleKey {
-                        authored_sql: facts.authored_sql.clone(),
-                        query_sql: facts.query_sql.clone(),
+                        authored_sql: facts.authored_sql.to_string(),
+                        query_sql: facts.query_sql.to_string(),
                         contract: compiled_of(record)?
                             .analysis
                             .proof
@@ -427,6 +427,47 @@ impl NativeCompiledModel {
         })
     }
 
+    /// The model's name, `str(relative_path)` and authored file text.
+    pub(crate) fn file_texts(&self, py: Python<'_>) -> PyResult<(String, String, Arc<str>)> {
+        self.read(py, |record, py| {
+            let model_file: &NativeModelFile = record.model_file.get();
+            Ok((
+                model_name(record),
+                model_file.relative_text(py)?,
+                Arc::clone(model_file.contents_text()),
+            ))
+        })
+    }
+
+    /// The name, compiled query and authored file of the model, and whether it calls a function.
+    pub(crate) fn metadata_texts(
+        &self,
+        py: Python<'_>,
+        function_kinds: &[String],
+    ) -> PyResult<(String, String, String, bool)> {
+        self.read(py, |record, _| {
+            Ok((
+                model_name(record),
+                record.query_sql.to_string(),
+                record.model_file.get().contents_text().to_string(),
+                record
+                    .references
+                    .iter()
+                    .any(|(kind, _, _, _)| function_kinds.contains(kind)),
+            ))
+        })
+    }
+
+    /// `relative_path.as_posix()` and the compiled query, which compiled artifacts are written from.
+    pub(crate) fn output_texts(&self, py: Python<'_>) -> PyResult<(String, Arc<str>)> {
+        self.read(py, |record, py| {
+            Ok((
+                record.model_file.get().posix_path(py)?,
+                Arc::clone(&record.query_sql),
+            ))
+        })
+    }
+
     /// The model's authored file text and expanded query, from its recorded facts.
     pub(crate) fn sql_texts(&self, py: Python<'_>) -> PyResult<(String, String)> {
         let name: String = self.name(py)?;
@@ -434,7 +475,7 @@ impl NativeCompiledModel {
         let facts: &CompiledModelFacts = model_facts(owner.facts(), &name).ok_or_else(|| {
             pyo3::exceptions::PyRuntimeError::new_err("the model was not assembled")
         })?;
-        Ok((facts.authored_sql.clone(), facts.query_sql.clone()))
+        Ok((facts.authored_sql.to_string(), facts.query_sql.to_string()))
     }
 
     fn model_file<T>(
@@ -518,7 +559,7 @@ impl NativeCompiledModel {
 
     #[getter]
     pub(crate) fn query_sql<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyString>> {
-        self.read(py, |record, py| Ok(PyString::new(py, &record.query_sql)))
+        self.read(py, |record, py| Ok(query_sql_text(py, record)))
     }
 
     #[getter]

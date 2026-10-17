@@ -1,6 +1,7 @@
 //! Facts a compile's producers retain about each resource, in production order.
 
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use serde_json::Value;
 
@@ -17,11 +18,11 @@ pub struct CompiledModelFacts {
     pub name: String,
     pub relative_path: String,
     /// SQL after variable, declaration and macro expansion.
-    pub query_sql: String,
+    pub query_sql: Arc<str>,
     /// The authored query below the `MODEL (...)` header.
-    pub authored_query_sql: String,
+    pub authored_query_sql: Arc<str>,
     /// The whole authored file.
-    pub authored_sql: String,
+    pub authored_sql: Arc<str>,
     pub config: ModelConfigFacts,
     pub references: Vec<ModelReferenceFact>,
     pub schema: Option<ModelSchemaFact>,
@@ -210,9 +211,9 @@ pub struct SplicedSql {
 pub struct PlainModel {
     pub name: String,
     pub relative_path: String,
-    pub query_sql: String,
-    pub authored_query_sql: String,
-    pub authored_sql: String,
+    pub query_sql: Arc<str>,
+    pub authored_query_sql: Arc<str>,
+    pub authored_sql: Arc<str>,
     pub config: ModelConfigFacts,
     /// The attached schema entry; present when the header declares description, columns or audits.
     pub schema: Option<ModelSchemaFact>,

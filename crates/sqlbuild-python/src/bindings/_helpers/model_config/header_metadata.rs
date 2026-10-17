@@ -7,16 +7,15 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject, IntoPyObjectExt};
+use sqlbuild_discovery::model_files::models::{NativeAudit, NativeColumn};
 use sqlbuild_discovery::models::LineColumnSpan;
 use sqlbuild_model_config::header_metadata::models::{
     ParsedAudit, ParsedColumn, ParsedThresholds, ThresholdBound,
 };
-use sqlbuild_model_config::types::{AuthoredNode, NodeKind};
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
-use crate::bindings::_helpers::model_config::native_nodes::NativeNode;
 use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::all_specs;
 use crate::bindings::_helpers::records::fields::field;
@@ -47,76 +46,6 @@ pub(crate) struct NativeColumnSpec {
     pub(crate) location: Option<(Py<NativeModelFile>, LineColumnSpan)>,
     /// The contract classes the record and its audits are built with.
     pub(crate) contracts: Arc<Py<PyDict>>,
-}
-
-/// One MODEL column parsed from native authored values.
-#[derive(Clone, Debug)]
-pub(crate) struct NativeColumn {
-    pub(crate) name: String,
-    pub(crate) column_type: Option<String>,
-    pub(crate) nullable: Option<bool>,
-    pub(crate) description: Option<String>,
-    pub(crate) audits: Vec<NativeAudit>,
-    pub(crate) migrate_from: Option<String>,
-}
-
-/// One audit instance parsed from native authored values.
-#[derive(Clone, Debug)]
-pub(crate) struct NativeAudit {
-    pub(crate) definition_name: String,
-    pub(crate) arguments: Vec<(String, AuthoredValue)>,
-    pub(crate) name: Option<String>,
-    pub(crate) description: Option<String>,
-    pub(crate) severity: Option<String>,
-    pub(crate) run_scope: Option<String>,
-    pub(crate) always_run: Option<bool>,
-    pub(crate) thresholds: Option<ParsedThresholds>,
-    pub(crate) minimum_samples: Option<AuthoredValue>,
-    pub(crate) evidence_limit: Option<AuthoredValue>,
-}
-
-impl NativeColumn {
-    /// The column a native parse produced; every leaf is the projected text, flag or count.
-    pub(crate) fn parsed(column: &ParsedColumn<NativeNode<'_>>) -> Self {
-        let text = |node: Option<&NativeNode<'_>>| node.and_then(AuthoredNode::text);
-        Self {
-            name: column.name.text().unwrap_or_default(),
-            column_type: text(column.column_type.as_ref()),
-            nullable: flag(column.nullable.as_ref()),
-            description: text(column.description.as_ref()),
-            audits: column.audits.iter().map(NativeAudit::parsed).collect(),
-            migrate_from: text(column.migrate_from.as_ref()),
-        }
-    }
-}
-
-impl NativeAudit {
-    fn parsed(audit: &ParsedAudit<NativeNode<'_>>) -> Self {
-        let text = |node: Option<&NativeNode<'_>>| node.and_then(AuthoredNode::text);
-        Self {
-            definition_name: audit.definition_name.text().unwrap_or_default(),
-            arguments: audit
-                .arguments
-                .iter()
-                .map(|(key, value)| (key.text().unwrap_or_default(), value.authored()))
-                .collect(),
-            name: text(audit.name.as_ref()),
-            description: text(audit.description.as_ref()),
-            severity: text(audit.severity.as_ref()),
-            run_scope: text(audit.run_scope.as_ref()),
-            always_run: flag(audit.always_run.as_ref()),
-            thresholds: audit.thresholds,
-            minimum_samples: audit.minimum_samples.as_ref().map(NativeNode::authored),
-            evidence_limit: audit.evidence_limit.as_ref().map(NativeNode::authored),
-        }
-    }
-}
-
-fn flag(node: Option<&NativeNode<'_>>) -> Option<bool> {
-    match node.map(AuthoredNode::kind) {
-        Some(NodeKind::Bool(value)) => Some(value),
-        _ => None,
-    }
 }
 
 impl HeaderColumn {

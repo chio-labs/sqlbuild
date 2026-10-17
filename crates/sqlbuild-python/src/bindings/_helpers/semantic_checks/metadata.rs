@@ -444,18 +444,36 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
             upstreams.push((upstream.str()?.extract()?, column_names(&columns)?));
         }
     }
-    let mut calls_functions: bool = false;
-    for reference in native_field(model, "references")?.try_iter()? {
-        let kind: Bound<'_, PyAny> = native_field(&reference?, "ref_kind")?;
-        if kind.eq(&classes.udf_kind)? || kind.eq(&classes.table_function_kind)? {
-            calls_functions = true;
-            break;
+    let (name, query_sql, authored_sql, calls_functions) = match model.cast::<NativeCompiledModel>()
+    {
+        Ok(native) => {
+            let function_kinds: [String; 2] = [
+                classes.udf_kind.getattr("value")?.extract()?,
+                classes.table_function_kind.getattr("value")?.extract()?,
+            ];
+            native.get().metadata_texts(model.py(), &function_kinds)?
         }
-    }
+        Err(_) => {
+            let mut calls_functions: bool = false;
+            for reference in native_field(model, "references")?.try_iter()? {
+                let kind: Bound<'_, PyAny> = native_field(&reference?, "ref_kind")?;
+                if kind.eq(&classes.udf_kind)? || kind.eq(&classes.table_function_kind)? {
+                    calls_functions = true;
+                    break;
+                }
+            }
+            (
+                native_field(model, "name")?.extract()?,
+                native_field(model, "query_sql")?.extract()?,
+                native_field(model, "authored_sql")?.extract()?,
+                calls_functions,
+            )
+        }
+    };
     Ok(MetadataModel {
-        name: native_field(model, "name")?.extract()?,
-        query_sql: native_field(model, "query_sql")?.extract()?,
-        authored_sql: native_field(model, "authored_sql")?.extract()?,
+        name,
+        query_sql,
+        authored_sql,
         checked: checked(classes, model)?,
         calls_functions,
         references,

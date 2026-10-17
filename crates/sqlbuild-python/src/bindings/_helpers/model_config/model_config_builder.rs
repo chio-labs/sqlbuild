@@ -21,7 +21,7 @@ use sqlbuild_model_config::types::AuthoredNode;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, built_config};
-use crate::bindings::_helpers::compiled_project::model_loop_prepass::{EntryFacts, HeaderFacts};
+use crate::bindings::_helpers::compiled_project::model_loop_prepass::own_entry;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
@@ -30,6 +30,7 @@ use crate::bindings::_helpers::model_config::config_templates::{
 };
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 use crate::bindings::_helpers::model_config::project_defaults::project_defaults_mapping;
+use sqlbuild_discovery::model_files::models::{EntryFacts, HeaderFacts};
 
 const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 /// Hook keys in the sorted order `validate_model_hook_config` checks them.
@@ -786,7 +787,7 @@ impl<'py> HeaderInput<'_, 'py> {
         value: &Bound<'py, PyAny>,
     ) -> PyResult<Option<&EntryFacts>> {
         match self.facts {
-            Some(facts) => facts.own_entry(self.values, key, value),
+            Some(facts) => own_entry(facts, self.values, (key, value)),
             None => Ok(None),
         }
     }

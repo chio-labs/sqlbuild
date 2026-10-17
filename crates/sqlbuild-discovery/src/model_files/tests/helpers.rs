@@ -1,5 +1,6 @@
+use crate::model_files::main::header_facts::header_facts;
 use crate::model_files::main::parse_model_text::parse_model_text;
-use crate::model_files::models::{DiscoveredModelFile, ModelFileOptions};
+use crate::model_files::models::{DiscoveredModelFile, HeaderFacts, ModelFileOptions};
 use crate::model_files::tests::test_types::{Located, ModelSummary, Span};
 use crate::models::LineColumnSpan;
 
@@ -72,4 +73,11 @@ fn owned(locations: &[(&str, Span)]) -> Vec<Located> {
 /// The expected failure summary.
 pub(super) fn failed(message: &str, help: Option<&str>) -> ModelSummary {
     Err((message.to_owned(), help.map(str::to_owned)))
+}
+
+/// The header facts of one model file parsed as `/project/models/orders.sql`.
+pub(super) fn parsed_header_facts(contents: &str) -> HeaderFacts {
+    let model: DiscoveredModelFile = parse_model_text(FILE_PATH, contents.to_owned(), &options())
+        .unwrap_or_else(|failure| panic!("{}", failure.message));
+    header_facts(&model.header_values, "models/orders.sql")
 }

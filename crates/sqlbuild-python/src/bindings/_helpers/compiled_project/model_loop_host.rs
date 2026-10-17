@@ -17,7 +17,6 @@ use crate::bindings::_helpers::compiled_project::model_loop_header::AttachedHead
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{
     reference_fact, stripped_values,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_prepass::HeaderFacts;
 use crate::bindings::_helpers::compiled_project::project::{
     CONTRACT_KEY, INCREMENTAL_MODE_KEY, materialization, text_value,
 };
@@ -31,6 +30,7 @@ use crate::bindings::_helpers::render::declaration_expansion::{
 };
 use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
 use crate::bindings::_helpers::render::macro_expansion::ExpansionOutput;
+use sqlbuild_discovery::model_files::models::HeaderFacts;
 
 const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
 const LAYER_SCHEMA_ATTRIBUTE: &str = "layer_schema";
@@ -222,7 +222,7 @@ pub(crate) fn finished_record<'py>(
         name: name.clone(),
         model_file,
         config: config.unbind(),
-        query_sql: query,
+        query_sql: Arc::clone(&query),
         macro_source_sql: macro_source,
         references: finished.references.clone(),
         schema,
@@ -254,9 +254,9 @@ pub(crate) fn finished_record<'py>(
     let facts: CompiledModelFacts = plain_model_facts(PlainModel {
         name,
         relative_path,
-        query_sql: finished.query_sql,
-        authored_query_sql: authored_query_sql.to_string(),
-        authored_sql: authored_sql.to_string(),
+        query_sql: query,
+        authored_query_sql,
+        authored_sql,
         config: ModelConfigFacts {
             values,
             encoding_error,

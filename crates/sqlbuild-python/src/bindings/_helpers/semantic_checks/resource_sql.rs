@@ -15,6 +15,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::audit_views::audit_reference_rows;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
@@ -227,10 +228,19 @@ fn model_input(
             });
         }
     }
+    let (name, path, authored_sql): (String, String, Arc<str>) =
+        match model.cast::<NativeCompiledModel>() {
+            Ok(native) => native.get().file_texts(model.py())?,
+            Err(_) => (
+                native_field(model, "name")?.extract()?,
+                native_field(model, "relative_path")?.str()?.extract()?,
+                Arc::from(native_field(model, "authored_sql")?.extract::<String>()?),
+            ),
+        };
     Ok(HookModelInput {
-        name: native_field(model, "name")?.extract()?,
-        path: native_field(model, "relative_path")?.str()?.extract()?,
-        authored_sql: Arc::from(native_field(model, "authored_sql")?.extract::<String>()?),
+        name,
+        path,
+        authored_sql,
         analysis_disabled: opts_out(&values)?,
         hooks,
     })

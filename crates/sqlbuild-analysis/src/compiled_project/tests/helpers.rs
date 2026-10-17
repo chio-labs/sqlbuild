@@ -3,7 +3,7 @@ use crate::compiled_project::models::{CompiledModelFacts, ModelAnalysisFact};
 pub(super) fn model(name: &str, query_sql: &str) -> CompiledModelFacts {
     CompiledModelFacts {
         name: name.to_owned(),
-        query_sql: query_sql.to_owned(),
+        query_sql: query_sql.into(),
         ..CompiledModelFacts::default()
     }
 }

@@ -193,6 +193,18 @@ fn python_texts(
     })
 }
 
+/// `text` as the Python string `cache` shares with every reader, built on first read.
+pub(crate) fn projected_text<'py>(
+    py: Python<'py>,
+    cache: &PyOnceLock<Py<PyString>>,
+    text: &str,
+) -> Bound<'py, PyString> {
+    cache
+        .get_or_init(py, || PyString::new(py, text).unbind())
+        .bind(py)
+        .clone()
+}
+
 /// A model header's authored values: native entries, with the Python dict built on first read.
 struct HeaderValues {
     native: Option<Arc<[(String, AuthoredValue)]>>,
@@ -248,6 +260,8 @@ impl HeaderValues {
 pub(crate) struct NativeModelFile {
     paths: ModelFilePaths,
     contents: Arc<str>,
+    /// `contents` and `query_sql` as the Python strings readers share, built on first read.
+    projected_texts: (PyOnceLock<Py<PyString>>, PyOnceLock<Py<PyString>>),
     header_values: HeaderValues,
     header_column_locations: Locations,
     output_column_locations: Locations,
@@ -327,6 +341,7 @@ impl PendingModelFile {
         NativeModelFile {
             paths: self.paths,
             contents: parts.contents.into(),
+            projected_texts: (PyOnceLock::new(), PyOnceLock::new()),
             header_values: HeaderValues::native(parts.header_values),
             header_column_locations: Locations::from_rows(parts.header_column_locations),
             output_column_locations: Locations::from_rows(parts.output_column_locations),
@@ -404,6 +419,19 @@ impl NativeModelFile {
         }
     }
 
+    /// `relative_path.as_posix()`.
+    pub(crate) fn posix_path(&self, py: Python<'_>) -> PyResult<String> {
+        match &self.paths.texts {
+            Some(texts) => Ok(texts.posix_path.clone()),
+            None => self
+                .paths
+                .objects(py)?
+                .1
+                .call_method0(AS_POSIX_METHOD)?
+                .extract(),
+        }
+    }
+
     /// `str(relative_path)`.
     pub(crate) fn relative_text(&self, py: Python<'_>) -> PyResult<String> {
         match &self.paths.texts {
@@ -452,7 +480,7 @@ impl NativeModelFile {
         Ok(vec![
             file_path,
             relative_path.clone(),
-            PyString::new(py, &self.contents).into_any(),
+            self.contents(py).into_any(),
             self.header_values.dict(py)?.into_any(),
             self.header_column_locations
                 .dict(&relative_path)?
@@ -460,7 +488,7 @@ impl NativeModelFile {
             self.output_column_locations
                 .dict(&relative_path)?
                 .into_any(),
-            PyString::new(py, &self.query_sql).into_any(),
+            self.query_sql(py).into_any(),
             self.enum_declarations.bind(py).clone().into_any(),
             self.constant_declarations.bind(py).clone().into_any(),
             pyo3::types::PyBool::new(py, self.extract_implicit_alias_columns)
@@ -492,6 +520,7 @@ impl NativeModelFile {
         Ok(Self {
             paths: ModelFilePaths::given(py, fields.file_path, fields.relative_path)?,
             contents: fields.contents.bind(py).to_str()?.into(),
+            projected_texts: (PyOnceLock::new(), PyOnceLock::new()),
             header_values: HeaderValues::given(py, fields.header_values),
             header_column_locations: Locations::from_dict(py, fields.header_column_locations),
             output_column_locations: Locations::from_dict(py, fields.output_column_locations),
@@ -516,6 +545,7 @@ impl NativeModelFile {
         Ok(Self {
             paths: self.paths.shared(py),
             contents: contents.bind(py).to_str()?.into(),
+            projected_texts: (PyOnceLock::new(), PyOnceLock::new()),
             header_values: self.header_values.shared(py),
             header_column_locations: self.header_column_locations.shared(py),
             output_column_locations: self.output_column_locations.shared(py),
@@ -538,7 +568,7 @@ impl NativeModelFile {
 
     #[getter]
     pub(crate) fn contents<'py>(&self, py: Python<'py>) -> Bound<'py, PyString> {
-        PyString::new(py, &self.contents)
+        projected_text(py, &self.projected_texts.0, &self.contents)
     }
 
     #[getter]
@@ -565,7 +595,7 @@ impl NativeModelFile {
 
     #[getter]
     pub(crate) fn query_sql<'py>(&self, py: Python<'py>) -> Bound<'py, PyString> {
-        PyString::new(py, &self.query_sql)
+        projected_text(py, &self.projected_texts.1, &self.query_sql)
     }
 
     #[getter]

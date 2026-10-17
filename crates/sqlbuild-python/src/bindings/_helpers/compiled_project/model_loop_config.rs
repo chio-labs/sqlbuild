@@ -12,11 +12,11 @@ use sqlbuild_model_config::config_presence::main::mutable_config_value::mutable_
 use sqlbuild_model_config::model_validation::models::{RetentionOverride, TableTypeOverride};
 
 use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, config_error};
-use crate::bindings::_helpers::compiled_project::model_loop_prepass::HeaderFacts;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::model_config_builder::{
     BuiltConfig, ConfigBuild, NativeModelConfigBuilder,
 };
+use sqlbuild_discovery::model_files::models::HeaderFacts;
 
 const COLUMNS_KEY: &str = "columns";
 const DESCRIPTION_KEY: &str = "description";
