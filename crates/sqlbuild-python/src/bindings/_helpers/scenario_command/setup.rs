@@ -20,16 +20,24 @@ use sqlbuild_core::scenario_command::models::{
     SnapshotLimitInputs, SnapshotLimits, SqlAnalysisCommand,
 };
 
+use crate::bindings::_helpers::cli::progress_reporters::PlanningProgressReporter;
+use crate::bindings::_helpers::cli::progress_text::write_execution_header;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::run_compile_only_pipeline;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_scenario_config;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::discovery::guidance::sql_analysis_guidance;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const METADATA_MODULE: &str = "importlib.metadata";
@@ -122,14 +130,7 @@ pub(crate) fn discover_project<'py>(
     )?;
     let selectors: Bound<'py, PyAny> = native_field(request, "selectors")?;
     let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;
-    call_with(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", selectors.clone()),
-            ("exclude", exclude.clone()),
-            ("discovered_inputs", discovered.clone()),
-        ],
-    )?;
+    reject_unit_test_selectors(&selectors.clone(), &exclude.clone(), &discovered.clone())?;
     let local_config: Bound<'py, PyAny> = native_field(&discovered, "local_config")?;
     let candidates: NamespaceCandidates = NamespaceCandidates {
         cli: native_field(request, "scenario_namespace")?.extract()?,
@@ -187,19 +188,9 @@ pub(crate) fn require_sql_analysis(
 
 /// The adapter named by the project's effective configuration.
 pub(crate) fn project_adapter_name(project: &ScenarioProject<'_>) -> PyResult<String> {
-    let py: Python<'_> = project.discovered.py();
-    call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&project.discovered, "project_config")?,
-            ),
-            (
-                "local_config",
-                native_field(&project.discovered, "local_config")?,
-            ),
-        ],
+    resolve_effective_adapter_name(
+        &native_field(&project.discovered, "project_config")?,
+        &native_field(&project.discovered, "local_config")?,
     )?
     .extract()
 }
@@ -226,12 +217,15 @@ pub(crate) fn project_connection_config<'py>(
     project: &ScenarioProject<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.discovered.py();
-    call_with(
-        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
-        &[
-            ("discovered_inputs", project.discovered.clone()),
-            ("project_dir", project.project_dir.clone()),
-        ],
+    resolve_project_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", project.discovered.clone()),
+                ("project_dir", project.project_dir.clone()),
+            ],
+        )?),
     )
 }
 
@@ -251,24 +245,25 @@ pub(crate) fn write_headers<'py>(
     let py: Python<'py> = stream.py();
     write(stream, &render_namespace_header(&project.namespace))?;
     let selectors: Vec<String> = project.selectors.extract()?;
-    let planning: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::PlanningProgressReporter)?,
-        &[
-            ("stream", stream.clone()),
-            ("use_color", boolean(py, style.use_color)),
-        ],
-    )?;
+    let planning: Bound<'py, PyAny> = Bound::new(
+        py,
+        PlanningProgressReporter::new(py, stream, style.use_color)?,
+    )?
+    .into_any();
     write(stream, "\n")?;
     let target: Option<String> = (!selectors.is_empty()).then(|| selectors.join(" "));
-    call_with(
-        &registry::native(py, NativeAttr::WriteExecutionHeader)?,
-        &[
-            ("stream", stream.clone()),
-            ("command", text(py, command)),
-            ("target", optional_text(py, target.as_deref())),
-            ("concurrency", int(py, concurrency)),
-            ("use_color", boolean(py, style.use_color)),
-        ],
+    write_execution_header(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("stream", stream.clone()),
+                ("command", text(py, command)),
+                ("target", optional_text(py, target.as_deref())),
+                ("concurrency", int(py, concurrency)),
+                ("use_color", boolean(py, style.use_color)),
+            ],
+        )?),
     )?;
     Ok(planning)
 }
@@ -291,12 +286,9 @@ pub(crate) fn compile<'py>(
         planning,
     } = inputs;
     let py: Python<'py> = project.discovered.py();
-    let resolver: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            ("project_dir", project.project_dir.clone()),
-            ("discovered_inputs", project.discovered.clone()),
-        ],
+    let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
+        project.project_dir.clone(),
+        project.discovered.clone(),
     )?;
     let mut pairs: Vec<(&str, Bound<'py, PyAny>)> = options.to_vec();
     pairs.push(("external_sql_reference_resolver", resolver));
@@ -312,14 +304,17 @@ pub(crate) fn compile<'py>(
         ],
     )?;
     within(&lifecycle, |_| {
-        call_with(
-            &registry::native(py, NativeAttr::RunCompileOnlyPipeline)?,
-            &[
-                ("discovered_inputs", project.discovered.clone()),
-                ("adapter", adapter.clone()),
-                ("options", options.clone()),
-                ("on_progress", native_field(planning, "on_progress")?),
-            ],
+        run_compile_only_pipeline(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("discovered_inputs", project.discovered.clone()),
+                    ("adapter", adapter.clone()),
+                    ("options", options.clone()),
+                    ("on_progress", native_field(planning, "on_progress")?),
+                ],
+            )?),
         )
     })
 }
@@ -368,18 +363,9 @@ pub(crate) fn capture_limits<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let inputs: Bound<'py, PyAny> = native_field(request, "limit_inputs")?;
-    let configured: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveScenarioConfig)?,
-        &[
-            (
-                "project_config",
-                native_field(&project.discovered, "project_config")?,
-            ),
-            (
-                "local_config",
-                native_field(&project.discovered, "local_config")?,
-            ),
-        ],
+    let configured: Bound<'py, PyAny> = resolve_effective_scenario_config(
+        &native_field(&project.discovered, "project_config")?,
+        &native_field(&project.discovered, "local_config")?,
     )?
     .getattr("snapshot_limits")?;
     let limits: SnapshotLimits = resolve_snapshot_limits(

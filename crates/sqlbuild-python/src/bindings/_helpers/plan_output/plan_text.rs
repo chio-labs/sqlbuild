@@ -488,7 +488,7 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
 /// The text plan grouped by reason with inline detail, optionally closed by its completion line.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn format_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "format_plan", options, PLAN_OPTIONS)?;
     let report: PlanTextReport = report(&arguments)?;

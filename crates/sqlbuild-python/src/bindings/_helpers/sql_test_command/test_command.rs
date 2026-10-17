@@ -23,14 +23,28 @@ use sqlbuild_core::test_command::models::{
     TestFailure, TestInspectionEntry, TestParameter, TestPlanWarning,
 };
 
+use crate::bindings::_helpers::build_progress::nested_progress::NestedCommandProgressCallbacks;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
+use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
+use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::cli::progress_text::{
+    format_expectation_detail, format_expectation_name, write_execution_header,
+};
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
+use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::selection_phases::compile_static_command_context;
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_test_runtime_target;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::planner_entries::command_plans::build_test_command_plan;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::result_output::documents::format_test_execution_json;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
+use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
 use crate::bindings::_helpers::result_output::resource_ids::sql_test_identity;
 
@@ -147,8 +161,6 @@ fn outcome_status(outcome: &Bound<'_, PyAny>) -> PyResult<&'static str> {
 fn expectation_rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = result.py();
     let row_class: Bound<'py, PyAny> = registry::class(py, RecordId::NestedProgressChildRow)?;
-    let name: Bound<'py, PyAny> = registry::native(py, NativeAttr::FormatExpectationName)?;
-    let detail: Bound<'py, PyAny> = registry::native(py, NativeAttr::FormatExpectationDetail)?;
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::new();
     for step in result.getattr("step_results")?.try_iter()? {
         let step: Bound<'py, PyAny> = step?;
@@ -156,12 +168,18 @@ fn expectation_rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTu
             &row_class,
             &[
                 ("label", text(py, EXPECT_LABEL)),
-                ("name", name.call1((step.getattr("model_name")?,))?),
+                (
+                    "name",
+                    text(
+                        py,
+                        &format_expectation_name(&step.getattr("model_name")?.extract::<String>()?),
+                    ),
+                ),
                 (
                     "status_text",
                     text(py, outcome_status(&step.getattr("outcome")?)?),
                 ),
-                ("detail", detail.call1((&step,))?),
+                ("detail", text(py, &format_expectation_detail(&step)?)),
             ],
         )?);
     }
@@ -305,12 +323,9 @@ fn compile_tests<'py>(
     let py: Python<'py> = request.py();
     let discovered: Bound<'py, PyAny> = invocation.getattr("discovered_inputs")?;
     let adapter: Bound<'py, PyAny> = invocation.getattr("adapter")?;
-    let resolver: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            ("project_dir", invocation.getattr("effective_project_dir")?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
+        invocation.getattr("effective_project_dir")?,
+        discovered.clone(),
     )?;
     let options: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::CompilePipelineOptions)?,
@@ -335,8 +350,8 @@ fn compile_tests<'py>(
             ("external_sql_reference_resolver", resolver),
         ],
     )?;
-    let context: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::CompileStaticCommandContext)?,
+    let context: Bound<'py, PyAny> = compile_static_command_context(Some(&keywords(
+        py,
         &[
             ("discovered_inputs", discovered),
             ("adapter", adapter.clone()),
@@ -348,17 +363,20 @@ fn compile_tests<'py>(
                     .getattr("on_progress")?,
             ),
         ],
-    )?;
+    )?))?;
     let case_name: Bound<'py, PyAny> = request.getattr("case_name")?;
-    let plan_output: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildTestCommandPlan)?,
-        &[
-            ("project", context.getattr("project")?),
-            ("adapter", adapter),
-            ("scope", context.getattr("scope")?),
-            ("relations", context.getattr("relations")?),
-            ("case_name", case_name.clone()),
-        ],
+    let plan_output: Bound<'py, PyAny> = build_test_command_plan(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project", context.getattr("project")?),
+                ("adapter", adapter),
+                ("scope", context.getattr("scope")?),
+                ("relations", context.getattr("relations")?),
+                ("case_name", case_name.clone()),
+            ],
+        )?),
     )?;
     if !case_name.is_none() && !plan_output.getattr("test_entries")?.is_truthy()? {
         let cases: Vec<String> = strings(plan_output.getattr("available_test_case_names")?)?;
@@ -375,9 +393,12 @@ fn compile_tests<'py>(
             ),
         ));
     }
-    call_with(
-        &registry::native(py, NativeAttr::BuildStaticPipelineResult)?,
-        &[("context", context), ("plan_output", plan_output)],
+    build_static_pipeline_result(
+        py,
+        Some(keywords(
+            py,
+            &[("context", context), ("plan_output", plan_output)],
+        )?),
     )
 }
 
@@ -463,22 +484,28 @@ fn run_tests<'py>(
         }
     }
     let worker_count: i64 = concurrency.min(i64::try_from(test_count).unwrap_or(i64::MAX));
-    let progress: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::NestedCommandProgressCallbacks)?,
-        &[
-            ("total", PyInt::new(py, test_count).into_any()),
-            ("label", text(py, "test")),
-            ("stream", stream.clone()),
-            ("use_color", use_color.clone()),
-            (
-                "name_width",
-                PyInt::new(py, name_width(&entries)?).into_any(),
-            ),
-            ("concurrency", PyInt::new(py, worker_count).into_any()),
-        ],
-    )?;
-    let projector: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::CurrentNativeProgressProjector)?.call0()?;
+    let progress: Bound<'py, PyAny> = Bound::new(
+        py,
+        NestedCommandProgressCallbacks::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("total", PyInt::new(py, test_count).into_any()),
+                    ("label", text(py, "test")),
+                    ("stream", stream.clone()),
+                    ("use_color", use_color.clone()),
+                    (
+                        "name_width",
+                        PyInt::new(py, name_width(&entries)?).into_any(),
+                    ),
+                    ("concurrency", PyInt::new(py, worker_count).into_any()),
+                ],
+            )?),
+        )?,
+    )?
+    .into_any();
+    let projector: Bound<'py, PyAny> = current_native_progress_projector(py)?;
     if !projector.is_none() {
         for entry in entries.try_iter()? {
             call_with(
@@ -492,17 +519,24 @@ fn run_tests<'py>(
         (render_test_ready((test_count, models.len()), style),),
     )?;
     stream.call_method0("flush")?;
-    let connection: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
-        &[
-            ("adapter_name", invocation.getattr("adapter_name")?),
-            ("stream", stream.clone()),
-            ("use_color", use_color.clone()),
-        ],
-    )?;
+    let connection: Bound<'py, PyAny> = Bound::new(
+        py,
+        ConnectionProgressReporter::new(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("adapter_name", invocation.getattr("adapter_name")?),
+                    ("stream", stream.clone()),
+                    ("use_color", use_color.clone()),
+                ],
+            )?),
+        )?,
+    )?
+    .into_any();
     let preflight: Bound<'py, PyAny> = status_reporter(&stream, use_color.is_truthy()?)?;
     let event_writer: Bound<'py, PyAny> =
-        registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
+        Bound::new(py, ExecutionEventWriter::new(py, None)?)?.into_any();
     let relay: Bound<'py, TestCallbackRelay> = Bound::new(
         py,
         TestCallbackRelay {
@@ -595,17 +629,13 @@ fn complete(
     )?;
     stream.call_method0("flush")?;
     let tuple: Bound<'_, PyAny> = PyTuple::new(py, results)?.into_any();
-    let payload: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::FormatTestExecutionJson)?,
-        &[("results", tuple)],
-    )?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
-        &[
-            ("payload", payload),
-            ("json_output", request.getattr("json_output")?),
-            ("json_output_path", request.getattr("json_output_path")?),
-        ],
+    let payload: Bound<'_, PyAny> =
+        PyString::new(py, &format_test_execution_json(py, tuple)?).into_any();
+    write_execution_json_output(
+        py,
+        payload,
+        request.getattr("json_output")?.extract()?,
+        request.getattr("json_output_path")?,
     )?;
     Ok(test_exit_code(passed, results.len()))
 }
@@ -642,7 +672,7 @@ fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
     header.set_item("target", py.None())?;
     header.set_item("concurrency", concurrency)?;
     header.set_item("use_color", invocation.getattr("use_color")?)?;
-    registry::native(py, NativeAttr::WriteExecutionHeader)?.call((), Some(&header))?;
+    write_execution_header(py, Some(header))?;
     let results: Vec<Bound<'_, PyAny>> = run_tests(&invocation, &pipeline, concurrency)?;
     write_test_runtime_target(
         (

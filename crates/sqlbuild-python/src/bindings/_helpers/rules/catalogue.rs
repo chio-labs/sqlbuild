@@ -278,7 +278,7 @@ pub(crate) fn verify_custom_rules<'py>(
 /// The validated built-in and custom rule catalogue sorted by code.
 #[pyfunction]
 #[pyo3(signature = (*, config, project_dir, include_custom = true))]
-fn build_rule_catalogue<'py>(
+pub(crate) fn build_rule_catalogue<'py>(
     config: &Bound<'py, PyAny>,
     project_dir: &Bound<'py, PyAny>,
     include_custom: bool,

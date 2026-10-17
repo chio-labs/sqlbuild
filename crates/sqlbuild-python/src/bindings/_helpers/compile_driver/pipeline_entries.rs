@@ -172,7 +172,7 @@ pub(crate) fn build_static_pipeline_result<'py>(
 /// Compile a project for consumers that construct their own focused plans.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_compile_only_pipeline<'py>(
+pub(crate) fn run_compile_only_pipeline<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

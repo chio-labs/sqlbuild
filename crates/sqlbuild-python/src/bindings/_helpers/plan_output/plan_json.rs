@@ -706,7 +706,10 @@ fn table_type_json<'py>(plan: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 /// The plan as one JSON document, `json.dumps(indent=2)`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_plan_json(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<String> {
+pub(crate) fn format_plan_json(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<String> {
     let arguments: KeywordArguments<'_> = KeywordArguments::read(
         py,
         "format_plan_json",

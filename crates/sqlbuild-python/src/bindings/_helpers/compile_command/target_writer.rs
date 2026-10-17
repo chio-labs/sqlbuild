@@ -750,7 +750,7 @@ fn write_compile_target<'py>(
 /// Plan uncached SQL tests and report their errors without writing artifacts or cache.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn static_sql_test_planning_diagnostics<'py>(
+pub(crate) fn static_sql_test_planning_diagnostics<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

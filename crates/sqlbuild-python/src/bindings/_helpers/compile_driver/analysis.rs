@@ -132,7 +132,7 @@ fn any_error(diagnostics: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// Discover, compile and validate the project into one `CompileAnalysis`.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn analyze_compile_project<'py>(
+pub(crate) fn analyze_compile_project<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

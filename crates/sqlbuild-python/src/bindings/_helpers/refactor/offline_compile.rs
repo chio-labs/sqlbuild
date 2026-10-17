@@ -5,11 +5,14 @@ use std::path::Path;
 use pyo3::IntoPyObject;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyBool, PyString};
+use pyo3::types::{PyBool, PyString, PyTuple};
 
+use crate::bindings::_helpers::compile_command::target_writer::static_sql_test_planning_diagnostics;
+use crate::bindings::_helpers::compile_driver::analysis::analyze_compile_project;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const DEFAULT_ERROR_CODE: &str = "E001";
@@ -108,27 +111,30 @@ fn analyzed<'py>(
         &registry::class(py, RecordId::CompileAnalysisSelection)?,
         &[("no_cache", PyBool::new(py, no_cache).to_owned().into_any())],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::AnalyzeCompileProject)?,
-        &[
-            ("project_dir", project_dir.into_pyobject(py)?.into_any()),
-            (
-                "no_sql_validation",
-                PyBool::new(py, false).to_owned().into_any(),
-            ),
-            ("selected_target", py.None().into_bound(py)),
-            (
-                "lineage_mode",
-                registry::class(py, RecordId::CompileLineageMode)?.getattr("NONE")?,
-            ),
-            ("cli_vars", py.None().into_bound(py)),
-            (
-                "profile_flags",
-                registry::class(py, RecordId::CompileProfileFlags)?.call0()?,
-            ),
-            ("analysis_selection", selection),
-            ("status", py.None().into_bound(py)),
-        ],
+    analyze_compile_project(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_dir", project_dir.into_pyobject(py)?.into_any()),
+                (
+                    "no_sql_validation",
+                    PyBool::new(py, false).to_owned().into_any(),
+                ),
+                ("selected_target", py.None().into_bound(py)),
+                (
+                    "lineage_mode",
+                    registry::class(py, RecordId::CompileLineageMode)?.getattr("NONE")?,
+                ),
+                ("cli_vars", py.None().into_bound(py)),
+                (
+                    "profile_flags",
+                    registry::class(py, RecordId::CompileProfileFlags)?.call0()?,
+                ),
+                ("analysis_selection", selection),
+                ("status", py.None().into_bound(py)),
+            ],
+        )?),
     )
 }
 
@@ -154,22 +160,25 @@ pub(crate) fn compile_for_refactor<'py>(
     let mut errors: Vec<Bound<'py, PyAny>> =
         error_diagnostics(native_field(&analysis, "diagnostics")?)?;
     if errors.is_empty() {
-        let planned: PyResult<Bound<'py, PyAny>> = call_with(
-            &registry::native(py, NativeAttr::StaticSqlTestPlanningDiagnostics)?,
-            &[
-                (
-                    "target_dir",
-                    project_dir.join("target").into_pyobject(py)?.into_any(),
-                ),
-                ("adapter", native_field(&analysis, "adapter")?),
-                (
-                    "project",
-                    native_field(&analysis, "graph")?.getattr("project")?,
-                ),
-            ],
+        let planned: PyResult<Bound<'py, PyTuple>> = static_sql_test_planning_diagnostics(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    (
+                        "target_dir",
+                        project_dir.join("target").into_pyobject(py)?.into_any(),
+                    ),
+                    ("adapter", native_field(&analysis, "adapter")?),
+                    (
+                        "project",
+                        native_field(&analysis, "graph")?.getattr("project")?,
+                    ),
+                ],
+            )?),
         );
         match planned {
-            Ok(diagnostics) => errors.extend(error_diagnostics(diagnostics)?),
+            Ok(diagnostics) => errors.extend(error_diagnostics(diagnostics.into_any())?),
             Err(error)
                 if matches_any_class(
                     py,

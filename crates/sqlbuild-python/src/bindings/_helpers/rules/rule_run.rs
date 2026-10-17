@@ -141,7 +141,7 @@ pub(crate) fn run_rules<'py>(
 /// One bulk Rules cache file owned by the native compiler engine.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, file_name))]
-fn rules_bulk_cache_path(project_dir: PathBuf, file_name: &str) -> PathBuf {
+pub(crate) fn rules_bulk_cache_path(project_dir: PathBuf, file_name: &str) -> PathBuf {
     bulk_cache_path(&project_dir, file_name)
 }
 

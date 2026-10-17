@@ -59,7 +59,7 @@ fn closure_paths<'py>(py: Python<'py>, paths: Vec<PathBuf>) -> PyResult<Bound<'p
 /// Repository-owned helper files imported by one rule module.
 #[pyfunction]
 #[pyo3(signature = (*, rule, project_dir))]
-fn custom_rule_import_closure<'py>(
+pub(crate) fn custom_rule_import_closure<'py>(
     rule: &Bound<'py, PyAny>,
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {

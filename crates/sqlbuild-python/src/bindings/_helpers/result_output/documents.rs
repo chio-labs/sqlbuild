@@ -381,7 +381,7 @@ fn build_json<'py>(
 /// Format seed command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, results, plan))]
-fn format_seed_execution_json<'py>(
+pub(crate) fn format_seed_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
     plan: Bound<'py, PyAny>,
@@ -487,7 +487,7 @@ fn format_clone_execution_json<'py>(
 /// Format test command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, results))]
-fn format_test_execution_json<'py>(
+pub(crate) fn format_test_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
 ) -> PyResult<String> {
@@ -604,7 +604,7 @@ fn scenario_failed(result: &Bound<'_, PyAny>, local: bool) -> PyResult<bool> {
 /// Format scenario test command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_scenario_execution_json<'py>(
+pub(crate) fn format_scenario_execution_json<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {
@@ -694,7 +694,7 @@ fn format_scenario_execution_json<'py>(
 /// Format scenario snapshot sync/refresh execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_scenario_snapshot_execution_json<'py>(
+pub(crate) fn format_scenario_snapshot_execution_json<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {

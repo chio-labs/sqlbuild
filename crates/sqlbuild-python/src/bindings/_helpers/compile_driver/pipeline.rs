@@ -209,7 +209,7 @@ fn reject_compile_errors(
 /// Run compile inputs, assembly, planning, and manifest generation.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_compile_pipeline<'py>(
+pub(crate) fn run_compile_pipeline<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

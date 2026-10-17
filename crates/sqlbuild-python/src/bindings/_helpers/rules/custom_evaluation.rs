@@ -16,6 +16,7 @@ use sqlbuild_rules::custom_rule_cache::models::CustomEvaluation;
 use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
@@ -27,8 +28,12 @@ use crate::bindings::_helpers::rules::custom_hosts::{
     HostCancel, HostRequest, host_payload_project, run_custom_hosts,
 };
 use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
+use crate::bindings::_helpers::rules::custom_rule_cache::custom_rule_identity;
+use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_implementation_fingerprint;
+use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_import_closure;
 use crate::bindings::_helpers::rules::fact_encoder::{Encoded, reproducible};
 use crate::bindings::_helpers::rules::fact_replay::{FactReplay, is_tree_fact};
+use crate::bindings::_helpers::rules::rule_run::rules_bulk_cache_path;
 
 const PROJECT_SUBJECT: &str = "project";
 const MODEL_SUBJECT: &str = "model";
@@ -107,19 +112,10 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         rows.push((code.clone(), identity, subject_value(rule)?));
     }
     let cache_path: Option<PathBuf> = if enabled {
-        Some(
-            call_with(
-                &registry::native(py, NativeAttr::RulesBulkCachePath)?,
-                &[
-                    ("project_dir", run.project_dir.clone()),
-                    (
-                        "file_name",
-                        pyo3::types::PyString::new(py, CUSTOM_RULES_CACHE_FILE).into_any(),
-                    ),
-                ],
-            )?
-            .extract()?,
-        )
+        Some(rules_bulk_cache_path(
+            run.project_dir.extract()?,
+            CUSTOM_RULES_CACHE_FILE,
+        ))
     } else {
         None
     };
@@ -352,26 +348,15 @@ fn rule_identity(
     let fingerprint: Bound<'_, PyAny> = match fingerprint {
         Some(fingerprint) => fingerprint.into_bound_py_any(py)?,
         None => {
-            let closure: Bound<'_, PyAny> = call_with(
-                &registry::native(py, NativeAttr::CustomRuleImportClosure)?,
-                &[
-                    ("rule", rule.clone()),
-                    ("project_dir", run.project_dir.clone()),
-                ],
-            )?;
-            call_with(
-                &registry::native(py, NativeAttr::CustomRuleImplementationFingerprint)?,
-                &[
-                    ("rule", rule.clone()),
-                    ("project_dir", run.project_dir.clone()),
-                    ("import_closure", closure),
-                ],
-            )?
+            let closure: Bound<'_, PyAny> =
+                custom_rule_import_closure(rule, run.project_dir)?.into_any();
+            custom_rule_implementation_fingerprint(rule, run.project_dir, Some(&closure))?
+                .into_bound_py_any(py)?
         }
     };
     let subject: Option<String> = subject_value(rule)?;
-    call_with(
-        &registry::native(py, NativeAttr::CustomRuleIdentity)?,
+    custom_rule_identity(Some(&keywords(
+        py,
         &[
             (
                 "code_identity",
@@ -395,8 +380,7 @@ fn rule_identity(
                 run.project_dir.call_method0("resolve")?.str()?.into_any(),
             ),
         ],
-    )?
-    .extract()
+    )?))
 }
 
 /// This thread's CPU plus that of finished child processes, which run the rule hosts.
