@@ -182,7 +182,7 @@ fn count(result: &Bound<'_, PyAny>, field: &str) -> PyResult<usize> {
 /// Format build command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_build_execution_json<'py>(
+pub(crate) fn format_build_execution_json<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {
@@ -225,7 +225,7 @@ fn audit_projection<'py>(
 /// The build document with its audit-history projection, or a minimal degraded document.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn format_degradable_build_execution_json<'py>(
+pub(crate) fn format_degradable_build_execution_json<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<String> {
@@ -412,7 +412,7 @@ pub(crate) fn format_seed_execution_json<'py>(
 /// Format load command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, results))]
-fn format_load_execution_json<'py>(
+pub(crate) fn format_load_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
 ) -> PyResult<String> {
@@ -443,7 +443,7 @@ fn format_load_execution_json<'py>(
 /// Format direct clone command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, result, resource_types_by_name))]
-fn format_clone_execution_json<'py>(
+pub(crate) fn format_clone_execution_json<'py>(
     py: Python<'py>,
     result: Bound<'py, PyAny>,
     resource_types_by_name: Bound<'py, PyAny>,
@@ -518,7 +518,7 @@ pub(crate) fn format_test_execution_json<'py>(
 /// Format audit command execution results as JSON.
 #[pyfunction]
 #[pyo3(signature = (*, results, configured_concurrency = None, worker_count = None))]
-fn format_audit_execution_json<'py>(
+pub(crate) fn format_audit_execution_json<'py>(
     py: Python<'py>,
     results: Bound<'py, PyAny>,
     configured_concurrency: Option<Bound<'py, PyAny>>,

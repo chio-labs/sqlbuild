@@ -454,7 +454,7 @@ fn origin_source_entries<'py>(
 /// Prepare planner outputs needed for clone execution.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
-fn run_clone_planning<'py>(
+pub(crate) fn run_clone_planning<'py>(
     py: Python<'py>,
     kwargs: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

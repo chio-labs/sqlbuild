@@ -458,7 +458,9 @@ fn relation_info<'py>(item: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// Selected declarations compared with one bulk read of physical columns.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn compare_contracts<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyTuple>> {
+pub(crate) fn compare_contracts<'py>(
+    request: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyTuple>> {
     let request = Request::new("compare_contracts", request)?;
     let py: Python<'py> = request.py();
     let adapter: &Bound<'py, PyAny> = &request.get("adapter")?;

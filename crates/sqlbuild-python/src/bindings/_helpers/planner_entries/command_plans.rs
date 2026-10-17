@@ -147,7 +147,7 @@ pub(crate) fn resolve_static_relation_context<'py>(
 /// Project selected audits from canonical static state.
 #[pyfunction]
 #[pyo3(signature = (*, project, adapter, scope, relations))]
-fn build_audit_command_plan<'py>(
+pub(crate) fn build_audit_command_plan<'py>(
     project: &Bound<'py, PyAny>,
     adapter: &Bound<'py, PyAny>,
     scope: &Bound<'py, PyAny>,

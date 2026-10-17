@@ -25,7 +25,7 @@ fn simplify_fixture_null_projections(sql: &str, relation: &Bound<'_, PyAny>) -> 
 
 #[pyfunction]
 #[pyo3(signature = (*, files, project_dir, discovered_inputs, sql_lexical_syntax))]
-fn format_redundant_fixture_nulls<'py>(
+pub(crate) fn format_redundant_fixture_nulls<'py>(
     files: &Bound<'py, PyDict>,
     project_dir: &Bound<'py, PyAny>,
     discovered_inputs: &Bound<'py, PyAny>,

@@ -71,7 +71,7 @@ fn physical_rows(columns: &Bound<'_, PyAny>) -> PyResult<Vec<PhysicalColumn>> {
 /// The model's MODEL header with physical columns adopted, or the ownership conflict.
 #[pyfunction]
 #[pyo3(signature = (*, model, physical_columns, overwrite))]
-fn edit_contract_model(
+pub(crate) fn edit_contract_model(
     py: Python<'_>,
     model: &Bound<'_, PyAny>,
     physical_columns: &Bound<'_, PyAny>,
@@ -117,7 +117,7 @@ fn edit_contract_model(
 /// The source's YAML declaration with physical columns adopted, or the ownership conflict.
 #[pyfunction]
 #[pyo3(signature = (*, source, physical_columns, overwrite, contents = None))]
-fn edit_contract_source(
+pub(crate) fn edit_contract_source(
     source: &Bound<'_, PyAny>,
     physical_columns: &Bound<'_, PyAny>,
     overwrite: bool,
@@ -148,7 +148,7 @@ fn edit_contract_source(
 /// The findings an edit leaves, plus an ownership-conflict finding when the edit was refused.
 #[pyfunction]
 #[pyo3(signature = (*, findings, overwrite, conflict))]
-fn remaining_contract_findings<'py>(
+pub(crate) fn remaining_contract_findings<'py>(
     py: Python<'py>,
     findings: &Bound<'py, PyAny>,
     overwrite: bool,

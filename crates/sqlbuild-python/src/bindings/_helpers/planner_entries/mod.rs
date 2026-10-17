@@ -1,9 +1,9 @@
 //! Plan entry and plan output assembly over native planner resolution.
 
-mod clone_plans;
+pub(crate) mod clone_plans;
 pub(crate) mod command_plans;
 pub(crate) mod contexts;
-mod display_plan;
+pub(crate) mod display_plan;
 pub(crate) mod execution_plan;
 pub(crate) mod model_entries;
 pub(crate) mod models;

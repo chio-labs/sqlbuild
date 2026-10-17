@@ -127,7 +127,10 @@ fn update_sqlbuild_skills<'py>(
 /// Check or refresh generated project skills without changing command success.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir))]
-fn maintain_sqlbuild_skills(py: Python<'_>, project_dir: PathBuf) -> PyResult<Bound<'_, PyAny>> {
+pub(crate) fn maintain_sqlbuild_skills(
+    py: Python<'_>,
+    project_dir: PathBuf,
+) -> PyResult<Bound<'_, PyAny>> {
     let message: String = maintain_skills(&project_dir, &package_dir(py)?.join(SKILLS_DIRECTORY))
         .map_err(|error| raised(py, error))?;
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
