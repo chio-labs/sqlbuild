@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::planner_identity::hashing::model_query_hash;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const GENERIC_DIALECT: &str = "generic";
@@ -224,8 +225,7 @@ fn changed_referencing_query(
     let models_by_name: Bound<'_, PyAny> = native_field(scope, "models_by_name")?;
     let mut selected: Vec<Bound<'_, PyAny>> = Vec::new();
     for key in native_field(scope, "selected_keys")?.try_iter()? {
-        let model: Bound<'_, PyAny> =
-            models_by_name.call_method1("get", (native_field(&key?, "name")?,))?;
+        let model: Bound<'_, PyAny> = mapping_get(&models_by_name, native_field(&key?, "name")?)?;
         if !model.is_none() {
             selected.push(model);
         }
@@ -236,7 +236,7 @@ fn changed_referencing_query(
     let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
     for model in selected {
         let recorded: Bound<'_, PyAny> =
-            recorded_models.call_method1("get", (model_reads::name_object(&model)?,))?;
+            mapping_get(&recorded_models, model_reads::name_object(&model)?)?;
         if recorded.is_none() {
             continue;
         }

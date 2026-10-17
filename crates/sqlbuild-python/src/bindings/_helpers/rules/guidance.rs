@@ -21,6 +21,7 @@ use sqlbuild_rules::rule_catalogue::models::{FingerprintRule, OptionText, RuleTe
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::records::fields::field as record_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::rules::catalogue::{
     native_rules_config, references_custom_rules, rule_catalogue, select_rules, verify_custom_rules,
 };
@@ -60,7 +61,7 @@ fn rule_text(rule: &Bound<'_, PyAny>, config: Option<&Bound<'_, PyAny>>) -> PyRe
         let name: String = text_field(&option, "name")?;
         let default: Bound<'_, PyAny> = record_field(&option, "default")?;
         let effective: Bound<'_, PyAny> = match &configured {
-            Some(values) => values.call_method1("get", (&name, &default))?,
+            Some(values) => mapping_get_or(values, &name, &default)?,
             None => default.clone(),
         };
         options.push(OptionText {

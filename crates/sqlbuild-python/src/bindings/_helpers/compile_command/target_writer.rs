@@ -37,6 +37,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -419,8 +420,7 @@ fn plan_tests<'py>(
             continue;
         };
         let record_key: String = artifact_record_key(&test)?;
-        let chain: Bound<'py, PyAny> =
-            chains.call_method1("get", (native_field(&test, "key")?, &empty))?;
+        let chain: Bound<'py, PyAny> = mapping_get_or(chains, native_field(&test, "key")?, &empty)?;
         let identity: String = artifact_identity(&test, &chain, context)?;
         let reusable: Option<SqlTestArtifactRecord> = cached
             .get(&record_key)

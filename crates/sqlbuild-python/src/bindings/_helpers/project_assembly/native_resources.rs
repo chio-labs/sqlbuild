@@ -26,6 +26,7 @@ use crate::bindings::_helpers::project_assembly::models::{
 };
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::types::CompilerDetach;
 
@@ -135,7 +136,7 @@ fn environment_rows(
     environment_template_names(values)
         .into_iter()
         .map(|name| {
-            let value: Option<String> = environment.call_method1("get", (&name,))?.extract()?;
+            let value: Option<String> = mapping_get(&environment, &name)?.extract()?;
             Ok((name, value))
         })
         .collect()

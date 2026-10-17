@@ -24,6 +24,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};
 
@@ -256,7 +257,7 @@ fn model_rows<'py>(
     let mut rows: Vec<Bound<'py, PyAny>> = Vec::with_capacity(model_inputs.len());
     for model_input in model_inputs {
         let values: Bound<'py, PyAny> = native_field(model_input, "config")?.getattr("values")?;
-        let get = |key: &str| values.call_method1("get", (key,));
+        let get = |key: &str| mapping_get(&values, key);
         let query_sql: Bound<'py, PyAny> = PyString::new(
             py,
             &analysis_cursor_sql(

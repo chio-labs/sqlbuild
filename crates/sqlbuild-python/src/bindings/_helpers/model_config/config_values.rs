@@ -6,13 +6,14 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::construct::error_class;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::ErrorId;
 
 const DATETIME_MODULE: &str = "datetime";
 
 /// `values.get(key)`, or `None` when the value is absent or `None`.
 fn authored<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let value: Bound<'py, PyAny> = values.call_method1("get", (key,))?;
+    let value: Bound<'py, PyAny> = mapping_get(values, key)?;
     Ok(Some(value).filter(|value| !value.is_none()))
 }
 

@@ -16,6 +16,7 @@ use crate::bindings::_helpers::discovery::imported_modules::{
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const PROVIDER_ERROR: ErrorId = ErrorId::ProviderDiscovery;
@@ -76,7 +77,7 @@ fn validation_details(error: &Bound<'_, PyAny>) -> PyResult<String> {
         .try_iter()?
     {
         let item: Bound<'_, PyAny> = item?;
-        let location: Bound<'_, PyAny> = item.call_method1("get", ("loc", py.None()))?;
+        let location: Bound<'_, PyAny> = mapping_get_or(&item, "loc", py.None())?;
         let location_text: String = if location.is_none() || !location.is_truthy()? {
             ROOT_LOCATION.to_owned()
         } else {
@@ -86,9 +87,8 @@ fn validation_details(error: &Bound<'_, PyAny>) -> PyResult<String> {
                 .collect::<PyResult<Vec<String>>>()?
                 .join(".")
         };
-        let message: Bound<'_, PyAny> = item.call_method1("get", ("msg", DEFAULT_MESSAGE))?;
-        let error_type: Bound<'_, PyAny> =
-            item.call_method1("get", ("type", DEFAULT_ERROR_TYPE))?;
+        let message: Bound<'_, PyAny> = mapping_get_or(&item, "msg", DEFAULT_MESSAGE)?;
+        let error_type: Bound<'_, PyAny> = mapping_get_or(&item, "type", DEFAULT_ERROR_TYPE)?;
         details.push(format!(
             "{location_text}: {} [{}]",
             message.str()?,

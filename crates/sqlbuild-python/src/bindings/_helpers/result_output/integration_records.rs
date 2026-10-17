@@ -11,6 +11,7 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 use crate::bindings::_helpers::plan_output::safety::{future_cursor_safety, maximum_start_safety};
 use crate::bindings::_helpers::plan_output::values::items;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::result_output::checks::{
     audit_passed, measurement_evidence, measurement_thresholds, python_check_status,
 };
@@ -354,7 +355,7 @@ fn duration(value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
 /// The envelope fields every record copies from its terminal, in record order.
 fn terminal_fields(terminal: &Bound<'_, PyAny>, event_sequence: usize) -> PyResult<Entries> {
     let payload: Bound<'_, PyAny> = native_field(terminal, "payload")?;
-    let get = |key: &str| payload.call_method1("get", (key,));
+    let get = |key: &str| mapping_get(&payload, key);
     let attribute = |key: &str| -> PyResult<JsonValue> {
         Ok(required_json(&native_field(terminal, key)?)?.unwrap_or(JsonValue::Null))
     };
@@ -404,10 +405,7 @@ fn failure_fields(terminal: &Bound<'_, PyAny>) -> PyResult<Entries> {
     let payload: Bound<'_, PyAny> = native_field(terminal, "payload")?;
     let mut fields: Entries = Vec::new();
     for key in ["error_code", "error_type", "skip_code", "skip_mode"] {
-        fields.push((
-            key.to_owned(),
-            optional_text(&payload.call_method1("get", (key,))?)?,
-        ));
+        fields.push((key.to_owned(), optional_text(&mapping_get(&payload, key)?)?));
     }
     Ok(fields)
 }

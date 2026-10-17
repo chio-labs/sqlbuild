@@ -9,6 +9,7 @@ use crate::bindings::_helpers::planner_scenario::{
 };
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -82,7 +83,7 @@ pub(super) fn fixture_plans<'py>(
                 )?);
             };
             if kind != super::constants::DBT_REF && !overrides.is_none() {
-                sql = overrides.call_method1("get", ((resource, &name), sql))?;
+                sql = mapping_get_or(overrides, (resource, &name), sql)?;
             }
             let sql = resolve_sql(context, &sql.extract::<String>()?, true)?;
             let sql = if helpers.is_empty() {

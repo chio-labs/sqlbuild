@@ -21,6 +21,7 @@ use crate::bindings::_helpers::cost_telemetry::values::process_object;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -168,7 +169,7 @@ fn record_statement(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyRes
 fn ledger_entry<'py>(line: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = line.py();
     let payload: Bound<'py, PyAny> = imported(py, "json", "loads")?.call1((line,))?;
-    let query_id: Bound<'py, PyAny> = payload.call_method1("get", ("query_id",))?;
+    let query_id: Bound<'py, PyAny> = mapping_get(&payload, "query_id")?;
     let field = |name: &str| -> PyResult<Bound<'py, PyAny>> {
         Ok(payload.get_item(name)?.str()?.into_any())
     };

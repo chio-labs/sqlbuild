@@ -23,6 +23,7 @@ use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 
 fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
@@ -81,7 +82,7 @@ fn target_database<'py>(
             return Ok(database);
         }
     }
-    let database: Bound<'py, PyAny> = connection_config.call_method1("get", ("database",))?;
+    let database: Bound<'py, PyAny> = mapping_get(connection_config, "database")?;
     if database.is_none() {
         return Ok(py.None().into_bound(py));
     }

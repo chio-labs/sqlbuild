@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::format_command::files::write_file_atomically;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::refactor::contract_edits::edit_contract_model;
@@ -74,10 +75,7 @@ pub(crate) fn write_contracts<'py>(
                     &source,
                     &physical_columns,
                     write.overwrite.clone().extract::<bool>()?,
-                    updates
-                        .as_any()
-                        .call_method1("get", (&path,))?
-                        .extract::<Option<String>>()?,
+                    mapping_get(updates.as_any(), &path)?.extract::<Option<String>>()?,
                 )
                 .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
                 (path, edited)

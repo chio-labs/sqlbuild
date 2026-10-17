@@ -9,6 +9,7 @@ use sqlbuild_render::macro_calls::main::call_class_store_text::call_class_store_
 
 use crate::bindings::_helpers::macro_bridge::store_keys::{context_store_token, macro_store_token};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::render::macro_expansion_facts::ResourceRef;
 
 /// `(kind, name, owner (kind, name))` of a `DeclarationIdentity`, compared by value.
@@ -158,7 +159,7 @@ impl CallClassState {
             return Ok(found.clone());
         }
         let py: Python<'_> = owner.py();
-        let loaded: Bound<'_, PyAny> = macros.call_method1("get", (name,))?;
+        let loaded: Bound<'_, PyAny> = mapping_get(macros, name)?;
         let declarations: &Bound<'_, PyAny> = inputs.declarations;
         let visible: bool = !loaded.is_none()
             && (declarations.is_none()

@@ -9,6 +9,7 @@ use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, replace};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -105,10 +106,8 @@ fn reusable_model_names(
     for name in native_field(execution_changes, "models")?.try_iter()? {
         let name = name?;
         let same = |field: &str| -> PyResult<bool> {
-            execution
-                .getattr(field)?
-                .call_method1("get", (&name,))?
-                .eq(native_field(&stale, field)?.call_method1("get", (&name,))?)
+            mapping_get(&execution.getattr(field)?, &name)?
+                .eq(mapping_get(&native_field(&stale, field)?, &name)?)
         };
         if same("model_version_hashes")? && same("model_metadata_jsons")? {
             names.insert(name.extract()?);

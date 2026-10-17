@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::PyString;
@@ -45,8 +46,8 @@ fn resolve_policy<'py>(
         class.call0()?
     };
     let values = native_field(&native_field(model, "config")?, "values")?;
-    let raw_distance = values.call_method1("get", (fields.distance_key,))?;
-    let raw_action = values.call_method1("get", (fields.action_key,))?;
+    let raw_distance = mapping_get(&values, fields.distance_key)?;
+    let raw_action = mapping_get(&values, fields.action_key)?;
     let mut distance = configured.getattr(fields.distance)?;
     if raw_distance.is_instance_of::<PyString>() {
         distance = if raw_distance.eq(POLICY_DISABLED)? {

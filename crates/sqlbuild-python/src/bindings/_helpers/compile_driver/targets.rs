@@ -44,6 +44,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::discovery::guidance::setting_help;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use pyo3::IntoPyObjectExt;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -329,7 +330,7 @@ fn managed_source_namespace(
         &[
             native_field(source_entry, "database")?,
             native_field(target_config, "database")?,
-            connection.call_method1("get", ("database",))?,
+            mapping_get(connection, "database")?,
         ],
         || adapter.call_method0("default_database"),
     )?;
@@ -338,7 +339,7 @@ fn managed_source_namespace(
             native_field(source_entry, "schema")?,
             native_field(target_config, "loader_schema")?,
             native_field(target_config, "schema")?,
-            connection.call_method1("get", ("schema",))?,
+            mapping_get(connection, "schema")?,
         ],
         || adapter.call_method0("default_schema"),
     )?;

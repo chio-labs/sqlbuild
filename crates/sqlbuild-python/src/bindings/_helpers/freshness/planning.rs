@@ -20,6 +20,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::graph::build_downstream_model_name_closure;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::state_rows::freshness::{age_policy, equivalent};
 
@@ -60,9 +62,7 @@ fn previous_records<'py>(
     let merged: Bound<'py, PyDict> = PyDict::new(py);
     for schema in arguments.value("state_schemas")?.try_iter()? {
         let schema: Bound<'py, PyAny> = schema?;
-        let exists: bool = exists_by_schema
-            .call_method1("get", (&schema, false))?
-            .is_truthy()?;
+        let exists: bool = mapping_get_or(&exists_by_schema, &schema, false)?.is_truthy()?;
         let previous: Bound<'py, PyAny> =
             read_latest(&read, (&database, &schema), exists, source_names)?;
         for (identity, candidate) in native_field(&previous, "records")?
@@ -212,7 +212,7 @@ pub(crate) fn build_direct_source_freshness_planning_result<'py>(
     let age_statuses: Bound<'py, PyDict> = PyDict::new(py);
     for (name, source) in observed_sources.iter() {
         let observation: Bound<'py, PyAny> = if freshness_strategy_is_adapter(&source)? {
-            let observation: Bound<'py, PyAny> = observations.call_method1("get", (&name,))?;
+            let observation: Bound<'py, PyAny> = mapping_get(&observations, &name)?;
             if observation.is_none() {
                 continue;
             }

@@ -20,6 +20,8 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 
 const MISSING_RELATION_CODE: &str = "C682";
 const MODEL_KIND: &str = "model";
@@ -215,10 +217,10 @@ pub(crate) fn relevant_check_functions<'py>(
         if !native_field(&node, "kind")?.eq(&check_kind)? || excluded.contains(&name)? {
             continue;
         }
-        let upstream: Vec<Bound<'py, PyAny>> = upstream_deps
-            .call_method1("get", (&name, PyTuple::empty(py)))?
-            .try_iter()?
-            .collect::<PyResult<_>>()?;
+        let upstream: Vec<Bound<'py, PyAny>> =
+            mapping_get_or(&upstream_deps, &name, PyTuple::empty(py))?
+                .try_iter()?
+                .collect::<PyResult<_>>()?;
         let mut sql_names: Vec<Bound<'py, PyAny>> = Vec::new();
         for reference in native_field(&node, "sql_deps")?.try_iter()? {
             sql_names.push(native_field(&reference?, "name")?);
@@ -291,8 +293,10 @@ fn located<'py>(
         SEED_KIND => "seed_locations",
         _ => return Ok(None),
     };
-    let location: Bound<'py, PyAny> = native_field(plan_output, attribute)?
-        .call_method1("get", (native_field(reference, "name")?,))?;
+    let location: Bound<'py, PyAny> = mapping_get(
+        &native_field(plan_output, attribute)?,
+        native_field(reference, "name")?,
+    )?;
     Ok((!location.is_none()).then_some(location))
 }
 

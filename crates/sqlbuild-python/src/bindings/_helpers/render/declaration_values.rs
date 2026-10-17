@@ -14,6 +14,7 @@ use crate::bindings::_helpers::records::construct::{
     enum_member, new_record, new_record_with, record_class,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::declaration_contexts::NativeDeclarationContexts;
@@ -229,7 +230,7 @@ pub(crate) fn native_declaration_contexts<'py>(
         let identity: Bound<'py, PyAny> = identity?;
         let key: Bound<'py, PyAny> =
             identity_keys.call_method1("setdefault", (&identity, identity_keys.len()))?;
-        let value: Bound<'py, PyAny> = declarations.call_method1("get", (&identity,))?;
+        let value: Bound<'py, PyAny> = mapping_get(declarations, &identity)?;
         positions.push(PyTuple::new(
             py,
             [

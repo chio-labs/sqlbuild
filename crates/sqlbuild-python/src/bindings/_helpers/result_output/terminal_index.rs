@@ -12,6 +12,7 @@ use sqlbuild_core::terminal_events::main::claim_resource_terminal::claim_resourc
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::terminal_events::main::consume_terminal_fact::consume_terminal_fact;
@@ -50,7 +51,7 @@ pub(crate) struct TerminalEventClaim {
 
 /// `payload.get(key)` when it is a string.
 fn payload_text(payload: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
-    let value: Bound<'_, PyAny> = payload.call_method1("get", (key,))?;
+    let value: Bound<'_, PyAny> = mapping_get(payload, key)?;
     if value.is_instance_of::<PyString>() {
         return Ok(Some(value.extract()?));
     }
@@ -59,7 +60,7 @@ fn payload_text(payload: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String
 
 /// The payload attempt number, when it is an `int` (or `bool`, which Python compares as one).
 fn payload_attempt_number(payload: &Bound<'_, PyAny>) -> PyResult<Option<i64>> {
-    let value: Bound<'_, PyAny> = payload.call_method1("get", ("attempt_number",))?;
+    let value: Bound<'_, PyAny> = mapping_get(payload, "attempt_number")?;
     if !value.is_instance_of::<PyInt>() {
         return Ok(None);
     }

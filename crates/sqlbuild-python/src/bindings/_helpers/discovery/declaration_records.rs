@@ -30,6 +30,7 @@ use crate::bindings::_helpers::model_config::header_columns::schema_columns;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
 use crate::bindings::models::{NativeDiscoverySession, NativeProjectTree};
@@ -299,15 +300,11 @@ fn audit_block<'py>(py: Python<'py>, block: &AuditBlock) -> PyResult<Bound<'py, 
                     ("value_column", header_values.as_any().get_item("value")?),
                     (
                         "sample_count_column",
-                        header_values
-                            .as_any()
-                            .call_method1("get", ("sample_count",))?,
+                        mapping_get(header_values.as_any(), "sample_count")?,
                     ),
                     (
                         "sample_unit",
-                        header_values
-                            .as_any()
-                            .call_method1("get", ("sample_unit",))?,
+                        mapping_get(header_values.as_any(), "sample_unit")?,
                     ),
                 ],
             )?

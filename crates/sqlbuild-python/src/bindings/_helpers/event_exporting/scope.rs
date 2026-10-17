@@ -19,6 +19,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 
 static CURRENT_SCOPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
@@ -71,7 +72,7 @@ fn provider_arguments<'py>(
         let usage: Bound<'py, PyAny> = usage?;
         arguments.set_item(
             native_field(&usage, "parameter_name")?,
-            session.call_method1("get", (native_field(&usage, "provider_name")?,))?,
+            mapping_get(session, native_field(&usage, "provider_name")?)?,
         )?;
     }
     Ok(arguments)

@@ -22,6 +22,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 
@@ -612,8 +614,7 @@ fn model_resource<'py>(
             ),
             (
                 "materialized",
-                values
-                    .call_method1("get", ("materialized", "view"))?
+                mapping_get_or(&values, "materialized", "view")?
                     .str()?
                     .into_any(),
             ),
@@ -628,7 +629,7 @@ fn model_resource<'py>(
     )?;
     qualified_name(&item, model)?;
     for hook_key in HOOK_KEYS {
-        let hooks: Bound<'py, PyAny> = values.call_method1("get", (hook_key,))?;
+        let hooks: Bound<'py, PyAny> = mapping_get(&values, hook_key)?;
         if !hooks.is_none() {
             item.set_item(
                 hook_key,

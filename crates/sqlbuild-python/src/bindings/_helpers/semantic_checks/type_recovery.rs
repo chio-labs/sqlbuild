@@ -20,6 +20,7 @@ use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
 use crate::bindings::_helpers::compiled_project::records::with_type_recovery;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::semantic_checks::constants::SCHEMA_REVALIDATIONS;
 use crate::bindings::_helpers::semantic_checks::failures::{internal_error, semantic_error};
 use crate::bindings::_helpers::semantic_checks::inputs::revalidation_request;
@@ -207,7 +208,7 @@ fn recovery_model(
     let mut raw_bindings: Vec<RawBinding> = Vec::new();
     if !bindings.is_empty() {
         let raws: Bound<'_, PyAny> =
-            binding_results.call_method1("get", (&name, PyList::empty(model.py())))?;
+            mapping_get_or(binding_results, &name, PyList::empty(model.py()))?;
         for raw in raws.try_iter()? {
             let raw: Bound<'_, PyAny> = raw?;
             raw_bindings.push(RawBinding {

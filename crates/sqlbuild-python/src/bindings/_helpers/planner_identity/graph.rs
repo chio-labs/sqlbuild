@@ -29,6 +29,7 @@ use crate::bindings::_helpers::planner_identity::hashing::graph_key;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const TABLE_FN_TEST_MODE: &str = "table_fn";
@@ -357,7 +358,7 @@ pub(crate) fn check_buildability<'py>(
     let mut deps: HashMap<GraphKey, Vec<GraphKey>> = HashMap::new();
     for key in &selected {
         let dep_keys: Bound<'py, PyAny> =
-            upstream_deps.call_method1("get", (objects.object(key), PyTuple::empty(py)))?;
+            mapping_get_or(&upstream_deps, objects.object(key), PyTuple::empty(py))?;
         deps.insert(key.clone(), objects.keys(&dep_keys)?);
     }
     let available = AvailableUpstreams {

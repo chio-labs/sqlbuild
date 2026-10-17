@@ -19,6 +19,7 @@ use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const SKIPPED_UPSTREAM_CODE: &str = "P501";
@@ -289,7 +290,7 @@ fn previous_identity<'py>(
             native_field(identity, "node_name")?,
         ],
     )?;
-    previous_identities.call_method1("get", (key,))
+    mapping_get(previous_identities, key)
 }
 
 /// `_identity_status`: whether a node's identity is unknown, new, unchanged or changed.

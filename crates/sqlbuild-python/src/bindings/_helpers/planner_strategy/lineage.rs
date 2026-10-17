@@ -20,6 +20,7 @@ use crate::bindings::_helpers::planner_strategy::microbatches::{
 };
 use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::ErrorId;
 
 const MICROBATCH_MODE: &str = "microbatch";
@@ -35,7 +36,7 @@ fn mapped_references<'py>(
     mapping: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<Option<Vec<Bound<'py, PyAny>>>> {
-    let value: Bound<'py, PyAny> = mapping.call_method1("get", (name,))?;
+    let value: Bound<'py, PyAny> = mapping_get(mapping, name)?;
     if value.is_none() {
         return Ok(None);
     }

@@ -21,6 +21,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_changes::detect::{ModelPass, model_change};
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// Change kinds that mean the model's own identity changed.
@@ -94,7 +95,7 @@ fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>
     let models_by_name: Bound<'_, PyAny> = native_field(&inputs.original_scope, "models_by_name")?;
     for item in models_by_name.call_method0("items")?.try_iter()? {
         let (name, model): (String, Bound<'_, PyAny>) = item?.extract()?;
-        let selected_change: Bound<'_, PyAny> = models.call_method1("get", (&name,))?;
+        let selected_change: Bound<'_, PyAny> = mapping_get(&models, &name)?;
         if !selected_change.is_none()
             && (inputs.model_changes_complete || own_change(&selected_change)?)
         {
@@ -110,8 +111,8 @@ fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>
             &pass,
             &model,
             (
-                version_hashes.call_method1("get", (&name,))?.extract()?,
-                metadata_jsons.call_method1("get", (&name,))?.extract()?,
+                mapping_get(&version_hashes, &name)?.extract()?,
+                mapping_get(&metadata_jsons, &name)?.extract()?,
             ),
         )?;
         if own_change(&change)? {
@@ -133,7 +134,7 @@ fn changed_seed_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>>
         if expected.is_none() {
             continue;
         }
-        let fingerprint: Bound<'_, PyAny> = recorded.call_method1("get", (&name,))?;
+        let fingerprint: Bound<'_, PyAny> = mapping_get(&recorded, &name)?;
         if fingerprint.is_none() || !native_field(&fingerprint, "version_hash")?.eq(&expected)? {
             changed.insert(name);
         }

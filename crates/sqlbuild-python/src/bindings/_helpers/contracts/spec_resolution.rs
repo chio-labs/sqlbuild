@@ -18,6 +18,7 @@ use crate::bindings::_helpers::contracts::effective_config::{
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const TARGET_GROUPS: [(&str, RecordId); 4] = [
@@ -210,12 +211,16 @@ fn scenario_local_type_overrides_for_dialect<'py>(
     let overrides: Bound<'py, PyDict> = PyDict::new(py);
     overrides.call_method1(
         "update",
-        (rules.call_method1("get", (ALL_DIALECTS, PyDict::new(py)))?,),
+        (mapping_get_or(&rules, ALL_DIALECTS, PyDict::new(py))?,),
     )?;
     if !sql_analysis_dialect.is_none() {
         overrides.call_method1(
             "update",
-            (rules.call_method1("get", (sql_analysis_dialect, PyDict::new(py)))?,),
+            (mapping_get_or(
+                &rules,
+                sql_analysis_dialect,
+                PyDict::new(py),
+            )?,),
         )?;
     }
     Ok(overrides)

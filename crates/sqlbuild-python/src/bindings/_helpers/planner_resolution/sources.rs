@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_resolution::values::{
 };
 use crate::bindings::_helpers::planner_strategy::values::input_error;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::type_system::equality::types_equal;
@@ -254,13 +255,13 @@ fn resolve_one(
     filtering: &CursorFiltering<'_>,
     (name, original): (&str, &str),
 ) -> PyResult<String> {
-    let entry = source_map.call_method1("get", (name,))?;
+    let entry = mapping_get(source_map, name)?;
     if entry.is_none() {
         return Ok(original.to_owned());
     }
     let adapter = adapter.clone();
     let mut relation = render_source_read_relation(&adapter, &entry)?;
-    let columns = warehouse_columns.call_method1("get", (name,))?;
+    let columns = mapping_get(warehouse_columns, name)?;
     let expression = !native_field(&entry, "expression")?.is_none();
     if columns.is_truthy()?
         && (!expression

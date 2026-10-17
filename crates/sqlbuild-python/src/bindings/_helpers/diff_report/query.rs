@@ -28,6 +28,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::types::CompilerDetach;
 use sqlbuild_analysis::diff_selection::main::raw_query_shape::raw_query_shape;
@@ -185,7 +186,7 @@ pub(crate) fn prepare_query_diff<'py>(
     let database: Bound<'py, PyAny> = if NAMESPACELESS_ADAPTERS.contains(&adapter_name.as_str()) {
         none(py)
     } else {
-        config.call_method1("get", ("database",))?
+        mapping_get(&config, "database")?
     };
     let namespace: Bound<'py, PyAny> = build_effective_target_namespace(
         py,
@@ -195,10 +196,7 @@ pub(crate) fn prepare_query_diff<'py>(
                 ("discovered_inputs", discovered.clone()),
                 ("selected_target", selected_target.clone()),
                 ("connection_database", database.clone()),
-                (
-                    "connection_schema",
-                    config.call_method1("get", ("schema",))?,
-                ),
+                ("connection_schema", mapping_get(&config, "schema")?),
                 (
                     "default_database",
                     adapter.call_method0("default_database")?,

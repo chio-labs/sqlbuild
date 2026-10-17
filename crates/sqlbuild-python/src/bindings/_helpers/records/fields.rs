@@ -102,6 +102,32 @@ fn property_value(
     Ok(value)
 }
 
+/// `mapping.get(key)`: a dict is read through the C API.
+pub(crate) fn mapping_get<'py, K: pyo3::IntoPyObject<'py>>(
+    mapping: &Bound<'py, PyAny>,
+    key: K,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = mapping.py();
+    mapping_get_or(mapping, key, py.None())
+}
+
+/// `mapping.get(key, default)`: a dict is read through the C API.
+pub(crate) fn mapping_get_or<'py, K: pyo3::IntoPyObject<'py>, D: pyo3::IntoPyObject<'py>>(
+    mapping: &Bound<'py, PyAny>,
+    key: K,
+    default: D,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = mapping.py();
+    let key: Bound<'py, PyAny> = key.into_bound_py_any(py)?;
+    if let Ok(dict) = mapping.cast_exact::<PyDict>() {
+        if let Some(found) = dict.get_item(&key)? {
+            return Ok(found);
+        }
+        return default.into_bound_py_any(py);
+    }
+    mapping.call_method1("get", (key, default.into_bound_py_any(py)?))
+}
+
 /// `dataclasses.replace(value, **changes)`: a native record is rebuilt from its own values.
 pub(crate) fn replaced<'py>(
     value: &Bound<'py, PyAny>,

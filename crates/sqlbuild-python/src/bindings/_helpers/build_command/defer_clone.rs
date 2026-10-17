@@ -28,6 +28,7 @@ use crate::bindings::_helpers::planner_scope::scope::build_planner_scope;
 use crate::bindings::_helpers::planner_selection::unit_tests::split_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 
@@ -146,7 +147,7 @@ fn selected_executable_model_count(scope: &Bound<'_, PyAny>) -> PyResult<usize> 
         if resource_type(&key)? != MODEL_TYPE {
             continue;
         }
-        let model: Bound<'_, PyAny> = models.call_method1("get", (native_field(&key, "name")?,))?;
+        let model: Bound<'_, PyAny> = mapping_get(&models, native_field(&key, "name")?)?;
         if !model.is_none()
             && native_field(&model, "config")?
                 .getattr("values")?

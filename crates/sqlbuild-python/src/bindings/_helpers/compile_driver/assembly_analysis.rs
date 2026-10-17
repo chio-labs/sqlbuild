@@ -27,6 +27,7 @@ use crate::bindings::_helpers::project_assembly::declared_relations::{
 };
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
@@ -295,26 +296,24 @@ fn record_expression_shapes<'py>(
         }
         let name: Bound<'py, PyAny> =
             native_field(source_input, "source_entry")?.getattr("name")?;
-        let declared_types: Bound<'py, PyAny> = context
-            .column_types
-            .call_method1("get", (&name, PyDict::new(py)))?;
+        let declared_types: Bound<'py, PyAny> =
+            mapping_get_or(&context.column_types, &name, PyDict::new(py))?;
         let declared_shape: Bound<'py, PyDict> = PyDict::new(py);
         for item in shape.call_method0("items")?.try_iter()? {
             let item: Bound<'py, PyAny> = item?;
             let column: Bound<'py, PyAny> = item.get_item(0)?;
             declared_shape.set_item(
                 &column,
-                declared_types.call_method1("get", (&column, item.get_item(1)?))?,
+                mapping_get_or(&declared_types, &column, item.get_item(1)?)?,
             )?;
         }
         context.complete_schemas.set_item(&name, &declared_shape)?;
         context.column_types.set_item(&name, &declared_shape)?;
         let nullability: Bound<'py, PyDict> = PyDict::new(py);
         for column in declared_shape.keys() {
-            let known: Bound<'py, PyAny> = context
-                .nullability
-                .call_method1("get", (&name, PyDict::new(py)))?;
-            nullability.set_item(&column, known.call_method1("get", (&column, &unknown))?)?;
+            let known: Bound<'py, PyAny> =
+                mapping_get_or(&context.nullability, &name, PyDict::new(py))?;
+            nullability.set_item(&column, mapping_get_or(&known, &column, &unknown)?)?;
         }
         context.nullability.set_item(&name, nullability)?;
     }

@@ -19,6 +19,7 @@ use crate::bindings::_helpers::planner_resolution::sources::resolve_sources;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -344,10 +345,7 @@ pub(crate) fn model_hook_entries<'py>(
     let name: String = model_reads::model_name(model)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ["pre_hooks", "post_hooks"] {
-        hooks.push(resolution.hook(
-            values.call_method1("get", (key,))?,
-            &format!("Model '{name}' {key}"),
-        )?);
+        hooks.push(resolution.hook(mapping_get(&values, key)?, &format!("Model '{name}' {key}"))?);
     }
     PyTuple::new(model.py(), hooks)
 }

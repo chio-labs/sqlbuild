@@ -32,6 +32,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The `WarehouseGroup` whose warehouse is a target's `warehouses.build`; any other reads `query`.
@@ -203,8 +204,7 @@ fn expand_authored(
 }
 
 fn connection_warehouse(connection_config: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    let value: Bound<'_, PyAny> =
-        connection_config.call_method1("get", (CONNECTION_WAREHOUSE_KEY,))?;
+    let value: Bound<'_, PyAny> = mapping_get(connection_config, CONNECTION_WAREHOUSE_KEY)?;
     if !value.is_instance_of::<PyString>() {
         return Ok(None);
     }

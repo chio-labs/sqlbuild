@@ -34,6 +34,7 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 /// Model config keys copied to the plan entry as optional strings, with their entry fields.
@@ -121,7 +122,7 @@ fn schema_columns<'py>(
 /// A string or list-of-strings config value as a tuple of strings.
 fn string_list<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = values.py();
-    let raw: Bound<'py, PyAny> = values.call_method1("get", (key,))?;
+    let raw: Bound<'py, PyAny> = mapping_get(values, key)?;
     if raw.is_instance_of::<PyString>() {
         return PyTuple::new(py, [raw]);
     }
@@ -141,7 +142,7 @@ fn string_list<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py
 /// The model's `on_schema_change` policy, rejecting unknown values.
 fn on_schema_change<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let raw: Bound<'py, PyAny> = model_values(model)?.call_method1("get", ("on_schema_change",))?;
+    let raw: Bound<'py, PyAny> = mapping_get(&model_values(model)?, "on_schema_change")?;
     if raw.is_none() {
         return Ok(raw);
     }
@@ -290,22 +291,16 @@ fn custom_fields<'py>(
     let placeholders: Bound<'py, PyDict> = PyDict::new(py);
     let mut name: Bound<'py, PyAny> = none(py);
     if custom {
-        let raw_name: Bound<'py, PyAny> = values.call_method1("get", ("materialized",))?;
+        let raw_name: Bound<'py, PyAny> = mapping_get(values, "materialized")?;
         if raw_name.is_instance_of::<PyString>() {
             name = raw_name;
         }
-        if let Ok(raw) = values
-            .call_method1("get", ("config",))?
-            .downcast::<PyDict>()
-        {
+        if let Ok(raw) = mapping_get(values, "config")?.downcast::<PyDict>() {
             for (key, value) in raw.iter() {
                 config.set_item(key.str()?, value)?;
             }
         }
-        if let Ok(raw) = values
-            .call_method1("get", ("placeholders",))?
-            .downcast::<PyDict>()
-        {
+        if let Ok(raw) = mapping_get(values, "placeholders")?.downcast::<PyDict>() {
             for (key, value) in raw.iter() {
                 placeholders.set_item(key.str()?, value.str()?)?;
             }
@@ -443,9 +438,7 @@ fn contract_fields<'py>(
     entry.set_item("declared_columns", schema_columns(model, true)?)?;
     entry.set_item(
         "contract_enforced",
-        values
-            .call_method1("get", ("contract",))?
-            .eq(ENFORCED_CONTRACT)?,
+        mapping_get(values, "contract")?.eq(ENFORCED_CONTRACT)?,
     )?;
     entry.set_item("contract_columns", schema_columns(model, false)?)?;
     let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;

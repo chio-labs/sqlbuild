@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
     CURSOR_TYPE_INTEGER, CURSOR_TYPE_TIMESTAMP, WATERMARK_CONTRACT_CODE,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods};
@@ -92,7 +93,7 @@ pub(crate) fn validate_watermark_column<'py>(
             ));
         }
         let values = native_field(&native_field(&upstream, "config")?, "values")?;
-        if !values.call_method1("get", ("contract",))?.eq("enforced")? {
+        if !mapping_get(&values, "contract")?.eq("enforced")? {
             return Ok(());
         }
         let schema = native_field(&upstream, "schema_entry")?;

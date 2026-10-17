@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_phases::objects::{text, tuple};
 use crate::bindings::_helpers::planner_warehouse::constants::ACTIVE_CATALOG;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{columns_for, list_relations};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
@@ -208,7 +209,7 @@ pub(crate) fn semantic_source_columns<'py>(
         if columns.contains(&name)? {
             continue;
         }
-        let entry = source_read_map.call_method1("get", (&name,))?;
+        let entry = mapping_get(source_read_map, &name)?;
         if entry.is_none()
             || !native_field(&entry, "expression")?.is_none()
             || native_field(&entry, "contract")?.eq("enforced")?

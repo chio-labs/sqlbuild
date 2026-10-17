@@ -17,6 +17,7 @@ use crate::bindings::_helpers::planner_phases::objects::{
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -127,7 +128,7 @@ pub(crate) fn plan_table_types<'py>(
         if !backed.is_truthy()? {
             continue;
         }
-        let relation = relations.call_method1("get", (model_reads::name_object(&model)?,))?;
+        let relation = mapping_get(&relations, model_reads::name_object(&model)?)?;
         if relation.is_none() {
             continue;
         }

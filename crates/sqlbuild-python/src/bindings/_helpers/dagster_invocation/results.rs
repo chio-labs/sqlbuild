@@ -17,6 +17,7 @@ use crate::bindings::_helpers::dagster_invocation::access::{
 };
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 
 const CHECK_KIND_FALLBACK: &str = "check";
 const CHECK_NAME_JOIN: &str = "__";
@@ -50,7 +51,7 @@ pub(crate) fn sorted_nodes<'py>(dag: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'
 pub(crate) fn dagster_check_name(check: &Bound<'_, PyAny>) -> PyResult<String> {
     let py: Python<'_> = check.py();
     let field: Bound<'_, PyAny> = constant(py, ThirdPartyHost::DagsterCheckNameField)?;
-    let translated: Bound<'_, PyAny> = check.call_method1("get", (field,))?;
+    let translated: Bound<'_, PyAny> = mapping_get(check, field)?;
     if !translated.is_none() {
         return translated.str()?.extract();
     }

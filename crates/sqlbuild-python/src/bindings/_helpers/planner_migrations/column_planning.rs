@@ -9,6 +9,7 @@ use crate::bindings::_helpers::planner_migrations::models::{
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PySetMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -106,9 +107,10 @@ pub(crate) fn plan_column_migrations<'py>(
             &native_field(&state, "column_events")?,
             &inputs,
         )?;
-        let physical = columns
-            .physical_relations
-            .call_method1("get", (model_reads::name_object(&candidate.model)?,))?;
+        let physical = mapping_get(
+            &columns.physical_relations,
+            model_reads::name_object(&candidate.model)?,
+        )?;
         let checked = super::column_entries::checked(&runtime, candidate, decided, &physical)?;
         for hint in super::column_entries::hints(candidate, &checked.entries)?.try_iter()? {
             hints.push(hint?);

@@ -9,6 +9,7 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
     MISSING_SOURCE_TABLE_CODE, RUN_BOUNDED, WILDCARD_TABLE_CHARACTER,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -30,10 +31,7 @@ fn selected_source_readers(scope: &Bound<'_, PyAny>) -> PyResult<HashMap<String,
             continue;
         }
         let reader: String = native_field(&key, "name")?.extract()?;
-        for dep in deps
-            .call_method1("get", (&key, PyTuple::empty(key.py())))?
-            .try_iter()?
-        {
+        for dep in mapping_get_or(&deps, &key, PyTuple::empty(key.py()))?.try_iter()? {
             let dep = dep?;
             if native_field(&dep, "resource_type")?.eq("source")? {
                 readers
@@ -105,7 +103,7 @@ pub(crate) fn check_selected_source_tables_exist<'py>(
             continue;
         };
         let declared = native_field(&source, "source_entry")?;
-        let entry = read_map.call_method1("get", (&name, &declared))?;
+        let entry = mapping_get_or(&read_map, &name, &declared)?;
         if !external_table(&declared)? || !external_table(&entry)? {
             continue;
         }

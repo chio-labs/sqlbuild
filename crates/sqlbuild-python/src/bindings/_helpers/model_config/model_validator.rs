@@ -17,6 +17,7 @@ use crate::bindings::_helpers::discovery::project_facts::{column_name, each, ste
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 
 const FILE_PATH_ATTRIBUTE: &str = "file_path";
 const RETURNS_KEY: &str = "returns";
@@ -85,7 +86,7 @@ fn discovered_names(inputs: &Bound<'_, PyAny>) -> PyResult<ResourceNames> {
 /// Whether a SQL function's header `returns` is a mapping whose only key is `table`.
 fn returns_table(file: &Bound<'_, PyAny>) -> PyResult<bool> {
     let headers: Bound<'_, PyAny> = native_field(file, "header_values")?;
-    let returns: Bound<'_, PyAny> = headers.call_method1("get", (RETURNS_KEY,))?;
+    let returns: Bound<'_, PyAny> = mapping_get(&headers, RETURNS_KEY)?;
     let Ok(returns) = returns.downcast::<PyDict>() else {
         return Ok(false);
     };

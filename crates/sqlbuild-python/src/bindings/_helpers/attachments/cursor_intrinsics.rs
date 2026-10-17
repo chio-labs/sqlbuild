@@ -9,6 +9,7 @@ use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicModel;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::records::construct::error_class;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::ErrorId;
 
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
@@ -74,9 +75,9 @@ pub(crate) fn validated_model_cursor_sql(
     sql: &str,
     (model_name, config_values): (&str, &Bound<'_, PyAny>),
 ) -> PyResult<String> {
-    let incremental: bool = text_value(&config_values.call_method1("get", ("materialized",))?)
+    let incremental: bool = text_value(&mapping_get(config_values, "materialized")?)
         .is_some_and(|materialized| materialized == INCREMENTAL_MATERIALIZATION);
-    let cursor: Option<String> = text_value(&config_values.call_method1("get", ("cursor",))?);
+    let cursor: Option<String> = text_value(&mapping_get(config_values, "cursor")?);
     let reserved_markers: Vec<String> = reserved_cursor_markers();
     let outcome: Result<String, String> = compiler_guard(|| {
         Ok(validated_model_intrinsics(

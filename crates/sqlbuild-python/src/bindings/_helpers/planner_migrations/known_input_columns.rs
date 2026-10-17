@@ -1,6 +1,7 @@
 //! Physical columns of the relations a model reads, as inspected by the planner.
 
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyFrozenSet;
 use pyo3::{pyclass, pymethods};
@@ -38,7 +39,7 @@ impl KnownInputColumns {
             SOURCE_INPUT_FUNCTION => self.source_columns.bind(py),
             _ => return Ok(None),
         };
-        let columns = inspected.call_method1("get", (name,))?;
+        let columns = mapping_get(inspected, name)?;
         if columns.is_none() || !columns.is_truthy()? {
             return Ok(None);
         }

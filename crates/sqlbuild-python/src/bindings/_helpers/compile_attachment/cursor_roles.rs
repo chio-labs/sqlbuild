@@ -7,6 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const CURSOR_INPUTS_KEY: &str = "cursor_inputs";
@@ -67,8 +68,8 @@ pub(crate) fn resolve_cursor_input_roles<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
     let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
-    let authored: Bound<'py, PyAny> = values.call_method1("get", (CURSOR_INPUTS_KEY,))?;
-    let strategy: Bound<'py, PyAny> = values.call_method1("get", ("microbatch_strategy",))?;
+    let authored: Bound<'py, PyAny> = mapping_get(&values, CURSOR_INPUTS_KEY)?;
+    let strategy: Bound<'py, PyAny> = mapping_get(&values, "microbatch_strategy")?;
     let rolling: bool = strategy.eq(ROLLING_WINDOW_STRATEGY)?;
     let mut filter: Bound<'py, PyDict> = PyDict::new(py);
     let mut watermark: Bound<'py, PyDict> = PyDict::new(py);
@@ -83,7 +84,7 @@ pub(crate) fn resolve_cursor_input_roles<'py>(
             }
         }
         Err(_) => {
-            let cursor: Bound<'py, PyAny> = values.call_method1("get", ("cursor",))?;
+            let cursor: Bound<'py, PyAny> = mapping_get(&values, "cursor")?;
             if cursor.is_instance_of::<PyString>() {
                 for (_, name, _, _) in input_reference_rows(model)? {
                     filter.set_item(name, &cursor)?;

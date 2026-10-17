@@ -28,6 +28,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
@@ -179,7 +180,7 @@ fn effective_target_values<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     let schema: Bound<'py, PyAny> = if schema.is_truthy()? {
         schema
     } else {
-        str_or_none(&connection.call_method1("get", ("schema",))?)?
+        str_or_none(&mapping_get(&connection, "schema")?)?
     };
     early_model_templates(
         keywords(py, &[("database", database), ("schema", schema)])?.as_any(),
@@ -205,7 +206,7 @@ fn connection_database_fallback<'py>(
     if adapter_name.eq(host::entry(py, AdapterHost::BuiltinAdapter)?.getattr("DUCKDB")?)? {
         return Ok(py.None().into_bound(py));
     }
-    str_or_none(&connection.call_method1("get", ("database",))?)
+    str_or_none(&mapping_get(connection, "database")?)
 }
 
 /// The compiled project's fields, in the order Python's assembly built them.
@@ -241,11 +242,11 @@ fn project_fields<'py>(
             ("effective_vars", native_field(inputs, "effective_vars")?),
             (
                 "effective_target_database",
-                str_or_none(&target_values.call_method1("get", ("database",))?)?,
+                str_or_none(&mapping_get(target_values, "database")?)?,
             ),
             (
                 "effective_target_schema",
-                str_or_none(&target_values.call_method1("get", ("schema",))?)?,
+                str_or_none(&mapping_get(target_values, "schema")?)?,
             ),
             (
                 "sql_analysis_dialect",

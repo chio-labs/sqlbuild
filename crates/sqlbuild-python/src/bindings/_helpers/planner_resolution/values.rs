@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyString;
 use sqlbuild_sqltext::resolution::main::cursor_subquery::cursor_subquery;
@@ -31,10 +32,7 @@ pub(super) fn cursor_wrap(
     if bounds.is_none() {
         return Ok(relation);
     }
-    let column: Option<String> = filtering
-        .filter_inputs
-        .call_method1("get", (name,))?
-        .extract()?;
+    let column: Option<String> = mapping_get(&filtering.filter_inputs, name)?.extract()?;
     let Some(column) = column else {
         return Ok(relation);
     };

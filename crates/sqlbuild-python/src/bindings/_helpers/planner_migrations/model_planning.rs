@@ -16,6 +16,8 @@ use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
@@ -25,7 +27,7 @@ use pyo3::types::{
 fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<ModelMigrationRequest<'py>>> {
     let py = item.py();
     let values = native_field(&native_field(item, "config")?, "values")?;
-    let origin = values.call_method1("get", ("migrate_from",))?;
+    let origin = mapping_get(&values, "migrate_from")?;
     if !origin.is_instance_of::<PyString>() {
         return Ok(None);
     }
@@ -36,9 +38,7 @@ fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<ModelMigrationRequ
         raw_origin: Some(origin.call_method0("strip")?),
         origin_location: None,
         origin_model: py.None().into_bound(py),
-        force: values
-            .call_method1("get", ("migrate_force",))?
-            .is(PyBool::new(py, true)),
+        force: mapping_get(&values, "migrate_force")?.is(PyBool::new(py, true)),
         identity_only: materialization.eq("table")? || materialization.eq("view")?,
     }))
 }
@@ -191,9 +191,11 @@ fn finish<'py>(
                 &[("missing_origin_policy", policy.clone())],
             )?);
             if decided.applies {
-                let destinations = discovery
-                    .destination_fingerprints
-                    .call_method1("get", (&name, PyTuple::empty(py)))?;
+                let destinations = mapping_get_or(
+                    &discovery.destination_fingerprints,
+                    &name,
+                    PyTuple::empty(py),
+                )?;
                 handovers.set_item(
                     name,
                     super::model_handover::equivalent(

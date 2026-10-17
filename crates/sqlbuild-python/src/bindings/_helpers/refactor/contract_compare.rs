@@ -12,6 +12,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
@@ -501,7 +502,7 @@ pub(crate) fn compare_contracts<'py>(
         };
     for (item, relation) in inspectable.iter().zip(&relations) {
         let columns: Bound<'py, PyAny> =
-            physical.call_method1("get", (native_field(relation, "identity")?,))?;
+            mapping_get(&physical, native_field(relation, "identity")?)?;
         evidence.push(compared(&vocabulary, (item, &columns), adapter)?);
     }
     PyTuple::new(py, evidence)

@@ -45,6 +45,7 @@ use crate::bindings::_helpers::planner_identity::metadata::{
     model_version_identity_metadata_json,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
@@ -118,7 +119,7 @@ pub(crate) fn detect_changes<'py>(
             let reason: &str = if full_refresh {
                 "full_refresh"
             } else {
-                let fingerprint: Bound<'py, PyAny> = recorded.call_method1("get", (&name,))?;
+                let fingerprint: Bound<'py, PyAny> = mapping_get(&recorded, &name)?;
                 if fingerprint.is_none() {
                     "first_run"
                 } else if query_change_tracking
@@ -279,8 +280,7 @@ pub(crate) fn scope_model_changes<'py>(
         if !selected.contains(&key)? || !native_field(&key, "resource_type")?.eq(&model_kind)? {
             continue;
         }
-        let model: Bound<'py, PyAny> =
-            models_by_name.call_method1("get", (native_field(&key, "name")?,))?;
+        let model: Bound<'py, PyAny> = mapping_get(&models_by_name, native_field(&key, "name")?)?;
         if model.is_none() {
             continue;
         }
@@ -298,7 +298,7 @@ fn lookup(mapping: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyResult<Optio
     if mapping.is_none() {
         return Ok(None);
     }
-    mapping.call_method1("get", (name,))?.extract()
+    mapping_get(mapping, name)?.extract()
 }
 
 pub(crate) fn model_change<'py>(

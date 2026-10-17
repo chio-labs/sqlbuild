@@ -25,6 +25,7 @@ use crate::bindings::_helpers::records::construct::{
     enum_from_value, new_record_with, record_class,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const INTEGER_CURSOR: &str = "integer";
@@ -266,7 +267,7 @@ pub(crate) fn microbatch_limit_config<'py>(
     values: &Bound<'py, PyAny>,
 ) -> PyResult<(MaybeValue<'py>, MaybeValue<'py>)> {
     let py: Python<'py> = values.py();
-    let raw: Bound<'py, PyAny> = values.call_method1("get", ("microbatch_limit",))?;
+    let raw: Bound<'py, PyAny> = mapping_get(values, "microbatch_limit")?;
     if let Ok(raw) = raw.downcast::<PyDict>() {
         let max_batches: Option<Bound<'py, PyAny>> =
             positive_integer(raw.get_item("max_batches")?)?;
@@ -279,7 +280,7 @@ pub(crate) fn microbatch_limit_config<'py>(
             return Ok((Some(max_batches), Some(action)));
         }
     }
-    let legacy: Bound<'py, PyAny> = values.call_method1("get", ("max_microbatches",))?;
+    let legacy: Bound<'py, PyAny> = mapping_get(values, "max_microbatches")?;
     Ok((positive_integer(Some(legacy))?, None))
 }
 

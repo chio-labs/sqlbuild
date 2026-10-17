@@ -13,6 +13,8 @@ use crate::bindings::_helpers::analysis::conversions;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::models::{CatalogInput, ProjectCatalog};
 use crate::bindings::types::CompilerDetach;
@@ -166,7 +168,7 @@ impl BindingCatalog {
         let updates: Bound<'_, PyDict> = PyDict::new(py);
         for item in nullability.call_method0("items")?.try_iter()? {
             let (name, columns): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item?.extract()?;
-            let typed: Bound<'_, PyAny> = types.call_method1("get", (&name, PyDict::new(py)))?;
+            let typed: Bound<'_, PyAny> = mapping_get_or(types, &name, PyDict::new(py))?;
             let shape: Bound<'_, PyTuple> = PyTuple::new(py, [typed, columns])?;
             let unchanged: bool = match shapes.get_item(&name)? {
                 Some(known) => known.eq(&shape)?,
@@ -256,7 +258,7 @@ pub(crate) fn ignores_quoted_case(
     if dialect.is_none() || dialect.extract::<String>()? != SNOWFLAKE_DIALECT {
         return Ok(false);
     }
-    let parameters: Bound<'_, PyAny> = connection.call_method1("get", (SESSION_PARAMETERS,))?;
+    let parameters: Bound<'_, PyAny> = mapping_get(connection, SESSION_PARAMETERS)?;
     let Ok(parameters) = parameters.downcast::<PyDict>() else {
         return Ok(false);
     };

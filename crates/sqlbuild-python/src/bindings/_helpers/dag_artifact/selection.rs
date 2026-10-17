@@ -20,6 +20,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
+use crate::bindings::_helpers::records::fields::mapping_get_or;
 
 const PATHLIB_MODULE: &str = "pathlib";
 const JSON_MODULE: &str = "json";
@@ -32,15 +34,12 @@ fn text(value: &Bound<'_, PyAny>) -> PyResult<String> {
 }
 
 fn field<'py>(mapping: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    mapping.call_method1("get", (key,))
+    mapping_get(mapping, key)
 }
 
 fn items<'py>(mapping: &Bound<'py, PyAny>, key: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let empty: Bound<'py, PyTuple> = PyTuple::empty(mapping.py());
-    mapping
-        .call_method1("get", (key, empty))?
-        .try_iter()?
-        .collect()
+    mapping_get_or(mapping, key, empty)?.try_iter()?.collect()
 }
 
 fn texts(mapping: &Bound<'_, PyAny>, key: &str) -> PyResult<Vec<String>> {
@@ -181,7 +180,7 @@ fn load_sqlbuild_dag<'py>(
     } else {
         dag
     };
-    let version: Bound<'py, PyAny> = payload.call_method1("get", ("version",))?;
+    let version: Bound<'py, PyAny> = mapping_get(&payload, "version")?;
     if version.ne(DAG_VERSION)? {
         return Err(raised(
             error_class,
@@ -193,10 +192,7 @@ fn load_sqlbuild_dag<'py>(
         ));
     }
     for key in DAG_LIST_KEYS {
-        if !payload
-            .call_method1("get", (key,))?
-            .is_instance_of::<PyList>()
-        {
+        if !mapping_get(&payload, key)?.is_instance_of::<PyList>() {
             return Err(raised(
                 error_class,
                 format!("SQLBuild DAG artifact field '{key}' must be a list"),

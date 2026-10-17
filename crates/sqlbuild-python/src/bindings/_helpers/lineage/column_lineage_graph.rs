@@ -15,6 +15,7 @@ use crate::bindings::_helpers::record_behaviours::lineage_facts::{
     confidence_member, transform_kind_member,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 
 /// One compact model's facts and root-star flag.
 struct CompactModel {
@@ -286,7 +287,7 @@ impl ProjectColumnLineage {
                 builder.push_facts(classes, name, compact.columns.bind(py))?;
                 continue;
             }
-            let model: Bound<'_, PyAny> = models.call_method1("get", (name,))?;
+            let model: Bound<'_, PyAny> = mapping_get(&models, name)?;
             if model.is_none() {
                 continue;
             }
