@@ -44,6 +44,7 @@ use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTR
 use crate::bindings::_helpers::native_threads::exit_signal::{
     interpreter_exiting, signal_interpreter_exit,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// One bound lifecycle-event sink.
 pub(crate) struct Exporter {
@@ -180,7 +181,7 @@ fn retire_output_lane(py: Python<'_>, retired: Option<Py<PyAny>>) -> PyResult<()
 fn join(thread: &Bound<'_, PyAny>, seconds: f64) -> PyResult<()> {
     if thread.call_method0("is_alive")?.is_truthy()? {
         call_with(
-            &thread.getattr("join")?,
+            &native_field(thread, "join")?,
             &[("timeout", PyFloat::new(thread.py(), seconds).into_any())],
         )?;
     }
@@ -211,12 +212,12 @@ fn read_exporters(
                 .try_iter()?
                 .map(|kind| kind.and_then(|kind| kind.extract::<String>()))
                 .collect::<PyResult<_>>()?,
-            min_severity: severity_from(&exporter.getattr("min_severity")?)?,
+            min_severity: severity_from(&native_field(&exporter, "min_severity")?)?,
         });
         bound.push(Arc::new(Exporter {
-            name: exporter.getattr("name")?.extract()?,
-            function: exporter.getattr("function")?.unbind(),
-            provider_arguments: exporter.getattr("provider_arguments")?.unbind(),
+            name: native_field(&exporter, "name")?.extract()?,
+            function: native_field(&exporter, "function")?.unbind(),
+            provider_arguments: native_field(&exporter, "provider_arguments")?.unbind(),
         }));
     }
     Ok((bound, filters))
@@ -227,8 +228,8 @@ fn read_output_sinks(sinks: &Bound<'_, PyAny>) -> PyResult<Vec<OutputSink>> {
     for sink in sinks.try_iter()? {
         let sink: Bound<'_, PyAny> = sink?;
         bound.push(OutputSink {
-            function: sink.getattr("function")?.unbind(),
-            provider_arguments: sink.getattr("provider_arguments")?.unbind(),
+            function: native_field(&sink, "function")?.unbind(),
+            provider_arguments: native_field(&sink, "provider_arguments")?.unbind(),
             streams: sink
                 .getattr("streams")?
                 .try_iter()?
@@ -548,7 +549,7 @@ impl Shared {
             ),),
         )?;
         let empty: Bound<'_, PyAny> = imported(py, "queue", "Empty")?;
-        let get: Bound<'_, PyAny> = outcome.getattr("get")?;
+        let get: Bound<'_, PyAny> = native_field(&outcome, "get")?;
         loop {
             match call_with(
                 &get,
@@ -724,7 +725,7 @@ impl EventExporterDispatcher {
 
     /// Filter and enqueue eligible exporter attempts without waiting.
     fn enqueue(&self, py: Python<'_>, event: &Bound<'_, PyAny>) -> PyResult<()> {
-        let event_type: String = event.getattr("event_type")?.extract()?;
+        let event_type: String = native_field(event, "event_type")?.extract()?;
         let policy: ExportPolicy = export_policy(py, &event_type)?;
         let shared = &self.shared;
         let _held = shared.hold(py)?;
@@ -821,7 +822,7 @@ impl EventExporterDispatcher {
                     .getattr("record_type")?
                     .eq(COMMAND_OUTPUT_RECORD_TYPE)?;
                 let stream: Option<String> = if is_output {
-                    Some(record.getattr("stream")?.extract()?)
+                    Some(native_field(&record, "stream")?.extract()?)
                 } else {
                     None
                 };
@@ -878,7 +879,7 @@ impl EventExporterDispatcher {
         }
         let thread: &Bound<'_, PyAny> = self.thread.bind(py);
         call_with(
-            &thread.getattr("join")?,
+            &native_field(thread, "join")?,
             &[(
                 "timeout",
                 PyFloat::new(py, remaining_seconds(deadline) + JOIN_GRACE_SECONDS).into_any(),

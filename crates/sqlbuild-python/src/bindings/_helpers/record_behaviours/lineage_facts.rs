@@ -6,6 +6,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PySlice, PyTuple, PyTupleMethods};
 
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -48,7 +49,7 @@ fn resource_name<'py>(
     facts: &Bound<'py, PyAny>,
     index: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let names: Bound<'py, PyAny> = facts.getattr("resource_names")?;
+    let names: Bound<'py, PyAny> = native_field(facts, "resource_names")?;
     let name: Bound<'py, PyAny> = names.call_method1("get", (index,))?;
     if !name.is_none() {
         return Ok(name);
@@ -56,7 +57,7 @@ fn resource_name<'py>(
     let pooled: Bound<'py, PyAny> = facts
         .getattr("resource_name_indexes")?
         .call_method1("get", (index, index))?;
-    facts.getattr("string_pool")?.get_item(pooled)
+    native_field(facts, "string_pool")?.get_item(pooled)
 }
 
 /// `CompactLineageFacts.resource_name(index)`.
@@ -72,7 +73,7 @@ pub(crate) fn facts_resource_name(
 /// One compact row projected to a `CompiledLineageColumnFact`.
 fn project_row(facts: &Bound<'_, PyAny>, row: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = facts.py();
-    let pool: Bound<'_, PyAny> = facts.getattr("string_pool")?;
+    let pool: Bound<'_, PyAny> = native_field(facts, "string_pool")?;
     let (name_index, transform_code, confidence_code, sources): (
         Bound<'_, PyAny>,
         usize,
@@ -129,7 +130,9 @@ pub(crate) fn facts_len(
     _args: &Bound<'_, PyTuple>,
     _kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
-    instance.getattr("rows")?.len()?.into_py_any(instance.py())
+    native_field(instance, "rows")?
+        .len()?
+        .into_py_any(instance.py())
 }
 
 /// `facts[index]`: one fact, or a tuple of facts for a slice.
@@ -139,7 +142,7 @@ pub(crate) fn facts_getitem(
     _kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
     let index: Bound<'_, PyAny> = args.get_item(0)?;
-    let projected: Bound<'_, PyAny> = instance.getattr("facts")?;
+    let projected: Bound<'_, PyAny> = native_field(instance, "facts")?;
     if index.is_instance_of::<PySlice>() {
         return Ok(projected.get_item(index)?.unbind());
     }
@@ -162,7 +165,10 @@ pub(crate) fn facts_iter(
     _args: &Bound<'_, PyTuple>,
     _kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
-    Ok(instance.getattr("facts")?.try_iter()?.into_any().unbind())
+    Ok(native_field(instance, "facts")?
+        .try_iter()?
+        .into_any()
+        .unbind())
 }
 
 /// `facts == other`: item-wise equality with any sequence.
@@ -177,7 +183,7 @@ pub(crate) fn facts_eq(
     if !other.is_instance(&sequence)? {
         return Ok(py.NotImplemented());
     }
-    let mine: Bound<'_, PyAny> = instance.getattr("facts")?;
+    let mine: Bound<'_, PyAny> = native_field(instance, "facts")?;
     let theirs: Bound<'_, PyTuple> = PyTuple::new(
         py,
         other

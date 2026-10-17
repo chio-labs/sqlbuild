@@ -7,6 +7,7 @@ use pyo3::types::{PyDict, PyDictMethods};
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -104,7 +105,7 @@ fn members_by_value<'py>(enumeration: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
     let members: Bound<'py, PyDict> = PyDict::new(enumeration.py());
     for member in enumeration.try_iter()? {
         let member: Bound<'py, PyAny> = member?;
-        members.set_item(member.getattr("value")?, member)?;
+        members.set_item(native_field(&member, "value")?, member)?;
     }
     Ok(members)
 }

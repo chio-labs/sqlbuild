@@ -7,6 +7,7 @@ use pyo3::types::{
 use sqlbuild_core::graph_walk::main::breadth_first_reach::breadth_first_reach;
 
 use crate::bindings::_helpers::graph::node_set::PyNodeSet;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// `PythonNodeGraph.selected_sql_refs(selected_names=...)`: SQL references of the selected closure.
 pub(crate) fn graph_selected_sql_refs(
@@ -23,8 +24,8 @@ pub(crate) fn graph_selected_sql_refs(
         Some(selected) => selected,
         None => args.get_item(0)?,
     };
-    let nodes_by_name: Bound<'_, PyAny> = graph.getattr("nodes_by_name")?;
-    let upstream: Bound<'_, PyAny> = graph.getattr("upstream_deps")?;
+    let nodes_by_name: Bound<'_, PyAny> = native_field(graph, "nodes_by_name")?;
+    let upstream: Bound<'_, PyAny> = native_field(graph, "upstream_deps")?;
     let refs: Bound<'_, PySet> = PySet::empty(py)?;
     let starts: Vec<Bound<'_, PyAny>> = selected.try_iter()?.collect::<PyResult<_>>()?;
     let mut visited: PyNodeSet<'_> = PyNodeSet(PySet::new(py, &starts)?);
@@ -37,7 +38,7 @@ pub(crate) fn graph_selected_sql_refs(
     for name in visited.0.iter() {
         let node: Bound<'_, PyAny> = nodes_by_name.call_method1("get", (name,))?;
         if !node.is_none() {
-            for reference in node.getattr("sql_deps")?.try_iter()? {
+            for reference in native_field(&node, "sql_deps")?.try_iter()? {
                 refs.add(reference?)?;
             }
         }

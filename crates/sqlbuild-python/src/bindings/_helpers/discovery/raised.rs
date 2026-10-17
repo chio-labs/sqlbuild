@@ -10,6 +10,7 @@ use sqlbuild_discovery::models::{DiscoveryFailure, ReadFailure, StageFailure};
 use sqlbuild_discovery::tree::models::ProjectTree;
 
 use crate::bindings::_helpers::discovery::project_files::path_object;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -74,7 +75,7 @@ pub(crate) fn read_error(failure: ReadFailure, file_path: &Bound<'_, PyAny>) -> 
                 start,
                 end,
                 reason,
-            } => builtins.getattr("UnicodeDecodeError")?.call1((
+            } => native_field(&builtins, "UnicodeDecodeError")?.call1((
                 DECODE_ENCODING,
                 PyBytes::new(py, &bytes),
                 start,
@@ -86,7 +87,7 @@ pub(crate) fn read_error(failure: ReadFailure, file_path: &Bound<'_, PyAny>) -> 
                 winerror,
                 message,
             } => {
-                let os_error = builtins.getattr("OSError")?;
+                let os_error = native_field(&builtins, "OSError")?;
                 let path: String = file_path.str()?.to_string();
                 match (winerror, errno) {
                     (Some(winerror), _) => os_error.call1((py.None(), message, path, winerror)),

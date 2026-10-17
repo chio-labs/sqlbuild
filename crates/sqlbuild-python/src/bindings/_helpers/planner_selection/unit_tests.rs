@@ -12,6 +12,7 @@ use sqlbuild_analysis::planner_selection::models::{
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -34,19 +35,19 @@ const RESOURCE_NODES: [&str; 4] = [
 ];
 
 fn stem(path: &Bound<'_, PyAny>) -> PyResult<String> {
-    path.getattr("stem")?.extract()
+    native_field(path, "stem")?.extract()
 }
 
 fn unit_test_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
-    for test_file in discovered.getattr("test_files")?.try_iter()? {
+    for test_file in native_field(discovered, "test_files")?.try_iter()? {
         let test_file: Bound<'_, PyAny> = test_file?;
-        for block in test_file.getattr("blocks")?.try_iter()? {
-            let name: Bound<'_, PyAny> = block?.getattr("name")?;
+        for block in native_field(&test_file, "blocks")?.try_iter()? {
+            let name: Bound<'_, PyAny> = native_field(&block?, "name")?;
             names.insert(if name.is_truthy()? {
                 name.extract()?
             } else {
-                stem(&test_file.getattr("relative_path")?)?
+                stem(&native_field(&test_file, "relative_path")?)?
             });
         }
     }
@@ -57,19 +58,19 @@ fn resource_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     for field in RESOURCE_PATH_FILES {
         for file in discovered.getattr(field)?.try_iter()? {
-            names.insert(stem(&file?.getattr("file_path")?)?);
+            names.insert(stem(&native_field(&file?, "file_path")?)?);
         }
     }
     for (field, entries) in RESOURCE_ENTRY_FILES {
         for file in discovered.getattr(field)?.try_iter()? {
             for entry in file?.getattr(entries)?.try_iter()? {
-                names.insert(entry?.getattr("name")?.extract()?);
+                names.insert(native_field(&entry?, "name")?.extract()?);
             }
         }
     }
     for field in RESOURCE_NODES {
         for node in discovered.getattr(field)?.try_iter()? {
-            names.insert(node?.getattr("name")?.extract()?);
+            names.insert(native_field(&node?, "name")?.extract()?);
         }
     }
     Ok(names)

@@ -19,6 +19,7 @@ use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, bridg
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_cache::{
@@ -59,8 +60,8 @@ fn project_adapter<'py>(
     let discovered: Bound<'py, PyAny> = registry::native(py, NativeAttr::DiscoverProjectInputs)?
         .call((), Some(&discover_keywords))?;
     let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
-        &discovered.getattr("project_config")?,
-        &discovered.getattr("local_config")?,
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
     )
     .and_then(|value| value.into_bound_py_any(py))?;
     let adapter: Bound<'py, PyAny> = call_with(
@@ -77,7 +78,7 @@ fn compiled_index<'py>(
     syntax: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
-    let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
+    let project_config: Bound<'py, PyAny> = native_field(&discovered, "project_config")?;
     let collection_rendering: Bound<'py, PyAny> =
         resolve_effective_collection_rendering(&project_config, &py.None().into_bound(py))
             .and_then(|value| value.into_bound_py_any(py))?;
@@ -127,10 +128,10 @@ fn tolerant_index<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_dir.py();
     let snapshot: Bound<'py, PyAny> = discover_scope_snapshot(project_dir)?;
-    let discovered: Bound<'py, PyAny> = snapshot.getattr("discovered_inputs")?;
+    let discovered: Bound<'py, PyAny> = native_field(&snapshot, "discovered_inputs")?;
     let inventory: Bound<'py, PyAny> = call_with(
         &host::entry(py, UserCodeHost::InventoryProjectMacros)?,
-        &[("macro_files", discovered.getattr("macro_files")?)],
+        &[("macro_files", native_field(&discovered, "macro_files")?)],
     )?;
     let native: Bound<'py, PyAny> = Bound::new(
         py,
@@ -138,7 +139,7 @@ fn tolerant_index<'py>(
             py,
             &discovered,
             &PyDict::new(py).into_any(),
-            Some(inventory.getattr("exports")?),
+            Some(native_field(&inventory, "exports")?),
         )?,
     )?
     .into_any();
@@ -150,7 +151,7 @@ fn tolerant_index<'py>(
         ],
     )?;
     let relationship_faults: Bound<'py, PyAny> = call_with(
-        &native.getattr("grant_relationships")?,
+        &native_field(&native, "grant_relationships")?,
         &[
             ("discovered_inputs", discovered),
             ("syntax", syntax.clone()),
@@ -161,7 +162,7 @@ fn tolerant_index<'py>(
         py,
         &native.call_method0("index_with_relationships")?,
         &snapshot,
-        (inventory.getattr("faults")?, relationship_faults),
+        (native_field(&inventory, "faults")?, relationship_faults),
     )?
     .into_bound(py))
 }
@@ -188,7 +189,7 @@ fn load_or_build_scope_index<'py>(
     let mut syntax: Bound<'py, PyAny> = registry::class(py, RecordId::SqlLexicalSyntax)?.call0()?;
     let compiled: PyResult<Bound<'py, PyAny>> = match project_adapter(&resolved) {
         Ok((discovered, adapter)) => {
-            syntax = adapter.getattr("sql_lexical_syntax")?;
+            syntax = native_field(&adapter, "sql_lexical_syntax")?;
             compiled_index(discovered, &adapter, &syntax)
         }
         Err(error) => Err(error),

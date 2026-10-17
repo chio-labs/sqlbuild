@@ -26,6 +26,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::graph::algorithms::{closure, inverted};
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -67,7 +68,7 @@ impl<'py> KeyObjects<'py> {
 }
 
 fn function_resource(key: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let kind: String = key.getattr("resource_type")?.str()?.extract()?;
+    let kind: String = native_field(key, "resource_type")?.str()?.extract()?;
     Ok(kind == UDF_RESOURCE || kind == TABLE_FN_RESOURCE)
 }
 
@@ -89,7 +90,7 @@ pub(crate) fn build_execution_upstream_deps<'py>(
         for resource in project.getattr(collection)?.try_iter()? {
             let resource: Bound<'py, PyAny> = resource?;
             upstream.set_item(
-                resource.getattr("key")?,
+                native_field(&resource, "key")?,
                 PyList::new(
                     py,
                     resource
@@ -100,12 +101,12 @@ pub(crate) fn build_execution_upstream_deps<'py>(
             )?;
         }
     }
-    for test in project.getattr("sql_tests")?.try_iter()? {
+    for test in native_field(project, "sql_tests")?.try_iter()? {
         let test: Bound<'py, PyAny> = test?;
-        let test_key: Bound<'py, PyAny> = test.getattr("key")?;
-        let scope_deps: Bound<'py, PyAny> = test.getattr("scope_deps")?;
+        let test_key: Bound<'py, PyAny> = native_field(&test, "key")?;
+        let scope_deps: Bound<'py, PyAny> = native_field(&test, "scope_deps")?;
         let deps: Bound<'py, PyList> = PyList::empty(py);
-        if test.getattr("mode")?.str()?.extract::<String>()? == TABLE_FN_TEST_MODE {
+        if native_field(&test, "mode")?.str()?.extract::<String>()? == TABLE_FN_TEST_MODE {
             for scope_dep in scope_deps.try_iter()? {
                 let scope_dep: Bound<'py, PyAny> = scope_dep?;
                 if function_resource(&scope_dep)? {
@@ -169,21 +170,21 @@ pub(crate) fn build_execution_edge_origins<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project.py();
     let origins: Bound<'py, PyDict> = PyDict::new(py);
-    for test in project.getattr("sql_tests")?.try_iter()? {
+    for test in native_field(project, "sql_tests")?.try_iter()? {
         let test: Bound<'py, PyAny> = test?;
-        let test_name: String = test.getattr("name")?.extract()?;
-        for target_key in test.getattr("scope_deps")?.try_iter()? {
+        let test_name: String = native_field(&test, "name")?.extract()?;
+        for target_key in native_field(&test, "scope_deps")?.try_iter()? {
             let target_key: Bound<'py, PyAny> = target_key?;
-            let target_name: String = target_key.getattr("name")?.extract()?;
+            let target_name: String = native_field(&target_key, "name")?.extract()?;
             origins.set_item(
-                (target_key, test.getattr("key")?),
+                (target_key, native_field(&test, "key")?),
                 format!("SQL test '{test_name}' runs before '{target_name}'"),
             )?;
         }
     }
     let (gates, hooks): (Vec<GateRow>, Vec<HookRow>) = native_execution_gate_edges(project)?;
     let cache: KeyCache<'py> = KeyCache::new(py)?;
-    let lineage: Bound<'py, PyAny> = project.getattr("lineage_graph")?;
+    let lineage: Bound<'py, PyAny> = native_field(project, "lineage_graph")?;
     let is_lineage = |gated: &(String, String), read: &(String, String)| -> PyResult<bool> {
         lineage
             .call_method1("upstream", (gated.clone(),))?
@@ -323,8 +324,8 @@ fn missing_rows<'py>(
         .map(|entry| {
             let entry: Bound<'py, PyAny> = entry?;
             Ok(MissingUpstream {
-                key: objects.key(entry.getattr("key")?)?,
-                required_by: objects.keys(&entry.getattr("required_by")?)?,
+                key: objects.key(native_field(&entry, "key")?)?,
+                required_by: objects.keys(&native_field(&entry, "required_by")?)?,
             })
         })
         .collect()
@@ -365,7 +366,7 @@ pub(crate) fn check_buildability<'py>(
         } else {
             objects.keys(&satisfied_keys)?.into_iter().collect()
         },
-        existing_relations: name_set(&snapshot.getattr("existing_relations")?)?,
+        existing_relations: name_set(&native_field(&snapshot, "existing_relations")?)?,
         deferred_relations: if deferred_relations.is_none() {
             None
         } else {

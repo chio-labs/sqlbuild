@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
 use crate::bindings::_helpers::plan_output::values::{any, dict, items, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::assets::{or_none, without_none};
 use crate::bindings::_helpers::result_output::projection::{
     Projection, audit_check_id, rounded, sql_test_check_id,
@@ -19,7 +20,7 @@ const COLLECTION_KINDS: [&str; 2] = ["list", "set"];
 const ERROR_FIELDS: [&str; 3] = ["error_code", "error_help", "error_message"];
 
 fn value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
-    result.getattr(field)?.getattr("value")
+    native_field(&result.getattr(field)?, "value")
 }
 
 fn optional_value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -27,7 +28,7 @@ fn optional_value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Boun
     if value.is_none() {
         return Ok(value);
     }
-    value.getattr("value")
+    native_field(&value, "value")
 }
 
 fn fields<'py>(
@@ -47,8 +48,8 @@ fn tuple_of<'py>(py: Python<'py>, entries: Vec<Bound<'py, PyDict>>) -> PyResult<
 /// A SQL value as plain JSON: decimals as text, collections as lists, structs as objects.
 fn sql_value_json<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    let kind: String = text(&value.getattr("kind")?.getattr("value")?)?;
-    let inner: Bound<'py, PyAny> = value.getattr("value")?;
+    let kind: String = text(&native_field(value, "kind")?.getattr("value")?)?;
+    let inner: Bound<'py, PyAny> = native_field(value, "value")?;
     if kind == DECIMAL_KIND {
         return Ok(inner.str()?.into_any());
     }
@@ -75,26 +76,26 @@ fn case_metadata<'py>(
     result: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
     let py: Python<'py> = result.py();
-    let source_path: Bound<'py, PyAny> = result.getattr("source_path")?;
-    if result.getattr("case_name")?.is_none() || source_path.is_none() {
+    let source_path: Bound<'py, PyAny> = native_field(result, "source_path")?;
+    if native_field(result, "case_name")?.is_none() || source_path.is_none() {
         return Ok(Vec::new());
     }
     let parameter_types: Bound<'py, PyDict> = PyDict::new(py);
     let mut schema: Vec<Bound<'py, PyDict>> = Vec::new();
-    for parameter in items(&result.getattr("parameter_schema")?)? {
+    for parameter in items(&native_field(result, "parameter_schema")?)? {
         let parameter_type: Bound<'py, PyAny> = value(&parameter, "value_type")?;
-        parameter_types.set_item(parameter.getattr("name")?, &parameter_type)?;
+        parameter_types.set_item(native_field(&parameter, "name")?, &parameter_type)?;
         schema.push(dict(
             py,
             vec![
-                ("name", parameter.getattr("name")?),
+                ("name", native_field(&parameter, "name")?),
                 ("type", parameter_type),
-                ("nullable", parameter.getattr("nullable")?),
+                ("nullable", native_field(&parameter, "nullable")?),
             ],
         )?);
     }
     let mut parameters: Vec<Bound<'py, PyDict>> = Vec::new();
-    for item in items(&result.getattr("parameter_values")?)? {
+    for item in items(&native_field(result, "parameter_values")?)? {
         let (name, parameter_value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item.extract()?;
         let parameter_type: Bound<'py, PyAny> = parameter_types.as_any().get_item(&name)?;
         parameters.push(dict(
@@ -128,7 +129,7 @@ fn difference_samples<'py>(samples: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     let formatted: Bound<'py, PyList> = PyList::empty(py);
     for sample in items(samples)? {
         let pairs: Bound<'py, PyList> = PyList::empty(py);
-        for pair in items(&sample.getattr("values")?)? {
+        for pair in items(&native_field(&sample, "values")?)? {
             let (name, sample_value): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair.extract()?;
             pairs.append(dict(py, vec![("name", name), ("value", sample_value)])?)?;
         }
@@ -140,14 +141,14 @@ fn difference_samples<'py>(samples: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
 fn sql_test_step<'py>(step: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = step.py();
     let differences: Bound<'py, PyList> = PyList::empty(py);
-    for difference in items(&step.getattr("column_differences")?)? {
+    for difference in items(&native_field(step, "column_differences")?)? {
         differences.append(dict(
             py,
             fields(&difference, &["name", "actual", "expected"])?,
         )?)?;
     }
     let mut entries: Vec<(&str, Bound<'py, PyAny>)> = vec![
-        ("model_name", step.getattr("model_name")?),
+        ("model_name", native_field(step, "model_name")?),
         ("status", value(step, "outcome")?),
     ];
     entries.extend(fields(
@@ -162,11 +163,11 @@ fn sql_test_step<'py>(step: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
     )?);
     entries.push((
         "unexpected_samples",
-        difference_samples(&step.getattr("unexpected_samples")?)?,
+        difference_samples(&native_field(step, "unexpected_samples")?)?,
     ));
     entries.push((
         "missing_samples",
-        difference_samples(&step.getattr("missing_samples")?)?,
+        difference_samples(&native_field(step, "missing_samples")?)?,
     ));
     entries.push(("column_differences", or_none(differences.into_any())?));
     entries.extend(fields(
@@ -187,11 +188,11 @@ pub(crate) fn sql_test_checks<'py>(
             continue;
         }
         let py: Python<'py> = result.py();
-        let steps: Vec<Bound<'py, PyAny>> = items(&result.getattr("step_results")?)?;
+        let steps: Vec<Bound<'py, PyAny>> = items(&native_field(result, "step_results")?)?;
         let outcome: Bound<'py, PyAny> = value(result, "outcome")?;
         let mut entries: Vec<(&str, Bound<'py, PyAny>)> = vec![
             ("kind", any(py, "sql_test")?),
-            ("name", result.getattr("test_name")?),
+            ("name", native_field(result, "test_name")?),
             ("check_id", any(py, sql_test_check_id(result)?)?),
         ];
         entries.extend(case_metadata(result)?);
@@ -204,7 +205,7 @@ pub(crate) fn sql_test_checks<'py>(
         entries.push((
             "asset_name",
             match steps.first() {
-                Some(step) => step.getattr("model_name")?,
+                Some(step) => native_field(step, "model_name")?,
                 None => py.None().into_bound(py),
             },
         ));
@@ -227,10 +228,10 @@ pub(crate) fn sql_test_checks<'py>(
 fn threshold_bound<'py>(bound: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = bound.py();
     let rendered: Bound<'py, PyDict> = dict(py, vec![("operator", value(bound, "operator")?)])?;
-    let limit: Bound<'py, PyAny> = bound.getattr("limit")?;
+    let limit: Bound<'py, PyAny> = native_field(bound, "limit")?;
     if limit.is_none() {
-        rendered.set_item("lower", bound.getattr("lower")?)?;
-        rendered.set_item("upper", bound.getattr("upper")?)?;
+        rendered.set_item("lower", native_field(bound, "lower")?)?;
+        rendered.set_item("upper", native_field(bound, "upper")?)?;
     } else {
         rendered.set_item("limit", limit)?;
     }
@@ -263,8 +264,8 @@ pub(crate) fn measurement_evidence<'py>(
         return Ok((py.None().into_bound(py), py.None().into_bound(py)));
     }
     Ok((
-        any(py, result.getattr("evidence_rows")?.len()?)?,
-        result.getattr("evidence_truncated")?,
+        any(py, native_field(result, "evidence_rows")?.len()?)?,
+        native_field(result, "evidence_truncated")?,
     ))
 }
 
@@ -288,7 +289,7 @@ pub(crate) fn audit_checks<'py>(
         let py: Python<'py> = result.py();
         let (evidence_count, evidence_truncated) = measurement_evidence(&result)?;
         let mut entries: Vec<(&str, Bound<'py, PyAny>)> = vec![("kind", any(py, "audit")?)];
-        entries.push(("name", result.getattr("audit_name")?));
+        entries.push(("name", native_field(&result, "audit_name")?));
         entries.extend(fields(
             &result,
             &["audit_definition_name", "audit_description"],
@@ -297,19 +298,19 @@ pub(crate) fn audit_checks<'py>(
         entries.push(("passed", any(py, audit_passed(&result)?)?));
         entries.push(("status", value(&result, "outcome")?));
         entries.push(("severity", value(&result, "severity")?));
-        entries.push(("row_count", result.getattr("row_count")?));
+        entries.push(("row_count", native_field(&result, "row_count")?));
         entries.push(("attachment_kind", value(&result, "attachment_kind")?));
         entries.push((
             "attached_target_kind",
             optional_value(&result, "attached_target_kind")?,
         ));
-        entries.push(("asset_name", result.getattr("attached_target_name")?));
+        entries.push(("asset_name", native_field(&result, "attached_target_name")?));
         entries.push((
             "attached_column_name",
-            result.getattr("attached_column_name")?,
+            native_field(&result, "attached_column_name")?,
         ));
         entries.push(("run_scope_phase", value(&result, "run_scope_phase")?));
-        entries.push(("reused", result.getattr("reused")?));
+        entries.push(("reused", native_field(&result, "reused")?));
         entries.push(("evaluation_mode", value(&result, "evaluation_mode")?));
         entries.extend(fields(
             &result,
@@ -322,11 +323,11 @@ pub(crate) fn audit_checks<'py>(
         )?);
         entries.push((
             "thresholds",
-            measurement_thresholds(&result.getattr("thresholds")?)?,
+            measurement_thresholds(&native_field(&result, "thresholds")?)?,
         ));
         entries.push(("evidence_count", evidence_count));
         entries.push(("evidence_truncated", evidence_truncated));
-        entries.push(("execution_error", result.getattr("execution_error")?));
+        entries.push(("execution_error", native_field(&result, "execution_error")?));
         checks.push(without_none(py, entries)?);
     }
     Ok(checks)
@@ -334,9 +335,9 @@ pub(crate) fn audit_checks<'py>(
 
 /// `pass`, `warn` or `fail` of a Python check result.
 pub(crate) fn python_check_status(result: &Bound<'_, PyAny>) -> PyResult<&'static str> {
-    Ok(if result.getattr("passed")?.is_truthy()? {
+    Ok(if native_field(result, "passed")?.is_truthy()? {
         "pass"
-    } else if result.getattr("warned")?.is_truthy()? {
+    } else if native_field(result, "warned")?.is_truthy()? {
         "warn"
     } else {
         "fail"
@@ -354,20 +355,23 @@ pub(crate) fn python_checks<'py>(
             continue;
         }
         let py: Python<'py> = result.py();
-        let name: String = text(&result.getattr("node_name")?)?;
+        let name: String = text(&native_field(result, "node_name")?)?;
         checks.push(without_none(
             py,
             vec![
                 ("kind", any(py, "python_check")?),
-                ("name", result.getattr("node_name")?),
+                ("name", native_field(result, "node_name")?),
                 ("check_id", any(py, format!("python_check:{name}"))?),
-                ("passed", result.getattr("passed")?),
+                ("passed", native_field(result, "passed")?),
                 ("status", any(py, python_check_status(result)?)?),
                 ("severity", value(result, "severity")?),
-                ("message", result.getattr("message")?),
-                ("error_message", result.getattr("error_message")?),
-                ("metadata", result.getattr("metadata")?),
-                ("warnings", or_none(result.getattr("warning_messages")?)?),
+                ("message", native_field(result, "message")?),
+                ("error_message", native_field(result, "error_message")?),
+                ("metadata", native_field(result, "metadata")?),
+                (
+                    "warnings",
+                    or_none(native_field(result, "warning_messages")?)?,
+                ),
             ],
         )?);
     }
@@ -385,12 +389,12 @@ fn with_errors<'py>(
 /// The scenario check with its expected-result and assertion outcomes.
 pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = result.py();
-    let name: String = text(&result.getattr("scenario_name")?)?;
+    let name: String = text(&native_field(result, "scenario_name")?)?;
     let status: Bound<'py, PyAny> = value(result, "status")?;
     let mut expected: Vec<Bound<'py, PyDict>> = Vec::new();
-    for item in items(&result.getattr("expected_results")?)? {
+    for item in items(&native_field(result, "expected_results")?)? {
         let mut entries: Vec<(&'static str, Bound<'py, PyAny>)> = vec![
-            ("model_name", item.getattr("model_name")?),
+            ("model_name", native_field(&item, "model_name")?),
             ("status", value(&item, "status")?),
         ];
         entries.extend(fields(
@@ -404,12 +408,15 @@ pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<
         expected.push(with_errors(&item, entries)?);
     }
     let mut assertions: Vec<Bound<'py, PyDict>> = Vec::new();
-    for item in items(&result.getattr("assertion_results")?)? {
+    for item in items(&native_field(result, "assertion_results")?)? {
         let entries: Vec<(&'static str, Bound<'py, PyAny>)> = vec![
-            ("name", item.getattr("name")?),
+            ("name", native_field(&item, "name")?),
             ("status", value(&item, "status")?),
-            ("failing_row_count", item.getattr("failing_row_count")?),
-            ("sample_rows", item.getattr("sample_rows")?),
+            (
+                "failing_row_count",
+                native_field(&item, "failing_row_count")?,
+            ),
+            ("sample_rows", native_field(&item, "sample_rows")?),
         ];
         assertions.push(with_errors(&item, entries)?);
     }
@@ -428,7 +435,7 @@ pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<
 }
 
 fn rounded_duration<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let duration: Bound<'py, PyAny> = result.getattr("duration_ms")?;
+    let duration: Bound<'py, PyAny> = native_field(result, "duration_ms")?;
     if duration.is_none() {
         return Ok(duration);
     }
@@ -438,23 +445,23 @@ fn rounded_duration<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
 /// The run outcome of one scenario.
 pub(crate) fn scenario_result<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = result.py();
-    let path: Bound<'py, PyAny> = result.getattr("local_duckdb_path")?;
-    let local_status: Bound<'py, PyAny> = result.getattr("local_status")?;
+    let path: Bound<'py, PyAny> = native_field(result, "local_duckdb_path")?;
+    let local_status: Bound<'py, PyAny> = native_field(result, "local_status")?;
     with_errors(
         result,
         vec![
-            ("name", result.getattr("scenario_name")?),
+            ("name", native_field(result, "scenario_name")?),
             ("status", value(result, "status")?),
             ("duration_ms", rounded_duration(result)?),
             (
                 "local_status",
                 if local_status.is_truthy()? {
-                    local_status.getattr("value")?
+                    native_field(&local_status, "value")?
                 } else {
                     py.None().into_bound(py)
                 },
             ),
-            ("retained", result.getattr("retained")?),
+            ("retained", native_field(result, "retained")?),
             (
                 "local_duckdb_path",
                 if path.is_truthy()? {
@@ -470,35 +477,38 @@ pub(crate) fn scenario_result<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound
 /// The capture outcome of one scenario snapshot sync or refresh.
 pub(crate) fn snapshot_result<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = result.py();
-    let capture: Bound<'py, PyAny> = result.getattr("capture_result")?;
+    let capture: Bound<'py, PyAny> = native_field(result, "capture_result")?;
     let mut relations: Vec<Bound<'py, PyDict>> = Vec::new();
     let mut manifest_path: Bound<'py, PyAny> = py.None().into_bound(py);
     if !capture.is_none() {
-        for relation in items(&capture.getattr("relation_results")?)? {
+        for relation in items(&native_field(&capture, "relation_results")?)? {
             relations.push(with_errors(
                 &relation,
                 vec![
                     ("kind", value(&relation, "kind")?),
-                    ("logical_name", relation.getattr("logical_name")?),
-                    ("source_relation", relation.getattr("source_relation")?),
+                    ("logical_name", native_field(&relation, "logical_name")?),
+                    (
+                        "source_relation",
+                        native_field(&relation, "source_relation")?,
+                    ),
                     (
                         "file_path",
-                        relation.getattr("file_path")?.str()?.into_any(),
+                        native_field(&relation, "file_path")?.str()?.into_any(),
                     ),
                     ("status", value(&relation, "status")?),
-                    ("row_count", relation.getattr("row_count")?),
-                    ("byte_count", relation.getattr("byte_count")?),
+                    ("row_count", native_field(&relation, "row_count")?),
+                    ("byte_count", native_field(&relation, "byte_count")?),
                 ],
             )?);
         }
-        manifest_path = capture.getattr("manifest_path")?.str()?.into_any();
+        manifest_path = native_field(&capture, "manifest_path")?.str()?.into_any();
     }
     with_errors(
         result,
         vec![
-            ("name", result.getattr("scenario_name")?),
+            ("name", native_field(result, "scenario_name")?),
             ("status", value(result, "status")?),
-            ("retained", result.getattr("retained")?),
+            ("retained", native_field(result, "retained")?),
             ("relations", tuple_of(py, relations)?),
             ("manifest_path", manifest_path),
         ],

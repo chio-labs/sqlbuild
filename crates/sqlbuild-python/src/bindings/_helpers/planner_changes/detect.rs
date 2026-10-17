@@ -43,6 +43,7 @@ use crate::bindings::_helpers::planner_identity::metadata::{
     compiled_function_fingerprint_sql, function_local_hashes, model_declared_columns_hash,
     model_version_identity_metadata_json,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
@@ -101,22 +102,23 @@ pub(crate) fn detect_changes<'py>(
         scope_model_changes((project, scope, snapshot), None, expected)?;
     let functions: Bound<'py, PyDict> = PyDict::new(py);
     let result_class: Bound<'py, PyAny> = registry::class(py, RecordId::FunctionChangeResult)?;
-    let selected: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
-    let recorded: Bound<'py, PyAny> = snapshot.getattr("fingerprints")?.getattr("functions")?;
+    let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
+    let recorded: Bound<'py, PyAny> =
+        native_field(snapshot, "fingerprints")?.getattr("functions")?;
     let query_change_tracking: bool = project
         .getattr("settings")?
         .getattr("query_change_tracking")?
         .is_truthy()?;
-    let dialect: Option<String> = snapshot.getattr("column_dialect")?.extract()?;
-    for function in project.getattr("functions")?.try_iter()? {
+    let dialect: Option<String> = native_field(snapshot, "column_dialect")?.extract()?;
+    for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        let name: Bound<'py, PyAny> = function.getattr("name")?;
+        let name: Bound<'py, PyAny> = native_field(&function, "name")?;
         let fingerprint_sql: String = compiled_function_fingerprint_sql(&function)?;
         let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = vec![(
             "fingerprint_sql",
             PyString::new(py, &fingerprint_sql).into_any(),
         )];
-        if selected.contains(function.getattr("key")?)? {
+        if selected.contains(native_field(&function, "key")?)? {
             let reason: &str = if full_refresh {
                 "full_refresh"
             } else {
@@ -129,7 +131,9 @@ pub(crate) fn detect_changes<'py>(
                         &name.extract::<String>()?,
                         (
                             &fingerprint_sql,
-                            &function.getattr("language")?.str()?.extract::<String>()?,
+                            &native_field(&function, "language")?
+                                .str()?
+                                .extract::<String>()?,
                             dialect.as_deref(),
                         ),
                     )? != fingerprint
@@ -246,7 +250,7 @@ fn scope_model_changes<'py>(
             .extract()?,
     };
     let function_local_hashes: Bound<'py, PyAny> = function_local_hashes(
-        &project.getattr("functions")?,
+        &native_field(project, "functions")?,
         project
             .getattr("sql_analysis_dialect")?
             .extract::<Option<String>>()?
@@ -255,12 +259,12 @@ fn scope_model_changes<'py>(
     .into_any();
     let hook_version_hashes: Bound<'py, PyDict> = PyDict::new(py);
     let identities: Bound<'py, PyAny> = host::entry(py, UserCodeHost::BuildHookIdentities)?
-        .call1((project.getattr("hook_functions")?,))?;
+        .call1((native_field(project, "hook_functions")?,))?;
     for item in identities.call_method0("items")?.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
         hook_version_hashes.set_item(
             item.get_item(0)?,
-            item.get_item(1)?.getattr("version_hash")?,
+            native_field(&item.get_item(1)?, "version_hash")?,
         )?;
     }
     let pass = ModelPass {
@@ -272,16 +276,16 @@ fn scope_model_changes<'py>(
     };
     let model_kind: Bound<'py, PyAny> =
         imported(py, COMPILE_TYPES_MODULE, "CompiledResourceType")?.getattr("MODEL")?;
-    let selected: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
-    let models_by_name: Bound<'py, PyAny> = scope.getattr("models_by_name")?;
+    let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
+    let models_by_name: Bound<'py, PyAny> = native_field(scope, "models_by_name")?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
-    for key in scope.getattr("execution_order")?.try_iter()? {
+    for key in native_field(scope, "execution_order")?.try_iter()? {
         let key: Bound<'py, PyAny> = key?;
-        if !selected.contains(&key)? || !key.getattr("resource_type")?.eq(&model_kind)? {
+        if !selected.contains(&key)? || !native_field(&key, "resource_type")?.eq(&model_kind)? {
             continue;
         }
         let model: Bound<'py, PyAny> =
-            models_by_name.call_method1("get", (key.getattr("name")?,))?;
+            models_by_name.call_method1("get", (native_field(&key, "name")?,))?;
         if model.is_none() {
             continue;
         }
@@ -343,7 +347,7 @@ pub(crate) fn model_change<'py>(
         .getattr("models")?
         .call_method1("get", (&model_name,))?;
     let recorded: Option<Recorded> = recorded_fingerprint(&fingerprint)?;
-    let dialect: Bound<'py, PyAny> = snapshot.getattr("column_dialect")?;
+    let dialect: Bound<'py, PyAny> = native_field(snapshot, "column_dialect")?;
     let compiled_query_hash: Option<String> = if pass.query_change_tracking && recorded.is_some() {
         Some(model_query_hash(
             py,
@@ -363,7 +367,7 @@ pub(crate) fn model_change<'py>(
         (Some(hash), Some(recorded)) => *hash != recorded.definition_hash,
         _ => false,
     };
-    if !relation_exists && snapshot.getattr("renamed_models")?.contains(&model_name)? {
+    if !relation_exists && native_field(snapshot, "renamed_models")?.contains(&model_name)? {
         result.query_changed = definition_changed;
         let backfill: Backfill = if definition_changed {
             replay_policy(model)?
@@ -390,7 +394,7 @@ pub(crate) fn model_change<'py>(
         .as_ref()
         .map(|recorded| recorded.metadata_json.as_str())
         .filter(|text| *text != EMPTY_FINGERPRINT_METADATA_JSON);
-    let renames: Bound<'py, PyAny> = snapshot.getattr("reference_renames")?;
+    let renames: Bound<'py, PyAny> = native_field(snapshot, "reference_renames")?;
     let origins: Option<Vec<(String, String)>> = match (&compiled_query_hash, &recorded) {
         (Some(_), Some(recorded)) if definition_changed && renames.is_truthy()? => origin_names(
             (model_reads::query_sql(model)?.extract()?, &fingerprint),
@@ -441,7 +445,7 @@ pub(crate) fn model_change<'py>(
 fn replay_policy(model: &Bound<'_, PyAny>) -> PyResult<Backfill> {
     let py: Python<'_> = model.py();
     let raw: Option<String> = authored_config_str(
-        &model.getattr("config")?.getattr("values")?,
+        &native_field(model, "config")?.getattr("values")?,
         REPLAY_CONFIG_KEY,
     )?
     .map(|value| value.extract())
@@ -461,9 +465,9 @@ fn recorded_fingerprint(fingerprint: &Bound<'_, PyAny>) -> PyResult<Option<Recor
         return Ok(None);
     }
     Ok(Some(Recorded {
-        definition_hash: fingerprint.getattr("definition_hash")?.extract()?,
-        metadata_json: fingerprint.getattr("metadata_json")?.extract()?,
-        version_hash: fingerprint.getattr("version_hash")?.extract()?,
+        definition_hash: native_field(fingerprint, "definition_hash")?.extract()?,
+        metadata_json: native_field(fingerprint, "metadata_json")?.extract()?,
+        version_hash: native_field(fingerprint, "version_hash")?.extract()?,
     }))
 }
 
@@ -515,7 +519,7 @@ fn log_query_check(
         &log_sql,
         &[
             ("logger", logger),
-            ("sql", fingerprint.getattr("definition")?),
+            ("sql", native_field(fingerprint, "definition")?),
             ("action", text("fingerprint_definition")),
         ],
     )?;
@@ -534,22 +538,22 @@ fn model_schema_findings<'py>(
     if warehouse.is_none() {
         return Ok(Vec::new());
     }
-    let schema_entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
     let mut yml: Vec<(String, String)> = Vec::new();
     let mut type_enforcement: bool = false;
     let mut dynamic: Option<Bound<'py, PyAny>> = None;
     if !schema_entry.is_none() {
-        for column in schema_entry.getattr("columns")?.try_iter()? {
+        for column in native_field(&schema_entry, "columns")?.try_iter()? {
             let column: Bound<'py, PyAny> = column?;
-            if let Some(kind) = column.getattr("type")?.extract::<Option<String>>()? {
-                yml.push((column.getattr("name")?.extract()?, kind));
+            if let Some(kind) = native_field(&column, "type")?.extract::<Option<String>>()? {
+                yml.push((native_field(&column, "name")?.extract()?, kind));
             }
         }
         type_enforcement = schema_entry
             .getattr("type_enforcement")?
             .extract::<Option<bool>>()?
             .unwrap_or(false);
-        let families: Bound<'py, PyAny> = schema_entry.getattr("dynamic_columns")?;
+        let families: Bound<'py, PyAny> = native_field(&schema_entry, "dynamic_columns")?;
         if families.is_truthy()? {
             dynamic = Some(families);
         }
@@ -583,8 +587,8 @@ fn column_pairs(columns: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
     for column in columns.try_iter()? {
         let column: Bound<'_, PyAny> = column?;
         pairs.push((
-            column.getattr("name")?.extract()?,
-            column.getattr("type")?.extract()?,
+            native_field(&column, "name")?.extract()?,
+            native_field(&column, "type")?.extract()?,
         ));
     }
     Ok(pairs)
@@ -607,7 +611,7 @@ fn schema_findings_of<'py>(
         if matching.len()? != 1 {
             return Ok(None);
         }
-        matching.get_item(0)?.getattr("type")?.extract()
+        native_field(&matching.get_item(0)?, "type")?.extract()
     };
     detect_schema_changes(
         columns,
@@ -657,8 +661,8 @@ fn schema_changes<'py>(
         for column in inferred_columns.try_iter()? {
             let column: Bound<'py, PyAny> = column?;
             items.push((
-                column.getattr("name")?.extract()?,
-                column.getattr("type")?.extract()?,
+                native_field(&column, "name")?.extract()?,
+                native_field(&column, "type")?.extract()?,
             ));
         }
         Some(items)

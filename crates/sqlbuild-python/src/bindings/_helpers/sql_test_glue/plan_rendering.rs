@@ -6,6 +6,7 @@ use crate::bindings::_helpers::sql_test_glue::plan_values::{model_payload, strin
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::SENTINEL;
@@ -25,7 +26,7 @@ pub(super) fn models<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = project.py();
     let result = PyDict::new(py);
-    for (index, model) in project.getattr("models")?.try_iter()?.enumerate() {
+    for (index, model) in native_field(project, "models")?.try_iter()?.enumerate() {
         let model = model?;
         let sql = model_reads::query_sql(&model)?;
         if mentions(&sql.extract::<String>()?) {
@@ -45,7 +46,7 @@ pub(super) fn overrides<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py = project.py();
     let models = PyDict::new(py);
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         models.set_item(model_reads::name_object(&model)?, model)?;
     }
@@ -142,13 +143,13 @@ pub(super) fn functions<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py = project.py();
     let mut result: Vec<Bound<'py, PyTuple>> = Vec::new();
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(project, "functions")?.try_iter()? {
         let function = function?;
-        let target = function.getattr("destination")?.getattr("qualified_name")?;
+        let target = native_field(&function, "destination")?.getattr("qualified_name")?;
         if target.is_none() {
             continue;
         }
-        let mut fields = vec![function.getattr("name")?];
+        let mut fields = vec![native_field(&function, "name")?];
         for method in ["render_udf_call", "render_table_function_call"] {
             let rendered: String = call_with(
                 &adapter.getattr(method)?,

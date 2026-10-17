@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::lifecycle_events::payloads::{
     PathSegment, frozen, object_entries, validation_error,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const CORRELATION_FIELDS: [&str; 5] = [
     "run_id",
@@ -74,7 +75,7 @@ pub(crate) fn optional_text_check(value: &Bound<'_, PyAny>, field_name: &str) ->
 pub(crate) fn timestamp_check(value: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = value.py();
     let datetime: Bound<'_, PyAny> = imported(py, "datetime", "datetime")?;
-    if !value.is_instance(&datetime)? || value.getattr("tzinfo")?.is_none() {
+    if !value.is_instance(&datetime)? || native_field(value, "tzinfo")?.is_none() {
         return Err(validation_error(
             py,
             "occurred_at must be a timezone-aware UTC datetime",
@@ -97,10 +98,10 @@ pub(crate) fn known_event_check(event: &Bound<'_, PyAny>) -> PyResult<()> {
         correlations.push((field, !event.getattr(field)?.is_none()));
     }
     let facts = KnownEventFacts {
-        schema_version: event.getattr("schema_version")?.extract()?,
-        event_type: event.getattr("event_type")?.extract()?,
+        schema_version: native_field(event, "schema_version")?.extract()?,
+        event_type: native_field(event, "event_type")?.extract()?,
         correlations,
-        payload: object_entries(&event.getattr("payload")?)?,
+        payload: object_entries(&native_field(event, "payload")?)?,
     };
     validate_known_event(&facts).map_err(|message| validation_error(event.py(), &message))
 }

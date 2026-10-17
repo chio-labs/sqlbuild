@@ -1,5 +1,6 @@
 //! Typed SQL value normalization between Python authored values and native `SqlValue`s.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
@@ -84,7 +85,7 @@ pub(crate) fn raw_value(
         return sequence(value.downcast::<PyList>()?.iter(), classes).map(RawSqlValue::List);
     }
     if value.is_instance(&classes.authored_set)? {
-        let items = value.getattr("values")?;
+        let items = native_field(value, "values")?;
         return sequence(
             items.try_iter()?.collect::<PyResult<Vec<_>>>()?.into_iter(),
             classes,
@@ -93,7 +94,7 @@ pub(crate) fn raw_value(
     }
     if value.is_instance(&classes.value_call)? {
         let mut arguments: Vec<(String, RawSqlValue)> = Vec::new();
-        for argument in value.getattr("arguments")?.try_iter()? {
+        for argument in native_field(value, "arguments")?.try_iter()? {
             let (name, item): (String, Bound<'_, PyAny>) = argument?.extract()?;
             arguments.push((name, raw_value(&item, classes)?));
         }
@@ -201,9 +202,9 @@ fn normalize_sql_value<'py>(
         _ => registry::class(py, RecordId::SqlValueLimits)?.call0()?,
     };
     let limits = SqlValueLimits {
-        max_depth: applied.getattr("max_depth")?.extract()?,
-        max_elements: applied.getattr("max_elements")?.extract()?,
-        max_size: applied.getattr("max_size")?.extract()?,
+        max_depth: native_field(&applied, "max_depth")?.extract()?,
+        max_elements: native_field(&applied, "max_elements")?.extract()?,
+        max_size: native_field(&applied, "max_size")?.extract()?,
     };
     match normalized(&raw, context, explicit_type, limits) {
         Ok(value) => sql_value(&value, &classes),

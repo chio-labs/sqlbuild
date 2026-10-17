@@ -14,6 +14,7 @@ use sqlbuild_core::json::main::python_float_repr::python_float_repr;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 fn text_of(value: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(value.str()?.to_string_lossy().into_owned())
@@ -131,40 +132,40 @@ fn coverage(value: Bound<'_, PyAny>) -> PyResult<Option<DiffCoverageFacts>> {
         return Ok(None);
     }
     Ok(Some(DiffCoverageFacts {
-        row_count: value.getattr("row_count")?.extract()?,
-        minimum_cursor: optional_value(value.getattr("minimum_cursor")?)?,
-        maximum_cursor: optional_value(value.getattr("maximum_cursor")?)?,
+        row_count: native_field(&value, "row_count")?.extract()?,
+        minimum_cursor: optional_value(native_field(&value, "minimum_cursor")?)?,
+        maximum_cursor: optional_value(native_field(&value, "maximum_cursor")?)?,
     }))
 }
 
 fn column(value: &Bound<'_, PyAny>) -> PyResult<DiffColumnFacts> {
-    let tolerance: Bound<'_, PyAny> = value.getattr("tolerance")?;
+    let tolerance: Bound<'_, PyAny> = native_field(value, "tolerance")?;
     Ok(DiffColumnFacts {
-        name: text_of(&value.getattr("name")?)?,
-        mismatched_count: value.getattr("mismatched_count")?.extract()?,
+        name: text_of(&native_field(value, "name")?)?,
+        mismatched_count: native_field(value, "mismatched_count")?.extract()?,
         tolerance: if tolerance.is_none() {
             None
         } else {
             Some((
-                optional_text(tolerance.getattr("absolute")?)?,
-                optional_text(tolerance.getattr("relative")?)?,
+                optional_text(native_field(&tolerance, "absolute")?)?,
+                optional_text(native_field(&tolerance, "relative")?)?,
             ))
         },
     })
 }
 
 fn coverage_differs(rows: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let left: Bound<'_, PyAny> = rows.getattr("left_coverage")?;
-    let right: Bound<'_, PyAny> = rows.getattr("right_coverage")?;
+    let left: Bound<'_, PyAny> = native_field(rows, "left_coverage")?;
+    let right: Bound<'_, PyAny> = native_field(rows, "right_coverage")?;
     if left.is_none() || right.is_none() {
         return Ok(false);
     }
     Ok(left
         .getattr("minimum_cursor")?
-        .ne(right.getattr("minimum_cursor")?)?
+        .ne(native_field(&right, "minimum_cursor")?)?
         || left
             .getattr("maximum_cursor")?
-            .ne(right.getattr("maximum_cursor")?)?)
+            .ne(native_field(&right, "maximum_cursor")?)?)
 }
 
 fn row_facts(rows: Bound<'_, PyAny>) -> PyResult<Option<DiffRowFacts>> {
@@ -173,10 +174,10 @@ fn row_facts(rows: Bound<'_, PyAny>) -> PyResult<Option<DiffRowFacts>> {
     }
     let count = |name: &str| -> PyResult<i64> { rows.getattr(name)?.extract() };
     let mut columns: Vec<DiffColumnFacts> = Vec::new();
-    for item in rows.getattr("column_results")?.try_iter()? {
+    for item in native_field(&rows, "column_results")?.try_iter()? {
         columns.push(column(&item?)?);
     }
-    let sampling: Bound<'_, PyAny> = rows.getattr("sampling")?;
+    let sampling: Bound<'_, PyAny> = native_field(&rows, "sampling")?;
     Ok(Some(DiffRowFacts {
         left_count: count("left_count")?,
         right_count: count("right_count")?,
@@ -192,81 +193,81 @@ fn row_facts(rows: Bound<'_, PyAny>) -> PyResult<Option<DiffRowFacts>> {
             None
         } else {
             Some((
-                sampling.getattr("row_limit")?.extract()?,
-                sampling.getattr("seed")?.extract()?,
+                native_field(&sampling, "row_limit")?.extract()?,
+                native_field(&sampling, "seed")?.extract()?,
             ))
         },
-        left_coverage: coverage(rows.getattr("left_coverage")?)?,
-        right_coverage: coverage(rows.getattr("right_coverage")?)?,
-        cursor_column: optional_text(rows.getattr("cursor_column")?)?,
-        cursor_start: optional_value(rows.getattr("cursor_start")?)?,
-        cursor_end: optional_value(rows.getattr("cursor_end")?)?,
-        exhaustive: rows.getattr("is_exhaustive")?.is_truthy()?,
+        left_coverage: coverage(native_field(&rows, "left_coverage")?)?,
+        right_coverage: coverage(native_field(&rows, "right_coverage")?)?,
+        cursor_column: optional_text(native_field(&rows, "cursor_column")?)?,
+        cursor_start: optional_value(native_field(&rows, "cursor_start")?)?,
+        cursor_end: optional_value(native_field(&rows, "cursor_end")?)?,
+        exhaustive: native_field(&rows, "is_exhaustive")?.is_truthy()?,
         coverage_differs: coverage_differs(&rows)?,
     }))
 }
 
 fn sample_row(value: &Bound<'_, PyAny>) -> PyResult<DiffSampleRow> {
     let mut changed_cells: Vec<DiffChangedCell> = Vec::new();
-    for cell in value.getattr("changed_cells")?.try_iter()? {
+    for cell in native_field(value, "changed_cells")?.try_iter()? {
         let cell: Bound<'_, PyAny> = cell?;
         changed_cells.push(DiffChangedCell {
-            name: text_of(&cell.getattr("name")?)?,
-            left: diff_value(&cell.getattr("left_value")?)?,
-            right: diff_value(&cell.getattr("right_value")?)?,
+            name: text_of(&native_field(&cell, "name")?)?,
+            left: diff_value(&native_field(&cell, "left_value")?)?,
+            right: diff_value(&native_field(&cell, "right_value")?)?,
         });
     }
     Ok(DiffSampleRow {
-        key_values: named_values(&value.getattr("key_values")?)?,
+        key_values: named_values(&native_field(value, "key_values")?)?,
         changed_cells,
     })
 }
 
 fn model_facts(model: &Bound<'_, PyAny>) -> PyResult<DiffModelFacts> {
-    let schema: Bound<'_, PyAny> = model.getattr("schema_result")?;
+    let schema: Bound<'_, PyAny> = native_field(model, "schema_result")?;
     let names = |attribute: &str| -> PyResult<Vec<String>> {
         let mut names: Vec<String> = Vec::new();
         for column in schema.getattr(attribute)?.try_iter()? {
-            names.push(text_of(&column?.getattr("name")?)?);
+            names.push(text_of(&native_field(&column?, "name")?)?);
         }
         Ok(names)
     };
     let mut type_changes: Vec<(String, String, String)> = Vec::new();
-    for pair in schema.getattr("type_changed_columns")?.try_iter()? {
+    for pair in native_field(&schema, "type_changed_columns")?.try_iter()? {
         let (left, right): (Bound<'_, PyAny>, Bound<'_, PyAny>) = pair?.extract()?;
         type_changes.push((
-            text_of(&left.getattr("name")?)?,
-            text_of(&left.getattr("type")?)?,
-            text_of(&right.getattr("type")?)?,
+            text_of(&native_field(&left, "name")?)?,
+            text_of(&native_field(&left, "type")?)?,
+            text_of(&native_field(&right, "type")?)?,
         ));
     }
     let mut unequal_samples: Vec<DiffSampleRow> = Vec::new();
-    for sample in model.getattr("unequal_row_samples")?.try_iter()? {
+    for sample in native_field(model, "unequal_row_samples")?.try_iter()? {
         unequal_samples.push(sample_row(&sample?)?);
     }
     Ok(DiffModelFacts {
-        name: text_of(&model.getattr("name")?)?,
-        left_relation: text_of(&model.getattr("left_relation")?)?,
-        right_relation: text_of(&model.getattr("right_relation")?)?,
+        name: text_of(&native_field(model, "name")?)?,
+        left_relation: text_of(&native_field(model, "left_relation")?)?,
+        right_relation: text_of(&native_field(model, "right_relation")?)?,
         added_columns: names("added_columns")?,
         removed_columns: names("removed_columns")?,
         type_changes,
-        unique_key: strings(&model.getattr("unique_key")?)?,
-        rows: row_facts(model.getattr("row_result")?)?,
+        unique_key: strings(&native_field(model, "unique_key")?)?,
+        rows: row_facts(native_field(model, "row_result")?)?,
         unequal_samples,
-        left_only_keys: key_samples(&model.getattr("left_only_key_samples")?)?,
-        right_only_keys: key_samples(&model.getattr("right_only_key_samples")?)?,
-        bounded_fallback: model.getattr("bounded_fallback")?.is_truthy()?,
-        excluded_columns: strings(&model.getattr("excluded_columns")?)?,
-        input_kind: text_of(&model.getattr("input_kind")?)?,
-        unkeyed: model.getattr("unkeyed")?.is_truthy()?,
+        left_only_keys: key_samples(&native_field(model, "left_only_key_samples")?)?,
+        right_only_keys: key_samples(&native_field(model, "right_only_key_samples")?)?,
+        bounded_fallback: native_field(model, "bounded_fallback")?.is_truthy()?,
+        excluded_columns: strings(&native_field(model, "excluded_columns")?)?,
+        input_kind: text_of(&native_field(model, "input_kind")?)?,
+        unkeyed: native_field(model, "unkeyed")?.is_truthy()?,
     })
 }
 
 /// Every model result of a `DiffExecutionResult`.
 pub(crate) fn diff_facts(result: &Bound<'_, PyAny>) -> PyResult<Vec<DiffModelFacts>> {
     let mut models: Vec<DiffModelFacts> = Vec::new();
-    for model in result.getattr("model_results")?.try_iter()? {
+    for model in native_field(result, "model_results")?.try_iter()? {
         models.push(model_facts(&model?)?);
     }
     Ok(models)

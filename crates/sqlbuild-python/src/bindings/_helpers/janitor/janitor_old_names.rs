@@ -23,6 +23,7 @@ use crate::bindings::_helpers::state_rows::migration_io::{
 const IS_COMPATIBILITY_VIEW: ExecutorHost = ExecutorHost::IsCompatibilityView;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
@@ -43,7 +44,7 @@ fn status<'py>(
     history: &Bound<'py, PyAny>,
     now: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&history.getattr("status")?, &[("now", now.clone())])
+    call_with(&native_field(history, "status")?, &[("now", now.clone())])
 }
 
 fn status_is(py: Python<'_>, value: &Bound<'_, PyAny>, member: &str) -> PyResult<bool> {
@@ -87,13 +88,13 @@ fn read_histories<'py>(
             py,
             &[
                 ("connection", warehouse.connection.clone()),
-                ("execute", warehouse.adapter.getattr("execute")?),
+                ("execute", native_field(&warehouse.adapter, "execute")?),
                 ("database", optional(py, database.as_deref())?),
                 ("schema", text(py, &schema)),
                 ("stored_columns", stored_columns),
                 (
                     "render_qualified_name",
-                    warehouse.adapter.getattr("render_qualified_name")?,
+                    native_field(&warehouse.adapter, "render_qualified_name")?,
                 ),
             ],
         )?))?;
@@ -105,7 +106,7 @@ fn read_histories<'py>(
 }
 
 fn old_key(history: &Bound<'_, PyAny>) -> PyResult<Key> {
-    Key::of(&history.getattr("old")?)
+    Key::of(&native_field(history, "old")?)
 }
 
 /// Each history's listed relation at its old name, listing only schemas not already scanned.
@@ -200,11 +201,11 @@ fn view<'py>(
     claimed_by: Option<Option<String>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = history.py();
-    let created: Bound<'py, PyAny> = history.getattr("created")?;
+    let created: Bound<'py, PyAny> = native_field(history, "created")?;
     let expires_at: Bound<'py, PyAny> = if created.is_none() {
         py.None().into_bound(py)
     } else {
-        created.getattr("expires_at")?
+        native_field(&created, "expires_at")?
     };
     let mut pairs: Vec<(&str, Bound<'py, PyAny>)> = vec![
         ("key", key.to_python(py)?),
@@ -257,12 +258,13 @@ pub(crate) fn plan_old_name_views<'py>(
     (early_drops, now): (&[String], &Bound<'py, PyAny>),
 ) -> PyResult<OldNamePlanning<'py>> {
     let py: Python<'py> = warehouse.py();
-    let target_name: Option<String> = project.getattr("effective_target_name")?.extract()?;
+    let target_name: Option<String> = native_field(project, "effective_target_name")?.extract()?;
     let destinations: Bound<'py, PyDict> = project_destinations(project)?;
     let mut histories: Vec<Bound<'py, PyAny>> = Vec::new();
     for history in read_histories(warehouse, managed, relations)? {
-        let recorded: Option<String> =
-            history.getattr("move")?.getattr("target_name")?.extract()?;
+        let recorded: Option<String> = native_field(&history, "move")?
+            .getattr("target_name")?
+            .extract()?;
         if recorded.is_some() && recorded != target_name {
             continue;
         }

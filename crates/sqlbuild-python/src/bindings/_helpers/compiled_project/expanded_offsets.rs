@@ -1,5 +1,6 @@
 //! Map offsets in expanded SQL back onto the authored text that produced them.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -22,10 +23,10 @@ fn map_expanded_offset<'py>(
         for span in pass?.try_iter()? {
             let span: Bound<'py, PyAny> = span?;
             pass_spans.push(SplicedSpan {
-                source_start: span.getattr("source_start")?.extract()?,
-                source_end: span.getattr("source_end")?.extract()?,
-                output_start: span.getattr("output_start")?.extract()?,
-                output_end: span.getattr("output_end")?.extract()?,
+                source_start: native_field(&span, "source_start")?.extract()?,
+                source_end: native_field(&span, "source_end")?.extract()?,
+                output_start: native_field(&span, "output_start")?.extract()?,
+                output_end: native_field(&span, "output_end")?.extract()?,
             });
         }
         spans.push(pass_spans);

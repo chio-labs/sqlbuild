@@ -20,6 +20,7 @@ use crate::bindings::_helpers::dagster_invocation::access::{
 };
 use crate::bindings::_helpers::dagster_invocation::results::{dagster_check_name, sorted_nodes};
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SELECT_FILE_FLAG: &str = "--select-file";
 const EVENT_OUTPUT_FLAG: &str = "--event-output";
@@ -49,7 +50,7 @@ fn temporary_file<'py>(
         handle.call_method1("write", (format!("{line}\n"),))?;
     }
     handle.call_method0("close")?;
-    imported(py, "pathlib", "Path")?.call1((handle.getattr("name")?,))
+    imported(py, "pathlib", "Path")?.call1((native_field(&handle, "name")?,))
 }
 
 fn is_scenario_test(args: &[String]) -> bool {

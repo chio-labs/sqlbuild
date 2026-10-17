@@ -14,6 +14,7 @@ use crate::bindings::_helpers::analysis_session::query_columns::ColumnsRow;
 use crate::bindings::_helpers::analysis_session::stage_functions::query_column_rows;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -46,7 +47,7 @@ fn infer_fixture_column_facts<'py>(
     let Some((true, Some(columns), false)) = rows.into_iter().next() else {
         return Ok(py.None().into_bound(py));
     };
-    let dialect: Option<String> = profile.getattr("sql_analysis_dialect")?.extract()?;
+    let dialect: Option<String> = native_field(&profile, "sql_analysis_dialect")?.extract()?;
     let facts: ProjectionFacts = py
         .compiler_detach(|| projection_facts(&query_sql, dialect.as_deref()))
         .map_err(|reason| compiler_error(native_failure(PROJECTION_FACTS_CONTEXT, &reason)))?;

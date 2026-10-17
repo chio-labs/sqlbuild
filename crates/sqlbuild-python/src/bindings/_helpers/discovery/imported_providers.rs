@@ -13,6 +13,7 @@ use crate::bindings::_helpers::discovery::imported_modules::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -48,7 +49,7 @@ fn provider_name<'py>(
     relative_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = provider_class.py();
-    let explicit: Bound<'py, PyAny> = provider_class.getattr("provider_name")?;
+    let explicit: Bound<'py, PyAny> = native_field(provider_class, "provider_name")?;
     if !explicit.is_none() {
         reject_invalid_identity(&explicit, relative_path)?;
     }
@@ -142,7 +143,7 @@ pub(crate) fn discover_provider_classes<'py>(
     if let Some(cached) = project.cached_extensions()? {
         let providers: Bound<'py, PyAny> = cached.get_item(0)?;
         for provider in providers.try_iter()? {
-            record_read.call1((provider?.getattr("provider_class")?,))?;
+            record_read.call1((native_field(&provider?, "provider_class")?,))?;
         }
         return Ok(providers);
     }
@@ -236,7 +237,7 @@ pub(crate) fn discover_event_exporter_declarations<'py>(
             if read.is_none() {
                 continue;
             }
-            let name: String = read.getattr("name")?.extract()?;
+            let name: String = native_field(&read, "name")?.extract()?;
             if let Some((_, existing)) = seen.iter().find(|(listed, _)| *listed == name) {
                 return Err(discovery_error(
                     py,
@@ -253,7 +254,7 @@ pub(crate) fn discover_event_exporter_declarations<'py>(
                 &shim(py, UserCodeHost::ValidateEventExporterSignature)?,
                 &[
                     ("function", function.clone()),
-                    ("exporter_name", read.getattr("name")?),
+                    ("exporter_name", native_field(&read, "name")?),
                     ("relative_path", relative_path.clone()),
                 ],
             )?;
@@ -264,10 +265,10 @@ pub(crate) fn discover_event_exporter_declarations<'py>(
                 &[
                     ("file_path", file_path.clone()),
                     ("relative_path", relative_path),
-                    ("name", read.getattr("name")?),
+                    ("name", native_field(&read, "name")?),
                     ("function", function.clone()),
-                    ("event_kinds", read.getattr("event_kinds")?),
-                    ("min_severity", read.getattr("min_severity")?),
+                    ("event_kinds", native_field(&read, "event_kinds")?),
+                    ("min_severity", native_field(&read, "min_severity")?),
                 ],
             )?);
         }
@@ -281,10 +282,10 @@ fn exporter_provider_usages<'py>(
     (project, providers): (&ProjectDir<'py>, &Bound<'py, PyDict>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let function: Bound<'py, PyAny> = declaration.getattr("function")?;
-    let name: String = declaration.getattr("name")?.extract()?;
+    let function: Bound<'py, PyAny> = native_field(declaration, "function")?;
+    let name: String = native_field(declaration, "name")?.extract()?;
     let relative_path: String = project
-        .relative(&declaration.getattr("file_path")?)?
+        .relative(&native_field(declaration, "file_path")?)?
         .str()?
         .extract()?;
     let empty: Bound<'py, PyAny> = imported(py, "inspect", "Parameter")?.getattr("empty")?;
@@ -304,7 +305,7 @@ fn exporter_provider_usages<'py>(
                 ),
             ));
         };
-        let provider_class: Bound<'py, PyAny> = provider.getattr("provider_class")?;
+        let provider_class: Bound<'py, PyAny> = native_field(&provider, "provider_class")?;
         if !annotation.is(&empty) && !annotation.is(&provider_class) {
             return Err(discovery_error(
                 py,

@@ -12,6 +12,7 @@ use crate::bindings::_helpers::planner_phases::objects::{frozenset, planner_erro
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_tables::check_selected_source_tables_exist;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 
@@ -27,10 +28,10 @@ pub(crate) fn check_selected_scope_buildability<'py>(
     let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let selected_scope = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
     let mut external_seeds: Vec<_> = Vec::new();
-    for seed in project.getattr("seeds")?.try_iter()? {
+    for seed in native_field(&project, "seeds")?.try_iter()? {
         let seed = seed?;
-        if seed.getattr("external")?.is_truthy()? {
-            external_seeds.push(seed.getattr("key")?);
+        if native_field(&seed, "external")?.is_truthy()? {
+            external_seeds.push(native_field(&seed, "key")?);
         }
     }
     let missing = object(
@@ -40,15 +41,21 @@ pub(crate) fn check_selected_scope_buildability<'py>(
             Some(keywords(
                 py,
                 &[
-                    ("selected_keys", selected_scope.getattr("selected_keys")?),
-                    ("upstream_deps", selected_scope.getattr("upstream_deps")?),
+                    (
+                        "selected_keys",
+                        native_field(&selected_scope, "selected_keys")?,
+                    ),
+                    (
+                        "upstream_deps",
+                        native_field(&selected_scope, "upstream_deps")?,
+                    ),
                     (
                         "snapshot",
                         warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
                     ),
                     (
                         "deferred_relations",
-                        deferral.getattr("deferred_relations")?,
+                        native_field(deferral, "deferred_relations")?,
                     ),
                     ("satisfied_keys", frozenset(py, &external_seeds)?),
                 ],

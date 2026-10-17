@@ -8,6 +8,7 @@ use sqlbuild_core::cost_report::models::{CostResource, CostRun, CostSummary};
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -49,7 +50,7 @@ fn resource(value: &Bound<'_, PyAny>) -> PyResult<CostResource> {
         warehouse_name: text(value, "warehouse_name")?,
         warehouse_size: text(value, "warehouse_size")?,
         warehouse_type: optional_text(value, "warehouse_type")?,
-        cluster_number: value.getattr("cluster_number")?.extract()?,
+        cluster_number: native_field(value, "cluster_number")?.extract()?,
         query_count: integer(value, "query_count")?,
         attributed_seconds: decimal(value, "attributed_seconds")?,
         bytes_scanned: integer(value, "bytes_scanned")?,
@@ -60,15 +61,15 @@ fn resource(value: &Bound<'_, PyAny>) -> PyResult<CostResource> {
 
 fn summary(value: &Bound<'_, PyAny>) -> PyResult<CostSummary> {
     let mut resources: Vec<CostResource> = Vec::new();
-    for item in value.getattr("resources")?.try_iter()? {
+    for item in native_field(value, "resources")?.try_iter()? {
         resources.push(resource(&item?)?);
     }
     let mut limitations: Vec<String> = Vec::new();
-    for item in value.getattr("limitations")?.try_iter()? {
+    for item in native_field(value, "limitations")?.try_iter()? {
         limitations.push(item?.extract()?);
     }
     Ok(CostSummary {
-        status: value.getattr("status")?.getattr("value")?.extract()?,
+        status: native_field(value, "status")?.getattr("value")?.extract()?,
         usd_per_credit: decimal(value, "usd_per_credit")?,
         rate_source: text(value, "rate_source")?,
         resources,
@@ -97,9 +98,9 @@ pub(crate) fn cost_run(record: &Bound<'_, PyAny>) -> PyResult<CostRun> {
         build_status: text(record, "build_status")?,
         started_at: timestamp(record, "started_at")?,
         completed_at: timestamp(record, "completed_at")?,
-        cost: summary(&record.getattr("cost")?)?,
+        cost: summary(&native_field(record, "cost")?)?,
         version: integer(record, "version")?,
-        had_executable_work: record.getattr("had_executable_work")?.extract()?,
+        had_executable_work: native_field(record, "had_executable_work")?.extract()?,
     })
 }
 

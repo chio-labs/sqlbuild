@@ -1,5 +1,6 @@
 //! Report a scope index's error findings as individual compile diagnostics.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -13,16 +14,20 @@ pub(crate) fn report_scope_index_errors(index: &Bound<'_, PyAny>) -> PyResult<()
     let report = registry::native(py, NativeAttr::ReportCompileDiagnostic)?;
     let compiler_diagnostic = registry::class(py, RecordId::CompilerDiagnostic)?;
     let path_class = py.import("pathlib")?.getattr("Path")?;
-    for item in index.getattr("diagnostics")?.try_iter()? {
+    for item in native_field(index, "diagnostics")?.try_iter()? {
         let item: Bound<'_, PyAny> = item?;
-        if item.getattr("severity")?.str()?.extract::<String>()? != ERROR_SEVERITY {
+        if native_field(&item, "severity")?
+            .str()?
+            .extract::<String>()?
+            != ERROR_SEVERITY
+        {
             continue;
         }
-        let code: Bound<'_, PyAny> = item.getattr("code")?.getattr("value")?;
-        let message: Bound<'_, PyAny> = item.getattr("message")?;
-        let path: Bound<'_, PyAny> = item.getattr("path")?;
-        let declaration: Bound<'_, PyAny> = item.getattr("declaration")?;
-        let resource: Bound<'_, PyAny> = item.getattr("resource")?;
+        let code: Bound<'_, PyAny> = native_field(&item, "code")?.getattr("value")?;
+        let message: Bound<'_, PyAny> = native_field(&item, "message")?;
+        let path: Bound<'_, PyAny> = native_field(&item, "path")?;
+        let declaration: Bound<'_, PyAny> = native_field(&item, "declaration")?;
+        let resource: Bound<'_, PyAny> = native_field(&item, "resource")?;
         let key: Bound<'_, PyTuple> = PyTuple::new(
             py,
             [
@@ -46,8 +51,8 @@ pub(crate) fn report_scope_index_errors(index: &Bound<'_, PyAny>) -> PyResult<()
         } else {
             fields.set_item("path", path_class.call1((path,))?)?;
         }
-        fields.set_item("line", item.getattr("line")?)?;
-        fields.set_item("column", item.getattr("column")?)?;
+        fields.set_item("line", native_field(&item, "line")?)?;
+        fields.set_item("column", native_field(&item, "column")?)?;
         let diagnostic: Bound<'_, PyAny> = compiler_diagnostic.call((), Some(&fields))?;
         let arguments: Bound<'_, PyDict> = PyDict::new(py);
         arguments.set_item("key", key)?;
@@ -71,7 +76,7 @@ fn owning_resource(
     declaration: &Bound<'_, PyAny>,
 ) -> PyResult<(Option<&'static str>, Option<String>)> {
     if !resource.is_none() {
-        let kind: String = resource.getattr("kind")?.str()?.extract()?;
+        let kind: String = native_field(resource, "kind")?.str()?.extract()?;
         let resource_type: Option<&'static str> = match kind.as_str() {
             "model" => Some("model"),
             "source" => Some("source"),
@@ -82,13 +87,19 @@ fn owning_resource(
             _ => None,
         };
         if resource_type.is_some() {
-            return Ok((resource_type, Some(resource.getattr("name")?.extract()?)));
+            return Ok((
+                resource_type,
+                Some(native_field(resource, "name")?.extract()?),
+            ));
         }
     }
     if !declaration.is_none() {
-        let kind: String = declaration.getattr("kind")?.str()?.extract()?;
+        let kind: String = native_field(declaration, "kind")?.str()?.extract()?;
         if matches!(kind.as_str(), "audit" | "singular_audit") {
-            return Ok((Some("audit"), Some(declaration.getattr("name")?.extract()?)));
+            return Ok((
+                Some("audit"),
+                Some(native_field(declaration, "name")?.extract()?),
+            ));
         }
     }
     Ok((None, None))

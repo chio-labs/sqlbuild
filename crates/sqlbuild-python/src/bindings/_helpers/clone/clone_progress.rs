@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::exceptions::PyKeyError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyDict;
@@ -21,19 +22,19 @@ fn optional_text(value: Bound<'_, PyAny>) -> PyResult<Option<String>> {
 
 /// One executor `CloneItemResult` as the command renders it.
 pub(crate) fn clone_item_text(item: &Bound<'_, PyAny>) -> PyResult<CloneItemText> {
-    let duration: Bound<'_, PyAny> = item.getattr("duration_seconds")?;
+    let duration: Bound<'_, PyAny> = native_field(item, "duration_seconds")?;
     Ok(CloneItemText {
-        name: item.getattr("name")?.extract()?,
-        action: item.getattr("action")?.getattr("value")?.extract()?,
+        name: native_field(item, "name")?.extract()?,
+        action: native_field(item, "action")?.getattr("value")?.extract()?,
         status: CloneStatusKind::from_value(
             &item
                 .getattr("status")?
                 .getattr("value")?
                 .extract::<String>()?,
         ),
-        message: optional_text(item.getattr("message")?)?,
-        origin_relation: optional_text(item.getattr("origin_relation")?)?,
-        destination_relation: optional_text(item.getattr("destination_relation")?)?,
+        message: optional_text(native_field(item, "message")?)?,
+        origin_relation: optional_text(native_field(item, "origin_relation")?)?,
+        destination_relation: optional_text(native_field(item, "destination_relation")?)?,
         duration_seconds: if duration.is_none() {
             None
         } else {

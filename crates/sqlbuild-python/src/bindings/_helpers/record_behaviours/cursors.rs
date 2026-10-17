@@ -7,6 +7,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -60,7 +61,7 @@ fn bound<'py>(raw: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     }
     for member in sentinel.try_iter()? {
         let member: Bound<'py, PyAny> = member?;
-        if raw.eq(member.getattr("value")?)? {
+        if raw.eq(native_field(&member, "value")?)? {
             return Ok(member);
         }
     }
@@ -185,5 +186,5 @@ pub(crate) fn finish_input_relation(
 
 /// `CursorInputRelation.is_runtime_owned`: whether bounds are read after upstream execution.
 pub(crate) fn input_relation_runtime_owned(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(instance.getattr("is_runtime_produced")?.unbind())
+    Ok(native_field(instance, "is_runtime_produced")?.unbind())
 }

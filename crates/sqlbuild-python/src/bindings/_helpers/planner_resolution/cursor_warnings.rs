@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::scalars::render_value;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
@@ -21,7 +22,7 @@ pub(crate) fn future_cap_message(bounds: &Bound<'_, PyAny>) -> PyResult<Option<S
     if bounds.is_none() {
         return Ok(None);
     }
-    let evidence = bounds.getattr("future_safety")?;
+    let evidence = native_field(bounds, "future_safety")?;
     if evidence.is_none() {
         return Ok(None);
     }
@@ -39,11 +40,11 @@ pub(crate) fn maximum_start_message(bounds: &Bound<'_, PyAny>) -> PyResult<Optio
     if bounds.is_none() {
         return Ok(None);
     }
-    let evidence = bounds.getattr("maximum_start_safety")?;
+    let evidence = native_field(bounds, "maximum_start_safety")?;
     if evidence.is_none() {
         return Ok(None);
     }
-    let highest = evidence.getattr("highest_eligible_target_max")?;
+    let highest = native_field(&evidence, "highest_eligible_target_max")?;
     let highest = if highest.is_none() {
         "None".to_owned()
     } else {
@@ -58,9 +59,9 @@ pub(crate) fn maximum_start_message(bounds: &Bound<'_, PyAny>) -> PyResult<Optio
         rendered(&evidence, "physical_target_max")?,
         rendered(&evidence, "maximum_allowed_start")?,
         rendered(&evidence, "effective_start")?,
-        evidence.getattr("action")?.getattr("value")?.str()?,
-        evidence.getattr("target_relation")?.str()?,
-        evidence.getattr("cursor_column")?.str()?,
+        native_field(&evidence, "action")?.getattr("value")?.str()?,
+        native_field(&evidence, "target_relation")?.str()?,
+        native_field(&evidence, "cursor_column")?.str()?,
     )))
 }
 

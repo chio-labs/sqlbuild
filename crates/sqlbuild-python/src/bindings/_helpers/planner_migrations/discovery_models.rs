@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_identity::metadata::build_function_local_
 use crate::bindings::_helpers::planner_identity::metadata::build_model_version_identity_metadata_json;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods};
 use sqlbuild_analysis::planner_migrations::main::discovery_order::discovery_order;
@@ -21,12 +22,12 @@ pub(super) fn ordered<'py>(runtime: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'p
         .try_iter()?
     {
         let item = item?;
-        let name: String = item.getattr("name")?.extract()?;
+        let name: String = native_field(&item, "name")?.extract()?;
         let mut upstream: Vec<String> = Vec::new();
-        for dependency in item.getattr("deps")?.try_iter()? {
+        for dependency in native_field(&item, "deps")?.try_iter()? {
             let dependency = dependency?;
-            if dependency.getattr("resource_type")?.eq("model")? {
-                upstream.push(dependency.getattr("name")?.extract()?);
+            if native_field(&dependency, "resource_type")?.eq("model")? {
+                upstream.push(native_field(&dependency, "name")?.extract()?);
             }
         }
         dependencies.insert(name.clone(), upstream);
@@ -58,10 +59,10 @@ pub(super) fn triggered(
             .collect::<PyResult<Vec<Bound<'_, PyAny>>>>()
     })?;
     let relevant = relevant.0;
-    let fingerprints = snapshot.getattr("fingerprints")?.getattr("models")?;
+    let fingerprints = native_field(snapshot, "fingerprints")?.getattr("models")?;
     for item in models {
-        let name = item.getattr("name")?;
-        if relevant.contains(item.getattr("key")?)?
+        let name = native_field(item, "name")?;
+        if relevant.contains(native_field(item, "key")?)?
             && !fingerprints.contains(&name)?
             && !declared.contains(&name)?
         {
@@ -80,7 +81,7 @@ pub(super) fn metadata<'py>(
     let functions = object(
         py,
         build_function_local_hashes(
-            &project.getattr("functions")?,
+            &native_field(&project, "functions")?,
             project
                 .getattr("sql_analysis_dialect")?
                 .extract::<Option<String>>()?
@@ -88,19 +89,19 @@ pub(super) fn metadata<'py>(
         )?,
     )?;
     let identities = host::entry(py, UserCodeHost::BuildHookIdentities)?
-        .call1((project.getattr("hook_functions")?,))?;
+        .call1((native_field(&project, "hook_functions")?,))?;
     let hooks = PyDict::new(py);
     for pair in identities.call_method0("items")?.try_iter()? {
         let pair = pair?;
         hooks.set_item(
             pair.get_item(0)?,
-            pair.get_item(1)?.getattr("version_hash")?,
+            native_field(&pair.get_item(1)?, "version_hash")?,
         )?;
     }
     let result = PyDict::new(py);
     for item in models {
         result.set_item(
-            item.getattr("name")?,
+            native_field(item, "name")?,
             object(
                 py,
                 build_model_version_identity_metadata_json(

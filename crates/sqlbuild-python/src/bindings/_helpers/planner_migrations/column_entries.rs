@@ -14,6 +14,7 @@ use crate::bindings::_helpers::planner_migrations::constants::{AUTOMATIC, DONE};
 use crate::bindings::_helpers::planner_migrations::models::{CheckedColumns, ColumnCandidate};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_column;
@@ -58,8 +59,8 @@ pub(super) fn decide<'py>(
     }
     let mut outputs: Vec<String> = Vec::new();
     if !candidate.current.is_none() {
-        for projection in candidate.current.getattr("projections")?.try_iter()? {
-            outputs.push(projection?.getattr("key")?.extract::<String>()?);
+        for projection in native_field(&candidate.current, "projections")?.try_iter()? {
+            outputs.push(native_field(&projection?, "key")?.extract::<String>()?);
         }
     } else {
         for (name, _, _) in inferred_rows(&candidate.model)?.unwrap_or_default() {
@@ -83,7 +84,7 @@ pub(super) fn decide<'py>(
         )?;
         let recorded = !newest.is_none()
             && call_with(
-                &newest.getattr("renamed")?,
+                &native_field(&newest, "renamed")?,
                 &[
                     ("origin_column", origin_name.clone()),
                     ("destination_column", destination.clone()),
@@ -97,7 +98,7 @@ pub(super) fn decide<'py>(
         );
         let decision =
             registry::class(py, RecordId::ColumnMigrationDecision)?.call1((decision_name,))?;
-        if discovery == AUTOMATIC && decision.getattr("blocks_build")?.is_truthy()? {
+        if discovery == AUTOMATIC && native_field(&decision, "blocks_build")?.is_truthy()? {
             continue;
         }
         let done = decision_name == DONE && !newest.is_none();
@@ -110,7 +111,7 @@ pub(super) fn decide<'py>(
                 (
                     "origin_column",
                     if let Some(origin) = origin {
-                        origin.getattr("name")?
+                        native_field(&origin, "name")?
                     } else {
                         origin_name
                     },
@@ -124,7 +125,7 @@ pub(super) fn decide<'py>(
                 (
                     "target_name",
                     if done {
-                        newest.getattr("target_name")?
+                        native_field(&newest, "target_name")?
                     } else {
                         runtime
                             .getattr("project")?
@@ -134,7 +135,7 @@ pub(super) fn decide<'py>(
                 (
                     "completed_at",
                     if done {
-                        newest.getattr("created_at")?
+                        native_field(&newest, "created_at")?
                     } else {
                         py.None().into_bound(py)
                     },
@@ -154,7 +155,9 @@ pub(super) fn checked<'py>(
     let py = runtime.py();
     let mut pending = false;
     for entry in &entries {
-        pending |= entry.getattr("decision")?.getattr("renames")?.is_truthy()?;
+        pending |= native_field(entry, "decision")?
+            .getattr("renames")?
+            .is_truthy()?;
     }
     if !pending {
         return Ok(CheckedColumns {
@@ -163,13 +166,13 @@ pub(super) fn checked<'py>(
         });
     }
     let destination = model_reads::destination(&candidate.model)?;
-    let qualified = destination.getattr("qualified_name")?;
+    let qualified = native_field(&destination, "qualified_name")?;
     let relation = if physical.is_truthy()? {
         physical.clone()
     } else if qualified.is_truthy()? {
         qualified
     } else {
-        destination.getattr("name")?
+        native_field(&destination, "name")?
     };
     let reason = call_with(
         &runtime
@@ -192,9 +195,12 @@ pub(super) fn checked<'py>(
     let mut checked: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for entry in entries {
-        if !entry.getattr("decision")?.getattr("renames")?.is_truthy()? {
+        if !native_field(&entry, "decision")?
+            .getattr("renames")?
+            .is_truthy()?
+        {
             checked.push(entry);
-        } else if entry.getattr("discovery")?.eq("manual")? {
+        } else if native_field(&entry, "discovery")?.eq("manual")? {
             checked.push(replace(
                 &entry,
                 &[
@@ -230,8 +236,11 @@ pub(super) fn hints<'py>(
     let excluded = declared_names(candidate)?.call_method0("copy")?;
     let claimed = PyDict::new(py);
     for entry in entries {
-        claimed.set_item(lower(&entry.getattr("origin_column")?)?, py.None())?;
-        claimed.set_item(lower(&entry.getattr("destination_column")?)?, py.None())?;
+        claimed.set_item(lower(&native_field(entry, "origin_column")?)?, py.None())?;
+        claimed.set_item(
+            lower(&native_field(entry, "destination_column")?)?,
+            py.None(),
+        )?;
     }
     object(
         py,

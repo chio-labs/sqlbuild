@@ -9,6 +9,7 @@ use crate::bindings::_helpers::planner_scenario::constants::{
 };
 use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::values::error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -51,18 +52,24 @@ pub(crate) fn build_scenario_relation_plan<'py>(
     let py = args.project.py();
     let graph = &args.graph_plan;
     let artifacts = PyDict::new(py);
-    for artifact in args.relation_map.getattr("artifacts")?.try_iter()? {
+    for artifact in native_field(&args.relation_map, "artifacts")?.try_iter()? {
         let artifact = artifact?;
-        let identity = artifact.getattr("identity")?;
+        let identity = native_field(&artifact, "identity")?;
         artifacts.set_item(
-            (identity.getattr("kind")?, identity.getattr("logical_name")?),
-            artifact.getattr("physical_name")?,
+            (
+                native_field(&identity, "kind")?,
+                native_field(&identity, "logical_name")?,
+            ),
+            native_field(&artifact, "physical_name")?,
         )?;
     }
     let sources = PyDict::new(py);
-    for source in args.project.getattr("sources")?.try_iter()? {
+    for source in native_field(&args.project, "sources")?.try_iter()? {
         let source = source?;
-        sources.set_item(source.getattr("name")?, source.getattr("source_entry")?)?;
+        sources.set_item(
+            native_field(&source, "name")?,
+            native_field(&source, "source_entry")?,
+        )?;
     }
     let models = PyDict::new(py);
     let refs = PyDict::new(py);
@@ -92,7 +99,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
                 for field in ["database", "schema"] {
                     changes.set_item(field, target.getattr(field)?)?;
                 }
-                changes.set_item("table", target.getattr("name")?)?;
+                changes.set_item("table", native_field(&target, "name")?)?;
                 changes.set_item("expression", py.None())?;
                 changes.set_item("type_enforcement", false)?;
                 let replacement =
@@ -101,7 +108,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
             }
         }
     }
-    for name in graph.getattr("seed_fixture_names")?.try_iter()? {
+    for name in native_field(graph, "seed_fixture_names")?.try_iter()? {
         let name: String = name?.extract()?;
         let Some(target) = seeds.get_item(&name)? else {
             return Err(error(
@@ -116,7 +123,7 @@ pub(crate) fn build_scenario_relation_plan<'py>(
     call_with(
         &registry::class(py, RecordId::ScenarioRelationPlan)?,
         &[
-            ("scenario_name", graph.getattr("name")?),
+            ("scenario_name", native_field(graph, "name")?),
             ("relation_map", args.relation_map.clone()),
             ("model_locations", models.into_any()),
             ("seed_locations", seeds.into_any()),

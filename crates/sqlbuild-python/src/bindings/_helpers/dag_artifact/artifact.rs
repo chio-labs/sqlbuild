@@ -11,6 +11,7 @@ use sqlbuild_core::json::errors::JsonEmitError;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::dag_artifact::rows::{project_input, python_graph_input};
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -38,12 +39,12 @@ pub(crate) fn build_dag_json(
 ) -> PyResult<String> {
     compiler_guard(|| {
         let py = graph.py();
-        let project: DagProjectInput = project_input(&graph.getattr("project")?)?;
+        let project: DagProjectInput = project_input(&native_field(graph, "project")?)?;
         let python: Option<DagPythonGraphInput> = python_graph
             .filter(|python_graph| !python_graph.is_none())
             .map(python_graph_input)
             .transpose()?;
-        let native: Bound<'_, PyAny> = graph.getattr("native")?;
+        let native: Bound<'_, PyAny> = native_field(graph, "native")?;
         let native: PyRef<'_, NativeProjectGraph> = native.extract()?;
         build(native.graph(), &project, python.as_ref(), project_name)
             .map_err(|error| python_error(error, py))

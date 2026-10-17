@@ -7,6 +7,7 @@ use crate::bindings::_helpers::cursor::conversion::GRAIN_NAMES;
 use crate::bindings::_helpers::exported_constants::constants::{
     EXPORTED_INTEGERS, EXPORTED_TEXT_SETS, EXPORTED_TEXT_TUPLES, EXPORTED_TEXTS,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// Registers after the native enums, since `GRAIN_ORDER` is keyed by `CursorGrain` members.
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -23,7 +24,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     for (name, values) in EXPORTED_TEXT_SETS {
         module.add(*name, PyFrozenSet::new(py, values.iter())?)?;
     }
-    let grain = module.getattr("CursorGrain")?;
+    let grain = native_field(module, "CursorGrain")?;
     let order = PyDict::new(py);
     for (name, rank) in GRAIN_NAMES {
         order.set_item(grain.call1((name,))?, rank as usize)?;

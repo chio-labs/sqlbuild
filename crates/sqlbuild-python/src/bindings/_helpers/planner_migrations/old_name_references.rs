@@ -7,6 +7,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, text};
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::relations::match_project_relation;
@@ -31,9 +32,9 @@ fn old_relation<'py>(
     let relation = call_with(
         &imported(py, "sqlbuild.compiler.references.models", "RelationName")?,
         &[
-            ("name", old.getattr("name")?),
-            ("schema", old.getattr("schema")?),
-            ("database", old.getattr("database")?),
+            ("name", native_field(old, "name")?),
+            ("schema", native_field(old, "schema")?),
+            ("database", native_field(old, "database")?),
         ],
     )?;
     call_with(
@@ -62,15 +63,21 @@ pub(super) fn errors<'py>(
     for view in views.try_iter()? {
         let view = view?;
         relations.set_item(
-            old_relation(&view.getattr("old")?, view.getattr("destination_model")?)?,
+            old_relation(
+                &native_field(&view, "old")?,
+                native_field(&view, "destination_model")?,
+            )?,
             py.None(),
         )?;
     }
     for entry in entries.try_iter()? {
         let entry = entry?;
-        if entry.getattr("runs_steps")?.is_truthy()? {
+        if native_field(&entry, "runs_steps")?.is_truthy()? {
             relations.set_item(
-                old_relation(&entry.getattr("origin")?, entry.getattr("model_name")?)?,
+                old_relation(
+                    &native_field(&entry, "origin")?,
+                    native_field(&entry, "model_name")?,
+                )?,
                 py.None(),
             )?;
         }
@@ -86,9 +93,9 @@ pub(super) fn errors<'py>(
     let mut errors: Vec<Bound<'py, PyAny>> = Vec::new();
     for literal in literals.try_iter()? {
         let literal = literal?;
-        let relation = literal.getattr("relation")?;
+        let relation = native_field(&literal, "relation")?;
         let matched = object(py, match_project_relation(&index, &relation, None, None)?)?;
-        if matched.is_none() || matched.getattr("compatibility_for")?.is_none() {
+        if matched.is_none() || native_field(&matched, "compatibility_for")?.is_none() {
             continue;
         }
         let mut parts: Vec<String> = Vec::new();
@@ -101,16 +108,16 @@ pub(super) fn errors<'py>(
         let message: String = object(
             py,
             old_name_reference_message(
-                &literal.getattr("owner_label")?.extract::<String>()?,
+                &native_field(&literal, "owner_label")?.extract::<String>()?,
                 &parts.join("."),
-                &literal.getattr("method")?.extract::<String>()?,
-                &matched.getattr("compatibility_for")?.extract::<String>()?,
+                &native_field(&literal, "method")?.extract::<String>()?,
+                &native_field(&matched, "compatibility_for")?.extract::<String>()?,
             ),
         )?
         .extract()?;
         let remedy: String = hard_coded_relation_remedy(
-            &literal.getattr("owner_kind")?.extract::<String>()?,
-            &matched.getattr("ref")?,
+            &native_field(&literal, "owner_kind")?.extract::<String>()?,
+            &native_field(&matched, "ref")?,
             None,
         )?;
         let path = literal
@@ -118,7 +125,7 @@ pub(super) fn errors<'py>(
             .str()?
             .to_str()?
             .to_owned();
-        let line = literal.getattr("line")?.str()?.to_str()?.to_owned();
+        let line = native_field(&literal, "line")?.str()?.to_str()?.to_owned();
         errors.push(native(
             py,
             RecordId::PlanWarning,

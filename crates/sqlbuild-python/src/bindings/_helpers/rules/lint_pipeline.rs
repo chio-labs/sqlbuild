@@ -36,6 +36,7 @@ use sqlbuild_rules::sql_lint::types::PreparedSql;
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::authored_sql::{AuthoredExpansion, expand_with_inputs};
@@ -95,28 +96,27 @@ impl LintSettings {
     /// The settings a `LintConfig` record holds.
     pub(crate) fn from_record(config: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut relation_keys: Vec<(String, Vec<Vec<String>>)> = Vec::new();
-        for item in config
-            .getattr("relation_keys")?
+        for item in record_field(config, "relation_keys")?
             .call_method0("items")?
             .try_iter()?
         {
             relation_keys.push(item?.extract()?);
         }
         Ok(Self {
-            native_enabled: config.getattr("native_enabled")?.is_truthy()?,
-            header_rules_enabled: config.getattr("header_rules_enabled")?.is_truthy()?,
+            native_enabled: record_field(config, "native_enabled")?.is_truthy()?,
+            header_rules_enabled: record_field(config, "header_rules_enabled")?.is_truthy()?,
             header_rules: HeaderRulesConfig {
-                line_width: config.getattr("line_width")?.extract()?,
-                max_description_lines: config.getattr("max_description_lines")?.extract()?,
+                line_width: record_field(config, "line_width")?.extract()?,
+                max_description_lines: record_field(config, "max_description_lines")?.extract()?,
             },
             sql: LintSqlOptions {
-                dialect: config.getattr("dialect")?.extract()?,
-                enabled_rules: config.getattr("enabled_native_rules")?.extract()?,
-                ignored_rules: config.getattr("ignored_native_rules")?.extract()?,
-                max_literal_length: config.getattr("max_literal_length")?.extract()?,
-                max_ranking_order_by: config.getattr("max_ranking_order_by")?.extract()?,
+                dialect: record_field(config, "dialect")?.extract()?,
+                enabled_rules: record_field(config, "enabled_native_rules")?.extract()?,
+                ignored_rules: record_field(config, "ignored_native_rules")?.extract()?,
+                max_literal_length: record_field(config, "max_literal_length")?.extract()?,
+                max_ranking_order_by: record_field(config, "max_ranking_order_by")?.extract()?,
             },
-            allow_suppressions: config.getattr("allow_suppressions")?.is_truthy()?,
+            allow_suppressions: record_field(config, "allow_suppressions")?.is_truthy()?,
             relation_keys,
         })
     }
@@ -150,22 +150,22 @@ impl CompiledExpansion {
     /// The expansion a `CompiledSqlExpansion` record holds.
     pub(crate) fn from_record(record: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut passes: Vec<Vec<ExpansionSpan>> = Vec::new();
-        for pass in record.getattr("passes")?.try_iter()? {
+        for pass in record_field(record, "passes")?.try_iter()? {
             let mut spans: Vec<ExpansionSpan> = Vec::new();
             for span in pass?.try_iter()? {
                 let span: Bound<'_, PyAny> = span?;
                 spans.push(ExpansionSpan {
-                    source_start: span.getattr("source_start")?.extract()?,
-                    source_end: span.getattr("source_end")?.extract()?,
-                    output_start: span.getattr("output_start")?.extract()?,
-                    output_end: span.getattr("output_end")?.extract()?,
+                    source_start: record_field(&span, "source_start")?.extract()?,
+                    source_end: record_field(&span, "source_end")?.extract()?,
+                    output_start: record_field(&span, "output_start")?.extract()?,
+                    output_end: record_field(&span, "output_end")?.extract()?,
                 });
             }
             passes.push(spans);
         }
         Ok(Self {
-            authored_sql: record.getattr("authored_sql")?.extract()?,
-            expanded_sql: record.getattr("expanded_sql")?.extract()?,
+            authored_sql: record_field(record, "authored_sql")?.extract()?,
+            expanded_sql: record_field(record, "expanded_sql")?.extract()?,
             passes,
         })
     }

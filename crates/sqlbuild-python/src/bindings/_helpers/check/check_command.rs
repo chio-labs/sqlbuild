@@ -43,6 +43,7 @@ use crate::bindings::_helpers::graph::python_selection::python_node_names;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -93,8 +94,8 @@ fn refuse_graph_selectors(py: Python<'_>, selectors: &[Bound<'_, PyAny>]) -> PyR
                 let parsed: Bound<'_, PyAny> =
                     parse_project_selector(part?.downcast::<PyString>()?)?;
                 if parsed.is_instance(&path_selector)?
-                    || parsed.getattr("upstream")?.is_truthy()?
-                    || parsed.getattr("downstream")?.is_truthy()?
+                    || native_field(&parsed, "upstream")?.is_truthy()?
+                    || native_field(&parsed, "downstream")?.is_truthy()?
                 {
                     return Err(user_error(
                         py,
@@ -130,8 +131,8 @@ fn selected_check_names<'py>(
     graph: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let py: Python<'py> = graph.py();
-    let select: Bound<'py, PyAny> = request.getattr("select")?;
-    let exclude: Bound<'py, PyAny> = request.getattr("exclude")?;
+    let select: Bound<'py, PyAny> = native_field(request, "select")?;
+    let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;
     let selectors: Vec<Bound<'py, PyAny>> = select
         .try_iter()?
         .chain(exclude.try_iter()?)
@@ -157,10 +158,10 @@ fn selected_check_names<'py>(
         PyFrozenSet::empty(py)?.into_any()
     };
     let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
-    for node in graph.getattr("nodes")?.try_iter()? {
+    for node in native_field(graph, "nodes")?.try_iter()? {
         let node: Bound<'py, PyAny> = node?;
-        let name: Bound<'py, PyAny> = node.getattr("name")?;
-        if node.getattr("kind")?.eq(&check_kind)? && !excluded.contains(&name)? {
+        let name: Bound<'py, PyAny> = native_field(&node, "name")?;
+        if native_field(&node, "kind")?.eq(&check_kind)? && !excluded.contains(&name)? {
             names.push(name);
         }
     }
@@ -174,16 +175,16 @@ fn compile_pipeline<'py>(
     (graph, check_names): (&Bound<'py, PyAny>, &Bound<'py, PyFrozenSet>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let discovered: Bound<'py, PyAny> = invocation.getattr("discovered_inputs")?;
+    let discovered: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?;
     let required_refs: Bound<'py, PyAny> = call_with(
-        &graph.getattr("selected_sql_refs")?,
+        &native_field(graph, "selected_sql_refs")?,
         &[("selected_names", check_names.clone().into_any())],
     )?;
     let closure: Bound<'py, PyAny> = object(
         py,
         transitive_closure_many(
             check_names.as_any(),
-            &graph.getattr("upstream_deps")?,
+            &native_field(graph, "upstream_deps")?,
             false,
             None,
         )?,
@@ -205,15 +206,15 @@ fn compile_pipeline<'py>(
     for reference in required_refs.try_iter()? {
         keys.push(sql_ref_key(py, &reference?)?);
     }
-    for source_file in discovered.getattr("source_files")?.try_iter()? {
-        for source in source_file?.getattr("source_entries")?.try_iter()? {
+    for source_file in native_field(&discovered, "source_files")?.try_iter()? {
+        for source in native_field(&source_file?, "source_entries")?.try_iter()? {
             let source: Bound<'py, PyAny> = source?;
-            if loaders.contains(source.getattr("loader")?)? {
+            if loaders.contains(native_field(&source, "loader")?)? {
                 keys.push(call_with(
                     &key_class,
                     &[
                         ("resource_type", source_type.clone()),
-                        ("name", source.getattr("name")?),
+                        ("name", native_field(&source, "name")?),
                     ],
                 )?);
             }
@@ -221,19 +222,22 @@ fn compile_pipeline<'py>(
     }
     let keys: Bound<'py, PyAny> = PyFrozenSet::new(py, keys)?.into_any();
     let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
-        invocation.getattr("effective_project_dir")?,
+        native_field(invocation, "effective_project_dir")?,
         discovered.clone(),
     )?;
     let options: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::CompilePipelineOptions)?,
         &[
-            ("selected_target", request.getattr("selected_target")?),
-            ("no_sql_validation", request.getattr("no_sql_validation")?),
+            ("selected_target", native_field(request, "selected_target")?),
+            (
+                "no_sql_validation",
+                native_field(request, "no_sql_validation")?,
+            ),
             (
                 "connection_config",
-                invocation.getattr("connection_config")?,
+                native_field(invocation, "connection_config")?,
             ),
-            ("cli_vars", request.getattr("cli_vars")?),
+            ("cli_vars", native_field(request, "cli_vars")?),
             ("external_sql_reference_resolver", resolver),
         ],
     )?;
@@ -241,7 +245,7 @@ fn compile_pipeline<'py>(
         py,
         &[
             ("discovered_inputs", discovered),
-            ("adapter", invocation.getattr("adapter")?),
+            ("adapter", native_field(invocation, "adapter")?),
             ("options", options),
             ("selected_keys", keys.clone()),
             ("relation_keys", keys),
@@ -254,9 +258,9 @@ fn compile_pipeline<'py>(
         ],
     )?))?;
     let plan_output: Bound<'py, PyAny> = build_relation_command_plan(
-        &context.getattr("project")?,
-        &context.getattr("scope")?,
-        &context.getattr("relations")?,
+        &native_field(&context, "project")?,
+        &native_field(&context, "scope")?,
+        &native_field(&context, "relations")?,
     )?;
     build_static_pipeline_result(
         py,
@@ -288,8 +292,8 @@ fn python_selection<'py>(
     let _py: Python<'py> = request.py();
     let python_graph: Bound<'py, PyAny> = python_node_graph(discovered)?;
     reject_unit_test_selectors(
-        &request.getattr("select")?,
-        &request.getattr("exclude")?,
+        &native_field(request, "select")?,
+        &native_field(request, "exclude")?,
         discovered,
     )?;
     let check_names: Bound<'py, PyFrozenSet> = selected_check_names(request, &python_graph)?;
@@ -301,16 +305,16 @@ fn prepare<'py>(
     invocation: &Bound<'py, PyAny>,
 ) -> PyResult<Prepared<'py>> {
     let py: Python<'py> = request.py();
-    let discovered: Bound<'py, PyAny> = invocation.getattr("discovered_inputs")?;
-    let adapter: Bound<'py, PyAny> = invocation.getattr("adapter")?;
+    let discovered: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?;
+    let adapter: Bound<'py, PyAny> = native_field(invocation, "adapter")?;
     let (planning_graph, planning_names) = python_selection(request, &discovered)?;
     let pipeline: Bound<'py, PyAny> =
         compile_pipeline(request, invocation, (&planning_graph, &planning_names))?;
     let (python_graph, check_names) = python_selection(request, &discovered)?;
     let mut check_functions: Vec<Bound<'py, PyAny>> = Vec::new();
-    for check in discovered.getattr("check_functions")?.try_iter()? {
+    for check in native_field(&discovered, "check_functions")?.try_iter()? {
         let check: Bound<'py, PyAny> = check?;
-        if check_names.contains(check.getattr("name")?)? {
+        if check_names.contains(native_field(&check, "name")?)? {
             check_functions.push(check);
         }
     }
@@ -324,11 +328,11 @@ fn prepare<'py>(
     let lifecycle_plan: Bound<'py, PyAny> =
         build_python_sql_run_lifecycle(&selection, &python_graph)?;
     let relation_refs: Bound<'py, PyAny> = call_with(
-        &python_graph.getattr("selected_sql_refs")?,
+        &native_field(&python_graph, "selected_sql_refs")?,
         &[("selected_names", check_names.clone().into_any())],
     )?;
-    let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
-    let plan_output: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
+    let project: Bound<'py, PyAny> = native_field(&pipeline, "project")?;
+    let plan_output: Bound<'py, PyAny> = native_field(&pipeline, "plan_output")?;
     let relation_targets: Bound<'py, PyAny> = object(
         py,
         build_python_relation_targets(
@@ -383,17 +387,17 @@ fn node_runtime<'py>(
     (connection, providers, with_project_relations): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, bool),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
-    let project: Bound<'py, PyAny> = prepared.pipeline.getattr("project")?;
+    let project: Bound<'py, PyAny> = native_field(&prepared.pipeline, "project")?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
-        ("adapter", invocation.getattr("adapter")?),
+        ("adapter", native_field(invocation, "adapter")?),
         (
             "connection_config",
-            invocation.getattr("connection_config")?,
+            native_field(invocation, "connection_config")?,
         ),
         ("connection", connection.clone()),
-        ("run_id", project.getattr("run_id")?),
-        ("target", project.getattr("effective_target_name")?),
-        ("vars", project.getattr("effective_vars")?),
+        ("run_id", native_field(&project, "run_id")?),
+        ("target", native_field(&project, "effective_target_name")?),
+        ("vars", native_field(&project, "effective_vars")?),
         ("is_reload", PyBool::new(py, false).to_owned().into_any()),
         ("default_database", prepared.defaults.0.clone()),
         ("default_schema", prepared.defaults.1.clone()),
@@ -416,7 +420,7 @@ fn record_run_state<'py>(
     source_map: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     record_python_run_state_results(
-        &invocation.getattr("discovered_inputs")?,
+        &native_field(invocation, "discovered_inputs")?,
         &run_state,
         (&python_results, load_results.as_ref()),
         Some(source_map),
@@ -434,11 +438,11 @@ fn run_checks<'py>(
     ),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
-    let plan_output: Bound<'py, PyAny> = prepared.pipeline.getattr("plan_output")?;
-    let source_map: Bound<'py, PyAny> = plan_output.getattr("source_map")?;
+    let plan_output: Bound<'py, PyAny> = native_field(&prepared.pipeline, "plan_output")?;
+    let source_map: Bound<'py, PyAny> = native_field(&plan_output, "source_map")?;
     let callbacks: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::IngressCallbacks)?,
-        &[("use_color", invocation.getattr("use_color")?)],
+        &[("use_color", native_field(invocation, "use_color")?)],
     )?;
     let ingress: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::ExecuteIngressPythonLoaderNodes)?,
@@ -464,9 +468,9 @@ fn run_checks<'py>(
             ("callbacks", callbacks),
         ],
     )?;
-    let run_state: Bound<'py, PyAny> = ingress.getattr("run_state")?;
-    let load_results: Bound<'py, PyAny> = ingress.getattr("load_results")?;
-    let ingress_python: Bound<'py, PyAny> = ingress.getattr("python_results")?;
+    let run_state: Bound<'py, PyAny> = native_field(&ingress, "run_state")?;
+    let load_results: Bound<'py, PyAny> = native_field(&ingress, "load_results")?;
+    let ingress_python: Bound<'py, PyAny> = native_field(&ingress, "python_results")?;
     record_run_state(
         invocation,
         (
@@ -477,8 +481,8 @@ fn run_checks<'py>(
         &source_map,
     )?;
     let read_side: Bound<'py, PyAny> = run_read_side_dependencies(&ReadSideInputs {
-        adapter: invocation.getattr("adapter")?,
-        connection_config: invocation.getattr("connection_config")?,
+        adapter: native_field(invocation, "adapter")?,
+        connection_config: native_field(invocation, "connection_config")?,
         connection: connection.clone(),
         pipeline_result: prepared.pipeline.clone(),
         python_graph: prepared.python_graph.clone(),
@@ -564,9 +568,9 @@ fn execute<'py>(
     providers: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = invocation.py();
-    let adapter: Bound<'py, PyAny> = invocation.getattr("adapter")?;
+    let adapter: Bound<'py, PyAny> = native_field(invocation, "adapter")?;
     let connection: Bound<'py, PyAny> =
-        adapter.call_method1("connect", (invocation.getattr("connection_config")?,))?;
+        adapter.call_method1("connect", (native_field(invocation, "connection_config")?,))?;
     let event_writer: Bound<'py, PyAny> =
         registry::native(py, NativeAttr::ExecutionEventWriter)?.call0()?;
     let executed: PyResult<Vec<Bound<'py, PyAny>>> = (|| {
@@ -576,7 +580,7 @@ fn execute<'py>(
             let mut total: usize = 0;
             for check in prepared.check_functions.try_iter()? {
                 total += 1;
-                ordinals.set_item(check?.getattr("name")?, total)?;
+                ordinals.set_item(native_field(&check?, "name")?, total)?;
             }
             let options: Bound<'py, PyDict> = PyDict::new(py);
             options.set_item("ordinals", ordinals)?;
@@ -607,9 +611,9 @@ fn complete<'py>(
     (prepared, results): (&Prepared<'py>, &[Bound<'py, PyAny>]),
 ) -> PyResult<i32> {
     let py: Python<'py> = request.py();
-    let stream: Bound<'py, PyAny> = invocation.getattr("progress_stream")?;
+    let stream: Bound<'py, PyAny> = native_field(invocation, "progress_stream")?;
     let style: CliStyle = CliStyle {
-        use_color: invocation.getattr("use_color")?.extract()?,
+        use_color: native_field(invocation, "use_color")?.extract()?,
     };
     write_results(
         &stream,
@@ -635,8 +639,8 @@ fn complete<'py>(
         write_execution_json_output(
             py,
             PyString::new(py, &results_json(results)?).into_any(),
-            request.getattr("json_output")?.is_truthy()?,
-            request.getattr("json_output_path")?,
+            native_field(request, "json_output")?.is_truthy()?,
+            native_field(request, "json_output_path")?,
         )?,
     )?;
     Ok(check_exit_code(&texts))
@@ -651,14 +655,14 @@ fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32
         &registry::class(py, RecordId::CheckInvocation)?,
         true,
     )?;
-    let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
+    let stream: Bound<'_, PyAny> = native_field(&invocation, "progress_stream")?;
     stream.call_method1("write", ("\n",))?;
     let header: Bound<'_, PyDict> = PyDict::new(py);
     header.set_item("stream", &stream)?;
     header.set_item("command", EXECUTION_COMMAND)?;
     header.set_item("target", py.None())?;
     header.set_item("concurrency", PyInt::new(py, 1))?;
-    header.set_item("use_color", invocation.getattr("use_color")?)?;
+    header.set_item("use_color", native_field(&invocation, "use_color")?)?;
     write_execution_header(py, Some(header))?;
     let prepared: Prepared<'_> = prepare(request, &invocation)?;
     let session: Bound<'_, PyAny> = call_with(
@@ -671,8 +675,11 @@ fn run_check_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32
         )],
     )?;
     let outcome: PyResult<i32> = (|| {
-        let results: Vec<Bound<'_, PyAny>> =
-            execute(&invocation, &prepared, &session.getattr("providers")?)?;
+        let results: Vec<Bound<'_, PyAny>> = execute(
+            &invocation,
+            &prepared,
+            &native_field(&session, "providers")?,
+        )?;
         complete(request, &invocation, (&prepared, &results))
     })();
     let closed: PyResult<Bound<'_, PyAny>> = session.call_method0("close");

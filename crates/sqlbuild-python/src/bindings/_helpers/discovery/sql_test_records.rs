@@ -27,6 +27,7 @@ use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::discovery::sql_test_blocks::{
     sql_test_block_records, validate_block_names,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::authored_values::map_to_python;
@@ -112,8 +113,8 @@ fn test_blocks<'py>(
         .iter()
         .map(|block| {
             Ok((
-                block.getattr("test_index")?.extract()?,
-                block.getattr("name")?.extract()?,
+                native_field(block, "test_index")?.extract()?,
+                native_field(block, "name")?.extract()?,
             ))
         })
         .collect::<PyResult<_>>()?;
@@ -189,7 +190,7 @@ fn scenario_file<'py>(
             ("header_values", header_values.into_any()),
             ("sql_body", file.sql_body.into_bound_py_any(py)?),
             ("sql_body_span", file.body_span.into_bound_py_any(py)?),
-            ("name", file_path.getattr("stem")?),
+            ("name", native_field(file_path, "stem")?),
             (
                 "ownership_root",
                 ownership_root(py, SQL_SCENARIOS_OWNERSHIP_ROOT)?,

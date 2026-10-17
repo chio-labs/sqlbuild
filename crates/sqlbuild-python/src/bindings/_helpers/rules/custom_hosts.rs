@@ -27,6 +27,7 @@ use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::constants::{
@@ -412,7 +413,7 @@ pub(crate) fn host_payload_project<'py>(
     let py: Python<'py> = project.py();
     let model_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledModel)?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let fields: Bound<'py, PyDict> = PyDict::new(py);
         for name in PAYLOAD_MODEL_FIELDS {

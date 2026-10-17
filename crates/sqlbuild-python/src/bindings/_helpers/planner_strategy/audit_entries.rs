@@ -21,6 +21,7 @@ use crate::bindings::_helpers::planner_strategy::constants::{
     AUDIT_TYPES_MODULE, COMPILE_TYPES_MODULE, MODEL_ATTACHMENT, SOURCE_ATTACHMENT,
 };
 use crate::bindings::_helpers::planner_strategy::models::AuditPlanning;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -95,13 +96,13 @@ fn plan_audit<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = audit.py();
     let audit = audit.clone();
-    let name: String = audit.getattr("name")?.extract()?;
+    let name: String = native_field(&audit, "name")?.extract()?;
     let resolved = render_query(
         request,
-        audit.getattr("sql_body")?,
+        native_field(&audit, "sql_body")?,
         &format!("audit '{name}' planned SQL"),
     )?;
-    let evidence = audit.getattr("evidence_sql")?;
+    let evidence = native_field(&audit, "evidence_sql")?;
     let evidence_resolved = if evidence.is_none() {
         py.None().into_bound(py)
     } else {
@@ -126,7 +127,7 @@ fn plan_audit<'py>(
     let requested = audit_enum(&audit, "run_scope", "AuditRunScope", "final")?;
     let severity = audit_enum(&audit, "severity", "AuditSeverity", "warn")?;
     let effective = resolve_effective_run_scope(&requested, &materialization)?;
-    let mut target_kind = audit.getattr("attached_target_kind")?;
+    let mut target_kind = native_field(&audit, "attached_target_kind")?;
     if target_kind.is_none() && (kind_text == MODEL_ATTACHMENT || kind_text == SOURCE_ATTACHMENT) {
         target_kind =
             imported(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?.call1((kind_text,))?;
@@ -147,7 +148,7 @@ fn plan_audit<'py>(
     ] {
         values.set_item(field, audit.getattr(field)?)?;
     }
-    let measurement = audit.getattr("measurement_contract")?;
+    let measurement = native_field(&audit, "measurement_contract")?;
     for field in ["value_column", "sample_count_column", "sample_unit"] {
         values.set_item(
             field,
@@ -160,13 +161,16 @@ fn plan_audit<'py>(
     }
     for (field, value) in [
         ("resolved_sql", resolved),
-        ("unresolved_sql", audit.getattr("sql_body")?),
+        ("unresolved_sql", native_field(&audit, "sql_body")?),
         ("attachment_kind", kind),
         ("severity", severity),
         ("requested_run_scope", requested),
         ("effective_run_scope", effective),
         ("evidence_resolved_sql", evidence_resolved),
-        ("evidence_unresolved_sql", audit.getattr("evidence_sql")?),
+        (
+            "evidence_unresolved_sql",
+            native_field(&audit, "evidence_sql")?,
+        ),
         ("attached_target_kind", target_kind),
         ("attached_target_name", target),
         (
@@ -192,8 +196,8 @@ pub(crate) fn audit_is_selected(
     selected_keys: &Bound<'_, PyAny>,
 ) -> PyResult<bool> {
     let py = audit.py();
-    let kind = audit.getattr("attached_target_kind")?;
-    let name = audit.getattr("attached_target_name")?;
+    let kind = native_field(audit, "attached_target_kind")?;
+    let name = native_field(audit, "attached_target_name")?;
     if !kind.is_none() && !name.is_none() {
         let target_value = imported(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?
             .call1((kind,))?
@@ -206,7 +210,7 @@ pub(crate) fn audit_is_selected(
         )?;
         return selected_keys.contains(key);
     }
-    for dependency in audit.getattr("scope_deps")?.try_iter()? {
+    for dependency in native_field(audit, "scope_deps")?.try_iter()? {
         if selected_keys.contains(dependency?)? {
             return Ok(true);
         }
@@ -225,7 +229,7 @@ pub(crate) fn build_selected_audit_entries<'py>(
     let project = request.get("project")?;
     let selected_keys = request.get("scope")?.getattr("selected_keys")?;
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
-    for audit in project.getattr("audits")?.try_iter()? {
+    for audit in native_field(&project, "audits")?.try_iter()? {
         let audit = audit?;
         if audit_is_selected(&audit, &selected_keys)? {
             selected.push(audit);
@@ -238,13 +242,13 @@ pub(crate) fn build_selected_audit_entries<'py>(
     let lineage = project_lineage_views(py, &project)?;
     let relations = request.get("relations")?;
     let planning = AuditPlanning {
-        model_locations: relations.getattr("model_locations")?,
-        seed_locations: relations.getattr("seed_locations")?,
-        source_map: relations.getattr("source_read_map")?,
+        model_locations: native_field(&relations, "model_locations")?,
+        seed_locations: native_field(&relations, "seed_locations")?,
+        source_map: native_field(&relations, "source_read_map")?,
         adapter: request.get("adapter")?,
         model_materializations: request.get("model_materializations")?,
-        lineage_upstream_deps: lineage.getattr("upstream_deps")?,
-        lineage_downstream_deps: lineage.getattr("downstream_deps")?,
+        lineage_upstream_deps: native_field(&lineage, "upstream_deps")?,
+        lineage_downstream_deps: native_field(&lineage, "downstream_deps")?,
     };
     for audit in selected {
         entries.append(plan_audit(&audit, &planning)?)?;

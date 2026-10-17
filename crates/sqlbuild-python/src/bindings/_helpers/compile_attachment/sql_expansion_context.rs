@@ -11,6 +11,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
@@ -23,7 +24,7 @@ fn declaration_scope<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let loaded_macros: Bound<'py, PyAny> = host::entry(py, UserCodeHost::LoadProjectMacros)?
-        .call1((discovered.getattr("macro_files")?,))?;
+        .call1((native_field(discovered, "macro_files")?,))?;
     if !static_scope.is_none() {
         let rebound: Bound<'py, PyAny> =
             rebind_declaration_scope(&static_scope, &discovered.clone(), &loaded_macros.clone())
@@ -50,22 +51,25 @@ fn local_declarations<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         let named: Bound<'py, PyDict> = PyDict::new(py);
         for declaration in declarations.try_iter()? {
             let declaration: Bound<'py, PyAny> = declaration?;
-            named.set_item(declaration.getattr("name")?, declaration)?;
+            named.set_item(native_field(&declaration, "name")?, declaration)?;
         }
         Ok(named.into_any())
     };
     let local: Bound<'py, PyDict> = PyDict::new(py);
-    for model_file in discovered.getattr("model_files")?.try_iter()? {
+    for model_file in native_field(discovered, "model_files")?.try_iter()? {
         let model_file: Bound<'py, PyAny> = model_file?;
         local.set_item(
-            model_file.getattr("file_path")?,
+            native_field(&model_file, "file_path")?,
             call_with(
                 &context,
                 &[
-                    ("enums", by_name(model_file.getattr("enum_declarations")?)?),
+                    (
+                        "enums",
+                        by_name(native_field(&model_file, "enum_declarations")?)?,
+                    ),
                     (
                         "constants",
-                        by_name(model_file.getattr("constant_declarations")?)?,
+                        by_name(native_field(&model_file, "constant_declarations")?)?,
                     ),
                 ],
             )?,
@@ -163,8 +167,8 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
             ],
         )?,
     };
-    let project_config: Bound<'_, PyAny> = discovered.getattr("project_config")?;
-    let local_config: Bound<'_, PyAny> = discovered.getattr("local_config")?;
+    let project_config: Bound<'_, PyAny> = native_field(&discovered, "project_config")?;
+    let local_config: Bound<'_, PyAny> = native_field(&discovered, "local_config")?;
     let cli_vars: Bound<'_, PyAny> = sources
         .cli_vars
         .unwrap_or_else(|| PyDict::new(py).into_any());
@@ -182,7 +186,7 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
             sources
                 .static_declaration_scope
                 .unwrap_or_else(|| py.None().into_bound(py)),
-            value_renderer.getattr("sql_lexical_syntax")?,
+            native_field(&value_renderer, "sql_lexical_syntax")?,
         )?,
     };
     let (enums, constants): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
@@ -204,7 +208,10 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
                 "sql_analysis_enabled",
                 PyBool::new(py, false).to_owned().into_any(),
             ),
-            ("target_name", project_config.getattr("default_target")?),
+            (
+                "target_name",
+                native_field(&project_config, "default_target")?,
+            ),
             ("vars", effective_vars.clone()),
             ("_value_renderer", value_renderer.clone()),
             ("_collection_rendering", collection_rendering.clone()),
@@ -218,14 +225,14 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
     )?;
     Ok(SqlExpansionInputs {
         effective_vars: effective_vars.unbind(),
-        loaded_macros: scope.getattr("loaded_macros")?.unbind(),
+        loaded_macros: native_field(&scope, "loaded_macros")?.unbind(),
         macro_context: macro_context.unbind(),
         enums: enums.unbind(),
         constants: constants.unbind(),
         value_renderer: value_renderer.unbind(),
         collection_rendering: collection_rendering.unbind(),
         local_declarations: local_declarations(&discovered)?.unbind(),
-        declaration_resolver: scope.getattr("resolver")?.unbind(),
+        declaration_resolver: native_field(&scope, "resolver")?.unbind(),
     })
 }
 

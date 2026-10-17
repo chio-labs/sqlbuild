@@ -13,6 +13,7 @@ use crate::bindings::_helpers::planner_phases::objects::{
 use crate::bindings::_helpers::planner_warehouse::constants::{
     MODEL_HOOK_CONFIG_KEYS, SQL_HOOK_ENTRY,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -24,10 +25,10 @@ use std::collections::BTreeSet;
 
 fn managed_names(project: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<_> = BTreeSet::new();
-    for source in project.getattr("sources")?.try_iter()? {
-        let entry = source?.getattr("source_entry")?;
-        if !entry.getattr("loader")?.is_none() {
-            names.insert(entry.getattr("name")?.extract()?);
+    for source in native_field(project, "sources")?.try_iter()? {
+        let entry = native_field(&source?, "source_entry")?;
+        if !native_field(&entry, "loader")?.is_none() {
+            names.insert(native_field(&entry, "name")?.extract()?);
         }
     }
     Ok(names)
@@ -51,7 +52,7 @@ fn hook_source_reads(
     let py = model.py();
     let hook_entry = registry::class(py, SQL_HOOK_ENTRY)?;
     let source_kind = host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
-    let values = model.getattr("config")?.getattr("values")?;
+    let values = native_field(model, "config")?.getattr("values")?;
     for key in MODEL_HOOK_CONFIG_KEYS {
         let value = values.call_method1("get", (key,))?;
         let entries: Vec<Bound<'_, PyAny>> =
@@ -64,10 +65,10 @@ fn hook_source_reads(
             if !entry.is_instance(&hook_entry)? {
                 continue;
             }
-            for reference in entry.getattr("reads")?.try_iter()? {
+            for reference in native_field(&entry, "reads")?.try_iter()? {
                 let reference = reference?;
-                if reference.getattr("kind")?.is(&source_kind) {
-                    let name: String = reference.getattr("name")?.extract()?;
+                if native_field(&reference, "kind")?.is(&source_kind) {
+                    let name: String = native_field(&reference, "name")?.extract()?;
                     if managed.contains(&name) {
                         names.push(name);
                     }
@@ -84,7 +85,7 @@ fn selected_managed_refs(
     managed: &BTreeSet<String>,
 ) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<_> = BTreeSet::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         if !selected.contains(model_reads::model_key(&model)?)? {
             continue;
@@ -92,15 +93,18 @@ fn selected_managed_refs(
         names.extend(sql_source_reads(&model_reads::query_sql(&model)?, managed)?);
         names.extend(hook_source_reads(&model, managed)?);
     }
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(project, "functions")?.try_iter()? {
         let function = function?;
-        if selected.contains(function.getattr("key")?)? {
-            names.extend(sql_source_reads(&function.getattr("body_sql")?, managed)?);
+        if selected.contains(native_field(&function, "key")?)? {
+            names.extend(sql_source_reads(
+                &native_field(&function, "body_sql")?,
+                managed,
+            )?);
         }
     }
-    for audit in project.getattr("audits")?.try_iter()? {
+    for audit in native_field(project, "audits")?.try_iter()? {
         let audit = audit?;
-        let deps = audit.getattr("scope_deps")?;
+        let deps = native_field(&audit, "scope_deps")?;
         if deps.is_truthy()? {
             let mut any = false;
             for dep in deps.try_iter()? {
@@ -113,14 +117,17 @@ fn selected_managed_refs(
                 continue;
             }
         }
-        for reference in audit.getattr("references")?.try_iter()? {
+        for reference in native_field(&audit, "references")?.try_iter()? {
             let reference = reference?;
-            let name: String = reference.getattr("ref_name")?.extract()?;
-            if reference.getattr("ref_kind")?.eq("source")? && managed.contains(&name) {
+            let name: String = native_field(&reference, "ref_name")?.extract()?;
+            if native_field(&reference, "ref_kind")?.eq("source")? && managed.contains(&name) {
                 names.insert(name);
             }
         }
-        names.extend(sql_source_reads(&audit.getattr("sql_body")?, managed)?);
+        names.extend(sql_source_reads(
+            &native_field(&audit, "sql_body")?,
+            managed,
+        )?);
     }
     Ok(names)
 }
@@ -147,7 +154,7 @@ fn source_target_name<'py>(
     if !defer_sources_to.is_none() {
         return Ok(defer_sources_to.clone());
     }
-    let active = project.getattr("effective_target_name")?;
+    let active = native_field(project, "effective_target_name")?;
     if active.is_none() || project_config.is_none() || local_config.is_none() {
         return Ok(py.None().into_bound(py));
     }
@@ -161,15 +168,15 @@ fn source_target_name<'py>(
 }
 
 fn raw_source_entry<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let declared = source.getattr("source_entry")?;
-    let name = declared.getattr("name")?;
+    let declared = native_field(source, "source_entry")?;
+    let name = native_field(&declared, "name")?;
     for entry in source
         .getattr("source_file")?
         .getattr("source_entries")?
         .try_iter()?
     {
         let entry = entry?;
-        if entry.getattr("name")?.eq(&name)? {
+        if native_field(&entry, "name")?.eq(&name)? {
             return Ok(entry);
         }
     }
@@ -211,20 +218,24 @@ fn entry_for_environment<'py>(
     target: &Bound<'py, PyAny>,
     effective_vars: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    if !entry.getattr("expression")?.is_none() {
+    if !native_field(entry, "expression")?.is_none() {
         return Ok(entry.clone());
     }
-    let mut database = entry.getattr("database")?;
+    let mut database = native_field(entry, "database")?;
     if database.is_none() {
-        database = target_field(&target.getattr("database")?, &database, effective_vars)?;
+        database = target_field(
+            &native_field(target, "database")?,
+            &database,
+            effective_vars,
+        )?;
     }
-    let mut schema = entry.getattr("schema")?;
+    let mut schema = native_field(entry, "schema")?;
     if schema.is_none() {
-        let loader_schema = target.getattr("loader_schema")?;
+        let loader_schema = native_field(target, "loader_schema")?;
         let target_schema = if loader_schema.is_truthy()? {
             loader_schema
         } else {
-            target.getattr("schema")?
+            native_field(target, "schema")?
         };
         schema = target_field(&target_schema, &schema, effective_vars)?;
     }
@@ -284,8 +295,8 @@ pub(crate) fn build_source_read_map<'py>(
     if target_name.is_none() || project_config.is_none() || local_config.is_none() {
         return Ok(source_map.clone());
     }
-    if !project_config.getattr("targets")?.contains(&target_name)?
-        && !local_config.getattr("targets")?.contains(&target_name)?
+    if !native_field(project_config, "targets")?.contains(&target_name)?
+        && !native_field(local_config, "targets")?.contains(&target_name)?
     {
         return Err(planner_error(
             py,
@@ -294,11 +305,13 @@ pub(crate) fn build_source_read_map<'py>(
         ));
     }
     let target = resolve_target(project_config, local_config, target_name)?;
-    let effective_vars = project.getattr("effective_vars")?;
+    let effective_vars = native_field(project, "effective_vars")?;
     let result = source_map.copy()?;
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        let name: String = source.getattr("source_entry")?.getattr("name")?.extract()?;
+        let name: String = native_field(&source, "source_entry")?
+            .getattr("name")?
+            .extract()?;
         if !selected.contains(&name) {
             continue;
         }
@@ -330,9 +343,9 @@ pub(crate) fn with_declared_source_reads<'py>(
         return Ok(source_map.clone());
     }
     let result = source_map.copy()?;
-    for source in project.getattr("sources")?.try_iter()? {
-        let entry = source?.getattr("source_entry")?;
-        let name: String = entry.getattr("name")?.extract()?;
+    for source in native_field(project, "sources")?.try_iter()? {
+        let entry = native_field(&source?, "source_entry")?;
+        let name: String = native_field(&entry, "name")?.extract()?;
         if missing.contains(&name) {
             result.set_item(name, entry)?;
         }

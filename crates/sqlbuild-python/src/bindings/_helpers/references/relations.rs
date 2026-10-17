@@ -10,6 +10,7 @@ use crate::bindings::_helpers::analysis::relation_names::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const RUNTIME_RELATION_PREFIX: &str = "SELECT 1 FROM ";
 
@@ -76,7 +77,7 @@ pub(crate) fn match_project_relation<'py>(
     default_database: Option<String>,
     default_schema: Option<String>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let name: String = python_casefold(&relation.getattr("name")?.extract::<String>()?);
+    let name: String = python_casefold(&native_field(relation, "name")?.extract::<String>()?);
     let schema: Option<String> = relation
         .getattr("schema")?
         .extract::<Option<String>>()?
@@ -85,14 +86,14 @@ pub(crate) fn match_project_relation<'py>(
         .getattr("database")?
         .extract::<Option<String>>()?
         .or(default_database);
-    for candidate in index.getattr("relations")?.try_iter()? {
+    for candidate in native_field(index, "relations")?.try_iter()? {
         let candidate: Bound<'py, PyAny> = candidate?;
-        let target: Bound<'py, PyAny> = candidate.getattr("relation")?;
-        if python_casefold(&target.getattr("name")?.extract::<String>()?) != name {
+        let target: Bound<'py, PyAny> = native_field(&candidate, "relation")?;
+        if python_casefold(&native_field(&target, "name")?.extract::<String>()?) != name {
             continue;
         }
-        let target_schema: Option<String> = target.getattr("schema")?.extract()?;
-        let target_database: Option<String> = target.getattr("database")?.extract()?;
+        let target_schema: Option<String> = native_field(&target, "schema")?.extract()?;
+        let target_database: Option<String> = native_field(&target, "database")?.extract()?;
         if parts_compatible(schema.as_deref(), target_schema.as_deref())
             && parts_compatible(database.as_deref(), target_database.as_deref())
         {

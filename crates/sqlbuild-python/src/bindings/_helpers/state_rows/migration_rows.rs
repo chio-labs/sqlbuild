@@ -18,6 +18,7 @@ use sqlbuild_state::events::main::readable_columns::readable_columns;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::events::typed_insert_sql;
@@ -105,9 +106,9 @@ fn row_values<'py>(
     let relation = |name: &str| -> PyResult<[Bound<'py, PyAny>; 3]> {
         let relation: Bound<'py, PyAny> = event.getattr(name)?;
         Ok([
-            relation.getattr("database")?,
-            relation.getattr("schema")?,
-            relation.getattr("name")?,
+            native_field(&relation, "database")?,
+            native_field(&relation, "schema")?,
+            native_field(&relation, "name")?,
         ])
     };
     let mut values: Vec<Bound<'py, PyAny>> = vec![field("event_id")?, field("target_name")?];
@@ -168,16 +169,16 @@ pub(crate) fn write_statements<'py>(
 ) -> PyResult<(String, String)> {
     let py: Python<'py> = event.py();
     let relation: Bound<'py, PyAny> = event.getattr(layout.relation_attribute)?;
-    let schema: Bound<'py, PyAny> = relation.getattr("schema")?;
+    let schema: Bound<'py, PyAny> = native_field(&relation, "schema")?;
     if schema.is_none() {
         return Err(state_error(py, layout.event_message));
     }
     let table: String = qualified_table(
         layout,
         render_qualified_name,
-        (relation.getattr("database")?, schema),
+        (native_field(&relation, "database")?, schema),
     )?;
-    let event_id: String = event.getattr("event_id")?.extract()?;
+    let event_id: String = native_field(event, "event_id")?.extract()?;
     let values: Vec<Bound<'py, PyAny>> = row_values(layout.table, event)?;
     let insert: String = typed_insert_sql(py, &table, (layout.columns, &values))?;
     Ok((event_exists_sql(&table, &event_id), insert))
@@ -243,7 +244,7 @@ fn timestamp<'py>(raw: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     } else {
         imported(py, DATETIME_MODULE, "datetime")?.call_method1("fromisoformat", (raw.str()?,))?
     };
-    if !parsed.getattr("tzinfo")?.is_none() {
+    if !native_field(&parsed, "tzinfo")?.is_none() {
         return Ok(parsed);
     }
     let utc: Bound<'py, PyDict> = PyDict::new(py);

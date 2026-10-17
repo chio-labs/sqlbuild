@@ -1,5 +1,6 @@
 //! Authored locations Python consumers read: YAML entry lines and project-relative paths.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyTuple, PyTupleMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -21,8 +22,8 @@ pub(crate) fn project_relative_path<'py>(
     path: &Bound<'py, PyAny>,
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let root_parts: Bound<'py, PyTuple> = project_dir.getattr("parts")?.cast_into()?;
-    let path_parts: Bound<'py, PyTuple> = path.getattr("parts")?.cast_into()?;
+    let root_parts: Bound<'py, PyTuple> = native_field(project_dir, "parts")?.cast_into()?;
+    let path_parts: Bound<'py, PyTuple> = native_field(path, "parts")?.cast_into()?;
     let same_anchor: bool = path.call_method0("is_absolute")?.is_truthy()?
         == project_dir.call_method0("is_absolute")?.is_truthy()?;
     if !same_anchor

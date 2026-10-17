@@ -26,6 +26,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::diagnostics::redaction::redacted_value;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const PRIVATE_SQL_MARKER: ExecutorHost = ExecutorHost::SqlPrivateRecordMarker;
 
@@ -164,8 +165,8 @@ fn route_diagnostic_log_record<'py>(
     let py: Python<'py> = record.py();
     let values: Bound<'py, PyDict> = record_values(record)?;
     let facts = RecordFacts {
-        internal: internal_name(&record.getattr("name")?)?,
-        level: record.getattr("levelno")?.extract()?,
+        internal: internal_name(&native_field(record, "name")?)?,
+        level: native_field(record, "levelno")?.extract()?,
         has_sql_digest: values.contains(SQL_DIGEST_FIELD)?,
         has_sql_text: values.contains(SQL_TEXT_FIELD)?,
     };
@@ -184,7 +185,7 @@ fn route_diagnostic_log_record<'py>(
     if facts.has_sql_digest {
         REDACTED_SQL_LOG_MESSAGE.clone_into(&mut message);
     }
-    let exc_info: Bound<'py, PyAny> = record.getattr("exc_info")?;
+    let exc_info: Bound<'py, PyAny> = native_field(record, "exc_info")?;
     if !exc_info.is_none() {
         let formatted: PyResult<String> = imported(py, "logging", "Formatter")
             .and_then(|formatter| formatter.call0())
@@ -271,7 +272,7 @@ fn retained<'py>(
         } else {
             extra_fields(record)?
         };
-        return Ok((message, record.getattr("name")?, fields));
+        return Ok((message, native_field(record, "name")?, fields));
     }
     let sql_fields: Bound<'py, PyDict> = PyDict::new(py);
     for (key, value) in fields.iter() {
@@ -298,12 +299,12 @@ fn compute_diagnostic_log_fields<'py>(
     invocation_id: &str,
     include_sql_text: bool,
 ) -> PyResult<Option<Bound<'py, PyDict>>> {
-    let name: Bound<'py, PyAny> = record.getattr("name")?;
+    let name: Bound<'py, PyAny> = native_field(record, "name")?;
     let Ok(name) = name.downcast::<PyString>() else {
         return Ok(None);
     };
     let values: Bound<'py, PyDict> = record_values(record)?;
-    let level: i64 = record.getattr("levelno")?.extract()?;
+    let level: i64 = native_field(record, "levelno")?.extract()?;
     let facts = RecordFacts {
         internal: internal_logger(name.to_str()?),
         level,

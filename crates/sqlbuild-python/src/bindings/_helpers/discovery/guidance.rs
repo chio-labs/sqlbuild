@@ -12,6 +12,7 @@ use sqlbuild_config::project::main::sql_analysis_off_guidance::sql_analysis_off_
 use sqlbuild_config::project::models::{SettingSite, SettingText};
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 
 /// The note and help for turning SQL analysis on, or `None` when it is effectively on.
@@ -19,14 +20,14 @@ pub(crate) fn sql_analysis_guidance(
     discovered_inputs: &Bound<'_, PyAny>,
     purpose: &str,
 ) -> PyResult<Option<(String, String)>> {
-    let local: Bound<'_, PyAny> = discovered_inputs.getattr("local_config")?;
+    let local: Bound<'_, PyAny> = native_field(discovered_inputs, "local_config")?;
     let local_override: bool = local
         .getattr("setting_overrides")?
         .contains(SQL_ANALYSIS_KEY)?;
     let owner: Bound<'_, PyAny> = if local_override {
         local
     } else {
-        discovered_inputs.getattr("project_config")?
+        native_field(discovered_inputs, "project_config")?
     };
     if owner
         .getattr("settings")?

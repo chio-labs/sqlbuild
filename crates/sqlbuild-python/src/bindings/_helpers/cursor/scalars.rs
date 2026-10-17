@@ -29,6 +29,7 @@ use crate::bindings::_helpers::cursor::conversion::{CursorSession, algebra_error
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, naive_date_time};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -90,7 +91,7 @@ fn integer_failure(py: Python<'_>, error: &PyErr) -> PyResult<bool> {
 
 /// `value.astimezone(UTC)` for an aware `datetime`, else `value`.
 fn utc_normalized<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    if value.getattr("tzinfo")?.is_none() {
+    if native_field(value, "tzinfo")?.is_none() {
         return Ok(value.clone());
     }
     value.call_method1(
@@ -228,7 +229,7 @@ pub(crate) fn render_value(value: &Bound<'_, PyAny>) -> PyResult<String> {
 #[pyo3(signature = (*, sentinel))]
 pub(crate) fn sentinel_to_token(sentinel: &Bound<'_, PyAny>) -> PyResult<String> {
     if sentinel.is_instance(&host::entry(sentinel.py(), ExecutorHost::BoundSentinel)?)? {
-        return sentinel.getattr("value")?.extract();
+        return native_field(sentinel, "value")?.extract();
     }
     render_value(sentinel)
 }

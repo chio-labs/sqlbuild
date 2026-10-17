@@ -17,6 +17,7 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::placement::{QualifiedRow, qualified_identity};
@@ -242,7 +243,7 @@ fn visibility_index<'py>(
     let py: Python<'py> = canonical_declarations.py();
     let identities: Vec<Bound<'py, PyAny>> = canonical_declarations
         .iter()
-        .map(|record| record.getattr("identity"))
+        .map(|record| native_field(&record, "identity"))
         .collect::<PyResult<_>>()?;
     let private: Bound<'py, PyDict> = PyDict::new(py);
     for (owner, positions) in &visibility.private {
@@ -290,10 +291,10 @@ pub(crate) fn build_scope_lookup(py: Python<'_>, index: &Bound<'_, PyAny>) -> Py
         &canonical_declarations,
         picked(&usages, &lookup.usages)?,
         picked(&grants, &lookup.grants)?,
-        index.getattr("visibility")?,
-        index.getattr("inaccessible")?,
+        native_field(index, "visibility")?,
+        native_field(index, "inaccessible")?,
         picked(&tuple_attribute(index, "diagnostics")?, &lookup.diagnostics)?,
-        index.getattr("completeness")?,
+        native_field(index, "completeness")?,
     ))?;
     let groups = &lookup.groups;
     let mappings: [Bound<'_, PyAny>; 6] = [

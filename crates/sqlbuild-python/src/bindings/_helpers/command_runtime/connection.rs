@@ -20,6 +20,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -74,7 +75,7 @@ pub(crate) fn with_dbt_profile<'py>(
             ("adapter_name", adapter_name.clone()),
             (
                 "project_config",
-                discovered_inputs.getattr("project_config")?,
+                native_field(discovered_inputs, "project_config")?,
             ),
             ("cli_vars", cli_vars.clone()),
         ],
@@ -82,11 +83,11 @@ pub(crate) fn with_dbt_profile<'py>(
     if profile.is_none() {
         return Ok(config);
     }
-    for warning in profile.getattr("warnings")?.try_iter()? {
+    for warning in native_field(&profile, "warnings")?.try_iter()? {
         warn(py, &format!("Warning: {}", warning?.str()?))?;
     }
     let merged: Bound<'py, PyDict> = PyDict::new(py);
-    merged.update(&profile.getattr("connection")?.cast_into()?)?;
+    merged.update(&native_field(&profile, "connection")?.cast_into()?)?;
     for (key, value) in raw_config.iter() {
         let routing: bool = key
             .extract::<String>()
@@ -198,10 +199,10 @@ fn require_configured_connection(
     selected_target: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'_> = project_dir.py();
-    let project_config: Bound<'_, PyAny> = discovered_inputs.getattr("project_config")?;
-    let local_config: Bound<'_, PyAny> = discovered_inputs.getattr("local_config")?;
-    if project_config.getattr("connection")?.is_truthy()?
-        || local_config.getattr("connection")?.is_truthy()?
+    let project_config: Bound<'_, PyAny> = native_field(discovered_inputs, "project_config")?;
+    let local_config: Bound<'_, PyAny> = native_field(discovered_inputs, "local_config")?;
+    if native_field(&project_config, "connection")?.is_truthy()?
+        || native_field(&local_config, "connection")?.is_truthy()?
     {
         return Ok(());
     }
@@ -228,8 +229,8 @@ fn require_configured_connection(
             ("target_name", target_name.clone()),
         ],
     )?;
-    if !target_config.getattr("connection_name")?.is_none()
-        || target_config.getattr("connection")?.is_truthy()?
+    if !native_field(&target_config, "connection_name")?.is_none()
+        || native_field(&target_config, "connection")?.is_truthy()?
     {
         return Ok(());
     }
@@ -263,9 +264,12 @@ pub(crate) fn project_connection_config<'py>(
         &[
             (
                 "project_config",
-                discovered_inputs.getattr("project_config")?,
+                native_field(discovered_inputs, "project_config")?,
             ),
-            ("local_config", discovered_inputs.getattr("local_config")?),
+            (
+                "local_config",
+                native_field(discovered_inputs, "local_config")?,
+            ),
         ],
     )?;
     connection_config(

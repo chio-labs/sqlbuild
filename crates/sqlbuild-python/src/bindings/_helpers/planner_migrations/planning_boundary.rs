@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_re
 use crate::bindings::_helpers::planner_phases::retention::effective_target_config;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_warehouse::snapshot::gather_redirected_cursor_snapshots;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 
@@ -14,7 +15,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 pub(super) fn missing_origin_policy<'py>(
     runtime: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    effective_target_config(runtime)?.getattr("missing_migration_origin")
+    native_field(
+        &effective_target_config(runtime)?,
+        "missing_migration_origin",
+    )
 }
 
 /// Live cursor snapshots of models whose history now sits in a redirected relation.
@@ -32,25 +36,31 @@ pub(super) fn redirected_cursor_snapshots<'py>(
     let start = if config.is_none() {
         py.None().into_bound(py)
     } else {
-        config.getattr("cursors")?.getattr("start")?
+        native_field(&config, "cursors")?.getattr("start")?
     };
     let cursor_scope = native(
         py,
         RecordId::CursorSnapshotScope,
         &[
-            ("model_keys", scope.getattr("selected_keys")?),
-            ("runtime_producer_keys", scope.getattr("selected_keys")?),
+            ("model_keys", native_field(scope, "selected_keys")?),
+            (
+                "runtime_producer_keys",
+                native_field(scope, "selected_keys")?,
+            ),
             (
                 "invocation_time",
                 runtime_field(runtime, |runtime| &runtime.invocation_time)?,
             ),
             ("start_cursor_config", start),
-            ("cursor_overrides", overrides.getattr("cursor_overrides")?),
+            (
+                "cursor_overrides",
+                native_field(overrides, "cursor_overrides")?,
+            ),
         ],
     )?;
     let full_refresh = effectively_full_refreshed_model_names(
         &project,
-        overrides.getattr("full_refresh")?.is_truthy()?,
+        native_field(overrides, "full_refresh")?.is_truthy()?,
     )?;
     gather_redirected_cursor_snapshots(
         py,
@@ -72,7 +82,7 @@ pub(super) fn redirected_cursor_snapshots<'py>(
                 ("full_refresh_model_names", full_refresh),
                 (
                     "deferred_locations",
-                    phase.deferral.getattr("deferred_locations")?,
+                    native_field(&phase.deferral, "deferred_locations")?,
                 ),
                 (
                     "on_progress",

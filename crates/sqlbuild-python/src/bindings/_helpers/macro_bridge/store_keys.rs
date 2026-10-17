@@ -17,6 +17,7 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::frontier::encoder::emit_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const VALUE_RENDERER_FIELD: &str = "_value_renderer";
 /// Nesting at which a value counts as too deep to key, as Python's recursion limit stops it.
@@ -109,7 +110,7 @@ impl<'py> CanonicalTypes<'py> {
             return Ok(JsonValue::Array(vec![
                 JsonValue::String("enum".to_owned()),
                 JsonValue::String(type_name(&kind)?),
-                self.canonical(&value.getattr("value")?, depth + 1)?,
+                self.canonical(&native_field(value, "value")?, depth + 1)?,
             ]));
         }
         if value.is_none() {
@@ -201,7 +202,7 @@ impl<'py> CanonicalTypes<'py> {
         if self.is_dataclass.call1((value,))?.is_truthy()? && !value.is_instance(&self.type_type)? {
             let mut fields: Vec<JsonValue> = Vec::new();
             for field in self.fields.call1((value,))?.try_iter()? {
-                let name: Bound<'py, PyAny> = field?.getattr("name")?;
+                let name: Bound<'py, PyAny> = native_field(&field?, "name")?;
                 let item: Bound<'py, PyAny> = value.getattr(name.downcast::<PyString>()?)?;
                 fields.push(JsonValue::Array(vec![
                     text(name.downcast::<PyString>()?)?,
@@ -230,7 +231,7 @@ fn macro_store_token<'py>(
     let loaded: Bound<'py, PyAny> = arguments.value("loaded")?;
     let keyed: PyResult<Option<String>> = (|| {
         let types: CanonicalTypes<'py> = CanonicalTypes::load(py)?;
-        let name: JsonValue = text(loaded.getattr("name")?.downcast::<PyString>()?)?;
+        let name: JsonValue = text(native_field(&loaded, "name")?.downcast::<PyString>()?)?;
         let path: JsonValue = text(
             loaded
                 .getattr("relative_path")?
@@ -238,7 +239,7 @@ fn macro_store_token<'py>(
                 .downcast::<PyString>()?,
         )?;
         let identity: JsonValue = types.canonical(&arguments.value("identity")?, 0)?;
-        let raw_source: String = loaded.getattr("raw_source")?.extract()?;
+        let raw_source: String = native_field(&loaded, "raw_source")?.extract()?;
         macro_key((name, path), identity, &raw_source).map_err(emit_error)
     })();
     match keyed {
@@ -269,8 +270,8 @@ fn context_store_token<'py>(
         } else {
             let sorted = imported(py, "builtins", "sorted")?;
             let mut parts: Vec<JsonValue> = vec![
-                types.canonical(&declarations.getattr("constants")?, 0)?,
-                types.canonical(&declarations.getattr("enums")?, 0)?,
+                types.canonical(&native_field(&declarations, "constants")?, 0)?,
+                types.canonical(&native_field(&declarations, "enums")?, 0)?,
             ];
             for name in ["inaccessible_constants", "inaccessible_enums"] {
                 let mut items: Vec<JsonValue> = Vec::new();
@@ -296,7 +297,7 @@ fn canonical_context<'py>(
 ) -> PyResult<JsonValue> {
     let mut fields: Vec<JsonValue> = Vec::new();
     for field in types.fields.call1((macro_context,))?.try_iter()? {
-        let name: Bound<'py, PyAny> = field?.getattr("name")?;
+        let name: Bound<'py, PyAny> = native_field(&field?, "name")?;
         let name_text: String = name.extract()?;
         let value: Bound<'py, PyAny> = macro_context.getattr(name_text.as_str())?;
         let canonical: JsonValue = if name_text == VALUE_RENDERER_FIELD {

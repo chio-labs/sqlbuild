@@ -14,6 +14,7 @@ use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 use crate::bindings::_helpers::cli::namespace::new_cli_namespace;
 use crate::bindings::_helpers::cli::surrogates::{python_text, rust_text, uses_placeholders};
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -53,19 +54,20 @@ impl<'py> PythonHost<'py> {
 
     fn vars(&mut self, text: &str) -> PyResult<Result<Value, TypeFailure>> {
         let json: Bound<'_, PyModule> = self.py.import("json")?;
-        let parsed: Bound<'_, PyAny> = match json.getattr("loads")?.call1((self.text(text)?,)) {
-            Ok(parsed) => parsed,
-            Err(error) => {
-                let decode_error: Bound<'_, PyAny> = json.getattr("JSONDecodeError")?;
-                if !error.value(self.py).is_instance(&decode_error)? {
-                    return Err(error);
+        let parsed: Bound<'_, PyAny> =
+            match native_field(&json, "loads")?.call1((self.text(text)?,)) {
+                Ok(parsed) => parsed,
+                Err(error) => {
+                    let decode_error: Bound<'_, PyAny> = native_field(&json, "JSONDecodeError")?;
+                    if !error.value(self.py).is_instance(&decode_error)? {
+                        return Err(error);
+                    }
+                    let message: String = native_field(error.value(self.py), "msg")?.extract()?;
+                    return Ok(Err(TypeFailure::ArgumentType(format!(
+                        "--vars must be valid JSON: {message}"
+                    ))));
                 }
-                let message: String = error.value(self.py).getattr("msg")?.extract()?;
-                return Ok(Err(TypeFailure::ArgumentType(format!(
-                    "--vars must be valid JSON: {message}"
-                ))));
-            }
-        };
+            };
         let Ok(parsed) = parsed.downcast_into::<PyDict>() else {
             return Ok(Err(TypeFailure::ArgumentType(
                 "--vars must be a JSON object".to_owned(),
@@ -110,7 +112,7 @@ impl ArgvHost for PythonHost<'_> {
     fn program_version(&mut self) -> String {
         self.py
             .import("importlib.metadata")
-            .and_then(|metadata| metadata.getattr("version")?.call1((DISTRIBUTION,)))
+            .and_then(|metadata| native_field(&metadata, "version")?.call1((DISTRIBUTION,)))
             .and_then(|version| version.extract())
             .unwrap_or_else(|_| UNKNOWN_VERSION.to_owned())
     }

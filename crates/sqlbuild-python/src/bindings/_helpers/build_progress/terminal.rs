@@ -6,6 +6,7 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_progress::transient_lines::shared_coordinator;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -107,7 +108,7 @@ fn stop_progress_spinners(py: Python<'_>) -> PyResult<()> {
         .try_iter()?
     {
         let thread: Bound<'_, PyAny> = thread?;
-        if thread.getattr("name")?.eq(SPINNER_THREAD_NAME)?
+        if native_field(&thread, "name")?.eq(SPINNER_THREAD_NAME)?
             && thread.hasattr(STOP_EVENT_ATTRIBUTE)?
         {
             thread.getattr(STOP_EVENT_ATTRIBUTE)?.call_method0("set")?;
@@ -133,7 +134,7 @@ pub(crate) fn start_spinner<'py>(
     let thread: Bound<'py, PyAny> = call_with(
         &imported(py, "threading", "Thread")?,
         &[
-            ("target", owner.getattr("_spin_until_stopped")?),
+            ("target", native_field(owner, "_spin_until_stopped")?),
             ("args", PyTuple::new(py, [&event])?.into_any()),
             ("daemon", PyBool::new(py, true).to_owned().into_any()),
             ("name", SPINNER_THREAD_NAME.into_bound_py_any(py)?),

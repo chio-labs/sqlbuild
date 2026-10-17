@@ -5,6 +5,7 @@ use crate::bindings::_helpers::planner_phases::contexts::class_field;
 use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, replace};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -21,11 +22,11 @@ fn version_identities<'py>(
         project.py(),
         NativeAttr::BuildDirectModelVersionIdentities,
         &[
-            ("functions", project.getattr("functions")?),
-            ("seeds", project.getattr("seeds")?),
+            ("functions", native_field(project, "functions")?),
+            ("seeds", native_field(project, "seeds")?),
             ("scope", scope),
-            ("hook_functions", project.getattr("hook_functions")?),
-            ("dialect", project.getattr("sql_analysis_dialect")?),
+            ("hook_functions", native_field(project, "hook_functions")?),
+            ("dialect", native_field(project, "sql_analysis_dialect")?),
         ],
     )
 }
@@ -74,7 +75,7 @@ fn reusable_model_names(
     let stale = class_field(identities, |i: &PlannerIdentityContext| {
         &i.stale_warning_identities
     })?;
-    for name in execution_changes.getattr("models")?.try_iter()? {
+    for name in native_field(execution_changes, "models")?.try_iter()? {
         let name = name?;
         let same = |field: &str| -> PyResult<bool> {
             execution
@@ -143,8 +144,8 @@ pub(crate) fn detect_stale_warning_changes<'py>(
         .try_iter()?
     {
         let key = key?;
-        if key.getattr("resource_type")?.eq("model")?
-            && !reusable.contains(&key.getattr("name")?.extract::<String>()?)
+        if native_field(&key, "resource_type")?.eq("model")?
+            && !reusable.contains(&native_field(&key, "name")?.extract::<String>()?)
         {
             remaining.push(key);
         }
@@ -171,11 +172,11 @@ pub(crate) fn detect_stale_warning_changes<'py>(
             ),
             (
                 "expected_version_hashes",
-                stale_identities.getattr("model_version_hashes")?,
+                native_field(&stale_identities, "model_version_hashes")?,
             ),
             (
                 "expected_metadata_jsons",
-                stale_identities.getattr("model_metadata_jsons")?,
+                native_field(&stale_identities, "model_metadata_jsons")?,
             ),
         ],
     )?;

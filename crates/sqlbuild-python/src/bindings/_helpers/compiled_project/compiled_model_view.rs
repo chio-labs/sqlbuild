@@ -5,6 +5,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
 use pyo3::{FromPyObject, pyclass, pymethods};
 
+use sqlbuild_analysis::assembly::analysis_session::main::contract_proof_json::contract_proof_json;
 use sqlbuild_analysis::assembly::analysis_session::models::LineageRow;
 use sqlbuild_analysis::compiled_project::main::model_facts::model_facts;
 use sqlbuild_analysis::compiled_project::models::{
@@ -21,6 +22,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::relation_keys::RelationKeyRow;
 
 const DATABASE_KEY: &str = "database";
@@ -30,8 +32,24 @@ const VALUES_ATTRIBUTE: &str = "values";
 const LOGICAL_SCHEMA_ATTRIBUTE: &str = "logical_schema";
 const LOGICAL_DATABASE_ATTRIBUTE: &str = "logical_database";
 const MODEL_RESOURCE: &str = "model";
+const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 const TAGS_KEY: &str = "tags";
 const NULLABLE: &str = "nullable";
+
+/// A model's SQL rule inputs; `excluded` is `None` when its config values could not be read natively.
+pub(crate) struct SqlRuleInputs {
+    pub(crate) posix_path: String,
+    pub(crate) excluded: Option<bool>,
+    pub(crate) key: Option<SqlRuleKey>,
+}
+
+/// What a model's SQL rule cache key reads.
+pub(crate) struct SqlRuleKey {
+    pub(crate) authored_sql: String,
+    pub(crate) query_sql: String,
+    /// The canonical JSON text of the model's dynamic pivot proof.
+    pub(crate) contract: Option<String>,
+}
 
 /// A schema's entry audits, column specs and each audited column's index and name.
 pub(crate) type AuditedSchema = (Py<PyTuple>, Py<PyTuple>, Vec<(usize, String)>);
@@ -369,6 +387,41 @@ impl NativeCompiledModel {
         })
     }
 
+    /// What SQL rules select the model by, plus its cache key inputs when `keyed`.
+    pub(crate) fn sql_rule_inputs(&self, py: Python<'_>, keyed: bool) -> PyResult<SqlRuleInputs> {
+        read_input_with_owner(&self.owner, self.index, py, |owner, record| {
+            let facts: &CompiledModelFacts =
+                model_facts(owner.facts(), &record.name).ok_or_else(|| {
+                    pyo3::exceptions::PyRuntimeError::new_err("the model was not assembled")
+                })?;
+            let excluded: Option<bool> = match &facts.config.encoding_error {
+                Some(_) => None,
+                None => Some(
+                    facts.config.values.get(SQL_ANALYSIS_KEY)
+                        == Some(&serde_json::Value::Bool(false)),
+                ),
+            };
+            let key = keyed
+                .then(|| -> PyResult<SqlRuleKey> {
+                    Ok(SqlRuleKey {
+                        authored_sql: facts.authored_sql.clone(),
+                        query_sql: facts.query_sql.clone(),
+                        contract: compiled_of(record)?
+                            .analysis
+                            .proof
+                            .as_ref()
+                            .map(contract_proof_json),
+                    })
+                })
+                .transpose()?;
+            Ok(SqlRuleInputs {
+                posix_path: facts.relative_path.clone(),
+                excluded,
+                key,
+            })
+        })
+    }
+
     /// The model's authored file text and expanded query, from its recorded facts.
     pub(crate) fn sql_texts(&self, py: Python<'_>) -> PyResult<(String, String)> {
         let name: String = self.name(py)?;
@@ -702,7 +755,7 @@ impl NativeCompiledModel {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;
         self.read(py, |record, py| {
             let name: String = model_name(record);
-            let path: Bound<'_, PyAny> = record.model_file.bind(py).getattr("relative_path")?;
+            let path: Bound<'_, PyAny> = native_field(record.model_file.bind(py), "relative_path")?;
             compiled_of(record)?
                 .analysis
                 .binding_tuple(py, &classes.compiled, (&name, &path))

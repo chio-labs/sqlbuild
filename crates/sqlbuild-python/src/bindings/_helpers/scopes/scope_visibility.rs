@@ -10,6 +10,7 @@ use sqlbuild_scopes::scope_index::models::{
     OwnershipRoot, OwnershipRootKind, RejectedPath, ResourceIdentity, ResourceKind, ResourceRecord,
 };
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_lookup::{
@@ -24,7 +25,7 @@ type PyObject = Py<PyAny>;
 const CURRENT_PATH: &str = ".";
 
 fn native_lookup(lookup: &Bound<'_, PyAny>) -> PyResult<Py<NativeScopeLookup>> {
-    lookup.getattr("native")?.extract()
+    native_field(lookup, "native")?.extract()
 }
 
 /// Python's `query_target`: the resources or declarations `target` names.
@@ -61,7 +62,7 @@ fn target_query<'py>(
     } else {
         raw.into_bound_py_any(py)?
     };
-    let index: Bound<'py, PyAny> = lookup.getattr("index")?;
+    let index: Bound<'py, PyAny> = native_field(lookup, "index")?;
     let records: Bound<'py, PyTuple> = tuple_attribute(
         &index,
         if declarations {
@@ -143,9 +144,9 @@ fn resolved_visibility(
 ) -> PyResult<PyObject> {
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     let query: Bound<'_, PyAny> = target_query(&classes, lookup, target)?;
-    let index: Bound<'_, PyAny> = lookup.getattr("index")?;
+    let index: Bound<'_, PyAny> = native_field(lookup, "index")?;
     let identities: Bound<'_, PyTuple> =
-        tuple_attribute(&lookup.getattr("visibility_index")?, "identities")?;
+        tuple_attribute(&native_field(lookup, "visibility_index")?, "identities")?;
     let declarations: Bound<'_, PyTuple> = tuple_attribute(&index, "declarations")?;
     let grants: Bound<'_, PyTuple> = tuple_attribute(&index, "grants")?;
     let visible_class: Bound<'_, PyAny> = classes.model(RecordId::VisibilityRecord)?;
@@ -155,10 +156,10 @@ fn resolved_visibility(
     for resource in tuple_attribute(&query, "matches")?.iter() {
         let (resource_visible, resource_inaccessible, _) =
             resolved(py, lookup, &read_resource(&resource)?)?;
-        let owner: Bound<'_, PyAny> = resource.getattr("identity")?;
+        let owner: Bound<'_, PyAny> = native_field(&resource, "identity")?;
         for (position, reason, grant) in resource_visible {
             let through: Option<Bound<'_, PyAny>> = grant
-                .map(|grant| grants.get_item(grant)?.getattr("through"))
+                .map(|grant| native_field(&grants.get_item(grant)?, "through"))
                 .transpose()?;
             visible.push(visible_class.call1((
                 &owner,
@@ -169,7 +170,7 @@ fn resolved_visibility(
         }
         for (position, reason) in resource_inaccessible {
             let identity: Bound<'_, PyAny> =
-                declarations.get_item(position)?.getattr("identity")?;
+                native_field(&declarations.get_item(position)?, "identity")?;
             inaccessible.push(if with_reasons {
                 inaccessible_class.call1((
                     &owner,
@@ -229,7 +230,7 @@ fn scope_resolve_path_visibility(
     };
     let (visible, inaccessible, _) = resolved(py, lookup, &resource)?;
     let declarations: Bound<'_, PyTuple> =
-        tuple_attribute(&lookup.getattr("index")?, "declarations")?;
+        tuple_attribute(&native_field(lookup, "index")?, "declarations")?;
     let pick = |positions: Vec<usize>| -> PyResult<Py<PyTuple>> {
         let records: Vec<Bound<'_, PyAny>> = positions
             .into_iter()

@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SOURCE_RESOURCE: &str = "source";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -183,7 +184,7 @@ impl NativeSourceInput {
             let attached: &AttachedSource = &source.attached;
             Ok((
                 attached.name.clone(),
-                !attached.entry.bind(py).getattr("loader")?.is_none(),
+                !native_field(attached.entry.bind(py), "loader")?.is_none(),
                 attached.database.clone(),
                 attached.schema.clone(),
             ))

@@ -20,6 +20,7 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::relationship_scan::{
@@ -92,7 +93,7 @@ fn optional_text(item: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>
 }
 
 fn stem(path: &Bound<'_, PyAny>) -> PyResult<String> {
-    path.getattr("stem")?.extract()
+    native_field(path, "stem")?.extract()
 }
 
 /// `value or fallback` with Python truthiness.
@@ -118,8 +119,7 @@ fn name_or_stem(value: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<S
 }
 
 fn header_name<'py>(file: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    file.getattr("header_values")?
-        .call_method1("get", ("name",))
+    native_field(file, "header_values")?.call_method1("get", ("name",))
 }
 
 fn items<'py>(item: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
@@ -194,7 +194,7 @@ impl<'py> Walk<'py> {
         placement: Placement,
     ) -> PyResult<()> {
         let identity: DeclarationIdentity = self.native_identity(&values.identity)?;
-        let scope_text: String = values.scope.getattr("value")?.extract()?;
+        let scope_text: String = native_field(&values.scope, "value")?.extract()?;
         let scope: ScopeKind = ScopeKind::parse(&scope_text).unwrap_or_else(|| {
             self.indexable = false;
             ScopeKind::Global
@@ -251,34 +251,34 @@ impl<'py> Walk<'py> {
         let member_class: Bound<'py, PyAny> = self.classes.model(RecordId::EnumMemberMetadata)?;
         let members: Vec<Bound<'py, PyAny>> = items(declaration, "members")?
             .iter()
-            .map(|member| member_class.call1((member.getattr("name")?,)))
+            .map(|member| member_class.call1((native_field(member, "name")?,)))
             .collect::<PyResult<_>>()?;
         self.classes.model(RecordId::EnumMetadata)?.call1((
             PyTuple::new(declaration.py(), members)?,
-            declaration.getattr("scalar_type")?,
+            native_field(declaration, "scalar_type")?,
         ))
     }
 
     fn constant_metadata(&self, declaration: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let value: Bound<'py, PyAny> = declaration.getattr("value")?;
-        let kind: Bound<'py, PyAny> = value.getattr("kind")?;
-        let kind_text: String = kind.getattr("value")?.extract()?;
+        let value: Bound<'py, PyAny> = native_field(declaration, "value")?;
+        let kind: Bound<'py, PyAny> = native_field(&value, "kind")?;
+        let kind_text: String = native_field(&kind, "value")?.extract()?;
         let is_collection: bool = COLLECTION_KINDS.contains(&kind_text.as_str());
-        let payload: Bound<'py, PyAny> = value.getattr("value")?;
+        let payload: Bound<'py, PyAny> = native_field(&value, "value")?;
         let item_count: Option<usize> = if is_collection && payload.is_instance_of::<PyTuple>() {
             Some(payload.len()?)
         } else {
             None
         };
         let render_as: Option<Bound<'py, PyAny>> = optional_item(declaration, "render_as")?
-            .map(|rendering| rendering.getattr("value"))
+            .map(|rendering| native_field(&rendering, "value"))
             .transpose()?;
         self.classes.model(RecordId::ConstantMetadata)?.call1((
             declaration
                 .getattr("logical_type")?
                 .getattr("display_name")?,
             if is_collection {
-                Some(kind.getattr("value")?)
+                Some(native_field(&kind, "value")?)
             } else {
                 None
             },
@@ -290,7 +290,7 @@ impl<'py> Walk<'py> {
 
     fn add_models(&mut self, inputs: &Bound<'py, PyAny>) -> PyResult<()> {
         for model_file in items(inputs, "model_files")? {
-            let path: Bound<'py, PyAny> = model_file.getattr("relative_path")?;
+            let path: Bound<'py, PyAny> = native_field(&model_file, "relative_path")?;
             let model_name: String = name_or_stem(&header_name(&model_file)?, &path)?;
             self.add_resource(
                 ResourceKind::Model,
@@ -309,7 +309,7 @@ impl<'py> Walk<'py> {
             for declaration in items(&model_file, "enum_declarations")? {
                 let identity: Bound<'py, PyAny> = self.declaration_identity(
                     DeclarationKind::Enum,
-                    &declaration.getattr("name")?,
+                    &native_field(&declaration, "name")?,
                     Some(&owner),
                 )?;
                 let metadata = [None, Some(self.enum_metadata(&declaration)?), None];
@@ -319,7 +319,7 @@ impl<'py> Walk<'py> {
             for declaration in items(&model_file, "constant_declarations")? {
                 let identity: Bound<'py, PyAny> = self.declaration_identity(
                     DeclarationKind::Constant,
-                    &declaration.getattr("name")?,
+                    &native_field(&declaration, "name")?,
                     Some(&owner),
                 )?;
                 let metadata = [None, None, Some(self.constant_metadata(&declaration)?)];
@@ -341,17 +341,18 @@ impl<'py> Walk<'py> {
                 path: text(path)?,
                 ownership_root: Some(PRIVATE_ROOT.to_owned()),
                 root_fallback: PRIVATE_ROOT.to_owned(),
-                owning_path: Some(text(&path.getattr("parent")?)?),
+                owning_path: Some(text(&native_field(path, "parent")?)?),
             },
         )
     }
 
     fn add_resources(&mut self, inputs: &Bound<'py, PyAny>) -> PyResult<()> {
         for test_file in items(inputs, "test_files")? {
-            let path: Bound<'py, PyAny> = test_file.getattr("relative_path")?;
+            let path: Bound<'py, PyAny> = native_field(&test_file, "relative_path")?;
             for block in items(&test_file, "blocks")? {
-                let name: Bound<'py, PyAny> =
-                    or_else(block.getattr("name")?, || path.getattr("stem"))?;
+                let name: Bound<'py, PyAny> = or_else(native_field(&block, "name")?, || {
+                    native_field(&path, "stem")
+                })?;
                 self.add_resource(
                     ResourceKind::Test,
                     name.extract()?,
@@ -363,20 +364,23 @@ impl<'py> Walk<'py> {
             self.add_resource(
                 ResourceKind::Scenario,
                 field(&scenario, "name")?,
-                (&scenario.getattr("relative_path")?, ResourceRoot::Kind),
+                (
+                    &native_field(&scenario, "relative_path")?,
+                    ResourceRoot::Kind,
+                ),
             )?;
         }
         for function in items(inputs, "sql_function_files")? {
-            let path: Bound<'py, PyAny> = function.getattr("relative_path")?;
+            let path: Bound<'py, PyAny> = native_field(&function, "relative_path")?;
             let name: String = name_or_stem(&header_name(&function)?, &path)?;
             self.add_resource(ResourceKind::Function, name, (&path, ResourceRoot::Kind))?;
         }
         for function in items(inputs, "python_function_files")? {
             self.add_resource(
                 ResourceKind::Function,
-                stem(&function.getattr("file_path")?)?,
+                stem(&native_field(&function, "file_path")?)?,
                 (
-                    &function.getattr("relative_path")?,
+                    &native_field(&function, "relative_path")?,
                     ResourceRoot::PythonFunction,
                 ),
             )?;
@@ -384,12 +388,12 @@ impl<'py> Walk<'py> {
         for seed in items(inputs, "seed_files")? {
             self.add_resource(
                 ResourceKind::Seed,
-                stem(&seed.getattr("file_path")?)?,
-                (&seed.getattr("relative_path")?, ResourceRoot::Seed),
+                stem(&native_field(&seed, "file_path")?)?,
+                (&native_field(&seed, "relative_path")?, ResourceRoot::Seed),
             )?;
         }
         for source_file in items(inputs, "source_files")? {
-            let path: Bound<'py, PyAny> = source_file.getattr("relative_path")?;
+            let path: Bound<'py, PyAny> = native_field(&source_file, "relative_path")?;
             for source in items(&source_file, "source_entries")? {
                 self.add_resource(
                     ResourceKind::Source,
@@ -403,7 +407,7 @@ impl<'py> Walk<'py> {
 
     fn file_placement(file: &Bound<'py, PyAny>, root_fallback: String) -> PyResult<Placement> {
         Ok(Placement {
-            path: text(&file.getattr("relative_path")?)?,
+            path: text(&native_field(file, "relative_path")?)?,
             ownership_root: optional_text(file, "ownership_root")?,
             root_fallback,
             owning_path: optional_text(file, "owning_path")?,
@@ -415,11 +419,12 @@ impl<'py> Walk<'py> {
             for declaration in items(&enum_file, "declarations")? {
                 let identity: Bound<'py, PyAny> = self.declaration_identity(
                     DeclarationKind::Enum,
-                    &declaration.getattr("name")?,
+                    &native_field(&declaration, "name")?,
                     None,
                 )?;
                 let metadata = [None, Some(self.enum_metadata(&declaration)?), None];
-                let values = self.values(identity, enum_file.getattr("scope_kind")?, metadata);
+                let values =
+                    self.values(identity, native_field(&enum_file, "scope_kind")?, metadata);
                 let placement = Self::file_placement(&enum_file, ENUM_FALLBACK.to_owned())?;
                 self.add_declaration(values, placement)?;
             }
@@ -428,11 +433,15 @@ impl<'py> Walk<'py> {
             for declaration in items(&constant_file, "declarations")? {
                 let identity: Bound<'py, PyAny> = self.declaration_identity(
                     DeclarationKind::Constant,
-                    &declaration.getattr("name")?,
+                    &native_field(&declaration, "name")?,
                     None,
                 )?;
                 let metadata = [None, None, Some(self.constant_metadata(&declaration)?)];
-                let values = self.values(identity, constant_file.getattr("scope_kind")?, metadata);
+                let values = self.values(
+                    identity,
+                    native_field(&constant_file, "scope_kind")?,
+                    metadata,
+                );
                 let placement = Self::file_placement(&constant_file, CONSTANT_FALLBACK.to_owned())?;
                 self.add_declaration(values, placement)?;
             }
@@ -447,9 +456,13 @@ impl<'py> Walk<'py> {
         name: &Bound<'py, PyAny>,
     ) -> PyResult<()> {
         let identity: Bound<'py, PyAny> = self.declaration_identity(kind, name, None)?;
-        let values = self.values(identity, item.getattr("scope_kind")?, [None, None, None]);
-        let fallback: Bound<'py, PyAny> = or_else(item.getattr("declaration_root")?, || {
-            item.getattr("relative_path")?.getattr("parent")
+        let values = self.values(
+            identity,
+            native_field(item, "scope_kind")?,
+            [None, None, None],
+        );
+        let fallback: Bound<'py, PyAny> = or_else(native_field(item, "declaration_root")?, || {
+            native_field(item, "relative_path")?.getattr("parent")
         })?;
         let placement = Self::file_placement(item, text(&fallback)?)?;
         self.add_declaration(values, placement)
@@ -459,14 +472,14 @@ impl<'py> Walk<'py> {
         let audit_kind: String = DeclarationKind::Audit.as_str().to_owned();
         for audit_file in items(inputs, "audit_files")? {
             let stem_name: Bound<'py, PyAny> =
-                audit_file.getattr("relative_path")?.getattr("stem")?;
+                native_field(&audit_file, "relative_path")?.getattr("stem")?;
             if value_of(&audit_file, "declaration_kind")? == audit_kind {
                 self.add_named(&audit_file, DeclarationKind::Audit, &stem_name)?;
                 continue;
             }
             for block in items(&audit_file, "blocks")? {
                 let name: Bound<'py, PyAny> =
-                    or_else(block.getattr("name")?, || Ok(stem_name.clone()))?;
+                    or_else(native_field(&block, "name")?, || Ok(stem_name.clone()))?;
                 self.add_named(&audit_file, DeclarationKind::SingularAudit, &name)?;
             }
         }
@@ -475,7 +488,7 @@ impl<'py> Walk<'py> {
                 self.add_named(
                     &schema_file,
                     DeclarationKind::Schema,
-                    &declaration.getattr("name")?,
+                    &native_field(&declaration, "name")?,
                 )?;
             }
         }
@@ -483,11 +496,15 @@ impl<'py> Walk<'py> {
             self.add_named(
                 &hook_file,
                 DeclarationKind::SqlHook,
-                &hook_file.getattr("name")?,
+                &native_field(&hook_file, "name")?,
             )?;
         }
         for hook in items(inputs, "hook_functions")? {
-            self.add_named(&hook, DeclarationKind::PythonHook, &hook.getattr("name")?)?;
+            self.add_named(
+                &hook,
+                DeclarationKind::PythonHook,
+                &native_field(&hook, "name")?,
+            )?;
         }
         Ok(())
     }
@@ -498,17 +515,20 @@ impl<'py> Walk<'py> {
         source: (&Bound<'py, PyAny>, i64, Bound<'py, PyAny>),
     ) -> PyResult<(DeclarationValues<'py>, Placement)> {
         let (export, line, metadata) = source;
-        let identity: Bound<'py, PyAny> =
-            self.declaration_identity(DeclarationKind::Macro, &export.getattr("name")?, None)?;
+        let identity: Bound<'py, PyAny> = self.declaration_identity(
+            DeclarationKind::Macro,
+            &native_field(export, "name")?,
+            None,
+        )?;
         let scope: Bound<'py, PyAny> = match macro_file {
-            Some(file) => file.getattr("scope_kind")?,
+            Some(file) => native_field(file, "scope_kind")?,
             None => self
                 .classes
                 .member(RecordId::ScopeKind, ScopeKind::Global.as_str())?,
         };
         let dependencies: Vec<Bound<'py, PyAny>> = items(export, "dependencies")?;
         let placement: Placement = Placement {
-            path: text(&export.getattr("relative_path")?)?,
+            path: text(&native_field(export, "relative_path")?)?,
             ownership_root: match macro_file {
                 Some(file) => optional_text(file, "ownership_root")?,
                 None => None,
@@ -533,7 +553,7 @@ impl<'py> Walk<'py> {
 
     fn loaded_metadata(&self, loaded: &Bound<'py, PyAny>) -> PyResult<(i64, Bound<'py, PyAny>)> {
         let py: Python<'py> = loaded.py();
-        let function: Bound<'py, PyAny> = loaded.getattr("function")?;
+        let function: Bound<'py, PyAny> = native_field(loaded, "function")?;
         let parameters: Vec<Bound<'py, PyAny>> = py
             .import(INSPECT_MODULE)?
             .getattr("signature")?
@@ -544,13 +564,13 @@ impl<'py> Walk<'py> {
         let raw_source: String = field(loaded, "raw_source")?;
         let metadata: Bound<'py, PyAny> = self.classes.model(RecordId::MacroMetadata)?.call1((
             PyTuple::new(py, parameters)?,
-            loaded.getattr("dependencies")?,
+            native_field(loaded, "dependencies")?,
             macro_source_digest(&raw_source),
         ))?;
         let code_type: Bound<'py, PyAny> = py.import(CODE_TYPE_MODULE)?.getattr("CodeType")?;
         let line: i64 = match function.getattr_opt("__code__")? {
             Some(code) if code.is_instance(&code_type)? => {
-                code.getattr("co_firstlineno")?.extract()?
+                native_field(&code, "co_firstlineno")?.extract()?
             }
             _ => 1,
         };
@@ -566,12 +586,12 @@ impl<'py> Walk<'py> {
         let py: Python<'py> = inputs.py();
         let mut macro_files: HashMap<String, Bound<'py, PyAny>> = HashMap::new();
         for macro_file in items(inputs, "macro_files")? {
-            let key: String = normalized(py, &macro_file.getattr("relative_path")?)?;
+            let key: String = normalized(py, &native_field(&macro_file, "relative_path")?)?;
             macro_files.insert(key, macro_file);
         }
         for loaded in loaded_macros.call_method0("values")?.try_iter()? {
             let loaded: Bound<'py, PyAny> = loaded?;
-            let key: String = normalized(py, &loaded.getattr("relative_path")?)?;
+            let key: String = normalized(py, &native_field(&loaded, "relative_path")?)?;
             let (line, metadata) = self.loaded_metadata(&loaded)?;
             let (values, placement) =
                 self.macro_values(macro_files.get(&key), (&loaded, line, metadata))?;
@@ -579,12 +599,12 @@ impl<'py> Walk<'py> {
         }
         for export in static_macros.try_iter()? {
             let export: Bound<'py, PyAny> = export?;
-            let key: String = normalized(py, &export.getattr("relative_path")?)?;
+            let key: String = normalized(py, &native_field(&export, "relative_path")?)?;
             let metadata: Bound<'py, PyAny> =
                 self.classes.model(RecordId::MacroMetadata)?.call1((
-                    export.getattr("parameters")?,
-                    export.getattr("dependencies")?,
-                    export.getattr("source_digest")?,
+                    native_field(&export, "parameters")?,
+                    native_field(&export, "dependencies")?,
+                    native_field(&export, "source_digest")?,
                 ))?;
             let (values, placement) = self.macro_values(
                 macro_files.get(&key),
@@ -690,7 +710,7 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::with_capacity(native.usages.len());
     for usage in &native.usages {
         usages.push(usage_class.call1((
-            declarations[usage.consumer].getattr("identity")?,
+            native_field(&declarations[usage.consumer], "identity")?,
             &walk.declarations[usage.consumer].dependencies[usage.dependency],
             &dependency_kind,
         ))?);
@@ -706,14 +726,14 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
             "declaration",
             diagnostic
                 .declaration
-                .map(|position| declarations[position].getattr("identity"))
+                .map(|position| native_field(&declarations[position], "identity"))
                 .transpose()?,
         )?;
         keywords.set_item(
             "resource",
             diagnostic
                 .resource
-                .map(|position| resources[position].getattr("identity"))
+                .map(|position| native_field(&resources[position], "identity"))
                 .transpose()?,
         )?;
         diagnostics.push(diagnostic_class.call(
@@ -776,10 +796,12 @@ fn materialise<'py>(walk: Walk<'py>, native: ScopeIndex) -> PyResult<NativeScope
 }
 
 fn test_file_row(test_file: &Bound<'_, PyAny>) -> PyResult<TestFileRow> {
-    let path: Bound<'_, PyAny> = test_file.getattr("relative_path")?;
+    let path: Bound<'_, PyAny> = native_field(test_file, "relative_path")?;
     let mut blocks: Vec<(String, String, String)> = Vec::new();
     for block in items(test_file, "blocks")? {
-        let name: Bound<'_, PyAny> = or_else(block.getattr("name")?, || path.getattr("stem"))?;
+        let name: Bound<'_, PyAny> = or_else(native_field(&block, "name")?, || {
+            native_field(&path, "stem")
+        })?;
         blocks.push((
             name.extract()?,
             field(&block, "sql_body")?,
@@ -792,7 +814,7 @@ fn test_file_row(test_file: &Bound<'_, PyAny>) -> PyResult<TestFileRow> {
 fn scenario_row(scenario: &Bound<'_, PyAny>) -> PyResult<ScenarioRow> {
     Ok((
         field(scenario, "name")?,
-        text(&scenario.getattr("relative_path")?)?,
+        text(&native_field(scenario, "relative_path")?)?,
         field(scenario, "sql_body")?,
     ))
 }
@@ -830,9 +852,9 @@ impl NativeScopeIndex {
             .collect::<PyResult<_>>()?;
         let (store, algorithm) = scan_store;
         let settings: Bound<'_, PyDict> = PyDict::new(py);
-        settings.set_item("syntax", syntax.getattr("native_mapping")?)?;
+        settings.set_item("syntax", native_field(syntax, "native_mapping")?)?;
         settings.set_item("store", store)?;
-        settings.set_item("scan_key", (algorithm, syntax.getattr("cache_key")?))?;
+        settings.set_item("scan_key", (algorithm, native_field(syntax, "cache_key")?))?;
         let settings: RelationshipScanSettings = settings.extract()?;
         let scan: RelationshipScan = scanned_relationships(py, &files, &scenarios, settings)?;
         let index: &ScopeIndex = &self.native;
@@ -889,7 +911,7 @@ impl NativeScopeIndex {
     fn index_with_relationships(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let index: &Bound<'_, PyAny> = self.index.bind(py);
         let completeness: Bound<'_, PyAny> = replace(
-            &index.getattr("completeness")?,
+            &native_field(index, "completeness")?,
             &[("relationships", true.into_bound_py_any(py)?)],
         )?;
         Ok(replace(

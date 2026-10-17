@@ -4,6 +4,7 @@ use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
 use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods};
@@ -28,14 +29,14 @@ pub(super) fn overlay<'py>(
         .getattr("existing_columns")?
         .cast_into::<PyDict>()?
         .copy()?;
-    let fingerprints = snapshot.getattr("fingerprints")?;
+    let fingerprints = native_field(&snapshot, "fingerprints")?;
     let models = fingerprints
         .getattr("models")?
         .cast_into::<PyDict>()?
         .copy()?;
     let redirected = PyDict::new(py);
     for entry in entries {
-        let name = entry.getattr("model_name")?;
+        let name = native_field(entry, "model_name")?;
         let Some(handover) = handovers.get_item(&name)? else {
             continue;
         };
@@ -51,25 +52,25 @@ pub(super) fn overlay<'py>(
         {
             continue;
         }
-        let origin = entry.getattr("origin")?;
+        let origin = native_field(entry, "origin")?;
         let origin_relation = state.call_method1("relation", (&origin,))?;
         if origin_relation.is_none() {
             continue;
         }
-        let destination = entry.getattr("destination")?;
-        let transient = entry.getattr("stage_is_transient")?;
+        let destination = native_field(entry, "destination")?;
+        let transient = native_field(entry, "stage_is_transient")?;
         relations.set_item(
             &name,
             replace(
                 &origin_relation,
                 &[
-                    ("database", destination.getattr("database")?),
-                    ("schema", destination.getattr("schema")?),
-                    ("name", destination.getattr("name")?),
+                    ("database", native_field(&destination, "database")?),
+                    ("schema", native_field(&destination, "schema")?),
+                    ("name", native_field(&destination, "name")?),
                     (
                         "is_transient",
                         if transient.is_none() {
-                            origin_relation.getattr("is_transient")?
+                            native_field(&origin_relation, "is_transient")?
                         } else {
                             transient
                         },
@@ -78,7 +79,7 @@ pub(super) fn overlay<'py>(
             )?,
         )?;
         columns.set_item(&name, state.call_method1("relation_columns", (&origin,))?)?;
-        let qualified = origin.getattr("qualified_name")?;
+        let qualified = native_field(&origin, "qualified_name")?;
         if !qualified.is_none() && cursor_enabled(&runtime, &name)? {
             redirected.set_item(name, qualified)?;
         }
@@ -105,9 +106,9 @@ pub(super) fn overlay<'py>(
                     RecordId::WarehouseFingerprints,
                     &[
                         ("models", models.into_any()),
-                        ("functions", fingerprints.getattr("functions")?),
-                        ("seeds", fingerprints.getattr("seeds")?),
-                        ("python_nodes", fingerprints.getattr("python_nodes")?),
+                        ("functions", native_field(&fingerprints, "functions")?),
+                        ("seeds", native_field(&fingerprints, "seeds")?),
+                        ("python_nodes", native_field(&fingerprints, "python_nodes")?),
                     ],
                 )?,
             ),
@@ -122,7 +123,7 @@ fn cursor_enabled(runtime: &Bound<'_, PyAny>, name: &Bound<'_, PyAny>) -> PyResu
         .try_iter()?
     {
         let item = item?;
-        if item.getattr("name")?.eq(name)? {
+        if native_field(&item, "name")?.eq(name)? {
             return Ok(config(&item, "materialized")?.eq("incremental")?
                 && !config(&item, "cursor")?.is_none());
         }

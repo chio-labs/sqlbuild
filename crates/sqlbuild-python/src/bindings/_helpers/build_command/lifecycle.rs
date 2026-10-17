@@ -18,6 +18,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -37,11 +38,11 @@ fn node_rows(results: &Bound<'_, PyAny>) -> PyResult<Vec<PythonNodeRow>> {
     for result in results.try_iter()? {
         let result: Bound<'_, PyAny> = result?;
         rows.push(PythonNodeRow {
-            kind: result.getattr("kind")?.getattr("value")?.extract()?,
-            node_name: result.getattr("node_name")?.extract()?,
-            status: result.getattr("status")?.str()?.extract()?,
-            error_message: result.getattr("error_message")?.extract()?,
-            skip_reason: result.getattr("skip_reason")?.extract()?,
+            kind: native_field(&result, "kind")?.getattr("value")?.extract()?,
+            node_name: native_field(&result, "node_name")?.extract()?,
+            status: native_field(&result, "status")?.str()?.extract()?,
+            error_message: native_field(&result, "error_message")?.extract()?,
+            skip_reason: native_field(&result, "skip_reason")?.extract()?,
         });
     }
     Ok(rows)
@@ -60,7 +61,7 @@ pub(crate) fn write_python_node_results(
 fn result_names(results: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
     results
         .try_iter()?
-        .map(|result| result?.getattr("node_name")?.extract())
+        .map(|result| native_field(&result?, "node_name")?.extract())
         .collect()
 }
 
@@ -95,12 +96,12 @@ impl DirectPythonLifecycle {
             return Ok(());
         };
         let tracker: &Bound<'_, PyAny> = tracker.bind(py);
-        let previous: HashSet<String> = result_names(&tracker.getattr("results")?)?;
+        let previous: HashSet<String> = result_names(&native_field(tracker, "results")?)?;
         tracker.call_method1("record_sql_result", (node_result,))?;
         let mut new_results: Vec<Bound<'_, PyAny>> = Vec::new();
-        for result in tracker.getattr("results")?.try_iter()? {
+        for result in native_field(tracker, "results")?.try_iter()? {
             let result: Bound<'_, PyAny> = result?;
-            if !previous.contains(&result.getattr("node_name")?.extract::<String>()?) {
+            if !previous.contains(&native_field(&result, "node_name")?.extract::<String>()?) {
                 new_results.push(result);
             }
         }
@@ -127,7 +128,7 @@ impl DirectPythonLifecycle {
             .try_iter()?
             .collect::<PyResult<_>>()?;
         if let Some(tracker) = &self.read_side_tracker {
-            for result in tracker.bind(py).getattr("results")?.try_iter()? {
+            for result in native_field(tracker.bind(py), "results")?.try_iter()? {
                 results.push(result?);
             }
         }
@@ -144,16 +145,16 @@ impl DirectPythonLifecycle {
             .collect::<PyResult<_>>()?;
         let functions: Vec<Bound<'py, PyAny>> = loaders
             .iter()
-            .map(|loader| loader.getattr("function"))
+            .map(|loader| native_field(loader, "function"))
             .collect::<PyResult<_>>()?;
         let functions: Bound<'py, PyAny> = frozenset(py, &functions)?;
         let ingress: &Bound<'py, PyAny> = self.ingress_loader_names.bind(py);
         let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
         let mut handoff: Vec<Bound<'py, PyAny>> = Vec::new();
         for loader in loaders {
-            let keeps_all: bool = !ingress.contains(loader.getattr("name")?)?;
+            let keeps_all: bool = !ingress.contains(native_field(&loader, "name")?)?;
             let mut dependencies: Vec<Bound<'py, PyAny>> = Vec::new();
-            for dependency in loader.getattr("depends_on")?.try_iter()? {
+            for dependency in native_field(&loader, "depends_on")?.try_iter()? {
                 let dependency: Bound<'py, PyAny> = dependency?;
                 if keeps_all || functions.contains(&dependency)? {
                     dependencies.push(dependency);
@@ -177,14 +178,17 @@ impl DirectPythonLifecycle {
         for result in self.ingress_load_results.bind(py).try_iter()? {
             let result: Bound<'py, PyAny> = result?;
             if failed_only
-                && result.getattr("status")?.str()?.extract::<String>()? == SUCCESS_STATUS
+                && native_field(&result, "status")?
+                    .str()?
+                    .extract::<String>()?
+                    == SUCCESS_STATUS
             {
                 continue;
             }
-            let name: Bound<'py, PyAny> = result.getattr("source_name")?;
+            let name: Bound<'py, PyAny> = native_field(&result, "source_name")?;
             for entry in &entries {
-                if entry.getattr("name")?.eq(&name)? {
-                    keys.push(entry.getattr("key")?);
+                if native_field(entry, "name")?.eq(&name)? {
+                    keys.push(native_field(entry, "key")?);
                     break;
                 }
             }
@@ -230,14 +234,14 @@ impl DirectPythonLifecycle {
 
 /// The models, seeds and source loads this run executes and reports results for.
 fn scheduled_sql_names(plan: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
-    let scheduled: Bound<'_, PyAny> =
-        imported(plan.py(), "builtins", "frozenset")?.call1((plan.getattr("execution_order")?,))?;
+    let scheduled: Bound<'_, PyAny> = imported(plan.py(), "builtins", "frozenset")?
+        .call1((native_field(plan, "execution_order")?,))?;
     let mut names: HashSet<String> = HashSet::new();
     for kind in ["model_entries", "seed_entries", "source_load_entries"] {
         for entry in plan.getattr(kind)?.try_iter()? {
             let entry: Bound<'_, PyAny> = entry?;
-            if scheduled.contains(entry.getattr("key")?)? {
-                names.insert(entry.getattr("name")?.extract()?);
+            if scheduled.contains(native_field(&entry, "key")?)? {
+                names.insert(native_field(&entry, "name")?.extract()?);
             }
         }
     }
@@ -266,9 +270,12 @@ fn node_runtime<'py>(
             ("adapter", parts.adapter.clone()),
             ("connection_config", parts.connection_config.clone()),
             ("connection", connection.clone()),
-            ("run_id", parts.project.getattr("run_id")?),
-            ("target", parts.project.getattr("effective_target_name")?),
-            ("vars", parts.project.getattr("effective_vars")?),
+            ("run_id", native_field(parts.project, "run_id")?),
+            (
+                "target",
+                native_field(parts.project, "effective_target_name")?,
+            ),
+            ("vars", native_field(parts.project, "effective_vars")?),
             ("is_reload", boolean(py, parts.reload)),
             ("default_database", parts.defaults.0.clone()),
             ("default_schema", parts.defaults.1.clone()),
@@ -295,7 +302,7 @@ fn lifecycle_plan<'py>(
     pipeline: &Bound<'py, PyAny>,
 ) -> PyResult<LifecyclePlan<'py>> {
     let py: Python<'py> = discovered.py();
-    let plan_output: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
+    let plan_output: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
     let graph: Bound<'py, PyAny> = python_node_graph(discovered)?;
     let selection: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::PythonSqlRunSelection)?,
@@ -303,9 +310,12 @@ fn lifecycle_plan<'py>(
             (
                 "sql_keys",
                 imported(py, "builtins", "frozenset")?
-                    .call1((plan_output.getattr("upstream_deps")?,))?,
+                    .call1((native_field(&plan_output, "upstream_deps")?,))?,
             ),
-            ("python_node_names", pipeline.getattr("python_node_names")?),
+            (
+                "python_node_names",
+                native_field(pipeline, "python_node_names")?,
+            ),
         ],
     )?;
     let plan: Bound<'py, PyAny> = call_with(
@@ -316,20 +326,20 @@ fn lifecycle_plan<'py>(
         imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("SOURCE")?;
     let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let mut keys: Vec<Bound<'py, PyAny>> = Vec::new();
-    for name in plan.getattr("ingress_loader_names")?.try_iter()? {
+    for name in native_field(&plan, "ingress_loader_names")?.try_iter()? {
         keys.push(call_with(
             &key_class,
             &[("name", name?), ("resource_type", source_type.clone())],
         )?);
     }
     let source_map: Bound<'py, PyAny> =
-        imported(py, "builtins", "dict")?.call1((plan_output.getattr("source_map")?,))?;
+        imported(py, "builtins", "dict")?.call1((native_field(&plan_output, "source_map")?,))?;
     source_map.call_method1(
         "update",
         (call_with(
             &registry::native(py, NativeAttr::BuildIntermediateSourceMap)?,
             &[
-                ("project", pipeline.getattr("project")?),
+                ("project", native_field(pipeline, "project")?),
                 ("selected_keys", frozenset(py, &keys)?),
             ],
         )?,),
@@ -348,11 +358,11 @@ fn task_asset_names(
     let mut known: HashSet<String> = HashSet::new();
     for kind in ["task_functions", "asset_functions"] {
         for node in discovered.getattr(kind)?.try_iter()? {
-            known.insert(node?.getattr("name")?.extract()?);
+            known.insert(native_field(&node?, "name")?.extract()?);
         }
     }
     let mut names: Vec<String> = Vec::new();
-    for name in pipeline.getattr("python_node_names")?.try_iter()? {
+    for name in native_field(pipeline, "python_node_names")?.try_iter()? {
         let name: String = name?.extract()?;
         if known.contains(&name) {
             names.push(name);
@@ -371,22 +381,26 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
     let discovered: Bound<'py, PyAny> = context.get("discovered_inputs")?;
     let adapter: Bound<'py, PyAny> = context.get("adapter")?;
     let connection_config: Bound<'py, PyAny> = context.get("connection_config")?;
-    let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
-    let plan_output: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
+    let plan_output: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
     let selected: Vec<String> = if context.request_flag("include_python")? {
         task_asset_names(&discovered, pipeline)?
     } else {
         Vec::new()
     };
     let lifecycle: LifecyclePlan<'py> = lifecycle_plan(&discovered, pipeline)?;
-    let ingress_names: Bound<'py, PyAny> = lifecycle.plan.getattr("ingress_python_node_names")?;
+    let ingress_names: Bound<'py, PyAny> =
+        native_field(&lifecycle.plan, "ingress_python_node_names")?;
     let required: Bound<'py, PyAny> = call_with(
-        &lifecycle.graph.getattr("selected_sql_refs")?,
+        &native_field(&lifecycle.graph, "selected_sql_refs")?,
         &[(
             "selected_names",
             ingress_names.call_method1(
                 "__or__",
-                (lifecycle.plan.getattr("read_side_python_node_names")?,),
+                (native_field(
+                    &lifecycle.plan,
+                    "read_side_python_node_names",
+                )?,),
             )?,
         )],
     )?;
@@ -412,10 +426,10 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
         project: &project,
         reload: context.request_flag("reload_sources")?,
         defaults: (
-            or_none(project.getattr("effective_target_database")?, || {
+            or_none(native_field(&project, "effective_target_database")?, || {
                 adapter.call_method0("default_database")
             })?,
-            or_none(project.getattr("effective_target_schema")?, || {
+            or_none(native_field(&project, "effective_target_schema")?, || {
                 adapter.call_method0("default_schema")
             })?,
         ),
@@ -441,7 +455,10 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
                 &[
                     ("python_graph", lifecycle.graph.clone()),
                     ("selected_python_names", ingress_names.clone()),
-                    ("loader_functions", discovered.getattr("loader_functions")?),
+                    (
+                        "loader_functions",
+                        native_field(&discovered, "loader_functions")?,
+                    ),
                     ("source_map", lifecycle.source_map.clone()),
                     ("runtime", node_runtime(&parts, &connection)?),
                     ("callbacks", callbacks),
@@ -451,8 +468,8 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
         let closed: PyResult<Bound<'py, PyAny>> = adapter.call_method1("close", (connection,));
         let executed: Bound<'py, PyAny> = executed?;
         closed?;
-        ingress_python = executed.getattr("python_results")?;
-        ingress_loads = executed.getattr("load_results")?;
+        ingress_python = native_field(&executed, "python_results")?;
+        ingress_loads = native_field(&executed, "load_results")?;
         write_python_node_results(&context.stream, &ingress_python, context.use_color)?;
     }
     let ingress_set: HashSet<String> = ingress_names
@@ -472,7 +489,7 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
         read_side_connection = Some(connection.clone().unbind());
         let mut scheduled: HashSet<String> = scheduled_sql_names(&plan_output)?;
         for result in ingress_loads.try_iter()? {
-            scheduled.insert(result?.getattr("source_name")?.extract()?);
+            scheduled.insert(native_field(&result?, "source_name")?.extract()?);
         }
         let scheduled: Vec<String> = scheduled.into_iter().collect();
         let tracker: Bound<'py, PyAny> = call_with(
@@ -488,7 +505,7 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
             tracker.call_method1("record_sql_result", (result?,))?;
         }
         tracker.call_method0("dispatch_ready_python_nodes")?;
-        let initial: Bound<'py, PyAny> = tracker.getattr("results")?;
+        let initial: Bound<'py, PyAny> = native_field(&tracker, "results")?;
         if initial.is_truthy()? {
             write_python_node_results(&context.stream, &initial, context.use_color)?;
         }
@@ -507,7 +524,7 @@ pub(crate) fn prepare_direct_python_lifecycle<'py>(
             read_side_tracker,
             ingress_python_results: ingress_python.unbind(),
             ingress_load_results: ingress_loads.unbind(),
-            ingress_loader_names: lifecycle.plan.getattr("ingress_loader_names")?.unbind(),
+            ingress_loader_names: native_field(&lifecycle.plan, "ingress_loader_names")?.unbind(),
         },
     )
 }

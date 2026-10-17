@@ -6,6 +6,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestPlanOptions;
@@ -25,7 +26,7 @@ pub(super) fn chains<'py>(
     let request = call_with(
         &registry::class(py, RecordId::NativeSqlTestChainRequest)?,
         &[
-            ("models", project.getattr("models")?),
+            ("models", native_field(project, "models")?),
             ("tests", tests.clone()),
             (
                 "lexical_syntax",
@@ -82,7 +83,7 @@ pub(crate) fn planned<'py>(
     let request = call_with(
         &registry::class(py, RecordId::NativeSqlTestPlanningRequest)?,
         &[
-            ("models", project.getattr("models")?),
+            ("models", native_field(project, "models")?),
             ("rendered_model_sql", model_sql.into_any()),
             ("functions", functions.into_any()),
             ("tests", tests.clone()),
@@ -150,7 +151,7 @@ pub(crate) fn planned<'py>(
     for row in native.get_item(0)?.try_iter()? {
         let plan = super::plan_rows::plan(&row?)?;
         if artifact {
-            let sql = plan.getattr("sql")?;
+            let sql = native_field(&plan, "sql")?;
             if sql.is_none() {
                 return Err(PyErr::from_value(
                     registry::error(py, ErrorId::NativeSqlTestPlanning)?
@@ -161,8 +162,8 @@ pub(crate) fn planned<'py>(
                 &registry::class(py, RecordId::NativeSqlTestArtifact)?,
                 &[
                     ("sql", sql),
-                    ("model_names", plan.getattr("model_names")?),
-                    ("error_messages", plan.getattr("error_messages")?),
+                    ("model_names", native_field(&plan, "model_names")?),
+                    ("error_messages", native_field(&plan, "error_messages")?),
                 ],
             )?);
         } else {
@@ -241,7 +242,7 @@ pub(crate) fn sql_test_plan_error_messages<'py>(
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     for warning in warnings.try_iter()? {
         let warning = warning?;
-        let message: String = warning.getattr("message")?.extract()?;
+        let message: String = native_field(&warning, "message")?.extract()?;
         if warning
             .getattr("severity")?
             .getattr("value")?

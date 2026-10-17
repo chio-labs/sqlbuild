@@ -8,6 +8,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 
 const TYPE_CHECKED_DIALECTS: [&str; 4] = ["duckdb", "snowflake", "postgresql", "bigquery"];
@@ -35,17 +36,17 @@ pub(crate) fn semantic_coverage<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bo
     let mut references: Vec<Vec<(String, String)>> = Vec::with_capacity(models.len());
     let mut blocked_by: HashMap<String, HashSet<String>> = HashMap::new();
     for model in &models {
-        let name: String = model.getattr("name")?.extract()?;
+        let name: String = native_field(model, "name")?.extract()?;
         let mut rows: Vec<(String, String)> = Vec::new();
-        for row in model.getattr("reference_rows")?.try_iter()? {
+        for row in native_field(model, "reference_rows")?.try_iter()? {
             let row: Bound<'py, PyAny> = row?;
             rows.push((
                 row.get_item(0)?.str()?.extract()?,
                 row.get_item(1)?.extract()?,
             ));
         }
-        for item in model.getattr("binding_diagnostics")?.try_iter()? {
-            if item?.getattr("is_error")?.is_truthy()? {
+        for item in native_field(model, "binding_diagnostics")?.try_iter()? {
+            if native_field(&item?, "is_error")?.is_truthy()? {
                 blocked_by.insert(name.clone(), HashSet::from([name.clone()]));
                 break;
             }
@@ -71,7 +72,7 @@ pub(crate) fn semantic_coverage<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bo
             }
         }
     }
-    let dialect: Bound<'py, PyAny> = project.getattr("sql_analysis_dialect")?;
+    let dialect: Bound<'py, PyAny> = native_field(project, "sql_analysis_dialect")?;
     let dialect: String = if dialect.is_truthy()? {
         dialect.extract()?
     } else {

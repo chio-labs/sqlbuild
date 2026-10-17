@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_migrations::models::{
     ColumnMigrationInputs, ColumnMigrationPlanning, MigrationPhase,
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PySetMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -78,19 +79,19 @@ pub(crate) fn plan_column_migrations<'py>(
     let state = super::state_inspection::inspection(&runtime, None)?;
     let schemas = PySet::empty(py)?;
     for candidate in &candidates {
-        let schema = model_reads::destination(&candidate.model)?.getattr("schema")?;
+        let schema = native_field(&model_reads::destination(&candidate.model)?, "schema")?;
         if !schema.is_none() {
             schemas.add(schema)?;
         }
     }
     call_with(
-        &state.getattr("inspect_column_events")?,
+        &native_field(&state, "inspect_column_events")?,
         &[("schemas", schemas.into_any())],
     )?;
     let inputs = Bound::new(
         py,
         KnownInputColumns::new(
-            &snapshot.getattr("existing_columns")?,
+            &native_field(&snapshot, "existing_columns")?,
             &columns.source_columns,
         ),
     )?
@@ -102,7 +103,7 @@ pub(crate) fn plan_column_migrations<'py>(
         let decided = super::column_entries::decide(
             &runtime,
             candidate,
-            &state.getattr("column_events")?,
+            &native_field(&state, "column_events")?,
             &inputs,
         )?;
         let physical = columns

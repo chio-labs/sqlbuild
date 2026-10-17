@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::models::HostId;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -117,8 +118,8 @@ pub(crate) fn model_key_names(keys: &Bound<'_, PyAny>) -> PyResult<Vec<String>> 
     let mut names: Vec<_> = Vec::new();
     for key in keys.try_iter()? {
         let key = key?;
-        if key.getattr("resource_type")?.eq("model")? {
-            names.push(key.getattr("name")?.extract()?);
+        if native_field(&key, "resource_type")?.eq("model")? {
+            names.push(native_field(&key, "name")?.extract()?);
         }
     }
     Ok(names)
@@ -149,14 +150,14 @@ pub(crate) fn by_name<'py>(
     let nodes = pyo3::types::PyDict::new(project.py());
     for node in project.getattr(field)?.try_iter()? {
         let node = node?;
-        pyo3::types::PyDictMethods::set_item(&nodes, node.getattr("name")?, node)?;
+        pyo3::types::PyDictMethods::set_item(&nodes, native_field(&node, "name")?, node)?;
     }
     Ok(nodes)
 }
 
 /// A model config value as text, `None` when absent or not text.
 pub(crate) fn config_str(model: &Bound<'_, PyAny>, key: &str) -> PyResult<Option<String>> {
-    authored_config_str(&model.getattr("config")?.getattr("values")?, key)?
+    authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
         .map(|value| value.extract())
         .transpose()
 }

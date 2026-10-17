@@ -6,6 +6,7 @@ use pyo3::types::PyBool;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -33,8 +34,11 @@ pub(crate) fn resolve_adapter_connection_context<'py>(
     let adapter_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(discovered, "project_config")?,
+            ),
+            ("local_config", native_field(discovered, "local_config")?),
         ],
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
@@ -63,7 +67,7 @@ fn invocation_context<'py>(
     require_connection: bool,
 ) -> PyResult<InvocationContext<'py>> {
     let py: Python<'py> = request.py();
-    let requested: Bound<'py, PyAny> = request.getattr("project_dir")?;
+    let requested: Bound<'py, PyAny> = native_field(request, "project_dir")?;
     let project_dir: Bound<'py, PyAny> = if requested.is_none() {
         imported(py, "pathlib", "Path")?.call_method0("cwd")?
     } else {
@@ -77,14 +81,15 @@ fn invocation_context<'py>(
         &discovered,
         &project_dir,
         (
-            request.getattr("selected_target")?,
-            request.getattr("cli_vars")?,
+            native_field(request, "selected_target")?,
+            native_field(request, "cli_vars")?,
         ),
         require_connection,
     )?;
-    let machine_output: bool = request.getattr("json_output")?.is_truthy()?;
-    let use_color: bool =
-        !request.getattr("no_color")?.is_truthy()? && !machine_output && stdout_supports_color(py)?;
+    let machine_output: bool = native_field(request, "json_output")?.is_truthy()?;
+    let use_color: bool = !native_field(request, "no_color")?.is_truthy()?
+        && !machine_output
+        && stdout_supports_color(py)?;
     let stream: Bound<'py, PyAny> =
         py.import("sys")?
             .getattr(if machine_output { "stderr" } else { "stdout" })?;
@@ -99,11 +104,14 @@ fn context_fields<'py>(
     Ok(vec![
         ("effective_project_dir", project_dir.clone()),
         ("discovered_inputs", discovered.clone()),
-        ("adapter_name", adapter_context.getattr("adapter_name")?),
-        ("adapter", adapter_context.getattr("adapter")?),
+        (
+            "adapter_name",
+            native_field(adapter_context, "adapter_name")?,
+        ),
+        ("adapter", native_field(adapter_context, "adapter")?),
         (
             "connection_config",
-            adapter_context.getattr("connection_config")?,
+            native_field(adapter_context, "connection_config")?,
         ),
         ("use_color", boolean(py, *use_color)),
         ("progress_stream", stream.clone()),
@@ -134,7 +142,10 @@ pub(crate) fn resolve_reported_command_invocation<'py>(
         call_with(
             &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
             &[
-                ("adapter_name", adapter_context.getattr("adapter_name")?),
+                (
+                    "adapter_name",
+                    native_field(adapter_context, "adapter_name")?,
+                ),
                 ("stream", stream.clone()),
                 ("use_color", boolean(py, *use_color)),
             ],

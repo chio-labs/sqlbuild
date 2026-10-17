@@ -17,6 +17,7 @@ use sqlbuild_analysis::semantic_validation::models as validation;
 use crate::bindings::_helpers::analysis::model_reads::binding_validated;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::inputs::{
     column_names, resource_sql_diagnostics, sql_test_columns,
@@ -66,7 +67,7 @@ pub(crate) fn metadata_diagnostics<'py>(
         .compiler_detach(|| Ok(check_semantic_metadata(&request, catalog)))
         .map_err(compiler_error)?
         .map_err(|failure| semantic_error(py, &failure))?;
-    let dialect: Bound<'py, PyAny> = profile.getattr("sql_analysis_dialect")?;
+    let dialect: Bound<'py, PyAny> = native_field(profile, "sql_analysis_dialect")?;
     for type_sql in &outcome.fallback_types {
         let _ = classes.call(
             &classes.normalize_type,
@@ -84,11 +85,12 @@ pub(crate) fn metadata_diagnostics<'py>(
     }
     for (index, finding) in outcome.sources {
         let source: &Bound<'py, PyAny> = &inputs.sources[index];
-        let path: Bound<'py, PyAny> = source.getattr("source_file")?.getattr("relative_path")?;
+        let path: Bound<'py, PyAny> =
+            native_field(source, "source_file")?.getattr("relative_path")?;
         diagnostics.push(diagnostic(
             classes,
             finding,
-            (&classes.source_resource, &source.getattr("name")?),
+            (&classes.source_resource, &native_field(source, "name")?),
             (&path, None),
         )?);
     }
@@ -115,7 +117,7 @@ fn metadata_request<'py>(
 ) -> PyResult<(MetadataInputs<'py>, MetadataRequest)> {
     let shapes: Bound<'py, PyAny> = project_shapes(project, Some(profile.clone()))?.into_any();
     let mut tests: Vec<Bound<'py, PyAny>> = Vec::new();
-    for test in project.getattr("sql_tests")?.try_iter()? {
+    for test in native_field(project, "sql_tests")?.try_iter()? {
         let test: Bound<'py, PyAny> = test?;
         if test
             .getattr("payload")?
@@ -127,19 +129,20 @@ fn metadata_request<'py>(
     let columns_by_sql: Bound<'py, PyAny> =
         sql_test_columns(project, profile, &classes.model_test_payload)?.into_any();
     let functions: Vec<MetadataFunction> = metadata_functions(project)?;
-    let sources: Vec<Bound<'py, PyAny>> = items(&project.getattr("sources")?)?;
+    let sources: Vec<Bound<'py, PyAny>> = items(&native_field(project, "sources")?)?;
     let (files, contents) = file_contents(classes.py(), &sources, &tests)?;
-    let models: Vec<Bound<'py, PyAny>> = items(&project.getattr("models")?)?;
+    let models: Vec<Bound<'py, PyAny>> = items(&native_field(project, "models")?)?;
     let mut metadata_models: Vec<MetadataModel> = Vec::with_capacity(models.len());
     for model in &models {
         metadata_models.push(metadata_model(classes, model)?);
     }
     let mut metadata_sources: Vec<MetadataSource> = Vec::with_capacity(sources.len());
     for source in &sources {
-        let cursor: Bound<'py, PyAny> = source.getattr("source_entry")?.getattr("cursor_column")?;
-        let index: usize = file_index(&files, &source.getattr("source_file")?)?;
+        let cursor: Bound<'py, PyAny> =
+            native_field(source, "source_entry")?.getattr("cursor_column")?;
+        let index: usize = file_index(&files, &native_field(source, "source_file")?)?;
         metadata_sources.push(MetadataSource {
-            name: source.getattr("name")?.extract()?,
+            name: native_field(source, "name")?.extract()?,
             cursor_column: if cursor.is_truthy()? {
                 Some(cursor.extract()?)
             } else {
@@ -150,18 +153,18 @@ fn metadata_request<'py>(
     }
     let mut metadata_tests: Vec<MetadataSqlTest> = Vec::with_capacity(tests.len());
     for test in &tests {
-        let index: usize = file_index(&files, &test.getattr("test_file")?)?;
+        let index: usize = file_index(&files, &native_field(test, "test_file")?)?;
         metadata_tests.push(MetadataSqlTest {
             contents: contents[index].clone(),
-            ctes: test_ctes(&test.getattr("payload")?, &columns_by_sql)?,
+            ctes: test_ctes(&native_field(test, "payload")?, &columns_by_sql)?,
         });
     }
     let request = MetadataRequest {
-        dialect: profile.getattr("sql_analysis_dialect")?.extract()?,
+        dialect: native_field(profile, "sql_analysis_dialect")?.extract()?,
         quoted_ignore_case: profile
             .getattr("quoted_identifiers_ignore_case")?
             .extract()?,
-        return_types: pairs(&profile.getattr("function_return_types")?)?,
+        return_types: pairs(&native_field(profile, "function_return_types")?)?,
         functions,
         shapes: shape_rows(&shapes)?,
         models: metadata_models,
@@ -180,21 +183,21 @@ fn metadata_request<'py>(
 /// Declared functions by `name.casefold()`, the last declaration winning in the first's place.
 fn metadata_functions(project: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataFunction>> {
     let functions: Bound<'_, PyDict> = PyDict::new(project.py());
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'_, PyAny> = function?;
         functions.set_item(
-            function.getattr("name")?.call_method0("casefold")?,
+            native_field(&function, "name")?.call_method0("casefold")?,
             &function,
         )?;
     }
     let mut metadata: Vec<MetadataFunction> = Vec::with_capacity(functions.len());
     for (key, function) in functions.iter() {
         let mut arguments: Vec<(String, String)> = Vec::new();
-        for argument in function.getattr("arguments")?.try_iter()? {
+        for argument in native_field(&function, "arguments")?.try_iter()? {
             let argument: Bound<'_, PyAny> = argument?;
             arguments.push((
-                argument.getattr("name")?.extract()?,
-                argument.getattr("type")?.extract()?,
+                native_field(&argument, "name")?.extract()?,
+                native_field(&argument, "type")?.extract()?,
             ));
         }
         metadata.push(MetadataFunction {
@@ -214,13 +217,13 @@ fn file_contents<'py>(
     let file_texts: Bound<'py, PyDict> = PyDict::new(py);
     for file in sources
         .iter()
-        .map(|source| source.getattr("source_file"))
-        .chain(tests.iter().map(|test| test.getattr("test_file")))
+        .map(|source| native_field(source, "source_file"))
+        .chain(tests.iter().map(|test| native_field(test, "test_file")))
     {
         let file: Bound<'py, PyAny> = file?;
-        let path: Bound<'py, PyAny> = file.getattr("file_path")?;
+        let path: Bound<'py, PyAny> = native_field(&file, "file_path")?;
         if !file_texts.contains(&path)? {
-            file_texts.set_item(path, file.getattr("contents")?)?;
+            file_texts.set_item(path, native_field(&file, "contents")?)?;
         }
     }
     let files: Bound<'py, PyDict> = PyDict::new(py);
@@ -235,7 +238,7 @@ fn file_contents<'py>(
 fn file_index(files: &Bound<'_, PyDict>, file: &Bound<'_, PyAny>) -> PyResult<usize> {
     files
         .as_any()
-        .get_item(file.getattr("file_path")?)?
+        .get_item(native_field(file, "file_path")?)?
         .extract()
 }
 
@@ -248,13 +251,13 @@ fn test_ctes(
     for cte in payload
         .getattr("authored_ctes")?
         .try_iter()?
-        .chain(payload.getattr("expected_ctes")?.try_iter()?)
+        .chain(native_field(payload, "expected_ctes")?.try_iter()?)
     {
         let cte: Bound<'_, PyAny> = cte?;
         ctes.push((
-            cte.getattr("name")?.extract()?,
+            native_field(&cte, "name")?.extract()?,
             columns_by_sql
-                .get_item(cte.getattr("sql_body")?)?
+                .get_item(native_field(&cte, "sql_body")?)?
                 .try_iter()?
                 .map(|name| name?.extract())
                 .collect::<PyResult<_>>()?,
@@ -305,7 +308,7 @@ fn sql_test_diagnostic<'py>(
     end_column: i64,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = classes.py();
-    let path: Bound<'py, PyAny> = test.getattr("test_file")?.getattr("relative_path")?;
+    let path: Bound<'py, PyAny> = native_field(test, "test_file")?.getattr("relative_path")?;
     let location: Bound<'py, PyAny> = classes.call(
         &classes.location,
         &[
@@ -319,7 +322,7 @@ fn sql_test_diagnostic<'py>(
     diagnostic(
         classes,
         finding,
-        (&classes.sql_test_resource, &test.getattr("name")?),
+        (&classes.sql_test_resource, &native_field(test, "name")?),
         (&path, Some(&location)),
     )
 }
@@ -365,8 +368,8 @@ fn model_error<'py>(
             ("code", &PyString::new(py, code).into_any()),
             ("message", &PyString::new(py, message).into_any()),
             ("resource_type", &classes.model_resource),
-            ("resource_name", &model.getattr("name")?),
-            ("path", &model.getattr("relative_path")?),
+            ("resource_name", &native_field(model, "name")?),
+            ("path", &native_field(model, "relative_path")?),
             ("line", &line.into_bound_py_any(py)?),
             ("column", &column.into_bound_py_any(py)?),
         ],
@@ -421,7 +424,7 @@ fn text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 }
 
 fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyResult<MetadataModel> {
-    let values: Bound<'_, PyAny> = model.getattr("config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
     let get = |key: &str| values.call_method1("get", (key,));
     let mut references: Vec<NamesRow> = Vec::new();
     for key in METADATA_CONFIG_KEYS {
@@ -452,17 +455,17 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
         }
     }
     let mut calls_functions: bool = false;
-    for reference in model.getattr("references")?.try_iter()? {
-        let kind: Bound<'_, PyAny> = reference?.getattr("ref_kind")?;
+    for reference in native_field(model, "references")?.try_iter()? {
+        let kind: Bound<'_, PyAny> = native_field(&reference?, "ref_kind")?;
         if kind.eq(&classes.udf_kind)? || kind.eq(&classes.table_function_kind)? {
             calls_functions = true;
             break;
         }
     }
     Ok(MetadataModel {
-        name: model.getattr("name")?.extract()?,
-        query_sql: model.getattr("query_sql")?.extract()?,
-        authored_sql: model.getattr("authored_sql")?.extract()?,
+        name: native_field(model, "name")?.extract()?,
+        query_sql: native_field(model, "query_sql")?.extract()?,
+        authored_sql: native_field(model, "authored_sql")?.extract()?,
         checked: checked(classes, model)?,
         calls_functions,
         references,
@@ -488,23 +491,23 @@ fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
             }
             for (index, name) in audited {
                 let column: Bound<'_, PyAny> = columns.bind(py).get_item(index)?;
-                for audit in column.getattr("audits")?.try_iter()? {
+                for audit in native_field(&column, "audits")?.try_iter()? {
                     attached.push((Some(name.clone()), audit?));
                 }
             }
         }
         Err(_) => {
-            let entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
+            let entry: Bound<'_, PyAny> = native_field(model, "schema_entry")?;
             if entry.is_none() {
                 return Ok(Vec::new());
             }
-            for audit in entry.getattr("audits")?.try_iter()? {
+            for audit in native_field(&entry, "audits")?.try_iter()? {
                 attached.push((None, audit?));
             }
-            for column in entry.getattr("columns")?.try_iter()? {
+            for column in native_field(&entry, "columns")?.try_iter()? {
                 let column: Bound<'_, PyAny> = column?;
-                let name: String = column.getattr("name")?.extract()?;
-                for audit in column.getattr("audits")?.try_iter()? {
+                let name: String = native_field(&column, "name")?.extract()?;
+                for audit in native_field(&column, "audits")?.try_iter()? {
                     attached.push((Some(name.clone()), audit?));
                 }
             }
@@ -513,7 +516,7 @@ fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
     let empty: Bound<'_, PyAny> = PyString::new(py, "").into_any();
     let mut audits: Vec<MetadataAudit> = Vec::with_capacity(attached.len());
     for (column, audit) in attached {
-        let arguments: Bound<'_, PyAny> = audit.getattr("arguments")?;
+        let arguments: Bound<'_, PyAny> = native_field(&audit, "arguments")?;
         let values: Bound<'_, PyAny> = arguments.call_method1("get", ("values",))?;
         let values: Option<Vec<AuditValue>> =
             if values.is_instance_of::<PyList>() || values.is_instance_of::<PyTuple>() {
@@ -528,7 +531,7 @@ fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
             };
         audits.push(MetadataAudit {
             column,
-            definition: audit.getattr("definition_name")?.extract()?,
+            definition: native_field(&audit, "definition_name")?.extract()?,
             expression: text(&arguments.call_method1("get", ("expression",))?)?,
             target: arguments
                 .call_method1("get", ("to", &empty))?

@@ -23,6 +23,7 @@ use crate::bindings::_helpers::planner_scenario::{
 };
 use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fixtures as complete_relation_fixtures;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -81,18 +82,18 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     } else {
         analysis.is_truthy()?
     };
-    let models = by_attribute(&project.getattr("models")?, "name")?;
-    let functions = by_attribute(&project.getattr("functions")?, "key")?;
-    let locations = build_function_locations(&project.getattr("functions")?)?.into_any();
+    let models = by_attribute(&native_field(&project, "models")?, "name")?;
+    let functions = by_attribute(&native_field(&project, "functions")?, "key")?;
+    let locations = build_function_locations(&native_field(&project, "functions")?)?.into_any();
     let upstream = build_execution_upstream_deps(&project)?.into_any();
     let ordered = object(py, topologically_order_keys(&upstream, None)?)?;
     let mut model_keys: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ordered.try_iter()? {
         let key = key?;
-        if key.getattr("resource_type")?.eq("model")?
+        if native_field(&key, "resource_type")?.eq("model")?
             && graph
                 .getattr("model_names")?
-                .contains(key.getattr("name")?)?
+                .contains(native_field(&key, "name")?)?
         {
             model_keys.push(key);
         }
@@ -107,7 +108,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     let mut function_entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in ordered.try_iter()? {
         let key = key?;
-        if graph.getattr("function_deps")?.contains(&key)?
+        if native_field(&graph, "function_deps")?.contains(&key)?
             && let Some(function) = functions.get_item(key)?
         {
             function_entries.push(function_entry(&function, &context, &locations, &columns)?);
@@ -117,7 +118,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in model_keys {
         let model = models
-            .get_item(key.getattr("name")?)?
+            .get_item(native_field(&key, "name")?)?
             .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("scenario model"))?;
         let destination = required_target(
             &context.relations,
@@ -172,8 +173,8 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     let plan = call_with(
         &registry::class(py, RecordId::ScenarioExecutionPlan)?,
         &[
-            ("key", scenario.getattr("key")?),
-            ("name", scenario.getattr("name")?),
+            ("key", native_field(&scenario, "key")?),
+            ("name", native_field(&scenario, "name")?),
             ("graph_plan", graph),
             ("relation_plan", context.relations),
             ("fixture_plans", fixtures.into_any()),
@@ -183,7 +184,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
                 PyTuple::new(py, function_entries)?.into_any(),
             ),
             ("model_entries", PyTuple::new(py, entries)?.into_any()),
-            ("hook_functions", project.getattr("hook_functions")?),
+            ("hook_functions", native_field(&project, "hook_functions")?),
             ("expected_expectations", expected),
             ("assertion_expectations", assertions),
         ],
@@ -217,7 +218,7 @@ fn complete_fixtures<'py>(
     }
     let names = keys
         .iter()
-        .map(|key| key.getattr("name"))
+        .map(|key| native_field(key, "name"))
         .collect::<PyResult<Vec<_>>>()?;
     let names = names
         .iter()
@@ -234,10 +235,10 @@ fn complete_fixtures<'py>(
         for diagnostic in &completion.diagnostics {
             details.push(format!(
                 "- {}",
-                diagnostic.getattr("message")?.extract::<String>()?
+                native_field(diagnostic, "message")?.extract::<String>()?
             ));
         }
-        let name: String = scenario.getattr("name")?.extract()?;
+        let name: String = native_field(scenario, "name")?.extract()?;
         return Err(error(
             py,
             &format!(
@@ -263,14 +264,14 @@ fn model_context<'py>(
     Ok(Bound::new(
         py,
         ModelPlanContext {
-            model_locations: context.relations.getattr("model_locations")?.unbind(),
+            model_locations: native_field(&context.relations, "model_locations")?.unbind(),
             models_by_name: models.clone().into_any().unbind(),
-            functions_by_name: by_attribute(&project.getattr("functions")?, "name")?
+            functions_by_name: by_attribute(&native_field(project, "functions")?, "name")?
                 .into_any()
                 .unbind(),
-            seed_locations: context.relations.getattr("seed_locations")?.unbind(),
+            seed_locations: native_field(&context.relations, "seed_locations")?.unbind(),
             function_locations: locations.clone().unbind(),
-            source_map: context.relations.getattr("source_map")?.unbind(),
+            source_map: native_field(&context.relations, "source_map")?.unbind(),
             source_warehouse_columns: columns.clone().unbind(),
             star_exclude_keyword: context
                 .adapter
@@ -291,14 +292,14 @@ fn expectations<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = scenario.py();
     let mut expected: Vec<Bound<'py, PyAny>> = Vec::new();
-    for cte in scenario.getattr("expected_ctes")?.try_iter()? {
+    for cte in native_field(scenario, "expected_ctes")?.try_iter()? {
         let cte = cte?;
-        let name: String = cte.getattr("name")?.extract()?;
+        let name: String = native_field(&cte, "name")?.extract()?;
         let name = name.strip_prefix("__expected__").unwrap_or(&name);
         let target = required_target(&context.relations, "model_locations", name, "model")?;
         let sql = resolve_sql(
             context,
-            &cte.getattr("sql_body")?.extract::<String>()?,
+            &native_field(&cte, "sql_body")?.extract::<String>()?,
             false,
         )?;
         expected.push(call_with(
@@ -311,12 +312,12 @@ fn expectations<'py>(
         )?);
     }
     let mut assertions: Vec<Bound<'py, PyAny>> = Vec::new();
-    for cte in scenario.getattr("assertion_ctes")?.try_iter()? {
+    for cte in native_field(scenario, "assertion_ctes")?.try_iter()? {
         let cte = cte?;
-        let name: String = cte.getattr("name")?.extract()?;
+        let name: String = native_field(&cte, "name")?.extract()?;
         let sql = resolve_sql(
             context,
-            &cte.getattr("sql_body")?.extract::<String>()?,
+            &native_field(&cte, "sql_body")?.extract::<String>()?,
             false,
         )?;
         assertions.push(call_with(

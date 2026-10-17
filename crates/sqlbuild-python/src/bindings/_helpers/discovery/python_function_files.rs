@@ -22,6 +22,7 @@ use crate::bindings::_helpers::discovery::declaration_records::path_class;
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::NativeProjectTree;
@@ -83,13 +84,13 @@ fn keyword_values<'py>(
     let py: Python<'py> = call.py();
     let literal_eval: Bound<'py, PyAny> = py.import(AST_MODULE)?.getattr("literal_eval")?;
     let values: Bound<'py, PyDict> = PyDict::new(py);
-    let nodes: Bound<'py, PyAny> = call.getattr("keywords")?;
+    let nodes: Bound<'py, PyAny> = native_field(call, "keywords")?;
     for (keyword, node) in function.keywords.iter().zip(nodes.try_iter()?) {
         let Some(name) = &keyword.name else {
             let detail: String = format!("{UDF_STATEMENT} must not use **kwargs expansion");
             return Err(parse_error(source, &detail, None));
         };
-        match literal_eval.call1((node?.getattr("value")?,)) {
+        match literal_eval.call1((native_field(&node?, "value")?,)) {
             Ok(value) => values.set_item(name, value)?,
             Err(error)
                 if error.is_instance_of::<PyValueError>(py)
@@ -138,7 +139,7 @@ fn warehouse_body<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = module.py();
     let ast: Bound<'py, PyModule> = py.import(AST_MODULE)?;
-    let statements: Bound<'py, PyList> = module.getattr("body")?.downcast_into::<PyList>()?;
+    let statements: Bound<'py, PyList> = native_field(module, "body")?.downcast_into::<PyList>()?;
     let body: Bound<'py, PyList> = PyList::empty(py);
     for (index, statement) in statements.iter().enumerate() {
         if function.removed_statements.contains(&index) {
@@ -146,8 +147,9 @@ fn warehouse_body<'py>(
         }
         if index == function.statement_index {
             let decorators: Bound<'py, PyList> = PyList::empty(py);
-            for (position, decorator) in
-                statement.getattr("decorator_list")?.try_iter()?.enumerate()
+            for (position, decorator) in native_field(&statement, "decorator_list")?
+                .try_iter()?
+                .enumerate()
             {
                 if !function.removed_decorators.contains(&position) {
                     decorators.append(decorator?)?;
@@ -160,8 +162,8 @@ fn warehouse_body<'py>(
     let keywords: Bound<'py, PyDict> = PyDict::new(py);
     keywords.set_item("body", body)?;
     keywords.set_item("type_ignores", PyList::empty(py))?;
-    let cleaned: Bound<'py, PyAny> = ast.getattr("Module")?.call((), Some(&keywords))?;
-    ast.getattr("unparse")?
+    let cleaned: Bound<'py, PyAny> = native_field(&ast, "Module")?.call((), Some(&keywords))?;
+    native_field(&ast, "unparse")?
         .call1((cleaned,))?
         .call_method0("strip")
 }
@@ -189,13 +191,14 @@ fn parsed_function<'py>(
         UdfShape::Single(function) => function,
     };
     let statement: Bound<'py, PyAny> =
-        module.getattr("body")?.get_item(function.statement_index)?;
+        native_field(&module, "body")?.get_item(function.statement_index)?;
     let decorator: usize = function
         .removed_decorators
         .first()
         .copied()
         .ok_or_else(|| compiler_error("a @udf(...) function without its decorator"))?;
-    let call: Bound<'py, PyAny> = statement.getattr("decorator_list")?.get_item(decorator)?;
+    let call: Bound<'py, PyAny> =
+        native_field(&statement, "decorator_list")?.get_item(decorator)?;
     let values: Bound<'py, PyDict> = keyword_values(source, &function, &call)?;
     if function.has_positional_arguments {
         let detail: String = format!("{UDF_STATEMENT} must use keyword arguments only");

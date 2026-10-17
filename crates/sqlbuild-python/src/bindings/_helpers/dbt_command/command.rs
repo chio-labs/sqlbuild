@@ -11,6 +11,7 @@ use crate::bindings::_helpers::dbt_command::auto_init::{args_tuple, ensure_twin_
 use crate::bindings::_helpers::dbt_command::debug::run_dbt_debug;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, effective_dir, flag, stream};
 use crate::bindings::_helpers::dbt_interop::runtime_config::validate_dbt_execution_args;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -70,7 +71,10 @@ fn run_plan(project_dir: &Bound<'_, PyAny>, args: &[String], no_color: bool) -> 
         &[
             ("project_dir", project_dir.clone()),
             ("args", args_tuple(py, &options.routed_args)?),
-            ("on_progress", progress.reporter.getattr("on_progress")?),
+            (
+                "on_progress",
+                native_field(&progress.reporter, "on_progress")?,
+            ),
             ("progress_stream", progress.stream.clone()),
             ("use_color", flag(py, progress.use_color)),
         ],
@@ -117,7 +121,10 @@ fn run_execution(
             ("command", command.clone()),
             ("project_dir", project_dir.clone()),
             ("args", args_tuple(py, &options.routed_args)?),
-            ("on_progress", progress.reporter.getattr("on_progress")?),
+            (
+                "on_progress",
+                native_field(&progress.reporter, "on_progress")?,
+            ),
             ("progress_stream", progress.stream.clone()),
             ("dbt_stdout_stream", stream(py, "stdout")?),
             ("use_color", flag(py, progress.use_color)),
@@ -153,7 +160,7 @@ fn run_dbt_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResu
         args,
         no_color,
     )?;
-    let command_name: String = command.getattr("value")?.extract()?;
+    let command_name: String = native_field(&command, "value")?.extract()?;
     match command_name.as_str() {
         PLAN_COMMAND => run_plan(&project_dir, &args, no_color),
         DEBUG_COMMAND => run_dbt_debug(&project_dir, &args, no_color),

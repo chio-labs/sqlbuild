@@ -11,6 +11,7 @@ use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_core::terminal_events::main::claim_resource_terminal::claim_resource_terminal;
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::terminal_events::main::consume_terminal_fact::consume_terminal_fact;
@@ -74,10 +75,10 @@ fn optional_text(event: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String
 
 /// The facts of one lifecycle event that terminal indexing reads.
 fn terminal_fact(event: &Bound<'_, PyAny>) -> PyResult<TerminalFact> {
-    let payload: Bound<'_, PyAny> = event.getattr("payload")?;
+    let payload: Bound<'_, PyAny> = native_field(event, "payload")?;
     Ok(TerminalFact {
-        event_id: event.getattr("event_id")?.extract()?,
-        event_type: event.getattr("event_type")?.extract()?,
+        event_id: native_field(event, "event_id")?.extract()?,
+        event_type: native_field(event, "event_type")?.extract()?,
         resource_id: optional_text(event, "resource_id")?,
         resource_name: payload_text(&payload, "resource_name")?,
         resource_attempt_id: optional_text(event, "resource_attempt_id")?,

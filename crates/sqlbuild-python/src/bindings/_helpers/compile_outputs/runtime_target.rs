@@ -18,6 +18,7 @@ use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const RUN_DIR: &str = "run";
 const TESTS_DIR: &str = "tests";
@@ -43,9 +44,9 @@ fn path_object<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyAny>> 
 fn test_key(value: &Bound<'_, PyAny>, name_field: &str) -> PyResult<TestKey> {
     Ok((
         value.getattr(name_field)?.extract()?,
-        posix(&value.getattr("source_path")?)?,
-        value.getattr("block_index")?.extract()?,
-        value.getattr("case_name")?.extract()?,
+        posix(&native_field(value, "source_path")?)?,
+        native_field(value, "block_index")?.extract()?,
+        native_field(value, "case_name")?.extract()?,
     ))
 }
 
@@ -63,8 +64,8 @@ fn path_facts(test: &Bound<'_, PyAny>, model_names: Vec<String>) -> PyResult<Sql
 /// The target path of one planned SQL test, relative to its artifact directory.
 pub(crate) fn planned_sql_test_path<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let mut model_names: Vec<String> = Vec::new();
-    for step in entry.getattr("chain")?.try_iter()? {
-        model_names.push(step?.getattr("model_name")?.extract()?);
+    for step in native_field(entry, "chain")?.try_iter()? {
+        model_names.push(native_field(&step?, "model_name")?.extract()?);
     }
     path_object(
         entry.py(),
@@ -88,8 +89,7 @@ fn write_text(path: &Bound<'_, PyAny>, text: &str) -> PyResult<()> {
     let mkdir: Bound<'_, PyDict> = PyDict::new(py);
     mkdir.set_item("parents", true)?;
     mkdir.set_item("exist_ok", true)?;
-    path.getattr("parent")?
-        .call_method("mkdir", (), Some(&mkdir))?;
+    native_field(path, "parent")?.call_method("mkdir", (), Some(&mkdir))?;
     let options: Bound<'_, PyDict> = PyDict::new(py);
     options.set_item("encoding", "utf-8")?;
     path.call_method("write_text", (text,), Some(&options))?;
@@ -100,10 +100,10 @@ fn sql_statements(result: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let sql_kind: Bound<'_, PyAny> =
         host::entry(result.py(), AdapterHost::LifeCycleEventKind)?.getattr("SQL")?;
     let mut statements: Vec<String> = Vec::new();
-    for event in result.getattr("lifecycle_events")?.try_iter()? {
+    for event in native_field(result, "lifecycle_events")?.try_iter()? {
         let event: Bound<'_, PyAny> = event?;
-        if event.getattr("kind")?.eq(&sql_kind)? {
-            statements.push(event.getattr("content")?.extract()?);
+        if native_field(&event, "kind")?.eq(&sql_kind)? {
+            statements.push(native_field(&event, "content")?.extract()?);
         }
     }
     Ok(statements)
@@ -116,7 +116,7 @@ fn entry_paths<T>(
     let mut paths: HashMap<String, T> = HashMap::new();
     for entry in entries.try_iter()? {
         let entry: Bound<'_, PyAny> = entry?;
-        paths.insert(entry.getattr("name")?.extract()?, path_of(&entry)?);
+        paths.insert(native_field(&entry, "name")?.extract()?, path_of(&entry)?);
     }
     Ok(paths)
 }
@@ -135,11 +135,12 @@ pub(crate) fn write_runtime_target(
     result: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let run_dir: Bound<'_, PyAny> = target_dir.div(RUN_DIR)?;
-    let models: HashMap<String, String> = entry_paths(&plan.getattr("model_entries")?, |entry| {
-        relative_posix(entry).map(|path| model_run_path(&path))
-    })?;
+    let models: HashMap<String, String> =
+        entry_paths(&native_field(plan, "model_entries")?, |entry| {
+            relative_posix(entry).map(|path| model_run_path(&path))
+        })?;
     let functions: HashMap<String, String> =
-        entry_paths(&plan.getattr("function_entries")?, |entry| {
+        entry_paths(&native_field(plan, "function_entries")?, |entry| {
             Ok(function_run_path(
                 &relative_posix(entry)?,
                 &entry
@@ -178,7 +179,7 @@ pub(crate) fn write_test_runtime_target(
         executed.insert(test_key(&result?, "test_name")?);
     }
     let tests_dir: Bound<'_, PyAny> = target_dir.div(RUN_DIR)?.div(TESTS_DIR)?;
-    for entry in plan.getattr("test_entries")?.try_iter()? {
+    for entry in native_field(plan, "test_entries")?.try_iter()? {
         let entry: Bound<'_, PyAny> = entry?;
         if !executed.contains(&test_key(&entry, "name")?) {
             continue;
@@ -193,10 +194,10 @@ pub(crate) fn write_test_runtime_target(
 }
 
 fn check_status(result: &Bound<'_, PyAny>) -> PyResult<&'static str> {
-    if result.getattr("passed")?.is_truthy()? {
+    if native_field(result, "passed")?.is_truthy()? {
         return Ok("pass");
     }
-    if result.getattr("warned")?.is_truthy()? {
+    if native_field(result, "warned")?.is_truthy()? {
         return Ok("warn");
     }
     Ok("fail")
@@ -211,18 +212,21 @@ pub(crate) fn write_python_check_runtime_target(
     let checks: Bound<'_, PyList> = PyList::empty(py);
     for result in results.try_iter()? {
         let result: Bound<'_, PyAny> = result?;
-        let name: Bound<'_, PyAny> = result.getattr("node_name")?;
+        let name: Bound<'_, PyAny> = native_field(&result, "node_name")?;
         let check: Bound<'_, PyDict> = PyDict::new(py);
         check.set_item("kind", PYTHON_CHECK_KIND)?;
         check.set_item("name", &name)?;
         check.set_item("display_name", &name)?;
         check.set_item("check_id", format!("{PYTHON_CHECK_KIND}:{}", name.str()?))?;
         check.set_item("status", check_status(&result)?)?;
-        check.set_item("passed", result.getattr("passed")?)?;
-        check.set_item("severity", result.getattr("severity")?.getattr("value")?)?;
-        check.set_item("message", result.getattr("message")?)?;
-        check.set_item("error_message", result.getattr("error_message")?)?;
-        check.set_item("metadata", result.getattr("metadata")?)?;
+        check.set_item("passed", native_field(&result, "passed")?)?;
+        check.set_item(
+            "severity",
+            native_field(&result, "severity")?.getattr("value")?,
+        )?;
+        check.set_item("message", native_field(&result, "message")?)?;
+        check.set_item("error_message", native_field(&result, "error_message")?)?;
+        check.set_item("metadata", native_field(&result, "metadata")?)?;
         checks.append(check)?;
     }
     if checks.is_empty() {

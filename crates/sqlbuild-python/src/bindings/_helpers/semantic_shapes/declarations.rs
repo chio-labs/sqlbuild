@@ -7,6 +7,7 @@ use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const UNKNOWN: &str = "UNKNOWN";
 
@@ -14,7 +15,7 @@ const UNKNOWN: &str = "UNKNOWN";
 pub(crate) fn function_names(functions: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     for function in functions.try_iter()? {
-        let name: String = function?.getattr("name")?.extract()?;
+        let name: String = native_field(&function?, "name")?.extract()?;
         names.insert(format!("__sqlbuild_udf_{name}"));
         names.insert(format!("__sqlbuild_table_function_{name}"));
         names.insert(name);
@@ -35,15 +36,15 @@ pub(crate) fn declared_types(
     }
     for function in functions.try_iter()? {
         let function: Bound<'_, PyAny> = function?;
-        for argument in function.getattr("arguments")?.try_iter()? {
-            types.insert(argument?.getattr("type")?.extract()?);
+        for argument in native_field(&function, "arguments")?.try_iter()? {
+            types.insert(native_field(&argument?, "type")?.extract()?);
         }
-        let returns: Bound<'_, PyAny> = function.getattr("return_columns")?;
+        let returns: Bound<'_, PyAny> = native_field(&function, "return_columns")?;
         for column in returns.try_iter()? {
-            types.insert(column?.getattr("type")?.extract()?);
+            types.insert(native_field(&column?, "type")?.extract()?);
         }
         if !returns.is_truthy()? {
-            types.insert(function.getattr("returns")?.extract()?);
+            types.insert(native_field(&function, "returns")?.extract()?);
         }
     }
     types.remove(UNKNOWN);

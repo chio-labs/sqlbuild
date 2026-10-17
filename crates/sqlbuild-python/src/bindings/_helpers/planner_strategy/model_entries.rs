@@ -32,6 +32,7 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
     model_warning_records, resolve_schema_actions, warning_inputs,
 };
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -92,15 +93,15 @@ fn schema_columns<'py>(
     typed_only: bool,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = model.py();
-    let entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    let entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
     if entry.is_none() {
         return Ok(PyTuple::empty(py));
     }
     let class: Bound<'py, PyAny> = host::entry(py, AdapterHost::ColumnInfo)?;
     let mut columns: Vec<Bound<'py, PyAny>> = Vec::new();
-    for column in entry.getattr("columns")?.try_iter()? {
+    for column in native_field(&entry, "columns")?.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
-        let column_type: Bound<'py, PyAny> = column.getattr("type")?;
+        let column_type: Bound<'py, PyAny> = native_field(&column, "type")?;
         if typed_only && column_type.is_none() {
             continue;
         }
@@ -109,7 +110,10 @@ fn schema_columns<'py>(
         } else {
             PyString::new(py, "").into_any()
         };
-        columns.push(column_info(&class, (column.getattr("name")?, column_type))?);
+        columns.push(column_info(
+            &class,
+            (native_field(&column, "name")?, column_type),
+        )?);
     }
     PyTuple::new(py, columns)
 }
@@ -163,9 +167,9 @@ fn on_schema_change<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
 /// Whether the model's schema enforces declared column types.
 fn type_enforcement<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    let entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
     if !entry.is_none() {
-        let enforcement: Bound<'py, PyAny> = entry.getattr("type_enforcement")?;
+        let enforcement: Bound<'py, PyAny> = native_field(&entry, "type_enforcement")?;
         if !enforcement.is_none() {
             return Ok(enforcement);
         }
@@ -223,11 +227,11 @@ fn logical_ddl<'py>(
     let adapter: &Bound<'py, PyAny> = &request.adapter;
     let model: &Bound<'py, PyAny> = &request.model;
     let destination: Bound<'py, PyAny> = model_reads::destination(model)?;
-    let qualified: Bound<'py, PyAny> = destination.getattr("qualified_name")?;
+    let qualified: Bound<'py, PyAny> = native_field(&destination, "qualified_name")?;
     let qualified: Bound<'py, PyAny> = if qualified.is_truthy()? {
         qualified
     } else {
-        destination.getattr("name")?
+        native_field(&destination, "name")?
     };
     let sql: Bound<'py, PyAny> = request.resolved_sql.clone();
     let mut pairs: Vec<(&str, Bound<'py, PyAny>)> = vec![("destination", qualified), ("sql", sql)];
@@ -238,8 +242,8 @@ fn logical_ddl<'py>(
         "incremental_append" => "render_append",
         "incremental_delete_insert" if !cursor_column.is_none() && !cursor_bounds.is_none() => {
             let values: Bound<'py, PyAny> = model_values(model)?;
-            let start = sentinel_to_token(&cursor_bounds.getattr("start")?)?;
-            let end = sentinel_to_token(&cursor_bounds.getattr("end")?)?;
+            let start = sentinel_to_token(&native_field(&cursor_bounds, "start")?)?;
+            let end = sentinel_to_token(&native_field(&cursor_bounds, "end")?)?;
             pairs.push(("cursor_column", cursor_column));
             pairs.push(("cursor_start", PyString::new(py, &start).into_any()));
             pairs.push(("cursor_end", PyString::new(py, &end).into_any()));
@@ -256,7 +260,7 @@ fn logical_ddl<'py>(
         "incremental_merge" => {
             let mut source_columns: Vec<Bound<'py, PyAny>> = Vec::new();
             for column in warehouse_columns.try_iter()? {
-                source_columns.push(column?.getattr("name")?);
+                source_columns.push(native_field(&column?, "name")?);
             }
             pairs.push(("unique_key", unique_key.clone().into_any()));
             pairs.push((
@@ -354,8 +358,8 @@ fn ddl_cursor_bounds<'py>(request: &ModelEntryDecisions<'py>) -> PyResult<Bound<
             call_with(
                 &registry::class(py, RecordId::CursorBounds)?,
                 &[
-                    ("start", sentinel.getattr("START")?),
-                    ("end", sentinel.getattr("END")?),
+                    ("start", native_field(&sentinel, "START")?),
+                    ("end", native_field(&sentinel, "END")?),
                 ],
             )?
         } else if microbatch_range.is_truthy()? {
@@ -443,13 +447,13 @@ fn contract_fields<'py>(
             .eq(ENFORCED_CONTRACT)?,
     )?;
     entry.set_item("contract_columns", schema_columns(model, false)?)?;
-    let schema_entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
     entry.set_item(
         "contract_dynamic_columns",
         if schema_entry.is_none() {
             PyTuple::empty(py).into_any()
         } else {
-            schema_entry.getattr("dynamic_columns")?
+            native_field(&schema_entry, "dynamic_columns")?
         },
     )?;
     Ok(())
@@ -504,7 +508,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     let name: Bound<'py, PyAny> = model_reads::name_object(model)?;
     let policy: Bound<'py, PyAny> = on_schema_change(model)?;
     let schema_actions: Bound<'py, PyAny> =
-        resolve_schema_actions(&change.getattr("schema_findings")?, &policy)?.into_any();
+        resolve_schema_actions(&native_field(change, "schema_findings")?, &policy)?.into_any();
     let enforcement: Bound<'py, PyAny> = type_enforcement(model)?;
     let warehouse_columns: Bound<'py, PyAny> = snapshot
         .getattr("existing_columns")?
@@ -530,7 +534,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     let entry: Bound<'py, PyDict> = PyDict::new(py);
     entry.set_item("key", model_reads::model_key(model)?)?;
     entry.set_item("name", &name)?;
-    entry.set_item("relative_path", model.getattr("relative_path")?)?;
+    entry.set_item("relative_path", native_field(model, "relative_path")?)?;
     entry.set_item("destination", model_reads::destination(model)?)?;
     entry.set_item("fingerprint_query_sql", model_reads::query_sql(model)?)?;
     entry.set_item("logical_ddl", table_type_ddl(&ddl, &text(&table_type)?))?;
@@ -556,7 +560,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
         if fingerprint.is_none() {
             fingerprint
         } else {
-            fingerprint.getattr("definition")?
+            native_field(&fingerprint, "definition")?
         },
     )?;
     entry.set_item("schema_actions", schema_actions)?;

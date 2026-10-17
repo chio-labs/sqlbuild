@@ -14,6 +14,7 @@ use sqlbuild_scopes::scope_report::models::{
     ScopeFolder, ScopeReport, ScopeResult, ScopeSection, SourceLocation,
 };
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, diagnostic_facts, field, optional_item, read_declaration_identity,
@@ -143,7 +144,7 @@ pub(crate) fn python_to_json(value: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
         .getattr("Enum")
         .and_then(|enum_type| value.is_instance(&enum_type))?
     {
-        return python_to_json(&value.getattr("value")?);
+        return python_to_json(&native_field(value, "value")?);
     }
     if value.is_instance_of::<PyInt>() {
         let decimal: String = value.str()?.extract()?;
@@ -420,9 +421,9 @@ pub(crate) fn list_object<'py>(
 }
 
 fn read_declaration_report(report: &Bound<'_, PyAny>) -> PyResult<DeclarationReport> {
-    let definition: Bound<'_, PyAny> = report.getattr("definition")?;
+    let definition: Bound<'_, PyAny> = native_field(report, "definition")?;
     let mut metadata: Vec<(String, JsonValue)> = Vec::new();
-    for entry in report.getattr("metadata")?.try_iter()? {
+    for entry in native_field(report, "metadata")?.try_iter()? {
         let (key, value): (Bound<'_, PyAny>, Bound<'_, PyAny>) = entry?.extract()?;
         metadata.push((key.str()?.extract()?, python_to_json(&value)?));
     }
@@ -484,7 +485,7 @@ fn read_section(section: &Bound<'_, PyAny>) -> PyResult<ScopeSection> {
 
 fn read_folder(folder: &Bound<'_, PyAny>) -> PyResult<ScopeFolder> {
     let mut kind_counts: Vec<(String, i64)> = Vec::new();
-    for entry in folder.getattr("kind_counts")?.try_iter()? {
+    for entry in native_field(folder, "kind_counts")?.try_iter()? {
         let (kind, count): (Bound<'_, PyAny>, i64) = entry?.extract()?;
         let kind: String = kind.str()?.extract()?;
         match kind_counts
@@ -506,7 +507,7 @@ fn read_folder(folder: &Bound<'_, PyAny>) -> PyResult<ScopeFolder> {
 }
 
 fn read_diagnostics(item: &Bound<'_, PyAny>) -> PyResult<Vec<ReportDiagnostic>> {
-    item.getattr("diagnostics")?
+    native_field(item, "diagnostics")?
         .try_iter()?
         .map(|diagnostic| {
             Ok(ReportDiagnostic::Raised(diagnostic_facts(read_diagnostic(
@@ -541,7 +542,7 @@ fn read_move(preview: &Bound<'_, PyAny>) -> PyResult<MovePreview> {
 }
 
 fn read_report(report: &Bound<'_, PyAny>) -> PyResult<ScopeReport> {
-    let resource: Bound<'_, PyAny> = report.getattr("resource")?;
+    let resource: Bound<'_, PyAny> = native_field(report, "resource")?;
     Ok(ScopeReport {
         resource: ResourceReport {
             target: field(&resource, "target")?,
@@ -567,7 +568,7 @@ fn read_report(report: &Bound<'_, PyAny>) -> PyResult<ScopeReport> {
         used: read_declaration_reports(report, "used")?,
         relationship_scope: read_declaration_reports(report, "relationship_scope")?,
         nearby_unavailable: read_declaration_reports(report, "nearby_unavailable")?,
-        filters: read_filters(&report.getattr("filters")?)?,
+        filters: read_filters(&native_field(report, "filters")?)?,
         sections: report
             .getattr("sections")?
             .try_iter()?
@@ -607,7 +608,7 @@ pub(crate) fn read_result(
     Ok(ScopeResult::List(ListResult {
         folder: field(result, "folder")?,
         declarations: read_declaration_reports(result, "declarations")?,
-        section: read_section(&result.getattr("section")?)?,
+        section: read_section(&native_field(result, "section")?)?,
         diagnostics: read_diagnostics(result)?,
     }))
 }

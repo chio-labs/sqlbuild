@@ -13,6 +13,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 use crate::bindings::_helpers::model_config::template_data::{
     expanded_effective_vars, expanded_template_data, run_id,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -63,15 +64,15 @@ pub(crate) fn build_effective_settings<'py>(
     let names: Vec<Bound<'py, PyAny>> = imported(py, "dataclasses", "fields")?
         .call1((&settings_class,))?
         .try_iter()?
-        .map(|field| field?.getattr("name"))
+        .map(|field| native_field(&field?, "name"))
         .collect::<PyResult<_>>()?;
     let values: Bound<'py, PyDict> = registry::native(py, NativeAttr::EffectiveConfigSettings)?
         .call1((
             (
-                project_config.getattr("settings")?,
-                local_config.getattr("settings")?,
+                native_field(project_config, "settings")?,
+                native_field(local_config, "settings")?,
             ),
-            local_config.getattr("setting_overrides")?,
+            native_field(local_config, "setting_overrides")?,
             PyList::new(py, names)?,
         ))?
         .downcast_into()?;
@@ -99,8 +100,8 @@ fn target_selection<'py>(
     selected: Option<Bound<'py, PyAny>>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = discovered.py();
-    let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
-    let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
+    let project_config: Bound<'py, PyAny> = native_field(discovered, "project_config")?;
+    let local_config: Bound<'py, PyAny> = native_field(discovered, "local_config")?;
     let selected: Bound<'py, PyAny> = selected.unwrap_or_else(|| py.None().into_bound(py));
     let Some(name) = resolve_target_name(py, &project_config, &local_config, &selected)? else {
         return Ok((py.None().into_bound(py), py.None().into_bound(py)));
@@ -123,8 +124,8 @@ fn discovered_vars<'py>(
         _ => PyDict::new(py).into_any(),
     };
     build_effective_vars(
-        &discovered.getattr("project_config")?,
-        &discovered.getattr("local_config")?,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
         target_config,
         &cli_vars,
     )
@@ -152,8 +153,8 @@ pub(crate) fn build_effective_connection_config<'py>(
     let effective_vars: Bound<'py, PyAny> =
         discovered_vars(discovered_inputs, &target_config, cli_vars)?;
     build_effective_connection(
-        &discovered_inputs.getattr("project_config")?,
-        &discovered_inputs.getattr("local_config")?,
+        &native_field(discovered_inputs, "project_config")?,
+        &native_field(discovered_inputs, "local_config")?,
         &target_config,
         &effective_vars,
     )
@@ -182,8 +183,8 @@ pub(crate) fn build_effective_settings_config<'py>(
     discovered_inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     build_effective_settings(
-        &discovered_inputs.getattr("project_config")?,
-        &discovered_inputs.getattr("local_config")?,
+        &native_field(discovered_inputs, "project_config")?,
+        &native_field(discovered_inputs, "local_config")?,
     )
 }
 
@@ -193,8 +194,8 @@ pub(crate) fn project_vars<'py>(
     target_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     build_effective_vars(
-        &discovered.getattr("project_config")?,
-        &discovered.getattr("local_config")?,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
         target_config,
         PyDict::new(discovered.py()).as_any(),
     )

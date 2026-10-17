@@ -4,6 +4,7 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_resolution::values::{method, string};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
@@ -41,12 +42,12 @@ pub(crate) fn type_cursor_overrides<'py>(
     selected: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = overrides.py();
-    if overrides.is_none() || !overrides.getattr("has_untyped")?.is_truthy()? {
+    if overrides.is_none() || !native_field(overrides, "has_untyped")?.is_truthy()? {
         return Ok(overrides.clone());
     }
     let mut models: Vec<(String, String)> = Vec::new();
     for model in selected {
-        let values = model.getattr("config")?.getattr("values")?;
+        let values = native_field(model, "config")?.getattr("values")?;
         let config = |key: &str| -> PyResult<Bound<'_, PyAny>> {
             Ok(authored_config_str(&values, key)?.unwrap_or_else(|| py.None().into_bound(py)))
         };

@@ -8,6 +8,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::maximum_safety::apply_maximum_start_policy;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -47,7 +48,7 @@ fn read_snapshot<'py>(
     object: &Bound<'py, PyAny>,
 ) -> PyResult<CursorSnapshot> {
     let mut end_inputs: Vec<(Option<Scalar>, Option<Scalar>)> = Vec::new();
-    for pair in object.getattr("upstream_end_inputs")?.try_iter()? {
+    for pair in native_field(object, "upstream_end_inputs")?.try_iter()? {
         let pair = pair?;
         end_inputs.push((
             optional_scalar(session, &pair.get_item(0)?)?,
@@ -55,13 +56,13 @@ fn read_snapshot<'py>(
         ));
     }
     Ok(CursorSnapshot {
-        target_max: optional_scalar(session, &object.getattr("target_max")?)?,
+        target_max: optional_scalar(session, &native_field(object, "target_max")?)?,
         upstream_mins: scalars(session, object, "upstream_mins")?,
         upstream_maxes: scalars(session, object, "upstream_maxes")?,
         terminal_starts: scalars(session, object, "upstream_terminal_starts")?,
         terminal_ends: scalars(session, object, "upstream_terminal_ends")?,
         availability_ends: scalars(session, object, "upstream_availability_ends")?,
-        any_input: object.getattr("cursor_watermark_mode")?.eq("any")?,
+        any_input: native_field(object, "cursor_watermark_mode")?.eq("any")?,
         end_inputs,
     })
 }
@@ -198,13 +199,13 @@ pub(crate) fn compute_cursor_bounds<'py>(
         return call_with(
             &bounds_class,
             &[
-                ("start", sentinel.getattr("START")?),
-                ("end", sentinel.getattr("END")?),
+                ("start", native_field(&sentinel, "START")?),
+                ("end", native_field(&sentinel, "END")?),
             ],
         );
     }
     let snapshot = args.value("cursor_snapshot")?;
-    if !snapshot.getattr("watermarks_available")?.is_truthy()? {
+    if !native_field(&snapshot, "watermarks_available")?.is_truthy()? {
         return Ok(py.None().into_bound(py));
     }
     let session = CursorSession::new(py)?;

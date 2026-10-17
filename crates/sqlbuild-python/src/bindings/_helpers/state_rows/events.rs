@@ -18,6 +18,7 @@ use sqlbuild_state::events::models::{EventRelation, StateCell, StateColumnType, 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::timestamps::{date_time_typed, presumed_utc};
 
 fn emit_error(error: JsonEmitError) -> PyErr {
@@ -26,9 +27,9 @@ fn emit_error(error: JsonEmitError) -> PyErr {
 
 pub(crate) fn relation(value: &Bound<'_, PyAny>) -> PyResult<EventRelation> {
     Ok(EventRelation {
-        database: value.getattr("database")?.extract()?,
-        schema: value.getattr("schema")?.extract()?,
-        name: value.getattr("name")?.extract()?,
+        database: native_field(value, "database")?.extract()?,
+        schema: native_field(value, "schema")?.extract()?,
+        name: native_field(value, "name")?.extract()?,
     })
 }
 
@@ -70,7 +71,7 @@ fn column_id(request: Option<&Bound<'_, PyDict>>) -> PyResult<String> {
 #[pyfunction(name = "deterministic_old_name_view_event_id")]
 #[pyo3(signature = (*, event_type, migration_event_id))]
 fn old_name_id(event_type: &Bound<'_, PyAny>, migration_event_id: &str) -> PyResult<String> {
-    let event_type: String = event_type.getattr("value")?.extract()?;
+    let event_type: String = native_field(event_type, "value")?.extract()?;
     old_name_view_event_id(&event_type, migration_event_id).map_err(emit_error)
 }
 

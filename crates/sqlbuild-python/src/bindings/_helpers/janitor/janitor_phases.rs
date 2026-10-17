@@ -16,6 +16,7 @@ use crate::bindings::_helpers::janitor::janitor_planning::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
 
@@ -42,7 +43,7 @@ fn stdout(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 }
 
 fn use_color(invocation: &Bound<'_, PyAny>) -> PyResult<bool> {
-    invocation.getattr("use_color")?.extract()
+    native_field(invocation, "use_color")?.extract()
 }
 
 /// `OperationLifecycle(operation_kind=..., operation_name=...)`.
@@ -59,10 +60,10 @@ pub(crate) fn compile_janitor_project<'py>(
 ) -> PyResult<JanitorCompiled<'py>> {
     let py: Python<'py> = invocation.py();
     let context: Bound<'py, PyAny> = resolve_adapter_connection_context(
-        &invocation.getattr("discovered_inputs")?,
-        &invocation.getattr("effective_project_dir")?,
+        &native_field(invocation, "discovered_inputs")?,
+        &native_field(invocation, "effective_project_dir")?,
         (
-            invocation.getattr("selected_target")?,
+            native_field(invocation, "selected_target")?,
             py.None().into_bound(py),
         ),
         true,
@@ -80,9 +81,9 @@ pub(crate) fn compile_janitor_project<'py>(
             ),
         ],
     )?;
-    let as_target: Bound<'py, PyAny> = invocation.getattr("as_target")?;
+    let as_target: Bound<'py, PyAny> = native_field(invocation, "as_target")?;
     let target: Bound<'py, PyAny> = if as_target.is_none() {
-        invocation.getattr("selected_target")?
+        native_field(invocation, "selected_target")?
     } else {
         as_target
     };
@@ -96,11 +97,14 @@ pub(crate) fn compile_janitor_project<'py>(
                     &[
                         (
                             "discovered_inputs",
-                            invocation.getattr("discovered_inputs")?,
+                            native_field(invocation, "discovered_inputs")?,
                         ),
-                        ("adapter", context.getattr("adapter")?),
+                        ("adapter", native_field(&context, "adapter")?),
                         ("selected_target", target),
-                        ("resolved_connection", context.getattr("connection_config")?),
+                        (
+                            "resolved_connection",
+                            native_field(&context, "connection_config")?,
+                        ),
                     ],
                 )?),
             )?;
@@ -114,10 +118,10 @@ pub(crate) fn compile_janitor_project<'py>(
             Ok(project)
         })?;
     Ok(JanitorCompiled {
-        adapter_name: context.getattr("adapter_name")?,
-        adapter: context.getattr("adapter")?,
+        adapter_name: native_field(&context, "adapter_name")?,
+        adapter: native_field(&context, "adapter")?,
         project,
-        connection_config: context.getattr("connection_config")?,
+        connection_config: native_field(&context, "connection_config")?,
     })
 }
 
@@ -180,7 +184,9 @@ pub(crate) fn close_janitor_warehouse(
 }
 
 fn candidate_count(plan: &Bound<'_, PyAny>) -> PyResult<usize> {
-    let mut count: usize = plan.getattr("old_name_views")?.getattr("drops")?.len()?;
+    let mut count: usize = native_field(plan, "old_name_views")?
+        .getattr("drops")?
+        .len()?;
     for field in CANDIDATE_FIELDS {
         count += plan.getattr(field)?.len()?;
     }
@@ -228,9 +234,10 @@ pub(crate) fn build_janitor_execution_plan<'py>(
                     },
                 ),
                 &JanitorSettings {
-                    retention_days: settings.getattr("retention_days")?.extract()?,
-                    delete_tracked_only: janitor.getattr("delete_tracked_only")?.is_truthy()?,
-                    exclude_patterns: janitor.getattr("exclude_patterns")?.extract()?,
+                    retention_days: native_field(settings, "retention_days")?.extract()?,
+                    delete_tracked_only: native_field(&janitor, "delete_tracked_only")?
+                        .is_truthy()?,
+                    exclude_patterns: native_field(&janitor, "exclude_patterns")?.extract()?,
                     direct_mode: true,
                     state_history_versions: settings
                         .getattr("direct_state_history_versions")?

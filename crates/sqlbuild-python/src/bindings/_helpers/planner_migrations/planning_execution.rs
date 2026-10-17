@@ -5,17 +5,18 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::column_objects::replace;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyBool;
 
 fn label<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let qualified = location.getattr("qualified_name")?;
+    let qualified = native_field(location, "qualified_name")?;
     if qualified.is_truthy()? {
         Ok(qualified)
     } else {
-        location.getattr("name")
+        native_field(location, "name")
     }
 }
 
@@ -29,12 +30,12 @@ fn migration_promotion<'py>(
         .call_method0("supports_transactional_ddl")?
         .is_truthy()?
     {
-        return promotion.getattr("TRANSACTIONAL_RENAME");
+        return native_field(&promotion, "TRANSACTIONAL_RENAME");
     }
-    if !decision.eq("migrate")? && adapter.getattr("adapter_name")?.eq("snowflake")? {
-        return promotion.getattr("SWAP");
+    if !decision.eq("migrate")? && native_field(&adapter, "adapter_name")?.eq("snowflake")? {
+        return native_field(&promotion, "SWAP");
     }
-    promotion.getattr("RENAME")
+    native_field(&promotion, "RENAME")
 }
 
 /// The migration entry with the adapter's staging, transfer and promotion choices.
@@ -45,7 +46,7 @@ pub(super) fn migration_with_execution<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = runtime.py();
     let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
-    let transient = if adapter.getattr("adapter_name")?.eq("snowflake")? {
+    let transient = if native_field(&adapter, "adapter_name")?.eq("snowflake")? {
         PyBool::new(
             py,
             model
@@ -60,16 +61,19 @@ pub(super) fn migration_with_execution<'py>(
         py.None().into_bound(py)
     };
     let stage = call_with(
-        &adapter.getattr("render_migration_stage")?,
+        &native_field(&adapter, "render_migration_stage")?,
         &[
-            ("origin", label(&entry.getattr("origin")?)?),
-            ("stage", label(&entry.getattr("destination")?)?),
-            ("origin_is_transient", entry.getattr("origin_is_transient")?),
+            ("origin", label(&native_field(entry, "origin")?)?),
+            ("stage", label(&native_field(entry, "destination")?)?),
+            (
+                "origin_is_transient",
+                native_field(entry, "origin_is_transient")?,
+            ),
             ("stage_is_transient", transient.clone()),
         ],
     )?;
-    let transfer = stage.getattr("transfer")?;
-    let fallback = if stage.getattr("fallback_statements")?.is_truthy()? {
+    let transfer = native_field(&stage, "transfer")?;
+    let fallback = if native_field(&stage, "fallback_statements")?.is_truthy()? {
         host::entry(py, AdapterHost::MigrationTransfer)?.getattr("COPY")?
     } else {
         py.None().into_bound(py)
@@ -82,7 +86,7 @@ pub(super) fn migration_with_execution<'py>(
             ("transfer_fallback", fallback),
             (
                 "promotion",
-                migration_promotion(runtime, &entry.getattr("decision")?)?,
+                migration_promotion(runtime, &native_field(entry, "decision")?)?,
             ),
         ],
     )

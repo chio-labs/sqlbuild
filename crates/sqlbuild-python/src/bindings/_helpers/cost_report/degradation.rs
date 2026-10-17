@@ -17,6 +17,7 @@ use crate::bindings::_helpers::cost_report::store;
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -161,7 +162,7 @@ fn cost_record<'py>(
     fields.push(("cost", summary));
     fields.push((
         "had_executable_work",
-        finalization.getattr("had_executable_work")?,
+        native_field(finalization, "had_executable_work")?,
     ));
     call_with(&registry::class(py, RecordId::CostRunRecord)?, &fields)
 }
@@ -176,7 +177,7 @@ fn summary<'py>(
         &host::entry(py, ExecutorHost::RunCostSummary)?,
         &[
             ("status", status),
-            ("usd_per_credit", config.getattr("usd_per_credit")?),
+            ("usd_per_credit", native_field(config, "usd_per_credit")?),
             ("rate_source", PyString::new(py, rate_source).into_any()),
             ("message", message),
         ],
@@ -189,9 +190,9 @@ fn persist<'py>(
     stage: &str,
 ) -> PyResult<()> {
     persist_cost_run(
-        finalization.getattr("project_dir")?.extract()?,
+        native_field(finalization, "project_dir")?.extract()?,
         record,
-        &finalization.getattr("output_stream")?,
+        &native_field(finalization, "output_stream")?,
         stage,
     )
 }
@@ -212,7 +213,7 @@ fn collection_failure<'py>(
     )?;
     let error_type: String = error_type(py, error)?;
     warn_logging_to(
-        &finalization.getattr("output_stream")?,
+        &native_field(finalization, "output_stream")?,
         &format!("Cost telemetry failed during {stage} ({error_type}); build result unchanged."),
         COLLECTION_LOGGER_NAME,
     )?;
@@ -237,8 +238,8 @@ fn collected_summary<'py>(
     (config, rate_source): (&Bound<'py, PyAny>, &str),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = finalization.py();
-    let run_id: Bound<'py, PyAny> = finalization.getattr("run_id")?;
-    let mut ledger: Bound<'py, PyAny> = finalization.getattr("project_dir")?;
+    let run_id: Bound<'py, PyAny> = native_field(finalization, "run_id")?;
+    let mut ledger: Bound<'py, PyAny> = native_field(finalization, "project_dir")?;
     for part in STATEMENT_LEDGER_PATH {
         ledger = if part.is_empty() {
             ledger.div(&run_id)?
@@ -247,18 +248,21 @@ fn collected_summary<'py>(
         };
     }
     call_with(
-        &adapter.getattr("collect_run_cost")?,
+        &native_field(adapter, "collect_run_cost")?,
         &[
             (
                 "connection_config",
-                finalization.getattr("connection_config")?,
+                native_field(finalization, "connection_config")?,
             ),
-            ("target_database", finalization.getattr("target_database")?),
+            (
+                "target_database",
+                native_field(finalization, "target_database")?,
+            ),
             ("run_id", run_id),
-            ("started_at", finalization.getattr("started_at")?),
-            ("completed_at", finalization.getattr("completed_at")?),
+            ("started_at", native_field(finalization, "started_at")?),
+            ("completed_at", native_field(finalization, "completed_at")?),
             ("statement_ledger_path", ledger),
-            ("usd_per_credit", config.getattr("usd_per_credit")?),
+            ("usd_per_credit", native_field(config, "usd_per_credit")?),
             ("rate_source", PyString::new(py, rate_source).into_any()),
         ],
     )
@@ -270,12 +274,12 @@ pub(crate) fn finalize_build_cost<'py>(
     finalization: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = finalization.py();
-    let adapter: Bound<'py, PyAny> = finalization.getattr("adapter")?;
+    let adapter: Bound<'py, PyAny> = native_field(finalization, "adapter")?;
     if !cost_aware(&adapter)? {
         return Ok(py.None().into_bound(py));
     }
-    let config: Bound<'py, PyAny> = finalization.getattr("config")?;
-    let rate_source: String = if config.getattr("usd_per_credit_is_default")?.is_truthy()? {
+    let config: Bound<'py, PyAny> = native_field(finalization, "config")?;
+    let rate_source: String = if native_field(&config, "usd_per_credit_is_default")?.is_truthy()? {
         DEFAULT_RATE_SOURCE.to_owned()
     } else {
         CONFIGURED_RATE_SOURCE.to_owned()
@@ -290,7 +294,7 @@ pub(crate) fn finalize_build_cost<'py>(
     if capability.eq(host::entry(py, ExecutorHost::CostCapability)?.getattr("NONE")?)? {
         return Ok(py.None().into_bound(py));
     }
-    let cost: Bound<'py, PyAny> = if finalization.getattr("collect")?.is_truthy()? {
+    let cost: Bound<'py, PyAny> = if native_field(finalization, "collect")?.is_truthy()? {
         match collected_summary(finalization, &adapter, rate) {
             Ok(summary) => summary,
             Err(error) => return collection_failure(finalization, rate, "collection", &error),
@@ -298,20 +302,20 @@ pub(crate) fn finalize_build_cost<'py>(
     } else {
         summary(
             py,
-            finalization.getattr("cost_status")?,
+            native_field(finalization, "cost_status")?,
             rate,
-            finalization.getattr("cost_message")?,
+            native_field(finalization, "cost_message")?,
         )?
     };
     let record: Bound<'py, PyAny> = cost_record(finalization, cost)?;
     persist(finalization, &record, "artifact persistence")?;
-    if !finalization.getattr("render")?.is_truthy()? {
+    if !native_field(finalization, "render")?.is_truthy()? {
         return Ok(record);
     }
     write_build_cost_breakdown(
         &record,
-        &finalization.getattr("output_stream")?,
-        finalization.getattr("use_color")?.is_truthy()?,
+        &native_field(finalization, "output_stream")?,
+        native_field(finalization, "use_color")?.is_truthy()?,
     )?;
     Ok(record)
 }

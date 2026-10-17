@@ -13,6 +13,7 @@ use sqlbuild_analysis::planner_fixtures::models::{
 
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::models::FixtureRelation;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 #[pyfunction(name = "is_empty_fixture_query")]
 pub(crate) fn fixture_marker(sql: &str) -> PyResult<bool> {
@@ -62,7 +63,7 @@ pub(crate) fn render_completed(
     if !input.typed_nulls.is_empty() {
         for column in input.inferred.try_iter()? {
             let column = column?;
-            let name = column.getattr("name")?;
+            let name = native_field(&column, "name")?;
             let folded = name.call_method0("casefold")?;
             supplied.push(SuppliedProjection {
                 name: name.extract()?,
@@ -106,7 +107,7 @@ pub(crate) fn complete_typed_null_columns(
 ) -> PyResult<String> {
     let py = inference.py();
     let typed_nulls = PyDict::new(py);
-    for name in inference.getattr("null_literal_names")?.try_iter()? {
+    for name in native_field(inference, "null_literal_names")?.try_iter()? {
         let name = name?;
         let folded: String = name.extract()?;
         if let Some((_, expected)) = expected_types.iter().find(|(column, _)| *column == folded) {
@@ -119,9 +120,9 @@ pub(crate) fn complete_typed_null_columns(
     render_completed(
         CompletionSql {
             sql,
-            inferred: inference.getattr("columns")?,
+            inferred: native_field(inference, "columns")?,
             typed_nulls,
-            quoted_names: inference.getattr("quoted_names")?,
+            quoted_names: native_field(inference, "quoted_names")?,
             completed: Vec::new(),
         },
         adapter,

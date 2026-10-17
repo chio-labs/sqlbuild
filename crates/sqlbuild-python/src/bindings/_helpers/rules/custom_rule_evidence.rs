@@ -17,6 +17,7 @@ use sqlbuild_pysource::rule_evidence::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -34,7 +35,7 @@ fn python_version(py: Python<'_>) -> (u8, u8) {
 
 /// `Path(rule.source).resolve()` as a Python path, or `None` for a rule without a source file.
 fn resolved_source<'py>(rule: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let source: Bound<'py, PyAny> = rule.getattr("source")?;
+    let source: Bound<'py, PyAny> = native_field(rule, "source")?;
     if source.is_none() {
         return Ok(None);
     }
@@ -83,7 +84,7 @@ pub(crate) fn custom_rule_implementation_fingerprint(
     let py: Python<'_> = rule.py();
     let Some(source) = resolved_source(rule)? else {
         let text: Bound<'_, PyAny> =
-            imported(py, INSPECT_MODULE, "getsource")?.call1((rule.getattr("check")?,))?;
+            imported(py, INSPECT_MODULE, "getsource")?.call1((native_field(rule, "check")?,))?;
         return imported(py, HASHLIB_MODULE, "sha256")?
             .call1((text.call_method0("encode")?,))?
             .call_method0("hexdigest")?
@@ -113,7 +114,7 @@ fn custom_rule_test_evidence<'py>(
         return Ok(Vec::new());
     };
     let root_path: Bound<'py, PyAny> = project_dir.call_method0("resolve")?;
-    let check_name: String = match rule.getattr("check")?.getattr("__name__") {
+    let check_name: String = match native_field(rule, "check")?.getattr("__name__") {
         Ok(name) => name.extract()?,
         Err(_) => String::new(),
     };
@@ -207,7 +208,7 @@ pub(crate) fn verify_custom_rules(
     let checked: Bound<'_, PySet> = PySet::empty(py)?;
     for rule in rules.try_iter()? {
         let rule: Bound<'_, PyAny> = rule?;
-        if !rule.getattr("custom")?.is_truthy()? {
+        if !native_field(&rule, "custom")?.is_truthy()? {
             continue;
         }
         let Some(source) = resolved_source(&rule)? else {

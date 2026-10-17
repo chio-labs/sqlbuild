@@ -5,6 +5,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     DeclaredRow, InferredRow, LineageInput, NativeCompiledModel,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// `(output, transform kind, confidence, [(resource type, resource, column)])` of one lineage output.
 pub(crate) type LineageFactRow = (String, String, String, Vec<(String, String, String)>);
@@ -24,7 +25,7 @@ pub(crate) fn inferred_rows(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Inf
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return view.get().inferred_rows(model.py());
     }
-    let rows: Bound<'_, PyAny> = model.getattr("inferred_rows")?;
+    let rows: Bound<'_, PyAny> = native_field(model, "inferred_rows")?;
     if rows.is_none() {
         return Ok(None);
     }
@@ -51,7 +52,7 @@ pub(crate) fn declared_rows(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Dec
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return view.get().schema_column_rows(model.py());
     }
-    model.getattr("schema_column_rows")?.extract()
+    native_field(model, "schema_column_rows")?.extract()
 }
 
 /// Whether the attached schema declares dynamic column families.
@@ -59,7 +60,7 @@ pub(crate) fn dynamic_columns_declared(model: &Bound<'_, PyAny>) -> PyResult<boo
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return view.get().dynamic_columns_declared(model.py());
     }
-    model.getattr("has_dynamic_columns")?.is_truthy()
+    native_field(model, "has_dynamic_columns")?.is_truthy()
 }
 
 /// `(has star, star resolved)` of the model's analysed query.
@@ -72,8 +73,8 @@ pub(crate) fn star_flags(model: &Bound<'_, PyAny>) -> PyResult<(bool, bool)> {
         ));
     }
     Ok((
-        model.getattr("fast_lineage_has_star")?.is_truthy()?,
-        model.getattr("fast_lineage_star_resolved")?.is_truthy()?,
+        native_field(model, "fast_lineage_has_star")?.is_truthy()?,
+        native_field(model, "fast_lineage_star_resolved")?.is_truthy()?,
     ))
 }
 
@@ -94,7 +95,7 @@ pub(crate) fn lineage_inputs(model: &Bound<'_, PyAny>) -> PyResult<Vec<LineageIn
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return Ok(view.get().lineage_inputs(model.py())?.unwrap_or_default());
     }
-    let columns: Bound<'_, PyAny> = model.getattr("fast_lineage_columns")?;
+    let columns: Bound<'_, PyAny> = native_field(model, "fast_lineage_columns")?;
     if !columns.is_truthy()? {
         return Ok(Vec::new());
     }
@@ -102,14 +103,14 @@ pub(crate) fn lineage_inputs(model: &Bound<'_, PyAny>) -> PyResult<Vec<LineageIn
     for output in columns.try_iter()? {
         let output: Bound<'_, PyAny> = output?;
         let mut upstream: Vec<(String, String)> = Vec::new();
-        for source in output.getattr("upstream_columns")?.try_iter()? {
+        for source in native_field(&output, "upstream_columns")?.try_iter()? {
             let source: Bound<'_, PyAny> = source?;
             upstream.push((
-                source.getattr("resource_name")?.extract()?,
-                source.getattr("column_name")?.extract()?,
+                native_field(&source, "resource_name")?.extract()?,
+                native_field(&source, "column_name")?.extract()?,
             ));
         }
-        lineage.push((output.getattr("output_column")?.extract()?, upstream));
+        lineage.push((native_field(&output, "output_column")?.extract()?, upstream));
     }
     Ok(lineage)
 }
@@ -119,7 +120,7 @@ pub(crate) fn binding_validated(model: &Bound<'_, PyAny>) -> PyResult<bool> {
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return view.get().binding_validated(model.py());
     }
-    model.getattr("binding_validated")?.is_truthy()
+    native_field(model, "binding_validated")?.is_truthy()
 }
 
 /// Whether the model's dynamic pivot proof proved its output columns.
@@ -127,8 +128,8 @@ pub(crate) fn output_proven(model: &Bound<'_, PyAny>) -> PyResult<bool> {
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return view.get().output_proven(model.py());
     }
-    let proof: Bound<'_, PyAny> = model.getattr("dynamic_column_contract")?;
-    Ok(!proof.is_none() && proof.getattr("output_proven")?.is_truthy()?)
+    let proof: Bound<'_, PyAny> = native_field(model, "dynamic_column_contract")?;
+    Ok(!proof.is_none() && native_field(&proof, "output_proven")?.is_truthy()?)
 }
 
 /// Each lineage output with its transform kind and confidence values, `None` without lineage.
@@ -148,7 +149,7 @@ pub(crate) fn lineage_facts(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Lin
         }
         return Ok(Some(facts));
     }
-    let columns: Bound<'_, PyAny> = model.getattr("fast_lineage_columns")?;
+    let columns: Bound<'_, PyAny> = native_field(model, "fast_lineage_columns")?;
     if columns.is_none() {
         return Ok(None);
     }
@@ -156,18 +157,18 @@ pub(crate) fn lineage_facts(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Lin
     for output in columns.try_iter()? {
         let output: Bound<'_, PyAny> = output?;
         let mut sources: Vec<(String, String, String)> = Vec::new();
-        for source in output.getattr("upstream_columns")?.try_iter()? {
+        for source in native_field(&output, "upstream_columns")?.try_iter()? {
             let source: Bound<'_, PyAny> = source?;
             sources.push((
-                source.getattr("resource_type")?.extract()?,
-                source.getattr("resource_name")?.extract()?,
-                source.getattr("column_name")?.extract()?,
+                native_field(&source, "resource_type")?.extract()?,
+                native_field(&source, "resource_name")?.extract()?,
+                native_field(&source, "column_name")?.extract()?,
             ));
         }
         facts.push((
-            output.getattr("output_column")?.extract()?,
-            output.getattr("transform_kind")?.str()?.extract()?,
-            output.getattr("confidence")?.str()?.extract()?,
+            native_field(&output, "output_column")?.extract()?,
+            native_field(&output, "transform_kind")?.str()?.extract()?,
+            native_field(&output, "confidence")?.str()?.extract()?,
             sources,
         ));
     }
@@ -186,11 +187,11 @@ pub(crate) fn proven_inputs(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Str
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return view.get().proven_inputs(model.py());
     }
-    let proof: Bound<'_, PyAny> = model.getattr("dynamic_column_contract")?;
-    if proof.is_none() || !proof.getattr("output_proven")?.is_truthy()? {
+    let proof: Bound<'_, PyAny> = native_field(model, "dynamic_column_contract")?;
+    if proof.is_none() || !native_field(&proof, "output_proven")?.is_truthy()? {
         return Ok(None);
     }
-    proof.getattr("input_relations")?.extract().map(Some)
+    native_field(&proof, "input_relations")?.extract().map(Some)
 }
 
 /// The model's name.
@@ -198,7 +199,7 @@ pub(crate) fn model_name(model: &Bound<'_, PyAny>) -> PyResult<String> {
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return view.get().name(model.py());
     }
-    model.getattr("name")?.extract()
+    native_field(model, "name")?.extract()
 }
 
 /// The model's compiled query SQL.
@@ -210,7 +211,7 @@ pub(crate) fn query_sql<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
             .into_bound(model.py())
             .into_any());
     }
-    model.getattr("query_sql")
+    native_field(model, "query_sql")
 }
 
 /// The model's `CompiledObjectKey`.
@@ -218,7 +219,7 @@ pub(crate) fn model_key<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return Ok(view.get().key(model.py())?.into_bound(model.py()));
     }
-    model.getattr("key")
+    native_field(model, "key")
 }
 
 /// The model's destination `CompiledRelationLocation`.
@@ -226,7 +227,7 @@ pub(crate) fn destination<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
     if let Ok(view) = model.downcast::<NativeCompiledModel>() {
         return Ok(view.get().destination(model.py())?.into_bound(model.py()));
     }
-    model.getattr("destination")
+    native_field(model, "destination")
 }
 
 /// The model's name as a Python string.
@@ -235,5 +236,5 @@ pub(crate) fn name_object<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
         let name: String = view.get().name(model.py())?;
         return Ok(pyo3::types::PyString::new(model.py(), &name).into_any());
     }
-    model.getattr("name")
+    native_field(model, "name")
 }

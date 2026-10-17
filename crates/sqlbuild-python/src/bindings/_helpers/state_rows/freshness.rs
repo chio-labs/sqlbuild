@@ -19,6 +19,7 @@ use sqlbuild_state::freshness::types::TimestampParser;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::timestamps::{
@@ -84,7 +85,7 @@ pub(crate) fn normalize<'py>(
                 "Timestamp source freshness values must be datetime values",
             ));
         }
-        let aware: bool = !value.getattr("tzinfo")?.is_none();
+        let aware: bool = !native_field(value, "tzinfo")?.is_none();
         let local: LocalDateTime = if aware {
             local_date_time(&in_utc(value)?)?
         } else {
@@ -160,9 +161,9 @@ impl TimestampParser for StateTimestamps<'_> {
 
 fn comparable(record: &Bound<'_, PyAny>) -> PyResult<ComparableRecord> {
     Ok(ComparableRecord {
-        data_version_hash: record.getattr("data_version_hash")?.extract()?,
-        value_kind: record.getattr("value_kind")?.extract()?,
-        data_version: record.getattr("data_version")?.extract()?,
+        data_version_hash: native_field(record, "data_version_hash")?.extract()?,
+        value_kind: native_field(record, "value_kind")?.extract()?,
+        data_version: native_field(record, "data_version")?.extract()?,
     })
 }
 
@@ -214,12 +215,12 @@ pub(crate) fn age_policy<'py>(
     }
     let statuses: Bound<'py, PyAny> = registry::class(py, RecordId::SourceFreshnessAgeStatus)?;
     if !date_time_typed(data_version)? {
-        return statuses.getattr("UNKNOWN").map(Some);
+        return native_field(&statuses, "UNKNOWN").map(Some);
     }
     let version: LocalDateTime = aware_utc(data_version, "data_version")?;
     let observed: LocalDateTime = aware_utc(observed_at, "observed_at")?;
-    let error_after: Option<String> = policy.getattr("error_after")?.extract()?;
-    let warn_after: Option<String> = policy.getattr("warn_after")?.extract()?;
+    let error_after: Option<String> = native_field(policy, "error_after")?.extract()?;
+    let warn_after: Option<String> = native_field(policy, "warn_after")?.extract()?;
     let status: AgeStatus = age_status(
         (&version, &observed),
         error_after.as_deref(),

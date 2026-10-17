@@ -23,6 +23,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -176,20 +177,20 @@ fn run_skills_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyR
 /// `sqb playground`: create a self-contained playground project.
 #[pyfunction]
 fn run_playground_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let project_dir: Bound<'_, PyAny> = request.getattr("project_dir")?;
+    let project_dir: Bound<'_, PyAny> = native_field(request, "project_dir")?;
     let base: PathBuf = if project_dir.is_none() {
         current_dir(py)?
     } else {
         project_dir.extract()?
     };
-    let display_path: String = request.getattr("target_path")?.str()?.extract()?;
+    let display_path: String = native_field(request, "target_path")?.str()?.extract()?;
     let target_path: PathBuf = PathBuf::from(&display_path);
     let target_dir: PathBuf = if target_path.is_absolute() {
         target_path
     } else {
         base.join(target_path)
     };
-    let template: String = request.getattr("template")?.str()?.extract()?;
+    let template: String = native_field(request, "template")?.str()?.extract()?;
     create_playground(&PlaygroundRequest {
         templates_root: package_dir(py)?.join(TEMPLATES_DIRECTORY),
         target_dir: target_dir.clone(),

@@ -12,6 +12,7 @@ use sqlbuild_state::events::constants::{
 use sqlbuild_state::events::models::EventOrder;
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::constants::{COLUMN_KIND, MODEL_KIND, OLD_NAME_KIND};
@@ -86,7 +87,7 @@ pub(crate) fn qualified_table<'py>(
 /// The history order of a stored event: its creation time in UTC, then its ID.
 pub(crate) fn event_order(event: &Bound<'_, PyAny>) -> PyResult<EventOrder> {
     Ok(EventOrder {
-        created_at: presumed_utc(&event.getattr("created_at")?)?,
-        event_id: event.getattr("event_id")?.extract()?,
+        created_at: presumed_utc(&native_field(event, "created_at")?)?,
+        event_id: native_field(event, "event_id")?.extract()?,
     })
 }

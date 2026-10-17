@@ -18,6 +18,7 @@ use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, capped_microbatch_bounds, count_microbatches,
 };
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -49,7 +50,7 @@ pub(crate) fn replay_grain(
 ) -> PyResult<Option<String>> {
     let mut input_grains: Vec<Option<String>> = Vec::new();
     for relation in relations.try_iter()? {
-        input_grains.push(optional_string(&relation?.getattr("cursor_grain")?)?);
+        input_grains.push(optional_string(&native_field(&relation?, "cursor_grain")?)?);
     }
     effective_timestamp_grain(&TimestampGrainFacts {
         cursor_type,
@@ -63,9 +64,9 @@ pub(crate) fn replay_grain(
 /// The entry's effective batch size and its batch count over the planned range.
 fn batch_count(entry: &Bound<'_, PyAny>) -> PyResult<Option<(String, i128)>> {
     let py: Python<'_> = entry.py();
-    let range: Bound<'_, PyAny> = entry.getattr("microbatch_range")?;
-    let batch_size: Bound<'_, PyAny> = entry.getattr("batch_size")?;
-    let cursor_type: Bound<'_, PyAny> = entry.getattr("cursor_type")?;
+    let range: Bound<'_, PyAny> = native_field(entry, "microbatch_range")?;
+    let batch_size: Bound<'_, PyAny> = native_field(entry, "batch_size")?;
+    let cursor_type: Bound<'_, PyAny> = native_field(entry, "cursor_type")?;
     if range.is_none() || batch_size.is_none() || cursor_type.is_none() {
         return Ok(None);
     }
@@ -73,16 +74,16 @@ fn batch_count(entry: &Bound<'_, PyAny>) -> PyResult<Option<(String, i128)>> {
     let grain: Option<String> = replay_grain(
         (
             Some(cursor_type.clone()),
-            optional_string(&entry.getattr("microbatch_strategy")?)?,
-            optional_string(&entry.getattr("cursor_grain")?)?,
+            optional_string(&native_field(entry, "microbatch_strategy")?)?,
+            optional_string(&native_field(entry, "cursor_grain")?)?,
         ),
-        &entry.getattr("cursor_input_relations")?,
+        &native_field(entry, "cursor_input_relations")?,
     )?;
     let effective_size: String = match grain {
         Some(grain) => resolve_effective_microbatch_batch_size(py, &batch_size, &grain)?,
         None => batch_size,
     };
-    let creates: bool = entry.getattr("action")?.eq(CREATE_TABLE_ACTION)?;
+    let creates: bool = native_field(entry, "action")?.eq(CREATE_TABLE_ACTION)?;
     let count: i128 = count_microbatches(&range, &effective_size, &cursor_type, creates)?;
     Ok(Some((effective_size, count)))
 }
@@ -94,7 +95,7 @@ fn limited<'py>(
     action: Bound<'py, PyAny>,
 ) -> PyResult<LimitedEntry<'py>> {
     let py: Python<'py> = entry.py();
-    if entry.getattr("action")?.eq(SKIP_ACTION)? {
+    if native_field(entry, "action")?.eq(SKIP_ACTION)? {
         return Ok((entry.clone(), None));
     }
     let action_text: String = text(&action)?;
@@ -104,7 +105,7 @@ fn limited<'py>(
         Some(max_batches.extract()?)
     };
     let counted: Option<(String, i128)> = batch_count(entry)?;
-    let name: Bound<'py, PyAny> = entry.getattr("name")?;
+    let name: Bound<'py, PyAny> = native_field(entry, "name")?;
     let cap: bool = CAP_ACTIONS.contains(&action_text.as_str());
     let warning: Option<String> = match &counted {
         Some((_, count)) => {
@@ -112,12 +113,12 @@ fn limited<'py>(
         }
         None => None,
     };
-    let mut range: Bound<'py, PyAny> = entry.getattr("microbatch_range")?;
+    let mut range: Bound<'py, PyAny> = native_field(entry, "microbatch_range")?;
     if let (Some(_), Some((size, _)), Some(maximum), true) =
         (&warning, &counted, maximum, cap && !range.is_none())
     {
         let cursor_type: String =
-            optional_string(&entry.getattr("cursor_type")?)?.unwrap_or_default();
+            optional_string(&native_field(entry, "cursor_type")?)?.unwrap_or_default();
         range = capped_microbatch_bounds(range, (size, &cursor_type), maximum, &action_text)?;
     }
     let none: Bound<'py, PyAny> = py.None().into_bound(py);
@@ -206,13 +207,13 @@ fn default_limit<'py>(
     if entry
         .getattr("microbatch_strategy")?
         .eq(ROLLING_WINDOW_STRATEGY)?
-        && !entry.getattr("reason")?.eq(FULL_REFRESH_REASON)?
-        && entry.getattr("start_cursor_override")?.is_none()
-        && entry.getattr("end_cursor_override")?.is_none()
+        && !native_field(entry, "reason")?.eq(FULL_REFRESH_REASON)?
+        && native_field(entry, "start_cursor_override")?.is_none()
+        && native_field(entry, "end_cursor_override")?.is_none()
     {
         return Ok(py.None().into_bound(py));
     }
-    let model_limit: Bound<'py, PyAny> = entry.getattr("microbatch_limit")?;
+    let model_limit: Bound<'py, PyAny> = native_field(entry, "microbatch_limit")?;
     Ok(if model_limit.is_truthy()? {
         model_limit
     } else {
@@ -228,8 +229,8 @@ pub(crate) fn apply_configured_microbatch_limits<'py>(
     inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = entry.py();
-    let configured: Bound<'py, PyAny> = inputs.getattr("max_microbatches")?;
-    let configured_action: Bound<'py, PyAny> = inputs.getattr("microbatch_limit_action")?;
+    let configured: Bound<'py, PyAny> = native_field(inputs, "max_microbatches")?;
+    let configured_action: Bound<'py, PyAny> = native_field(inputs, "microbatch_limit_action")?;
     if inputs
         .getattr("max_microbatches_is_override")?
         .is_truthy()?
@@ -238,7 +239,7 @@ pub(crate) fn apply_configured_microbatch_limits<'py>(
             registry::class(py, RecordId::MicrobatchLimitAction)?.getattr("ERROR")?;
         return with_warnings(limited(entry, configured, error)?, Vec::new());
     }
-    let declared: Bound<'py, PyAny> = entry.getattr("declared_microbatch_limit_action")?;
+    let declared: Bound<'py, PyAny> = native_field(entry, "declared_microbatch_limit_action")?;
     if declared.is_none() {
         let maximum: Bound<'py, PyAny> = default_limit(entry, configured)?;
         return with_warnings(limited(entry, maximum, configured_action)?, Vec::new());
@@ -256,6 +257,6 @@ pub(crate) fn apply_configured_microbatch_limits<'py>(
         )?;
         warnings.extend(safety_warning);
     }
-    let model_limit: Bound<'py, PyAny> = entry.getattr("microbatch_limit")?;
+    let model_limit: Bound<'py, PyAny> = native_field(&entry, "microbatch_limit")?;
     with_warnings(limited(&entry, model_limit, declared)?, warnings)
 }

@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -40,7 +41,7 @@ impl<'py> StageClasses<'py> {
     pub(crate) fn new(py: Python<'py>) -> PyResult<Self> {
         let types = py.import(COMPILE_TYPES_MODULE)?;
         let severity = registry::class(types.py(), RecordId::DiagnosticSeverity)?;
-        let resource = types.getattr("CompiledResourceType")?;
+        let resource = native_field(&types, "CompiledResourceType")?;
         let kinds = registry::class(py, RecordId::SqlReferenceKind)?;
         Ok(Self {
             diagnostic: registry::class(py, RecordId::CompilerDiagnostic)?,
@@ -48,11 +49,11 @@ impl<'py> StageClasses<'py> {
             model_test_payload: registry::class(py, RecordId::CompiledModelSqlTestPayload)?,
             compile_phase: registry::class(types.py(), RecordId::DiagnosticPhase)?
                 .getattr("COMPILE")?,
-            error: severity.getattr("ERROR")?,
-            warning: severity.getattr("WARNING")?,
-            model_resource: resource.getattr("MODEL")?,
-            source_resource: resource.getattr("SOURCE")?,
-            sql_test_resource: resource.getattr("SQL_TEST")?,
+            error: native_field(&severity, "ERROR")?,
+            warning: native_field(&severity, "WARNING")?,
+            model_resource: native_field(&resource, "MODEL")?,
+            source_resource: native_field(&resource, "SOURCE")?,
+            sql_test_resource: native_field(&resource, "SQL_TEST")?,
             opt_out_code: PyString::new(py, UNNEEDED_SQL_ANALYSIS_OPT_OUT_CODE).into_any(),
             replace: py.import(DATACLASSES_MODULE)?.getattr("replace")?,
             project_with: registry::native(py, NativeAttr::ProjectWith)?,
@@ -61,8 +62,8 @@ impl<'py> StageClasses<'py> {
             schema_validations: registry::native(py, NativeAttr::SchemaValidations)?,
             normalize_type: host::entry(py, AdapterHost::NormalizeType)?,
             sql_analysis_key: PyString::new(py, SQL_ANALYSIS_CONFIG_KEY).into_any(),
-            udf_kind: kinds.getattr("UDF")?,
-            table_function_kind: kinds.getattr("TABLE_FUNCTION")?,
+            udf_kind: native_field(&kinds, "UDF")?,
+            table_function_kind: native_field(&kinds, "TABLE_FUNCTION")?,
         })
     }
 

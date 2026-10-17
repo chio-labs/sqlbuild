@@ -9,6 +9,7 @@ use crate::bindings::_helpers::planner_strategy::fixture_sql::complete_empty_fix
 use crate::bindings::_helpers::planner_strategy::fixture_values::{diagnostic, label};
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 pub(crate) struct PreparedFixtures<'py> {
     /// Each fixture's key with its Python key, in request order.
@@ -67,13 +68,13 @@ pub(crate) fn prepare<'py>(
             if !inference.is_none() {
                 prepared
                     .inferred
-                    .set_item(&key, inference.getattr("columns")?)?;
+                    .set_item(&key, native_field(&inference, "columns")?)?;
                 prepared
                     .null_names
-                    .set_item(&key, inference.getattr("null_literal_names")?)?;
+                    .set_item(&key, native_field(&inference, "null_literal_names")?)?;
                 prepared
                     .quoted_names
-                    .set_item(&key, inference.getattr("quoted_names")?)?;
+                    .set_item(&key, native_field(&inference, "quoted_names")?)?;
             }
         }
     }

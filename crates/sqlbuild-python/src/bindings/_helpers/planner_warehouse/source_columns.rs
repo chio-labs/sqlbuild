@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
     COLUMN_INFO, METADATA_NAME_FILTER_LIMIT, RELATION_LOOKUP,
 };
 use crate::bindings::_helpers::planner_warehouse::snapshot::{columns_for, list_relations};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -21,22 +22,22 @@ fn entries_of<'py>(
         None => project
             .getattr("sources")?
             .try_iter()?
-            .map(|source| source?.getattr("source_entry"))
+            .map(|source| native_field(&source?, "source_entry"))
             .collect(),
     }
 }
 
 fn table_name(entry: &Bound<'_, PyAny>) -> PyResult<String> {
-    let table = entry.getattr("table")?;
+    let table = native_field(entry, "table")?;
     if table.is_none() {
-        entry.getattr("name")?.extract()
+        native_field(entry, "name")?.extract()
     } else {
         table.extract()
     }
 }
 
 fn database_of(entry: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
-    let database = entry.getattr("database")?;
+    let database = native_field(entry, "database")?;
     if database.is_truthy()? {
         Ok(Some(database.extract()?))
     } else {
@@ -51,10 +52,10 @@ fn name_filter(
 ) -> PyResult<Option<BTreeSet<String>>> {
     let mut names: BTreeSet<_> = BTreeSet::new();
     for entry in entries {
-        if !entry.getattr("expression")?.is_none() {
+        if !native_field(entry, "expression")?.is_none() {
             continue;
         }
-        let schema: Option<String> = entry.getattr("schema")?.extract()?;
+        let schema: Option<String> = native_field(entry, "schema")?.extract()?;
         if !schema.is_some_and(|schema| schemas.contains(&schema)) {
             continue;
         }
@@ -87,11 +88,11 @@ pub(crate) fn source_inspection<'py>(
     let mut groups: Vec<(String, BTreeSet<String>)> = Vec::new();
     let column_info = host::entry(py, COLUMN_INFO)?;
     for entry in &entries {
-        let expression = entry.getattr("expression")?;
+        let expression = native_field(entry, "expression")?;
         if !expression.is_none() {
-            if entry.getattr("type_enforcement")?.is_truthy()? {
+            if native_field(entry, "type_enforcement")?.is_truthy()? {
                 let names = call_with(
-                    &adapter.getattr("query_column_names")?,
+                    &native_field(adapter, "query_column_names")?,
                     &[("connection", connection.clone()), ("sql", expression)],
                 )?;
                 let mut columns: Vec<_> = Vec::new();
@@ -101,11 +102,11 @@ pub(crate) fn source_inspection<'py>(
                         &[("name", name?), ("type", text(py, ""))],
                     )?);
                 }
-                result.set_item(entry.getattr("name")?, tuple(py, columns)?)?;
+                result.set_item(native_field(entry, "name")?, tuple(py, columns)?)?;
             }
             continue;
         }
-        let schema = entry.getattr("schema")?;
+        let schema = native_field(entry, "schema")?;
         if schema.is_none() {
             continue;
         }
@@ -130,11 +131,12 @@ pub(crate) fn source_inspection<'py>(
         };
         let mut scoped: Vec<(String, Bound<'py, PyAny>, Bound<'py, PyAny>)> = Vec::new();
         for entry in &entries {
-            if !entry.getattr("expression")?.is_none() || database_of(entry)?.as_deref() != database
+            if !native_field(entry, "expression")?.is_none()
+                || database_of(entry)?.as_deref() != database
             {
                 continue;
             }
-            let schema: Option<String> = entry.getattr("schema")?.extract()?;
+            let schema: Option<String> = native_field(entry, "schema")?.extract()?;
             if !schema.is_some_and(|schema| schemas.contains(&schema)) {
                 continue;
             }
@@ -142,14 +144,14 @@ pub(crate) fn source_inspection<'py>(
                 &lookup,
                 &[
                     ("database", database_value.clone()),
-                    ("schema", entry.getattr("schema")?),
+                    ("schema", native_field(entry, "schema")?),
                     ("name", text(py, &table_name(entry)?)),
                 ],
             )?;
-            let entry_name: String = entry.getattr("name")?.extract()?;
+            let entry_name: String = native_field(entry, "name")?.extract()?;
             match scoped.iter_mut().find(|(name, _, _)| *name == entry_name) {
                 Some(existing) => existing.2 = identity,
-                None => scoped.push((entry_name, entry.getattr("name")?, identity)),
+                None => scoped.push((entry_name, native_field(entry, "name")?, identity)),
             }
         }
         let relations = list_relations(
@@ -166,7 +168,7 @@ pub(crate) fn source_inspection<'py>(
             py,
             &relations
                 .iter()
-                .map(|relation| relation.getattr("identity"))
+                .map(|relation| native_field(relation, "identity"))
                 .collect::<PyResult<Vec<_>>>()?,
         )?;
         for (text_name, name, identity) in &scoped {
@@ -183,7 +185,7 @@ pub(crate) fn source_inspection<'py>(
         )?;
         let mut chosen: Vec<_> = Vec::new();
         for relation in &relations {
-            if wanted.contains(relation.getattr("identity")?)? {
+            if wanted.contains(native_field(relation, "identity")?)? {
                 chosen.push(relation.clone());
             }
         }

@@ -14,6 +14,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{DeclaredRow, InferredRow};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -57,7 +58,7 @@ pub(crate) fn model_inputs<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
     let inputs: Bound<'py, PyDict> = PyDict::new(py);
-    for name in relation_row_names(&model.getattr("reference_rows")?)? {
+    for name in relation_row_names(&native_field(model, "reference_rows")?)? {
         let shape: Bound<'py, PyAny> = match shapes.get_item(&name)? {
             Some(shape) => shape,
             None => PyDict::new(py).into_any(),
@@ -76,7 +77,7 @@ pub(crate) fn published_shape<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
     let shape: Bound<'py, PyDict> = binding_shape(model, columns, inputs, profile)?;
-    let values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
+    let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
     let snapshot: Bound<'py, PyAny> =
         registry::class(py, RecordId::MaterializationType)?.getattr("SNAPSHOT")?;
     if values
@@ -107,7 +108,7 @@ fn binding_shape<'py>(
     profile: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
-    let dialect: Bound<'py, PyAny> = profile.getattr("sql_analysis_dialect")?;
+    let dialect: Bound<'py, PyAny> = native_field(profile, "sql_analysis_dialect")?;
     let sensitive: bool = !dialect.is_none()
         && CASE_SENSITIVE_BINDING_DIALECTS.contains(&dialect.extract::<String>()?.as_str());
     if profile
@@ -117,22 +118,22 @@ fn binding_shape<'py>(
     {
         return Ok(columns.clone());
     }
-    let mut catalog: Bound<'py, PyAny> = profile.getattr("binding_catalog")?;
+    let mut catalog: Bound<'py, PyAny> = native_field(profile, "binding_catalog")?;
     if !catalog.is_truthy()? {
         let created: BindingCatalog = BindingCatalog::create(
             py,
             (
                 or_generic(&dialect)?.extract()?,
                 false,
-                profile.getattr("semantic_known_functions")?.extract()?,
-                profile.getattr("semantic_known_types")?.extract()?,
+                native_field(profile, "semantic_known_functions")?.extract()?,
+                native_field(profile, "semantic_known_types")?.extract()?,
             ),
             inputs.as_any(),
         )?;
         catalog = Bound::new(py, created)?.into_any();
     }
     let request: Bound<'py, PyDict> = PyDict::new(py);
-    request.set_item("sql", model.getattr("query_sql")?)?;
+    request.set_item("sql", native_field(model, "query_sql")?)?;
     request.set_item("dialect", or_generic(&dialect)?)?;
     request.set_item("stubs", PyDict::new(py))?;
     request.set_item("placeholders", PyDict::new(py))?;
@@ -185,8 +186,8 @@ fn declared_columns<'py>(
     for column in columns.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
         shape.set_item(
-            column.getattr("name")?,
-            or_unknown(&column.getattr("type")?)?,
+            native_field(&column, "name")?,
+            or_unknown(&native_field(&column, "type")?)?,
         )?;
     }
     Ok(shape)
@@ -204,13 +205,13 @@ pub(crate) fn project_profile<'py>(
             let arguments: Bound<'py, PyDict> = PyDict::new(py);
             arguments.set_item(
                 "sql_analysis_dialect",
-                project.getattr("sql_analysis_dialect")?,
+                native_field(project, "sql_analysis_dialect")?,
             )?;
             host::entry(py, AdapterHost::ExpressionInferenceProfile)?.call((), Some(&arguments))?
         }
     };
     let arguments: Bound<'py, PyDict> = PyDict::new(py);
-    arguments.set_item("binding_catalog", project.getattr("binding_catalog")?)?;
+    arguments.set_item("binding_catalog", native_field(project, "binding_catalog")?)?;
     py.import(DATACLASSES_MODULE)?
         .getattr("replace")?
         .call((profile,), Some(&arguments))
@@ -224,23 +225,29 @@ pub(crate) fn project_shapes<'py>(
     let py: Python<'py> = project.py();
     let profile: Bound<'py, PyAny> = project_profile(project, profile)?;
     let shapes: Bound<'py, PyDict> = PyDict::new(py);
-    for seed in project.getattr("seeds")?.try_iter()? {
+    for seed in native_field(project, "seeds")?.try_iter()? {
         let seed: Bound<'py, PyAny> = seed?;
         shapes.set_item(
-            seed.getattr("name")?,
-            declared_columns(py, &seed.getattr("schema_entry")?.getattr("columns")?)?,
+            native_field(&seed, "name")?,
+            declared_columns(
+                py,
+                &native_field(&seed, "schema_entry")?.getattr("columns")?,
+            )?,
         )?;
     }
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        let returns: Bound<'py, PyAny> = function.getattr("return_columns")?;
+        let returns: Bound<'py, PyAny> = native_field(&function, "return_columns")?;
         if returns.is_truthy()? {
             let shape: Bound<'py, PyDict> = PyDict::new(py);
             for column in returns.try_iter()? {
                 let column: Bound<'py, PyAny> = column?;
-                shape.set_item(column.getattr("name")?, column.getattr("type")?)?;
+                shape.set_item(
+                    native_field(&column, "name")?,
+                    native_field(&column, "type")?,
+                )?;
             }
-            let name: String = function.getattr("name")?.extract()?;
+            let name: String = native_field(&function, "name")?.extract()?;
             shapes.set_item(format!("{TABLE_FUNCTION_PREFIX}{name}"), shape)?;
         }
     }
@@ -248,18 +255,18 @@ pub(crate) fn project_shapes<'py>(
         registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
     let mut expression_names: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source: Bound<'py, PyAny> = source?;
-        let entry: Bound<'py, PyAny> = source.getattr("source_entry")?;
-        if entry.getattr("contract")?.eq(&enforced)? {
+        let entry: Bound<'py, PyAny> = native_field(&source, "source_entry")?;
+        if native_field(&entry, "contract")?.eq(&enforced)? {
             shapes.set_item(
-                source.getattr("name")?,
-                declared_columns(py, &entry.getattr("columns")?)?,
+                native_field(&source, "name")?,
+                declared_columns(py, &native_field(&entry, "columns")?)?,
             )?;
         } else {
-            let expression: Bound<'py, PyAny> = entry.getattr("expression")?;
+            let expression: Bound<'py, PyAny> = native_field(&entry, "expression")?;
             if expression.is_truthy()? {
-                expression_names.push(source.getattr("name")?);
+                expression_names.push(native_field(&source, "name")?);
                 expressions.push(expression);
             }
         }
@@ -297,7 +304,7 @@ fn model_shapes<'py>(
         for model in &pending {
             let declared: Option<Vec<DeclaredRow>> = declared_rows(model)?;
             let inferred: Option<Vec<InferredRow>> = inferred_rows(model)?;
-            let rows: Bound<'py, PyAny> = model.getattr("reference_rows")?;
+            let rows: Bound<'py, PyAny> = native_field(model, "reference_rows")?;
             let relations: Vec<String> = relation_row_names(&rows)?;
             let contract: Bound<'py, PyAny> = model
                 .getattr("config")?
@@ -317,7 +324,7 @@ fn model_shapes<'py>(
                     };
                     shape.set_item(name, column_type)?;
                 }
-                shapes.set_item(model.getattr("name")?, shape)?;
+                shapes.set_item(native_field(model, "name")?, shape)?;
                 continue;
             }
             let (has_star, star_resolved): (bool, bool) = star_flags(model)?;
@@ -328,7 +335,7 @@ fn model_shapes<'py>(
                 let inputs: Bound<'py, PyDict> = model_inputs(model, shapes)?;
                 let columns: Bound<'py, PyDict> = typed_columns(py, inferred)?;
                 shapes.set_item(
-                    model.getattr("name")?,
+                    native_field(model, "name")?,
                     published_shape(model, &columns, &inputs, profile)?,
                 )?;
             } else {
@@ -373,8 +380,8 @@ fn binding_relation_names<'py>(
             PyTuple::new(
                 py,
                 [
-                    reference.getattr("ref_kind")?.str()?.into_any(),
-                    reference.getattr("ref_name")?,
+                    native_field(&reference, "ref_kind")?.str()?.into_any(),
+                    native_field(&reference, "ref_name")?,
                 ],
             )?
             .into_any(),

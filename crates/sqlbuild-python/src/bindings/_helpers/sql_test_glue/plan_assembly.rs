@@ -7,6 +7,7 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::{SqlTestAssembly, SqlTestPlanOptions};
@@ -89,7 +90,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
     }
     let mut plans = plans.into_iter();
     let models = PyDict::new(py);
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         models.set_item(model_reads::name_object(&model)?, model)?;
     }
@@ -111,7 +112,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
                 "missing SQL-test plan",
             ));
         };
-        let mut errors: Vec<String> = plan.getattr("error_messages")?.extract()?;
+        let mut errors: Vec<String> = native_field(&plan, "error_messages")?.extract()?;
         errors.extend(super::plan_entries::expected_diagnostics(
             test,
             &plan,
@@ -139,7 +140,7 @@ pub(crate) fn assemble_sql_test_plans<'py>(
                         &assembly.sql_analysis_enabled,
                     )?,
                 ),
-                ("warnings", plan.getattr("warnings")?),
+                ("warnings", native_field(&plan, "warnings")?),
             ],
         )?);
     }

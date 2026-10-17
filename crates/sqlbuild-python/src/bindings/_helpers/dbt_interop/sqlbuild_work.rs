@@ -14,6 +14,7 @@ use crate::bindings::_helpers::build_command::support::{
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -73,17 +74,26 @@ fn execute_dbt_sqlbuild_work<'py>(
     let args = KeywordArguments::read(py, "execute_dbt_sqlbuild_work", options, WORK_OPTIONS)?;
     let context = args.value("context")?;
     let project = args.value("project")?;
-    let plan = context.getattr("plan_output")?;
-    let output = context.getattr("output_stream")?;
-    let color = context.getattr("use_color")?;
+    let plan = native_field(&context, "plan_output")?;
+    let output = native_field(&context, "output_stream")?;
+    let color = native_field(&context, "use_color")?;
     call_with(
         &registry::native(py, NativeAttr::EnforcePlanSafetyPolicies)?,
         &[
             ("plan", plan.clone()),
             ("gates", dbt_interop_plan_safety_gates(py)?),
-            ("snapshots_config", context.getattr("snapshots_config")?),
-            ("target_name", project.getattr("effective_target_name")?),
-            ("execution_limits", context.getattr("execution_limits")?),
+            (
+                "snapshots_config",
+                native_field(&context, "snapshots_config")?,
+            ),
+            (
+                "target_name",
+                native_field(&project, "effective_target_name")?,
+            ),
+            (
+                "execution_limits",
+                native_field(&context, "execution_limits")?,
+            ),
             (
                 "streams",
                 tuple(py, &[py.import("sys")?.getattr("stdin")?, output.clone()])?,
@@ -101,12 +111,15 @@ fn execute_dbt_sqlbuild_work<'py>(
     )?;
     let command = args.value("command")?;
     let kinds = registry::class(py, RecordId::DbtInteropCommand)?;
-    let display = if command.eq(kinds.getattr("RUN")?)? {
+    let display = if command.eq(native_field(&kinds, "RUN")?)? {
         "sqb build --no-tests --no-audits".to_owned()
     } else {
-        format!("sqb {}", command.getattr("value")?.extract::<String>()?)
+        format!(
+            "sqb {}",
+            native_field(&command, "value")?.extract::<String>()?
+        )
     };
-    let concurrency = project.getattr("settings")?.getattr("concurrency")?;
+    let concurrency = native_field(&project, "settings")?.getattr("concurrency")?;
     let header = call_with(
         &registry::native(py, NativeAttr::FormatExecutionHeader)?,
         &[
@@ -134,17 +147,17 @@ fn execute_dbt_sqlbuild_work<'py>(
     let connection = call_with(
         &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
-            ("adapter_name", context.getattr("adapter_name")?),
+            ("adapter_name", native_field(&context, "adapter_name")?),
             ("stream", output.clone()),
             ("blank_line_after_complete", boolean(py, true)),
             ("use_color", color.clone()),
         ],
     )?;
-    let build = command.eq(kinds.getattr("BUILD")?)?;
+    let build = command.eq(native_field(&kinds, "BUILD")?)?;
     let runtime = call_with(
         &host::entry(py, ExecutorHost::BuildRuntimeParams)?,
         &[
-            ("run_id", project.getattr("run_id")?),
+            ("run_id", native_field(&project, "run_id")?),
             ("run_tests", boolean(py, build)),
             ("run_audits", boolean(py, build)),
             ("fail_fast", args.value("fail_fast")?),
@@ -158,27 +171,33 @@ fn execute_dbt_sqlbuild_work<'py>(
             (
                 "on_node_start",
                 keyword_relay(
-                    callbacks.getattr("on_node_start")?,
+                    native_field(&callbacks, "on_node_start")?,
                     &["name", "resource_kind"],
                 )?,
             ),
-            ("on_node_complete", callbacks.getattr("on_node_complete")?),
-            ("on_sub_progress", callbacks.getattr("on_sub_progress")?),
+            (
+                "on_node_complete",
+                native_field(&callbacks, "on_node_complete")?,
+            ),
+            (
+                "on_sub_progress",
+                native_field(&callbacks, "on_sub_progress")?,
+            ),
             (
                 "on_connection_start",
-                connection.getattr("on_connection_start")?,
+                native_field(&connection, "on_connection_start")?,
             ),
             (
                 "on_connection_complete",
                 keyword_relay(
-                    connection.getattr("on_connection_complete")?,
+                    native_field(&connection, "on_connection_complete")?,
                     &["connection_count", "elapsed_seconds"],
                 )?,
             ),
             (
                 "on_connection_error",
                 keyword_relay(
-                    connection.getattr("on_connection_error")?,
+                    native_field(&connection, "on_connection_error")?,
                     &["connection_count", "elapsed_seconds"],
                 )?,
             ),
@@ -188,9 +207,12 @@ fn execute_dbt_sqlbuild_work<'py>(
         &host::entry(py, ExecutorHost::RunBuildPipeline)?,
         &[
             ("plan", plan.clone()),
-            ("connection_config", context.getattr("connection_config")?),
-            ("adapter", context.getattr("adapter")?),
-            ("settings", project.getattr("settings")?),
+            (
+                "connection_config",
+                native_field(&context, "connection_config")?,
+            ),
+            ("adapter", native_field(&context, "adapter")?),
+            ("settings", native_field(&project, "settings")?),
             ("runtime", runtime),
             ("callbacks", hooks),
         ],
@@ -210,12 +232,12 @@ fn execute_dbt_sqlbuild_work<'py>(
         &registry::native(py, NativeAttr::FormatBuildFooter)?,
         &[
             ("result", result.clone()),
-            ("elapsed", callbacks.getattr("elapsed")?),
+            ("elapsed", native_field(&callbacks, "elapsed")?),
             ("use_color", color),
         ],
     )?;
     emit(&output, &format!("\n{}\n", footer.extract::<String>()?))?;
-    Ok(i64::from(!result.getattr("status")?.eq(
+    Ok(i64::from(!native_field(&result, "status")?.eq(
         host::entry(py, ExecutorHost::BuildStatus)?.getattr("SUCCESS")?,
     )?))
 }

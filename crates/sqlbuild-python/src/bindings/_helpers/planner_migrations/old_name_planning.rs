@@ -10,6 +10,7 @@ use crate::bindings::_helpers::planner_migrations::old_names::old_name_claim_err
 use crate::bindings::_helpers::planner_migrations::old_names::old_name_schemas_to_read;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PySet, PySetMethods, PyTuple};
 
@@ -22,13 +23,13 @@ fn schemas<'py>(
     let snapshot = phase.snapshot.clone();
     let needed = PySet::empty(py)?;
     for item in selected {
-        let schema = item.getattr("destination")?.getattr("schema")?;
+        let schema = native_field(item, "destination")?.getattr("schema")?;
         if !schema.is_none() {
             needed.add(schema)?;
         }
     }
     for entry in migration_entries.try_iter()? {
-        let schema = entry?.getattr("origin")?.getattr("schema")?;
+        let schema = native_field(&entry?, "origin")?.getattr("schema")?;
         if !schema.is_none() {
             needed.add(schema)?;
         }
@@ -41,10 +42,10 @@ fn schemas<'py>(
         for item in selected {
             let existing = snapshot
                 .getattr("existing_relations")?
-                .call_method1("get", (item.getattr("name")?,))?;
+                .call_method1("get", (native_field(item, "name")?,))?;
             if !existing.is_none()
                 && host::entry(py, AdapterHost::NormalizeRelationType)?
-                    .call1((existing.getattr("relation_type")?,))?
+                    .call1((native_field(&existing, "relation_type")?,))?
                     .eq("view")?
             {
                 include_project = true;
@@ -79,14 +80,14 @@ pub(crate) fn plan_old_name_views<'py>(
         .collect::<PyResult<_>>()?;
     let by_name = PyDict::new(py);
     for item in &models {
-        by_name.set_item(item.getattr("name")?, item)?;
+        by_name.set_item(native_field(item, "name")?, item)?;
     }
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
-    for key in scope.getattr("execution_order")?.try_iter()? {
+    for key in native_field(&scope, "execution_order")?.try_iter()? {
         let key = key?;
-        if scope.getattr("selected_keys")?.contains(&key)?
-            && key.getattr("resource_type")?.eq("model")?
-            && let Some(item) = by_name.get_item(key.getattr("name")?)?
+        if native_field(&scope, "selected_keys")?.contains(&key)?
+            && native_field(&key, "resource_type")?.eq("model")?
+            && let Some(item) = by_name.get_item(native_field(&key, "name")?)?
         {
             selected.push(item);
         }
@@ -95,20 +96,22 @@ pub(crate) fn plan_old_name_views<'py>(
     let needed = schemas((phase, moves.0), &selected)?;
     if needed.is_truthy()? {
         call_with(
-            &state.getattr("inspect_old_name_views")?,
+            &native_field(&state, "inspect_old_name_views")?,
             &[("schemas", needed)],
         )?;
     }
-    let target = project.getattr("effective_target_name")?;
+    let target = native_field(&project, "effective_target_name")?;
     let mut histories: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut views: Vec<Bound<'py, PyAny>> = Vec::new();
-    for history in state.getattr("old_name_histories")?.try_iter()? {
+    for history in native_field(&state, "old_name_histories")?.try_iter()? {
         let history = history?;
-        let history_target = history.getattr("move")?.getattr("target_name")?;
+        let history_target = native_field(&history, "move")?.getattr("target_name")?;
         if !history_target.is_none() && !history_target.eq(&target)? {
             continue;
         }
-        if !history.getattr("created")?.is_none() && history.getattr("dropped")?.is_none() {
+        if !native_field(&history, "created")?.is_none()
+            && native_field(&history, "dropped")?.is_none()
+        {
             views.push(recorded_view(&runtime, &history, &models)?);
         }
         histories.push(history);
@@ -124,7 +127,7 @@ pub(crate) fn plan_old_name_views<'py>(
     let covered = PySet::empty(py)?;
     for entry in moves.0.try_iter()? {
         let entry = entry?;
-        let name = entry.getattr("model_name")?;
+        let name = native_field(&entry, "model_name")?;
         if let Some(item) = by_name.get_item(&name)?
             && let Some(planned) = planner.for_migration(&entry, &item)?
         {
@@ -133,7 +136,7 @@ pub(crate) fn plan_old_name_views<'py>(
         }
     }
     for item in &selected {
-        if !covered.contains(item.getattr("name")?)?
+        if !covered.contains(native_field(item, "name")?)?
             && let Some(planned) = planner.pending_for(item)?
         {
             entries.push(planned);

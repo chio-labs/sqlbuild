@@ -24,6 +24,7 @@ use sqlbuild_rules::rule_cache::models::{CacheLookup, CachedEntry, LintKeyInput,
 use sqlbuild_rules::rule_cache::types::CachedEntries;
 use sqlbuild_rules::rule_results::models::RuleFinding;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::lint_pipeline::LintSettings;
 
 /// Stored entries as `{path: (key, findings JSON)}`.
@@ -226,14 +227,14 @@ fn finding_payload(finding: &Bound<'_, PyAny>) -> PyResult<Value> {
         .call_method0("as_posix")?
         .extract()?;
     Ok(json!({
-        "unevaluated": finding.getattr("unevaluated")?.extract::<bool>()?,
-        "code": finding.getattr("code")?.extract::<String>()?,
+        "unevaluated": native_field(finding, "unevaluated")?.extract::<bool>()?,
+        "code": native_field(finding, "code")?.extract::<String>()?,
         "path": path,
-        "line": finding.getattr("line")?.extract::<Option<i64>>()?,
-        "column": finding.getattr("column")?.extract::<Option<i64>>()?,
-        "message": finding.getattr("message")?.extract::<String>()?,
-        "remediation": finding.getattr("remediation")?.extract::<Option<String>>()?,
-        "fixable": finding.getattr("fixable")?.extract::<bool>()?,
+        "line": native_field(finding, "line")?.extract::<Option<i64>>()?,
+        "column": native_field(finding, "column")?.extract::<Option<i64>>()?,
+        "message": native_field(finding, "message")?.extract::<String>()?,
+        "remediation": native_field(finding, "remediation")?.extract::<Option<String>>()?,
+        "fixable": native_field(finding, "fixable")?.extract::<bool>()?,
     }))
 }
 

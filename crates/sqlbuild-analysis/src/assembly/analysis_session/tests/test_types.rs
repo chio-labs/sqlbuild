@@ -1,4 +1,4 @@
-use crate::assembly::analysis_session::models::PivotOutcome;
+use crate::assembly::analysis_session::models::{ContractProof, PivotOutcome};
 
 /// A model as `(name, sql, source names, model refs)`.
 pub(crate) type ModelSpec = (
@@ -182,4 +182,10 @@ pub(crate) struct NativeDialectTestCase {
     pub(crate) description: &'static str,
     pub(crate) dialect: Option<&'static str>,
     pub(crate) expected_dialect: Option<&'static str>,
+}
+
+pub(crate) struct ContractProofJsonTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) proof: ContractProof,
+    pub(crate) expected_json: &'static str,
 }

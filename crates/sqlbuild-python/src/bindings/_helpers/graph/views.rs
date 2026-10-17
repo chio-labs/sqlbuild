@@ -12,6 +12,7 @@ use sqlbuild_analysis::graph::models::{GraphIndexes, ProjectGraph};
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -102,7 +103,8 @@ pub(crate) fn project_lineage_views<'py>(
     py: Python<'py>,
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let graph: PyRef<'py, NativeProjectGraph> = project.getattr("lineage_graph")?.extract()?;
+    let graph: PyRef<'py, NativeProjectGraph> =
+        native_field(project, "lineage_graph")?.extract()?;
     graph_views(py, graph.graph())
 }
 

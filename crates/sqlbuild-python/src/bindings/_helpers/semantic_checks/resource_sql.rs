@@ -16,6 +16,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::audit_views::audit_reference_rows;
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
@@ -73,27 +74,27 @@ fn request(
     let py: Python<'_> = project.py();
     let reference_class: Bound<'_, PyAny> = registry::class(py, RecordId::CompileSqlReference)?;
     let mut audits: Vec<AuditSqlInput> = Vec::new();
-    for audit in project.getattr("audits")?.try_iter()? {
+    for audit in native_field(project, "audits")?.try_iter()? {
         audits.push(audit_input(&audit?, &reference_class)?);
     }
     let mut sql_tests: Vec<SqlTestSqlInput> = Vec::new();
-    for test in project.getattr("sql_tests")?.try_iter()? {
+    for test in native_field(project, "sql_tests")?.try_iter()? {
         sql_tests.push(sql_test_input(&test?)?);
     }
     let mut models: Vec<HookModelInput> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         models.push(model_input(&model?, &reference_class)?);
     }
     let mut hook_files: Vec<(String, Arc<str>)> = Vec::new();
-    for file in project.getattr("sql_hook_files")?.try_iter()? {
+    for file in native_field(project, "sql_hook_files")?.try_iter()? {
         let file: Bound<'_, PyAny> = file?;
         hook_files.push((
-            file.getattr("relative_path")?.str()?.extract()?,
-            Arc::from(file.getattr("contents")?.extract::<String>()?),
+            native_field(&file, "relative_path")?.str()?.extract()?,
+            Arc::from(native_field(&file, "contents")?.extract::<String>()?),
         ));
     }
     Ok(ResourceSqlRequest {
-        dialect: profile.getattr("sql_analysis_dialect")?.extract()?,
+        dialect: native_field(profile, "sql_analysis_dialect")?.extract()?,
         quoted_ignore_case: profile
             .getattr("quoted_identifiers_ignore_case")?
             .extract()?,
@@ -128,14 +129,16 @@ fn audit_input(
     audit: &Bound<'_, PyAny>,
     reference_class: &Bound<'_, PyAny>,
 ) -> PyResult<AuditSqlInput> {
-    let file: Bound<'_, PyAny> = audit.getattr("audit_file")?;
-    let block: Bound<'_, PyAny> = audit.getattr("audit_block")?;
-    let target_name: Bound<'_, PyAny> = audit.getattr("attached_target_name")?;
+    let file: Bound<'_, PyAny> = native_field(audit, "audit_file")?;
+    let block: Bound<'_, PyAny> = native_field(audit, "audit_block")?;
+    let target_name: Bound<'_, PyAny> = native_field(audit, "attached_target_name")?;
     let attached_target: Option<(String, String)> = if target_name.is_none() {
         None
     } else {
         Some((
-            audit.getattr("attached_target_kind")?.str()?.extract()?,
+            native_field(audit, "attached_target_kind")?
+                .str()?
+                .extract()?,
             target_name.extract()?,
         ))
     };
@@ -155,37 +158,37 @@ fn audit_input(
         ));
     }
     Ok(AuditSqlInput {
-        name: audit.getattr("name")?.extract()?,
-        definition_name: audit.getattr("definition_name")?.extract()?,
+        name: native_field(audit, "name")?.extract()?,
+        definition_name: native_field(audit, "definition_name")?.extract()?,
         attached_target,
-        attached_column: audit.getattr("attached_column_name")?.extract()?,
+        attached_column: native_field(audit, "attached_column_name")?.extract()?,
         built_in: first_part.as_deref() == Some(BUILT_IN_AUDIT_ROOT),
-        path: file.getattr("relative_path")?.str()?.extract()?,
-        contents: Arc::from(file.getattr("contents")?.extract::<String>()?),
+        path: native_field(&file, "relative_path")?.str()?.extract()?,
+        contents: Arc::from(native_field(&file, "contents")?.extract::<String>()?),
         bodies,
-        opts_out: opts_out(&block.getattr("header_values")?)?,
+        opts_out: opts_out(&native_field(&block, "header_values")?)?,
         relations: match audit_reference_rows(audit)? {
             Some(rows) => row_relations(rows),
-            None => relations(&audit.getattr("references")?, reference_class)?,
+            None => relations(&native_field(audit, "references")?, reference_class)?,
         },
     })
 }
 
 fn sql_test_input(test: &Bound<'_, PyAny>) -> PyResult<SqlTestSqlInput> {
-    let file: Bound<'_, PyAny> = test.getattr("test_file")?;
-    let block: Bound<'_, PyAny> = test.getattr("test_block")?;
+    let file: Bound<'_, PyAny> = native_field(test, "test_file")?;
+    let block: Bound<'_, PyAny> = native_field(test, "test_block")?;
     Ok(SqlTestSqlInput {
-        name: test.getattr("name")?.extract()?,
+        name: native_field(test, "name")?.extract()?,
         expected_model_names: test
             .getattr("expected_model_names")?
             .try_iter()?
             .map(|name| name?.extract())
             .collect::<PyResult<_>>()?,
-        path: file.getattr("relative_path")?.str()?.extract()?,
-        contents: Arc::from(file.getattr("contents")?.extract::<String>()?),
-        sql_body: test.getattr("sql_body")?.extract()?,
-        authored_body: block.getattr("sql_body")?.extract()?,
-        opts_out: opts_out(&block.getattr("header_values")?)?,
+        path: native_field(&file, "relative_path")?.str()?.extract()?,
+        contents: Arc::from(native_field(&file, "contents")?.extract::<String>()?),
+        sql_body: native_field(test, "sql_body")?.extract()?,
+        authored_body: native_field(&block, "sql_body")?.extract()?,
+        opts_out: opts_out(&native_field(&block, "header_values")?)?,
     })
 }
 
@@ -193,7 +196,7 @@ fn model_input(
     model: &Bound<'_, PyAny>,
     reference_class: &Bound<'_, PyAny>,
 ) -> PyResult<HookModelInput> {
-    let values: Bound<'_, PyAny> = model.getattr("config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
     let mut hooks: Vec<HookSqlInput> = Vec::new();
     for key in MODEL_HOOK_KEYS {
         let entries: Bound<'_, PyAny> = values.call_method1("get", (key,))?;
@@ -226,9 +229,9 @@ fn model_input(
         }
     }
     Ok(HookModelInput {
-        name: model.getattr("name")?.extract()?,
-        path: model.getattr("relative_path")?.str()?.extract()?,
-        authored_sql: Arc::from(model.getattr("authored_sql")?.extract::<String>()?),
+        name: native_field(model, "name")?.extract()?,
+        path: native_field(model, "relative_path")?.str()?.extract()?,
+        authored_sql: Arc::from(native_field(model, "authored_sql")?.extract::<String>()?),
         analysis_disabled: opts_out(&values)?,
         hooks,
     })
@@ -292,10 +295,10 @@ fn relations(
         if !reference.is_instance(reference_class)? {
             continue;
         }
-        let kind: String = reference.getattr("ref_kind")?.str()?.extract()?;
+        let kind: String = native_field(&reference, "ref_kind")?.str()?.extract()?;
         names.extend(relation_name(
             &kind,
-            reference.getattr("ref_name")?.extract()?,
+            native_field(&reference, "ref_name")?.extract()?,
         ));
     }
     names.sort_unstable();

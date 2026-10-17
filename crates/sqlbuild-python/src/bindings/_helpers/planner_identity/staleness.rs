@@ -19,6 +19,7 @@ use sqlbuild_analysis::planner_identity::models::{
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_changes::detect::{ModelPass, model_change};
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -32,7 +33,7 @@ const OWN_CHANGE_KINDS: [&str; 5] = [
 ];
 
 fn own_change(change: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let kind: String = change.getattr("change_kind")?.str()?.extract()?;
+    let kind: String = native_field(change, "change_kind")?.str()?.extract()?;
     Ok(OWN_CHANGE_KINDS.contains(&kind.as_str()))
 }
 
@@ -71,7 +72,7 @@ struct StalenessInputs<'py> {
 
 fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>> {
     let py: Python<'_> = inputs.snapshot.py();
-    let models: Bound<'_, PyAny> = inputs.changes.getattr("models")?;
+    let models: Bound<'_, PyAny> = native_field(&inputs.changes, "models")?;
     let mut changed: HashSet<String> = HashSet::new();
     for item in models.call_method0("items")?.try_iter()? {
         let (name, change): (String, Bound<'_, PyAny>) = item?.extract()?;
@@ -79,8 +80,10 @@ fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>
             changed.insert(name);
         }
     }
-    let version_hashes: Bound<'_, PyAny> = inputs.identities.getattr("model_version_hashes")?;
-    let metadata_jsons: Bound<'_, PyAny> = inputs.identities.getattr("model_metadata_jsons")?;
+    let version_hashes: Bound<'_, PyAny> =
+        native_field(&inputs.identities, "model_version_hashes")?;
+    let metadata_jsons: Bound<'_, PyAny> =
+        native_field(&inputs.identities, "model_metadata_jsons")?;
     let pass = ModelPass {
         snapshot: inputs.snapshot.clone(),
         query_change_tracking: true,
@@ -88,7 +91,7 @@ fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>
         function_local_hashes: py.None().into_bound(py),
         hook_version_hashes: py.None().into_bound(py),
     };
-    let models_by_name: Bound<'_, PyAny> = inputs.original_scope.getattr("models_by_name")?;
+    let models_by_name: Bound<'_, PyAny> = native_field(&inputs.original_scope, "models_by_name")?;
     for item in models_by_name.call_method0("items")?.try_iter()? {
         let (name, model): (String, Bound<'_, PyAny>) = item?.extract()?;
         let selected_change: Bound<'_, PyAny> = models.call_method1("get", (&name,))?;
@@ -119,7 +122,8 @@ fn changed_model_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>
 }
 
 fn changed_seed_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>> {
-    let recorded: Bound<'_, PyAny> = inputs.snapshot.getattr("fingerprints")?.getattr("seeds")?;
+    let recorded: Bound<'_, PyAny> =
+        native_field(&inputs.snapshot, "fingerprints")?.getattr("seeds")?;
     let mut changed: HashSet<String> = HashSet::new();
     for item in inputs
         .identities
@@ -132,7 +136,7 @@ fn changed_seed_names(inputs: &StalenessInputs<'_>) -> PyResult<HashSet<String>>
             continue;
         }
         let fingerprint: Bound<'_, PyAny> = recorded.call_method1("get", (&name,))?;
-        if fingerprint.is_none() || !fingerprint.getattr("version_hash")?.eq(&expected)? {
+        if fingerprint.is_none() || !native_field(&fingerprint, "version_hash")?.eq(&expected)? {
             changed.insert(name);
         }
     }
@@ -205,14 +209,14 @@ pub(crate) fn build_stale_out_of_selection_warnings<'py>(
     let source_freshness: Bound<'py, PyAny> = arguments.value("source_freshness")?;
     let mut changed_sources: HashSet<String> = HashSet::new();
     if include_sources && !source_freshness.is_none() {
-        for identity in source_freshness.getattr("changed_identities")?.try_iter()? {
-            changed_sources.insert(identity?.getattr("source_name")?.extract()?);
+        for identity in native_field(&source_freshness, "changed_identities")?.try_iter()? {
+            changed_sources.insert(native_field(&identity?, "source_name")?.extract()?);
         }
     }
     let graph = StalenessGraph {
-        upstream_deps: upstream_graph(&inputs.original_scope.getattr("upstream_deps")?)?,
+        upstream_deps: upstream_graph(&native_field(&inputs.original_scope, "upstream_deps")?)?,
         selected_model_names: names_of_kind(
-            &inputs.original_scope.getattr("selected_keys")?,
+            &native_field(&inputs.original_scope, "selected_keys")?,
             MODEL_RESOURCE,
         )?
         .into_iter()
@@ -242,19 +246,19 @@ fn classify_selection_staleness_warnings<'py>(
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = graph.py();
     let staleness = StalenessGraph {
-        upstream_deps: upstream_graph(&graph.getattr("upstream_deps")?)?,
-        selected_model_names: name_set(&graph.getattr("selected_model_names")?)?
+        upstream_deps: upstream_graph(&native_field(graph, "upstream_deps")?)?,
+        selected_model_names: name_set(&native_field(graph, "selected_model_names")?)?
             .into_iter()
             .collect(),
         run: StalenessNames {
-            models: name_set(&graph.getattr("run_model_names")?)?,
-            seeds: name_set(&graph.getattr("run_seed_names")?)?,
-            sources: name_set(&graph.getattr("run_source_names")?)?,
+            models: name_set(&native_field(graph, "run_model_names")?)?,
+            seeds: name_set(&native_field(graph, "run_seed_names")?)?,
+            sources: name_set(&native_field(graph, "run_source_names")?)?,
         },
         changed: StalenessNames {
-            models: name_set(&graph.getattr("changed_model_names")?)?,
-            seeds: name_set(&graph.getattr("changed_seed_names")?)?,
-            sources: name_set(&graph.getattr("changed_source_names")?)?,
+            models: name_set(&native_field(graph, "changed_model_names")?)?,
+            seeds: name_set(&native_field(graph, "changed_seed_names")?)?,
+            sources: name_set(&native_field(graph, "changed_source_names")?)?,
         },
     };
     let warning_class: Bound<'py, PyAny> =

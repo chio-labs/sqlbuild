@@ -38,6 +38,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -143,7 +144,7 @@ fn launch_payload<'py>(
         Bound<'py, PyAny>,
         Bound<'py, PyAny>,
     ) = native.call_method0("launch_identity")?.extract()?;
-    let project_dir: Bound<'py, PyAny> = attempt.getattr("project_dir")?;
+    let project_dir: Bound<'py, PyAny> = native_field(attempt, "project_dir")?;
     let resolved: Bound<'py, PyAny> = project_dir.call_method0("resolve")?;
     let capture: Bound<'py, PyAny> = if py
         .import("sys")?
@@ -157,7 +158,7 @@ fn launch_payload<'py>(
         capture.set_item("root", logs.str()?)?;
         capture.set_item("command", COMPILE_COMMAND_NAME)?;
         capture.set_item("project_dir", resolved.str()?)?;
-        capture.set_item("target", attempt.getattr("selected_target")?)?;
+        capture.set_item("target", native_field(attempt, "selected_target")?)?;
         capture.into_any()
     } else {
         py.None().into_bound(py)
@@ -184,7 +185,7 @@ fn launch_payload<'py>(
         "startup_inputs",
         host::entry(py, FacadeHost::StartupInputs)?.call0()?,
     )?;
-    payload.set_item("json_output", attempt.getattr("json_output")?)?;
+    payload.set_item("json_output", native_field(attempt, "json_output")?)?;
     payload.set_item("rules", reuse_rules(py, false)?)?;
     payload.set_item("capture", capture)?;
     payload.set_item("hit_message", PyList::new(py, REUSE_HIT_MESSAGE)?)?;
@@ -197,7 +198,7 @@ fn write_record(
     native: &Bound<'_, PyAny>,
     path: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    let payload: Bound<'_, PyDict> = launch_payload(attempt, native, path.getattr("stem")?)?;
+    let payload: Bound<'_, PyDict> = launch_payload(attempt, native, native_field(path, "stem")?)?;
     let text: String = plain_json(payload.as_any())?;
     let path: PathBuf = path.extract()?;
     write_record_file(&path, &text).map_err(PyErr::from)
@@ -207,7 +208,7 @@ fn write_record(
 pub(crate) fn write_launch_record(attempt: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = attempt.py();
     let path: Bound<'_, PyAny> = launch_record_path(py)?;
-    let native: Bound<'_, PyAny> = attempt.getattr("native")?;
+    let native: Bound<'_, PyAny> = native_field(attempt, "native")?;
     if path.is_none() || native.is_none() {
         return Ok(());
     }
@@ -215,7 +216,7 @@ pub(crate) fn write_launch_record(attempt: &Bound<'_, PyAny>) -> PyResult<()> {
     if environment.contains(INVOCATION_CONTEXT_ENV)? {
         return Ok(());
     }
-    let mut directory: Bound<'_, PyAny> = attempt.getattr("project_dir")?;
+    let mut directory: Bound<'_, PyAny> = native_field(attempt, "project_dir")?;
     for part in LAUNCH_RECORD_DIRECTORY {
         directory = directory.call_method1("__truediv__", (part,))?;
     }
@@ -269,7 +270,7 @@ fn reuse_check<'py>(
         cache_directory(&imported(py, "pathlib", "Path")?.call1((project_dir,))?)?
             .call_method1("__truediv__", (NATIVE_REUSE_DIRECTORY_NAME,))?,
     )?;
-    check.set_item("selected_target", request.getattr("selected_target")?)?;
+    check.set_item("selected_target", native_field(request, "selected_target")?)?;
     check.set_item(
         "invocation",
         invocation_identity(request, project_dir, use_color)?,
@@ -280,7 +281,7 @@ fn reuse_check<'py>(
         "bypass_requested",
         flag("no_cache")? || flag("manifest")? || flag("profiling")? || flag("debug")?,
     )?;
-    check.set_item("json_output", request.getattr("json_output")?)?;
+    check.set_item("json_output", native_field(request, "json_output")?)?;
     check.set_item("rules", reuse_rules(py, true)?)?;
     Ok(check)
 }
@@ -374,7 +375,7 @@ fn replayed<'py>(
 fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let started: f64 = monotonic(py)?;
-    let requested: Bound<'py, PyAny> = request.getattr("project_dir")?;
+    let requested: Bound<'py, PyAny> = native_field(request, "project_dir")?;
     let project_dir: Bound<'py, PyAny> =
         imported(py, "os.path", "abspath")?.call1((if requested.is_none() {
             imported(py, "os", "getcwd")?.call0()?
@@ -384,14 +385,14 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
     let native: Bound<'py, PyAny> = registry::native(py, NativeAttr::CheckCompileReuse)?
         .call1((reuse_check(request, &project_dir)?,))?;
     let checked: String = native.call_method0("outcome")?.extract()?;
-    let json_output: Bound<'py, PyAny> = request.getattr("json_output")?;
+    let json_output: Bound<'py, PyAny> = native_field(request, "json_output")?;
     let mut base: Vec<(&'static str, Bound<'py, PyAny>)> = vec![
         (
             "project_dir",
             imported(py, "pathlib", "Path")?.call1((&project_dir,))?,
         ),
         ("started", started.into_bound_py_any(py)?),
-        ("selected_target", request.getattr("selected_target")?),
+        ("selected_target", native_field(request, "selected_target")?),
         ("json_output", json_output.clone()),
     ];
     if checked == CHECKED_BYPASS {
@@ -423,7 +424,7 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         return reuse_attempt(py, &base);
     }
     let attempt: Bound<'py, PyAny> = replayed(&native, base, (started, json_output.is_truthy()?))?;
-    if attempt.getattr("outcome")?.eq(outcome(py, HIT)?)? {
+    if native_field(&attempt, "outcome")?.eq(outcome(py, HIT)?)? {
         write_launch_record(&attempt)?;
     }
     Ok(attempt)
@@ -432,7 +433,7 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
 /// The compile command choices that decide whether and how a compile is reused.
 fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let flags: Bound<'py, PyAny> = request.getattr("profile_flags")?;
+    let flags: Bound<'py, PyAny> = native_field(request, "profile_flags")?;
     let mut profiling: bool = false;
     for name in [
         "skip_discovery_sql_analysis",
@@ -476,8 +477,8 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
 fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let attempt: Bound<'py, PyAny> = attempt_compile_reuse(&reuse_request(request)?)?;
-    let exit_code: Bound<'py, PyAny> = attempt.getattr("exit_code")?;
-    if attempt.getattr("outcome")?.eq(outcome(py, HIT)?)? && !exit_code.is_none() {
+    let exit_code: Bound<'py, PyAny> = native_field(&attempt, "exit_code")?;
+    if native_field(&attempt, "outcome")?.eq(outcome(py, HIT)?)? && !exit_code.is_none() {
         return Ok(exit_code);
     }
     registry::native(py, NativeAttr::RunCompileCommand)?.call1((request, attempt))

@@ -250,9 +250,13 @@ impl NativeProjectView {
         ))
     }
 
-    /// The project field custom-rule facts read by `name`, or `None` for any other field.
+    /// The project field custom-rule facts and rules runs read by `name`, or `None` for any other.
     pub(crate) fn fact_field(&self, py: Python<'_>, name: &str) -> Option<Py<PyAny>> {
         let field: &Py<PyAny> = match name {
+            "settings" => &self.fields.compiler.settings,
+            "sql_scenarios" => &self.fields.compiler.sql_scenarios,
+            "scope_index" => &self.fields.compiler.scope_index,
+            "diagnostics" => &self.fields.compiler.diagnostics,
             "sources" => &self.fields.compiler.sources,
             "seeds" => &self.fields.compiler.seeds,
             "functions" => &self.fields.compiler.functions,

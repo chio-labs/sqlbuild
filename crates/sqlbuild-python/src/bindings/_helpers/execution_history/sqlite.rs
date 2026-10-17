@@ -52,6 +52,7 @@ use crate::bindings::_helpers::execution_history::statements::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SQLITE_MODULE: &str = "sqlite3";
 const PATHLIB_MODULE: &str = "pathlib";
@@ -223,7 +224,7 @@ impl SqliteExecutionHistory {
         let py: Python<'py> = slf.py();
         self.with_lock(py, || {
             self.ensure_open(py)?;
-            let connection: Bound<'py, PyAny> = slf.getattr("_connection")?;
+            let connection: Bound<'py, PyAny> = native_field(slf, "_connection")?;
             execute_plain(&connection, SQLITE_BEGIN)?;
             let value: T = match body(&connection) {
                 Ok(value) => value,
@@ -234,7 +235,7 @@ impl SqliteExecutionHistory {
             };
             if let Err(error) = execute_plain(&connection, SQLITE_COMMIT) {
                 if sqlite_failure(py, &error)?
-                    && connection.getattr("in_transaction")?.is_truthy()?
+                    && native_field(&connection, "in_transaction")?.is_truthy()?
                 {
                     let _ = execute_plain(&connection, SQLITE_ROLLBACK);
                 }
@@ -348,7 +349,7 @@ impl SqliteExecutionHistory {
                 None => {
                     let query = event_insert_query(Dialect::Sqlite, event, &now(py)?);
                     let cursor: Bound<'py, PyAny> = execute_query(connection, &query)?;
-                    let storage_id: Bound<'py, PyAny> = cursor.getattr("lastrowid")?;
+                    let storage_id: Bound<'py, PyAny> = native_field(&cursor, "lastrowid")?;
                     connection
                         .call_method1("execute", (SQLITE_EVENT_BY_STORAGE_ID, (storage_id,)))?
                         .call_method0("fetchone")?
@@ -373,7 +374,7 @@ impl SqliteExecutionHistory {
 
     fn migrate_in(&self, slf: &Bound<'_, Self>) -> PyResult<()> {
         let py: Python<'_> = slf.py();
-        let connection: Bound<'_, PyAny> = slf.getattr("_connection")?;
+        let connection: Bound<'_, PyAny> = native_field(slf, "_connection")?;
         let current: i64 = Self::metadata_version(&connection)?;
         if !checked(py, schema_migration_needed(Dialect::Sqlite, current))? {
             return Ok(());
@@ -495,7 +496,7 @@ impl SqliteExecutionHistory {
         let opened: PyResult<()> = (|| {
             prepare_history_directory(&database)?;
             let sqlite = py.import(SQLITE_MODULE)?;
-            let opened: Bound<'_, PyAny> = sqlite.getattr("connect")?.call(
+            let opened: Bound<'_, PyAny> = native_field(&sqlite, "connect")?.call(
                 (database.as_str(),),
                 Some(
                     &crate::bindings::_helpers::compile_driver::python_calls::keywords(
@@ -515,7 +516,7 @@ impl SqliteExecutionHistory {
             connection = Some(opened.clone());
             slf.setattr("_connection", &opened)?;
             this.with_lock(py, || {
-                opened.setattr("row_factory", sqlite.getattr("Row")?)?;
+                opened.setattr("row_factory", native_field(&sqlite, "Row")?)?;
                 execute_plain(&opened, &format!("PRAGMA busy_timeout = {busy_timeout_ms}"))?;
                 execute_plain(&opened, SQLITE_FOREIGN_KEYS)?;
                 if database != MEMORY_PATH {
@@ -613,7 +614,7 @@ impl SqliteExecutionHistory {
             let limit: Option<i64> = limit.map_or(Some(DEFAULT_PAGE_LIMIT), exact_int);
             checked(py, validate_page_limit(limit))?;
             let limit: i64 = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
-            let connection: Bound<'py, PyAny> = slf.getattr("_connection")?;
+            let connection: Bound<'py, PyAny> = native_field(slf, "_connection")?;
             let after: i64 = Self::event_position(&connection, after_cursor)?;
             let spec = event_filter_spec(event_filter)?;
             let query = event_page_query(Dialect::Sqlite, after, &spec, limit);
@@ -632,7 +633,7 @@ impl SqliteExecutionHistory {
                 }
             }
             let next_cursor: Bound<'py, PyAny> = match records.last() {
-                Some(record) => record.getattr("cursor")?,
+                Some(record) => native_field(record, "cursor")?,
                 None => py.None().into_bound(py),
             };
             crate::bindings::_helpers::compile_driver::python_calls::call_with(
@@ -655,7 +656,7 @@ impl SqliteExecutionHistory {
         let this: &Self = slf.get();
         this.with_lock(py, || {
             this.ensure_open(py)?;
-            let connection: Bound<'py, PyAny> = slf.getattr("_connection")?;
+            let connection: Bound<'py, PyAny> = native_field(slf, "_connection")?;
             let row =
                 fetch_one(&connection.call_method1("execute", (SQLITE_RUN_BY_ID, (run_id,)))?)?;
             match row {
@@ -683,7 +684,7 @@ impl SqliteExecutionHistory {
             let limit: Option<i64> = limit.map_or(Some(DEFAULT_PAGE_LIMIT), exact_int);
             checked(py, validate_page_limit(limit))?;
             let limit: i64 = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
-            let connection: Bound<'py, PyAny> = slf.getattr("_connection")?;
+            let connection: Bound<'py, PyAny> = native_field(slf, "_connection")?;
             let none = py.None().into_bound(py);
             let after = Self::run_cursor_key(&connection, after_cursor.unwrap_or(&none))?;
             let spec = run_filter_spec(run_filter)?;
@@ -727,7 +728,7 @@ impl SqliteExecutionHistory {
         this.with_lock(py, || {
             this.ensure_open(py)?;
             this.project_calls.fetch_add(1, Ordering::SeqCst);
-            let connection: Bound<'py, PyAny> = slf.getattr("_connection")?;
+            let connection: Bound<'py, PyAny> = native_field(slf, "_connection")?;
             let current: Vec<RunRow> = Self::read_all_runs(&connection)?;
             let facts = projection_facts(stored_events)?;
             let projected: Vec<RunRow> = checked(py, project_runs(facts, current))?;
@@ -805,7 +806,7 @@ impl SqliteExecutionHistory {
         let this: &Self = slf.get();
         this.with_lock(py, || {
             this.ensure_open(py)?;
-            let connection: Bound<'_, PyAny> = slf.getattr("_connection")?;
+            let connection: Bound<'_, PyAny> = native_field(slf, "_connection")?;
             let Some(result) = fetch_one(&execute_plain(&connection, SQLITE_QUICK_CHECK)?)? else {
                 return Ok(false);
             };
@@ -823,7 +824,7 @@ impl SqliteExecutionHistory {
         let this: &Self = slf.get();
         this.with_lock(py, || {
             this.ensure_open(py)?;
-            Self::metadata_version(&slf.getattr("_connection")?)
+            Self::metadata_version(&native_field(slf, "_connection")?)
         })
     }
 
@@ -882,7 +883,7 @@ impl SqliteExecutionHistory {
 
     fn _read_all_events<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyTuple>> {
         let py: Python<'py> = slf.py();
-        let connection: Bound<'py, PyAny> = slf.getattr("_connection")?;
+        let connection: Bound<'py, PyAny> = native_field(slf, "_connection")?;
         let rows: Vec<Bound<'py, PyAny>> = execute_plain(&connection, SQLITE_ALL_EVENTS)?
             .try_iter()?
             .collect::<PyResult<_>>()?;

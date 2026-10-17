@@ -5,6 +5,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_identity::hashing::model_definition_hash;
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -47,7 +48,7 @@ pub(super) fn native<'py>(
 
 pub(super) fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     Ok(
-        authored_config_str(&model.getattr("config")?.getattr("values")?, key)?
+        authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
             .unwrap_or_else(|| model.py().None().into_bound(model.py())),
     )
 }

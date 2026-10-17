@@ -26,6 +26,7 @@ use crate::bindings::_helpers::discovery::guidance::sql_analysis_guidance;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -109,7 +110,7 @@ pub(crate) fn discover_project<'py>(
     py: Python<'py>,
     request: &Bound<'py, PyAny>,
 ) -> PyResult<ScenarioProject<'py>> {
-    let project_dir: Bound<'py, PyAny> = match request.getattr("project_dir")? {
+    let project_dir: Bound<'py, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
@@ -117,8 +118,8 @@ pub(crate) fn discover_project<'py>(
         &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
-    let selectors: Bound<'py, PyAny> = request.getattr("selectors")?;
-    let exclude: Bound<'py, PyAny> = request.getattr("exclude")?;
+    let selectors: Bound<'py, PyAny> = native_field(request, "selectors")?;
+    let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;
     call_with(
         &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
@@ -127,23 +128,23 @@ pub(crate) fn discover_project<'py>(
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
-    let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
+    let local_config: Bound<'py, PyAny> = native_field(&discovered, "local_config")?;
     let candidates: NamespaceCandidates = NamespaceCandidates {
-        cli: request.getattr("scenario_namespace")?.extract()?,
+        cli: native_field(request, "scenario_namespace")?.extract()?,
         env: py
             .import("os")?
             .getattr("environ")?
             .call_method1("get", (SCENARIO_NAMESPACE_ENV,))?
             .extract()?,
         local_config: config_namespace(&local_config)?,
-        project_config: config_namespace(&discovered.getattr("project_config")?)?,
+        project_config: config_namespace(&native_field(&discovered, "project_config")?)?,
     };
     let namespace: ScenarioNamespace =
         resolve_scenario_namespace(candidates).map_err(|error| cli_user_error(py, error))?;
     let discovered: Bound<'py, PyAny> = match &namespace.value {
         Some(value) => {
             let scenario: Bound<'py, PyAny> = replaced(
-                &local_config.getattr("scenario")?,
+                &native_field(&local_config, "scenario")?,
                 ("run_namespace", text(py, value)),
             )?;
             replaced(
@@ -190,9 +191,12 @@ pub(crate) fn project_adapter_name(project: &ScenarioProject<'_>) -> PyResult<St
         &[
             (
                 "project_config",
-                project.discovered.getattr("project_config")?,
+                native_field(&project.discovered, "project_config")?,
             ),
-            ("local_config", project.discovered.getattr("local_config")?),
+            (
+                "local_config",
+                native_field(&project.discovered, "local_config")?,
+            ),
         ],
     )?
     .extract()
@@ -232,7 +236,7 @@ pub(crate) fn project_connection_config<'py>(
 /// `not no_color and supports_color()`.
 pub(crate) fn style(request: &Bound<'_, PyAny>) -> PyResult<CliStyle> {
     let use_color: bool =
-        !request.getattr("no_color")?.is_truthy()? && stdout_supports_color(request.py())?;
+        !native_field(request, "no_color")?.is_truthy()? && stdout_supports_color(request.py())?;
     Ok(CliStyle { use_color })
 }
 
@@ -312,7 +316,7 @@ pub(crate) fn compile<'py>(
                 ("discovered_inputs", project.discovered.clone()),
                 ("adapter", adapter.clone()),
                 ("options", options.clone()),
-                ("on_progress", planning.getattr("on_progress")?),
+                ("on_progress", native_field(planning, "on_progress")?),
             ],
         )
     })
@@ -331,11 +335,11 @@ pub(crate) fn selected_scenarios<'py>(
         .collect::<PyResult<_>>()?;
     let mut files: Vec<ScenarioFile> = Vec::with_capacity(compiled.len());
     for scenario in &compiled {
-        let file: Bound<'py, PyAny> = scenario.getattr("scenario_file")?;
+        let file: Bound<'py, PyAny> = native_field(scenario, "scenario_file")?;
         files.push(ScenarioFile {
-            name: scenario.getattr("name")?.extract()?,
-            file_path: file.getattr("file_path")?.extract()?,
-            relative_path: file.getattr("relative_path")?.extract()?,
+            name: native_field(scenario, "name")?.extract()?,
+            file_path: native_field(&file, "file_path")?.extract()?,
+            relative_path: native_field(&file, "relative_path")?.extract()?,
         });
     }
     let project_dir: PathBuf = project_dir.extract()?;
@@ -361,15 +365,18 @@ pub(crate) fn capture_limits<'py>(
     project: &ScenarioProject<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let inputs: Bound<'py, PyAny> = request.getattr("limit_inputs")?;
+    let inputs: Bound<'py, PyAny> = native_field(request, "limit_inputs")?;
     let configured: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveScenarioConfig)?,
         &[
             (
                 "project_config",
-                project.discovered.getattr("project_config")?,
+                native_field(&project.discovered, "project_config")?,
             ),
-            ("local_config", project.discovered.getattr("local_config")?),
+            (
+                "local_config",
+                native_field(&project.discovered, "local_config")?,
+            ),
         ],
     )?
     .getattr("snapshot_limits")?;
@@ -379,7 +386,7 @@ pub(crate) fn capture_limits<'py>(
             max_total_rows: optional_int(&inputs, "max_snapshot_total_rows")?,
             max_bytes_per_relation: optional_int(&inputs, "max_snapshot_bytes")?,
             max_total_bytes: optional_int(&inputs, "max_snapshot_total_bytes")?,
-            force: inputs.getattr("force")?.is_truthy()?,
+            force: native_field(&inputs, "force")?.is_truthy()?,
         },
         SnapshotLimitConfig {
             max_rows_per_relation: optional_int(&configured, "max_rows_per_relation")?,
@@ -408,9 +415,9 @@ pub(crate) fn capture_limits<'py>(
 
 fn sqlbuild_version(py: Python<'_>) -> PyResult<String> {
     let metadata: Bound<'_, PyAny> = py.import(METADATA_MODULE)?.into_any();
-    match metadata.getattr("version")?.call1((DISTRIBUTION_NAME,)) {
+    match native_field(&metadata, "version")?.call1((DISTRIBUTION_NAME,)) {
         Ok(version) => version.extract(),
-        Err(error) if error.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
+        Err(error) if error.is_instance(py, &native_field(&metadata, "PackageNotFoundError")?) => {
             Ok(UNKNOWN_VERSION.to_owned())
         }
         Err(error) => Err(error),

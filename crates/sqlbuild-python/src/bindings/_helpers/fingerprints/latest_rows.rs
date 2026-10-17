@@ -2,6 +2,7 @@
 
 use std::ffi::CString;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::{PyUnicodeDecodeError, PyValueError};
@@ -62,11 +63,11 @@ pub(crate) fn select_latest_fingerprints<'py>(
     node_names: Vec<String>,
     filtered_node_types: Vec<String>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let schema: String = fingerprint_set.getattr("schema")?.extract()?;
+    let schema: String = native_field(fingerprint_set, "schema")?.extract()?;
     if node_names.is_empty() && filtered_node_types.is_empty() {
         return indexed_set(py, &schema, &[]);
     }
-    let by_identity: Bound<'py, PyAny> = fingerprint_set.getattr("fingerprints_by_identity")?;
+    let by_identity: Bound<'py, PyAny> = native_field(fingerprint_set, "fingerprints_by_identity")?;
     let latest: Vec<Bound<'py, PyAny>> = if by_identity.is_truthy()? {
         by_identity
             .call_method0("values")?
@@ -113,8 +114,8 @@ fn indexed_set<'py>(
 
 fn identity_of(fingerprint: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     Ok((
-        fingerprint.getattr("node_type")?.extract()?,
-        fingerprint.getattr("node_name")?.extract()?,
+        native_field(fingerprint, "node_type")?.extract()?,
+        native_field(fingerprint, "node_name")?.extract()?,
     ))
 }
 

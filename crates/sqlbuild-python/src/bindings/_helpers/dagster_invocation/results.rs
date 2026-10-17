@@ -16,6 +16,7 @@ use crate::bindings::_helpers::dagster_invocation::access::{
     text_of, value_or,
 };
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const CHECK_KIND_FALLBACK: &str = "check";
 const CHECK_NAME_JOIN: &str = "__";
@@ -88,7 +89,7 @@ pub(crate) fn dagster_check_name(check: &Bound<'_, PyAny>) -> PyResult<String> {
 fn metadata_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     if value.is_instance(&imported(py, "enum", "Enum")?)? {
-        return value.getattr("value");
+        return native_field(value, "value");
     }
     if value.is_instance(&imported(py, "collections.abc", "Mapping")?)? {
         let plain: Bound<'py, PyDict> = PyDict::new(py);
@@ -505,17 +506,22 @@ pub(crate) fn dagster_integration_results<'py>(
     let nodes = nodes_by_id(&dag)?;
     let source_kind: String = constant(py, ThirdPartyHost::SourceNodeKind)?.extract()?;
     let clone_command: String = constant(py, ThirdPartyHost::CloneCommand)?.extract()?;
-    let envelope_command: String = envelope.getattr("command")?.str()?.extract()?;
+    let envelope_command: String = native_field(&envelope, "command")?.str()?.extract()?;
     let mut plans: Vec<Bound<'py, PyAny>> = Vec::new();
-    let asset: Bound<'py, PyAny> = envelope.getattr("asset")?;
-    if !asset.is_none() && completed(py, &asset.getattr("status")?.str()?.extract::<String>()?)? {
-        let resource_id: String = envelope.getattr("resource_id")?.str()?.extract()?;
+    let asset: Bound<'py, PyAny> = native_field(&envelope, "asset")?;
+    if !asset.is_none()
+        && completed(
+            py,
+            &native_field(&asset, "status")?.str()?.extract::<String>()?,
+        )?
+    {
+        let resource_id: String = native_field(&envelope, "resource_id")?.str()?.extract()?;
         let node: Option<&Bound<'py, PyAny>> = node_with_id(&nodes, &resource_id);
         let asset_facts: Bound<'py, PyAny> = asset.call_method0("as_dict")?;
         let mut projected: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
         if let Some(node) = node {
             projected.push((text_of(node, "id")?, asset_facts.clone()));
-            let loader: Bound<'py, PyAny> = asset.getattr("loader")?;
+            let loader: Bound<'py, PyAny> = native_field(&asset, "loader")?;
             let loader_facts: Option<(String, Bound<'py, PyDict>)> =
                 if text_of(node, "kind")? == source_kind && !loader.is_none() {
                     loader_result(
@@ -597,7 +603,7 @@ pub(crate) fn dagster_integration_results<'py>(
         ],
     )?;
     let mut seen: HashSet<CheckKey> = HashSet::new();
-    for check in envelope.getattr("checks")?.try_iter()? {
+    for check in native_field(&envelope, "checks")?.try_iter()? {
         let facts: Bound<'py, PyDict> = check?.call_method0("as_dict")?.cast_into()?;
         let record: Bound<'py, PyDict> = facts.copy()?;
         for (name, value) in &check_fields {

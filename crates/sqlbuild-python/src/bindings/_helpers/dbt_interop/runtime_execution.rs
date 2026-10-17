@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::runtime_results::{append_missing, result_ids};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -65,7 +66,7 @@ fn expected_total<'py>(
         ],
     );
     call_with(
-        &status.getattr("complete")?,
+        &native_field(&status, "complete")?,
         &[(
             "message",
             PyString::new(
@@ -79,12 +80,12 @@ fn expected_total<'py>(
         )],
     )?;
     let result = result?;
-    if result.getattr("returncode")?.extract::<i64>()? != 0 {
+    if native_field(&result, "returncode")?.extract::<i64>()? != 0 {
         return Ok(py.None().into_bound(py));
     }
     let nodes = call_with(
         &registry::native(py, NativeAttr::ParseDbtLsJsonLines)?,
-        &[("stdout", result.getattr("stdout")?)],
+        &[("stdout", native_field(&result, "stdout")?)],
     )?;
     Ok(PyInt::new(py, nodes.len()?).into_any())
 }
@@ -168,8 +169,8 @@ fn execute_dbt_commands<'py>(
         expected_total(&arguments, &argv)?
     };
     let dbt_options = arguments.value("options")?;
-    let mut target = dbt_options.getattr("target_path")?;
-    let project_dir = dbt_options.getattr("project_dir")?;
+    let mut target = native_field(&dbt_options, "target_path")?;
+    let project_dir = native_field(&dbt_options, "project_dir")?;
     if target.is_none() && !project_dir.is_none() {
         target = project_dir.call_method1("__truediv__", ("target",))?;
     }
@@ -191,7 +192,7 @@ fn execute_dbt_commands<'py>(
     let mut filtered: Vec<Bound<'py, PyAny>> = Vec::new();
     for result in streamed.try_iter()? {
         let result = result?;
-        let id: String = result.getattr("unique_id")?.extract()?;
+        let id: String = native_field(&result, "unique_id")?.extract()?;
         if expected.as_ref().is_none_or(|ids| ids.contains(&id)) {
             filtered.push(result);
         }
@@ -204,7 +205,7 @@ fn execute_dbt_commands<'py>(
     let mut appended: Vec<Bound<'py, PyAny>> = Vec::new();
     for result in results.try_iter()? {
         let result = result?;
-        if !streamed_ids.contains(&result.getattr("unique_id")?.extract::<String>()?) {
+        if !streamed_ids.contains(&native_field(&result, "unique_id")?.extract::<String>()?) {
             appended.push(result);
         }
     }
@@ -214,7 +215,7 @@ fn execute_dbt_commands<'py>(
             &registry::native(py, NativeAttr::RenderDbtNodeResult)?,
             &[
                 ("result", result.clone()),
-                ("use_color", style.getattr("use_color")?),
+                ("use_color", native_field(&style, "use_color")?),
                 (
                     "display_index",
                     PyInt::new(py, count + offset + 1).into_any(),

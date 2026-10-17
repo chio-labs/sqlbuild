@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const RANDOM_MODULE: &str = "random";
 const MAX_ATTEMPTS_TOO_LOW: &str = "RetryPolicy max_attempts must be at least 1";
@@ -104,16 +105,16 @@ fn retry_delay_seconds<'py>(
     retry_policy: &Bound<'py, PyAny>,
     retry_index: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let initial: Bound<'py, PyAny> = retry_policy.getattr("initial_delay_seconds")?;
+    let initial: Bound<'py, PyAny> = native_field(retry_policy, "initial_delay_seconds")?;
     let growth: Bound<'py, PyAny> = retry_policy
         .getattr("backoff_multiplier")?
         .pow(retry_index, retry_policy.py().None())?;
     let mut delay: Bound<'py, PyAny> = initial.mul(growth)?;
-    let maximum: Bound<'py, PyAny> = retry_policy.getattr("max_delay_seconds")?;
+    let maximum: Bound<'py, PyAny> = native_field(retry_policy, "max_delay_seconds")?;
     if !maximum.is_none() && maximum.lt(&delay)? {
         delay = maximum;
     }
-    if retry_policy.getattr("jitter")?.is_truthy()? {
+    if native_field(retry_policy, "jitter")?.is_truthy()? {
         return imported(retry_policy.py(), RANDOM_MODULE, "uniform")?.call1((0, delay));
     }
     Ok(delay)

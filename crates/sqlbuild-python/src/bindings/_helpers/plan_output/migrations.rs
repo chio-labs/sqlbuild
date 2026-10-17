@@ -4,6 +4,7 @@ use crate::bindings::_helpers::plan_output::plan_text::display_limit;
 use crate::bindings::_helpers::plan_output::values::{
     iso, items, optional_text, relation_name, text, texts,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::{
@@ -21,71 +22,71 @@ fn label(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if value.is_none() {
         return Ok(None);
     }
-    text(&value.getattr("label")?).map(Some)
+    text(&native_field(value, "label")?).map(Some)
 }
 
 fn decision(entry: &Bound<'_, PyAny>) -> PyResult<MigrationDecisionText> {
-    let value = entry.getattr("decision")?;
+    let value = native_field(entry, "decision")?;
     Ok(MigrationDecisionText {
         value: text(&value)?,
-        label: text(&value.getattr("label")?)?,
-        blocks_build: entry.getattr("blocks_build")?.extract()?,
-        origin_missing: entry.getattr("origin_missing")?.extract()?,
+        label: text(&native_field(&value, "label")?)?,
+        blocks_build: native_field(entry, "blocks_build")?.extract()?,
+        origin_missing: native_field(entry, "origin_missing")?.extract()?,
         ..MigrationDecisionText::default()
     })
 }
 
 fn migration(entry: &Bound<'_, PyAny>, materialization: Option<String>) -> PyResult<MigrationText> {
     let mut decision = decision(entry)?;
-    let value = entry.getattr("decision")?;
-    decision.decision_blocks_build = value.getattr("blocks_build")?.extract()?;
-    decision.checks_compatibility = value.getattr("checks_compatibility")?.extract()?;
+    let value = native_field(entry, "decision")?;
+    decision.decision_blocks_build = native_field(&value, "blocks_build")?.extract()?;
+    decision.checks_compatibility = native_field(&value, "checks_compatibility")?.extract()?;
     Ok(MigrationText {
-        model_name: text(&entry.getattr("model_name")?)?,
-        origin: text(&relation_name(&entry.getattr("origin")?)?)?,
-        destination: text(&relation_name(&entry.getattr("destination")?)?)?,
+        model_name: text(&native_field(entry, "model_name")?)?,
+        origin: text(&relation_name(&native_field(entry, "origin")?)?)?,
+        destination: text(&relation_name(&native_field(entry, "destination")?)?)?,
         decision,
-        compatibility: text(&entry.getattr("compatibility")?.getattr("value")?)?,
-        discovery: text(&entry.getattr("discovery")?.getattr("value")?)?,
-        completed_at: optional_text(&iso(&entry.getattr("completed_at")?)?)?,
-        target_label: text(&entry.getattr("target_label")?)?,
-        transfer: label(&entry.getattr("transfer")?)?,
-        transfer_fallback: label(&entry.getattr("transfer_fallback")?)?,
-        storage_transition: optional_text(&entry.getattr("storage_transition")?)?,
-        promotion: label(&entry.getattr("promotion")?)?,
-        findings: texts(&entry.getattr("compatibility_findings")?)?,
+        compatibility: text(&native_field(entry, "compatibility")?.getattr("value")?)?,
+        discovery: text(&native_field(entry, "discovery")?.getattr("value")?)?,
+        completed_at: optional_text(&iso(&native_field(entry, "completed_at")?)?)?,
+        target_label: text(&native_field(entry, "target_label")?)?,
+        transfer: label(&native_field(entry, "transfer")?)?,
+        transfer_fallback: label(&native_field(entry, "transfer_fallback")?)?,
+        storage_transition: optional_text(&native_field(entry, "storage_transition")?)?,
+        promotion: label(&native_field(entry, "promotion")?)?,
+        findings: texts(&native_field(entry, "compatibility_findings")?)?,
         materialization,
     })
 }
 
 fn old_name(entry: &Bound<'_, PyAny>) -> PyResult<OldNameText> {
-    let expires = entry.getattr("expires_at")?;
+    let expires = native_field(entry, "expires_at")?;
     let expires_date = if expires.is_none() {
         None
     } else {
         Some(expires.call_method1("strftime", ("%Y-%m-%d",))?.extract()?)
     };
     Ok(OldNameText {
-        model_name: text(&entry.getattr("model_name")?)?,
-        origin: text(&relation_name(&entry.getattr("origin")?)?)?,
-        destination: text(&relation_name(&entry.getattr("destination")?)?)?,
-        action: text(&entry.getattr("action")?)?,
+        model_name: text(&native_field(entry, "model_name")?)?,
+        origin: text(&relation_name(&native_field(entry, "origin")?)?)?,
+        destination: text(&relation_name(&native_field(entry, "destination")?)?)?,
+        action: text(&native_field(entry, "action")?)?,
         expires_date,
-        column_aliases: entry.getattr("column_aliases")?.extract()?,
-        grants_supported: entry.getattr("grants_supported")?.extract()?,
-        grants_copied: optional_text(&entry.getattr("grants_copied")?)?,
-        reason: optional_text(&entry.getattr("reason")?)?,
+        column_aliases: native_field(entry, "column_aliases")?.extract()?,
+        grants_supported: native_field(entry, "grants_supported")?.extract()?,
+        grants_copied: optional_text(&native_field(entry, "grants_copied")?)?,
+        reason: optional_text(&native_field(entry, "reason")?)?,
     })
 }
 
 fn column(entry: &Bound<'_, PyAny>) -> PyResult<ColumnMigrationText> {
     Ok(ColumnMigrationText {
-        model_name: text(&entry.getattr("model_name")?)?,
-        origin_column: text(&entry.getattr("origin_column")?)?,
-        destination_column: text(&entry.getattr("destination_column")?)?,
+        model_name: text(&native_field(entry, "model_name")?)?,
+        origin_column: text(&native_field(entry, "origin_column")?)?,
+        destination_column: text(&native_field(entry, "destination_column")?)?,
         decision: decision(entry)?,
-        discovery: text(&entry.getattr("discovery")?.getattr("value")?)?,
-        completed_at: optional_text(&iso(&entry.getattr("completed_at")?)?)?,
+        discovery: text(&native_field(entry, "discovery")?.getattr("value")?)?,
+        completed_at: optional_text(&iso(&native_field(entry, "completed_at")?)?)?,
     })
 }
 
@@ -96,24 +97,24 @@ pub(crate) fn migration_lines(
     display_options: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<String>> {
     let mut materializations: BTreeMap<String, String> = BTreeMap::new();
-    for entry in items(&plan.getattr("model_entries")?)? {
+    for entry in items(&native_field(plan, "model_entries")?)? {
         materializations.insert(
-            text(&entry.getattr("name")?)?,
-            text(&entry.getattr("materialization_type")?)?,
+            text(&native_field(&entry, "name")?)?,
+            text(&native_field(&entry, "materialization_type")?)?,
         );
     }
     let mut migrations: Vec<MigrationText> = Vec::new();
-    for entry in items(&plan.getattr("migration_entries")?)? {
-        let name = text(&entry.getattr("model_name")?)?;
+    for entry in items(&native_field(plan, "migration_entries")?)? {
+        let name = text(&native_field(&entry, "model_name")?)?;
         migrations.push(migration(&entry, materializations.get(&name).cloned())?);
     }
     let report = MigrationTextReport {
         migrations,
-        old_names: items(&plan.getattr("old_name_view_entries")?)?
+        old_names: items(&native_field(plan, "old_name_view_entries")?)?
             .iter()
             .map(old_name)
             .collect::<PyResult<_>>()?,
-        columns: items(&plan.getattr("column_migration_entries")?)?
+        columns: items(&native_field(plan, "column_migration_entries")?)?
             .iter()
             .map(column)
             .collect::<PyResult<_>>()?,
@@ -145,19 +146,19 @@ pub(crate) fn pre_build_lines(
     display_options: &Bound<'_, PyAny>,
 ) -> PyResult<Vec<String>> {
     let mut table_types: Vec<TableTypeText> = Vec::new();
-    for entry in items(&plan.getattr("table_type_entries")?)? {
+    for entry in items(&native_field(plan, "table_type_entries")?)? {
         table_types.push(TableTypeText {
-            model_name: text(&entry.getattr("model_name")?)?,
-            desired_type: text(&entry.getattr("desired_type")?)?,
-            actual_type: optional_text(&entry.getattr("actual_type")?)?
+            model_name: text(&native_field(&entry, "model_name")?)?,
+            desired_type: text(&native_field(&entry, "desired_type")?)?,
+            actual_type: optional_text(&native_field(&entry, "actual_type")?)?
                 .filter(|actual| !actual.is_empty()),
-            source: text(&entry.getattr("source")?)?,
-            irreversible_warning: optional_text(&entry.getattr("irreversible_warning")?)?,
+            source: text(&native_field(&entry, "source")?)?,
+            irreversible_warning: optional_text(&native_field(&entry, "irreversible_warning")?)?,
         });
     }
     let mut retention: Vec<RetentionText> = Vec::new();
-    for entry in items(&plan.getattr("retention_entries")?)? {
-        let request = entry.getattr("request")?;
+    for entry in items(&native_field(plan, "retention_entries")?)? {
+        let request = native_field(&entry, "request")?;
         let mut parts: Vec<String> = Vec::new();
         for field in ["database", "schema", "name"] {
             let part = request.getattr(field)?;
@@ -167,13 +168,13 @@ pub(crate) fn pre_build_lines(
         }
         retention.push(RetentionText {
             scope: parts.join("."),
-            desired_days: request.getattr("desired_days")?.extract()?,
-            actual_days: days(&entry.getattr("actual_days")?)?,
-            effective_days: days(&entry.getattr("effective_days")?)?,
-            source: text(&entry.getattr("source")?)?,
-            direction: text(&entry.getattr("direction")?.getattr("value")?)?,
-            phase: text(&entry.getattr("phase")?.getattr("value")?)?,
-            irreversible_warning: optional_text(&entry.getattr("irreversible_warning")?)?,
+            desired_days: native_field(&request, "desired_days")?.extract()?,
+            actual_days: days(&native_field(&entry, "actual_days")?)?,
+            effective_days: days(&native_field(&entry, "effective_days")?)?,
+            source: text(&native_field(&entry, "source")?)?,
+            direction: text(&native_field(&entry, "direction")?.getattr("value")?)?,
+            phase: text(&native_field(&entry, "phase")?.getattr("value")?)?,
+            irreversible_warning: optional_text(&native_field(&entry, "irreversible_warning")?)?,
         });
     }
     let work = PreBuildWorkText {
@@ -203,7 +204,7 @@ fn render_old_name(entry: &Bound<'_, PyAny>, style: &Bound<'_, PyAny>) -> PyResu
     Ok(old_name_rows::old_name_rows(
         &old_name(entry)?,
         CliStyle {
-            use_color: style.getattr("use_color")?.extract()?,
+            use_color: native_field(style, "use_color")?.extract()?,
         },
     ))
 }

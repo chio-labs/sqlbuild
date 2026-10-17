@@ -30,6 +30,7 @@ use crate::bindings::_helpers::build_progress::terminal::{
     terminal_columns, tty_flag, write,
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -68,9 +69,9 @@ fn result_kind(result: &Bound<'_, PyAny>) -> PyResult<ResultKind> {
 
 fn sql_test_resource_id(result: &Bound<'_, PyAny>) -> PyResult<String> {
     let name: String = text(result, "test_name")?;
-    let path: Bound<'_, PyAny> = result.getattr("source_path")?;
-    let block: Bound<'_, PyAny> = result.getattr("block_index")?;
-    let case: Bound<'_, PyAny> = result.getattr("case_name")?;
+    let path: Bound<'_, PyAny> = native_field(result, "source_path")?;
+    let block: Bound<'_, PyAny> = native_field(result, "block_index")?;
+    let case: Bound<'_, PyAny> = native_field(result, "case_name")?;
     if path.is_none() || block.is_none() || case.is_none() {
         return Ok(format!("sql_test:{name}"));
     }
@@ -345,7 +346,7 @@ impl BuildProgressCallbacks {
         };
         write_one(result)?;
         if result_kind(result)? == ResultKind::Model {
-            for audit in result.getattr("audit_results")?.try_iter()? {
+            for audit in native_field(result, "audit_results")?.try_iter()? {
                 write_one(&audit?)?;
             }
         }
@@ -355,11 +356,11 @@ impl BuildProgressCallbacks {
 
 fn scheduler_state(state: &Bound<'_, PyAny>) -> PyResult<SchedulerStateText> {
     Ok(SchedulerStateText {
-        running: state.getattr("running")?.extract()?,
-        ready: state.getattr("ready")?.extract()?,
-        waiting: state.getattr("waiting")?.extract()?,
-        limit: state.getattr("limit")?.extract()?,
-        aborted: state.getattr("aborted")?.extract()?,
+        running: native_field(state, "running")?.extract()?,
+        ready: native_field(state, "ready")?.extract()?,
+        waiting: native_field(state, "waiting")?.extract()?,
+        limit: native_field(state, "limit")?.extract()?,
+        aborted: native_field(state, "aborted")?.extract()?,
     })
 }
 
@@ -367,7 +368,7 @@ fn statement(telemetry: &Bound<'_, PyAny>) -> PyResult<StatementText> {
     Ok(StatementText {
         query_id: optional(telemetry, "query_id")?,
         status: text(telemetry, "status")?,
-        elapsed_seconds: telemetry.getattr("elapsed_seconds")?.extract()?,
+        elapsed_seconds: native_field(telemetry, "elapsed_seconds")?.extract()?,
         resource_type: text(telemetry, "resource_type")?,
         resource_name: text(telemetry, "resource_name")?,
         phase: text(telemetry, "phase")?,
@@ -394,9 +395,9 @@ impl BuildProgressCallbacks {
         let plan: Bound<'_, PyAny> = arguments.value("plan")?;
         let debug: bool = flag("debug")?;
         let sys: Bound<'_, PyAny> = py.import("sys")?.into_any();
-        let stdout: Bound<'_, PyAny> = sys.getattr("stdout")?;
+        let stdout: Bound<'_, PyAny> = native_field(&sys, "stdout")?;
         let stream: Bound<'_, PyAny> = if debug {
-            sys.getattr("stderr")?
+            native_field(&sys, "stderr")?
         } else {
             stdout.clone()
         };
@@ -433,7 +434,7 @@ impl BuildProgressCallbacks {
             plan: plan.unbind(),
             is_tty: tty_flag(&stdout)? && !debug,
             stream: stream.unbind(),
-            lock: lines.getattr("lock")?.unbind(),
+            lock: native_field(&lines, "lock")?.unbind(),
             lines: lines.unbind(),
             event_writer: event_writer.unbind(),
             projector,
@@ -472,7 +473,7 @@ impl BuildProgressCallbacks {
         {
             let mut state = callbacks.state();
             state.node_name = name;
-            state.node_kind = resource_kind.getattr("value")?.extract()?;
+            state.node_kind = native_field(resource_kind, "value")?.extract()?;
             state.sub_message = String::new();
         }
         if !callbacks.is_tty {

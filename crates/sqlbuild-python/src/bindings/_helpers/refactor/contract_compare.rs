@@ -9,6 +9,7 @@ use sqlbuild_core::text::main::python_casefold::python_casefold;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
@@ -46,8 +47,8 @@ impl<'py> Vocabulary<'py> {
         fields: Vec<(&str, Bound<'py, PyAny>)>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let keywords: Bound<'py, PyDict> = PyDict::new(self.py());
-        keywords.set_item("resource_type", item.getattr("resource_type")?)?;
-        keywords.set_item("resource_name", item.getattr("resource_name")?)?;
+        keywords.set_item("resource_type", native_field(item, "resource_type")?)?;
+        keywords.set_item("resource_name", native_field(item, "resource_name")?)?;
         keywords.set_item("kind", self.kinds.getattr(kind)?)?;
         for (name, value) in fields {
             keywords.set_item(name, value)?;
@@ -104,11 +105,11 @@ fn column_infos<'py>(
     let mut infos: Vec<Bound<'py, PyAny>> = Vec::new();
     for column in columns.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
-        let declared: Option<String> = column.getattr("type")?.extract()?;
+        let declared: Option<String> = native_field(&column, "type")?.extract()?;
         infos.push(keyword_call(
             &column_type,
             vec![
-                ("name", column.getattr("name")?),
+                ("name", native_field(&column, "name")?),
                 ("type", text(py, &declared.unwrap_or_default())),
             ],
         )?);
@@ -125,27 +126,27 @@ fn resource_type<'py>(py: Python<'py>, value: &str) -> PyResult<Bound<'py, PyAny
 /// The evidence a model's authored contract offers, before inspection.
 fn model_evidence<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let destination: Bound<'py, PyAny> = model.getattr("destination")?;
-    let schema_entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    let destination: Bound<'py, PyAny> = native_field(model, "destination")?;
+    let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
     let (declared, dynamic): (Bound<'py, PyAny>, Bound<'py, PyAny>) = if schema_entry.is_none() {
         (PyTuple::empty(py).into_any(), PyTuple::empty(py).into_any())
     } else {
         (
-            column_infos(py, &schema_entry.getattr("columns")?)?.into_any(),
-            schema_entry.getattr("dynamic_columns")?,
+            column_infos(py, &native_field(&schema_entry, "columns")?)?.into_any(),
+            native_field(&schema_entry, "dynamic_columns")?,
         )
     };
     keyword_call(
         &registry::class(py, RecordId::ContractEvidence)?,
         vec![
             ("resource_type", resource_type(py, MODEL_RESOURCE)?),
-            ("resource_name", model.getattr("name")?),
-            ("database", destination.getattr("database")?),
-            ("schema", destination.getattr("schema")?),
-            ("relation", destination.getattr("name")?),
+            ("resource_name", native_field(model, "name")?),
+            ("database", native_field(&destination, "database")?),
+            ("schema", native_field(&destination, "schema")?),
+            ("relation", native_field(&destination, "name")?),
             ("declared_columns", declared),
             ("physical_columns", py.None().into_bound(py)),
-            ("source_path", model.getattr("relative_path")?),
+            ("source_path", native_field(model, "relative_path")?),
             ("dynamic_columns", dynamic),
         ],
     )
@@ -157,21 +158,24 @@ fn source_evidence<'py>(
     source: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = source.py();
-    let entry: Bound<'py, PyAny> = source.getattr("source_entry")?;
-    let table: Option<String> = entry.getattr("table")?.extract()?;
+    let entry: Bound<'py, PyAny> = native_field(source, "source_entry")?;
+    let table: Option<String> = native_field(&entry, "table")?.extract()?;
     let relation: String = match table.filter(|table| !table.is_empty()) {
         Some(table) => table,
-        None => entry.getattr("name")?.extract()?,
+        None => native_field(&entry, "name")?.extract()?,
     };
-    let name: Bound<'py, PyAny> = source.getattr("name")?;
-    let inspectable: bool = entry.getattr("expression")?.is_none() && !relation.is_empty();
+    let name: Bound<'py, PyAny> = native_field(source, "name")?;
+    let inspectable: bool = native_field(&entry, "expression")?.is_none() && !relation.is_empty();
     let resource: Bound<'py, PyAny> = resource_type(py, SOURCE_RESOURCE)?;
     let mut findings: Vec<Bound<'py, PyAny>> = Vec::new();
     if !inspectable {
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
         keywords.set_item("resource_type", &resource)?;
         keywords.set_item("resource_name", &name)?;
-        keywords.set_item("kind", vocabulary.kinds.getattr("INSPECTION_UNAVAILABLE")?)?;
+        keywords.set_item(
+            "kind",
+            native_field(&vocabulary.kinds, "INSPECTION_UNAVAILABLE")?,
+        )?;
         keywords.set_item(
             "message",
             "source expression has no inspectable physical relation",
@@ -188,17 +192,17 @@ fn source_evidence<'py>(
         vec![
             ("resource_type", resource),
             ("resource_name", name),
-            ("database", entry.getattr("database")?),
-            ("schema", entry.getattr("schema")?),
+            ("database", native_field(&entry, "database")?),
+            ("schema", native_field(&entry, "schema")?),
             ("relation", relation),
             (
                 "declared_columns",
-                column_infos(py, &entry.getattr("columns")?)?.into_any(),
+                column_infos(py, &native_field(&entry, "columns")?)?.into_any(),
             ),
             ("physical_columns", py.None().into_bound(py)),
             (
                 "source_path",
-                source.getattr("source_file")?.getattr("relative_path")?,
+                native_field(source, "source_file")?.getattr("relative_path")?,
             ),
             ("findings", PyTuple::new(py, findings)?.into_any()),
         ],
@@ -249,25 +253,25 @@ fn undeclared_finding<'py>(
     adapter: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py: Python<'py> = vocabulary.py();
-    let name: String = physical.getattr("name")?.extract()?;
-    let physical_type: Bound<'py, PyAny> = physical.getattr("type")?;
+    let name: String = native_field(physical, "name")?.extract()?;
+    let physical_type: Bound<'py, PyAny> = native_field(physical, "type")?;
     let matching: Bound<'py, PyAny> = keyword_call(
         &registry::native(py, NativeAttr::MatchingDynamicFamilies)?,
         vec![
-            ("families", item.getattr("dynamic_columns")?),
+            ("families", native_field(item, "dynamic_columns")?),
             ("column_name", text(py, &name)),
         ],
     )?;
     if matching.len()? == 1 {
         let family: Bound<'py, PyAny> = matching.get_item(0)?;
-        let family_type: Bound<'py, PyAny> = family.getattr("type")?;
+        let family_type: Bound<'py, PyAny> = native_field(&family, "type")?;
         if types_equal(adapter, (&family_type, &physical_type))? {
             return Ok(None);
         }
         let message: String = format!(
             "dynamic column '{name}' is physically {} but family '{}' declares {}",
             physical_type.str()?,
-            family.getattr("name")?.str()?,
+            native_field(&family, "name")?.str()?,
             family_type.str()?
         );
         return vocabulary
@@ -307,9 +311,9 @@ fn declared_finding<'py>(
     adapter: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py: Python<'py> = vocabulary.py();
-    let declared_name: Bound<'py, PyAny> = declared.getattr("name")?;
-    let declared_type: Bound<'py, PyAny> = declared.getattr("type")?;
-    let physical_type: Bound<'py, PyAny> = physical.getattr("type")?;
+    let declared_name: Bound<'py, PyAny> = native_field(declared, "name")?;
+    let declared_type: Bound<'py, PyAny> = native_field(declared, "type")?;
+    let physical_type: Bound<'py, PyAny> = native_field(physical, "type")?;
     if !declared_type.is_truthy()? {
         let message: String = format!(
             "declared column '{}' has no type; physical type is {}",
@@ -321,7 +325,7 @@ fn declared_finding<'py>(
                 item,
                 "MISSING_DECLARATION",
                 vec![
-                    ("column_name", physical.getattr("name")?),
+                    ("column_name", native_field(physical, "name")?),
                     ("physical_type", physical_type),
                     ("message", text(py, &message)),
                 ],
@@ -383,13 +387,13 @@ fn compared<'py>(
     let mut declared_keys: Vec<String> = Vec::with_capacity(declared.len());
     for column in &declared {
         declared_keys.push(python_casefold(
-            &column.getattr("name")?.extract::<String>()?,
+            &native_field(column, "name")?.extract::<String>()?,
         ));
     }
     let mut physical_keys: Vec<String> = Vec::with_capacity(physical.len());
     for column in &physical {
         physical_keys.push(python_casefold(
-            &column.getattr("name")?.extract::<String>()?,
+            &native_field(column, "name")?.extract::<String>()?,
         ));
     }
     let mut findings: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -410,8 +414,8 @@ fn compared<'py>(
         if physical_keys.contains(key) {
             continue;
         }
-        let name: Bound<'py, PyAny> = column.getattr("name")?;
-        let declared_type: Bound<'py, PyAny> = column.getattr("type")?;
+        let name: Bound<'py, PyAny> = native_field(column, "name")?;
+        let declared_type: Bound<'py, PyAny> = native_field(column, "type")?;
         let message: String = format!(
             "declared column '{}' is absent from the physical relation",
             name.str()?
@@ -457,9 +461,9 @@ fn relation_info<'py>(item: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     keyword_call(
         &host::entry(py, AdapterHost::RelationInfo)?,
         vec![
-            ("database", item.getattr("database")?),
-            ("schema", item.getattr("schema")?),
-            ("name", item.getattr("relation")?),
+            ("database", native_field(item, "database")?),
+            ("schema", native_field(item, "schema")?),
+            ("name", native_field(item, "relation")?),
             ("relation_type", text(py, "")),
         ],
     )
@@ -483,7 +487,7 @@ fn compare_contracts<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Boun
     }
     for source in sources.try_iter()? {
         let item: Bound<'py, PyAny> = source_evidence(&vocabulary, &source?)?;
-        if item.getattr("findings")?.is_truthy()? {
+        if native_field(&item, "findings")?.is_truthy()? {
             evidence.push(item);
         } else {
             inspectable.push(item);
@@ -509,7 +513,7 @@ fn compare_contracts<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Boun
         };
     for (item, relation) in inspectable.iter().zip(&relations) {
         let columns: Bound<'py, PyAny> =
-            physical.call_method1("get", (relation.getattr("identity")?,))?;
+            physical.call_method1("get", (native_field(relation, "identity")?,))?;
         evidence.push(compared(&vocabulary, (item, &columns), adapter)?);
     }
     PyTuple::new(py, evidence)

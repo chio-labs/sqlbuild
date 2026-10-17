@@ -22,6 +22,7 @@ use crate::bindings::_helpers::dbt_interop::cli::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -65,7 +66,7 @@ impl DbtRunner {
             (&self.dbt_executable, options),
             DbtArgvCommand::Compile { full_refresh },
         )?;
-        self.run(command, &options.getattr("project_dir")?)
+        self.run(command, &native_field(options, "project_dir")?)
     }
 
     /// Run dbt deps.
@@ -76,7 +77,7 @@ impl DbtRunner {
             (&self.dbt_executable, options),
             DbtArgvCommand::Deps,
         )?;
-        self.run(command, &options.getattr("project_dir")?)
+        self.run(command, &native_field(options, "project_dir")?)
     }
 
     /// Run dbt debug.
@@ -92,7 +93,7 @@ impl DbtRunner {
             (&self.dbt_executable, options),
             DbtArgvCommand::Debug { args },
         )?;
-        self.run(command, &options.getattr("project_dir")?)
+        self.run(command, &native_field(options, "project_dir")?)
     }
 
     /// Run dbt ls and parse selected nodes, reusing an earlier identical listing.
@@ -121,8 +122,9 @@ impl DbtRunner {
         if let Some(cached) = self.cached_listing(py, &key)? {
             return Ok(cached);
         }
-        let result: Bound<'py, PyAny> = self.run(command, &options.getattr("project_dir")?)?;
-        let stdout: String = result.getattr("stdout")?.extract()?;
+        let result: Bound<'py, PyAny> =
+            self.run(command, &native_field(options, "project_dir")?)?;
+        let stdout: String = native_field(&result, "stdout")?.extract()?;
         let listing: Bound<'py, PyAny> = call_with(
             &registry::class(py, RecordId::DbtLsResult)?,
             &[

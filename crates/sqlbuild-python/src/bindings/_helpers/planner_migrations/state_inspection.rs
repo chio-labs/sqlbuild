@@ -20,6 +20,7 @@ use crate::bindings::_helpers::planner_migrations::constants::{
     GET_COLUMNS_FOR_INSPECTION, LIST_RELATIONS_FOR_INSPECTION,
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::constants::{COLUMN_KIND, MODEL_KIND, OLD_NAME_KIND};
 use crate::bindings::_helpers::state_rows::migration_io::{read_events, stored_old_name_columns};
 use crate::bindings::_helpers::state_rows::migration_objects::layout;
@@ -67,8 +68,8 @@ fn schema_or_empty<'py>(value: Bound<'py, PyAny>) -> Bound<'py, PyAny> {
 /// `((schema or "").lower(), name.lower())` of a relation or location.
 fn relation_key(value: &Bound<'_, PyAny>) -> PyResult<RelationKey> {
     Ok((
-        lowered(&schema_or_empty(value.getattr("schema")?))?,
-        lowered(&value.getattr("name")?)?,
+        lowered(&schema_or_empty(native_field(value, "schema")?))?,
+        lowered(&native_field(value, "name")?)?,
     ))
 }
 
@@ -97,13 +98,13 @@ fn tuple_of<'py>(py: Python<'py>, items: &[Py<PyAny>]) -> PyResult<Bound<'py, Py
 }
 
 fn fingerprint_key(fingerprint: &Bound<'_, PyAny>) -> PyResult<FingerprintKey> {
-    let target_name: Bound<'_, PyAny> = fingerprint.getattr("target_name")?;
+    let target_name: Bound<'_, PyAny> = native_field(fingerprint, "target_name")?;
     let target: Option<EventRelation> = if target_name.is_none() {
         None
     } else {
         Some(EventRelation {
-            database: fingerprint.getattr("target_database")?.extract()?,
-            schema: fingerprint.getattr("target_schema")?.extract()?,
+            database: native_field(fingerprint, "target_database")?.extract()?,
+            schema: native_field(fingerprint, "target_schema")?.extract()?,
             name: target_name.extract()?,
         })
     };
@@ -113,9 +114,9 @@ fn fingerprint_key(fingerprint: &Bound<'_, PyAny>) -> PyResult<FingerprintKey> {
                 .getattr("ts")?
                 .call_method0("isoformat")?
                 .extract()?,
-            run_id: fingerprint.getattr("run_id")?.extract()?,
+            run_id: native_field(fingerprint, "run_id")?.extract()?,
         },
-        node_name: fingerprint.getattr("node_name")?.extract()?,
+        node_name: native_field(fingerprint, "node_name")?.extract()?,
         target,
     })
 }
@@ -138,8 +139,8 @@ impl MigrationStateInspection {
         let adapter: &Bound<'py, PyAny> = self.adapter.bind(py);
         Ok(StateAccess {
             connection: self.connection.bind(py).clone(),
-            execute: adapter.getattr("execute")?,
-            render_qualified_name: adapter.getattr("render_qualified_name")?,
+            execute: native_field(adapter, "execute")?,
+            render_qualified_name: native_field(adapter, "render_qualified_name")?,
         })
     }
 
@@ -179,22 +180,22 @@ impl MigrationStateInspection {
                 py,
                 &[
                     ("connection", self.connection.bind(py).clone()),
-                    ("execute", adapter.getattr("execute")?),
+                    ("execute", native_field(adapter, "execute")?),
                     ("table_exists", PyBool::new(py, true).to_owned().into_any()),
                     ("database", self.database.bind(py).clone()),
                     ("schema", schema.clone()),
                     (
                         "render_qualified_name",
-                        adapter.getattr("render_qualified_name")?,
+                        native_field(adapter, "render_qualified_name")?,
                     ),
                     (
                         "render_read_latest_sql",
-                        adapter.getattr("render_read_latest_fingerprints_sql")?,
+                        native_field(adapter, "render_read_latest_fingerprints_sql")?,
                     ),
                 ],
             )?))?;
             let by_identity: Bound<'py, PyAny> =
-                fingerprint_set.getattr("fingerprints_by_identity")?;
+                native_field(&fingerprint_set, "fingerprints_by_identity")?;
             if by_identity.is_truthy()? {
                 by_identity.call_method0("values")?
             } else {
@@ -206,7 +207,7 @@ impl MigrationStateInspection {
         let mut models: Vec<Py<PyAny>> = Vec::new();
         for fingerprint in latest.try_iter()? {
             let fingerprint: Bound<'py, PyAny> = fingerprint?;
-            if fingerprint.getattr("node_type")?.eq(NODE_TYPE_MODEL)? {
+            if native_field(&fingerprint, "node_type")?.eq(NODE_TYPE_MODEL)? {
                 models.push(fingerprint.unbind());
             }
         }
@@ -227,9 +228,10 @@ impl MigrationStateInspection {
         let py: Python<'_> = adapter.py();
         let known: Bound<'_, PyAny> = match known_fingerprints {
             Some(known)
-                if !known.is_none() && known.getattr("unfiltered_database")?.eq(database)? =>
+                if !known.is_none()
+                    && native_field(known, "unfiltered_database")?.eq(database)? =>
             {
-                known.getattr("unfiltered_schemas")?
+                native_field(known, "unfiltered_schemas")?
             }
             _ => PyDict::new(py).into_any(),
         };
@@ -297,8 +299,10 @@ impl MigrationStateInspection {
         )?;
         let mut present: HashSet<String> = HashSet::new();
         for relation in &listed {
-            if lowered(&relation.getattr("name")?)? == COLUMN_MIGRATION_TABLE_NAME {
-                present.insert(lowered(&schema_or_empty(relation.getattr("schema")?))?);
+            if lowered(&native_field(relation, "name")?)? == COLUMN_MIGRATION_TABLE_NAME {
+                present.insert(lowered(&schema_or_empty(native_field(
+                    relation, "schema",
+                )?))?);
             }
         }
         for (schema, key) in pending {
@@ -446,7 +450,7 @@ impl MigrationStateInspection {
         let mut names: Vec<String> = Vec::new();
         for location in locations.try_iter()? {
             let location: Bound<'_, PyAny> = location?;
-            if location.getattr("schema")?.is_none() {
+            if native_field(&location, "schema")?.is_none() {
                 continue;
             }
             let key: RelationKey = relation_key(&location)?;
@@ -454,8 +458,8 @@ impl MigrationStateInspection {
                 continue;
             }
             wanted.insert(key);
-            schemas.push(location.getattr("schema")?.extract()?);
-            names.push(location.getattr("name")?.extract()?);
+            schemas.push(native_field(&location, "schema")?.extract()?);
+            names.push(native_field(&location, "name")?.extract()?);
         }
         if wanted.is_empty() {
             return Ok(());
@@ -501,7 +505,7 @@ impl MigrationStateInspection {
         let empty: Bound<'_, PyTuple> = PyTuple::empty(py);
         for (key, relation) in matched {
             let relation_columns: Bound<'_, PyAny> =
-                columns.call_method1("get", (relation.getattr("identity")?, &empty))?;
+                columns.call_method1("get", (native_field(&relation, "identity")?, &empty))?;
             let mut this: PyRefMut<'_, Self> = slf.borrow_mut();
             this.relations.insert(key.clone(), relation.unbind());
             this.columns.insert(key, relation_columns.unbind());
@@ -533,15 +537,15 @@ impl MigrationStateInspection {
         location: &Bound<'py, PyAny>,
         model_name: Option<String>,
     ) -> PyResult<Option<Bound<'py, PyAny>>> {
-        let key: String = lowered(&schema_or_empty(location.getattr("schema")?))?;
+        let key: String = lowered(&schema_or_empty(native_field(location, "schema")?))?;
         let Some((_, candidates)) = self.fingerprints.iter().find(|(stored, _)| *stored == key)
         else {
             return Ok(None);
         };
         let target = EventRelation {
-            database: location.getattr("database")?.extract()?,
-            schema: location.getattr("schema")?.extract()?,
-            name: location.getattr("name")?.extract()?,
+            database: native_field(location, "database")?.extract()?,
+            schema: native_field(location, "schema")?.extract()?,
+            name: native_field(location, "name")?.extract()?,
         };
         newest(py, candidates, (Some(&target), model_name.as_deref()))
     }
@@ -571,7 +575,7 @@ impl MigrationStateInspection {
         for (_, fingerprints) in &self.fingerprints {
             for fingerprint in fingerprints {
                 let fingerprint: &Bound<'py, PyAny> = fingerprint.bind(py);
-                if !project_model_names.contains(fingerprint.getattr("node_name")?)? {
+                if !project_model_names.contains(native_field(fingerprint, "node_name")?)? {
                     orphans.push(fingerprint.clone());
                 }
             }

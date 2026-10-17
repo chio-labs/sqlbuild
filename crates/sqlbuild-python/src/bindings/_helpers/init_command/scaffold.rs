@@ -4,6 +4,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, ErrorKind};
 use std::path::Path;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_FILE;
 use sqlbuild_core::init_command::constants::{GITKEEP_FILE, SCAFFOLD_DIRECTORIES};
@@ -17,7 +18,7 @@ fn os_error(py: Python<'_>, error: &io::Error, path: &Path) -> PyErr {
                 .strip_suffix(&format!(" (os error {errno})"))
                 .unwrap_or(&described);
             py.import("builtins").and_then(|builtins| {
-                builtins.getattr("OSError")?.call1((
+                native_field(&builtins, "OSError")?.call1((
                     errno,
                     strerror,
                     path.to_string_lossy().into_owned(),
@@ -26,7 +27,7 @@ fn os_error(py: Python<'_>, error: &io::Error, path: &Path) -> PyErr {
         }
         None => py
             .import("builtins")
-            .and_then(|builtins| builtins.getattr("OSError")?.call1((error.to_string(),))),
+            .and_then(|builtins| native_field(&builtins, "OSError")?.call1((error.to_string(),))),
     };
     match raised {
         Ok(raised) => PyErr::from_value(raised),

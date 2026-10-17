@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hook
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -31,7 +32,7 @@ fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
 }
 
 fn status_value(result: &Bound<'_, PyAny>) -> PyResult<String> {
-    result.getattr("status")?.getattr("value")?.extract()
+    native_field(result, "status")?.getattr("value")?.extract()
 }
 
 /// Forward positional connection timing to a reporter that takes keywords.
@@ -112,11 +113,11 @@ struct SeedCompletionRelay {
 #[pymethods]
 impl SeedCompletionRelay {
     fn on_seed_complete(&self, py: Python<'_>, result: Bound<'_, PyAny>) -> PyResult<()> {
-        let name: String = result.getattr("seed_name")?.extract()?;
+        let name: String = native_field(&result, "seed_name")?.extract()?;
         let mut result: Bound<'_, PyAny> = result;
         if let Some(projector) = &self.projector {
             let duration: Bound<'_, PyAny> = call_with(
-                &projector.bind(py).getattr("consume_resource_terminal")?,
+                &native_field(projector.bind(py), "consume_resource_terminal")?,
                 &[
                     ("resource_name", text(py, &name)),
                     ("resource_id", text(py, &format!("seed:{name}"))),
@@ -145,10 +146,10 @@ impl SeedCompletionRelay {
             ordinal,
             total: self.total,
             succeeded: status_value(&result)? == SUCCESS_STATUS,
-            duration_ms: result.getattr("duration_ms")?.extract()?,
-            error_message: result.getattr("error_message")?.extract()?,
-            error_code: result.getattr("error_code")?.extract()?,
-            error_help: result.getattr("error_help")?.extract()?,
+            duration_ms: native_field(&result, "duration_ms")?.extract()?,
+            error_message: native_field(&result, "error_message")?.extract()?,
+            error_code: native_field(&result, "error_code")?.extract()?,
+            error_help: native_field(&result, "error_help")?.extract()?,
         };
         let stream: &Bound<'_, PyAny> = self.stream.bind(py);
         stream.call_method1("write", (render_seed_row(&row, style),))?;
@@ -171,16 +172,16 @@ fn compile_seeds<'py>(
     invocation: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let stream: Bound<'py, PyAny> = invocation.getattr("progress_stream")?;
-    let adapter: Bound<'py, PyAny> = invocation.getattr("adapter")?;
-    let connection_config: Bound<'py, PyAny> = invocation.getattr("connection_config")?;
-    let discovered: Bound<'py, PyAny> = invocation.getattr("discovered_inputs")?;
+    let stream: Bound<'py, PyAny> = native_field(invocation, "progress_stream")?;
+    let adapter: Bound<'py, PyAny> = native_field(invocation, "adapter")?;
+    let connection_config: Bound<'py, PyAny> = native_field(invocation, "connection_config")?;
+    let discovered: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?;
     let connection_progress: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
-            ("adapter_name", invocation.getattr("adapter_name")?),
+            ("adapter_name", native_field(invocation, "adapter_name")?),
             ("stream", stream.clone()),
-            ("use_color", invocation.getattr("use_color")?),
+            ("use_color", native_field(invocation, "use_color")?),
         ],
     )?;
     stream.call_method1("write", ("\n",))?;
@@ -188,18 +189,21 @@ fn compile_seeds<'py>(
     let resolver: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
         &[
-            ("project_dir", invocation.getattr("effective_project_dir")?),
+            (
+                "project_dir",
+                native_field(invocation, "effective_project_dir")?,
+            ),
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
     let options: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::CompilePipelineOptions)?,
         &[
-            ("selected_target", request.getattr("selected_target")?),
-            ("select", request.getattr("select")?),
-            ("exclude", request.getattr("exclude")?),
+            ("selected_target", native_field(request, "selected_target")?),
+            ("select", native_field(request, "select")?),
+            ("exclude", native_field(request, "exclude")?),
             ("connection_config", connection_config.clone()),
-            ("cli_vars", request.getattr("cli_vars")?),
+            ("cli_vars", native_field(request, "cli_vars")?),
             ("external_sql_reference_resolver", resolver),
         ],
     )?;
@@ -211,13 +215,13 @@ fn compile_seeds<'py>(
             ("options", options),
         ],
     )?;
-    let project: Bound<'py, PyAny> = context.getattr("project")?;
-    let scope: Bound<'py, PyAny> = context.getattr("scope")?;
-    let selected_keys: Bound<'py, PyAny> = scope.getattr("selected_keys")?;
+    let project: Bound<'py, PyAny> = native_field(&context, "project")?;
+    let scope: Bound<'py, PyAny> = native_field(&context, "scope")?;
+    let selected_keys: Bound<'py, PyAny> = native_field(&scope, "selected_keys")?;
     let mut selected: Vec<Bound<'py, PyAny>> = Vec::new();
-    for seed in project.getattr("seeds")?.try_iter()? {
+    for seed in native_field(&project, "seeds")?.try_iter()? {
         let seed: Bound<'py, PyAny> = seed?;
-        if selected_keys.contains(seed.getattr("key")?)? {
+        if selected_keys.contains(native_field(&seed, "key")?)? {
             selected.push(seed);
         }
     }
@@ -230,13 +234,16 @@ fn compile_seeds<'py>(
             &[
                 (
                     "on_connection_start",
-                    connection_progress.getattr("on_connection_start")?,
+                    native_field(&connection_progress, "on_connection_start")?,
                 ),
                 (
                     "on_connection_complete",
-                    relay.getattr("on_connection_complete")?,
+                    native_field(&relay, "on_connection_complete")?,
                 ),
-                ("on_connection_error", relay.getattr("on_connection_error")?),
+                (
+                    "on_connection_error",
+                    native_field(&relay, "on_connection_error")?,
+                ),
             ],
         )?;
         let connection: Bound<'py, PyAny> =
@@ -259,7 +266,7 @@ fn compile_seeds<'py>(
         &[
             ("project", project),
             ("scope", scope),
-            ("relations", context.getattr("relations")?),
+            ("relations", native_field(&context, "relations")?),
             ("fingerprints", fingerprints),
         ],
     )?;
@@ -274,7 +281,7 @@ fn seed_names(pipeline: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
         .getattr("plan_output")?
         .getattr("seed_entries")?
         .try_iter()?
-        .map(|entry| entry?.getattr("name")?.extract())
+        .map(|entry| native_field(&entry?, "name")?.extract())
         .collect()
 }
 
@@ -285,8 +292,8 @@ fn write_header(
     concurrency: i64,
 ) -> PyResult<()> {
     let py: Python<'_> = invocation.py();
-    let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
-    let use_color: Bound<'_, PyAny> = invocation.getattr("use_color")?;
+    let stream: Bound<'_, PyAny> = native_field(invocation, "progress_stream")?;
+    let use_color: Bound<'_, PyAny> = native_field(invocation, "use_color")?;
     let style: CliStyle = CliStyle {
         use_color: use_color.is_truthy()?,
     };
@@ -308,10 +315,10 @@ fn load_seeds<'py>(
     concurrency: i64,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = invocation.py();
-    let stream: Bound<'py, PyAny> = invocation.getattr("progress_stream")?;
-    let use_color: Bound<'py, PyAny> = invocation.getattr("use_color")?;
-    let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
-    let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
+    let stream: Bound<'py, PyAny> = native_field(invocation, "progress_stream")?;
+    let use_color: Bound<'py, PyAny> = native_field(invocation, "use_color")?;
+    let plan: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
     let names: Vec<String> = seed_names(pipeline)?;
     let ordinals: HashMap<String, usize> = names
         .iter()
@@ -330,7 +337,7 @@ fn load_seeds<'py>(
             order.set_item(name, index + 1)?;
         }
         call_with(
-            &projector.getattr("configure_resources")?,
+            &native_field(&projector, "configure_resources")?,
             &[
                 ("ordinals", order.into_any()),
                 ("total", PyInt::new(py, names.len()).into_any()),
@@ -353,7 +360,7 @@ fn load_seeds<'py>(
     let connection_progress: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
-            ("adapter_name", invocation.getattr("adapter_name")?),
+            ("adapter_name", native_field(invocation, "adapter_name")?),
             ("stream", stream),
             (
                 "blank_line_after_complete",
@@ -370,27 +377,33 @@ fn load_seeds<'py>(
                 ("plan", plan),
                 (
                     "connection_config",
-                    invocation.getattr("connection_config")?,
+                    native_field(invocation, "connection_config")?,
                 ),
-                ("adapter", invocation.getattr("adapter")?),
+                ("adapter", native_field(invocation, "adapter")?),
                 ("max_concurrency", PyInt::new(py, concurrency).into_any()),
-                ("run_id", project.getattr("run_id")?),
+                ("run_id", native_field(&project, "run_id")?),
                 (
                     "query_change_tracking",
                     project
                         .getattr("settings")?
                         .getattr("query_change_tracking")?,
                 ),
-                ("on_seed_complete", completion.getattr("on_seed_complete")?),
+                (
+                    "on_seed_complete",
+                    native_field(&completion, "on_seed_complete")?,
+                ),
                 (
                     "on_connection_start",
-                    connection_progress.getattr("on_connection_start")?,
+                    native_field(&connection_progress, "on_connection_start")?,
                 ),
                 (
                     "on_connection_complete",
-                    relay.getattr("on_connection_complete")?,
+                    native_field(&relay, "on_connection_complete")?,
                 ),
-                ("on_connection_error", relay.getattr("on_connection_error")?),
+                (
+                    "on_connection_error",
+                    native_field(&relay, "on_connection_error")?,
+                ),
             ],
         )?
         .try_iter()?
@@ -409,7 +422,7 @@ fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
     let invocation: Bound<'_, PyAny> =
         resolve_command_invocation(request, &registry::class(py, RecordId::SeedInvocation)?)?;
     let pipeline: Bound<'_, PyAny> = compile_seeds(request, &invocation)?;
-    let requested: Bound<'_, PyAny> = request.getattr("concurrency")?;
+    let requested: Bound<'_, PyAny> = native_field(request, "concurrency")?;
     let concurrency: i64 = if requested.is_none() {
         pipeline
             .getattr("project")?
@@ -433,9 +446,9 @@ fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
             _ => {}
         }
     }
-    let stream: Bound<'_, PyAny> = invocation.getattr("progress_stream")?;
+    let stream: Bound<'_, PyAny> = native_field(&invocation, "progress_stream")?;
     let style: CliStyle = CliStyle {
-        use_color: invocation.getattr("use_color")?.is_truthy()?,
+        use_color: native_field(&invocation, "use_color")?.is_truthy()?,
     };
     stream.call_method1(
         "write",
@@ -450,15 +463,18 @@ fn run_seed_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32>
         &registry::native(py, NativeAttr::FormatSeedExecutionJson)?,
         &[
             ("results", PyTuple::new(py, &results)?.into_any()),
-            ("plan", pipeline.getattr("plan_output")?),
+            ("plan", native_field(&pipeline, "plan_output")?),
         ],
     )?;
     call_with(
         &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
-            ("json_output", request.getattr("json_output")?),
-            ("json_output_path", request.getattr("json_output_path")?),
+            ("json_output", native_field(request, "json_output")?),
+            (
+                "json_output_path",
+                native_field(request, "json_output_path")?,
+            ),
         ],
     )?;
     Ok(seed_exit_code(failed))

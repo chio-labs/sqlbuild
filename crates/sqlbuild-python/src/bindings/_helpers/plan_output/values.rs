@@ -1,5 +1,6 @@
 //! Reading planner values by attribute and building the JSON documents' dictionaries.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList};
@@ -32,7 +33,7 @@ pub(crate) fn enum_value<'py>(
     value: &Bound<'py, PyAny>,
     name: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    value.getattr(name)?.getattr("value")
+    native_field(&value.getattr(name)?, "value")
 }
 
 /// `value.value` when `value` is set, else `None`.
@@ -40,7 +41,7 @@ pub(crate) fn optional_enum_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bo
     if value.is_none() {
         return Ok(value.clone());
     }
-    value.getattr("value")
+    native_field(value, "value")
 }
 
 /// A dictionary of the entries, in order.
@@ -79,11 +80,11 @@ pub(crate) fn mapped<'py>(
 
 /// `value.qualified_name or value.name`.
 pub(crate) fn relation_name<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let qualified: Bound<'py, PyAny> = value.getattr("qualified_name")?;
+    let qualified: Bound<'py, PyAny> = native_field(value, "qualified_name")?;
     if qualified.is_truthy()? {
         return Ok(qualified);
     }
-    value.getattr("name")
+    native_field(value, "name")
 }
 
 /// `value.isoformat()` when set, else `None`.

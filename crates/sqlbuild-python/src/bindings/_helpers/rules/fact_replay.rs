@@ -21,6 +21,7 @@ use crate::bindings::_helpers::compiled_project::function_views::NativeCompiledF
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::seed_views::NativeCompiledSeed;
 use crate::bindings::_helpers::compiled_project::source_views::NativeCompiledSource;
+use crate::bindings::_helpers::records::fields::field as record_field_or_attribute;
 use crate::bindings::_helpers::records::fields::record_spec;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
@@ -158,7 +159,7 @@ pub(crate) struct ModelEntry<'py> {
     path_text: String,
     pub(crate) posix: String,
     pub(crate) config_values: Option<Bound<'py, PyDict>>,
-    key: (String, String),
+    pub(crate) key: (String, String),
     deps: Vec<(String, String)>,
 }
 
@@ -588,6 +589,20 @@ impl<'py> FactReplay<'py> {
             .as_ref()
             .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("models were not indexed"))
     }
+}
+
+/// One project attribute: a native project view's stored field, a record's field, or by `getattr`.
+pub(crate) fn project_attribute<'py>(
+    project: &Bound<'py, PyAny>,
+    name: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = project.py();
+    if let Ok(view) = project.downcast::<NativeProjectView>()
+        && let Some(field) = view.get().fact_field(py, name)
+    {
+        return Ok(field.into_bound(py));
+    }
+    record_field_or_attribute(project, name)
 }
 
 /// One project field, from a native project view or a project record.

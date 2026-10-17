@@ -10,6 +10,7 @@ use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext, sql::required_target, values::error,
 };
 use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -22,16 +23,16 @@ pub(super) fn seed_entries<'py>(
     relations: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py = project.py();
-    let seeds = by_attribute(&project.getattr("seeds")?, "name")?;
-    let fixtures = graph.getattr("seed_fixture_names")?;
+    let seeds = by_attribute(&native_field(project, "seeds")?, "name")?;
+    let fixtures = native_field(graph, "seed_fixture_names")?;
     let mut result: Vec<Bound<'py, PyAny>> = Vec::new();
-    for name in graph.getattr("seed_names")?.try_iter()? {
+    for name in native_field(graph, "seed_names")?.try_iter()? {
         let name = name?;
         if fixtures.contains(&name)? {
             continue;
         }
         let Some(seed) = seeds.get_item(&name)? else {
-            let scenario: String = graph.getattr("name")?.extract()?;
+            let scenario: String = native_field(graph, "name")?.extract()?;
             let name: String = name.extract()?;
             return Err(error(
                 py,
@@ -49,17 +50,17 @@ pub(super) fn seed_entries<'py>(
         result.push(call_with(
             &registry::class(py, RecordId::SeedPlanEntry)?,
             &[
-                ("key", seed.getattr("key")?),
-                ("name", seed.getattr("name")?),
+                ("key", native_field(&seed, "key")?),
+                ("name", native_field(&seed, "name")?),
                 ("destination", destination),
                 (
                     "file_path",
-                    seed.getattr("seed_file")?.getattr("file_path")?,
+                    native_field(&seed, "seed_file")?.getattr("file_path")?,
                 ),
                 ("columns", extract_seed_columns(&seed)?.into_any()),
                 (
                     "csv_settings",
-                    seed.getattr("schema_entry")?.getattr("csv_settings")?,
+                    native_field(&seed, "schema_entry")?.getattr("csv_settings")?,
                 ),
             ],
         )?);
@@ -83,14 +84,17 @@ pub(super) fn function_entry<'py>(
                 ("function", function.clone()),
                 (
                     "model_locations",
-                    context.relations.getattr("model_locations")?,
+                    native_field(&context.relations, "model_locations")?,
                 ),
                 (
                     "seed_locations",
-                    context.relations.getattr("seed_locations")?,
+                    native_field(&context.relations, "seed_locations")?,
                 ),
                 ("function_locations", locations.clone()),
-                ("source_map", context.relations.getattr("source_map")?),
+                (
+                    "source_map",
+                    native_field(&context.relations, "source_map")?,
+                ),
                 ("source_warehouse_columns", warehouse_columns.clone()),
                 (
                     "star_exclude_keyword",

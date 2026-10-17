@@ -9,6 +9,7 @@ use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext,
     values::{error, string},
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -24,7 +25,7 @@ pub(super) fn resolve_sql(
     project_sources: bool,
 ) -> PyResult<String> {
     let py = context.adapter.py();
-    let syntax: LexicalSyntaxInput = context.syntax.getattr("native_mapping")?.extract()?;
+    let syntax: LexicalSyntaxInput = native_field(&context.syntax, "native_mapping")?.extract()?;
     let mut result = sql.to_owned();
     for (kind, field) in [
         (0, "model_locations"),
@@ -47,7 +48,7 @@ pub(super) fn resolve_sql(
             let target = locations.call_method1("get", (name,))?;
             let target = if target.is_none() {target} else if kind == super::constants::SOURCE_MARKER {
                 object(py, render_source_relation(&target, Some(&context.adapter.clone()).filter(|value| !value.is_none()))?)?
-            } else {target.getattr("qualified_name")?};
+            } else {native_field(&target, "qualified_name")?};
             if target.is_none() {
                 let marker = string(py, marker).repr()?.to_str()?.to_owned();
                 return Err(error(py, &format!("Scenario SQL in {} references {marker}, which is not a relation in this scenario", context.label),
@@ -67,13 +68,13 @@ pub(super) fn resolve_sql(
 }
 
 pub(super) fn resolve_model_dbt_refs(sql: &str, relations: &Bound<'_, PyAny>) -> PyResult<String> {
-    let locations = relations.getattr("dbt_ref_fixture_locations")?;
+    let locations = native_field(relations, "dbt_ref_fixture_locations")?;
     replace_markers(sql, 3, None, |name, marker| {
         let target = locations.call_method1("get", (name,))?;
         let qualified = if target.is_none() {
             target
         } else {
-            target.getattr("qualified_name")?
+            native_field(&target, "qualified_name")?
         };
         Ok(if qualified.is_none() {
             marker.to_owned()
@@ -90,11 +91,11 @@ pub(super) fn resolve_model_dbt_refs(sql: &str, relations: &Bound<'_, PyAny>) ->
 }
 
 pub(super) fn source_label(scenario: &Bound<'_, PyAny>) -> PyResult<String> {
-    let source = scenario.getattr("source_path")?;
+    let source = native_field(scenario, "source_path")?;
     if source.is_truthy()? {
         Ok(source.str()?.to_str()?.to_owned())
     } else {
-        scenario.getattr("name")?.extract()
+        native_field(scenario, "name")?.extract()
     }
 }
 

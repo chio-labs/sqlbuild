@@ -21,6 +21,7 @@ use sqlbuild_core::dbt_graph::types::DbtSelectorResolver;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -109,15 +110,15 @@ fn graph_manifest(manifest: &Bound<'_, PyAny>) -> PyResult<DbtGraphManifest> {
     {
         let model: Bound<'_, PyAny> = model?;
         models.push(DbtGraphManifestModel {
-            unique_id: model.getattr("unique_id")?.extract()?,
-            name: model.getattr("name")?.extract()?,
-            depends_on_nodes: texts(&model.getattr("depends_on_nodes")?)?,
+            unique_id: native_field(&model, "unique_id")?.extract()?,
+            name: native_field(&model, "name")?.extract()?,
+            depends_on_nodes: texts(&native_field(&model, "depends_on_nodes")?)?,
         });
     }
     Ok(DbtGraphManifest {
         models,
-        source_ids: key_set(&manifest.getattr("sources_by_unique_id")?)?,
-        seed_ids: key_set(&manifest.getattr("seeds_by_unique_id")?)?,
+        source_ids: key_set(&native_field(manifest, "sources_by_unique_id")?)?,
+        seed_ids: key_set(&native_field(manifest, "seeds_by_unique_id")?)?,
     })
 }
 
@@ -132,22 +133,22 @@ fn project_models<'py>(
     {
         let (model, dbt_model): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
         refs_by_name
-            .entry(model.getattr("name")?.extract()?)
+            .entry(native_field(&model, "name")?.extract()?)
             .or_default()
-            .push(dbt_model.getattr("unique_id")?.extract()?);
+            .push(native_field(&dbt_model, "unique_id")?.extract()?);
     }
     let mut models: Vec<DbtGraphProjectModel> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        let name: String = model.getattr("name")?.extract()?;
+        let name: String = native_field(&model, "name")?.extract()?;
         let mut model_deps: Vec<String> = Vec::new();
-        for dependency in model.getattr("deps")?.try_iter()? {
+        for dependency in native_field(&model, "deps")?.try_iter()? {
             let dependency: Bound<'py, PyAny> = dependency?;
             if dependency
                 .getattr("resource_type")?
                 .eq(MODEL_RESOURCE_TYPE)?
             {
-                model_deps.push(dependency.getattr("name")?.extract()?);
+                model_deps.push(native_field(&dependency, "name")?.extract()?);
             }
         }
         let dbt_ref_unique_ids: Vec<String> = refs_by_name.get(&name).cloned().unwrap_or_default();
@@ -196,9 +197,9 @@ impl DbtSelectorResolver for PlannerResolver<'_> {
     fn split(&self, term: &str) -> PyResult<DbtSelectorExpansion> {
         let parsed: Bound<'_, PyAny> = self.split.call1((term,))?;
         Ok(DbtSelectorExpansion {
-            core: parsed.getattr("core")?.extract()?,
-            upstream: parsed.getattr("upstream")?.is_truthy()?,
-            downstream: parsed.getattr("downstream")?.is_truthy()?,
+            core: native_field(&parsed, "core")?.extract()?,
+            upstream: native_field(&parsed, "upstream")?.is_truthy()?,
+            downstream: native_field(&parsed, "downstream")?.is_truthy()?,
         })
     }
 

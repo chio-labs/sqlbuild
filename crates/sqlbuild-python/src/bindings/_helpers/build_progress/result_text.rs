@@ -9,6 +9,7 @@ use sqlbuild_core::progress::main::format_expectation_detail::format_expectation
 
 use crate::bindings::_helpers::cli::progress_text::expectation_step;
 use crate::bindings::_helpers::plan_output::display::{cursor_bound_display, inclusive_cursor_end};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sql_test_command::test_command::test_label;
 
 const SQL_EVENT: &str = "sql";
@@ -41,7 +42,7 @@ fn items<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, 
 }
 
 fn duration(value: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {
-    value.getattr("duration_ms")?.extract()
+    native_field(value, "duration_ms")?.extract()
 }
 
 fn error(value: &Bound<'_, PyAny>) -> PyResult<ErrorText> {
@@ -62,7 +63,7 @@ fn skip(value: &Bound<'_, PyAny>) -> PyResult<SkipText> {
 fn events(value: &Bound<'_, PyAny>) -> PyResult<Vec<LifecycleEventText>> {
     let mut events: Vec<LifecycleEventText> = Vec::new();
     for event in items(value, "lifecycle_events")? {
-        let content: String = event.getattr("content")?.extract()?;
+        let content: String = native_field(&event, "content")?.extract()?;
         events.push(if text(&event, "kind")? == SQL_EVENT {
             LifecycleEventText::Sql(content)
         } else {
@@ -79,8 +80,8 @@ pub(crate) fn audit_text(audit: &Bound<'_, PyAny>) -> PyResult<AuditResultText> 
         attached_target_name: optional(audit, "attached_target_name")?,
         run_scope_phase: text(audit, "run_scope_phase")?,
         outcome: text(audit, "outcome")?,
-        row_count: audit.getattr("row_count")?.extract()?,
-        reused: audit.getattr("reused")?.is_truthy()?,
+        row_count: native_field(audit, "row_count")?.extract()?,
+        reused: native_field(audit, "reused")?.is_truthy()?,
         executed_sql: optional(audit, "executed_sql")?,
         measurement: text(audit, "evaluation_mode")? == MEASUREMENT,
         measured_value: text(audit, "measured_value")?,
@@ -103,13 +104,16 @@ fn hook_text(hook: &Bound<'_, PyAny>) -> PyResult<HookResultText> {
 }
 
 fn cursor_range(model: &Bound<'_, PyAny>) -> PyResult<Option<(String, String)>> {
-    let start: Bound<'_, PyAny> = model.getattr("cursor_range_start")?;
-    let end: Bound<'_, PyAny> = model.getattr("cursor_range_end")?;
-    if start.is_none() || end.is_none() || model.getattr("empty_cursor_inputs")?.is_truthy()? {
+    let start: Bound<'_, PyAny> = native_field(model, "cursor_range_start")?;
+    let end: Bound<'_, PyAny> = native_field(model, "cursor_range_end")?;
+    if start.is_none()
+        || end.is_none()
+        || native_field(model, "empty_cursor_inputs")?.is_truthy()?
+    {
         return Ok(None);
     }
-    let cursor_type: Bound<'_, PyAny> = model.getattr("cursor_type")?;
-    let cursor_grain: Bound<'_, PyAny> = model.getattr("cursor_grain")?;
+    let cursor_type: Bound<'_, PyAny> = native_field(model, "cursor_type")?;
+    let cursor_grain: Bound<'_, PyAny> = native_field(model, "cursor_grain")?;
     Ok(Some((
         cursor_bound_display(&start, &cursor_type, &cursor_grain)?,
         inclusive_cursor_end(&end, &cursor_type, &cursor_grain)?,
@@ -123,12 +127,12 @@ pub(crate) fn model_text(model: &Bound<'_, PyAny>) -> PyResult<ModelResultText> 
         failed_phase: optional(model, "failed_phase")?,
         staging_relation: optional(model, "staging_relation")?,
         duration_ms: duration(model)?,
-        batch_count: model.getattr("batch_count")?.extract()?,
+        batch_count: native_field(model, "batch_count")?.extract()?,
         batch_size: optional(model, "batch_size")?,
-        rows_affected: model.getattr("rows_affected")?.extract()?,
+        rows_affected: native_field(model, "rows_affected")?.extract()?,
         cursor_range: cursor_range(model)?,
         empty_cursor_inputs: texts(model, "empty_cursor_inputs")?,
-        waiting_on_empty_inputs: model.getattr("waiting_on_empty_inputs")?.is_truthy()?,
+        waiting_on_empty_inputs: native_field(model, "waiting_on_empty_inputs")?.is_truthy()?,
         recovery_batch_count: model
             .getattr("microbatch_recovery_batch_count")?
             .extract()?,
@@ -176,7 +180,7 @@ pub(crate) fn load_text(load: &Bound<'_, PyAny>) -> PyResult<LoadRowText> {
         loader_name: text(load, "loader_name")?,
         resource_kind: text(load, "resource_kind")?,
         status: text(load, "status")?,
-        rows_loaded: load.getattr("rows_loaded")?.extract()?,
+        rows_loaded: native_field(load, "rows_loaded")?.extract()?,
         duration_ms: duration(load)?,
         events: events(load)?,
         skip: skip(load)?,
@@ -215,8 +219,8 @@ pub(crate) fn python_node_text(node: &Bound<'_, PyAny>) -> PyResult<PythonNodeTe
 pub(crate) fn build_text(result: &Bound<'_, PyAny>) -> PyResult<BuildResultText> {
     Ok(BuildResultText {
         failed: text(result, "status")? == FAILED,
-        warning_count: result.getattr("warning_count")?.extract()?,
-        insufficient_count: result.getattr("insufficient_count")?.extract()?,
+        warning_count: native_field(result, "warning_count")?.extract()?,
+        insufficient_count: native_field(result, "insufficient_count")?.extract()?,
         models: items(result, "model_results")?
             .iter()
             .map(model_text)

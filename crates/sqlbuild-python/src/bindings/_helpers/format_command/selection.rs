@@ -16,6 +16,7 @@ use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -75,8 +76,11 @@ fn discovered_adapter<'py>(
     let adapter_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(discovered, "project_config")?,
+            ),
+            ("local_config", native_field(discovered, "local_config")?),
         ],
     )?;
     resolve_cli_adapter(&adapter_name, project_dir)
@@ -89,15 +93,15 @@ fn selectors<'py>(py: Python<'py>, values: &[String]) -> PyResult<Bound<'py, PyA
 /// Model names and resolved files, by configured name or file stem.
 fn model_names_and_paths(scope: &Scope<'_, '_>) -> PyResult<Vec<(String, PathBuf)>> {
     let mut pairs: Vec<(String, PathBuf)> = Vec::new();
-    for model_file in scope.discovered.getattr("model_files")?.try_iter()? {
+    for model_file in native_field(scope.discovered, "model_files")?.try_iter()? {
         let model_file: Bound<'_, PyAny> = model_file?;
-        let relative_path: Bound<'_, PyAny> = model_file.getattr("relative_path")?;
+        let relative_path: Bound<'_, PyAny> = native_field(&model_file, "relative_path")?;
         let configured: Bound<'_, PyAny> = model_file
             .getattr("header_values")?
             .call_method1("get", ("name",))?;
         let name: String = match configured.downcast::<PyString>() {
             Ok(text) if !text.to_str()?.is_empty() => text.to_str()?.to_owned(),
-            _ => relative_path.getattr("stem")?.extract()?,
+            _ => native_field(&relative_path, "stem")?.extract()?,
         };
         let path: PathBuf = scope.directory.join(relative_path.extract::<PathBuf>()?);
         pairs.push((name, resolved(&path)));
@@ -171,15 +175,18 @@ fn model_paths(
     let mut names: BTreeSet<String> = BTreeSet::new();
     for key in keys.try_iter()? {
         let key: Bound<'_, PyAny> = key?;
-        if key.getattr("resource_type")?.eq(&model_type)? {
-            names.insert(key.getattr("name")?.extract()?);
+        if native_field(&key, "resource_type")?.eq(&model_type)? {
+            names.insert(native_field(&key, "name")?.extract()?);
         }
     }
     let mut paths: BTreeSet<PathBuf> = BTreeSet::new();
-    for model in graph.getattr("project")?.getattr("models")?.try_iter()? {
+    for model in native_field(&graph, "project")?
+        .getattr("models")?
+        .try_iter()?
+    {
         let model: Bound<'_, PyAny> = model?;
-        if names.contains(&model.getattr("name")?.extract::<String>()?) {
-            let relative: PathBuf = model.getattr("relative_path")?.extract()?;
+        if names.contains(&native_field(&model, "name")?.extract::<String>()?) {
+            let relative: PathBuf = native_field(&model, "relative_path")?.extract()?;
             paths.insert(resolved(&scope.directory.join(relative)));
         }
     }

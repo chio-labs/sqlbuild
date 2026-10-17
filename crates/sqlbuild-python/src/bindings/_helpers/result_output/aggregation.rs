@@ -10,6 +10,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const RESULT_FIELDS: [&str; 7] = [
     "model_results",
@@ -34,10 +35,10 @@ fn facts(sections: &[Bound<'_, PyAny>]) -> PyResult<BuildResultFacts> {
         .map(|model| {
             let model: Bound<'_, PyAny> = model?;
             Ok(ModelResultFacts {
-                status: model.getattr("status")?.str()?.extract()?,
-                error_code: model.getattr("error_code")?.extract()?,
-                warning_count: model.getattr("warning_messages")?.len()?,
-                audit_outcomes: texts(&model.getattr("audit_results")?, "outcome")?,
+                status: native_field(&model, "status")?.str()?.extract()?,
+                error_code: native_field(&model, "error_code")?.extract()?,
+                warning_count: native_field(&model, "warning_messages")?.len()?,
+                audit_outcomes: texts(&native_field(&model, "audit_results")?, "outcome")?,
             })
         })
         .collect::<PyResult<_>>()?;
@@ -46,8 +47,8 @@ fn facts(sections: &[Bound<'_, PyAny>]) -> PyResult<BuildResultFacts> {
         .map(|function| {
             let function: Bound<'_, PyAny> = function?;
             Ok((
-                function.getattr("status")?.str()?.extract()?,
-                function.getattr("warning_messages")?.len()?,
+                native_field(&function, "status")?.str()?.extract()?,
+                native_field(&function, "warning_messages")?.len()?,
             ))
         })
         .collect::<PyResult<_>>()?;

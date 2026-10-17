@@ -6,6 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods, PyTypeMethods}
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 
 use crate::bindings::_helpers::records::constants::{ERROR_SPEC_ATTRIBUTE, ERRORS};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::models::{ClassValue, ErrorSpec};
 
 /// The `__init__` of the expected-error classes: `Error(message, *, code=None, help=None, **fields)`.
@@ -127,7 +128,7 @@ fn initialize(
     match code {
         Some(code) if !code.is_none() => error.setattr("code", code)?,
         _ => {
-            if let Ok(code) = class.getattr("code") {
+            if let Ok(code) = native_field(&class, "code") {
                 error.setattr("code", code)?;
             }
         }

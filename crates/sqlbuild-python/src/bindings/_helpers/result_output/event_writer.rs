@@ -10,6 +10,7 @@ use sqlbuild_core::integration_results::errors::IntegrationRecordError;
 use sqlbuild_core::terminal_events::models::TerminalRequest;
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_records::{
     clone_record, degraded_record, degraded_warning, execution_succeeded, integration_record,
 };
@@ -134,8 +135,7 @@ impl ExecutionEventWriter {
                 let keywords: Bound<'_, PyDict> = PyDict::new(py);
                 keywords.set_item("parents", true)?;
                 keywords.set_item("exist_ok", true)?;
-                path.getattr("parent")?
-                    .call_method("mkdir", (), Some(&keywords))?;
+                native_field(&path, "parent")?.call_method("mkdir", (), Some(&keywords))?;
                 let options: Bound<'_, PyDict> = PyDict::new(py);
                 options.set_item("mode", "a")?;
                 options.set_item("encoding", "utf-8")?;
@@ -201,7 +201,7 @@ impl ExecutionEventWriter {
         resource_type: &str,
     ) -> PyResult<()> {
         self.serialized(py, |stream| {
-            let name: String = item.getattr("name")?.extract()?;
+            let name: String = native_field(&item, "name")?.extract()?;
             let Some(claim) = self.claim(
                 py,
                 &TerminalRequest {

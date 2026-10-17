@@ -10,6 +10,7 @@ use sqlbuild_core::scenario_command::models::ScenarioNamespace;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
@@ -53,8 +54,11 @@ impl LocalSync<'_> {
             &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
             &[
                 ("payload", payload),
-                ("json_output", request.getattr("json_output")?),
-                ("json_output_path", request.getattr("json_output_path")?),
+                ("json_output", native_field(request, "json_output")?),
+                (
+                    "json_output_path",
+                    native_field(request, "json_output_path")?,
+                ),
             ],
         )?;
         Ok(self.exit_code)
@@ -75,7 +79,7 @@ pub(crate) fn sync_local_snapshots<'py>(
     (local_pipeline, local_scenarios): (&Bound<'py, PyAny>, &Bound<'py, PyTuple>),
 ) -> PyResult<LocalSync<'py>> {
     let py: Python<'py> = request.py();
-    let refresh: bool = request.getattr("refresh")?.is_truthy()?;
+    let refresh: bool = native_field(request, "refresh")?.is_truthy()?;
     let project_connection: Bound<'py, PyAny> = project_connection_config(&run.project)?;
     let project_name: Bound<'py, PyAny> = run
         .project
@@ -95,7 +99,7 @@ pub(crate) fn sync_local_snapshots<'py>(
             ("refresh", boolean(py, refresh)),
             (
                 "source_lexical_syntax",
-                run.project_adapter.getattr("sql_lexical_syntax")?,
+                native_field(&run.project_adapter, "sql_lexical_syntax")?,
             ),
         ],
     )?
@@ -121,7 +125,10 @@ pub(crate) fn sync_local_snapshots<'py>(
         CompileInputs {
             adapter: &run.project_adapter,
             options: &[
-                ("no_sql_validation", request.getattr("no_sql_validation")?),
+                (
+                    "no_sql_validation",
+                    native_field(request, "no_sql_validation")?,
+                ),
                 ("source_deferral_enabled", boolean(py, false)),
                 ("connection_config", project_connection.clone()),
             ],
@@ -180,10 +187,13 @@ pub(crate) fn sync_local_snapshots<'py>(
                 ("project_name", project_name),
                 ("settings", settings),
                 ("connection_hooks", hooks),
-                ("on_scenario_start", relay.getattr("on_scenario_start")?),
+                (
+                    "on_scenario_start",
+                    native_field(&relay, "on_scenario_start")?,
+                ),
                 (
                     "on_scenario_complete",
-                    relay.getattr("on_scenario_complete")?,
+                    native_field(&relay, "on_scenario_complete")?,
                 ),
             ],
         )?

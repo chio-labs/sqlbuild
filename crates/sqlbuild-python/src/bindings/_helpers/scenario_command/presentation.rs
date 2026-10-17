@@ -16,6 +16,7 @@ use crate::bindings::_helpers::build_progress::transient_status::status_reporter
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scenario_command::conversions::{
@@ -79,7 +80,7 @@ impl ScenarioProgressRelay {
             CompletionKind::Run { target_dir } => {
                 if let Some(plan) = plan {
                     let adapter: &Bound<'_, PyAny> = self.adapter.bind(py);
-                    if result.getattr("local_status")?.is_none() {
+                    if native_field(&result, "local_status")?.is_none() {
                         write_warehouse_runtime_target(target_dir, (adapter, plan, &result))?;
                     } else {
                         write_local_runtime_target(target_dir, (adapter, plan, &result))?;
@@ -180,13 +181,16 @@ pub(crate) fn connection_hooks<'py>(
         &[
             (
                 "on_connection_start",
-                reporter.getattr("on_connection_start")?,
+                native_field(&reporter, "on_connection_start")?,
             ),
             (
                 "on_connection_complete",
-                relay.getattr("on_connection_complete")?,
+                native_field(&relay, "on_connection_complete")?,
             ),
-            ("on_connection_error", relay.getattr("on_connection_error")?),
+            (
+                "on_connection_error",
+                native_field(&relay, "on_connection_error")?,
+            ),
         ],
     )
 }

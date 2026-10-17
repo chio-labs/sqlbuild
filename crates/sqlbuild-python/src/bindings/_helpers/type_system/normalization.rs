@@ -8,6 +8,7 @@ use sqlbuild_analysis::type_system::main::normalize_type::normalize_type;
 use sqlbuild_analysis::type_system::models::{NormalizedType, TypeNormalization};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// `(name, family, precision, scale, length)` of one normalized type.
 type NormalizedRow = (
@@ -43,7 +44,7 @@ pub(crate) fn normalization_error(python: Python<'_>, error: &TypeNormalizationE
         TypeNormalizationError::UnknownDialect(_) => PyValueError::new_err(error.message()),
         TypeNormalizationError::Generation(_) => python
             .import("polyglot_sql")
-            .and_then(|module| module.getattr("PolyglotError"))
+            .and_then(|module| native_field(&module, "PolyglotError"))
             .and_then(|class| class.call1((error.message(),)))
             .map_or_else(|import_error| import_error, PyErr::from_value),
     }

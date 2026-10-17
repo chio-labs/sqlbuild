@@ -7,6 +7,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_config::command_connection::main::check_preview_target::check_preview_target;
 
 use crate::bindings::_helpers::command_runtime::runtime_errors::raised;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 fn target_names(config: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     config
@@ -28,8 +29,12 @@ pub(crate) fn validate_preview_target(
     let Some(as_target) = as_target else {
         return Ok(());
     };
-    let mut configured: Vec<String> = target_names(&discovered_inputs.getattr("project_config")?)?;
-    configured.extend(target_names(&discovered_inputs.getattr("local_config")?)?);
+    let mut configured: Vec<String> =
+        target_names(&native_field(&discovered_inputs, "project_config")?)?;
+    configured.extend(target_names(&native_field(
+        &discovered_inputs,
+        "local_config",
+    )?)?);
     check_preview_target(&as_target, &command_name, &configured).map_err(|error| raised(py, error))
 }
 

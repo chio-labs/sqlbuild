@@ -17,6 +17,7 @@ use crate::bindings::_helpers::execution_history::conversion::{
     checked, event_filter_spec, exact_int, projection_facts, run_filter_spec, run_records,
     run_rows, text_of, utc_zone,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// Return the required stable ID from a known or opaque lifecycle event.
 #[pyfunction]
@@ -69,9 +70,9 @@ fn append_and_project<'py>(
 #[pyfunction]
 fn validate_stored_history_event(record: &Bound<'_, PyAny>) -> Result<(), PyErr> {
     let py: Python<'_> = record.py();
-    let storage_order: i64 = record.getattr("storage_order")?.extract()?;
-    let cursor: String = text_of(&record.getattr("cursor")?)?.unwrap_or_default();
-    let received_at_is_utc: bool = utc_zone(&record.getattr("received_at")?)?;
+    let storage_order: i64 = native_field(record, "storage_order")?.extract()?;
+    let cursor: String = text_of(&native_field(record, "cursor")?)?.unwrap_or_default();
+    let received_at_is_utc: bool = utc_zone(&native_field(record, "received_at")?)?;
     checked(
         py,
         validate_stored_event(storage_order, &cursor, received_at_is_utc),
@@ -101,12 +102,12 @@ fn validate_history_run_filter(run_filter: &Bound<'_, PyAny>) -> Result<(), PyEr
 #[pyo3(signature = (*, page, is_event_page))]
 fn validate_history_page(page: &Bound<'_, PyAny>, is_event_page: bool) -> Result<(), PyErr> {
     let py: Python<'_> = page.py();
-    let records: Bound<'_, PyAny> = page.getattr("records")?;
+    let records: Bound<'_, PyAny> = native_field(page, "records")?;
     let has_records: bool = records.is_truthy()?;
-    let next_cursor: Bound<'_, PyAny> = page.getattr("next_cursor")?;
+    let next_cursor: Bound<'_, PyAny> = native_field(page, "next_cursor")?;
     let next_text: Option<String> = text_of(&next_cursor)?;
     let last_text: Option<String> = if is_event_page && has_records {
-        text_of(&records.get_item(-1)?.getattr("cursor")?)?
+        text_of(&native_field(&records.get_item(-1)?, "cursor")?)?
     } else {
         None
     };

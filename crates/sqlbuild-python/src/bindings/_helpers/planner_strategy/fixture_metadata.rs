@@ -9,15 +9,16 @@ use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags
 use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
 use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
 use crate::bindings::_helpers::planner_strategy::models::FixtureRelation;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// The model's merged inferred and declared columns, authoritative unless its analysis saw a star.
 pub(crate) fn model_fixture_relation(model: &Bound<'_, PyAny>) -> PyResult<FixtureRelation> {
     let inferred: Option<Vec<InferredRow>> = inferred_rows(model)?;
-    let schema = model.getattr("schema_entry")?;
+    let schema = native_field(model, "schema_entry")?;
     let declared: Vec<FixtureColumn> = if schema.is_none() {
         Vec::new()
     } else {
-        columns(&schema.getattr("columns")?, false)?
+        columns(&native_field(&schema, "columns")?, false)?
     };
     let mut inferred_columns: Vec<FixtureColumn> = Vec::new();
     for (name, sql_type, _) in inferred.iter().flatten() {

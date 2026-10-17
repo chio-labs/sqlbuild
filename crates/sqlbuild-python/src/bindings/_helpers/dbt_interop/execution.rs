@@ -18,6 +18,7 @@ use sqlbuild_core::dbt_plan::models::DbtExecutedNode;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::dbt_interop::cli::option_values;
 use crate::bindings::_helpers::dbt_interop::graph::{DbtCombinedGraph, texts};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MERGED_OPTIONS: (&[&str], &[&str]) = (&["command", "options", "routed_args", "plan"], &[]);
 
@@ -35,13 +36,15 @@ fn build_merged_dbt_execution_argv<'py>(
         MERGED_OPTIONS,
     )?;
     let plan: Bound<'py, PyAny> = arguments.value("plan")?;
-    let required_terms: Vec<String> = texts(&plan.getattr("dbt_required_selector_terms")?)?;
-    if !plan.getattr("dbt_selected_unique_ids")?.is_truthy()? && required_terms.is_empty() {
+    let required_terms: Vec<String> = texts(&native_field(&plan, "dbt_required_selector_terms")?)?;
+    if !native_field(&plan, "dbt_selected_unique_ids")?.is_truthy()? && required_terms.is_empty() {
         return Ok(None);
     }
     let args: Vec<String> =
         merged_dbt_execution_args(&texts(&arguments.value("routed_args")?)?, &required_terms);
-    let dbt_executable: String = plan.getattr("dbt_command_argv")?.get_item(0)?.extract()?;
+    let dbt_executable: String = native_field(&plan, "dbt_command_argv")?
+        .get_item(0)?
+        .extract()?;
     let command: DbtArgvCommand = DbtArgvCommand::Other {
         command: arguments.value("command")?.getattr("value")?.extract()?,
         args,
@@ -65,10 +68,10 @@ fn executed_nodes(node_results: &Bound<'_, PyAny>) -> PyResult<Vec<DbtExecutedNo
     for result in node_results.try_iter()? {
         let result: Bound<'_, PyAny> = result?;
         nodes.push(DbtExecutedNode {
-            unique_id: result.getattr("unique_id")?.extract()?,
-            resource_type: result.getattr("resource_type")?.extract()?,
-            status: result.getattr("status")?.extract()?,
-            execution_time: result.getattr("execution_time")?.extract()?,
+            unique_id: native_field(&result, "unique_id")?.extract()?,
+            resource_type: native_field(&result, "resource_type")?.extract()?,
+            status: native_field(&result, "status")?.extract()?,
+            execution_time: native_field(&result, "execution_time")?.extract()?,
         });
     }
     Ok(nodes)
@@ -83,7 +86,8 @@ fn build_failed_sqlbuild_model_names<'py>(
     node_results: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let mut dependencies: HashMap<String, Vec<String>> = HashMap::new();
-    let lookup: Bound<'py, PyAny> = manifest.getattr("validation_depends_on_nodes_by_unique_id")?;
+    let lookup: Bound<'py, PyAny> =
+        native_field(manifest, "validation_depends_on_nodes_by_unique_id")?;
     for item in lookup.call_method0("items")?.try_iter()? {
         let (unique_id, depends_on): (String, Bound<'py, PyAny>) = item?.extract()?;
         dependencies.insert(unique_id, texts(&depends_on)?);

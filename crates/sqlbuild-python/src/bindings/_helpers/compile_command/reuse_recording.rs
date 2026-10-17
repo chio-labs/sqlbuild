@@ -21,6 +21,7 @@ use crate::bindings::_helpers::compile_outputs::reuse::artifact_digest;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MISS_OUTCOME: &str = "miss";
 const HIT_OUTCOME: &str = "hit";
@@ -261,7 +262,7 @@ pub(crate) fn compile_reuse_timings<'py>(
     attempt: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = attempt.py();
-    let outcome: String = attempt.getattr("outcome")?.str()?.to_string();
+    let outcome: String = native_field(attempt, "outcome")?.str()?.to_string();
     let timings: Bound<'py, PyDict> = PyDict::new(py);
     for (name, counted) in [
         (REUSE_HIT_TIMING, HIT_OUTCOME),
@@ -270,7 +271,7 @@ pub(crate) fn compile_reuse_timings<'py>(
     ] {
         timings.set_item(name, i64::from(outcome == counted))?;
     }
-    timings.set_item(REUSE_CHECK_TIMING, attempt.getattr("check_ms")?)?;
+    timings.set_item(REUSE_CHECK_TIMING, native_field(attempt, "check_ms")?)?;
     Ok(timings)
 }
 
@@ -352,18 +353,18 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
         &host::entry(py, FacadeHost::ProviderSettingsInputs)?,
         &[(
             "settings_classes",
-            facts.input_reads.getattr("settings_classes")?,
+            native_field(&facts.input_reads, "settings_classes")?,
         )],
     )?;
-    let unsupported: Bound<'_, PyAny> = settings.getattr("unsupported_reason")?;
+    let unsupported: Bound<'_, PyAny> = native_field(&settings, "unsupported_reason")?;
     if !unsupported.is_none() {
         let _ = reuse_logger(py)?.call_method1(
             "debug",
             ("Compile reuse is off for this project: %s", &unsupported),
         )?;
     }
-    let read_run_id: Bound<'_, PyAny> = facts.input_reads.getattr("read_run_id")?;
-    let stdout: Bound<'_, PyAny> = facts.output.getattr("stdout")?;
+    let read_run_id: Bound<'_, PyAny> = native_field(&facts.input_reads, "read_run_id")?;
+    let stdout: Bound<'_, PyAny> = native_field(&facts.output, "stdout")?;
     let eligible: bool = !stdout.is_none()
         && facts.compile_cache_enabled
         && !read_run_id.is_truthy()?
@@ -378,14 +379,14 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
         let list = |value: Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
             Ok(PyList::new(py, value.try_iter()?.collect::<PyResult<Vec<_>>>()?)?.into_any())
         };
-        for item in settings.getattr("inputs")?.try_iter()? {
+        for item in native_field(&settings, "inputs")?.try_iter()? {
             let item: Bound<'_, PyAny> = item?;
             rows.append((
-                item.getattr("case_sensitive")?,
-                list(item.getattr("names")?)?,
-                list(item.getattr("prefixes")?)?,
-                list(item.getattr("env_files")?)?,
-                list(item.getattr("secrets_dirs")?)?,
+                native_field(&item, "case_sensitive")?,
+                list(native_field(&item, "names")?)?,
+                list(native_field(&item, "prefixes")?)?,
+                list(native_field(&item, "env_files")?)?,
+                list(native_field(&item, "secrets_dirs")?)?,
             ))?;
         }
         rows.into_any()
@@ -433,7 +434,10 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
                 .into_any(),
             ),
             ("module_paths", module_paths(py)?.into_any()),
-            ("artifacts", facts.artifact_writes.getattr("artifacts")?),
+            (
+                "artifacts",
+                native_field(&facts.artifact_writes, "artifacts")?,
+            ),
             (
                 "artifacts_written",
                 facts.artifacts_written.into_bound_py_any(py)?,
@@ -488,9 +492,12 @@ pub(crate) fn write_reusable_compile(
         ),
     )?;
     let attempt: Bound<'_, PyAny> = arguments.value("attempt")?;
-    let entry_path: Bound<'_, PyAny> = attempt.getattr("entry_path")?;
-    let native: Bound<'_, PyAny> = attempt.getattr("native")?;
-    if !attempt.getattr("outcome")?.eq(MISS_OUTCOME)? || entry_path.is_none() || native.is_none() {
+    let entry_path: Bound<'_, PyAny> = native_field(&attempt, "entry_path")?;
+    let native: Bound<'_, PyAny> = native_field(&attempt, "native")?;
+    if !native_field(&attempt, "outcome")?.eq(MISS_OUTCOME)?
+        || entry_path.is_none()
+        || native.is_none()
+    {
         return Ok(());
     }
     let facts: CompileFacts<'_> = CompileFacts {

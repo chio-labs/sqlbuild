@@ -6,6 +6,7 @@ use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_RELATION_COLLISION,
 };
 use crate::bindings::_helpers::planner_scenario::values::{error, string};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::relation_naming::fitting::fitted_logical_name;
@@ -84,7 +85,7 @@ pub(crate) fn build_scenario_hash_index<'py>(
     let result = PyDict::new(py);
     let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
     for scenario in scenarios.try_iter()? {
-        let name: String = scenario?.getattr("name")?.extract()?;
+        let name: String = native_field(&scenario?, "name")?.extract()?;
         let prefix = compute_prefix(
             py,
             (&project_name, &name, run_namespace.as_deref()),
@@ -211,8 +212,8 @@ pub(crate) fn build_scenario_relation_map<'py>(
         let artifact = artifact?;
         let physical = build_scenario_artifact_name(
             &hash,
-            artifact.getattr("kind")?,
-            artifact.getattr("logical_name")?,
+            native_field(&artifact, "kind")?,
+            native_field(&artifact, "logical_name")?,
             limit,
         )?;
         let normalized = if normalize.is_none() {
@@ -223,15 +224,15 @@ pub(crate) fn build_scenario_relation_map<'py>(
         if let Some(existing) = seen.get_item(&normalized)? {
             let kind = registry::class(py, RecordId::ScenarioArtifactKind)?;
             let old_kind: String = kind
-                .call1((existing.getattr("kind")?,))?
+                .call1((native_field(&existing, "kind")?,))?
                 .getattr("value")?
                 .extract()?;
             let new_kind: String = kind
-                .call1((artifact.getattr("kind")?,))?
+                .call1((native_field(&artifact, "kind")?,))?
                 .getattr("value")?
                 .extract()?;
-            let old_name: String = existing.getattr("logical_name")?.extract()?;
-            let new_name: String = artifact.getattr("logical_name")?.extract()?;
+            let old_name: String = native_field(&existing, "logical_name")?.extract()?;
+            let new_name: String = native_field(&artifact, "logical_name")?.extract()?;
             return Err(error(
                 py,
                 &format!(

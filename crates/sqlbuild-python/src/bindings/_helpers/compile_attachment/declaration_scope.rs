@@ -5,6 +5,7 @@ use pyo3::pyfunction;
 use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
@@ -56,19 +57,19 @@ pub(crate) fn build_declaration_scope<'py>(
             compile_cache_dir.unwrap_or_else(|| py.None().into_bound(py)),
         )],
     )?;
-    let test_files: Bound<'py, PyAny> = discovered_inputs.getattr("test_files")?;
-    let scenario_files: Bound<'py, PyAny> = discovered_inputs.getattr("scenario_files")?;
+    let test_files: Bound<'py, PyAny> = native_field(discovered_inputs, "test_files")?;
+    let scenario_files: Bound<'py, PyAny> = native_field(discovered_inputs, "scenario_files")?;
     registry::native(py, NativeAttr::ValidateAuthoredSqlTestCtes)?.call1((
         &test_files,
         &scenario_files,
-        sql_lexical_syntax.getattr("native_mapping")?,
+        native_field(sql_lexical_syntax, "native_mapping")?,
     ))?;
     let native: Bound<'py, PyAny> = Bound::new(
         py,
         open_native_scope_index(py, discovered_inputs, loaded_macros, None)?,
     )?
     .into_any();
-    let validated: Result<(), PyErr> = validate_scope_index(&native.getattr("index")?);
+    let validated: Result<(), PyErr> = validate_scope_index(&native_field(&native, "index")?);
     if let Err(error) = validated {
         if !error.is_instance(py, &registry::error(py, ErrorId::ScopeValidation)?) {
             return Err(error);
@@ -83,7 +84,7 @@ pub(crate) fn build_declaration_scope<'py>(
         && (test_files.is_truthy()? || scenario_files.is_truthy()?)
     {
         let faults: Bound<'py, PyAny> = call_with(
-            &native.getattr("grant_relationships")?,
+            &native_field(&native, "grant_relationships")?,
             &[
                 ("discovered_inputs", discovered_inputs.clone()),
                 ("syntax", sql_lexical_syntax.clone()),
@@ -122,11 +123,11 @@ fn indexed_macro_metadata<'py>(loaded_macros: &Bound<'py, PyAny>) -> PyResult<Bo
     let mut rows: Vec<Bound<'py, PyTuple>> = Vec::new();
     for pair in loaded_macros.call_method0("items")?.try_iter()? {
         let (key, loaded): (Bound<'py, PyAny>, Bound<'py, PyAny>) = pair?.extract()?;
-        let function: Bound<'py, PyAny> = loaded.getattr("function")?;
+        let function: Bound<'py, PyAny> = native_field(&loaded, "function")?;
         let code: Bound<'py, PyAny> =
             imported(py, "builtins", "getattr")?.call1((&function, "__code__", py.None()))?;
         let first_line: Bound<'py, PyAny> = if code.is_instance(&code_type)? {
-            code.getattr("co_firstlineno")?
+            native_field(&code, "co_firstlineno")?
         } else {
             py.None().into_bound(py)
         };
@@ -142,10 +143,10 @@ fn indexed_macro_metadata<'py>(loaded_macros: &Bound<'py, PyAny>) -> PyResult<Bo
             py,
             [
                 key,
-                loaded.getattr("name")?,
-                loaded.getattr("relative_path")?,
-                loaded.getattr("raw_source")?,
-                loaded.getattr("dependencies")?,
+                native_field(&loaded, "name")?,
+                native_field(&loaded, "relative_path")?,
+                native_field(&loaded, "raw_source")?,
+                native_field(&loaded, "dependencies")?,
                 first_line,
                 parameters.into_any(),
             ],
@@ -164,7 +165,8 @@ pub(crate) fn rebind_declaration_scope<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = scope.py();
     let current: Bound<'py, PyTuple> = indexed_macro_metadata(loaded_macros)?;
-    let indexed: Bound<'py, PyTuple> = indexed_macro_metadata(&scope.getattr("loaded_macros")?)?;
+    let indexed: Bound<'py, PyTuple> =
+        indexed_macro_metadata(&native_field(scope, "loaded_macros")?)?;
     if current.as_any().ne(indexed.as_any())? {
         return Ok(py.None().into_bound(py));
     }
@@ -172,9 +174,9 @@ pub(crate) fn rebind_declaration_scope<'py>(
         discovered_inputs,
         loaded_macros,
         (
-            scope.getattr("index")?,
-            scope.getattr("resolver")?.getattr("lookup")?,
-            scope.getattr("sql_test_scans")?,
+            native_field(scope, "index")?,
+            native_field(scope, "resolver")?.getattr("lookup")?,
+            native_field(scope, "sql_test_scans")?,
         ),
     )
 }

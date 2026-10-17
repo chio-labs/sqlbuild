@@ -22,6 +22,7 @@ use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_cli::launcher::constants::LAUNCH_RECORD_OPTION;
@@ -200,7 +201,7 @@ fn write_diff_machine_error<'py>(
     }
     let py: Python<'py> = invocation.py();
     let json_stdout: bool = invocation.flag("json")?;
-    let json_path: Bound<'py, PyAny> = invocation.args.getattr("json_output")?;
+    let json_path: Bound<'py, PyAny> = native_field(&invocation.args, "json_output")?;
     if !json_stdout && json_path.is_none() {
         return Ok(None);
     }
@@ -215,15 +216,15 @@ fn write_diff_machine_error<'py>(
         py,
         &[
             ("status", status),
-            ("code", error.getattr("code")?),
-            ("message", error.getattr("message")?),
-            ("help_text", error.getattr("help")?),
+            ("code", native_field(error, "code")?),
+            ("message", native_field(error, "message")?),
+            ("help_text", native_field(error, "help")?),
             ("size_guard", size_guard),
         ],
     )?;
     if !json_path.is_none() {
         let published: PyResult<()> = (|| {
-            let parent: Bound<'py, PyAny> = json_path.getattr("parent")?;
+            let parent: Bound<'py, PyAny> = native_field(&json_path, "parent")?;
             let options: Bound<'py, PyDict> = PyDict::new(py);
             options.set_item("parents", true)?;
             options.set_item("exist_ok", true)?;
@@ -254,9 +255,9 @@ fn write_diff_machine_error<'py>(
                 let document: Bound<'py, PyAny> = render_diff_error(
                     py,
                     &[
-                        ("status", publication.getattr("status")?),
-                        ("code", publication.getattr("code")?),
-                        ("message", publication.getattr("message")?),
+                        ("status", native_field(&publication, "status")?),
+                        ("code", native_field(&publication, "code")?),
+                        ("message", native_field(&publication, "message")?),
                     ],
                 )?;
                 print_object(&document, None, None)?;
@@ -331,7 +332,7 @@ fn report_failure<'py>(
     if effective.is_instance(&registry::error(py, ErrorId::QueryDiffOutcome)?)? {
         let line: Bound<'py, PyAny> = PyString::new(py, DIFF_OUTCOME_PREFIX)
             .into_any()
-            .add(effective.getattr("status")?.str()?)?;
+            .add(native_field(&effective, "status")?.str()?)?;
         print_object(&line, Some("stderr"), None)?;
     }
     print_expected_error(invocation, &effective, fallback_code)?;
@@ -367,7 +368,7 @@ fn report_skill_freshness(invocation: &Invocation<'_>, policy: InvocationPolicy)
             return Err(error);
         }
     };
-    let message: Bound<'_, PyAny> = result.getattr("message")?;
+    let message: Bound<'_, PyAny> = native_field(&result, "message")?;
     if message.is_truthy()? {
         print_object(&message, Some("stderr"), Some(""))?;
     }
@@ -461,7 +462,7 @@ fn handled_dispatch<'py>(invocation: &Invocation<'py>) -> PyResult<Bound<'py, Py
     };
     let value: Bound<'py, PyAny> = error.value(py).clone().into_any();
     if error.is_instance_of::<PySystemExit>(py) {
-        let code: Bound<'py, PyAny> = value.getattr("code")?;
+        let code: Bound<'py, PyAny> = native_field(&value, "code")?;
         return if code.is_instance_of::<PyInt>() {
             Ok(code)
         } else {
@@ -495,9 +496,9 @@ fn parsed_invocation<'py>(
     let py: Python<'py> = argv.py();
     let use_color: bool = !argv.contains(NO_COLOR_OPTION)? && stdout_supports_color(py)?;
     let parsed: Bound<'py, PyAny> = parse_cli_invocation(py, argv.extract()?, use_color)?;
-    let args: Bound<'py, PyAny> = parsed.getattr("args")?;
+    let args: Bound<'py, PyAny> = native_field(&parsed, "args")?;
     if args.is_none() {
-        let exit_code: Bound<'py, PyAny> = parsed.getattr("exit_code")?;
+        let exit_code: Bound<'py, PyAny> = native_field(&parsed, "exit_code")?;
         return if exit_code.is_none() {
             exit(py, 1)
         } else {
@@ -591,7 +592,10 @@ fn run_cli<'py>(
         within(&external_scope, |_| {
             let diagnostics: Bound<'py, PyAny> = call_with(
                 &host::entry(py, ExecutorHost::DiagnosticsContext)?,
-                &[("sqlbuild_invocation_id", identity.getattr("invocation_id")?)],
+                &[(
+                    "sqlbuild_invocation_id",
+                    native_field(identity, "invocation_id")?,
+                )],
             )?;
             within(&diagnostics, |_| {
                 parsed_invocation(&argv, handlers.clone(), identity)

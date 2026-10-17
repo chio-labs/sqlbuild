@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::dbt_interop::cli::{raised, resolved_path};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -235,8 +236,8 @@ pub(crate) fn vars_mapping<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = project_config.py();
     let values: Bound<'py, PyDict> = PyDict::new(py);
-    values.call_method1("update", (project_config.getattr("vars")?,))?;
-    values.call_method1("update", (local_config.getattr("vars")?,))?;
+    values.call_method1("update", (native_field(project_config, "vars")?,))?;
+    values.call_method1("update", (native_field(local_config, "vars")?,))?;
     values.update(cli_vars(py, dbt_flag_value(args, VARS_FLAG))?.as_mapping())?;
     Ok(values)
 }
@@ -263,7 +264,7 @@ pub(crate) fn plan_options<'py>(
         .getattr("project_config")?
         .getattr("dbt")?;
     let local_config: Bound<'py, PyAny> =
-        discovered_inputs.getattr("local_config")?.getattr("dbt")?;
+        native_field(discovered_inputs, "local_config")?.getattr("dbt")?;
     let resolved: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveDbtConfig)?,
         &[
@@ -286,10 +287,10 @@ pub(crate) fn plan_options<'py>(
     call_with(
         &registry::class(py, RecordId::DbtCliOptions)?,
         &[
-            ("project_dir", resolved.getattr("project_dir")?),
-            ("profiles_dir", resolved.getattr("profiles_dir")?),
-            ("target", resolved.getattr("target")?),
-            ("target_path", resolved.getattr("target_path")?),
+            ("project_dir", native_field(&resolved, "project_dir")?),
+            ("profiles_dir", native_field(&resolved, "profiles_dir")?),
+            ("target", native_field(&resolved, "target")?),
+            ("target_path", native_field(&resolved, "target_path")?),
             ("vars", vars),
             (
                 "state",
@@ -303,11 +304,11 @@ pub(crate) fn plan_options<'py>(
 /// The manifest path `dbt compile` writes for these options.
 pub(crate) fn manifest_path<'py>(options: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = options.py();
-    let project_dir: Bound<'py, PyAny> = options.getattr("project_dir")?;
+    let project_dir: Bound<'py, PyAny> = native_field(options, "project_dir")?;
     if project_dir.is_none() {
         return Err(config_error(py, "dbt project directory is not configured"));
     }
-    let mut target_path: Bound<'py, PyAny> = options.getattr("target_path")?;
+    let mut target_path: Bound<'py, PyAny> = native_field(options, "target_path")?;
     if !target_path.is_truthy()? {
         target_path = project_dir.div(DEFAULT_TARGET_DIR)?;
     }

@@ -11,6 +11,7 @@ use crate::bindings::_helpers::planner_identity::graph::{
 use crate::bindings::_helpers::planner_phases::full_refresh::resolve_model_full_refresh;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::strategy::materialization_of;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyFrozenSet, PyTuple};
@@ -41,7 +42,7 @@ fn display_action(
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
     Ok(
-        authored_config_str(&model.getattr("config")?.getattr("values")?, key)?
+        authored_config_str(&native_field(model, "config")?.getattr("values")?, key)?
             .unwrap_or_else(|| model.py().None().into_bound(model.py())),
     )
 }
@@ -69,7 +70,7 @@ fn display_entry<'py>(
         &[
             ("key", model_reads::model_key(model)?),
             ("name", model_reads::name_object(model)?),
-            ("relative_path", model.getattr("relative_path")?),
+            ("relative_path", native_field(model, "relative_path")?),
             (
                 "action",
                 planner_type(
@@ -138,7 +139,7 @@ fn build_display_only_sqlbuild_plan<'py>(
             .collect::<PyResult<Vec<_>>>()?,
     )?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         if selected.contains(model_reads::name_object(&model)?)? {
             entries.push(display_entry(&model, full_refresh)?);
@@ -146,7 +147,7 @@ fn build_display_only_sqlbuild_plan<'py>(
     }
     let keys: Vec<Bound<'py, PyAny>> = entries
         .iter()
-        .map(|entry| entry.getattr("key"))
+        .map(|entry| native_field(entry, "key"))
         .collect::<PyResult<_>>()?;
     let upstream = build_execution_upstream_deps(project)?.into_any();
     let downstream = build_downstream_deps(&upstream)?.into_any();

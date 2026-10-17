@@ -9,6 +9,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, VisibleDeclarations};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scopes::declaration_contexts::NativeDeclarationContexts;
 
 const NAME_FIELD: &str = "name";
@@ -189,7 +190,7 @@ impl<'py> ModelVisibility<'py> {
     ) -> PyResult<Bound<'py, PyAny>> {
         let resolver: &Bound<'py, PyAny> = &context.classes.visibility.resolver;
         let contexts: Bound<'py, NativeDeclarationContexts> =
-            resolver.getattr("native_contexts")?.downcast_into()?;
+            native_field(resolver, "native_contexts")?.downcast_into()?;
         let (resolved, _) = contexts.get().resolved_context(resolver, file_path, None)?;
         Ok(resolved)
     }
@@ -211,7 +212,7 @@ fn rebound<'py>(
     }
     let resolver: &Bound<'py, PyAny> = &context.classes.visibility.resolver;
     let contexts: Bound<'py, NativeDeclarationContexts> =
-        resolver.getattr("native_contexts")?.downcast_into()?;
+        native_field(resolver, "native_contexts")?.downcast_into()?;
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     for field in VISIBLE_FIELDS {
         fields.set_item(field, cached.getattr(field)?)?;

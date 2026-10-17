@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -55,10 +56,10 @@ pub(crate) fn hook_entries<'py>(
             hooks.append(sql_hook(&entry, sql_fields)?)?;
         } else if entry.is_instance(&python_class)? {
             let hook: Bound<'py, PyDict> = PyDict::new(py);
-            let name: Bound<'py, PyAny> = entry.getattr("name")?;
+            let name: Bound<'py, PyAny> = native_field(&entry, "name")?;
             hook.set_item("type", "python")?;
             hook.set_item("name", &name)?;
-            hook.set_item("kwargs", entry.getattr("kwargs")?)?;
+            hook.set_item("kwargs", native_field(&entry, "kwargs")?)?;
             if let Some(fields) = python_hook_fields
                 && let Some(extra) = fields.get_item(&name)?
             {

@@ -23,6 +23,7 @@ use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::frontier::python_types::PythonTypes;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// An instance's attributes, by name in first-set order.
 type Attributes<'py> = Vec<(String, Bound<'py, PyAny>)>;
@@ -157,7 +158,7 @@ impl<'py> CaptureEncoder<'py> {
 
     fn encode_value(&mut self, value: &Bound<'py, PyAny>) -> PyResult<JsonValue> {
         if value.is_instance(&self.types.enumeration)? {
-            let name: String = value.getattr("name")?.str()?.to_str()?.to_owned();
+            let name: String = native_field(value, "name")?.str()?.to_str()?.to_owned();
             return Ok(tagged(
                 "__enum__",
                 JsonValue::String(format!(
@@ -271,12 +272,15 @@ impl<'py> CaptureEncoder<'py> {
             return Ok(JsonValue::Object(vec![
                 (
                     "__partial__".to_owned(),
-                    self.encode(&value.getattr("func")?)?,
+                    self.encode(&native_field(value, "func")?)?,
                 ),
-                ("args".to_owned(), self.encode(&value.getattr("args")?)?),
+                (
+                    "args".to_owned(),
+                    self.encode(&native_field(value, "args")?)?,
+                ),
                 (
                     "keywords".to_owned(),
-                    self.encode(&value.getattr("keywords")?)?,
+                    self.encode(&native_field(value, "keywords")?)?,
                 ),
             ]));
         }
@@ -300,7 +304,7 @@ impl<'py> CaptureEncoder<'py> {
         let mut entries: Vec<(String, JsonValue)> =
             vec![("__type__".to_owned(), JsonValue::String(type_name))];
         for field in self.types.fields.call1((value,))?.try_iter()? {
-            let name: String = field?.getattr("name")?.extract()?;
+            let name: String = native_field(&field?, "name")?.extract()?;
             if omitted.contains(&name.as_str()) {
                 continue;
             }

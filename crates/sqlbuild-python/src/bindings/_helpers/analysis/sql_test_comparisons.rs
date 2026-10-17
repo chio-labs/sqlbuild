@@ -11,6 +11,7 @@ use sqlbuild_analysis::compiler::main::sql_test_rendering::render_json;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::types::CompilerDetach;
 
 const RENDER_WORKERS: usize = 4;
@@ -133,17 +134,17 @@ pub(crate) fn comparison_request(
         .map(|assertion| {
             let assertion: Bound<'_, PyAny> = assertion?;
             Ok(json!({
-                "name": assertion.getattr("name")?.extract::<String>()?,
-                "resolvedSql": assertion.getattr("resolved_sql")?.extract::<String>()?,
-                "liftedCtes": assertion.getattr("lifted_ctes")?.extract::<Vec<(String, String)>>()?,
-                "comparisonBodySql": assertion.getattr("comparison_body_sql")?.extract::<Option<String>>()?,
+                "name": native_field(&assertion, "name")?.extract::<String>()?,
+                "resolvedSql": native_field(&assertion, "resolved_sql")?.extract::<String>()?,
+                "liftedCtes": native_field(&assertion, "lifted_ctes")?.extract::<Vec<(String, String)>>()?,
+                "comparisonBodySql": native_field(&assertion, "comparison_body_sql")?.extract::<Option<String>>()?,
             }))
         })
         .collect::<PyResult<_>>()?;
     Ok(json!({
         "chain": chain,
         "assertions": assertions,
-        "sqlAnalysisEnabled": entry.getattr("sql_analysis_enabled")?.extract::<bool>()?,
+        "sqlAnalysisEnabled": native_field(entry, "sql_analysis_enabled")?.extract::<bool>()?,
         "setDifferenceOperator": set_difference_operator,
         "sqlAnalysisDialect": sql_analysis_dialect,
     }))
@@ -152,13 +153,13 @@ pub(crate) fn comparison_request(
 /// The native request of one planned chain step.
 pub(crate) fn chain_step_request(step: &Bound<'_, PyAny>) -> PyResult<Value> {
     Ok(json!({
-        "modelName": step.getattr("model_name")?.extract::<String>()?,
-        "resolvedSql": step.getattr("resolved_sql")?.extract::<String>()?,
-        "expectedCteSql": step.getattr("expected_cte_sql")?.extract::<Option<String>>()?,
-        "liftedCtes": step.getattr("lifted_ctes")?.extract::<Vec<(String, String)>>()?,
-        "comparisonBodySql": step.getattr("comparison_body_sql")?.extract::<Option<String>>()?,
-        "expectedColumns": step.getattr("expected_columns")?.extract::<Option<Vec<String>>>()?,
-        "expectedLiftedCtes": step.getattr("expected_lifted_ctes")?.extract::<Vec<(String, String)>>()?,
+        "modelName": native_field(step, "model_name")?.extract::<String>()?,
+        "resolvedSql": native_field(step, "resolved_sql")?.extract::<String>()?,
+        "expectedCteSql": native_field(step, "expected_cte_sql")?.extract::<Option<String>>()?,
+        "liftedCtes": native_field(step, "lifted_ctes")?.extract::<Vec<(String, String)>>()?,
+        "comparisonBodySql": native_field(step, "comparison_body_sql")?.extract::<Option<String>>()?,
+        "expectedColumns": native_field(step, "expected_columns")?.extract::<Option<Vec<String>>>()?,
+        "expectedLiftedCtes": native_field(step, "expected_lifted_ctes")?.extract::<Vec<(String, String)>>()?,
     }))
 }
 
@@ -172,13 +173,13 @@ fn render_sql_test_difference_sample_sql(
     let request = Request::new("render_sql_test_difference_sample_sql", options)?;
     let test_entry: Bound<'_, PyAny> = request.get("test_entry")?;
     let step: Bound<'_, PyAny> = request.get("step")?;
-    if step.getattr("expected_cte_sql")?.is_none() {
+    if native_field(&step, "expected_cte_sql")?.is_none() {
         return Ok(String::new());
     }
     let settings: RenderSettings = RenderSettings::read(options)?;
     let request_json: String = serde_json::to_string(&json!({
         "step": chain_step_request(&step)?,
-        "sqlAnalysisEnabled": test_entry.getattr("sql_analysis_enabled")?.extract::<bool>()?,
+        "sqlAnalysisEnabled": native_field(&test_entry, "sql_analysis_enabled")?.extract::<bool>()?,
         "setDifferenceOperator": settings.set_difference_operator,
         "sqlAnalysisDialect": settings.sql_analysis_dialect,
         "direction": request.get("direction")?.extract::<String>()?,

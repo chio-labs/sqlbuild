@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{
@@ -32,9 +33,9 @@ fn index_declarations<'py>(
 ) -> PyResult<()> {
     let py: Python<'py> = files.py();
     for file in files.try_iter()? {
-        for declaration in file?.getattr("declarations")?.try_iter()? {
+        for declaration in native_field(&file?, "declarations")?.try_iter()? {
             let declaration: Bound<'py, PyAny> = declaration?;
-            let name: Bound<'py, PyAny> = declaration.getattr("name")?;
+            let name: Bound<'py, PyAny> = native_field(&declaration, "name")?;
             if let Some(existing) = index.get_item(&name)? {
                 return Err(compile_input_error(
                     py,
@@ -60,8 +61,12 @@ pub(crate) fn public_declaration_indexes<'py>(
     let py: Python<'py> = inputs.py();
     let enums: Bound<'py, PyDict> = PyDict::new(py);
     let constants: Bound<'py, PyDict> = PyDict::new(py);
-    index_declarations(&inputs.getattr("enum_files")?, "enum", &enums)?;
-    index_declarations(&inputs.getattr("constant_files")?, "constant", &constants)?;
+    index_declarations(&native_field(&inputs, "enum_files")?, "enum", &enums)?;
+    index_declarations(
+        &native_field(&inputs, "constant_files")?,
+        "constant",
+        &constants,
+    )?;
     Ok((enums, constants))
 }
 
@@ -91,7 +96,7 @@ impl<'py> SchemaResolution<'py> {
             ));
         }
         let declaration: Bound<'py, PyAny> = self.authored[self.by_name[name]].1.clone();
-        let extends: Option<String> = declaration.getattr("extends")?.extract()?;
+        let extends: Option<String> = native_field(&declaration, "extends")?.extract()?;
         let mut inherited: Vec<Bound<'py, PyAny>> = Vec::new();
         if let Some(parent) = extends {
             if !self.by_name.contains_key(&parent) {
@@ -106,13 +111,13 @@ impl<'py> SchemaResolution<'py> {
             let mut chain: Vec<String> = resolving.to_vec();
             chain.push(name.to_owned());
             let parent: Bound<'py, PyAny> = self.resolve(&parent, &chain)?;
-            for column in parent.getattr("columns")?.try_iter()? {
+            for column in native_field(&parent, "columns")?.try_iter()? {
                 inherited.push(column?);
             }
         }
         self.reject_overrides(name, &declaration, &inherited)?;
         let mut columns: Vec<Bound<'py, PyAny>> = inherited;
-        for column in declaration.getattr("columns")?.try_iter()? {
+        for column in native_field(&declaration, "columns")?.try_iter()? {
             columns.push(column?);
         }
         let fields: Bound<'py, PyDict> = PyDict::new(self.py);
@@ -134,12 +139,12 @@ impl<'py> SchemaResolution<'py> {
         for column in inherited {
             by_name.insert(lowered_name(column)?, column);
         }
-        for local in declaration.getattr("columns")?.try_iter()? {
+        for local in native_field(declaration, "columns")?.try_iter()? {
             let local: Bound<'py, PyAny> = local?;
             let Some(column) = by_name.get(&lowered_name(&local)?) else {
                 continue;
             };
-            let location: Bound<'py, PyAny> = column.getattr("location")?;
+            let location: Bound<'py, PyAny> = native_field(column, "location")?;
             let origin: String = if location.is_none() {
                 "an ancestor schema".to_owned()
             } else {
@@ -161,7 +166,9 @@ impl<'py> SchemaResolution<'py> {
 
 /// `column.name.lower()`.
 fn lowered_name(column: &Bound<'_, PyAny>) -> PyResult<String> {
-    column.getattr("name")?.call_method0("lower")?.extract()
+    native_field(column, "name")?
+        .call_method0("lower")?
+        .extract()
 }
 
 /// Every public model schema by name, with its inherited columns first, collision-checked.
@@ -172,10 +179,10 @@ pub(crate) fn public_model_schema_index<'py>(
     let py: Python<'py> = inputs.py();
     let mut authored: Vec<(String, Bound<'py, PyAny>)> = Vec::new();
     let mut by_name: HashMap<String, usize> = HashMap::new();
-    for file in inputs.getattr("model_schema_files")?.try_iter()? {
-        for declaration in file?.getattr("declarations")?.try_iter()? {
+    for file in native_field(&inputs, "model_schema_files")?.try_iter()? {
+        for declaration in native_field(&file?, "declarations")?.try_iter()? {
             let declaration: Bound<'py, PyAny> = declaration?;
-            let name: String = declaration.getattr("name")?.extract()?;
+            let name: String = native_field(&declaration, "name")?.extract()?;
             if let Some(index) = by_name.get(&name) {
                 return Err(compile_input_error(
                     py,

@@ -24,6 +24,7 @@ use crate::bindings::_helpers::discovery::sql_test_records::{
 };
 use crate::bindings::_helpers::discovery::yaml_records::discover_source_files;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -49,7 +50,7 @@ impl<'py> Faults<'py> {
     /// A fresh fault list and its `append`, the `on_fault` a discoverer reports to.
     fn collector(&self) -> PyResult<(Bound<'py, PyList>, Bound<'py, PyAny>)> {
         let faults: Bound<'py, PyList> = PyList::empty(self.py());
-        let append: Bound<'py, PyAny> = faults.getattr("append")?;
+        let append: Bound<'py, PyAny> = native_field(&faults, "append")?;
         Ok((faults, append))
     }
 
@@ -113,7 +114,7 @@ fn configs<'py>(
         (&list, Some(PROJECT_CONFIG_FILENAME)),
         load_project_config_file(py, project_dir).map(|config| config.into_bound(py)),
         || {
-            let name: Bound<'py, PyAny> = project_dir.getattr("name")?;
+            let name: Bound<'py, PyAny> = native_field(project_dir, "name")?;
             let name: Bound<'py, PyAny> = if name.is_truthy()? {
                 name
             } else {
@@ -143,7 +144,7 @@ fn category<'py>(
     list: &Bound<'py, PyList>,
     discover: impl FnOnce(Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let append: Bound<'py, PyAny> = list.getattr("append")?;
+    let append: Bound<'py, PyAny> = native_field(list, "append")?;
     tolerated(
         faults,
         (list, None),

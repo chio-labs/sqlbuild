@@ -13,6 +13,7 @@ use crate::bindings::_helpers::graph::python_selection::resolve_python_sql_run_s
 use crate::bindings::_helpers::graph::views::compiled_graph_keys;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -43,7 +44,7 @@ fn optional_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     if value.is_none() {
         return Ok(value.clone());
     }
-    value.getattr("value")
+    native_field(value, "value")
 }
 
 /// The kind-specific decorator configuration and metadata record of one discovered function.
@@ -124,7 +125,7 @@ fn python_node<'py>(
     let identity: Bound<'py, PyAny> = call_with(
         &vocabulary.identity,
         &[
-            ("kind", kind_member.getattr("value")?),
+            ("kind", native_field(&kind_member, "value")?),
             ("name", get("name")?),
             ("function", get("function")?),
             ("file_path", get("file_path")?),
@@ -168,10 +169,10 @@ fn upstream_names(
 ) -> PyResult<Vec<Vec<String>>> {
     let by_key: Bound<'_, PyDict> = PyDict::new(py);
     for node in nodes {
-        by_key.set_item(node.getattr("function")?, node.getattr("name")?)?;
+        by_key.set_item(native_field(node, "function")?, native_field(node, "name")?)?;
     }
     for node in nodes {
-        let name: Bound<'_, PyAny> = node.getattr("name")?;
+        let name: Bound<'_, PyAny> = native_field(node, "name")?;
         by_key.set_item(
             PyTuple::new(py, [PyString::new(py, NAME_KEY).into_any(), name.clone()])?,
             name,
@@ -182,7 +183,7 @@ fn upstream_names(
         .iter()
         .map(|node| {
             let mut names: Vec<String> = Vec::new();
-            for dependency in node.getattr("depends_on")?.try_iter()? {
+            for dependency in native_field(node, "depends_on")?.try_iter()? {
                 let dependency: Bound<'_, PyAny> = dependency?;
                 if dependency.is_instance(sql_ref)? {
                     continue;
@@ -199,8 +200,8 @@ fn upstream_names(
 
 fn inventory_node(node: &Bound<'_, PyAny>, upstream: Vec<String>) -> PyResult<InventoryNode> {
     Ok(InventoryNode {
-        name: node.getattr("name")?.extract()?,
-        tags: node.getattr("tags")?.extract()?,
+        name: native_field(node, "name")?.extract()?,
+        tags: native_field(node, "tags")?.extract()?,
         relative_path: node
             .getattr("relative_path")?
             .call_method0("as_posix")?
@@ -215,9 +216,9 @@ pub(crate) fn python_node_graph<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered_inputs.py();
     let providers: Bound<'py, PyDict> = PyDict::new(py);
-    for provider in discovered_inputs.getattr("providers")?.try_iter()? {
+    for provider in native_field(discovered_inputs, "providers")?.try_iter()? {
         let provider: Bound<'py, PyAny> = provider?;
-        providers.set_item(provider.getattr("name")?, provider)?;
+        providers.set_item(native_field(&provider, "name")?, provider)?;
     }
     let vocabulary: Vocabulary<'py> = Vocabulary {
         node: registry::class(py, RecordId::DiscoveredPythonNode)?,
@@ -291,8 +292,8 @@ fn graph_record<'py>(
     let by_name: Bound<'py, PyDict> = PyDict::new(py);
     let by_selector: Bound<'py, PyDict> = PyDict::new(py);
     for node in nodes {
-        let name: Bound<'py, PyAny> = node.getattr("name")?;
-        let kind: String = node.getattr("kind")?.getattr("value")?.extract()?;
+        let name: Bound<'py, PyAny> = native_field(node, "name")?;
+        let kind: String = native_field(node, "kind")?.getattr("value")?.extract()?;
         by_name.set_item(&name, node)?;
         by_selector.set_item(format!("{kind}:{}", name.str()?), node)?;
     }

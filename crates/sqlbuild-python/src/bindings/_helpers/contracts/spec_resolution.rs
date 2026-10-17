@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::effective_config::{
     effective_config_target_fields, effective_config_target_name,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -112,9 +113,9 @@ pub(crate) fn resolve_effective_adapter_name<'py>(
     project_config: &Bound<'py, PyAny>,
     local_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let local: Bound<'py, PyAny> = local_config.getattr("adapter")?;
+    let local: Bound<'py, PyAny> = native_field(local_config, "adapter")?;
     if local.is_none() {
-        return project_config.getattr("adapter");
+        return native_field(project_config, "adapter");
     }
     Ok(local)
 }
@@ -147,8 +148,8 @@ fn resolve_effective_scenario_config<'py>(
     local_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_config.py();
-    let project: Bound<'py, PyAny> = project_config.getattr("scenario")?;
-    let local: Bound<'py, PyAny> = local_config.getattr("scenario")?;
+    let project: Bound<'py, PyAny> = native_field(project_config, "scenario")?;
+    let local: Bound<'py, PyAny> = native_field(local_config, "scenario")?;
     let overrides: Bound<'py, PyDict> = PyDict::new(py);
     for item in project
         .getattr("local_type_overrides")?
@@ -168,8 +169,8 @@ fn resolve_effective_scenario_config<'py>(
             .call_method1("setdefault", (dialect, PyDict::new(py)))?
             .call_method1("update", (rules,))?;
     }
-    let project_limits: Bound<'py, PyAny> = project.getattr("snapshot_limits")?;
-    let local_limits: Bound<'py, PyAny> = local.getattr("snapshot_limits")?;
+    let project_limits: Bound<'py, PyAny> = native_field(&project, "snapshot_limits")?;
+    let local_limits: Bound<'py, PyAny> = native_field(&local, "snapshot_limits")?;
     let limits: Vec<(&str, Bound<'py, PyAny>)> = SNAPSHOT_LIMITS
         .iter()
         .map(|field| {
@@ -188,8 +189,8 @@ fn resolve_effective_scenario_config<'py>(
             (
                 "run_namespace",
                 override_or(
-                    local.getattr("run_namespace")?,
-                    project.getattr("run_namespace")?,
+                    native_field(&local, "run_namespace")?,
+                    native_field(&project, "run_namespace")?,
                 ),
             ),
             ("local_type_overrides", overrides.into_any()),
@@ -212,7 +213,7 @@ fn scenario_local_type_overrides_for_dialect<'py>(
     sql_analysis_dialect: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = scenario_config.py();
-    let rules: Bound<'py, PyAny> = scenario_config.getattr("local_type_overrides")?;
+    let rules: Bound<'py, PyAny> = native_field(scenario_config, "local_type_overrides")?;
     let overrides: Bound<'py, PyDict> = PyDict::new(py);
     overrides.call_method1(
         "update",
@@ -286,7 +287,7 @@ fn loader_parts<'py>(
 
 /// Whether a family's optional `name_pattern` accepts `column_name`.
 fn family_accepts(family: &Bound<'_, PyAny>, column_name: &str) -> PyResult<bool> {
-    let pattern: Option<String> = family.getattr("name_pattern")?.extract()?;
+    let pattern: Option<String> = native_field(family, "name_pattern")?.extract()?;
     let Some(pattern) = pattern else {
         return Ok(true);
     };

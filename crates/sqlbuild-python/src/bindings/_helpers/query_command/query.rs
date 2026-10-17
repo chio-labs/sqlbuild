@@ -20,6 +20,7 @@ use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_
 use crate::bindings::_helpers::query_command::query_values::{
     csv_text, display_text, json_cell, python_json_rows, strict_width,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
 
@@ -164,7 +165,7 @@ fn run_sql<'py>(
         None => py.None().into_bound(py),
     };
     let queried: PyResult<Bound<'py, PyAny>> = call_with(
-        &project.adapter.getattr("query")?,
+        &native_field(&project.adapter, "query")?,
         &[
             ("connection", connection.clone()),
             ("sql", sql),
@@ -178,7 +179,7 @@ fn run_sql<'py>(
             return error;
         }
         let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
-        let message: PyResult<Bound<'_, PyAny>> = match value.getattr("message") {
+        let message: PyResult<Bound<'_, PyAny>> = match native_field(&value, "message") {
             Ok(message) => message.str().map(Bound::into_any),
             Err(_) => value.str().map(Bound::into_any),
         };
@@ -226,14 +227,16 @@ fn render_json(
         for value in row {
             match json_cell(value)? {
                 Some(cell) => cells.push(cell),
-                None => return python_json_rows(result.py(), &result.getattr("columns")?, rows),
+                None => {
+                    return python_json_rows(result.py(), &native_field(result, "columns")?, rows);
+                }
             }
         }
         values.push(cells);
     }
     match render_query_json(columns, values) {
         Ok(rendered) => Ok(rendered),
-        Err(_) => python_json_rows(result.py(), &result.getattr("columns")?, rows),
+        Err(_) => python_json_rows(result.py(), &native_field(result, "columns")?, rows),
     }
 }
 
@@ -258,7 +261,7 @@ fn render(result: &Bound<'_, PyAny>, output_format: &str, limit: Option<i64>) ->
         Ok(QueryDisplay {
             columns: columns.clone(),
             rows: texts(&rows, display_text)?,
-            truncated: result.getattr("truncated")?.is_truthy()?,
+            truncated: native_field(result, "truncated")?.is_truthy()?,
             limit,
         })
     };

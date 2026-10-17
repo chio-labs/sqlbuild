@@ -14,6 +14,7 @@ use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::{ChangeReconciliation, ModelEntryResults};
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyFrozenSet;
 
@@ -87,14 +88,14 @@ pub(crate) fn build_planner_entry_results<'py>(
             .getattr("source_warehouse_columns")?,
         relation_keys: py.None().into_bound(py),
     })?;
-    let propagation = source_freshness.getattr("propagation")?;
+    let propagation = native_field(source_freshness, "propagation")?;
     let blocked = if propagation.is_none() {
         PyFrozenSet::empty(py)?.into_any()
     } else {
-        propagation.getattr("blocked_model_names")?
+        native_field(&propagation, "blocked_model_names")?
     };
     let none = || py.None().into_bound(py);
-    let max_override = overrides.getattr("max_microbatches")?;
+    let max_override = native_field(overrides, "max_microbatches")?;
     let max_microbatches = if max_override.is_none() {
         config_or(&config, &["microbatches", "limits", "max_batches"], none())?
     } else {
@@ -138,9 +139,9 @@ pub(crate) fn build_planner_entry_results<'py>(
         scope: execution_scope.clone(),
         snapshot: warehouse_field(warehouse, |warehouse| &warehouse.snapshot)?,
         relations,
-        resolved_models: reconciliation.resolved_actions.getattr("models")?,
-        cursor_overrides: overrides.getattr("cursor_overrides")?,
-        full_refresh: overrides.getattr("full_refresh")?.is_truthy()?,
+        resolved_models: native_field(&reconciliation.resolved_actions, "models")?,
+        cursor_overrides: native_field(overrides, "cursor_overrides")?,
+        full_refresh: native_field(overrides, "full_refresh")?.is_truthy()?,
         build_inputs,
     })
 }

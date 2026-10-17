@@ -31,6 +31,7 @@ use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_phases::warehouse_state::gather_planner_warehouse_state;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::build_planner_source_freshness_result;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
@@ -50,18 +51,20 @@ fn scopes_and_cursor_overrides<'py>(
         &args.value("policies")?,
     )?;
     let selected = class_field(&scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
-    let models_by_name = selected.getattr("models_by_name")?;
+    let models_by_name = native_field(&selected, "models_by_name")?;
     let model_type = imported(py, COMPILE_TYPES, "CompiledResourceType")?.getattr("MODEL")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
-    for key in selected.getattr("selected_keys")?.try_iter()? {
+    for key in native_field(&selected, "selected_keys")?.try_iter()? {
         let key = key?;
-        let name = key.getattr("name")?;
-        if key.getattr("resource_type")?.eq(&model_type)? && models_by_name.contains(&name)? {
+        let name = native_field(&key, "name")?;
+        if native_field(&key, "resource_type")?.eq(&model_type)?
+            && models_by_name.contains(&name)?
+        {
             models.push(models_by_name.get_item(&name)?);
         }
     }
     let overrides = args.value("overrides")?;
-    let typed = type_cursor_overrides(&overrides.getattr("cursor_overrides")?, &models)?;
+    let typed = type_cursor_overrides(&native_field(&overrides, "cursor_overrides")?, &models)?;
     Ok((
         scopes,
         replaced(&overrides, &[("cursor_overrides", typed)])?,
@@ -85,13 +88,13 @@ fn change_results<'py>(
             &class_field(scopes, |s: &PlannerScopeResolution| &s.inspection_scope)?,
             snapshot,
         ),
-        overrides.getattr("full_refresh")?.is_truthy()?,
+        native_field(overrides, "full_refresh")?.is_truthy()?,
         (
-            versions.getattr("model_version_hashes")?,
-            versions.getattr("model_metadata_jsons")?,
+            native_field(&versions, "model_version_hashes")?,
+            native_field(&versions, "model_metadata_jsons")?,
         ),
     )?;
-    if !policies.getattr("selection_diagnostics")?.is_truthy()? {
+    if !native_field(policies, "selection_diagnostics")?.is_truthy()? {
         let empty = native(
             py,
             RecordId::PlannerChangeResults,
@@ -122,7 +125,7 @@ fn planned_output<'py>(
     let identities = build_planner_identity_context(
         &project,
         scopes,
-        policies.getattr("selection_diagnostics")?.extract()?,
+        native_field(&policies, "selection_diagnostics")?.extract()?,
     )?;
     check_selected_scope_buildability(runtime, scopes, &warehouse, &deferral)?;
     let snapshot = warehouse_field(&warehouse, |warehouse| &warehouse.snapshot)?;
@@ -138,7 +141,7 @@ fn planned_output<'py>(
         (&project, &inspection_scope),
         (&args.value("adapter")?, &args.value("connection")?),
         &warehouse_field(&warehouse, |warehouse| &warehouse.inspection_relations)?,
-        &snapshot.getattr("source_freshness_state_schemas")?,
+        &native_field(&snapshot, "source_freshness_state_schemas")?,
     )?;
     let reconciliation = reconcile_execution_changes(
         (&inspection_scope, &snapshot),
@@ -227,8 +230,8 @@ pub(crate) fn build_execution_plan<'py>(
         PlanningRequest {
             project: project.clone().unbind(),
             adapter: adapter.clone().unbind(),
-            selected_keys: inspection.getattr("selected_keys")?.unbind(),
-            sql_test_selection: inspection.getattr("sql_test_selection")?.unbind(),
+            selected_keys: native_field(&inspection, "selected_keys")?.unbind(),
+            sql_test_selection: native_field(&inspection, "sql_test_selection")?.unbind(),
         },
         args.value("policies")?
             .getattr("plan_sql_tests")?

@@ -27,13 +27,14 @@ use crate::bindings::_helpers::planner_resolution::cursor_windows::without_desti
 use crate::bindings::_helpers::planner_resolution::future_safety::resolve_future_cursor_safety;
 use crate::bindings::_helpers::planner_resolution::models::ModelSqlRequest;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::{IntoPyObject, PyErr};
 
 fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    let values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
+    let values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
     let value: Option<Bound<'py, PyAny>> = if key == CURSOR_START {
         config_cursor_bound(&values, key)?
     } else {
@@ -47,8 +48,8 @@ fn unbounded(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     call_with(
         &registry::class(py, RecordId::CursorBounds)?,
         &[
-            ("start", sentinel.getattr("START")?),
-            ("end", sentinel.getattr("END")?),
+            ("start", native_field(&sentinel, "START")?),
+            ("end", native_field(&sentinel, "END")?),
         ],
     )
 }
@@ -64,18 +65,21 @@ fn destination_exists(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> 
     let key = call_with(
         &host::entry(model.py(), AdapterHost::RelationLookup)?.getattr("key")?,
         &[
-            ("database", destination.getattr("database")?),
-            ("schema", destination.getattr("schema")?),
-            ("name", destination.getattr("name")?),
+            ("database", native_field(&destination, "database")?),
+            ("schema", native_field(&destination, "schema")?),
+            ("name", native_field(&destination, "name")?),
         ],
     )?;
-    relation.getattr("identity")?.eq(key)
+    native_field(&relation, "identity")?.eq(key)
 }
 
 fn history_redirected(model: &Bound<'_, PyAny>, snapshot: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let target = snapshot.getattr("target_relation")?;
+    let target = native_field(snapshot, "target_relation")?;
     Ok(!target.is_none()
-        && target.ne(model_reads::destination(model)?.getattr("qualified_name")?)?)
+        && target.ne(native_field(
+            &model_reads::destination(model)?,
+            "qualified_name",
+        )?)?)
 }
 
 /// One model's cursor bounds from its snapshot, overrides and cursor policies; `None` when unbounded by a full refresh.
@@ -124,7 +128,7 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         &c.runtime_cursor_producer_names
     })?;
     let mut runtime_owned = false;
-    for name in roles.getattr("watermark_inputs")?.try_iter()? {
+    for name in native_field(&roles, "watermark_inputs")?.try_iter()? {
         if producers.contains(name?)? {
             runtime_owned = true;
             break;
@@ -133,7 +137,10 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
     let full_refresh = request.full_refresh;
     let replaces = request.replaces_relation;
     if !full_refresh && !runtime_owned && !cursor_snapshot.is_none() {
-        let empty = cursor_inputs_without_rows(&cursor_snapshot)?.getattr("input_names")?;
+        let empty = native_field(
+            &cursor_inputs_without_rows(&cursor_snapshot)?,
+            "input_names",
+        )?;
         if empty.is_truthy()?
             && replaces
             && (destination_exists(&model, snapshot)?
@@ -163,11 +170,11 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
             .getattr("watermarks_available")?
             .is_truthy()?
         {
-            let unreadable = cursor_snapshot.getattr("unreadable_input_names")?;
+            let unreadable = native_field(&cursor_snapshot, "unreadable_input_names")?;
             let names = if unreadable.is_truthy()? {
                 unreadable
             } else {
-                cursor_snapshot.getattr("unavailable_watermark_tags")?
+                native_field(&cursor_snapshot, "unavailable_watermark_tags")?
             };
             return Err(PyErr::from_value(unreadable_cursor_inputs_error(
                 py,
@@ -190,8 +197,8 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
         cursor_snapshot = without_destination_cursor(&cursor_snapshot)?;
     }
     let backfill = &request.backfill;
-    let duration = if backfill.getattr("action")?.eq("bounded")? {
-        backfill.getattr("duration")?
+    let duration = if native_field(backfill, "action")?.eq("bounded")? {
+        native_field(backfill, "duration")?
     } else {
         py.None().into_bound(py)
     };
@@ -254,7 +261,10 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
                         .to_owned()
                         .into_any(),
                 ),
-                ("input_evidence", cursor_snapshot.getattr("input_evidence")?),
+                (
+                    "input_evidence",
+                    native_field(&cursor_snapshot, "input_evidence")?,
+                ),
             ],
         )?),
     )

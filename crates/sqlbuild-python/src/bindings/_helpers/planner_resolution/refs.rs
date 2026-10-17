@@ -7,6 +7,7 @@ use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
 use crate::bindings::_helpers::planner_resolution::values::{
     cursor_wrap, filtering_of, method, string,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sqltext::code_scanner::SqlCodeScanner;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -157,7 +158,7 @@ fn resolve_function_calls(
         let qualified = if target.is_none() {
             py.None().into_bound(py)
         } else {
-            target.getattr("qualified_name")?
+            native_field(&target, "qualified_name")?
         };
         let suffix =
             span.end + query_sql[span.end..].len() - query_sql[span.end..].trim_start().len();
@@ -235,7 +236,7 @@ pub(crate) fn apply_deferred_locations<'py>(
 ) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyDict>)> {
     let selected = selected_keys
         .try_iter()?
-        .map(|key| key?.getattr("name")?.extract::<String>())
+        .map(|key| native_field(&key?, "name")?.extract::<String>())
         .collect::<PyResult<std::collections::HashSet<_>>>()?;
     let models = model_locations.copy()?;
     let seeds = seed_locations.copy()?;

@@ -1,5 +1,6 @@
 //! Python objects read in place as authored header values.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods};
 use pyo3::types::{
     PyBool, PyBoolMethods, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyListMethods, PyString,
@@ -113,7 +114,7 @@ impl AuthoredNode for PyNode<'_> {
     fn is_date_like(&self) -> bool {
         let py = self.0.py();
         py.import("datetime")
-            .and_then(|module| module.getattr("date"))
+            .and_then(|module| native_field(&module, "date"))
             .and_then(|date| self.0.is_instance(&date))
             .unwrap_or(false)
     }

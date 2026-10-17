@@ -36,6 +36,7 @@ use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::lineage::lineage_index::lineage_key;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::refactor::offline_compile::{OfflineCompile, compile_for_refactor};
@@ -112,7 +113,7 @@ fn relative_diagnostics(
 ) -> PyResult<Vec<RefactorDiagnostic>> {
     let mut diagnostics: Vec<RefactorDiagnostic> = Vec::new();
     for error in errors {
-        let path: Option<String> = optional_posix(&error.getattr("path")?)?.map(|path| {
+        let path: Option<String> = optional_posix(&native_field(error, "path")?)?.map(|path| {
             let candidate: &Path = Path::new(&path);
             match candidate.strip_prefix(staging_dir) {
                 Ok(relative) if candidate.is_absolute() => relative.to_string_lossy().into_owned(),
@@ -120,10 +121,10 @@ fn relative_diagnostics(
             }
         });
         diagnostics.push(RefactorDiagnostic {
-            code: error.getattr("code")?.extract()?,
-            message: error.getattr("message")?.extract()?,
+            code: native_field(error, "code")?.extract()?,
+            message: native_field(error, "message")?.extract()?,
             path,
-            line: error.getattr("line")?.extract()?,
+            line: native_field(error, "line")?.extract()?,
         });
     }
     Ok(diagnostics)
@@ -133,10 +134,10 @@ fn relative_diagnostics(
 fn write_errors(py: Python<'_>, errors: &[Bound<'_, PyAny>]) -> PyResult<()> {
     let stderr: Bound<'_, PyAny> = py.import("sys")?.getattr("stderr")?;
     for error in errors {
-        let location: String = optional_posix(&error.getattr("path")?)?
+        let location: String = optional_posix(&native_field(error, "path")?)?
             .map_or_else(String::new, |path| format!("{path}: "));
-        let code: String = error.getattr("code")?.str()?.extract()?;
-        let message: String = error.getattr("message")?.str()?.extract()?;
+        let code: String = native_field(error, "code")?.str()?.extract()?;
+        let message: String = native_field(error, "message")?.str()?.extract()?;
         stderr.call_method1("write", (format!("error[{code}] {location}{message}\n"),))?;
     }
     Ok(())
@@ -212,11 +213,14 @@ fn target_lookup(all_keys: &Bound<'_, PyAny>) -> PyResult<HashMap<String, Lineag
 
 fn target_request(request: &Bound<'_, PyAny>) -> PyResult<RefactorTargetRequest> {
     Ok(RefactorTargetRequest {
-        is_move: request.getattr("command")?.str()?.extract::<String>()? == MOVE_COMMAND,
-        target: request.getattr("target")?.extract()?,
-        new_name: request.getattr("new_name")?.extract()?,
-        destination: request.getattr("destination")?.extract()?,
-        cascade: request.getattr("cascade")?.extract()?,
+        is_move: native_field(request, "command")?
+            .str()?
+            .extract::<String>()?
+            == MOVE_COMMAND,
+        target: native_field(request, "target")?.extract()?,
+        new_name: native_field(request, "new_name")?.extract()?,
+        destination: native_field(request, "destination")?.extract()?,
+        cascade: native_field(request, "cascade")?.extract()?,
     })
 }
 
@@ -302,7 +306,7 @@ fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<O
         started.elapsed().as_secs_f64()
     ))?;
     let names: HashMap<String, LineageKey> =
-        target_lookup(&before.project.getattr("graph")?.getattr("all_keys")?)?;
+        target_lookup(&native_field(&before.project, "graph")?.getattr("all_keys")?)?;
     let lookup = |name: &str| names.get(name).cloned();
     let request: RefactorRequest =
         refactor_request_for_target(&target_request(&command.request)?, &lookup)
@@ -322,7 +326,7 @@ fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<O
     options.set_item("prefix", STAGING_PREFIX)?;
     let staging: Bound<'_, PyAny> =
         imported(py, "tempfile", "TemporaryDirectory")?.call((), Some(&options))?;
-    let staging_dir: PathBuf = staging.getattr("name")?.extract()?;
+    let staging_dir: PathBuf = native_field(&staging, "name")?.extract()?;
     let verified = verify(
         py,
         command,
@@ -347,7 +351,7 @@ fn run(py: Python<'_>, command: &Command<'_>, status: &Status<'_>) -> PyResult<O
         }));
     }
     status.complete("Verified: the edited project compiles.")?;
-    if command.request.getattr("dry_run")?.extract::<bool>()? {
+    if native_field(&command.request, "dry_run")?.extract::<bool>()? {
         return Ok(Some(Outcome {
             plan,
             status: RefactorStatus::DryRun,
@@ -370,7 +374,7 @@ fn finish(py: Python<'_>, command: &Command<'_>, outcome: &Outcome) -> PyResult<
         render_refactor_json(&outcome.plan, outcome.status, &outcome.diagnostics)
             .map_err(|error| PyValueError::new_err(format!("{error:?}")))?
     } else {
-        let project_dir: Bound<'_, PyAny> = command.request.getattr("project_dir")?;
+        let project_dir: Bound<'_, PyAny> = native_field(&command.request, "project_dir")?;
         let project_dir: Option<String> = if project_dir.is_none() {
             None
         } else {
@@ -403,13 +407,13 @@ fn finish(py: Python<'_>, command: &Command<'_>, outcome: &Outcome) -> PyResult<
 #[pyfunction]
 #[pyo3(signature = (*, request))]
 fn run_refactor_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let project_dir: Bound<'_, PyAny> = match request.getattr("project_dir")? {
+    let project_dir: Bound<'_, PyAny> = match native_field(request, "project_dir")? {
         directory if !directory.is_none() => directory,
         _ => py.import("pathlib")?.getattr("Path")?.call_method0("cwd")?,
     };
-    let json_output: bool = request.getattr("json_output")?.extract()?;
+    let json_output: bool = native_field(request, "json_output")?.extract()?;
     let use_color: bool =
-        !request.getattr("no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
+        !native_field(request, "no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
     let command: Command<'_> = Command {
         request: request.clone(),
         project_dir: project_dir.call_method0("resolve")?.extract()?,

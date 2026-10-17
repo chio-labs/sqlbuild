@@ -5,6 +5,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::models::{
     FingerprintInputs, ModelMigrationRequest,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -19,7 +20,7 @@ fn variants<'py>(
 ) -> PyResult<Vec<String>> {
     let name = model_reads::name_object(model)?;
     let metadata = inputs.metadata_jsons.get_item(name)?;
-    let cache = inputs.fingerprints.getattr("fingerprint")?;
+    let cache = native_field(&inputs.fingerprints, "fingerprint")?;
     let mut hashes: Vec<String> = Vec::new();
     for map in maps.try_iter()? {
         let hash: Option<String> = call_with(
@@ -62,7 +63,7 @@ pub(super) fn match_migration_fingerprints<'py>(
     let mut fingerprints: Vec<MigrationCandidate> = Vec::new();
     for candidate in &original {
         fingerprints.push(MigrationCandidate {
-            name: candidate.getattr("node_name")?.extract()?,
+            name: native_field(candidate, "node_name")?.extract()?,
             fingerprint: stored_migration_fingerprint(candidate)?.unwrap_or_default(),
         });
     }
@@ -111,6 +112,6 @@ pub(super) fn migration_destination_fingerprints<'py>(
 pub(super) fn stored_migration_fingerprint(
     fingerprint: &Bound<'_, PyAny>,
 ) -> PyResult<Option<String>> {
-    let metadata: String = fingerprint.getattr("metadata_json")?.extract()?;
+    let metadata: String = native_field(fingerprint, "metadata_json")?.extract()?;
     Ok(sqlbuild_analysis::planner_migrations::main::stored_migration_fingerprint::stored_migration_fingerprint(&metadata))
 }

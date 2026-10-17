@@ -12,6 +12,7 @@ use crate::bindings::_helpers::dagster_invocation::access::{
     constant_contains, get, items, text_of,
 };
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const LIVE_FAILURE_MESSAGE: &str =
     "SQLBuild resource attempt failed; see final execution diagnostics";
@@ -146,8 +147,8 @@ pub(crate) fn dagster_live_failure<'py>(
     command: Vec<String>,
 ) -> PyResult<(Vec<String>, Bound<'py, PyDict>)> {
     let py: Python<'py> = asset.py();
-    let kind: String = asset.getattr("kind")?.extract()?;
-    let name: String = asset.getattr("name")?.extract()?;
+    let kind: String = native_field(&asset, "kind")?.extract()?;
+    let name: String = native_field(&asset, "name")?.extract()?;
     let label: String = format!("{kind}:{name}");
     let or_unknown = |value: Bound<'py, PyAny>| -> PyResult<String> {
         if value.is_truthy()? {
@@ -156,8 +157,8 @@ pub(crate) fn dagster_live_failure<'py>(
             Ok(UNKNOWN.to_owned())
         }
     };
-    let phase: String = or_unknown(asset.getattr("failed_phase")?)?;
-    let code: String = or_unknown(envelope.getattr("error_code")?)?;
+    let phase: String = or_unknown(native_field(&asset, "failed_phase")?)?;
+    let code: String = or_unknown(native_field(&envelope, "error_code")?)?;
     let metadata: Bound<'py, PyDict> = PyDict::new(py);
     metadata.set_item("sqlbuild_asset", &label)?;
     metadata.set_item("sqlbuild_asset_kind", &kind)?;
@@ -167,12 +168,15 @@ pub(crate) fn dagster_live_failure<'py>(
     metadata.set_item("sqlbuild_error_message", LIVE_FAILURE_MESSAGE)?;
     metadata.set_item("sqlbuild_command", command.join(" "))?;
     for (key, value) in [
-        ("sqlbuild_target", asset.getattr("target")?),
+        ("sqlbuild_target", native_field(&asset, "target")?),
         (
             "sqlbuild_staging_relation",
-            asset.getattr("staging_relation")?,
+            native_field(&asset, "staging_relation")?,
         ),
-        ("sqlbuild_duration_ms", envelope.getattr("duration_ms")?),
+        (
+            "sqlbuild_duration_ms",
+            native_field(&envelope, "duration_ms")?,
+        ),
     ] {
         if !value.is_none() {
             metadata.set_item(key, value)?;

@@ -14,6 +14,7 @@ use crate::bindings::_helpers::planner_migrations::planning_origin::{
 };
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -23,7 +24,7 @@ use pyo3::types::{
 
 fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<ModelMigrationRequest<'py>>> {
     let py = item.py();
-    let values = item.getattr("config")?.getattr("values")?;
+    let values = native_field(item, "config")?.getattr("values")?;
     let origin = values.call_method1("get", ("migrate_from",))?;
     if !origin.is_instance_of::<PyString>() {
         return Ok(None);
@@ -46,16 +47,16 @@ fn manual_migration_requests<'py>(
     scope: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<ModelMigrationRequest<'py>>> {
     let mut requests: Vec<ModelMigrationRequest<'py>> = Vec::new();
-    for key in scope.getattr("execution_order")?.try_iter()? {
+    for key in native_field(scope, "execution_order")?.try_iter()? {
         let key = key?;
-        if !scope.getattr("selected_keys")?.contains(&key)?
-            || !key.getattr("resource_type")?.eq("model")?
+        if !native_field(scope, "selected_keys")?.contains(&key)?
+            || !native_field(&key, "resource_type")?.eq("model")?
         {
             continue;
         }
         let item = scope
             .getattr("models_by_name")?
-            .call_method1("get", (key.getattr("name")?,))?;
+            .call_method1("get", (native_field(&key, "name")?,))?;
         if !item.is_none()
             && let Some(request) = declared(&item)?
         {
@@ -73,8 +74,10 @@ pub(crate) fn plan_model_migrations<'py>(
     let runtime = phase.runtime.clone();
     let snapshot = phase.snapshot.clone();
     let schemas = super::planning_origin::project_schemas(&runtime)?;
-    let state =
-        super::state_inspection::inspection(&runtime, Some(&snapshot.getattr("fingerprints")?))?;
+    let state = super::state_inspection::inspection(
+        &runtime,
+        Some(&native_field(&snapshot, "fingerprints")?),
+    )?;
     let discovery = discover((phase, fingerprints), &state, &schemas)?;
     finish(phase, &state, &schemas, &discovery)
 }
@@ -98,7 +101,7 @@ fn discover<'py>(
     }
     if !declared_requests.is_empty() {
         call_with(
-            &state.getattr("inspect_schemas")?,
+            &native_field(state, "inspect_schemas")?,
             &[("schemas", schemas.clone())],
         )?;
     }
@@ -106,7 +109,7 @@ fn discover<'py>(
     for request in &declared_requests {
         let (origin_location, origin_model) = resolve_origin(request, &runtime, state)?;
         declarations.push(ModelMigrationDeclaration {
-            model_name: request.model.getattr("name")?,
+            model_name: native_field(&request.model, "name")?,
             origin_location,
             origin_model,
         });
@@ -149,30 +152,30 @@ fn finish<'py>(
         let mut origins: Vec<Bound<'py, PyAny>> = Vec::new();
         for (_, origin, _) in &resolved {
             require_same_database(state, origin)?;
-            let schema = origin.getattr("schema")?;
+            let schema = native_field(origin, "schema")?;
             if !schema.is_none() {
                 origin_schemas.add(schema)?;
             }
             origins.push(origin.clone());
         }
         call_with(
-            &state.getattr("inspect_schemas")?,
+            &native_field(state, "inspect_schemas")?,
             &[("schemas", origin_schemas.into_any())],
         )?;
         call_with(
-            &state.getattr("inspect_relations")?,
+            &native_field(state, "inspect_relations")?,
             &[("locations", PyTuple::new(py, origins)?.into_any())],
         )?;
         let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
         let snapshots_config = if project_config.is_none() {
             registry::class(py, RecordId::SnapshotsConfig)?.call0()?
         } else {
-            project_config.getattr("snapshots")?
+            native_field(&project_config, "snapshots")?
         };
         let policy = super::planning_boundary::missing_origin_policy(&runtime)?;
         for (request, origin, origin_model) in resolved {
             let item = request.model.clone();
-            let name = item.getattr("name")?;
+            let name = native_field(&item, "name")?;
             let decided = super::model_entries::decide(&MigrationDecisionRequest {
                 runtime: runtime.clone(),
                 request,
@@ -196,7 +199,7 @@ fn finish<'py>(
                         &item,
                         decided.inherited,
                         &destinations,
-                        &snapshot.getattr("column_dialect")?,
+                        &native_field(&snapshot, "column_dialect")?,
                     )?,
                 )?;
             }
@@ -207,12 +210,12 @@ fn finish<'py>(
     let mut warnings: Vec<Bound<'py, PyAny>> = Vec::new();
     warnings.extend(discovery.warnings.iter().cloned());
     for entry in &entries {
-        let name = entry.getattr("model_name")?;
+        let name = native_field(entry, "model_name")?;
         if let Some(handover) = handovers.get_item(&name)? {
-            if !handover.is_none() && entry.getattr("decision")?.eq("renamed")? {
+            if !handover.is_none() && native_field(entry, "decision")?.eq("renamed")? {
                 renamed.push(name.clone());
             }
-            let origin_model = entry.getattr("origin_model")?;
+            let origin_model = native_field(entry, "origin_model")?;
             if !origin_model.is_none() {
                 planned.set_item(&name, origin_model)?;
             }

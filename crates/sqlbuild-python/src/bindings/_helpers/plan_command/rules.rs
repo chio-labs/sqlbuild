@@ -8,6 +8,7 @@ use pyo3::wrap_pyfunction;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -37,7 +38,7 @@ fn print_line(py: Python<'_>, text: &str, stderr: bool) -> PyResult<()> {
 fn rule_codes(catalogue: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     let mut codes: Vec<String> = Vec::new();
     for rule in catalogue.try_iter()? {
-        codes.push(rule?.getattr("code")?.extract()?);
+        codes.push(native_field(&rule?, "code")?.extract()?);
     }
     Ok(codes)
 }
@@ -48,13 +49,13 @@ fn run_skills(
     project_dir: &Bound<'_, PyAny>,
 ) -> PyResult<i32> {
     let py: Python<'_> = request.py();
-    let check: bool = request.getattr("skills_check")?.is_truthy()?;
+    let check: bool = native_field(request, "skills_check")?.is_truthy()?;
     let fresh: bool = call_with(
         &registry::native(py, NativeAttr::InstallRulesSkills)?,
         &[
             ("config", config.clone()),
             ("project_dir", project_dir.clone()),
-            ("check", request.getattr("skills_check")?),
+            ("check", native_field(request, "skills_check")?),
         ],
     )?
     .is_truthy()?;
@@ -82,8 +83,8 @@ fn list_rules(catalogue: &Bound<'_, PyAny>, json_output: bool) -> PyResult<i32> 
             let rule: Bound<'_, PyAny> = rule?;
             lines.push(format!(
                 "{}  {}",
-                rule.getattr("code")?.str()?,
-                rule.getattr("message")?.str()?
+                native_field(&rule, "code")?.str()?,
+                native_field(&rule, "message")?.str()?
             ));
         }
         print_line(py, &lines.join("\n"), false)?;
@@ -96,13 +97,13 @@ fn list_rules(catalogue: &Bound<'_, PyAny>, json_output: bool) -> PyResult<i32> 
         for field in ["code", "family", "message", "custom"] {
             item.set_item(field, rule.getattr(field)?)?;
         }
-        let subject: Bound<'_, PyAny> = rule.getattr("subject")?;
+        let subject: Bound<'_, PyAny> = native_field(&rule, "subject")?;
         item.set_item(
             "subject",
             if subject.is_none() {
                 subject
             } else {
-                subject.getattr("value")?
+                native_field(&subject, "value")?
             },
         )?;
         rules.append(item)?;
@@ -126,7 +127,7 @@ fn show_rule(
     let py: Python<'_> = catalogue.py();
     for rule in catalogue.try_iter()? {
         let rule: Bound<'_, PyAny> = rule?;
-        if rule.getattr("code")?.extract::<String>()? == selector {
+        if native_field(&rule, "code")?.extract::<String>()? == selector {
             let text: String = call_with(
                 &registry::native(py, NativeAttr::FormatRule)?,
                 &[("rule", rule), ("config", config.clone())],
@@ -157,8 +158,8 @@ fn rule_inputs<'py>(
         &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
     )?;
-    let select: Bound<'py, PyAny> = request.getattr("select")?;
-    let exclude: Bound<'py, PyAny> = request.getattr("exclude")?;
+    let select: Bound<'py, PyAny> = native_field(request, "select")?;
+    let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;
     call_with(
         &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
@@ -170,8 +171,11 @@ fn rule_inputs<'py>(
     let adapter_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
+            ("local_config", native_field(&discovered, "local_config")?),
         ],
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, project_dir)?;
@@ -223,8 +227,8 @@ fn run_rule_selection(
         graph,
         selected,
     } = rule_inputs(request, project_dir)?;
-    let narrowed: bool =
-        request.getattr("select")?.is_truthy()? || request.getattr("exclude")?.is_truthy()?;
+    let narrowed: bool = native_field(request, "select")?.is_truthy()?
+        || native_field(request, "exclude")?.is_truthy()?;
     let replaced: Bound<'_, PyDict> = PyDict::new(py);
     replaced.set_item("select", PyTuple::new(py, [selector])?)?;
     replaced.set_item("ignore", PyTuple::empty(py))?;
@@ -259,7 +263,7 @@ fn run_rule_selection(
     )?;
     let note: Bound<'_, PyAny> = call_with(
         &registry::native(py, NativeAttr::FormatSkippedTypeProofRules)?,
-        &[("codes", result.getattr("skipped_type_proof_rules")?)],
+        &[("codes", native_field(&result, "skipped_type_proof_rules")?)],
     )?;
     if !note.is_none() {
         print_line(py, &format!("note: {}", note.str()?), true)?;
@@ -275,12 +279,12 @@ fn run_rule_selection(
                 "result",
                 registry::class(py, RecordId::RulesResult)?.call((), Some(&fields))?,
             ),
-            ("json_output", request.getattr("json_output")?),
+            ("json_output", native_field(request, "json_output")?),
         ],
     )?
     .extract()?;
     print_line(py, &text, false)?;
-    let findings: usize = result.getattr("findings")?.len()?;
+    let findings: usize = native_field(&result, "findings")?.len()?;
     if findings > 0 {
         print_line(
             py,
@@ -298,7 +302,7 @@ fn run_rule_selection(
 #[pyo3(signature = (*, request))]
 fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let py: Python<'_> = request.py();
-    let requested_dir: Bound<'_, PyAny> = request.getattr("project_dir")?;
+    let requested_dir: Bound<'_, PyAny> = native_field(request, "project_dir")?;
     let project_dir: Bound<'_, PyAny> = if requested_dir.is_none() {
         imported(py, "pathlib", "Path")?.call_method0("cwd")?
     } else {
@@ -309,7 +313,7 @@ fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
         &registry::native(py, NativeAttr::LoadRulesConfig)?,
         &[("project_dir", project_dir.clone())],
     )?;
-    let action: String = request.getattr("action")?.extract()?;
+    let action: String = native_field(request, "action")?.extract()?;
     if action == SKILLS_ACTION {
         return run_skills(request, &config, &project_dir);
     }
@@ -321,9 +325,12 @@ fn run_rules_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
         ],
     )?;
     if action == LIST_ACTION {
-        return list_rules(&catalogue, request.getattr("json_output")?.is_truthy()?);
+        return list_rules(
+            &catalogue,
+            native_field(request, "json_output")?.is_truthy()?,
+        );
     }
-    let selector: Option<String> = request.getattr("rule_selector")?.extract()?;
+    let selector: Option<String> = native_field(request, "rule_selector")?.extract()?;
     let Some(selector) = selector else {
         print_line(py, "A rule code or family prefix is required", false)?;
         return Ok(USAGE_EXIT_CODE);

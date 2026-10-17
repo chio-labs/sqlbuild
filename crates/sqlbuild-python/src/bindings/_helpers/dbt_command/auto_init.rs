@@ -14,6 +14,7 @@ use sqlbuild_core::dbt_command::models::ForwardedArg;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -89,8 +90,8 @@ pub(crate) fn ensure_twin_project<'py>(
     let callbacks: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::DbtInitProgressCallbacks)?,
         &[
-            ("start", progress.getattr("start")?),
-            ("complete", progress.getattr("complete")?),
+            ("start", native_field(&progress, "start")?),
+            ("complete", native_field(&progress, "complete")?),
         ],
     )?;
     let none: Bound<'py, PyAny> = py.None().into_bound(py);
@@ -121,12 +122,12 @@ pub(crate) fn ensure_twin_project<'py>(
         &registry::native(py, NativeAttr::BuildDbtInitProject)?,
         &[("request", request)],
     )?;
-    let project_file: String = result.getattr("project_file")?.str()?.to_string();
+    let project_file: String = native_field(&result, "project_file")?.str()?.to_string();
     progress_stream.call_method1(
         "write",
         (render_dbt_auto_init(&project_file, CliStyle { use_color }),),
     )?;
-    Ok((result.getattr("output_dir")?, forwarded))
+    Ok((native_field(&result, "output_dir")?, forwarded))
 }
 
 /// The arguments as a Python tuple.

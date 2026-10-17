@@ -10,6 +10,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::plan_output::{connection_config, connection_hooks};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -34,14 +35,14 @@ fn environment<'py>(args: &KeywordArguments<'py>) -> PyResult<Bound<'py, PyAny>>
     call_with(
         &registry::class(request.py(), RecordId::DbtPlanEnvironment)?,
         &[
-            ("project_dir", request.getattr("project_dir")?),
+            ("project_dir", native_field(&request, "project_dir")?),
             (
                 "discovered_inputs",
                 args.value("invocation")?.getattr("discovered_inputs")?,
             ),
-            ("project", compiled.getattr("project")?),
-            ("adapter", compiled.getattr("adapter")?),
-            ("adapter_name", compiled.getattr("adapter_name")?),
+            ("project", native_field(&compiled, "project")?),
+            ("adapter", native_field(&compiled, "adapter")?),
+            ("adapter_name", native_field(&compiled, "adapter_name")?),
         ],
     )
 }
@@ -66,7 +67,7 @@ fn write_dbt_execution_plan_text(
 ) -> PyResult<()> {
     let args = KeywordArguments::read(py, "write_dbt_execution_plan_text", options, OPTIONS)?;
     let request = args.value("request")?;
-    if request.getattr("json_output")?.is_truthy()? {
+    if native_field(&request, "json_output")?.is_truthy()? {
         return Ok(());
     }
     let plan = args.value("plan")?;
@@ -85,7 +86,7 @@ fn write_dbt_execution_plan_text(
             )?),
         )?
     };
-    let limit = if request.getattr("verbose")?.is_truthy()? {
+    let limit = if native_field(&request, "verbose")?.is_truthy()? {
         none(py)
     } else {
         pyo3::types::PyInt::new(py, super::constants::PLAN_DISPLAY_LIMIT).into_any()
@@ -95,7 +96,7 @@ fn write_dbt_execution_plan_text(
         &[
             ("plan", display),
             ("json_output", boolean(py, false)),
-            ("use_color", request.getattr("use_color")?),
+            ("use_color", native_field(&request, "use_color")?),
             (
                 "display_options",
                 call_with(
@@ -124,17 +125,23 @@ fn execute_dbt_without_state_tracking<'py>(
     call_with(
         &registry::native(py, NativeAttr::ExecuteDbtCommands)?,
         &[
-            ("runner", invocation.getattr("runner")?),
-            ("options", invocation.getattr("dbt_options")?),
+            ("runner", native_field(&invocation, "runner")?),
+            ("options", native_field(&invocation, "dbt_options")?),
             ("merged_argv", args.value("merged_dbt_argv")?),
-            ("progress_stream", invocation.getattr("output_stream")?),
-            ("stdout_stream", invocation.getattr("dbt_output_stream")?),
-            ("use_color", request.getattr("use_color")?),
+            (
+                "progress_stream",
+                native_field(&invocation, "output_stream")?,
+            ),
+            (
+                "stdout_stream",
+                native_field(&invocation, "dbt_output_stream")?,
+            ),
+            ("use_color", native_field(&request, "use_color")?),
             (
                 "skip_message",
                 text(py, "Skipping dbt: no dbt work selected."),
             ),
-            ("on_progress", request.getattr("on_progress")?),
+            ("on_progress", native_field(&request, "on_progress")?),
         ],
     )
 }
@@ -177,15 +184,15 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
         OPTIONS,
     )?;
     let plan = args.value("plan")?;
-    if !plan.getattr("sqlbuild_skip_reason")?.is_none() {
+    if !native_field(&plan, "sqlbuild_skip_reason")?.is_none() {
         return Ok(none(py));
     }
-    let selected = plan.getattr("selection")?.getattr("sqlbuild_model_names")?;
+    let selected = native_field(&plan, "selection")?.getattr("sqlbuild_model_names")?;
     if !selected.is_truthy()? {
         return Ok(none(py));
     }
     let invocation = args.value("invocation")?;
-    let stream = invocation.getattr("output_stream")?;
+    let stream = native_field(&invocation, "output_stream")?;
     emit(&stream, "\n")?;
     let reporter = call_with(
         &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
@@ -205,7 +212,7 @@ fn resolve_sqlbuild_execution_plan_output<'py>(
             ("selected_model_names", selected),
             (
                 "sqlbuild_args",
-                invocation.getattr("effective_sqlbuild_args")?,
+                native_field(&invocation, "effective_sqlbuild_args")?,
             ),
             (
                 "external_blocked_model_names",
@@ -234,8 +241,11 @@ fn execution_limits<'py>(
     call_with(
         &registry::native(py, NativeAttr::ResolveTargetConfig)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(discovered, "project_config")?,
+            ),
+            ("local_config", native_field(discovered, "local_config")?),
             ("target_name", target),
         ],
     )?
@@ -253,24 +263,27 @@ fn run_dbt_sqlbuild_work<'py>(
     let request = args.value("request")?;
     let invocation = args.value("invocation")?;
     let compiled = args.value("compiled")?;
-    let project = compiled.getattr("project")?;
-    let discovered = invocation.getattr("discovered_inputs")?;
+    let project = native_field(&compiled, "project")?;
+    let discovered = native_field(&invocation, "discovered_inputs")?;
     let context = call_with(
         &registry::class(py, RecordId::DbtSqlbuildWorkContext)?,
         &[
             ("plan_output", args.value("plan_output")?),
             ("connection_config", args.value("connection_config")?),
-            ("adapter", compiled.getattr("adapter")?),
-            ("adapter_name", compiled.getattr("adapter_name")?),
-            ("output_stream", invocation.getattr("output_stream")?),
-            ("use_color", request.getattr("use_color")?),
+            ("adapter", native_field(&compiled, "adapter")?),
+            ("adapter_name", native_field(&compiled, "adapter_name")?),
+            ("output_stream", native_field(&invocation, "output_stream")?),
+            ("use_color", native_field(&request, "use_color")?),
             (
                 "snapshots_config",
-                discovered.getattr("project_config")?.getattr("snapshots")?,
+                native_field(&discovered, "project_config")?.getattr("snapshots")?,
             ),
             (
                 "execution_limits",
-                execution_limits(&discovered, project.getattr("effective_target_name")?)?,
+                execution_limits(
+                    &discovered,
+                    native_field(&project, "effective_target_name")?,
+                )?,
             ),
         ],
     )?;
@@ -278,11 +291,11 @@ fn run_dbt_sqlbuild_work<'py>(
         &registry::native(py, NativeAttr::ExecuteDbtSqlbuildWork)?,
         &[
             ("context", context),
-            ("command", request.getattr("command")?),
+            ("command", native_field(&request, "command")?),
             ("project", project),
-            ("project_dir", request.getattr("project_dir")?),
-            ("fail_fast", request.getattr("fail_fast")?),
-            ("verbose", request.getattr("verbose")?),
+            ("project_dir", native_field(&request, "project_dir")?),
+            ("fail_fast", native_field(&request, "fail_fast")?),
+            ("verbose", native_field(&request, "verbose")?),
         ],
     )
 }

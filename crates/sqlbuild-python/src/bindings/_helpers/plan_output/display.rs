@@ -23,6 +23,7 @@ use crate::bindings::_helpers::cursor::scalars::{
     render_value, to_exclusive, to_inclusive, try_parse,
 };
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -31,14 +32,14 @@ const DATETIME_MODULE: &str = "datetime";
 fn label_facts(entry: &Bound<'_, PyAny>) -> PyResult<ModelLabelFacts> {
     let field = |name: &str| -> PyResult<Option<String>> { optional_text(&entry.getattr(name)?) };
     Ok(ModelLabelFacts {
-        materialization_type: text(&entry.getattr("materialization_type")?)?,
-        action: text(&entry.getattr("action")?)?,
+        materialization_type: text(&native_field(entry, "materialization_type")?)?,
+        action: text(&native_field(entry, "action")?)?,
         custom_materialization_name: field("custom_materialization_name")?,
         incremental_strategy: field("incremental_strategy")?,
         incremental_mode: field("incremental_mode")?,
         cursor_type: field("cursor_type")?,
         snapshot_strategy: field("snapshot_strategy")?,
-        historical: !entry.getattr("observed_at_column")?.is_none(),
+        historical: !native_field(entry, "observed_at_column")?.is_none(),
         historical_input: field("historical_input")?,
     })
 }
@@ -184,7 +185,7 @@ fn model_execution_annotation(entry: &Bound<'_, PyAny>) -> PyResult<String> {
 fn materialization_type_display<'py>(
     resource_kind: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    resource_kind.getattr("value")
+    native_field(resource_kind, "value")
 }
 
 fn names(input_names: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -224,18 +225,18 @@ pub(crate) fn resolve_effective_microbatch_batch_size(
 
 fn as_datetime<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    let inner: Bound<'py, PyAny> = value.getattr("value")?;
+    let inner: Bound<'py, PyAny> = native_field(value, "value")?;
     if value.is_instance(&registry::class(py, RecordId::TimestampValue)?)? {
         return Ok(inner);
     }
     let datetime: Bound<'py, PyAny> = imported(py, DATETIME_MODULE, "datetime")?;
-    let midnight: Bound<'py, PyAny> = datetime.getattr("min")?.call_method0("time")?;
+    let midnight: Bound<'py, PyAny> = native_field(&datetime, "min")?.call_method0("time")?;
     datetime.call_method1("combine", (inner, midnight))
 }
 
 fn presume_utc<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    if !value.getattr("tzinfo")?.is_none() {
+    if !native_field(&value, "tzinfo")?.is_none() {
         return Ok(value);
     }
     let options: Bound<'py, PyDict> = PyDict::new(py);
@@ -257,7 +258,7 @@ pub(crate) fn aligned_timestamp_bounds<'py>(
     let py: Python<'py> = start.py();
     let mut start_at: Bound<'py, PyAny> = as_datetime(start)?;
     let mut end_at: Bound<'py, PyAny> = as_datetime(end)?;
-    if start_at.getattr("tzinfo")?.is_none() != end_at.getattr("tzinfo")?.is_none() {
+    if native_field(&start_at, "tzinfo")?.is_none() != native_field(&end_at, "tzinfo")?.is_none() {
         start_at = presume_utc(start_at)?;
         end_at = presume_utc(end_at)?;
     }

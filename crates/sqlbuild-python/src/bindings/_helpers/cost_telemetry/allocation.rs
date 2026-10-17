@@ -15,6 +15,7 @@ use crate::bindings::_helpers::cost_telemetry::values::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -24,19 +25,19 @@ const PENDING_MESSAGE: &str = "Snowflake query history is not complete yet.";
 pub(crate) fn cost_query(observation: &Bound<'_, PyAny>, run_id: &str) -> PyResult<CostQuery> {
     let text = |name: &str| -> PyResult<Option<String>> { observation.getattr(name)?.extract() };
     Ok(CostQuery {
-        query_id: observation.getattr("query_id")?.extract()?,
+        query_id: native_field(observation, "query_id")?.extract()?,
         warehouse: WarehouseKey {
-            name: observation.getattr("warehouse_name")?.extract()?,
-            size: observation.getattr("warehouse_size")?.extract()?,
+            name: native_field(observation, "warehouse_name")?.extract()?,
+            size: native_field(observation, "warehouse_size")?.extract()?,
             kind: text("warehouse_type")?,
-            cluster: observation.getattr("cluster_number")?.extract()?,
+            cluster: native_field(observation, "cluster_number")?.extract()?,
         },
-        started_micros: instant_micros(&observation.getattr("started_at")?)?,
-        completed_micros: instant_micros(&observation.getattr("completed_at")?)?,
+        started_micros: instant_micros(&native_field(observation, "started_at")?)?,
+        completed_micros: instant_micros(&native_field(observation, "completed_at")?)?,
         in_run: text("run_id")?.as_deref() == Some(run_id),
         resource_type: text("resource_type")?,
         resource_name: text("resource_name")?,
-        bytes_scanned: observation.getattr("bytes_scanned")?.extract()?,
+        bytes_scanned: native_field(observation, "bytes_scanned")?.extract()?,
     })
 }
 

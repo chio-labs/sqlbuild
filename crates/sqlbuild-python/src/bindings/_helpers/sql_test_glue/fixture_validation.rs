@@ -17,6 +17,7 @@ use crate::bindings::_helpers::planner_strategy::fixture_sql::{
 };
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sql_test_glue::constants::{COMPILE_TYPES, FIXTURE_PREFIXES};
 
 /// Report every statically provable fixture defect or return the completed fixture SQL groups.
@@ -30,11 +31,11 @@ pub(super) fn validated_fixtures<'py>(
     let (chain, [refs, sources, seeds, expected]) = request;
     let adapter = inputs.1;
     let resource_types = imported(py, COMPILE_TYPES, "CompiledResourceType")?;
-    let model = resource_types.getattr("MODEL")?;
+    let model = native_field(&resource_types, "MODEL")?;
     let kinds = [
         model.clone(),
-        resource_types.getattr("SOURCE")?,
-        resource_types.getattr("SEED")?,
+        native_field(&resource_types, "SOURCE")?,
+        native_field(&resource_types, "SEED")?,
     ];
     let groups = PyTuple::new(
         py,
@@ -48,7 +49,7 @@ pub(super) fn validated_fixtures<'py>(
     let completion = complete_fixtures(context, adapter, (&chain, groups.as_any()))?;
     let mut errors: BTreeSet<String> = BTreeSet::new();
     for diagnostic in &completion.diagnostics {
-        let key = diagnostic.getattr("key")?;
+        let key = native_field(diagnostic, "key")?;
         errors.insert(format!(
             "{}: {}",
             fixture_location(
@@ -56,12 +57,12 @@ pub(super) fn validated_fixtures<'py>(
                 &key.get_item(0)?,
                 &key.get_item(1)?.extract::<String>()?
             )?,
-            diagnostic.getattr("message")?.extract::<String>()?
+            native_field(diagnostic, "message")?.extract::<String>()?
         ));
     }
     let inferred_by_fixture = &completion.inferred_by_fixture;
     let completed_expected = expected.copy()?;
-    let sql_test = resource_types.getattr("SQL_TEST")?;
+    let sql_test = native_field(&resource_types, "SQL_TEST")?;
     let type_groups = [
         (&kinds[0], &refs),
         (&kinds[1], &sources),
@@ -106,7 +107,7 @@ pub(super) fn validated_fixtures<'py>(
                         &name,
                         complete_typed_null_columns(&completed_sql, &inference, types, adapter)?,
                     )?;
-                    Some(inference.getattr("columns")?)
+                    Some(native_field(&inference, "columns")?)
                 }
             } else {
                 let key = PyTuple::new(py, [kind, &key_name])?;
@@ -127,20 +128,20 @@ pub(super) fn validated_fixtures<'py>(
                 .unwrap_or_default();
             for column in columns.try_iter()? {
                 let column = column?;
-                let column_name = column.getattr("name")?;
+                let column_name = native_field(&column, "name")?;
                 let folded_name: String = column_name.call_method0("casefold")?.extract()?;
                 let expected_type: Option<String> = types
                     .iter()
                     .find(|(column, _)| *column == folded_name)
                     .map(|(_, sql_type)| sql_type.clone());
-                let inferred_type: Option<String> = column.getattr("type")?.extract()?;
+                let inferred_type: Option<String> = native_field(&column, "type")?.extract()?;
                 if !collection_mismatch(expected_type.as_deref(), inferred_type.as_deref()) {
                     continue;
                 }
                 let label = if expected_output {
                     "expected output".to_owned()
                 } else {
-                    format!("mock {}", kind.getattr("value")?.extract::<String>()?)
+                    format!("mock {}", native_field(kind, "value")?.extract::<String>()?)
                 };
                 errors.insert(format!(
                     "{}: {label} '{name}' column '{}' has incompatible type {}; resource type is {}. Use an explicit CAST, ARRAY_CONSTRUCT, or PARSE_JSON as appropriate",
@@ -153,7 +154,7 @@ pub(super) fn validated_fixtures<'py>(
         }
     }
     if !errors.is_empty() {
-        let test_name: String = test.getattr("name")?.extract()?;
+        let test_name: String = native_field(test, "name")?.extract()?;
         return Ok(Err(errors
             .into_iter()
             .map(|error| format!("SQL test '{test_name}': {error}"))
@@ -183,14 +184,14 @@ pub(super) fn fixture_location(
     resource_type: &Bound<'_, PyAny>,
     name: &str,
 ) -> PyResult<String> {
-    let value: String = resource_type.getattr("value")?.extract()?;
+    let value: String = native_field(resource_type, "value")?.extract()?;
     let prefix = FIXTURE_PREFIXES
         .iter()
         .find_map(|(kind, prefix)| (*kind == value).then_some(*prefix))
         .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(value))?;
-    let test_file = test.getattr("test_file")?;
+    let test_file = native_field(test, "test_file")?;
     let line = fixture_line(
-        &test_file.getattr("contents")?.extract::<String>()?,
+        &native_field(&test_file, "contents")?.extract::<String>()?,
         &format!("{prefix}{name}"),
     )
     .map_err(value_error)?;

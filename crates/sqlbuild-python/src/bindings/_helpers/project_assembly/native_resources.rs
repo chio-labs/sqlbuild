@@ -24,6 +24,7 @@ use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::project_assembly::models::{
     NativeProjectResources, NativeResourceFailure,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -162,7 +163,7 @@ fn tags(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 }
 
 fn model_facts(model_input: &Bound<'_, PyAny>, checks: &Bound<'_, PyAny>) -> PyResult<ModelFacts> {
-    let model_file: Bound<'_, PyAny> = model_input.getattr("model_file")?;
+    let model_file: Bound<'_, PyAny> = native_field(model_input, "model_file")?;
     let reference_rows: Vec<ReferenceRow> = input_reference_rows(model_input)?
         .into_iter()
         .map(|(kind, name, package, _)| (kind, name, package))
@@ -214,8 +215,8 @@ fn project_request<'py>(
     syntax_checks: &Bound<'py, PyAny>,
 ) -> PyResult<(ProjectRequest, Vec<Bound<'py, PyAny>>)> {
     let py: Python<'py> = inputs.py();
-    let (variables, held) = variables(&inputs.getattr("effective_vars")?)?;
-    let target: Bound<'py, PyAny> = inputs.getattr("effective_target")?;
+    let (variables, held) = variables(&native_field(inputs, "effective_vars")?)?;
+    let target: Bound<'py, PyAny> = native_field(inputs, "effective_target")?;
     let target: Option<TargetNamespace> = if target.is_none() {
         None
     } else {
@@ -225,7 +226,8 @@ fn project_request<'py>(
             loader_schema: optional_text(&target, "loader_schema")?,
         })
     };
-    let defaults: Bound<'py, PyAny> = inputs.getattr("project_config")?.getattr("defaults")?;
+    let defaults: Bound<'py, PyAny> =
+        native_field(inputs, "project_config")?.getattr("defaults")?;
     let defaults = SeedDefaults {
         database: optional_text(&defaults, "database")?,
         schema: optional_text(&defaults, "schema")?,
@@ -235,9 +237,9 @@ fn project_request<'py>(
     let seed_inputs: Vec<Bound<'py, PyAny>> = items(inputs, "seed_inputs")?;
     let mut seeds: Vec<SeedFacts> = Vec::with_capacity(seed_inputs.len());
     for seed_input in &seed_inputs {
-        let entry: Bound<'py, PyAny> = seed_input.getattr("schema_entry")?;
+        let entry: Bound<'py, PyAny> = native_field(seed_input, "schema_entry")?;
         seeds.push(SeedFacts {
-            name: entry.getattr("name")?.extract()?,
+            name: native_field(&entry, "name")?.extract()?,
             tags: entry
                 .getattr("tags")?
                 .try_iter()?
@@ -279,7 +281,7 @@ fn project_request<'py>(
     let rows = |attribute: &str| -> PyResult<Vec<Bound<'py, PyAny>>> {
         items(inputs, attribute)?
             .into_iter()
-            .map(|input| input.getattr("assembly_row"))
+            .map(|input| native_field(&input, "assembly_row"))
             .collect()
     };
     let sources: Vec<SourceFacts> = rows("source_inputs")?

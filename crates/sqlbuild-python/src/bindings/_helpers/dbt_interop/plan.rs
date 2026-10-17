@@ -9,6 +9,7 @@ use sqlbuild_core::cli_text::main::format_dbt_interop_plan_json::format_dbt_inte
 use sqlbuild_core::cli_text::models::{DbtInteropPlanText, DbtLsNodeText, DisplayLimit};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -49,51 +50,51 @@ fn reason_value(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if value.is_none() {
         return Ok(None);
     }
-    Ok(Some(value.getattr("value")?.extract()?))
+    Ok(Some(native_field(value, "value")?.extract()?))
 }
 
 fn ls_node(node: &Bound<'_, PyAny>) -> PyResult<DbtLsNodeText> {
     Ok(DbtLsNodeText {
-        unique_id: node.getattr("unique_id")?.extract()?,
-        resource_type: optional_text(&node.getattr("resource_type")?)?,
-        name: optional_text(&node.getattr("name")?)?,
-        fqn: strings(&node.getattr("fqn")?)?,
+        unique_id: native_field(node, "unique_id")?.extract()?,
+        resource_type: optional_text(&native_field(node, "resource_type")?)?,
+        name: optional_text(&native_field(node, "name")?)?,
+        fqn: strings(&native_field(node, "fqn")?)?,
     })
 }
 
 fn plan_text(plan: &Bound<'_, PyAny>) -> PyResult<DbtInteropPlanText> {
-    let selection: Bound<'_, PyAny> = plan.getattr("selection")?;
-    let anchor_ids: Bound<'_, PyAny> = selection.getattr("dbt_anchor_unique_ids_by_term")?;
+    let selection: Bound<'_, PyAny> = native_field(plan, "selection")?;
+    let anchor_ids: Bound<'_, PyAny> = native_field(&selection, "dbt_anchor_unique_ids_by_term")?;
     let empty: Bound<'_, PyTuple> = PyTuple::empty(plan.py());
     let mut anchors: Vec<(String, Vec<String>)> = Vec::new();
-    for term in selection.getattr("dbt_anchor_terms")?.try_iter()? {
+    for term in native_field(&selection, "dbt_anchor_terms")?.try_iter()? {
         let term: Bound<'_, PyAny> = term?;
         let unique_ids: Vec<String> = strings(&anchor_ids.call_method1("get", (&term, &empty))?)?;
         anchors.push((term.extract()?, unique_ids));
     }
     let mut path_translations: Vec<(String, String)> = Vec::new();
-    for pair in selection.getattr("path_translations")?.try_iter()? {
+    for pair in native_field(&selection, "path_translations")?.try_iter()? {
         path_translations.push(pair?.extract()?);
     }
     Ok(DbtInteropPlanText {
-        command: plan.getattr("command")?.getattr("value")?.extract()?,
-        dbt_argv: strings(&plan.getattr("dbt_command_argv")?)?,
-        supplemental_dbt_argvs: argvs(&plan.getattr("supplemental_dbt_command_argvs")?)?,
+        command: native_field(plan, "command")?.getattr("value")?.extract()?,
+        dbt_argv: strings(&native_field(plan, "dbt_command_argv")?)?,
+        supplemental_dbt_argvs: argvs(&native_field(plan, "supplemental_dbt_command_argvs")?)?,
         dbt_nodes: plan
             .getattr("dbt_selected_nodes")?
             .try_iter()?
             .map(|node| ls_node(&node?))
             .collect::<PyResult<_>>()?,
-        dbt_selected_unique_ids: strings(&plan.getattr("dbt_selected_unique_ids")?)?,
-        dbt_required_unique_ids: strings(&selection.getattr("dbt_required_unique_ids")?)?,
-        dbt_required_selector_terms: strings(&plan.getattr("dbt_required_selector_terms")?)?,
-        dbt_skip_reason: reason_value(&plan.getattr("dbt_skip_reason")?)?,
-        sqlbuild_argvs: argvs(&plan.getattr("sqlbuild_command_argvs")?)?,
-        sqlbuild_models: strings(&selection.getattr("sqlbuild_model_names")?)?,
-        sqlbuild_skip_reason: reason_value(&plan.getattr("sqlbuild_skip_reason")?)?,
+        dbt_selected_unique_ids: strings(&native_field(plan, "dbt_selected_unique_ids")?)?,
+        dbt_required_unique_ids: strings(&native_field(&selection, "dbt_required_unique_ids")?)?,
+        dbt_required_selector_terms: strings(&native_field(plan, "dbt_required_selector_terms")?)?,
+        dbt_skip_reason: reason_value(&native_field(plan, "dbt_skip_reason")?)?,
+        sqlbuild_argvs: argvs(&native_field(plan, "sqlbuild_command_argvs")?)?,
+        sqlbuild_models: strings(&native_field(&selection, "sqlbuild_model_names")?)?,
+        sqlbuild_skip_reason: reason_value(&native_field(plan, "sqlbuild_skip_reason")?)?,
         anchors,
         path_translations,
-        warnings: strings(&plan.getattr("warnings")?)?,
+        warnings: strings(&native_field(plan, "warnings")?)?,
     })
 }
 
@@ -137,13 +138,13 @@ pub(crate) fn build_dbt_interop_plan<'py>(
     let nodes: Bound<'py, PyAny> = tuple_of(arguments.value("dbt_ls_nodes")?)?;
     let mut selected: Vec<String> = Vec::new();
     for node in nodes.try_iter()? {
-        selected.push(node?.getattr("unique_id")?.extract()?);
+        selected.push(native_field(&node?, "unique_id")?.extract()?);
     }
     selected.sort();
     let selection: Bound<'py, PyAny> = arguments.value("selection")?;
     let dbt_has_work: bool =
-        !selected.is_empty() || selection.getattr("dbt_required_unique_ids")?.is_truthy()?;
-    let sqlbuild_has_work: bool = selection.getattr("sqlbuild_model_names")?.is_truthy()?;
+        !selected.is_empty() || native_field(&selection, "dbt_required_unique_ids")?.is_truthy()?;
+    let sqlbuild_has_work: bool = native_field(&selection, "sqlbuild_model_names")?.is_truthy()?;
     let warnings: Vec<String> = dbt_interop_plan_warnings(
         strings(&empty_or(arguments.value("warnings")?))?,
         dbt_has_work || sqlbuild_has_work,
@@ -193,8 +194,8 @@ pub(crate) fn build_dbt_interop_plan<'py>(
 
 fn display_limit(options: &Bound<'_, PyAny>) -> PyResult<DisplayLimit> {
     Ok(DisplayLimit {
-        max_entries: options.getattr("max_entries_per_section")?.extract()?,
-        overflow_flag: options.getattr("overflow_flag")?.extract()?,
+        max_entries: native_field(options, "max_entries_per_section")?.extract()?,
+        overflow_flag: native_field(options, "overflow_flag")?.extract()?,
     })
 }
 
@@ -214,7 +215,7 @@ fn render_dbt_interop_plan(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -
         display = registry::class(py, RecordId::DisplayOptions)?.call0()?;
     }
     let use_color: bool = arguments.flag("use_color")?;
-    let plan_output: Bound<'_, PyAny> = plan.getattr("sqlbuild_plan_output")?;
+    let plan_output: Bound<'_, PyAny> = native_field(&plan, "sqlbuild_plan_output")?;
     let sqlbuild_plan: Option<String> =
         if text.sqlbuild_skip_reason.is_some() || plan_output.is_none() {
             None

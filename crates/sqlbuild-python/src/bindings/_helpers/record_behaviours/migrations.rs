@@ -10,6 +10,7 @@ use sqlbuild_core::migration_values::main::plan_label::plan_label;
 use sqlbuild_core::migration_values::models::{ColumnDecisionTraits, DecisionTraits};
 
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -83,7 +84,7 @@ fn lowered<'py>(text: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 /// `(database.lower() or None, (schema or "").lower(), name.lower())`.
 fn relation_identity<'py>(relation: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = relation.py();
-    let schema: Bound<'py, PyAny> = relation.getattr("schema")?;
+    let schema: Bound<'py, PyAny> = native_field(relation, "schema")?;
     let schema: Bound<'py, PyAny> = if schema.is_none() {
         "".into_bound_py_any(py)?
     } else {
@@ -92,9 +93,9 @@ fn relation_identity<'py>(relation: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
     PyTuple::new(
         py,
         [
-            lowered(&relation.getattr("database")?)?,
+            lowered(&native_field(relation, "database")?)?,
             schema,
-            relation.getattr("name")?.call_method0("lower")?,
+            native_field(relation, "name")?.call_method0("lower")?,
         ],
     )
 }
@@ -132,8 +133,8 @@ pub(crate) fn event_mentions(
     kwargs: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<Py<PyAny>> {
     let relation: Bound<'_, PyAny> = call_argument((args, kwargs), "relation", 0)?;
-    let mentions: bool = relations_match(&event.getattr("origin")?, &relation)?
-        || relations_match(&event.getattr("destination")?, &relation)?;
+    let mentions: bool = relations_match(&native_field(event, "origin")?, &relation)?
+        || relations_match(&native_field(event, "destination")?, &relation)?;
     mentions.into_py_any(event.py())
 }
 
@@ -145,9 +146,10 @@ pub(crate) fn column_event_mentions(
 ) -> PyResult<Py<PyAny>> {
     let relation: Bound<'_, PyAny> = call_argument((args, kwargs), "relation", 0)?;
     let columns: Bound<'_, PyAny> = call_argument((args, kwargs), "columns", 1)?;
-    let mentions: bool = relations_match(&event.getattr("relation")?, &relation)?
-        && (columns.contains(event.getattr("origin_column")?.call_method0("lower")?)?
-            || columns.contains(event.getattr("destination_column")?.call_method0("lower")?)?);
+    let mentions: bool = relations_match(&native_field(event, "relation")?, &relation)?
+        && (columns.contains(native_field(event, "origin_column")?.call_method0("lower")?)?
+            || columns
+                .contains(native_field(event, "destination_column")?.call_method0("lower")?)?);
     mentions.into_py_any(event.py())
 }
 
@@ -177,17 +179,17 @@ pub(crate) fn history_status(
 ) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = history.py();
     let now: Bound<'_, PyAny> = call_argument((args, kwargs), "now", 0)?;
-    let created: Bound<'_, PyAny> = history.getattr("created")?;
-    let status: &str = if !history.getattr("dropped")?.is_none() {
+    let created: Bound<'_, PyAny> = native_field(history, "created")?;
+    let status: &str = if !native_field(history, "dropped")?.is_none() {
         "DROPPED"
     } else if !created.is_none() {
-        let expires_at: Bound<'_, PyAny> = created.getattr("expires_at")?;
+        let expires_at: Bound<'_, PyAny> = native_field(&created, "expires_at")?;
         if !expires_at.is_none() && expires_at.le(&now)? {
             "EXPIRED"
         } else {
             "LIVE"
         }
-    } else if !history.getattr("archived")?.is_none() {
+    } else if !native_field(history, "archived")?.is_none() {
         "PENDING_VIEW"
     } else {
         "PENDING_ARCHIVE"
@@ -199,10 +201,10 @@ pub(crate) fn history_status(
 
 /// `OldNameViewHistory.old`: the relation name the compatibility view occupies.
 pub(crate) fn history_old(history: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(history.getattr("required")?.getattr("old")?.unbind())
+    Ok(native_field(history, "required")?.getattr("old")?.unbind())
 }
 
 /// `OldNameViewHistory.new`: the relation the compatibility view reads.
 pub(crate) fn history_new(history: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    Ok(history.getattr("required")?.getattr("new")?.unbind())
+    Ok(native_field(history, "required")?.getattr("new")?.unbind())
 }

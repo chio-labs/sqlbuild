@@ -12,6 +12,7 @@ use sqlbuild_state::events::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::constants::OLD_NAME_VIEW_CONFIG_KEY;
@@ -43,8 +44,8 @@ pub(crate) fn newest_move<'py>(
         .map(|event| {
             Ok(MoveEventKey {
                 order: event_order(event)?,
-                origin: event_relation(&event.getattr("origin")?)?,
-                destination: event_relation(&event.getattr("destination")?)?,
+                origin: event_relation(&native_field(event, "origin")?)?,
+                destination: event_relation(&native_field(event, "destination")?)?,
             })
         })
         .collect::<PyResult<_>>()?;
@@ -64,9 +65,9 @@ pub(crate) fn newest_column<'py>(
         .map(|event| {
             Ok(ColumnEventKey {
                 order: event_order(event)?,
-                relation: event_relation(&event.getattr("relation")?)?,
-                origin_column: event.getattr("origin_column")?.extract()?,
-                destination_column: event.getattr("destination_column")?.extract()?,
+                relation: event_relation(&native_field(event, "relation")?)?,
+                origin_column: native_field(event, "origin_column")?.extract()?,
+                destination_column: native_field(event, "destination_column")?.extract()?,
             })
         })
         .collect::<PyResult<_>>()?;
@@ -77,7 +78,9 @@ pub(crate) fn newest_column<'py>(
 }
 
 fn step(fact: &Bound<'_, PyAny>) -> PyResult<OldNameStep> {
-    let value: String = fact.getattr("event_type")?.getattr("value")?.extract()?;
+    let value: String = native_field(fact, "event_type")?
+        .getattr("value")?
+        .extract()?;
     match value.as_str() {
         "required" => Ok(OldNameStep::Required),
         "origin_archived" => Ok(OldNameStep::OriginArchived),
@@ -103,7 +106,7 @@ pub(crate) fn old_name_views<'py>(
         .map(|fact| {
             Ok(OldNameFactKey {
                 order: event_order(fact)?,
-                migration_event_id: fact.getattr("migration_event_id")?.extract()?,
+                migration_event_id: native_field(fact, "migration_event_id")?.extract()?,
                 step: step(fact)?,
             })
         })

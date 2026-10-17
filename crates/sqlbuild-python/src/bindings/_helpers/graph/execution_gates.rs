@@ -8,6 +8,7 @@ use crate::bindings::_helpers::analysis::explicit_references::{
     GateRow, HookRow, native_execution_gate_edges,
 };
 use crate::bindings::_helpers::graph::keys::KeyCache;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -92,17 +93,17 @@ fn model_python_hook_names<'py>(
     model: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let entry_type: Bound<'_, PyAny> = registry::class(py, RecordId::PythonHookEntry)?;
-    let values: Bound<'_, PyAny> = model.getattr("config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
     let mut names: Vec<String> = Vec::new();
     for hook_key in MODEL_HOOK_KEYS {
         let entries: Bound<'_, PyAny> = values.call_method1("get", (hook_key,))?;
         if entries.is_instance(&entry_type)? {
-            names.push(entries.getattr("name")?.extract()?);
+            names.push(native_field(&entries, "name")?.extract()?);
         } else if entries.is_instance_of::<PyList>() || entries.is_instance_of::<PyTuple>() {
             for entry in entries.try_iter()? {
                 let entry: Bound<'_, PyAny> = entry?;
                 if entry.is_instance(&entry_type)? {
-                    names.push(entry.getattr("name")?.extract()?);
+                    names.push(native_field(&entry, "name")?.extract()?);
                 }
             }
         }
@@ -125,12 +126,12 @@ pub(crate) fn sql_ref_key<'py>(
     let resource_type: Bound<'py, PyAny> = py
         .import(COMPILE_TYPES_MODULE)?
         .getattr("CompiledResourceType")?
-        .call1((reference.getattr("kind")?.getattr("value")?,))?;
+        .call1((native_field(reference, "kind")?.getattr("value")?,))?;
     keyword_call(
         &registry::class(py, RecordId::CompiledObjectKey)?,
         &[
             ("resource_type", resource_type),
-            ("name", reference.getattr("name")?),
+            ("name", native_field(reference, "name")?),
         ],
     )
 }

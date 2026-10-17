@@ -6,6 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::auditing::main::replace_reference_calls::replace_reference_calls;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
 const REF_FUNCTION: &str = "__ref";
@@ -23,7 +24,7 @@ fn qualified<'py>(mapping: &Bound<'py, PyAny>, name: &str) -> PyResult<Option<Bo
     let Some(location) = lookup(mapping, name)? else {
         return Ok(None);
     };
-    let qualified: Bound<'py, PyAny> = location.getattr("qualified_name")?;
+    let qualified: Bound<'py, PyAny> = native_field(&location, "qualified_name")?;
     Ok(Some(qualified).filter(|qualified| !qualified.is_none()))
 }
 

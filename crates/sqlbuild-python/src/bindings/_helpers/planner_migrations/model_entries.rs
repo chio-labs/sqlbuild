@@ -11,6 +11,7 @@ use crate::bindings::_helpers::planner_migrations::model_handover::{
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationDecisionRequest,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_move;
@@ -23,14 +24,14 @@ pub(super) fn relation<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 }
 
 fn key(location: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
-    let schema = location.getattr("schema")?;
+    let schema = native_field(location, "schema")?;
     Ok((
         if schema.is_truthy()? {
             lower(&schema)?
         } else {
             String::new()
         },
-        lower(&location.getattr("name")?)?,
+        lower(&native_field(location, "name")?)?,
     ))
 }
 
@@ -70,23 +71,23 @@ pub(super) fn decide<'py>(
     let py = runtime.py();
     let request = decision_request.request;
     let item = request.model.clone();
-    let destination = item.getattr("destination")?;
+    let destination = native_field(&item, "destination")?;
     let origin = decision_request.origin.clone();
     let snapshot = decision_request.snapshot.clone();
     let state = decision_request.state.clone();
     let origin_model = decision_request.origin_model.clone();
     if key(&origin)? == key(&destination)? {
-        let name: String = item.getattr("name")?.extract()?;
+        let name: String = native_field(&item, "name")?.extract()?;
         return Err(pyo3::PyErr::from_value(
             registry::error(py, ErrorId::PlannerInput)?.call1((format!(
                 "model '{name}': migrate_from names the model's own relation"
             ),))?,
         ));
     }
-    let newest = newest_move(&state.getattr("events")?, &relation(&destination)?)?;
+    let newest = newest_move(&native_field(&state, "events")?, &relation(&destination)?)?;
     let origin_relation = state.call_method1("relation", (&origin,))?;
     let fingerprint = call_with(
-        &state.getattr("model_fingerprint")?,
+        &native_field(&state, "model_fingerprint")?,
         &[
             ("location", origin.clone()),
             ("model_name", origin_model.clone()),
@@ -96,7 +97,7 @@ pub(super) fn decide<'py>(
         py,
         RecordId::ModelMigrationPlanEntry,
         &[
-            ("model_name", item.getattr("name")?),
+            ("model_name", native_field(&item, "name")?),
             ("discovery", request.discovery.clone()),
             (
                 "decision",
@@ -120,7 +121,7 @@ pub(super) fn decide<'py>(
                 if fingerprint.is_none() {
                     text(py, "")
                 } else {
-                    fingerprint.getattr("version_hash")?
+                    native_field(&fingerprint, "version_hash")?
                 },
             ),
             (
@@ -128,7 +129,7 @@ pub(super) fn decide<'py>(
                 PyBool::new(
                     py,
                     !origin_relation.is_none()
-                        && origin_relation.getattr("is_transient")?.is_truthy()?,
+                        && native_field(&origin_relation, "is_transient")?.is_truthy()?,
                 )
                 .to_owned()
                 .into_any(),
@@ -151,7 +152,7 @@ pub(super) fn decide<'py>(
             .call_method1("matches", (relation(&origin)?,))?
             .is_truthy()?;
     if request.identity_only {
-        let recorded = recorded && newest.getattr("decision")?.eq("renamed")?;
+        let recorded = recorded && native_field(&newest, "decision")?.eq("renamed")?;
         if request.discovery.eq("manual")? && !recorded && origin_relation.is_none() {
             return result(
                 decision(&base, "origin_missing")?,
@@ -163,7 +164,7 @@ pub(super) fn decide<'py>(
             snapshot
                 .getattr("fingerprints")?
                 .getattr("models")?
-                .call_method1("get", (item.getattr("name")?,))?
+                .call_method1("get", (native_field(&item, "name")?,))?
         } else {
             empty_version(&item, &fingerprint)?
         };
@@ -173,7 +174,7 @@ pub(super) fn decide<'py>(
                 &[(
                     "completed_at",
                     if recorded {
-                        newest.getattr("created_at")?
+                        native_field(&newest, "created_at")?
                     } else {
                         py.None().into_bound(py)
                     },
@@ -186,23 +187,27 @@ pub(super) fn decide<'py>(
     if recorded {
         let applies = applies(&item, &newest, &snapshot)?;
         let inherited = if applies {
-            handover(&item, &fingerprint, &newest.getattr("origin_version_hash")?)?
+            handover(
+                &item,
+                &fingerprint,
+                &native_field(&newest, "origin_version_hash")?,
+            )?
         } else {
             snapshot
                 .getattr("fingerprints")?
                 .getattr("models")?
-                .call_method1("get", (item.getattr("name")?,))?
+                .call_method1("get", (native_field(&item, "name")?,))?
         };
         return result(
             replace(
                 &decision(&base, "done")?,
                 &[
-                    ("completed_at", newest.getattr("created_at")?),
+                    ("completed_at", native_field(&newest, "created_at")?),
                     (
                         "origin_version_hash",
-                        newest.getattr("origin_version_hash")?,
+                        native_field(&newest, "origin_version_hash")?,
                     ),
-                    ("target_name", newest.getattr("target_name")?),
+                    ("target_name", native_field(&newest, "target_name")?),
                 ],
             )?,
             inherited,
@@ -224,13 +229,13 @@ pub(super) fn decide<'py>(
             .getattr("project")?
             .getattr("settings")?
             .getattr("sql_analysis")?,
-        column_dialect: snapshot.getattr("column_dialect")?,
+        column_dialect: native_field(&snapshot, "column_dialect")?,
         snapshots_config: decision_request.snapshots_config.clone(),
     })?;
     let name = model_decision(
         snapshot
             .getattr("existing_relations")?
-            .contains(item.getattr("name")?)?,
+            .contains(native_field(&item, "name")?)?,
         (
             !newest.is_none(),
             !newest.is_none()
@@ -241,7 +246,7 @@ pub(super) fn decide<'py>(
             snapshot
                 .getattr("fingerprints")?
                 .getattr("models")?
-                .contains(item.getattr("name")?)?,
+                .contains(native_field(&item, "name")?)?,
         ),
         request.force,
     );
@@ -256,11 +261,15 @@ pub(super) fn decide<'py>(
         .getattr("decision")?
         .getattr("moves_data")?
         .is_truthy()?
-        || entry.getattr("blocks_build")?.is_truthy()?
+        || native_field(&entry, "blocks_build")?.is_truthy()?
     {
         return result(entry, py.None().into_bound(py), false);
     }
-    let inherited = handover(&item, &fingerprint, &entry.getattr("origin_version_hash")?)?;
+    let inherited = handover(
+        &item,
+        &fingerprint,
+        &native_field(&entry, "origin_version_hash")?,
+    )?;
     result(
         super::planning_execution::migration_with_execution(&runtime, &item, &entry)?,
         inherited,

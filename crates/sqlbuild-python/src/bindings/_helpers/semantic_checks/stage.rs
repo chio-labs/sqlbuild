@@ -10,6 +10,7 @@ use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::semantic_checks::completion::completed_diagnostics;
 use crate::bindings::_helpers::semantic_checks::metadata::metadata_diagnostics;
 use crate::bindings::_helpers::semantic_checks::stage_objects::StageClasses;
@@ -52,7 +53,7 @@ fn complete_semantic_project<'py>(
         resource_sql_analysis,
         &catalog.inner,
     )?;
-    let mut diagnostics: Vec<Bound<'py, PyAny>> = items(&recovered.getattr("diagnostics")?)?;
+    let mut diagnostics: Vec<Bound<'py, PyAny>> = items(&native_field(&recovered, "diagnostics")?)?;
     diagnostics.extend(metadata);
     let combined: Bound<'py, PyAny> = classes.project_with(
         &recovered,
@@ -84,11 +85,11 @@ fn semantic_metadata_diagnostics<'py>(
 }
 
 fn project_catalog<'py>(project: &Bound<'py, PyAny>) -> PyResult<PyRef<'py, ProjectCatalog>> {
-    let binding_catalog: Bound<'py, PyAny> = project.getattr("binding_catalog")?;
+    let binding_catalog: Bound<'py, PyAny> = native_field(project, "binding_catalog")?;
     if binding_catalog.is_none() {
         return Err(NativeCompilerError::new_err(NO_CATALOG_MESSAGE));
     }
-    binding_catalog.getattr("native")?.extract()
+    native_field(&binding_catalog, "native")?.extract()
 }
 
 /// Models whose output names and lineage are the finished session's, so need no payload.
@@ -101,9 +102,9 @@ fn session_fact_models(
     };
     let kept: HashSet<String> = session.fact_models().into_iter().collect();
     let mut models: HashSet<String> = HashSet::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'_, PyAny> = model?;
-        let name: String = model.getattr("name")?.extract()?;
+        let name: String = native_field(&model, "name")?.extract()?;
         if !kept.contains(&name) {
             continue;
         }

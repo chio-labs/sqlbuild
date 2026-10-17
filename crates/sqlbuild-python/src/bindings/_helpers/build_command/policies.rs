@@ -17,6 +17,7 @@ use sqlbuild_core::build_command::models::{
 };
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -71,8 +72,8 @@ fn flag(value: &Bound<'_, PyAny>, name: &str) -> PyResult<bool> {
 }
 
 fn model_migration(entry: &Bound<'_, PyAny>) -> PyResult<ModelMigrationFact> {
-    let origin: Bound<'_, PyAny> = entry.getattr("origin")?;
-    let qualified: Bound<'_, PyAny> = origin.getattr("qualified_name")?;
+    let origin: Bound<'_, PyAny> = native_field(entry, "origin")?;
+    let qualified: Bound<'_, PyAny> = native_field(&origin, "qualified_name")?;
     let origin_label: String = if qualified.is_truthy()? {
         qualified.str()?.extract()?
     } else {
@@ -91,7 +92,7 @@ fn model_migration(entry: &Bound<'_, PyAny>) -> PyResult<ModelMigrationFact> {
 }
 
 fn column_migration(entry: &Bound<'_, PyAny>) -> PyResult<ColumnMigrationFact> {
-    let decision: Bound<'_, PyAny> = entry.getattr("decision")?;
+    let decision: Bound<'_, PyAny> = native_field(entry, "decision")?;
     Ok(ColumnMigrationFact {
         model_name: text(entry, "model_name")?,
         destination_column: text(entry, "destination_column")?,
@@ -145,7 +146,7 @@ fn plan_facts(plan: &Bound<'_, PyAny>) -> PyResult<PlanSafetyFacts> {
         {
             facts.snapshot_refreshes.push(SnapshotRefreshFact {
                 name: text(&entry, "name")?,
-                historical: !entry.getattr("observed_at_column")?.is_none(),
+                historical: !native_field(&entry, "observed_at_column")?.is_none(),
                 model_policy: optional_text(&entry, "snapshot_full_refresh")?,
             });
         }
@@ -161,7 +162,7 @@ fn plan_facts(plan: &Bound<'_, PyAny>) -> PyResult<PlanSafetyFacts> {
     for entry in entries(plan, "retention_entries")? {
         if flag(&entry, "decreases")? {
             facts.retention_decreases.push(RetentionFact {
-                model_names: entry.getattr("model_names")?.extract()?,
+                model_names: native_field(&entry, "model_names")?.extract()?,
                 policy: text(&entry, "decrease_policy")?,
             });
         }
@@ -190,8 +191,8 @@ pub(crate) fn model_limit(
 ) -> PyResult<ModelLimit> {
     Ok(ModelLimit {
         target_name: target_name.extract()?,
-        max_models: limits.getattr("max_models")?.extract()?,
-        remediation: limits.getattr("remediation")?.extract()?,
+        max_models: native_field(limits, "max_models")?.extract()?,
+        remediation: native_field(limits, "remediation")?.extract()?,
     })
 }
 

@@ -4,6 +4,7 @@ use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_scope::loaders::intermediate_map;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
@@ -28,15 +29,15 @@ pub(crate) fn build_source_load_map<'py>(
         })
         .transpose()?;
     let result = PyDict::new(project.py());
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
         if let Some(keys) = &relevant
-            && !keys.contains(source.getattr("key")?)?
+            && !keys.contains(native_field(&source, "key")?)?
         {
             continue;
         }
-        let entry = source.getattr("source_entry")?;
-        result.set_item(entry.getattr("name")?, entry)?;
+        let entry = native_field(&source, "source_entry")?;
+        result.set_item(native_field(&entry, "name")?, entry)?;
     }
     for upstream in [false, true] {
         for (key, entry) in intermediate_map(project, selected_keys, upstream)?.iter() {
@@ -61,14 +62,17 @@ pub(crate) fn build_source_load_entries<'py>(
     for key in execution_order.try_iter()? {
         let key = key?;
         if !selected_keys.contains(&key)?
-            || key.getattr("resource_type")?.str()?.extract::<String>()? != SOURCE
+            || native_field(&key, "resource_type")?
+                .str()?
+                .extract::<String>()?
+                != SOURCE
         {
             continue;
         }
-        let Some(entry) = source_map.get_item(key.getattr("name")?)? else {
+        let Some(entry) = source_map.get_item(native_field(&key, "name")?)? else {
             continue;
         };
-        if entry.getattr("loader")?.is_none() {
+        if native_field(&entry, "loader")?.is_none() {
             continue;
         }
         let kwargs = PyDict::new(py);
@@ -82,13 +86,13 @@ pub(crate) fn build_source_load_entries<'py>(
         ] {
             kwargs.set_item(field, entry.getattr(field)?)?;
         }
-        let table = entry.getattr("table")?;
+        let table = native_field(&entry, "table")?;
         kwargs.set_item(
             "destination",
             if table.is_truthy()? {
                 table
             } else {
-                entry.getattr("name")?
+                native_field(&entry, "name")?
             },
         )?;
         let intermediate = entry
@@ -100,13 +104,13 @@ pub(crate) fn build_source_load_entries<'py>(
             kinds.getattr(if intermediate { "LOADER" } else { "SOURCE" })?,
         )?;
         kwargs.set_item("is_reload", is_reload)?;
-        let integration = entry.getattr("integration_loader")?;
+        let integration = native_field(&entry, "integration_loader")?;
         kwargs.set_item(
             "integration_kind",
             if integration.is_none() {
                 py.None().into_bound(py)
             } else {
-                integration.getattr("kind")?
+                native_field(&integration, "kind")?
             },
         )?;
         entries.push(class.call((), Some(&kwargs))?);

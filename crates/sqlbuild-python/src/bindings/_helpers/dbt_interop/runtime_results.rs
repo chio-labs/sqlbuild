@@ -1,6 +1,7 @@
 //! Backfill streamed dbt results using Python's JSON and UTF-8 artifact contract.
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyOSError;
@@ -13,7 +14,7 @@ use std::collections::HashSet;
 pub(crate) fn result_ids(results: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
     results
         .try_iter()?
-        .map(|result| result?.getattr("unique_id")?.extract())
+        .map(|result| native_field(&result?, "unique_id")?.extract())
         .collect()
 }
 
@@ -74,16 +75,16 @@ pub(crate) fn append_missing<'py>(
     let json = py.import("json")?;
     let payload = (|| {
         let text = call_with(
-            &path.getattr("read_text")?,
+            &native_field(&path, "read_text")?,
             &[("encoding", PyString::new(py, "utf-8").into_any())],
         )?;
-        json.getattr("loads")?.call1((text,))
+        native_field(&json, "loads")?.call1((text,))
     })();
     let payload = match payload {
         Ok(payload) => payload,
         Err(error)
             if error.is_instance_of::<PyOSError>(py)
-                || error.is_instance(py, &json.getattr("JSONDecodeError")?) =>
+                || error.is_instance(py, &native_field(&json, "JSONDecodeError")?) =>
         {
             return Ok(results.clone());
         }

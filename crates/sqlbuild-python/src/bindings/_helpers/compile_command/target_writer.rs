@@ -34,6 +34,7 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -70,7 +71,7 @@ fn path_class(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 /// `relative_path` under `models/`, unless it already starts there.
 fn model_output_path<'py>(relative_path: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = relative_path.py();
-    let parts: Bound<'py, PyTuple> = relative_path.getattr("parts")?.downcast_into()?;
+    let parts: Bound<'py, PyTuple> = native_field(relative_path, "parts")?.downcast_into()?;
     if !parts.is_empty() && parts.get_item(0)?.eq(MODELS_DIR)? {
         return path_class(py)?.call1(parts);
     }
@@ -83,8 +84,8 @@ fn function_output_path<'py>(
     language: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = relative_path.py();
-    let parts: Bound<'py, PyTuple> = relative_path.getattr("parts")?.downcast_into()?;
-    let language_dir: Bound<'py, PyAny> = language.getattr("value")?;
+    let parts: Bound<'py, PyTuple> = native_field(relative_path, "parts")?.downcast_into()?;
+    let language_dir: Bound<'py, PyAny> = native_field(language, "value")?;
     let path: Bound<'py, PyAny> = if parts.len() >= LANGUAGE_DIR_DEPTH
         && parts.get_item(0)?.eq(FUNCTIONS_DIR)?
         && parts.get_item(1)?.eq(&language_dir)?
@@ -102,9 +103,9 @@ fn function_output_path<'py>(
 /// The audit's folder and file name: generic audits under their target, others singular.
 fn audit_output_path<'py>(audit: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = audit.py();
-    let target: Bound<'py, PyAny> = audit.getattr("attached_target_name")?;
-    let column: Bound<'py, PyAny> = audit.getattr("attached_column_name")?;
-    let name: String = audit.getattr("name")?.str()?.to_string();
+    let target: Bound<'py, PyAny> = native_field(audit, "attached_target_name")?;
+    let column: Bound<'py, PyAny> = native_field(audit, "attached_column_name")?;
+    let name: String = native_field(audit, "name")?.str()?.to_string();
     let folder: Bound<'py, PyAny> = if target.is_none() {
         path_class(py)?.call1((SINGULAR_DIR,))?
     } else {
@@ -123,7 +124,7 @@ fn function_sql(adapter: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyRe
     let py: Python<'_> = adapter.py();
     let mut arguments: Vec<(&str, Bound<'_, PyAny>)> = vec![(
         "destination",
-        function.getattr("destination")?.getattr("qualified_name")?,
+        native_field(function, "destination")?.getattr("qualified_name")?,
     )];
     for field in [
         "arguments",
@@ -230,15 +231,18 @@ fn write_planned_target<'py>(
     let mut batch: ArtifactBatch = ArtifactBatch::new(remove_stale_files, None);
     let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
     let compiled: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR])?;
-    for entry in plan_output.getattr("model_entries")?.try_iter()? {
+    for entry in native_field(plan_output, "model_entries")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
         let path: Bound<'py, PyAny> =
-            compiled.div(model_output_path(&entry.getattr("relative_path")?)?)?;
-        batch.queue_sql(&path, &entry.getattr("resolved_sql")?.extract::<String>()?)?;
+            compiled.div(model_output_path(&native_field(&entry, "relative_path")?)?)?;
+        batch.queue_sql(
+            &path,
+            &native_field(&entry, "resolved_sql")?.extract::<String>()?,
+        )?;
         managed.push(path);
     }
     batch.flush(py)?;
-    for entry in plan_output.getattr("function_entries")?.try_iter()? {
+    for entry in native_field(plan_output, "function_entries")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
         if entry
             .getattr("destination")?
@@ -249,21 +253,24 @@ fn write_planned_target<'py>(
         }
         let sql: String = function_sql(adapter, &entry)?;
         let path: Bound<'py, PyAny> = compiled.div(function_output_path(
-            &entry.getattr("relative_path")?,
-            &entry.getattr("language")?,
+            &native_field(&entry, "relative_path")?,
+            &native_field(&entry, "language")?,
         )?)?;
         batch.queue_sql(&path, &sql)?;
         managed.push(path);
     }
     batch.flush(py)?;
-    for entry in plan_output.getattr("audit_entries")?.try_iter()? {
+    for entry in native_field(plan_output, "audit_entries")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
         let path: Bound<'py, PyAny> = compiled.div(AUDITS_DIR)?.div(audit_output_path(&entry)?)?;
-        batch.queue_sql(&path, &entry.getattr("resolved_sql")?.extract::<String>()?)?;
+        batch.queue_sql(
+            &path,
+            &native_field(&entry, "resolved_sql")?.extract::<String>()?,
+        )?;
         managed.push(path);
     }
     batch.flush(py)?;
-    for entry in plan_output.getattr("test_entries")?.try_iter()? {
+    for entry in native_field(plan_output, "test_entries")?.try_iter()? {
         let entry: Bound<'py, PyAny> = entry?;
         let path: Bound<'py, PyAny> = compiled
             .div(TESTS_DIR)?
@@ -361,7 +368,7 @@ fn planned_artifacts<'py>(
                 ("adapter", adapter.clone()),
                 (
                     "sql_analysis_enabled",
-                    project.getattr("settings")?.getattr("sql_analysis")?,
+                    native_field(project, "settings")?.getattr("sql_analysis")?,
                 ),
             ],
         )?
@@ -371,7 +378,7 @@ fn planned_artifacts<'py>(
         let metadata: Bound<'py, PyDict> = PyDict::new(py);
         metadata.set_item("item_count", artifacts.len())?;
         let _ = call_with(
-            &entered.getattr("completed")?,
+            &native_field(entered, "completed")?,
             &[("metadata", metadata.into_any())],
         )?;
         Ok(artifacts)
@@ -387,9 +394,9 @@ fn plan_tests<'py>(
     let py: Python<'py> = project.py();
     let tests_root: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR, TESTS_DIR])?;
     let tests_root_path: PathBuf = tests_root.extract()?;
-    let cache_dir: Bound<'py, PyAny> = project.getattr("compile_cache_dir")?;
+    let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
     let cached: HashMap<String, SqlTestArtifactRecord> = read_cache(&cache_dir)?;
-    let tests: Bound<'py, PyAny> = project.getattr("sql_tests")?;
+    let tests: Bound<'py, PyAny> = native_field(project, "sql_tests")?;
     let caching: Option<(IdentityContext<'py>, Bound<'py, PyAny>)> = if cache_dir.is_none() {
         None
     } else {
@@ -412,7 +419,7 @@ fn plan_tests<'py>(
         };
         let record_key: String = artifact_record_key(&test)?;
         let chain: Bound<'py, PyAny> =
-            chains.call_method1("get", (test.getattr("key")?, &empty))?;
+            chains.call_method1("get", (native_field(&test, "key")?, &empty))?;
         let identity: String = artifact_identity(&test, &chain, context)?;
         let reusable: Option<SqlTestArtifactRecord> = cached
             .get(&record_key)
@@ -474,7 +481,7 @@ fn artifact_diagnostics<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = test.py();
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
-    for message in artifact.getattr("error_messages")?.try_iter()? {
+    for message in native_field(artifact, "error_messages")?.try_iter()? {
         diagnostics.push(call_with(
             &registry::class(py, RecordId::CompilerDiagnostic)?,
             &[
@@ -486,8 +493,8 @@ fn artifact_diagnostics<'py>(
                 ),
                 ("message", message?),
                 ("resource_type", "sql_test".into_bound_py_any(py)?),
-                ("resource_name", test.getattr("name")?),
-                ("path", test.getattr("source_path")?),
+                ("resource_name", native_field(test, "name")?),
+                ("path", native_field(test, "source_path")?),
             ],
         )?);
     }
@@ -518,9 +525,9 @@ fn write_static_tests<'py>(
         let artifact: &Bound<'py, PyAny> = artifact.bind(py);
         let path: Bound<'py, PyAny> = tests_root.div(compiled_sql_test_path(
             test.bind(py),
-            &artifact.getattr("model_names")?,
+            &native_field(artifact, "model_names")?,
         )?)?;
-        batch.queue_sql(&path, &artifact.getattr("sql")?.extract::<String>()?)?;
+        batch.queue_sql(&path, &native_field(artifact, "sql")?.extract::<String>()?)?;
         managed.push(path.clone());
         test_paths.push(path);
     }
@@ -541,7 +548,7 @@ fn write_static_tests<'py>(
         }
     }
     record_compile_timing("cache_publication_ms", || {
-        write_cache(&project.getattr("compile_cache_dir")?, &records)
+        write_cache(&native_field(project, "compile_cache_dir")?, &records)
     })?;
     Ok((managed, diagnostics))
 }
@@ -558,15 +565,18 @@ pub(crate) fn write_static_target<'py>(
     let mut batch: ArtifactBatch = ArtifactBatch::new(remove_stale_files, prepared.recorder);
     let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
     let compiled: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR])?;
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let path: Bound<'py, PyAny> =
-            compiled.div(model_output_path(&model.getattr("relative_path")?)?)?;
-        batch.queue_sql(&path, &model.getattr("query_sql")?.extract::<String>()?)?;
+            compiled.div(model_output_path(&native_field(&model, "relative_path")?)?)?;
+        batch.queue_sql(
+            &path,
+            &native_field(&model, "query_sql")?.extract::<String>()?,
+        )?;
         managed.push(path);
     }
     batch.flush(py)?;
-    for function in project.getattr("functions")?.try_iter()? {
+    for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
         if function
             .getattr("destination")?
@@ -577,17 +587,20 @@ pub(crate) fn write_static_target<'py>(
         }
         let sql: String = function_sql(adapter, &function)?;
         let path: Bound<'py, PyAny> = compiled.div(function_output_path(
-            &function.getattr("relative_path")?,
-            &function.getattr("language")?,
+            &native_field(&function, "relative_path")?,
+            &native_field(&function, "language")?,
         )?)?;
         batch.queue_sql(&path, &sql)?;
         managed.push(path);
     }
     batch.flush(py)?;
-    for audit in project.getattr("audits")?.try_iter()? {
+    for audit in native_field(project, "audits")?.try_iter()? {
         let audit: Bound<'py, PyAny> = audit?;
         let path: Bound<'py, PyAny> = compiled.div(AUDITS_DIR)?.div(audit_output_path(&audit)?)?;
-        batch.queue_sql(&path, &audit.getattr("sql_body")?.extract::<String>()?)?;
+        batch.queue_sql(
+            &path,
+            &native_field(&audit, "sql_body")?.extract::<String>()?,
+        )?;
         managed.push(path);
     }
     batch.flush(py)?;
@@ -635,7 +648,8 @@ pub(crate) fn publish_staged_target<'py>(
     recorder: ArtifactRecorder<'_>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_dir.py();
-    let staged_dir: Bound<'py, PyAny> = joined(&prepared.getattr("target_dir")?, &[COMPILED_DIR])?;
+    let staged_dir: Bound<'py, PyAny> =
+        joined(&native_field(prepared, "target_dir")?, &[COMPILED_DIR])?;
     let compiled_dir: Bound<'py, PyAny> = joined(target_dir, &[COMPILED_DIR])?;
     let existed: bool = compiled_dir.call_method0("is_dir")?.is_truthy()?;
     let expected: Vec<PathBuf> = py
@@ -673,13 +687,13 @@ pub(crate) fn publish_staged_target<'py>(
     written_target(
         target_dir,
         [
-            prepared.getattr("model_count")?.extract()?,
-            prepared.getattr("seed_count")?.extract()?,
-            prepared.getattr("function_count")?.extract()?,
-            prepared.getattr("audit_count")?.extract()?,
-            prepared.getattr("test_count")?.extract()?,
+            native_field(prepared, "model_count")?.extract()?,
+            native_field(prepared, "seed_count")?.extract()?,
+            native_field(prepared, "function_count")?.extract()?,
+            native_field(prepared, "audit_count")?.extract()?,
+            native_field(prepared, "test_count")?.extract()?,
         ],
-        prepared.getattr("diagnostics")?,
+        native_field(prepared, "diagnostics")?,
     )
 }
 

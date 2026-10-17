@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -51,8 +52,8 @@ impl<'py> LineageClasses<'py> {
             transform_kind: registry::class(py, RecordId::ColumnTransformKind)?,
             confidence: registry::class(py, RecordId::ColumnLineageConfidence)?,
             analysis_dialect: registry::class(py, RecordId::PolyglotAnalysisDialect)?,
-            model_resource: resource_type.getattr("MODEL")?,
-            unknown_nullability: nullability.getattr("UNKNOWN")?,
+            model_resource: native_field(&resource_type, "MODEL")?,
+            unknown_nullability: native_field(&nullability, "UNKNOWN")?,
             nullability,
             resource_type,
         })

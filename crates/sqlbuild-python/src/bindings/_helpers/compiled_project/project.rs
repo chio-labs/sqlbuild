@@ -56,6 +56,7 @@ use crate::bindings::_helpers::compiled_project::source_views::{
     AttachedSource, NativeCompiledSource, NativeSourceInput, SourceNamespace, SourceRecord,
 };
 use crate::bindings::_helpers::compiled_project::values::{object_value, plain_value};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 
 pub(crate) const CONTRACT_KEY: &str = "contract";
@@ -210,8 +211,8 @@ impl NativeCompiledProject {
                         .to_string(),
                 ),
                 (
-                    &schema_entry.getattr("audits")?,
-                    &schema_entry.getattr("columns")?,
+                    &native_field(schema_entry, "audits")?,
+                    &native_field(schema_entry, "columns")?,
                 ),
             )?);
         }

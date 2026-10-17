@@ -12,6 +12,7 @@ use crate::bindings::_helpers::planner_phases::objects::{
 };
 use crate::bindings::_helpers::planner_warehouse::constants::RUN_SCOPE;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{destination_nodes, lower};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
@@ -36,11 +37,11 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
         .try_iter()?
     {
         let unknown = unknown?;
-        let reason: String = unknown.getattr("reason")?.str()?.extract()?;
+        let reason: String = native_field(&unknown, "reason")?.str()?.extract()?;
         if freshness_unknown_message(&reason, &[]).is_none() {
             continue;
         }
-        let name: String = unknown.getattr("source_name")?.extract()?;
+        let name: String = native_field(&unknown, "source_name")?.extract()?;
         match reasons.iter_mut().find(|(existing, _)| *existing == reason) {
             Some((_, names)) => names.push(name),
             None => reasons.push((reason, vec![name])),
@@ -68,7 +69,7 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
 
 fn state_database<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     for node in destination_nodes(project)? {
-        let database = node.getattr("destination")?.getattr("database")?;
+        let database = native_field(&node, "destination")?.getattr("database")?;
         if !database.is_none() {
             return Ok(database);
         }
@@ -82,19 +83,19 @@ fn state_schemas(
 ) -> PyResult<BTreeSet<String>> {
     let mut schemas: BTreeSet<_> = BTreeSet::new();
     for node in destination_nodes(project)? {
-        let schema = node.getattr("destination")?.getattr("schema")?;
+        let schema = native_field(&node, "destination")?.getattr("schema")?;
         if !schema.is_none() {
             schemas.insert(schema.extract()?);
         }
     }
     if schemas.is_empty() {
-        let models = scope.getattr("models_by_name")?;
-        for name in model_key_names(&scope.getattr("selected_keys")?)? {
+        let models = native_field(scope, "models_by_name")?;
+        for name in model_key_names(&native_field(scope, "selected_keys")?)? {
             let model = models.call_method1("get", (name,))?;
             if model.is_none() {
                 continue;
             }
-            let schema = model_reads::destination(&model)?.getattr("schema")?;
+            let schema = native_field(&model_reads::destination(&model)?, "schema")?;
             if !schema.is_none() {
                 schemas.insert(schema.extract()?);
             }
@@ -160,7 +161,7 @@ pub(crate) fn build_planner_source_freshness_result<'py>(
     let observed_at = imported(py, "datetime", "datetime")?
         .call_method1("now", (imported(py, "datetime", "UTC")?,))?;
     let result = within(
-        &host::entry(py, RUN_SCOPE)?.call1((project.getattr("run_id")?,))?,
+        &host::entry(py, RUN_SCOPE)?.call1((native_field(project, "run_id")?,))?,
         |_| {
             call_with(
                 wrap_pyfunction!(build_direct_source_freshness_planning_result, py)?.as_any(),
@@ -177,7 +178,7 @@ pub(crate) fn build_planner_source_freshness_result<'py>(
                     ("run_id", text(py, "planning")),
                     (
                         "render_qualified_name",
-                        adapter.getattr("render_qualified_name")?,
+                        native_field(adapter, "render_qualified_name")?,
                     ),
                     ("state_table_exists_by_schema", exists.into_any()),
                     (

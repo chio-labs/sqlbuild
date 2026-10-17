@@ -18,6 +18,7 @@ use crate::bindings::_helpers::event_exporting::models::BoundEventExporter;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 static CURRENT_SCOPE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 
@@ -66,11 +67,11 @@ fn provider_arguments<'py>(
     declaration: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let arguments: Bound<'py, PyDict> = PyDict::new(session.py());
-    for usage in declaration.getattr("provider_usages")?.try_iter()? {
+    for usage in native_field(declaration, "provider_usages")?.try_iter()? {
         let usage: Bound<'py, PyAny> = usage?;
         arguments.set_item(
-            usage.getattr("parameter_name")?,
-            session.call_method1("get", (usage.getattr("provider_name")?,))?,
+            native_field(&usage, "parameter_name")?,
+            session.call_method1("get", (native_field(&usage, "provider_name")?,))?,
         )?;
     }
     Ok(arguments)
@@ -90,14 +91,14 @@ fn bindings<'py>(
             Bound::new(
                 py,
                 BoundEventExporter::create(
-                    exporter.getattr("name")?.extract()?,
+                    native_field(&exporter, "name")?.extract()?,
                     (
-                        exporter.getattr("function")?.unbind(),
+                        native_field(&exporter, "function")?.unbind(),
                         arguments.into_any().unbind(),
                     ),
                     (
-                        Some(&exporter.getattr("event_kinds")?),
-                        Some(&exporter.getattr("min_severity")?),
+                        Some(&native_field(&exporter, "event_kinds")?),
+                        Some(&native_field(&exporter, "min_severity")?),
                     ),
                 )?,
             )?
@@ -112,10 +113,10 @@ fn bindings<'py>(
         sinks.push(call_with(
             &sink_class,
             &[
-                ("name", sink.getattr("name")?),
-                ("function", sink.getattr("function")?),
+                ("name", native_field(&sink, "name")?),
+                ("function", native_field(&sink, "function")?),
                 ("provider_arguments", arguments.into_any()),
-                ("streams", sink.getattr("streams")?),
+                ("streams", native_field(&sink, "streams")?),
             ],
         )?);
     }
@@ -175,7 +176,7 @@ impl EventExporterCommandScope {
             Err(error) => {
                 session.call_method0("release")?;
                 call_with(
-                    &session.getattr("close")?,
+                    &native_field(&session, "close")?,
                     &[("force", PyBool::new(py, true).to_owned().into_any())],
                 )?;
                 return Err(error);
@@ -264,9 +265,9 @@ impl EventExporterCommandScope {
             py,
             None,
             (
-                discovered_inputs.getattr("providers")?,
-                discovered_inputs.getattr("event_exporters")?,
-                discovered_inputs.getattr("command_output_sinks")?,
+                native_field(discovered_inputs, "providers")?,
+                native_field(discovered_inputs, "event_exporters")?,
+                native_field(discovered_inputs, "command_output_sinks")?,
             ),
         )
     }
@@ -372,7 +373,7 @@ impl ProviderSessionCloser {
         let session: &Bound<'_, PyAny> = self.session.bind(py);
         let released = session.call_method0("release");
         call_with(
-            &session.getattr("close")?,
+            &native_field(session, "close")?,
             &[("force", PyBool::new(py, true).to_owned().into_any())],
         )?;
         released?;
@@ -449,7 +450,7 @@ fn cached_event_exporter_extensions<'py>(
         return Ok(scope);
     }
     call_with(
-        &scope.getattr("cached_extensions")?,
+        &native_field(&scope, "cached_extensions")?,
         &[("project_dir", project_dir.clone())],
     )
 }

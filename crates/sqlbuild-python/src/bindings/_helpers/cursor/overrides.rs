@@ -8,6 +8,7 @@ use sqlbuild_cursor::algebra::main::parse_integer_text::parse_integer_text;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::conversion::algebra_error;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -26,12 +27,12 @@ pub(crate) fn cursor_timestamp<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound
         return Ok(value.clone());
     }
     if instance_of(value, RecordId::TimestampValue)? {
-        return value.getattr("value");
+        return native_field(value, "value");
     }
     let datetime: Bound<'py, PyAny> = imported(py, DATETIME_MODULE, "datetime")?;
     if instance_of(value, RecordId::DateValue)? {
-        let midnight: Bound<'py, PyAny> = datetime.getattr("min")?.call_method0("time")?;
-        return datetime.call_method1("combine", (value.getattr("value")?, midnight));
+        let midnight: Bound<'py, PyAny> = native_field(&datetime, "min")?.call_method0("time")?;
+        return datetime.call_method1("combine", (native_field(value, "value")?, midnight));
     }
     if instance_of(value, RecordId::IntegerValue)? {
         return Err(algebra_error(py, INTEGER_AS_TIMESTAMP));
@@ -46,7 +47,7 @@ pub(crate) fn cursor_integer<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'
         return Ok(value.clone());
     }
     if instance_of(value, RecordId::IntegerValue)? {
-        return value.getattr("value");
+        return native_field(value, "value");
     }
     if instance_of(value, RecordId::DateValue)? || instance_of(value, RecordId::TimestampValue)? {
         return Err(algebra_error(py, TIMESTAMP_AS_INTEGER));

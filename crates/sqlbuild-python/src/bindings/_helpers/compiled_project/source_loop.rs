@@ -21,6 +21,7 @@ use crate::bindings::_helpers::model_config::config_templates::{
     PythonHost, Stop, TemplateSources, expanded, template_error,
 };
 use crate::bindings::_helpers::project_assembly::resources::syntax_error_message;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
     expand_declarations,
@@ -53,21 +54,22 @@ pub(crate) fn attached_sources<'py>(
     let mut attached: Vec<AttachedSource> = Vec::with_capacity(rows.len());
     for (file_path, source_file, entry) in rows {
         let entry: Bound<'py, PyAny> = entry.into_bound(py);
-        let name: String = entry.getattr("name")?.extract()?;
+        let name: String = native_field(&entry, "name")?.extract()?;
         let consumer: Bound<'py, PyAny> = context
             .classes
             .visibility
             .resource_identity
             .call1((&source_kind, &name))?;
         let declarations: Bound<'py, PyAny> = scoped_declarations(context, &file_path, &consumer)?;
-        let (expression, usages) = match entry.getattr("expression")?.extract::<Option<String>>()? {
-            Some(sql) => {
-                let expansion: AuthoredExpansion<'py> =
-                    expanded_authored_sql(context, (&sql, &file_path), &declarations)?;
-                (Some(expansion.sql), expansion.usages)
-            }
-            None => (None, PyTuple::empty(py)),
-        };
+        let (expression, usages) =
+            match native_field(&entry, "expression")?.extract::<Option<String>>()? {
+                Some(sql) => {
+                    let expansion: AuthoredExpansion<'py> =
+                        expanded_authored_sql(context, (&sql, &file_path), &declarations)?;
+                    (Some(expansion.sql), expansion.usages)
+                }
+                None => (None, PyTuple::empty(py)),
+            };
         let label = |field: &str| format!("source {name} {field}");
         let database: Option<String> =
             template_text(context, &entry, "database", &label("database"))?;
@@ -76,15 +78,15 @@ pub(crate) fn attached_sources<'py>(
         let description: Option<String> =
             template_text(context, &entry, "description", &label("description"))?;
         let meta: Bound<'py, PyAny> =
-            template_value(context, &entry.getattr("meta")?, &label("meta"))?;
+            template_value(context, &native_field(&entry, "meta")?, &label("meta"))?;
         let mut columns: Vec<Py<PyAny>> = Vec::new();
-        for column in entry.getattr("columns")?.try_iter()? {
+        for column in native_field(&entry, "columns")?.try_iter()? {
             columns.push(expanded_column(context, &name, &column?)?);
         }
         let mut audits: Vec<Py<PyAny>> = Vec::new();
-        for audit in entry.getattr("audits")?.try_iter()? {
+        for audit in native_field(&entry, "audits")?.try_iter()? {
             let audit: Bound<'py, PyAny> = audit?;
-            let definition: String = audit.getattr("definition_name")?.extract()?;
+            let definition: String = native_field(&audit, "definition_name")?.extract()?;
             audits.push(expanded_audit(
                 context,
                 &audit,
@@ -218,7 +220,7 @@ pub(crate) fn expanded_authored_sql<'py>(
         return Err(compile_error(context.classes, &message, None));
     }
     let interpolated_sql: String = interpolated_sql.unwrap_or_else(|| sql.to_owned());
-    let consumer: Bound<'py, PyAny> = declarations.getattr("consumer")?;
+    let consumer: Bound<'py, PyAny> = native_field(declarations, "consumer")?;
     let (references, stop) = declaration_scan(&interpolated_sql);
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut argument_references: Vec<ReferenceRow> = Vec::new();
@@ -352,7 +354,7 @@ fn expanded_column(
     column: &Bound<'_, PyAny>,
 ) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = column.py();
-    let column_name: String = column.getattr("name")?.str()?.extract()?;
+    let column_name: String = native_field(column, "name")?.str()?.extract()?;
     let label = |field: &str| format!("source {source} column {column_name} {field}");
     let changes: Bound<'_, PyDict> = PyDict::new(py);
     changes.set_item(
@@ -365,12 +367,12 @@ fn expanded_column(
     )?;
     changes.set_item(
         "meta",
-        template_value(context, &column.getattr("meta")?, &label("meta"))?,
+        template_value(context, &native_field(column, "meta")?, &label("meta"))?,
     )?;
     let mut audits: Vec<Py<PyAny>> = Vec::new();
-    for audit in column.getattr("audits")?.try_iter()? {
+    for audit in native_field(column, "audits")?.try_iter()? {
         let audit: Bound<'_, PyAny> = audit?;
-        let definition: String = audit.getattr("definition_name")?.extract()?;
+        let definition: String = native_field(&audit, "definition_name")?.extract()?;
         audits.push(expanded_audit(
             context,
             &audit,
@@ -392,7 +394,7 @@ fn expanded_audit(
         "arguments",
         template_value(
             context,
-            &audit.getattr("arguments")?,
+            &native_field(audit, "arguments")?,
             &format!("{label} arguments"),
         )?,
     )?;

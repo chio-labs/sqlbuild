@@ -20,6 +20,7 @@ use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::graph::views::{GraphViewMappings, graph_from_view_mappings};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -147,7 +148,7 @@ pub(crate) fn select_project_graph<'py>(
     select: &Bound<'py, PyAny>,
     exclude: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
-    let native: PyRef<'py, NativeProjectGraph> = graph.getattr("native")?.extract()?;
+    let native: PyRef<'py, NativeProjectGraph> = native_field(graph, "native")?.extract()?;
     resolved(native.graph(), (select, exclude))
 }
 
@@ -221,11 +222,11 @@ fn match_project_selector<'py>(
         tag_index,
         path_index,
     })?;
-    let value: Bound<'py, PyString> = parsed.getattr("value")?.downcast_into()?;
+    let value: Bound<'py, PyString> = native_field(parsed, "value")?.downcast_into()?;
     let carrier: Carrier<'py> = Carrier::new(py, std::slice::from_ref(&value), || {
         Ok(graph_names(graph.graph()))
     })?;
-    let kind: String = parsed.getattr("kind")?.str()?.extract()?;
+    let kind: String = native_field(parsed, "kind")?.str()?.extract()?;
     selected(
         &carrier,
         match_selector(graph.graph(), &kind, &carrier.send(&value)?)

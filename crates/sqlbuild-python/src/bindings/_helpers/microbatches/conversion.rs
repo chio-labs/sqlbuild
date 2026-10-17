@@ -12,6 +12,7 @@ use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::as_scalar;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// `MicrobatchStateError(message)`.
 pub(crate) fn state_error(py: Python<'_>, message: &str) -> PyErr {
@@ -79,8 +80,8 @@ impl<'py> BoundParser<'py> {
     /// The bounds of an object with `start` and `end` attributes.
     pub(crate) fn interval(&mut self, interval: &Bound<'py, PyAny>) -> PyResult<BoundInterval> {
         Ok(BoundInterval {
-            start: self.bound(&interval.getattr("start")?)?,
-            end: self.bound(&interval.getattr("end")?)?,
+            start: self.bound(&native_field(interval, "start")?)?,
+            end: self.bound(&native_field(interval, "end")?)?,
         })
     }
 }

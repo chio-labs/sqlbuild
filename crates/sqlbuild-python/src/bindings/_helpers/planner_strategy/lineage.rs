@@ -19,6 +19,7 @@ use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, microbatch_limit_config,
 };
 use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 
 const MICROBATCH_MODE: &str = "microbatch";
@@ -42,12 +43,12 @@ fn mapped_references<'py>(
 }
 
 fn references<'py>(owner: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    owner.getattr("references")?.try_iter()?.collect()
+    native_field(owner, "references")?.try_iter()?.collect()
 }
 
 /// Whether a model's `incremental_mode` is microbatch.
 fn microbatch_flag(model: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let values: Bound<'_, PyAny> = model.getattr("config")?.getattr("values")?;
+    let values: Bound<'_, PyAny> = native_field(model, "config")?.getattr("values")?;
     Ok(match config_str(&values, "incremental_mode")? {
         Some(mode) => mode.eq(MICROBATCH_MODE)?,
         None => false,
@@ -69,8 +70,8 @@ impl<'py> ReferenceGraph for ProjectLineage<'py> {
 
     fn identity(&self, reference: &Bound<'py, PyAny>) -> PyResult<ReferenceIdentity> {
         Ok(ReferenceIdentity {
-            kind: text(&reference.getattr("ref_kind")?)?,
-            name: text(&reference.getattr("ref_name")?)?,
+            kind: text(&native_field(reference, "ref_kind")?)?,
+            name: text(&native_field(reference, "ref_name")?)?,
         })
     }
 
@@ -84,7 +85,7 @@ impl<'py> ReferenceGraph for ProjectLineage<'py> {
 
     fn producer_facts(&self, name: &str) -> PyResult<ProducerFacts> {
         let producer: Bound<'py, PyAny> = self.models_by_name.get_item(name)?;
-        let values: Bound<'py, PyAny> = producer.getattr("config")?.getattr("values")?;
+        let values: Bound<'py, PyAny> = native_field(&producer, "config")?.getattr("values")?;
         let capped: bool = match microbatch_limit_config(&values)?.1 {
             Some(action) => CAP_ACTIONS.contains(&text(&action)?.as_str()),
             None => false,

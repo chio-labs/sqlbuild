@@ -18,6 +18,7 @@ use crate::bindings::_helpers::microbatches::conversion::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const COMPLETION_RECORD_TYPES: [&str; 2] = ["partition_completion", "synthetic_completion"];
 const ORDINARY_COMPLETION: &str = "partition_completion";
@@ -62,11 +63,17 @@ fn python_coverage<'py>(
                     PyString::new(py, &segment.interval.start).into_any(),
                 ),
                 ("end", PyString::new(py, &segment.interval.end).into_any()),
-                ("fingerprint_status", event.getattr("fingerprint_status")?),
-                ("model_version_hash", event.getattr("model_version_hash")?),
-                ("record_type", event.getattr("record_type")?),
-                ("completion_type", event.getattr("completion_type")?),
-                ("event_id", event.getattr("event_id")?),
+                (
+                    "fingerprint_status",
+                    native_field(event, "fingerprint_status")?,
+                ),
+                (
+                    "model_version_hash",
+                    native_field(event, "model_version_hash")?,
+                ),
+                ("record_type", native_field(event, "record_type")?),
+                ("completion_type", native_field(event, "completion_type")?),
+                ("event_id", native_field(event, "event_id")?),
             ],
         )?);
     }
@@ -111,10 +118,10 @@ fn coverage<'py>(
     let mut completions: Vec<CompletionFact> = Vec::new();
     for event in events.try_iter()? {
         let event: Bound<'py, PyAny> = event?;
-        let record_type: String = enum_text(&event.getattr("record_type")?)?;
+        let record_type: String = enum_text(&native_field(&event, "record_type")?)?;
         let (start, end) = (
-            event.getattr("partition_start")?,
-            event.getattr("partition_end")?,
+            native_field(&event, "partition_start")?,
+            native_field(&event, "partition_end")?,
         );
         if !COMPLETION_RECORD_TYPES.contains(&record_type.as_str())
             || start.is_none()
@@ -128,10 +135,10 @@ fn coverage<'py>(
                 end: parser.bound(&end)?,
             },
             ordinary: record_type == ORDINARY_COMPLETION,
-            unknown_fingerprint: enum_text(&event.getattr("fingerprint_status")?)?
+            unknown_fingerprint: enum_text(&native_field(&event, "fingerprint_status")?)?
                 == UNKNOWN_FINGERPRINT,
-            created: timestamp(&event.getattr("created_at")?)?,
-            event_id: event.getattr("event_id")?.extract()?,
+            created: timestamp(&native_field(&event, "created_at")?)?,
+            event_id: native_field(&event, "event_id")?.extract()?,
         });
         completion_events.push(event);
     }
@@ -164,7 +171,7 @@ fn replay<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAn
     let requirement: Bound<'py, PyAny> = request.get("requirement")?;
     let current: String = request.get("current_model_version_hash")?.extract()?;
     let required: Option<String> =
-        optional_text(&requirement.getattr("required_model_version_hash")?)?;
+        optional_text(&native_field(&requirement, "required_model_version_hash")?)?;
     let versions = ReplayVersions {
         required: required.as_deref(),
         current: &current,
@@ -184,9 +191,9 @@ fn replay<'py>(request: Option<&Bound<'py, PyDict>>) -> PyResult<Bound<'py, PyAn
             let piece: Bound<'py, PyAny> = piece?;
             pieces.push(CoveragePiece {
                 interval: parser.interval(&piece)?,
-                unknown_fingerprint: enum_text(&piece.getattr("fingerprint_status")?)?
+                unknown_fingerprint: enum_text(&native_field(&piece, "fingerprint_status")?)?
                     == UNKNOWN_FINGERPRINT,
-                model_version_hash: optional_text(&piece.getattr("model_version_hash")?)?,
+                model_version_hash: optional_text(&native_field(&piece, "model_version_hash")?)?,
             });
         }
     }
@@ -225,20 +232,21 @@ fn latest<'py>(
     let objects: Vec<Bound<'py, PyAny>> = events.try_iter()?.collect::<PyResult<_>>()?;
     let mut facts: Vec<RequirementFact> = Vec::with_capacity(objects.len());
     for event in &objects {
-        let is_requirement: bool = enum_text(&event.getattr("record_type")?)? == REPLAY_REQUIREMENT;
+        let is_requirement: bool =
+            enum_text(&native_field(event, "record_type")?)? == REPLAY_REQUIREMENT;
         let required: Option<String> =
-            optional_text(&event.getattr("required_model_version_hash")?)?;
+            optional_text(&native_field(event, "required_model_version_hash")?)?;
         let matching: bool =
             is_requirement && required.as_deref() == Some(current_model_version_hash);
         facts.push(RequirementFact {
             is_requirement,
             required_model_version_hash: required,
             created: if matching {
-                timestamp(&event.getattr("created_at")?)?
+                timestamp(&native_field(event, "created_at")?)?
             } else {
                 0.0
             },
-            event_id: event.getattr("event_id")?.extract()?,
+            event_id: native_field(event, "event_id")?.extract()?,
         });
     }
     Ok(latest_requirement(&facts, current_model_version_hash).map(|index| objects[index].clone()))

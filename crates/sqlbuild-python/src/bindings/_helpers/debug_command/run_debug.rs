@@ -34,6 +34,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -112,7 +113,9 @@ fn warehouse_checks(
         .adapter
         .getattr("supports_session_warehouse")?
         .is_truthy()?;
-    let adapter_name: String = context.adapter.getattr("adapter_name")?.str()?.extract()?;
+    let adapter_name: String = native_field(&context.adapter, "adapter_name")?
+        .str()?
+        .extract()?;
     let inputs: WarehouseInputs<'_, '_> = WarehouseInputs {
         discovered_inputs: &context.discovered_inputs,
         selected_target: &context.selected_target,
@@ -120,7 +123,7 @@ fn warehouse_checks(
     let mut checks: Vec<WarehouseCheck> = Vec::new();
     for group in registry::class(py, RecordId::WarehouseGroup)?.try_iter()? {
         let group: Bound<'_, PyAny> = group?;
-        let group_name: String = group.getattr("value")?.str()?.extract()?;
+        let group_name: String = native_field(&group, "value")?.str()?.extract()?;
         if !supports_session_warehouse {
             if let Some(found) = find_authored(inputs, &group)? {
                 checks.push(WarehouseCheck::NotUsed {
@@ -154,11 +157,11 @@ fn warehouse_checks(
 
 fn providers(discovered_inputs: &Bound<'_, PyAny>) -> PyResult<Vec<DebugProvider>> {
     let mut providers: Vec<DebugProvider> = Vec::new();
-    for provider in discovered_inputs.getattr("providers")?.try_iter()? {
+    for provider in native_field(discovered_inputs, "providers")?.try_iter()? {
         let provider: Bound<'_, PyAny> = provider?;
         providers.push(DebugProvider {
-            name: provider.getattr("name")?.str()?.extract()?,
-            relative_path: provider.getattr("relative_path")?.str()?.extract()?,
+            name: native_field(&provider, "name")?.str()?.extract()?,
+            relative_path: native_field(&provider, "relative_path")?.str()?.extract()?,
             class_name: provider
                 .getattr("provider_class")?
                 .getattr("__name__")?
@@ -205,7 +208,7 @@ fn connection_check(
         Err(error) => return Ok(ConnectionCheck::ConnectFailed(check_failure(py, error)?)),
     };
     let queried: PyResult<Bound<'_, PyAny>> = call_with(
-        &adapter.getattr("query")?,
+        &native_field(adapter, "query")?,
         &[
             ("connection", connection.clone()),
             ("sql", PyString::new(py, "SELECT 1").into_any()),
@@ -266,9 +269,12 @@ fn build_report(
         &[
             (
                 "project_config",
-                discovered_inputs.getattr("project_config")?,
+                native_field(&discovered_inputs, "project_config")?,
             ),
-            ("local_config", discovered_inputs.getattr("local_config")?),
+            (
+                "local_config",
+                native_field(&discovered_inputs, "local_config")?,
+            ),
         ],
     )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir_object)?;
@@ -323,7 +329,7 @@ fn build_report(
     let connection_name: Option<String> = if target_config.is_none() {
         None
     } else {
-        optional_string(&target_config.getattr("connection_name")?)?
+        optional_string(&native_field(&target_config, "connection_name")?)?
     };
     let facts: DebugProjectFacts = DebugProjectFacts {
         project_file: path_text(py, &files.project_file)?,

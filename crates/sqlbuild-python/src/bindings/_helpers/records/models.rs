@@ -98,6 +98,8 @@ pub(crate) struct ErrorSpec {
 #[derive(Debug)]
 #[pyclass(module = "sqlbuild._native", subclass, frozen)]
 pub(crate) struct NativeRecord {
+    /// The layout of the record's class.
+    pub(crate) spec: &'static RecordSpec,
     pub(crate) values: Vec<Py<PyAny>>,
     /// Values of the record's cached computed attributes, by attribute name.
     pub(crate) cached: Mutex<Vec<(&'static str, Py<PyAny>)>>,
@@ -115,6 +117,7 @@ impl NativeRecord {
     ) -> PyResult<Self> {
         let spec: &RecordSpec = record_spec(cls)?;
         Ok(Self {
+            spec,
             values: build_values(spec, args, kwargs)?,
             cached: Mutex::new(Vec::new()),
         })

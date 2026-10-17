@@ -1,5 +1,6 @@
 //! Fixture boundary records and adapter callbacks.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -15,15 +16,15 @@ pub(crate) fn columns(values: &Bound<'_, PyAny>, inferred: bool) -> PyResult<Vec
         .try_iter()?
         .map(|value| {
             let value = value?;
-            let name = value.getattr("name")?;
+            let name = native_field(&value, "name")?;
             Ok(FixtureColumn {
                 name: name.extract()?,
                 folded_name: folded(&name)?,
-                sql_type: value.getattr("type")?.extract()?,
+                sql_type: native_field(&value, "type")?.extract()?,
                 nullable: if inferred {
                     None
                 } else {
-                    value.getattr("nullable")?.extract()?
+                    native_field(&value, "nullable")?.extract()?
                 },
             })
         })
@@ -41,7 +42,7 @@ pub(crate) fn record<'py>(
 pub(crate) fn label(key: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(format!(
         "mock {} '{}'",
-        key.get_item(0)?.getattr("value")?.extract::<String>()?,
+        native_field(&key.get_item(0)?, "value")?.extract::<String>()?,
         key.get_item(1)?.extract::<String>()?
     ))
 }

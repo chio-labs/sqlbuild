@@ -24,6 +24,7 @@ use crate::bindings::_helpers::freshness::publication::append_freshness_records;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -75,8 +76,8 @@ fn run_context_facts(
     concurrency: &Bound<'_, PyAny>,
 ) -> PyResult<RunContextFacts> {
     let py: Python<'_> = context.py();
-    let project: Bound<'_, PyAny> = pipeline.getattr("project")?;
-    let plan: Bound<'_, PyAny> = pipeline.getattr("plan_output")?;
+    let project: Bound<'_, PyAny> = native_field(pipeline, "project")?;
+    let plan: Bound<'_, PyAny> = native_field(pipeline, "plan_output")?;
     let discovered: Bound<'_, PyAny> = context.get("discovered_inputs")?;
     let selected_count: usize = count(&plan, "model_entries")?
         + count(&plan, "seed_entries")?
@@ -84,7 +85,7 @@ fn run_context_facts(
         + count(&plan, "source_load_entries")?
         + count(pipeline, "python_plan_entries")?;
     let mut loaded_sources: usize = 0;
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(&project, "sources")?.try_iter()? {
         if !source?
             .getattr("source_entry")?
             .getattr("loader")?
@@ -103,38 +104,41 @@ fn run_context_facts(
         &registry::native(py, NativeAttr::DescribeConnectionWarehouse)?,
         &[
             ("discovered_inputs", discovered),
-            ("selected_target", project.getattr("effective_target_name")?),
+            (
+                "selected_target",
+                native_field(&project, "effective_target_name")?,
+            ),
             ("connection_config", context.get("connection_config")?),
         ],
     )?;
-    let warehouse: Bound<'_, PyAny> = resolved.getattr("warehouse")?;
+    let warehouse: Bound<'_, PyAny> = native_field(&resolved, "warehouse")?;
     let warehouse: Option<(String, String)> = if warehouse.is_none() {
         None
     } else {
         Some((
             display_text(&warehouse)?.unwrap_or_else(|| "not set".to_owned()),
-            resolved.getattr("source")?.str()?.extract()?,
+            native_field(&resolved, "source")?.str()?.extract()?,
         ))
     };
-    let variables: Bound<'_, PyAny> = project.getattr("effective_vars")?;
+    let variables: Bound<'_, PyAny> = native_field(&project, "effective_vars")?;
     let variable = |name: &str| -> PyResult<Option<Bound<'_, PyAny>>> {
         let value: Bound<'_, PyAny> = variables.call_method1("get", (name,))?;
         Ok((!value.is_none()).then_some(value))
     };
     let mut selector_files: Vec<SelectorFileFact> = Vec::new();
-    for file in context.request.getattr("selector_files")?.try_iter()? {
+    for file in native_field(&context.request, "selector_files")?.try_iter()? {
         let file: Bound<'_, PyAny> = file?;
         selector_files.push(SelectorFileFact {
-            path: file.getattr("path")?.str()?.extract()?,
-            selector_count: file.getattr("selector_count")?.extract()?,
+            path: native_field(&file, "path")?.str()?.extract()?,
+            selector_count: native_field(&file, "selector_count")?.extract()?,
         });
     }
     Ok(RunContextFacts {
         command: EXECUTION_COMMAND.to_owned(),
-        run_id: display_text(&project.getattr("run_id")?)?,
-        target: display_text(&project.getattr("effective_target_name")?)?,
-        database: display_text(&project.getattr("effective_target_database")?)?,
-        schema: display_text(&project.getattr("effective_target_schema")?)?,
+        run_id: display_text(&native_field(&project, "run_id")?)?,
+        target: display_text(&native_field(&project, "effective_target_name")?)?,
+        database: display_text(&native_field(&project, "effective_target_database")?)?,
+        schema: display_text(&native_field(&project, "effective_target_schema")?)?,
         warehouse,
         concurrency: concurrency.extract()?,
         full_refresh: context.request_flag("full_refresh")?,
@@ -153,7 +157,7 @@ pub(crate) fn write_run_context(
     context: &BuildContext<'_>,
     pipeline: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
-    let concurrency: Bound<'_, PyAny> = context.concurrency(&pipeline.getattr("project")?)?;
+    let concurrency: Bound<'_, PyAny> = context.concurrency(&native_field(pipeline, "project")?)?;
     let facts: RunContextFacts = run_context_facts(context, pipeline, &concurrency)?;
     emit(
         &context.stream,
@@ -171,13 +175,13 @@ fn cursors<'py>(
     plan: &Bound<'py, PyAny>,
 ) -> PyResult<[Bound<'py, PyAny>; 4]> {
     let py: Python<'py> = context.py();
-    let mut overrides: Bound<'py, PyAny> = plan.getattr("cursor_overrides")?;
+    let mut overrides: Bound<'py, PyAny> = native_field(plan, "cursor_overrides")?;
     if !overrides.is_truthy()? {
         overrides = call_with(
             &registry::native(py, NativeAttr::TypeCursorOverrides)?,
             &[(
                 "cursor_overrides",
-                context.request.getattr("cursor_overrides")?,
+                native_field(&context.request, "cursor_overrides")?,
             )],
         )?;
     }
@@ -185,10 +189,10 @@ fn cursors<'py>(
         overrides = registry::class(py, RecordId::CursorOverrides)?.call0()?;
     }
     Ok([
-        cursor_timestamp(&overrides.getattr("start_ts")?)?,
-        cursor_timestamp(&overrides.getattr("end_ts")?)?,
-        cursor_integer(&overrides.getattr("start_int")?)?,
-        cursor_integer(&overrides.getattr("end_int")?)?,
+        cursor_timestamp(&native_field(&overrides, "start_ts")?)?,
+        cursor_timestamp(&native_field(&overrides, "end_ts")?)?,
+        cursor_integer(&native_field(&overrides, "start_int")?)?,
+        cursor_integer(&native_field(&overrides, "end_int")?)?,
     ])
 }
 
@@ -199,22 +203,23 @@ pub(crate) fn prepare_build_execution<'py>(
     providers: &Bound<'py, PyAny>,
 ) -> PyResult<Preparation<'py>> {
     let py: Python<'py> = context.py();
-    let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
+    let plan: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
     let debug: bool = context.request_flag("debug")? || context.request_flag("json_output")?;
     let callbacks: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::BuildProgressCallbacks)?,
         &[
             ("plan", plan.clone()),
             ("use_color", boolean(py, context.use_color)),
-            ("verbose", context.request.getattr("verbose")?),
+            ("verbose", native_field(&context.request, "verbose")?),
             ("debug", boolean(py, debug)),
             (
                 "event_output_path",
-                context.request.getattr("event_output_path")?,
+                native_field(&context.request, "event_output_path")?,
             ),
         ],
     )?;
-    let concurrency: Bound<'py, PyAny> = context.concurrency(&pipeline.getattr("project")?)?;
+    let concurrency: Bound<'py, PyAny> =
+        context.concurrency(&native_field(pipeline, "project")?)?;
     if context.verbose {
         write_run_context(context, pipeline)?;
     } else {
@@ -236,7 +241,7 @@ pub(crate) fn prepare_build_execution<'py>(
             ("stream", context.stream.clone()),
             (
                 "blank_line_before_start",
-                boolean(py, plan.getattr("source_load_entries")?.is_truthy()?),
+                boolean(py, native_field(&plan, "source_load_entries")?.is_truthy()?),
             ),
             ("blank_line_after_complete", boolean(py, true)),
             ("use_color", boolean(py, context.use_color)),
@@ -245,8 +250,8 @@ pub(crate) fn prepare_build_execution<'py>(
     let cursors: [Bound<'py, PyAny>; 4] = cursors(context, &plan)?;
     let inputs: LifecycleInputs<'py> = LifecycleInputs {
         cursors: cursors.clone(),
-        on_node_start: keyword_relay(callbacks.getattr("on_node_start")?, &NODE_START)?,
-        on_node_complete: callbacks.getattr("on_node_complete")?,
+        on_node_start: keyword_relay(native_field(&callbacks, "on_node_start")?, &NODE_START)?,
+        on_node_complete: native_field(&callbacks, "on_node_complete")?,
         providers: providers.clone(),
     };
     let lifecycle: Bound<'py, DirectPythonLifecycle> =
@@ -279,8 +284,8 @@ pub(crate) fn execute_build_plan<'py>(
     providers: &Bound<'py, PyAny>,
 ) -> PyResult<Outcome<'py>> {
     let py: Python<'py> = context.py();
-    let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
-    let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
+    let plan: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
     let adapter: Bound<'py, PyAny> = context.get("adapter")?;
     let connection_config: Bound<'py, PyAny> = context.get("connection_config")?;
     let callbacks: &Bound<'py, PyAny> = &preparation.callbacks;
@@ -290,7 +295,7 @@ pub(crate) fn execute_build_plan<'py>(
     let runtime: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::BuildRuntimeParams)?,
         &[
-            ("run_id", project.getattr("run_id")?),
+            ("run_id", native_field(&project, "run_id")?),
             (
                 "runtime_dir",
                 joined(&context.get("effective_project_dir")?, &["target"])?,
@@ -333,28 +338,31 @@ pub(crate) fn execute_build_plan<'py>(
             ("on_migration_progress", line_writer(&context.stream)?),
             (
                 "on_node_start",
-                keyword_relay(callbacks.getattr("on_node_start")?, &NODE_START)?,
+                keyword_relay(native_field(callbacks, "on_node_start")?, &NODE_START)?,
             ),
             (
                 "on_node_complete",
-                preparation.lifecycle.getattr("on_node_complete")?,
+                native_field(&preparation.lifecycle, "on_node_complete")?,
             ),
-            ("on_sub_progress", callbacks.getattr("on_sub_progress")?),
+            (
+                "on_sub_progress",
+                native_field(callbacks, "on_sub_progress")?,
+            ),
             (
                 "on_connection_start",
-                connection.getattr("on_connection_start")?,
+                native_field(connection, "on_connection_start")?,
             ),
             (
                 "on_connection_complete",
                 keyword_relay(
-                    connection.getattr("on_connection_complete")?,
+                    native_field(connection, "on_connection_complete")?,
                     &CONNECTION_TIMING,
                 )?,
             ),
             (
                 "on_connection_error",
                 keyword_relay(
-                    connection.getattr("on_connection_error")?,
+                    native_field(connection, "on_connection_error")?,
                     &CONNECTION_TIMING,
                 )?,
             ),
@@ -373,7 +381,7 @@ pub(crate) fn execute_build_plan<'py>(
         &[
             (
                 "custom_materializations",
-                pipeline.getattr("custom_materializations")?,
+                native_field(pipeline, "custom_materializations")?,
             ),
             ("loader_functions", lifecycle.loader_functions(py)?),
         ],
@@ -392,7 +400,7 @@ pub(crate) fn execute_build_plan<'py>(
             ("plan", plan.clone()),
             ("connection_config", connection_config.clone()),
             ("adapter", adapter.clone()),
-            ("settings", project.getattr("settings")?),
+            ("settings", native_field(&project, "settings")?),
             ("runtime", runtime),
             ("callbacks", build_callbacks),
             ("customizations", customizations),
@@ -403,7 +411,7 @@ pub(crate) fn execute_build_plan<'py>(
         (&plan, &result),
         &adapter,
         &connection_config,
-        &project.getattr("run_id")?,
+        &native_field(&project, "run_id")?,
     )?;
     lifecycle.finalize(py)?;
     Ok(Outcome {
@@ -420,10 +428,10 @@ fn check_runtime<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
     let adapter: Bound<'py, PyAny> = context.get("adapter")?;
-    let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
     let names: Vec<Bound<'py, PyAny>> = checks
         .iter()
-        .map(|check| check.getattr("name"))
+        .map(|check| native_field(check, "name"))
         .collect::<PyResult<_>>()?;
     call_with(
         &host::entry(py, ExecutorHost::PythonNodeRuntime)?,
@@ -431,10 +439,13 @@ fn check_runtime<'py>(
             ("adapter", adapter.clone()),
             ("connection_config", context.get("connection_config")?),
             ("connection", connection.clone()),
-            ("run_id", project.getattr("run_id")?),
-            ("target", project.getattr("effective_target_name")?),
-            ("vars", project.getattr("effective_vars")?),
-            ("is_reload", context.request.getattr("reload_sources")?),
+            ("run_id", native_field(&project, "run_id")?),
+            ("target", native_field(&project, "effective_target_name")?),
+            ("vars", native_field(&project, "effective_vars")?),
+            (
+                "is_reload",
+                native_field(&context.request, "reload_sources")?,
+            ),
             (
                 "default_database",
                 adapter.call_method0("default_database")?,
@@ -450,7 +461,7 @@ fn check_runtime<'py>(
                     &registry::native(py, NativeAttr::BuildProjectRelationTargets)?,
                     &[
                         ("adapter", adapter),
-                        ("plan_output", pipeline.getattr("plan_output")?),
+                        ("plan_output", native_field(pipeline, "plan_output")?),
                     ],
                 )?,
             ),
@@ -475,28 +486,34 @@ pub(crate) fn run_post_build_python_checks<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
     let result: &Bound<'py, PyAny> = &outcome.result;
-    if result.getattr("status")?.str()?.extract::<String>()? != SUCCESS_STATUS {
+    if native_field(result, "status")?.str()?.extract::<String>()? != SUCCESS_STATUS {
         return tuple(py, &[]);
     }
     let discovered: Bound<'py, PyAny> = context.get("discovered_inputs")?;
-    let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
-    let load_results: Bound<'py, PyAny> = result.getattr("load_results")?;
+    let plan: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
+    let load_results: Bound<'py, PyAny> = native_field(result, "load_results")?;
     let graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let by_loader = || -> PyResult<Bound<'py, PyAny>> {
-        Ok(load_results_by_loader_name(&plan.getattr("source_map")?, &load_results)?.into_any())
+        Ok(
+            load_results_by_loader_name(&native_field(&plan, "source_map")?, &load_results)?
+                .into_any(),
+        )
     };
     let mut dependencies: Vec<Bound<'py, PyAny>> = names_of(&outcome.python_results, "node_name")?;
     for name in by_loader()?.try_iter()? {
         dependencies.push(name?);
     }
     let mut completed: Vec<Bound<'py, PyAny>> =
-        names_of(&result.getattr("model_results")?, "model_name")?;
-    completed.extend(names_of(&result.getattr("seed_results")?, "seed_name")?);
+        names_of(&native_field(result, "model_results")?, "model_name")?;
+    completed.extend(names_of(
+        &native_field(result, "seed_results")?,
+        "seed_name",
+    )?);
     completed.extend(names_of(&load_results, "source_name")?);
     let checks: Vec<Bound<'py, PyAny>> = relevant_check_functions(
         &discovered,
         &graph,
-        context.request.getattr("exclude")?,
+        native_field(&context.request, "exclude")?,
         (&frozenset(py, &dependencies)?, &frozenset(py, &completed)?),
     )?;
     if checks.is_empty() {
@@ -512,13 +529,13 @@ pub(crate) fn run_post_build_python_checks<'py>(
             &discovered,
             &run_state,
             (&outcome.python_results, Some(&load_results)),
-            Some(&plan.getattr("source_map")?),
+            Some(&native_field(&plan, "source_map")?),
         )?;
         let callbacks: Bound<'py, PyAny> = call_with(
             &host::entry(py, ExecutorHost::PythonCheckCallbacks)?,
             &[(
                 "on_check_complete",
-                preparation.callbacks.getattr("write_execution_event")?,
+                native_field(&preparation.callbacks, "write_execution_event")?,
             )],
         )?;
         call_with(
@@ -561,9 +578,9 @@ pub(crate) fn execute_direct_build<'py>(
     providers: &Bound<'py, PyAny>,
 ) -> PyResult<(Preparation<'py>, Outcome<'py>, Bound<'py, PyAny>)> {
     let py: Python<'py> = context.py();
-    let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
-    let run_id: Bound<'py, PyAny> = project.getattr("run_id")?;
-    let target_name: Bound<'py, PyAny> = project.getattr("effective_target_name")?;
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
+    let run_id: Bound<'py, PyAny> = native_field(&project, "run_id")?;
+    let target_name: Bound<'py, PyAny> = native_field(&project, "effective_target_name")?;
     let resource_name: Bound<'py, PyAny> = if target_name.is_truthy()? {
         target_name
     } else {
@@ -594,7 +611,7 @@ pub(crate) fn execute_direct_build<'py>(
             let outcome: Outcome<'py> =
                 execute_build_plan(context, pipeline, &preparation, providers)?;
             let checks_scope: Bound<'py, PyAny> = call_with(
-                &cost_context.getattr("resource_scope")?,
+                &native_field(&cost_context, "resource_scope")?,
                 &[
                     ("resource_type", text(py, "run")),
                     ("resource_name", resource_name.clone()),

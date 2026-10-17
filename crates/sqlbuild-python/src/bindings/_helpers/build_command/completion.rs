@@ -26,6 +26,7 @@ use crate::bindings::_helpers::cost_report::degradation::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -48,18 +49,21 @@ pub(crate) fn finalize_build_cost<'py>(
     cost: CostRequest<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
-    let project: Bound<'py, PyAny> = pipeline.getattr("project")?;
+    let project: Bound<'py, PyAny> = native_field(pipeline, "project")?;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = vec![
         ("project_dir", context.get("effective_project_dir")?),
         ("adapter_name", context.get("adapter_name")?),
         ("adapter", context.get("adapter")?),
         ("connection_config", context.get("connection_config")?),
-        ("target_name", project.getattr("effective_target_name")?),
+        (
+            "target_name",
+            native_field(&project, "effective_target_name")?,
+        ),
         (
             "target_database",
-            project.getattr("effective_target_database")?,
+            native_field(&project, "effective_target_database")?,
         ),
-        ("run_id", project.getattr("run_id")?),
+        ("run_id", native_field(&project, "run_id")?),
         ("build_status", text(py, cost.status)),
         ("started_at", cost.started_at),
         ("completed_at", cost.completed_at),
@@ -166,7 +170,7 @@ fn run_id_for<'py>(
     if record.is_none() {
         return Ok(none(pipeline.py()));
     }
-    pipeline.getattr("project")?.getattr("run_id")
+    native_field(pipeline, "project")?.getattr("run_id")
 }
 
 fn write_json(context: &BuildContext<'_>, payload: Bound<'_, PyAny>) -> PyResult<()> {
@@ -174,10 +178,13 @@ fn write_json(context: &BuildContext<'_>, payload: Bound<'_, PyAny>) -> PyResult
         &registry::native(context.py(), NativeAttr::WriteExecutionJsonOutput)?,
         &[
             ("payload", payload),
-            ("json_output", context.request.getattr("json_output")?),
+            (
+                "json_output",
+                native_field(&context.request, "json_output")?,
+            ),
             (
                 "json_output_path",
-                context.request.getattr("json_output_path")?,
+                native_field(&context.request, "json_output_path")?,
             ),
         ],
     )?;
@@ -187,14 +194,14 @@ fn write_json(context: &BuildContext<'_>, payload: Bound<'_, PyAny>) -> PyResult
 /// Persist and emit a completed zero-cost record when the plan has no work.
 fn finalize_no_work(context: &BuildContext<'_>, pipeline: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = context.py();
-    let plan: Bound<'_, PyAny> = pipeline.getattr("plan_output")?;
+    let plan: Bound<'_, PyAny> = native_field(pipeline, "plan_output")?;
     if call_with(
         &registry::native(py, NativeAttr::PlanHasExecutableWork)?,
         &[
             ("plan", plan.clone()),
             (
                 "python_plan_entries",
-                pipeline.getattr("python_plan_entries")?,
+                native_field(pipeline, "python_plan_entries")?,
             ),
         ],
     )?
@@ -252,8 +259,8 @@ pub(crate) fn finalize_no_work_with_timings(
         write_timings(
             context,
             &PhaseTimings {
-                compile_seconds: pipeline.getattr("compile_seconds")?.extract()?,
-                planning_seconds: pipeline.getattr("planning_seconds")?.extract()?,
+                compile_seconds: native_field(pipeline, "compile_seconds")?.extract()?,
+                planning_seconds: native_field(pipeline, "planning_seconds")?.extract()?,
                 cost_collection_seconds: Some(cost_seconds),
                 total_seconds: Some(context.started.elapsed().as_secs_f64()),
                 ..PhaseTimings::default()
@@ -314,15 +321,16 @@ pub(crate) fn complete_direct_build<'py>(
     let py: Python<'py> = context.py();
     let completed_at: Bound<'py, PyAny> = utc_now(py)?;
     let result: &Bound<'py, PyAny> = &outcome.result;
-    let plan: Bound<'py, PyAny> = pipeline.getattr("plan_output")?;
-    let succeeded: bool = result.getattr("status")?.str()?.extract::<String>()? == SUCCESS_STATUS;
+    let plan: Bound<'py, PyAny> = native_field(pipeline, "plan_output")?;
+    let succeeded: bool =
+        native_field(result, "status")?.str()?.extract::<String>()? == SUCCESS_STATUS;
     let python_failed: bool = any_failed(&outcome.python_results, |result| {
         Ok(python_node_failed(
-            &result.getattr("status")?.str()?.extract::<String>()?,
+            &native_field(result, "status")?.str()?.extract::<String>()?,
         ))
     })?;
     let checks_failed: bool = any_failed(check_results, |result| {
-        result.getattr("failed")?.is_truthy()
+        native_field(result, "failed")?.is_truthy()
     })?;
     let exit_code: i32 = build_exit_code(succeeded, (python_failed, checks_failed));
     let target_dir: Bound<'py, PyAny> =
@@ -350,7 +358,7 @@ pub(crate) fn complete_direct_build<'py>(
         &registry::native(py, NativeAttr::FormatBuildFooter)?,
         &[
             ("result", result.clone()),
-            ("elapsed", preparation.callbacks.getattr("elapsed")?),
+            ("elapsed", native_field(&preparation.callbacks, "elapsed")?),
             ("use_color", boolean(py, context.use_color)),
             ("python_node_results", outcome.python_results.clone()),
         ],
@@ -373,13 +381,13 @@ pub(crate) fn complete_direct_build<'py>(
     write_json(context, payload)?;
     render_build_cost(&record, &context.stream, context.use_color)?;
     if context.verbose {
-        let timings: Bound<'py, PyAny> = result.getattr("timings")?;
+        let timings: Bound<'py, PyAny> = native_field(result, "timings")?;
         let seconds = |name: &str| -> PyResult<Option<f64>> { timings.getattr(name)?.extract() };
         write_timings(
             context,
             &PhaseTimings {
-                compile_seconds: pipeline.getattr("compile_seconds")?.extract()?,
-                planning_seconds: pipeline.getattr("planning_seconds")?.extract()?,
+                compile_seconds: native_field(pipeline, "compile_seconds")?.extract()?,
+                planning_seconds: native_field(pipeline, "planning_seconds")?.extract()?,
                 connection_preparation_seconds: seconds("connection_preparation_seconds")?,
                 schema_preparation_seconds: seconds("schema_preparation_seconds")?,
                 execution_seconds: seconds("execution_seconds")?,

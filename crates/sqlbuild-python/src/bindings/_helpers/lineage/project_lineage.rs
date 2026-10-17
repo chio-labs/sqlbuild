@@ -23,6 +23,7 @@ use crate::bindings::_helpers::lineage::lineage_objects::{LineageClasses, log_li
 use crate::bindings::_helpers::lineage::project_schema::{
     fast_schema, inferred_names, rich_schema,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::models::ProjectCatalog;
@@ -72,14 +73,14 @@ fn build_direct_semantic_uses<'py>(
     let classes: LineageClasses<'py> = LineageClasses::new(py)?;
     let schema = rich_schema(project)?;
     let mut models: Vec<(String, String, String)> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        let name: Bound<'py, PyAny> = model.getattr("name")?;
+        let name: Bound<'py, PyAny> = native_field(&model, "name")?;
         if model_names.contains(&name)? {
             models.push((
                 name.extract()?,
-                model.getattr("query_sql")?.extract()?,
-                model.getattr("authored_sql")?.extract()?,
+                native_field(&model, "query_sql")?.extract()?,
+                native_field(&model, "authored_sql")?.extract()?,
             ));
         }
     }
@@ -123,11 +124,11 @@ fn selected_models<'py>(
     model_names: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let selected: bool = match model_names {
             None => true,
-            Some(names) => names.contains(model.getattr("name")?)?,
+            Some(names) => names.contains(native_field(&model, "name")?)?,
         };
         if selected {
             models.push(model);
@@ -154,22 +155,22 @@ fn fast_lineage<'py>(
     let mut work: Vec<FastModel<'py>> = Vec::with_capacity(models.len());
     let mut requests: Vec<FastLineageModel> = Vec::new();
     for model in models {
-        let facts: Bound<'py, PyAny> = model.getattr("fast_lineage_columns")?;
+        let facts: Bound<'py, PyAny> = native_field(model, "fast_lineage_columns")?;
         let (has_star, star_resolved): (bool, bool) = star_flags(model)?;
         let expands_star: bool = has_star && !star_resolved;
         if facts.is_none() {
             requests.push(FastLineageModel::Parse {
-                query_sql: model.getattr("query_sql")?.extract()?,
+                query_sql: native_field(model, "query_sql")?.extract()?,
                 inferred_columns: inferred_names(model)?,
             });
         } else if expands_star {
             requests.push(FastLineageModel::StarExpansion {
-                query_sql: model.getattr("query_sql")?.extract()?,
+                query_sql: native_field(model, "query_sql")?.extract()?,
                 existing_columns: output_columns(classes, &facts)?,
             });
         }
         work.push(FastModel {
-            name: model.getattr("name")?.extract()?,
+            name: native_field(model, "name")?.extract()?,
             facts: (!facts.is_none()).then_some(facts),
             has_star,
             expands_star,
@@ -178,11 +179,11 @@ fn fast_lineage<'py>(
     let outcomes: Vec<FastLineageOutcome> = if requests.is_empty() {
         Vec::new()
     } else {
-        let binding_catalog: Bound<'py, PyAny> = project.getattr("binding_catalog")?;
+        let binding_catalog: Bound<'py, PyAny> = native_field(project, "binding_catalog")?;
         let catalog: Option<PyRef<'py, ProjectCatalog>> = if binding_catalog.is_none() {
             None
         } else {
-            binding_catalog.getattr("native")?.extract()?
+            native_field(&binding_catalog, "native")?.extract()?
         };
         let request = FastLineageRequest {
             dialect: dialect.map(|name| name.extract()).transpose()?,
@@ -251,7 +252,7 @@ fn fast_lineage<'py>(
 /// The output column names of compact facts or plain column facts.
 fn output_columns(classes: &LineageClasses<'_>, facts: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     if facts.is_instance(&classes.compact_facts)? {
-        let pool: Bound<'_, PyAny> = facts.getattr("string_pool")?;
+        let pool: Bound<'_, PyAny> = native_field(facts, "string_pool")?;
         return facts
             .getattr("rows")?
             .try_iter()?
@@ -260,7 +261,7 @@ fn output_columns(classes: &LineageClasses<'_>, facts: &Bound<'_, PyAny>) -> PyR
     }
     facts
         .try_iter()?
-        .map(|column| column?.getattr("output_column")?.extract())
+        .map(|column| native_field(&column?, "output_column")?.extract())
         .collect()
 }
 
@@ -288,7 +289,7 @@ fn rich_lineage<'py>(
             schema: rich_schema(project)?,
             models: models
                 .iter()
-                .map(|model| model.getattr("query_sql")?.extract())
+                .map(|model| native_field(model, "query_sql")?.extract())
                 .collect::<PyResult<_>>()?,
         };
         py.compiler_detach(|| build_rich_lineage(&request))
@@ -297,7 +298,7 @@ fn rich_lineage<'py>(
     let built: Bound<'py, PyDict> = PyDict::new(py);
     let mut edges: Vec<Bound<'py, PyAny>> = Vec::new();
     for (model, outcome) in models.iter().zip(outcomes) {
-        let name: String = model.getattr("name")?.extract()?;
+        let name: String = native_field(model, "name")?.extract()?;
         match outcome {
             RichLineageOutcome::Built { columns, has_star } => {
                 let mut lineage_columns: Vec<Bound<'py, PyAny>> = Vec::with_capacity(columns.len());
@@ -318,21 +319,21 @@ fn rich_lineage<'py>(
     }
     for item in built.iter() {
         let (target_name, result): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item;
-        for column in result.getattr("columns")?.try_iter()? {
+        for column in native_field(&result, "columns")?.try_iter()? {
             let column: Bound<'py, PyAny> = column?;
             let target: Bound<'py, PyAny> = classes.qualified_column.call1((
                 &classes.model_resource,
                 &target_name,
-                column.getattr("output_column")?,
+                native_field(&column, "output_column")?,
             ))?;
-            let transform: Bound<'py, PyAny> = column.getattr("transform_kind")?;
-            let confidence: Bound<'py, PyAny> = column.getattr("confidence")?;
-            for upstream in column.getattr("upstream_columns")?.try_iter()? {
+            let transform: Bound<'py, PyAny> = native_field(&column, "transform_kind")?;
+            let confidence: Bound<'py, PyAny> = native_field(&column, "confidence")?;
+            for upstream in native_field(&column, "upstream_columns")?.try_iter()? {
                 let upstream: Bound<'py, PyAny> = upstream?;
                 let source: Bound<'py, PyAny> = classes.qualified_column.call1((
-                    upstream.getattr("resource_type")?,
-                    upstream.getattr("resource_name")?,
-                    upstream.getattr("column_name")?,
+                    native_field(&upstream, "resource_type")?,
+                    native_field(&upstream, "resource_name")?,
+                    native_field(&upstream, "column_name")?,
                 ))?;
                 edges.push(classes.edge(source, &target, &transform, &confidence)?);
             }

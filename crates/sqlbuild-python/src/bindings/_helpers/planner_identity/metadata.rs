@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::planner_identity::hashing::function_definition_hash;
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, SPACED, sorted_dumps};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const LOCAL_FUNCTION_HASHES_KEY: &str = "local_function_hashes";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -86,20 +87,22 @@ pub(crate) fn model_version_identity_metadata_json<'py>(
     let py: Python<'py> = model.py();
     let local_function_hashes: Bound<'py, PyDict> = PyDict::new(py);
     if let Some(function_hashes) = function_local_hashes.filter(|hashes| !hashes.is_none()) {
-        for upstream_key in model.getattr("deps")?.try_iter()? {
+        for upstream_key in native_field(model, "deps")?.try_iter()? {
             let upstream_key: Bound<'py, PyAny> = upstream_key?;
-            let kind: String = upstream_key.getattr("resource_type")?.str()?.extract()?;
+            let kind: String = native_field(&upstream_key, "resource_type")?
+                .str()?
+                .extract()?;
             if kind != UDF_RESOURCE && kind != TABLE_FN_RESOURCE {
                 continue;
             }
-            let name: Bound<'py, PyAny> = upstream_key.getattr("name")?;
+            let name: Bound<'py, PyAny> = native_field(&upstream_key, "name")?;
             let upstream_hash: Bound<'py, PyAny> = function_hashes.call_method1("get", (&name,))?;
             if !upstream_hash.is_none() {
                 local_function_hashes.set_item(name, upstream_hash)?;
             }
         }
     }
-    let config_values: Bound<'py, PyAny> = model.getattr("config")?.getattr("values")?;
+    let config_values: Bound<'py, PyAny> = native_field(model, "config")?.getattr("values")?;
     let signature: Bound<'py, PyDict> =
         execution_signature(model, &config_values, hook_version_hashes)?;
     version_identity_metadata_json(
@@ -164,39 +167,39 @@ fn contract_output_signature<'py>(
     config_values: &Bound<'py, PyAny>,
 ) -> PyResult<Option<Bound<'py, PyDict>>> {
     let py: Python<'py> = model.py();
-    let schema_entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
     if schema_entry.is_none() {
         return Ok(None);
     }
-    let columns: Bound<'py, PyAny> = schema_entry.getattr("columns")?;
-    let families: Bound<'py, PyAny> = schema_entry.getattr("dynamic_columns")?;
+    let columns: Bound<'py, PyAny> = native_field(&schema_entry, "columns")?;
+    let families: Bound<'py, PyAny> = native_field(&schema_entry, "dynamic_columns")?;
     if !(columns.is_truthy()? || families.is_truthy()?) {
         return Ok(None);
     }
     let enforced: bool = config_values
         .call_method1("get", (CONTRACT_CONFIG_KEY,))?
         .eq(ENFORCED_CONTRACT_POLICY)?;
-    if !enforced && schema_entry.getattr("model_schema")?.is_none() {
+    if !enforced && native_field(&schema_entry, "model_schema")?.is_none() {
         return Ok(None);
     }
-    let enum_columns: Bound<'py, PyAny> = model.getattr("enum_columns")?;
+    let enum_columns: Bound<'py, PyAny> = native_field(model, "enum_columns")?;
     let rendered: Bound<'py, PyList> = PyList::empty(py);
     for column in columns.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
         let entry: Bound<'py, PyDict> = column_signature(&column)?;
         let declaration: Bound<'py, PyAny> =
-            enum_columns.call_method1("get", (column.getattr("name")?,))?;
+            enum_columns.call_method1("get", (native_field(&column, "name")?,))?;
         if !declaration.is_none() {
             let members: Bound<'py, PyList> = PyList::empty(py);
-            for member in declaration.getattr("members")?.try_iter()? {
+            for member in native_field(&declaration, "members")?.try_iter()? {
                 let member: Bound<'py, PyAny> = member?;
                 let rendered_member: Bound<'py, PyDict> = PyDict::new(py);
-                rendered_member.set_item("name", member.getattr("name")?)?;
-                rendered_member.set_item("value", member.getattr("value")?)?;
+                rendered_member.set_item("name", native_field(&member, "name")?)?;
+                rendered_member.set_item("value", native_field(&member, "value")?)?;
                 members.append(rendered_member)?;
             }
             let enum_entry: Bound<'py, PyDict> = PyDict::new(py);
-            enum_entry.set_item("name", declaration.getattr("name")?)?;
+            enum_entry.set_item("name", native_field(&declaration, "name")?)?;
             enum_entry.set_item("members", members)?;
             entry.set_item("enum", enum_entry)?;
         }
@@ -242,7 +245,7 @@ fn family_signatures<'py>(families: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
 /// The hash of a model's own declared columns, column families and contract setting.
 pub(crate) fn model_declared_columns_hash(model: &Bound<'_, PyAny>) -> PyResult<String> {
     let py: Python<'_> = model.py();
-    let schema_entry: Bound<'_, PyAny> = model.getattr("schema_entry")?;
+    let schema_entry: Bound<'_, PyAny> = native_field(model, "schema_entry")?;
     let payload: Bound<'_, PyDict> = PyDict::new(py);
     payload.set_item(
         "contract",
@@ -255,11 +258,11 @@ pub(crate) fn model_declared_columns_hash(model: &Bound<'_, PyAny>) -> PyResult<
     let mut families: Bound<'_, PyList> = PyList::empty(py);
     let mut type_enforcement: Bound<'_, PyAny> = py.None().into_bound(py);
     if !schema_entry.is_none() {
-        for column in schema_entry.getattr("columns")?.try_iter()? {
+        for column in native_field(&schema_entry, "columns")?.try_iter()? {
             columns.append(column_signature(&column?)?)?;
         }
-        families = family_signatures(&schema_entry.getattr("dynamic_columns")?)?;
-        type_enforcement = schema_entry.getattr("type_enforcement")?;
+        families = family_signatures(&native_field(&schema_entry, "dynamic_columns")?)?;
+        type_enforcement = native_field(&schema_entry, "type_enforcement")?;
     }
     payload.set_item("columns", columns)?;
     payload.set_item("dynamic_columns", families)?;
@@ -280,13 +283,13 @@ pub(crate) fn function_local_hashes<'py>(
     let hashes: Bound<'py, PyDict> = PyDict::new(py);
     for function in functions.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
-        let name: String = function.getattr("name")?.extract()?;
-        let language: Bound<'py, PyAny> = function.getattr("language")?.getattr("value")?;
+        let name: String = native_field(&function, "name")?.extract()?;
+        let language: Bound<'py, PyAny> = native_field(&function, "language")?.getattr("value")?;
         let body_hash: String = function_definition_hash(
             py,
             &name,
             (
-                &function.getattr("body_sql")?.extract::<String>()?,
+                &native_field(&function, "body_sql")?.extract::<String>()?,
                 &language.extract::<String>()?,
                 dialect,
             ),
@@ -294,12 +297,12 @@ pub(crate) fn function_local_hashes<'py>(
         let payload: Bound<'py, PyDict> = PyDict::new(py);
         payload.set_item(
             "arguments",
-            name_type_pairs(&function.getattr("arguments")?)?,
+            name_type_pairs(&native_field(&function, "arguments")?)?,
         )?;
-        payload.set_item("returns", function.getattr("returns")?)?;
+        payload.set_item("returns", native_field(&function, "returns")?)?;
         payload.set_item(
             "return_columns",
-            name_type_pairs(&function.getattr("return_columns")?)?,
+            name_type_pairs(&native_field(&function, "return_columns")?)?,
         )?;
         payload.set_item("body_sql", body_hash)?;
         payload.set_item("language", language)?;
@@ -320,7 +323,7 @@ fn name_type_pairs<'py>(items: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList
         let item: Bound<'py, PyAny> = item?;
         pairs.append(PyTuple::new(
             items.py(),
-            [item.getattr("name")?, item.getattr("type")?],
+            [native_field(&item, "name")?, native_field(&item, "type")?],
         )?)?;
     }
     Ok(pairs)
@@ -352,10 +355,10 @@ fn rendered_pairs(items: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
 /// Stable function definition text used for change fingerprints.
 pub(crate) fn compiled_function_fingerprint_sql(function: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(function_fingerprint_sql(&FunctionFingerprintFields {
-        language: function.getattr("language")?.str()?.extract()?,
-        arguments: rendered_pairs(&function.getattr("arguments")?)?,
-        returns: function.getattr("returns")?.str()?.extract()?,
-        return_columns: rendered_pairs(&function.getattr("return_columns")?)?,
+        language: native_field(function, "language")?.str()?.extract()?,
+        arguments: rendered_pairs(&native_field(function, "arguments")?)?,
+        returns: native_field(function, "returns")?.str()?.extract()?,
+        return_columns: rendered_pairs(&native_field(function, "return_columns")?)?,
         runtime_version: text_or_empty(function, "runtime_version")?,
         entry_point: text_or_empty(function, "entry_point")?,
         packages: function
@@ -363,29 +366,29 @@ pub(crate) fn compiled_function_fingerprint_sql(function: &Bound<'_, PyAny>) -> 
             .try_iter()?
             .map(|package| package?.extract::<String>())
             .collect::<PyResult<_>>()?,
-        body_sql: function.getattr("body_sql")?.extract()?,
+        body_sql: native_field(function, "body_sql")?.extract()?,
     }))
 }
 
 /// `(identity_hash, metadata_json)` of one compiled seed from its content and load-affecting config.
 pub(crate) fn seed_identity(seed: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     let py: Python<'_> = seed.py();
-    let schema_entry: Bound<'_, PyAny> = seed.getattr("schema_entry")?;
-    let csv_settings: Bound<'_, PyAny> = schema_entry.getattr("csv_settings")?;
+    let schema_entry: Bound<'_, PyAny> = native_field(seed, "schema_entry")?;
+    let csv_settings: Bound<'_, PyAny> = native_field(&schema_entry, "csv_settings")?;
     let columns: Bound<'_, PyList> = PyList::empty(py);
-    for column in schema_entry.getattr("columns")?.try_iter()? {
+    for column in native_field(&schema_entry, "columns")?.try_iter()? {
         columns.append(column_signature(&column?)?)?;
     }
-    let rows: Bound<'_, PyAny> = if seed.getattr("external")?.is_truthy()? {
+    let rows: Bound<'_, PyAny> = if native_field(seed, "external")?.is_truthy()? {
         PyList::empty(py).into_any()
     } else {
         seed_rows(
-            &seed.getattr("seed_file")?.getattr("file_path")?,
+            &native_field(seed, "seed_file")?.getattr("file_path")?,
             &csv_settings,
         )?
     };
     let payload: Bound<'_, PyDict> = PyDict::new(py);
-    payload.set_item("name", seed.getattr("name")?)?;
+    payload.set_item("name", native_field(seed, "name")?)?;
     payload.set_item(
         "csv_settings",
         imported(py, DATACLASSES_MODULE, "asdict")?.call1((&csv_settings,))?,
@@ -402,7 +405,7 @@ fn seed_rows<'py>(
     csv_settings: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = file_path.py();
-    let encoding: Bound<'py, PyAny> = match csv_settings.getattr("encoding")? {
+    let encoding: Bound<'py, PyAny> = match native_field(csv_settings, "encoding")? {
         value if value.is_truthy()? => value,
         _ => PyString::new(py, DEFAULT_SEED_ENCODING).into_any(),
     };

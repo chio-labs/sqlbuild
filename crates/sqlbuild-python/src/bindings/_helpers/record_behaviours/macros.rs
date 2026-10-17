@@ -7,6 +7,7 @@ use pyo3::types::{PyDict, PyList, PyTuple, PyTupleMethods};
 use crate::bindings::_helpers::graph::project_graph::{ResourceRow, project_graph};
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
 use crate::bindings::_helpers::record_behaviours::compiled::compile_input_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_values::{
     constant_declaration_sql, render_enum_member_value,
 };
@@ -24,7 +25,7 @@ pub(crate) fn macro_injects_context(instance: &Bound<'_, PyAny>) -> PyResult<Py<
         py,
         inspect
             .getattr("signature")?
-            .call1((instance.getattr("function")?,))?
+            .call1((native_field(instance, "function")?,))?
             .getattr("parameters")?
             .call_method0("values")?
             .try_iter()?
@@ -33,12 +34,12 @@ pub(crate) fn macro_injects_context(instance: &Bound<'_, PyAny>) -> PyResult<Py<
     let Ok(first) = parameters.get_item(0) else {
         return false.into_py_any(py);
     };
-    let kind: Bound<'_, PyAny> = first.getattr("kind")?;
+    let kind: Bound<'_, PyAny> = native_field(&first, "kind")?;
     let mut positional: bool = false;
     for name in POSITIONAL_KINDS {
-        positional |= kind.eq(inspect.getattr("Parameter")?.getattr(name)?)?;
+        positional |= kind.eq(native_field(&inspect, "Parameter")?.getattr(name)?)?;
     }
-    let named: bool = first.getattr("name")?.eq(MACRO_CONTEXT_PARAMETER_NAME)?;
+    let named: bool = native_field(&first, "name")?.eq(MACRO_CONTEXT_PARAMETER_NAME)?;
     (positional && named).into_py_any(py)
 }
 
@@ -50,14 +51,14 @@ pub(crate) fn context_render_constant(
 ) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = instance.py();
     let name: Bound<'_, PyAny> = call_argument((args, kwargs), "name", 0)?;
-    let value_renderer: Bound<'_, PyAny> = instance.getattr("_value_renderer")?;
+    let value_renderer: Bound<'_, PyAny> = native_field(instance, "_value_renderer")?;
     if value_renderer.is_none() {
         return Err(compile_input_error(
             py,
             "Constant SQL rendering is available only during a project macro invocation",
         )?);
     }
-    let _ = instance.getattr("constants")?.get_item(&name)?;
+    let _ = native_field(instance, "constants")?.get_item(&name)?;
     let declaration: Bound<'_, PyAny> = instance
         .getattr("_constant_declarations")?
         .call_method1("get", (&name,))?;
@@ -70,7 +71,7 @@ pub(crate) fn context_render_constant(
     constant_declaration_sql(
         &declaration,
         &value_renderer,
-        (&instance.getattr("_collection_rendering")?, None),
+        (&native_field(instance, "_collection_rendering")?, None),
     )?
     .into_py_any(py)
 }
@@ -98,8 +99,8 @@ pub(crate) fn context_render_enum_member(
 /// `(resource type, name)` of one compiled object key.
 fn graph_key(key: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     Ok((
-        key.getattr("resource_type")?.str()?.extract()?,
-        key.getattr("name")?.extract()?,
+        native_field(key, "resource_type")?.str()?.extract()?,
+        native_field(key, "name")?.extract()?,
     ))
 }
 
@@ -134,8 +135,8 @@ fn resource_rows(
         let resource: Bound<'_, PyAny> = resource?;
         let (tags, folder) = describe(&resource)?;
         rows.push((
-            graph_key(&resource.getattr("key")?)?,
-            graph_keys(&resource.getattr("deps")?)?,
+            graph_key(&native_field(&resource, "key")?)?,
+            graph_keys(&native_field(&resource, "deps")?)?,
             tags,
             folder,
         ));
@@ -186,11 +187,17 @@ fn function_tags(function: &Bound<'_, PyAny>) -> PyResult<ResourceTags> {
 /// `CompiledProject.lineage_graph`: lineage edges, tags, folders and names indexed natively.
 pub(crate) fn project_lineage_graph(instance: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     let mut rows: Vec<ResourceRow> = Vec::new();
-    rows.extend(resource_rows(&instance.getattr("models")?, model_tags)?);
-    rows.extend(resource_rows(&instance.getattr("sources")?, source_tags)?);
-    rows.extend(resource_rows(&instance.getattr("seeds")?, seed_tags)?);
     rows.extend(resource_rows(
-        &instance.getattr("functions")?,
+        &native_field(instance, "models")?,
+        model_tags,
+    )?);
+    rows.extend(resource_rows(
+        &native_field(instance, "sources")?,
+        source_tags,
+    )?);
+    rows.extend(resource_rows(&native_field(instance, "seeds")?, seed_tags)?);
+    rows.extend(resource_rows(
+        &native_field(instance, "functions")?,
         function_tags,
     )?);
     project_graph(rows)?.into_py_any(instance.py())

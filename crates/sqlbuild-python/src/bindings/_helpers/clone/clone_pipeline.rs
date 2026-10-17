@@ -7,6 +7,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -46,17 +47,20 @@ fn compiled_environment<'py>(
             ("selected_target", target_name.clone()),
             (
                 "resolved_connection",
-                pipeline.connection.getattr("config")?,
+                native_field(&pipeline.connection, "config")?,
             ),
-            ("no_sql_validation", options.getattr("no_sql_validation")?),
+            (
+                "no_sql_validation",
+                native_field(options, "no_sql_validation")?,
+            ),
             (
                 "analysis_selection",
                 call_with(
                     &registry::class(py, RecordId::CompileAnalysisSelection)?,
-                    &[("no_cache", options.getattr("no_cache")?)],
+                    &[("no_cache", native_field(options, "no_cache")?)],
                 )?,
             ),
-            ("cli_vars", options.getattr("cli_vars")?),
+            ("cli_vars", native_field(options, "cli_vars")?),
             ("external_sql_reference_resolver", pipeline.resolver.clone()),
         ],
     )
@@ -70,8 +74,8 @@ fn read_target_name<'py>(
     let py: Python<'py> = target_name.py();
     let deferred: Bound<'py, PyAny> = resolve_target_config(
         py,
-        &discovered.getattr("project_config")?,
-        &discovered.getattr("local_config")?,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
         target_name,
     )?
     .getattr("defer_sources_to")?;
@@ -111,10 +115,10 @@ pub(crate) fn prepared_clone_pipeline<'py>(
         &registry::native(py, NativeAttr::RunClonePlanning)?,
         &[
             ("project", destination_project.clone()),
-            ("select", pipeline.options.getattr("select")?),
-            ("exclude", pipeline.options.getattr("exclude")?),
+            ("select", native_field(&pipeline.options, "select")?),
+            ("exclude", native_field(&pipeline.options, "exclude")?),
             ("adapter", pipeline.adapter.clone()),
-            ("connection", pipeline.connection.getattr("handle")?),
+            ("connection", native_field(&pipeline.connection, "handle")?),
             ("origin_project", origin_project.clone()),
             ("origin_source_project", origin_source_project),
             ("destination_source_project", destination_source_project),

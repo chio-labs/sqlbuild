@@ -23,6 +23,7 @@ use crate::bindings::_helpers::planner_strategy::models::{
     FixtureReadCacheHost, FixtureRelation, ModelFixtureFacts, RelationFixturePlanningContext,
 };
 use crate::bindings::_helpers::planner_strategy::types::{FixtureKey, FixtureRelationInput};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -47,7 +48,7 @@ pub(crate) fn planning_context(
         Some(models) => models,
         None => {
             let models = PyDict::new(py);
-            for model in project.getattr("models")?.try_iter()? {
+            for model in native_field(project, "models")?.try_iter()? {
                 let model = model?;
                 models.set_item(model_reads::name_object(&model)?, &model)?;
             }
@@ -68,14 +69,14 @@ pub(crate) fn planning_context(
         for resource in project.getattr(collection)?.try_iter()? {
             let resource = resource?;
             let entry = resource.getattr(entry)?;
-            let columns: Vec<FixtureColumn> = columns(&entry.getattr("columns")?, false)?;
+            let columns: Vec<FixtureColumn> = columns(&native_field(&entry, "columns")?, false)?;
             let authoritative = if source {
-                entry.getattr("contract")?.eq("enforced")?
+                native_field(&entry, "contract")?.eq("enforced")?
             } else {
                 !columns.is_empty()
             };
             relations.insert(
-                (kind.to_owned(), resource.getattr("name")?.extract()?),
+                (kind.to_owned(), native_field(&resource, "name")?.extract()?),
                 FixtureRelation {
                     columns,
                     authoritative,

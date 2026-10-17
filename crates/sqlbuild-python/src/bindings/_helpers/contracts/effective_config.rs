@@ -2,6 +2,7 @@
 
 use std::hash::{Hash, Hasher};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, PyStringMethods, Python,
 };
@@ -186,12 +187,12 @@ pub(crate) fn effective_config_target_name<'py>(
     local_config: &Bound<'py, PyAny>,
     selected: &Bound<'py, PyAny>,
 ) -> PyResult<Outcome<'py, Bound<'py, PyString>>> {
-    let mut defined: Vec<Key<'py>> = keys(&project_config.getattr("targets")?)?;
-    defined.extend(keys(&local_config.getattr("targets")?)?);
+    let mut defined: Vec<Key<'py>> = keys(&native_field(project_config, "targets")?)?;
+    defined.extend(keys(&native_field(local_config, "targets")?)?);
     let choice: TargetChoice<Key<'py>> = TargetChoice {
         selected: optional_key(selected)?,
-        local: optional_key(&local_config.getattr("target")?)?,
-        default: optional_key(&project_config.getattr("default_target")?)?,
+        local: optional_key(&native_field(local_config, "target")?)?,
+        default: optional_key(&native_field(project_config, "default_target")?)?,
         defined,
     };
     Ok(match effective_target_name(choice) {
@@ -228,10 +229,10 @@ pub(crate) fn effective_config_target_fields<'py>(
         target: name,
         selected: is_set(&merged.fields[connection_name])
             || is_set(&merged.fields[field_position("connection")])
-            || project_config.getattr("connection")?.is_truthy()?
-            || local_config.getattr("connection")?.is_truthy()?,
-        project_names: keys(&project_config.getattr("connections")?)?,
-        local_names: keys(&local_config.getattr("connections")?)?,
+            || native_field(&project_config, "connection")?.is_truthy()?
+            || native_field(&local_config, "connection")?.is_truthy()?,
+        project_names: keys(&native_field(&project_config, "connections")?)?,
+        local_names: keys(&native_field(&local_config, "connections")?)?,
     };
     match default_connection_name(choice) {
         Ok(Some(only)) => {
@@ -261,13 +262,13 @@ fn effective_config_vars<'py>(
     cli_vars: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let (project_config, local_config) = configs;
-    let project: Pairs<'py> = pairs(&project_config.getattr("vars")?)?;
+    let project: Pairs<'py> = pairs(&native_field(&project_config, "vars")?)?;
     let target: Pairs<'py> = if target_config.is_none() {
         Vec::new()
     } else {
-        pairs(&target_config.getattr("vars")?)?
+        pairs(&native_field(target_config, "vars")?)?
     };
-    let local: Pairs<'py> = pairs(&local_config.getattr("vars")?)?;
+    let local: Pairs<'py> = pairs(&native_field(&local_config, "vars")?)?;
     let cli: Pairs<'py> = pairs(cli_vars)?;
     dictionary(py, effective_vars(&[&project, &target, &local, &cli]))
 }
@@ -292,16 +293,16 @@ fn effective_config_connection<'py>(
         None
     } else {
         Some((
-            optional_key(&target_config.getattr("connection_name")?)?,
-            pairs(&target_config.getattr("connection")?)?,
+            optional_key(&native_field(target_config, "connection_name")?)?,
+            pairs(&native_field(target_config, "connection")?)?,
         ))
     };
     let layers: ConnectionLayers<Key<'py>, Value<'py>> = ConnectionLayers {
-        project: pairs(&project_config.getattr("connection")?)?,
+        project: pairs(&native_field(project_config, "connection")?)?,
         target,
-        project_named: named(&project_config.getattr("connections")?)?,
-        local_named: named(&local_config.getattr("connections")?)?,
-        local: pairs(&local_config.getattr("connection")?)?,
+        project_named: named(&native_field(project_config, "connections")?)?,
+        local_named: named(&native_field(local_config, "connections")?)?,
+        local: pairs(&native_field(local_config, "connection")?)?,
     };
     Ok(match effective_connection(layers) {
         Ok(connection) => (Some(dictionary(py, connection)?), None),

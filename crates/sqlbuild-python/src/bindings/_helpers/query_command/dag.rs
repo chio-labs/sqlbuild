@@ -9,6 +9,7 @@ use sqlbuild_core::query_command::main::render_dag_summary::render_dag_summary;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -69,7 +70,7 @@ fn run_dag_command<'py>(py: Python<'py>, options: Option<Bound<'py, PyDict>>) ->
             ("graph", graph),
             (
                 "project_name",
-                discovered.getattr("project_config")?.getattr("name")?,
+                native_field(&discovered, "project_config")?.getattr("name")?,
             ),
             ("python_graph", python_graph),
         ],

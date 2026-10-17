@@ -9,6 +9,7 @@ use sqlbuild_cli::diff_report::models::DiffRequestFacts;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::models::HostId;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -52,10 +53,10 @@ pub(crate) fn cli_error(py: Python<'_>, class: ErrorId, error: &DiffUserError) -
 
 /// The `message`, `code` and `help` of a raised `CliUserError`.
 pub(crate) fn user_error_parts(error: &Bound<'_, PyAny>) -> PyResult<DiffUserError> {
-    let help: Bound<'_, PyAny> = error.getattr("help")?;
+    let help: Bound<'_, PyAny> = native_field(error, "help")?;
     Ok(DiffUserError {
-        message: error.getattr("message")?.extract()?,
-        code: error.getattr("code")?.str()?.extract()?,
+        message: native_field(error, "message")?.extract()?,
+        code: native_field(error, "code")?.str()?.extract()?,
         help: if help.is_none() {
             None
         } else {

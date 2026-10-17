@@ -12,18 +12,19 @@ use sqlbuild_analysis::planner_migrations::main::{
 use sqlbuild_analysis::planner_migrations::models::Projection;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
 fn projections(shape: &Bound<'_, PyAny>) -> PyResult<Vec<Projection>> {
     let mut result: Vec<Projection> = Vec::new();
-    for item in shape.getattr("projections")?.try_iter()? {
+    for item in native_field(shape, "projections")?.try_iter()? {
         let item = item?;
         result.push(Projection {
-            name: item.getattr("name")?.extract()?,
-            key: item.getattr("key")?.extract()?,
-            expression: item.getattr("expression")?.extract()?,
-            references: item.getattr("references")?.extract()?,
+            name: native_field(&item, "name")?.extract()?,
+            key: native_field(&item, "key")?.extract()?,
+            expression: native_field(&item, "expression")?.extract()?,
+            references: native_field(&item, "references")?.extract()?,
         });
     }
     Ok(result)
@@ -114,7 +115,7 @@ pub(crate) fn rename_hints<'py>(
         (&projections(&previous)?, &projections(&current)?),
         &arguments.value("excluded")?.extract()?,
         &arguments.value("live_columns")?.extract()?,
-        previous.getattr("body")?.eq(current.getattr("body")?)?,
+        native_field(&previous, "body")?.eq(native_field(&current, "body")?)?,
     );
     let mut result: Vec<Bound<'py, PyAny>> = Vec::new();
     for hint in hints {

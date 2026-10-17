@@ -20,6 +20,7 @@ use crate::bindings::_helpers::diff_report::facts::{diff_facts, json_of};
 use crate::bindings::_helpers::diff_report::tolerances;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_cli::diff_report::types::PhaseSeconds;
 
 const DEFAULT_MAX_VALUE_LENGTH: usize = 160;
@@ -137,10 +138,10 @@ fn render_diff_error_json(py: Python<'_>, options: Option<Bound<'_, PyDict>>) ->
 }
 
 fn mode_label(request: &Bound<'_, PyAny>) -> PyResult<String> {
-    if request.getattr("schema_only")?.is_truthy()? {
+    if native_field(request, "schema_only")?.is_truthy()? {
         return Ok("schema-only".to_owned());
     }
-    let bounded: Bound<'_, PyAny> = request.getattr("bounded")?;
+    let bounded: Bound<'_, PyAny> = native_field(request, "bounded")?;
     if bounded.is_truthy()? {
         return Ok(format!("bounded {}", bounded.str()?));
     }
@@ -160,16 +161,16 @@ pub(crate) fn publish_diff_output(
     (models, phase_seconds, outcome): (&[DiffModelFacts], Option<PhaseSeconds>, Option<String>),
 ) -> PyResult<()> {
     let py: Python<'_> = request.py();
-    let max_value_length: Bound<'_, PyAny> = request.getattr("max_value_length")?;
+    let max_value_length: Bound<'_, PyAny> = native_field(request, "max_value_length")?;
     let examples: DiffExampleOptions = DiffExampleOptions {
-        max_value_length: if request.getattr("full_example_values")?.is_truthy()? {
+        max_value_length: if native_field(request, "full_example_values")?.is_truthy()? {
             None
         } else if max_value_length.is_truthy()? {
             Some(max_value_length.extract()?)
         } else {
             Some(DEFAULT_MAX_VALUE_LENGTH)
         },
-        suppress_values: request.getattr("suppress_example_values")?.is_truthy()?,
+        suppress_values: native_field(request, "suppress_example_values")?.is_truthy()?,
     };
     let document: DiffDocumentOptions = DiffDocumentOptions {
         from_label: from_label.to_owned(),
@@ -178,13 +179,12 @@ pub(crate) fn publish_diff_output(
         outcome,
         phase_seconds,
     };
-    let path: Bound<'_, PyAny> = request.getattr("json_output_path")?;
+    let path: Bound<'_, PyAny> = native_field(request, "json_output_path")?;
     if !path.is_none() {
         let keywords: Bound<'_, PyDict> = PyDict::new(py);
         keywords.set_item("parents", true)?;
         keywords.set_item("exist_ok", true)?;
-        path.getattr("parent")?
-            .call_method("mkdir", (), Some(&keywords))?;
+        native_field(&path, "parent")?.call_method("mkdir", (), Some(&keywords))?;
         let encoding: Bound<'_, PyDict> = PyDict::new(py);
         encoding.set_item("encoding", "utf-8")?;
         path.call_method(
@@ -193,10 +193,11 @@ pub(crate) fn publish_diff_output(
             Some(&encoding),
         )?;
     }
-    if request.getattr("json_output")?.is_truthy()? {
+    if native_field(request, "json_output")?.is_truthy()? {
         return write_stdout(py, &json_text(models, &document)?);
     }
-    let use_color: bool = !request.getattr("no_color")?.is_truthy()? && stdout_supports_color(py)?;
+    let use_color: bool =
+        !native_field(request, "no_color")?.is_truthy()? && stdout_supports_color(py)?;
     write_stdout(
         py,
         &render_diff_text(
@@ -205,7 +206,7 @@ pub(crate) fn publish_diff_output(
             &DiffTextOptions {
                 mode_label: mode_label(request)?,
                 use_color,
-                verbose: request.getattr("verbose")?.is_truthy()?,
+                verbose: native_field(request, "verbose")?.is_truthy()?,
                 max_column_examples: usize::try_from(max_column_examples).unwrap_or_default(),
                 max_row_only_examples: usize::try_from(max_row_only_examples).unwrap_or_default(),
             },

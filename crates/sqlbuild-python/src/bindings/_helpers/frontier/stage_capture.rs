@@ -12,6 +12,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::frontier::encoder::{CaptureEncoder, emit_error};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 pub(crate) const CAPTURE_DIR_ENV_VAR: &str = "SQLBUILD_COMPILER_STAGE_CAPTURE_DIR";
 const CAPTURE_SUFFIX: &str = ".json";
@@ -58,7 +59,7 @@ pub(crate) fn write_stage_capture(
         return Ok(());
     }
     let number: u64 = capture_number(&directory)?;
-    let stage_name: String = stage.getattr("value")?.str()?.extract()?;
+    let stage_name: String = native_field(stage, "value")?.str()?.extract()?;
     let path: Bound<'_, PyAny> = imported(py, "pathlib", "Path")?
         .call1((directory,))?
         .call_method1(
@@ -90,7 +91,7 @@ pub(crate) fn write_plan_capture(plan_output: &Bound<'_, PyAny>) -> PyResult<()>
 fn write_capture_file(path: &Bound<'_, PyAny>, value: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = path.py();
     call_with(
-        &path.getattr("parent")?.getattr("mkdir")?,
+        &native_field(path, "parent")?.getattr("mkdir")?,
         &[
             (
                 "parents",

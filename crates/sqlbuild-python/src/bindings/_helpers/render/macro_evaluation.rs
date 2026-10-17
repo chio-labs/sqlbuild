@@ -14,6 +14,7 @@ use sqlbuild_render::macro_calls::main::macro_call_names::macro_call_names as sc
 use sqlbuild_render::macro_calls::main::scan_macro_call_sites::scan_macro_call_sites as scan_sites;
 use sqlbuild_render::macro_calls::models::{MacroCallScan, MacroCallSite};
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::macro_arguments::parsed_arguments;
 use crate::bindings::_helpers::render::macro_expansion::{
     ExpansionClasses, NativeMacroExpansion, raised,
@@ -157,8 +158,8 @@ fn invoke<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let (name, loaded_macro) = called;
     let (args, kwargs) = arguments;
-    let function: Bound<'py, PyAny> = loaded_macro.getattr("function")?;
-    if !loaded_macro.getattr("injects_context")?.is_truthy()? {
+    let function: Bound<'py, PyAny> = native_field(loaded_macro, "function")?;
+    if !native_field(loaded_macro, "injects_context")?.is_truthy()? {
         return function.call(args, Some(kwargs));
     }
     if kwargs.contains(CONTEXT_PARAMETER)? {
@@ -211,7 +212,7 @@ fn final_sql(run: &Evaluation<'_, '_>, name: &str, value: &Bound<'_, PyAny>) -> 
         if !error.is_instance_of::<PyUnicodeEncodeError>(py) {
             return Err(error);
         }
-        let start: Bound<'_, PyAny> = error.value(py).getattr("start")?;
+        let start: Bound<'_, PyAny> = native_field(error.value(py), "start")?;
         let surrogate: String = value.get_item(start)?.repr()?.to_string();
         let message: String = format!(
             "Macro '@{name}' in '{}' returned text with the lone surrogate {surrogate}, which is \

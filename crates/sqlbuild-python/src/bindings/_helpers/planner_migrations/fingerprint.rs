@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
@@ -93,14 +94,14 @@ pub(crate) fn with_migration_fingerprints<'py>(
         let entry = entry?;
         let model = arguments
             .value("models_by_name")?
-            .call_method1("get", (entry.getattr("name")?,))?;
-        let metadata = entry.getattr("fingerprint_metadata_json")?;
-        if model.is_none() || metadata.is_none() || entry.getattr("action")?.eq("skip")? {
+            .call_method1("get", (native_field(&entry, "name")?,))?;
+        let metadata = native_field(&entry, "fingerprint_metadata_json")?;
+        if model.is_none() || metadata.is_none() || native_field(&entry, "action")?.eq("skip")? {
             attached.push(entry);
             continue;
         }
         let fingerprint = call_with(
-            &cache.getattr("fingerprint")?,
+            &native_field(&cache, "fingerprint")?,
             &[
                 ("query_sql", model_reads::query_sql(&model)?),
                 ("metadata_json", metadata),

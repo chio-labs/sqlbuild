@@ -16,6 +16,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::discovery::project_facts::{column_name, each, stem};
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const FILE_PATH_ATTRIBUTE: &str = "file_path";
 const RETURNS_KEY: &str = "returns";
@@ -60,16 +61,16 @@ fn discovered_names(inputs: &Bound<'_, PyAny>) -> PyResult<ResourceNames> {
         .into_iter()
         .collect();
     let mut seeds: HashSet<String> = HashSet::new();
-    for schema in inputs.getattr("schema_files")?.try_iter()? {
+    for schema in native_field(inputs, "schema_files")?.try_iter()? {
         seeds.extend(each(&schema?, "seed_entries", column_name)?);
     }
     let mut sources: HashSet<String> = HashSet::new();
-    for file in inputs.getattr("source_files")?.try_iter()? {
+    for file in native_field(inputs, "source_files")?.try_iter()? {
         sources.extend(each(&file?, "source_entries", column_name)?);
     }
     let mut functions: HashSet<String> = HashSet::new();
     let mut table_functions: HashSet<String> = HashSet::new();
-    for file in inputs.getattr("sql_function_files")?.try_iter()? {
+    for file in native_field(inputs, "sql_function_files")?.try_iter()? {
         let file: Bound<'_, PyAny> = file?;
         let name: String = model_stem(&file)?;
         if returns_table(&file)? {
@@ -83,7 +84,7 @@ fn discovered_names(inputs: &Bound<'_, PyAny>) -> PyResult<ResourceNames> {
 
 /// Whether a SQL function's header `returns` is a mapping whose only key is `table`.
 fn returns_table(file: &Bound<'_, PyAny>) -> PyResult<bool> {
-    let headers: Bound<'_, PyAny> = file.getattr("header_values")?;
+    let headers: Bound<'_, PyAny> = native_field(file, "header_values")?;
     let returns: Bound<'_, PyAny> = headers.call_method1("get", (RETURNS_KEY,))?;
     let Ok(returns) = returns.downcast::<PyDict>() else {
         return Ok(false);
@@ -100,7 +101,7 @@ impl NativeModelValidator {
         let names: ResourceNames = discovered_names(&inputs)?;
         let custom_materializations: HashSet<String> =
             each(&inputs, "materialization_files", |file| {
-                file.getattr("name")?.extract()
+                native_field(file, "name")?.extract()
             })?
             .into_iter()
             .collect();

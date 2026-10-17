@@ -13,6 +13,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
 
@@ -89,8 +90,8 @@ fn expansion_inputs(sources: LintExpansionSources<'_>) -> PyResult<SqlExpansionI
         Some(renderer) => renderer,
         None => {
             let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
-                &discovered.getattr("project_config")?,
-                &discovered.getattr("local_config")?,
+                &native_field(&discovered, "project_config")?,
+                &native_field(&discovered, "local_config")?,
             )?;
             call_with(
                 &host::entry(py, AdapterHost::ResolveAdapter)?,

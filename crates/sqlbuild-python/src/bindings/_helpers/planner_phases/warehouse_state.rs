@@ -16,6 +16,7 @@ use crate::bindings::_helpers::planner_phases::objects::native;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_warehouse::fingerprint_cache::MigrationFingerprintCache;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{SnapshotRequest, warehouse_snapshot};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -43,22 +44,25 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
     let project = runtime_field(runtime, |runtime| &runtime.project)?;
     let fingerprints = Py::new(
         py,
-        MigrationFingerprintCache::open(py, Some(project.getattr("compile_cache_dir")?))?,
+        MigrationFingerprintCache::open(py, Some(native_field(&project, "compile_cache_dir")?))?,
     )?
     .into_bound(py)
     .into_any();
     progress(runtime, "Inspecting warehouse state...")?;
     let selected_scope = class_field(scopes, |s: &PlannerScopeResolution| &s.selected_scope)?;
-    let full_refresh: bool = overrides.getattr("full_refresh")?.extract()?;
+    let full_refresh: bool = native_field(overrides, "full_refresh")?.extract()?;
     let config = runtime_field(runtime, |runtime| &runtime.project_config)?;
     let cursor_scope = native(
         py,
         RecordId::CursorSnapshotScope,
         &[
-            ("model_keys", selected_scope.getattr("selected_keys")?),
+            (
+                "model_keys",
+                native_field(&selected_scope, "selected_keys")?,
+            ),
             (
                 "runtime_producer_keys",
-                selected_scope.getattr("selected_keys")?,
+                native_field(&selected_scope, "selected_keys")?,
             ),
             (
                 "invocation_time",
@@ -69,10 +73,13 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
                 if config.is_none() {
                     py.None().into_bound(py)
                 } else {
-                    config.getattr("cursors")?.getattr("start")?
+                    native_field(&config, "cursors")?.getattr("start")?
                 },
             ),
-            ("cursor_overrides", overrides.getattr("cursor_overrides")?),
+            (
+                "cursor_overrides",
+                native_field(overrides, "cursor_overrides")?,
+            ),
         ],
     )?;
     let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
@@ -89,12 +96,12 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
         project: project.clone(),
         adapter: adapter.clone(),
         connection: runtime_field(runtime, |runtime| &runtime.connection)?,
-        execute: adapter.getattr("execute")?,
+        execute: native_field(&adapter, "execute")?,
         selected_keys: stale_keys,
         full_refresh: false,
         full_refresh_model_names: effectively_full_refreshed_model_names(&project, full_refresh)?,
         on_progress: runtime_field(runtime, |runtime| &runtime.on_progress)?,
-        deferred_locations: deferral.getattr("deferred_locations")?,
+        deferred_locations: native_field(deferral, "deferred_locations")?,
         cursor_scope,
     })?;
     let phase = MigrationPhase {
@@ -124,14 +131,14 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
             .getattr("moves_data")?
             .is_truthy()?
         {
-            let origin = entry.getattr("origin")?;
-            let qualified = origin.getattr("qualified_name")?;
+            let origin = native_field(entry, "origin")?;
+            let qualified = native_field(&origin, "qualified_name")?;
             physical.set_item(
-                entry.getattr("model_name")?,
+                native_field(entry, "model_name")?,
                 if qualified.is_truthy()? {
                     qualified
                 } else {
-                    origin.getattr("name")?
+                    native_field(&origin, "name")?
                 },
             )?;
         }
@@ -147,7 +154,7 @@ pub(crate) fn gather_planner_warehouse_state<'py>(
                 full_refresh,
             )?,
             physical_relations: physical.into_any(),
-            source_columns: inspection_relations.getattr("source_warehouse_columns")?,
+            source_columns: native_field(&inspection_relations, "source_warehouse_columns")?,
         },
     )?;
     let migration_entries = PyTuple::new(py, &migrations.entries)?.into_any();

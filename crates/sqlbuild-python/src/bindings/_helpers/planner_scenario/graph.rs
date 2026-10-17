@@ -5,6 +5,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::values::string;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
@@ -23,19 +24,19 @@ pub(crate) fn plan_scenario_graph<'py>(
     let _ = (sql_analysis_enabled, sql_analysis_dialect);
     let py = scenario.py();
     let mut input = ScenarioGraphInput {
-        name: scenario.getattr("name")?.extract()?,
-        expected: scenario.getattr("expected_model_names")?.extract()?,
+        name: native_field(scenario, "name")?.extract()?,
+        expected: native_field(scenario, "expected_model_names")?.extract()?,
         assertions: scenario
             .getattr("assertion_target_model_names")?
             .extract()?,
-        targets: scenario.getattr("target_model_names")?.extract()?,
-        refs: scenario.getattr("ref_fixture_names")?.extract()?,
-        sources: scenario.getattr("source_fixture_names")?.extract()?,
-        seeds: scenario.getattr("seed_fixture_names")?.extract()?,
-        dbt_refs: scenario.getattr("dbt_ref_fixture_names")?.extract()?,
+        targets: native_field(scenario, "target_model_names")?.extract()?,
+        refs: native_field(scenario, "ref_fixture_names")?.extract()?,
+        sources: native_field(scenario, "source_fixture_names")?.extract()?,
+        seeds: native_field(scenario, "seed_fixture_names")?.extract()?,
+        dbt_refs: native_field(scenario, "dbt_ref_fixture_names")?.extract()?,
         ..ScenarioGraphInput::default()
     };
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model = model?;
         let deps = model
             .getattr("deps")?
@@ -46,15 +47,15 @@ pub(crate) fn plan_scenario_graph<'py>(
             .models
             .insert(model_reads::name_object(&model)?.extract()?, deps);
     }
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         input
             .project_sources
-            .insert(source?.getattr("name")?.extract()?);
+            .insert(native_field(&source?, "name")?.extract()?);
     }
-    for seed in project.getattr("seeds")?.try_iter()? {
+    for seed in native_field(project, "seeds")?.try_iter()? {
         input
             .project_seeds
-            .insert(seed?.getattr("name")?.extract()?);
+            .insert(native_field(&seed?, "name")?.extract()?);
     }
     let output = graph(&input);
     input.targets.sort();
@@ -62,8 +63,8 @@ pub(crate) fn plan_scenario_graph<'py>(
     let plan = call_with(
         &registry::class(py, RecordId::ScenarioGraphPlan)?,
         &[
-            ("key", scenario.getattr("key")?),
-            ("name", scenario.getattr("name")?),
+            ("key", native_field(scenario, "key")?),
+            ("name", native_field(scenario, "name")?),
             (
                 "target_model_names",
                 PyTuple::new(py, input.targets)?.into_any(),

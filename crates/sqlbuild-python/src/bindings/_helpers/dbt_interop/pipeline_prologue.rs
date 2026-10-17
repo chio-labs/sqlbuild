@@ -10,6 +10,7 @@ use crate::bindings::_helpers::dbt_interop::reference_resolver::DbtCompileRefere
 use crate::bindings::_helpers::dbt_interop::runtime_config::{
     interop_adapter, manifest_path, parse_dbt_execution_args, plan_options, vars_mapping,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -62,21 +63,21 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
     request: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = request.py();
-    let mut executable = request.getattr("dbt_executable")?;
+    let mut executable = native_field(request, "dbt_executable")?;
     if !executable.is_truthy()? {
         executable = registry::native(py, NativeAttr::ResolveDbtExecutable)?.call0()?;
     }
-    let mut stream = request.getattr("progress_stream")?;
+    let mut stream = native_field(request, "progress_stream")?;
     if !stream.is_truthy()? {
         stream = py.import("sys")?.getattr("stdout")?;
     }
-    let command = request.getattr("command")?;
-    let parsed = parse_dbt_execution_args(&command, &request.getattr("args")?)?;
+    let command = native_field(request, "command")?;
+    let parsed = parse_dbt_execution_args(&command, &native_field(request, "args")?)?;
     let routed = call_with(
         &registry::native(py, NativeAttr::RouteDbtInteropArgs)?,
         &[("command", command), ("parsed", parsed)],
     )?;
-    let project_dir = request.getattr("project_dir")?;
+    let project_dir = native_field(request, "project_dir")?;
     let discovered = call_with(
         &registry::native(py, NativeAttr::DiscoverProjectInputs)?,
         &[("project_dir", project_dir.clone())],
@@ -88,19 +89,19 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
         .collect::<PyResult<_>>()?;
     let options = plan_options(&project_dir, &discovered, &dbt_args)?;
     let vars = vars_mapping(
-        &discovered.getattr("project_config")?.getattr("dbt")?,
-        &discovered.getattr("local_config")?.getattr("dbt")?,
+        &native_field(&discovered, "project_config")?.getattr("dbt")?,
+        &native_field(&discovered, "local_config")?.getattr("dbt")?,
         &dbt_args,
     )?
     .into_any();
-    let mut runner = request.getattr("dbt_runner")?;
+    let mut runner = native_field(request, "dbt_runner")?;
     if !runner.is_truthy()? {
         runner = call_with(
             &registry::native(py, NativeAttr::DbtRunner)?,
             &[("dbt_executable", executable.clone())],
         )?;
     }
-    let dbt_stream = request.getattr("dbt_stdout_stream")?;
+    let dbt_stream = native_field(request, "dbt_stdout_stream")?;
     call_with(
         &registry::class(py, RecordId::DbtInteropInvocation)?,
         &[
@@ -114,7 +115,10 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
                     stream
                 },
             ),
-            ("effective_sqlbuild_args", routed.getattr("sqlbuild_args")?),
+            (
+                "effective_sqlbuild_args",
+                native_field(&routed, "sqlbuild_args")?,
+            ),
             ("routed", routed),
             ("discovered_inputs", discovered),
             ("dbt_options", options),
@@ -142,7 +146,7 @@ fn load_compiled_dbt_manifest<'py>(
             ("full_refresh", args.value("full_refresh")?),
         ],
     )?;
-    if result.getattr("returncode")?.extract::<i64>()? != 0 {
+    if native_field(&result, "returncode")?.extract::<i64>()? != 0 {
         let detail = registry::native(py, NativeAttr::DbtFailureDetail)?.call1((result,))?;
         let error = registry::error(py, ErrorId::DbtInteropRuntime)?.call(
             ("dbt compile failed",),
@@ -182,8 +186,11 @@ fn compile_dbt_interop_project<'py>(
     let name = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
+            ("local_config", native_field(&discovered, "local_config")?),
         ],
     )?;
     let adapter = interop_adapter(&name, &args.value("project_dir")?)?;
@@ -236,22 +243,28 @@ fn resolve_dbt_interop_plan<'py>(
     let start = Instant::now();
     progress(&callback, "Resolving dbt and SQLBuild selection...")?;
     let invocation = args.value("invocation")?;
-    let routed = invocation.getattr("routed")?;
+    let routed = native_field(&invocation, "routed")?;
     let tuple = py.import("builtins")?.getattr("tuple")?;
     let command_args = call_with(
         &registry::class(py, RecordId::DbtInteropCommandArgs)?,
         &[
-            ("select", tuple.call1((routed.getattr("select")?,))?),
-            ("exclude", tuple.call1((routed.getattr("exclude")?,))?),
+            ("select", tuple.call1((native_field(&routed, "select")?,))?),
+            (
+                "exclude",
+                tuple.call1((native_field(&routed, "exclude")?,))?,
+            ),
             (
                 "dbt_command_args",
-                tuple.call1((routed.getattr("dbt_args")?,))?,
+                tuple.call1((native_field(&routed, "dbt_args")?,))?,
             ),
             (
                 "sqlbuild_command_args",
-                tuple.call1((invocation.getattr("effective_sqlbuild_args")?,))?,
+                tuple.call1((native_field(&invocation, "effective_sqlbuild_args")?,))?,
             ),
-            ("dbt_executable", invocation.getattr("dbt_executable")?),
+            (
+                "dbt_executable",
+                native_field(&invocation, "dbt_executable")?,
+            ),
             ("sqlbuild_executable", args.value("sqlbuild_executable")?),
         ],
     )?;
@@ -262,8 +275,8 @@ fn resolve_dbt_interop_plan<'py>(
             ("project", project),
             ("manifest", args.value("manifest")?),
             ("graph", graph.clone()),
-            ("dbt_runner", invocation.getattr("runner")?),
-            ("dbt_options", invocation.getattr("dbt_options")?),
+            ("dbt_runner", native_field(&invocation, "runner")?),
+            ("dbt_options", native_field(&invocation, "dbt_options")?),
             ("command_args", command_args),
         ],
     )?;

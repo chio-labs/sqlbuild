@@ -14,6 +14,7 @@ use crate::bindings::_helpers::lineage::lineage_objects::LineageClasses;
 use crate::bindings::_helpers::record_behaviours::lineage_facts::{
     confidence_member, transform_kind_member,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// One compact model's facts and root-star flag.
 struct CompactModel {
@@ -116,7 +117,7 @@ impl ProjectColumnLineage {
         }
         for item in models.call_method0("items")?.try_iter()? {
             let (name, model): (String, Bound<'_, PyAny>) = item?.extract()?;
-            let _ = edge_counts.insert(name, upstream_count(&model.getattr("columns")?)?);
+            let _ = edge_counts.insert(name, upstream_count(&native_field(&model, "columns")?)?);
         }
         Ok(Self {
             models: models.clone().unbind(),
@@ -189,7 +190,7 @@ impl ProjectColumnLineage {
         if model.is_none() {
             return Ok(false);
         }
-        model.getattr("has_star")?.extract()
+        native_field(&model, "has_star")?.extract()
     }
 
     /// Return a target model's direct edge count without expanding edge objects.
@@ -253,8 +254,8 @@ impl ProjectColumnLineage {
     }
 
     fn __repr__(slf: &Bound<'_, Self>) -> PyResult<String> {
-        let models: Bound<'_, PyString> = slf.getattr("models")?.repr()?;
-        let edges: Bound<'_, PyString> = slf.getattr("edges")?.repr()?;
+        let models: Bound<'_, PyString> = native_field(slf, "models")?.repr()?;
+        let edges: Bound<'_, PyString> = native_field(slf, "edges")?.repr()?;
         Ok(format!(
             "ProjectColumnLineage(models={models}, edges={edges})"
         ))
@@ -265,8 +266,8 @@ impl ProjectColumnLineage {
         if !other.is_instance_of::<Self>() {
             return Ok(py.NotImplemented());
         }
-        let equal: bool = slf.getattr("models")?.eq(other.getattr("models")?)?
-            && slf.getattr("edges")?.eq(other.getattr("edges")?)?;
+        let equal: bool = native_field(slf, "models")?.eq(native_field(other, "models")?)?
+            && native_field(slf, "edges")?.eq(native_field(other, "edges")?)?;
         Ok(pyo3::types::PyBool::new(py, equal)
             .to_owned()
             .into_any()
@@ -292,7 +293,7 @@ impl ProjectColumnLineage {
             if model.is_none() {
                 continue;
             }
-            builder.push_columns(name, &model.getattr("columns")?)?;
+            builder.push_columns(name, &native_field(&model, "columns")?)?;
         }
         self.records = Some(EdgeRecords::new(builder.keys, builder.parts));
         Ok(())
@@ -401,11 +402,11 @@ impl RecordBuilder {
             return self.push_columns(model_name, columns);
         }
         let py: Python<'_> = columns.py();
-        let pool: Bound<'_, PyAny> = columns.getattr("string_pool")?;
-        let remapped: bool = columns.getattr("resource_names")?.is_truthy()?
-            || columns.getattr("resource_name_indexes")?.is_truthy()?;
+        let pool: Bound<'_, PyAny> = native_field(columns, "string_pool")?;
+        let remapped: bool = native_field(columns, "resource_names")?.is_truthy()?
+            || native_field(columns, "resource_name_indexes")?.is_truthy()?;
         let mut members = CodeMembers::default();
-        for row in columns.getattr("rows")?.try_iter()? {
+        for row in native_field(columns, "rows")?.try_iter()? {
             let (name_index, transform_code, confidence_code, sources): (
                 Bound<'_, PyAny>,
                 i64,
@@ -447,16 +448,16 @@ impl RecordBuilder {
     fn push_columns(&mut self, model_name: &str, columns: &Bound<'_, PyAny>) -> PyResult<()> {
         for column in columns.try_iter()? {
             let column: Bound<'_, PyAny> = column?;
-            let output_column: String = column.getattr("output_column")?.extract()?;
-            let transform: Bound<'_, PyAny> = column.getattr("transform_kind")?;
-            let confidence: Bound<'_, PyAny> = column.getattr("confidence")?;
-            for source in column.getattr("upstream_columns")?.try_iter()? {
+            let output_column: String = native_field(&column, "output_column")?.extract()?;
+            let transform: Bound<'_, PyAny> = native_field(&column, "transform_kind")?;
+            let confidence: Bound<'_, PyAny> = native_field(&column, "confidence")?;
+            for source in native_field(&column, "upstream_columns")?.try_iter()? {
                 let source: Bound<'_, PyAny> = source?;
-                let resource_type: Bound<'_, PyAny> = source.getattr("resource_type")?;
+                let resource_type: Bound<'_, PyAny> = native_field(&source, "resource_type")?;
                 self.keys.push(EdgeKey {
                     source_type: text(&resource_type)?,
-                    source_name: source.getattr("resource_name")?.extract()?,
-                    source_column: source.getattr("column_name")?.extract()?,
+                    source_name: native_field(&source, "resource_name")?.extract()?,
+                    source_column: native_field(&source, "column_name")?.extract()?,
                     target_model: model_name.to_owned(),
                     target_column: output_column.clone(),
                     transform: text(&transform)?,
@@ -512,7 +513,7 @@ fn fact_edge_count(classes: &LineageClasses<'_>, columns: &Bound<'_, PyAny>) -> 
         return upstream_count(columns);
     }
     let mut count: usize = 0;
-    for row in columns.getattr("rows")?.try_iter()? {
+    for row in native_field(columns, "rows")?.try_iter()? {
         count += row?.get_item(3)?.len()?;
     }
     Ok(count)
@@ -521,7 +522,7 @@ fn fact_edge_count(classes: &LineageClasses<'_>, columns: &Bound<'_, PyAny>) -> 
 fn upstream_count(columns: &Bound<'_, PyAny>) -> PyResult<usize> {
     let mut count: usize = 0;
     for column in columns.try_iter()? {
-        count += column?.getattr("upstream_columns")?.len()?;
+        count += native_field(&column?, "upstream_columns")?.len()?;
     }
     Ok(count)
 }
@@ -538,21 +539,21 @@ fn model_from_facts<'py>(
     for column in columns.try_iter()? {
         let column: Bound<'py, PyAny> = column?;
         let mut sources: Vec<Bound<'py, PyAny>> = Vec::new();
-        for source in column.getattr("upstream_columns")?.try_iter()? {
+        for source in native_field(&column, "upstream_columns")?.try_iter()? {
             let source: Bound<'py, PyAny> = source?;
             sources.push(classes.lineage_source.call1((
-                source.getattr("resource_type")?,
-                source.getattr("resource_name")?,
-                source.getattr("column_name")?,
+                native_field(&source, "resource_type")?,
+                native_field(&source, "resource_name")?,
+                native_field(&source, "column_name")?,
             ))?);
         }
         lineage_columns.push(classes.column_lineage.call1((
-            column.getattr("output_column")?,
-            column.getattr("transform_kind")?,
+            native_field(&column, "output_column")?,
+            native_field(&column, "transform_kind")?,
             py.None(),
             PyTuple::new(py, sources)?,
             &classes.unknown_nullability,
-            column.getattr("confidence")?,
+            native_field(&column, "confidence")?,
         ))?);
     }
     classes.model(model_name, lineage_columns, has_star)

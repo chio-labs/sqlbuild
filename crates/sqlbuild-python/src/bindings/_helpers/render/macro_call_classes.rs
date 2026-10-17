@@ -8,6 +8,7 @@ use pyo3::types::{PyDict, PyDictMethods};
 
 use sqlbuild_render::macro_calls::main::call_class_store_text::call_class_store_text;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::macro_expansion_facts::ResourceRef;
 
 /// `(kind, name, owner (kind, name))` of a `DeclarationIdentity`, compared by value.
@@ -83,7 +84,7 @@ impl CallClassState {
             inputs.loaded_macros.as_any()
         };
         let macros: Bound<'_, PyAny> = if scoped {
-            inputs.declarations.getattr("macros")?
+            native_field(inputs.declarations, "macros")?
         } else {
             inputs.loaded_macros.clone().into_any()
         };
@@ -230,8 +231,8 @@ impl CallClassState {
             None
         } else {
             Some((
-                value_ids(&declarations.getattr("constants")?.downcast_into()?)?,
-                value_ids(&declarations.getattr("enums")?.downcast_into()?)?,
+                value_ids(&native_field(declarations, "constants")?.downcast_into()?)?,
+                value_ids(&native_field(declarations, "enums")?.downcast_into()?)?,
             ))
         };
         let store_token: Option<String> = if self.store_tokens {
@@ -264,18 +265,20 @@ fn identity_key(identity: &Bound<'_, PyAny>) -> PyResult<Option<IdentityKey>> {
     if identity.is_none() {
         return Ok(None);
     }
-    let owner: Bound<'_, PyAny> = identity.getattr("owner")?;
+    let owner: Bound<'_, PyAny> = native_field(identity, "owner")?;
     let owner_key: Option<(String, String)> = if owner.is_none() {
         None
     } else {
         Some((
-            owner.getattr("kind")?.getattr("value")?.extract()?,
-            owner.getattr("name")?.extract()?,
+            native_field(&owner, "kind")?.getattr("value")?.extract()?,
+            native_field(&owner, "name")?.extract()?,
         ))
     };
     Ok(Some((
-        identity.getattr("kind")?.getattr("value")?.extract()?,
-        identity.getattr("name")?.extract()?,
+        native_field(identity, "kind")?
+            .getattr("value")?
+            .extract()?,
+        native_field(identity, "name")?.extract()?,
         owner_key,
     )))
 }

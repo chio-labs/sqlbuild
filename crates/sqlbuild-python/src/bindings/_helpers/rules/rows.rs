@@ -29,12 +29,16 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compiled_project::audit_views::NativeCompiledAudit;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::records::compiled_project_facts;
 use crate::bindings::_helpers::compiled_project::records::declaration_rows;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::rules::fact_replay::project_models;
+use crate::bindings::_helpers::rules::config_json::asdict_json;
+use crate::bindings::_helpers::rules::fact_replay::{project_attribute, project_models};
 use crate::bindings::_helpers::rules::findings::{FindingClasses, finding_fault};
 use crate::bindings::_helpers::rules::selection::rules_error;
 use crate::bindings::_helpers::rules::sql_test_objects::{scenario_fact, sql_test_fact};
@@ -117,17 +121,25 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
         "config": config_value(&config)?,
         "scope_index": plain_value(&call_with(
             &registry::native(py, NativeAttr::ScopeMetadataProjection)?,
-            &[("index", project.getattr("scope_index")?)],
+            &[("index", project_attribute(&project, "scope_index")?)],
         )?)?,
         "defer_suppressions": true,
         "custom_rules": plain_value(&options.get("custom_payloads")?)?,
         "rules_cache_path": path_text(py, rules_bulk_cache_path(&resolved_path, NATIVE_RULES_CACHE_FILE))?,
     });
     let (public_enums, public_constants) = declaration_rows(
-        PyTuple::new(py, mapping_values(&project.getattr("public_enums")?)?)?.as_any(),
-        PyTuple::new(py, mapping_values(&project.getattr("public_constants")?)?)?.as_any(),
+        PyTuple::new(
+            py,
+            mapping_values(&project_attribute(&project, "public_enums")?)?,
+        )?
+        .as_any(),
+        PyTuple::new(
+            py,
+            mapping_values(&project_attribute(&project, "public_constants")?)?,
+        )?
+        .as_any(),
     )?;
-    let enabled: bool = config.getattr("cache")?.getattr("enabled")?.is_truthy()?;
+    let enabled: bool = field(&field(&config, "cache")?, "enabled")?.is_truthy()?;
     let memo: Option<(String, String)> = if enabled {
         let unresolved: PathBuf = project_dir.extract()?;
         Some((
@@ -141,17 +153,17 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
         None
     };
     let mut attached_audit_targets: Vec<String> = Vec::new();
-    for audit in project.getattr("audits")?.try_iter()? {
-        let target: Bound<'_, PyAny> = audit?.getattr("attached_target_name")?;
-        if !target.is_none() {
-            attached_audit_targets.push(target.extract()?);
-        }
+    for audit in project_attribute(&project, "audits")?.try_iter()? {
+        let audit: Bound<'_, PyAny> = audit?;
+        let target: Option<String> = match audit.cast::<NativeCompiledAudit>() {
+            Ok(view) => view.get().attached_target_name(py)?,
+            Err(_) => field(&audit, "attached_target_name")?.extract()?,
+        };
+        attached_audit_targets.extend(target);
     }
     let mut rows = ProjectRows {
         memo,
-        sql_analysis_enabled: project
-            .getattr("settings")?
-            .getattr("sql_analysis")?
+        sql_analysis_enabled: field(&project_attribute(&project, "settings")?, "sql_analysis")?
             .is_truthy()?,
         include_type_proof: options.get("include_type_proof")?.is_truthy()?,
         attached_audit_targets,
@@ -163,20 +175,15 @@ fn built_request(options: &Request<'_, '_>) -> PyResult<NativeRulesRequest> {
             .collect::<PyResult<_>>()?,
         dialect,
     };
-    let facts: Bound<'_, NativeCompiledProject> =
-        registry::native(py, NativeAttr::CompiledProjectFacts)?
-            .call1((&project,))?
-            .downcast_into()?;
+    let facts: Bound<'_, NativeCompiledProject> = compiled_project_facts(&project)?;
     let names: Vec<String> = project_models(&project)?
         .into_iter()
         .map(|model| model.name)
         .collect();
-    let sql_tests: Vec<Bound<'_, PyAny>> = project
-        .getattr("sql_tests")?
+    let sql_tests: Vec<Bound<'_, PyAny>> = project_attribute(&project, "sql_tests")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    let scenarios: Vec<Bound<'_, PyAny>> = project
-        .getattr("sql_scenarios")?
+    let scenarios: Vec<Bound<'_, PyAny>> = project_attribute(&project, "sql_scenarios")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     compiler_guard(|| {
@@ -298,7 +305,7 @@ fn finalized<'py>(
     let mut faults: Vec<Fault> = Vec::with_capacity(findings.len());
     for finding in &findings {
         let fault: Fault = finding_fault(finding)?;
-        if finding.getattr("fixable")?.extract::<bool>()? {
+        if field(finding, "fixable")?.extract::<bool>()? {
             fixable.insert(fault_identity(&fault));
         }
         faults.push(fault);
@@ -319,6 +326,9 @@ fn finalized<'py>(
 
 /// `asdict(config)` as orjson with `default=str` encodes it.
 fn config_value(config: &Bound<'_, PyAny>) -> PyResult<Value> {
+    if let Some(value) = asdict_json(config)? {
+        return Ok(value);
+    }
     plain_value(&imported(config.py(), DATACLASSES_MODULE, "asdict")?.call1((config,))?)
 }
 

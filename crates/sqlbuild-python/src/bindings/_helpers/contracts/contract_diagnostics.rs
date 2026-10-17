@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::contracts::model_contracts::{
     ConflictRow, DiagnosticRow, evaluate_project_model_contracts, project_promotion_conflicts,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sqltext::model_headers::{ColumnLocation, location_rows};
@@ -47,7 +48,7 @@ fn output_column_location<'py>(
     let recorded: Bound<'py, PyAny> = model
         .getattr("output_column_locations")?
         .call_method1("get", (column_name,))?;
-    let authored: Option<String> = model.getattr("authored_sql")?.extract()?;
+    let authored: Option<String> = native_field(model, "authored_sql")?.extract()?;
     let authored: String = authored.unwrap_or_default();
     if !recorded.is_none() || authored.is_empty() {
         return Ok(Some(recorded).filter(|location| !location.is_none()));
@@ -67,7 +68,7 @@ fn output_column_location<'py>(
     let location: Bound<'py, PyAny> = keyword_call(
         &registry::class(py, RecordId::SourceLocation)?,
         vec![
-            ("path", model.getattr("relative_path")?),
+            ("path", native_field(model, "relative_path")?),
             ("line", line.into_pyobject(py)?.into_any()),
             ("column", column.into_pyobject(py)?.into_any()),
             ("end_line", end_line.into_pyobject(py)?.into_any()),
@@ -83,7 +84,7 @@ fn diagnostic_location<'py>(
     (declared_index, output_column): (Option<usize>, Option<&str>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let schema_entry: Bound<'py, PyAny> = model.getattr("schema_entry")?;
+    let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
     if let Some(index) = declared_index
         && !schema_entry.is_none()
     {
@@ -137,9 +138,9 @@ fn contract_diagnostic<'py>(
             ("code", code.into_pyobject(py)?.into_any()),
             ("message", message.into_pyobject(py)?.into_any()),
             ("resource_type", model_resource_type(py)?),
-            ("resource_name", model.getattr("name")?),
+            ("resource_name", native_field(model, "name")?),
             ("column_name", column_name.into_pyobject(py)?.into_any()),
-            ("path", model.getattr("relative_path")?),
+            ("path", native_field(model, "relative_path")?),
             (
                 "location",
                 diagnostic_location(model, (declared_index, output_column.as_deref()))?,
@@ -186,9 +187,9 @@ fn evaluate_model_contracts<'py>(
         &native,
     )?;
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        let name: String = model.getattr("name")?.extract()?;
+        let name: String = native_field(&model, "name")?.extract()?;
         let Some((_, rows)) = outcomes.iter().rev().find(|(owner, _)| *owner == name) else {
             continue;
         };

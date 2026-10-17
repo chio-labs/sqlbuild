@@ -28,6 +28,7 @@ use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -65,8 +66,8 @@ impl<'py> PythonSqlOwner<'py> {
         Ok(Self {
             label,
             kind,
-            function: node.getattr("function")?,
-            relative_path: node.getattr("relative_path")?,
+            function: native_field(node, "function")?,
+            relative_path: native_field(node, "relative_path")?,
             own_refs: Vec::new(),
             upstream_loader_by_source: Vec::new(),
         })
@@ -117,7 +118,7 @@ fn explicit_reference_report<'py>(
     }
     let request = ReferenceRequest {
         enforce_explicit,
-        dialect: project.getattr("sql_analysis_dialect")?.extract()?,
+        dialect: native_field(project, "sql_analysis_dialect")?.extract()?,
         explicit_help: if enforce_explicit {
             references_help(HARD_CODED_ALLOWED)
         } else {
@@ -158,7 +159,7 @@ fn python_sql_owners<'py>(
     for (label, attribute) in NODE_OWNERS {
         for node in discovered_inputs.getattr(attribute)?.try_iter()? {
             let node: Bound<'py, PyAny> = node?;
-            let name: String = node.getattr("name")?.extract()?;
+            let name: String = native_field(&node, "name")?.extract()?;
             owners.push(PythonSqlOwner::new(
                 format!("{label}:{name}"),
                 NODE_KIND,
@@ -169,11 +170,11 @@ fn python_sql_owners<'py>(
     owners.extend(loader_owners(project, discovered_inputs)?);
     let hook_names = registry::native(py, NativeAttr::ModelPythonHookNames)?;
     let mut attached: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
         keywords.set_item("model", &model)?;
-        let model_name: String = model.getattr("name")?.extract()?;
+        let model_name: String = native_field(&model, "name")?.extract()?;
         for hook_name in hook_names.call((), Some(&keywords))?.try_iter()? {
             attached
                 .entry(hook_name?.extract()?)
@@ -181,9 +182,9 @@ fn python_sql_owners<'py>(
                 .insert(model_name.clone());
         }
     }
-    for hook in project.getattr("hook_functions")?.try_iter()? {
+    for hook in native_field(project, "hook_functions")?.try_iter()? {
         let hook: Bound<'py, PyAny> = hook?;
-        let name: String = hook.getattr("name")?.extract()?;
+        let name: String = native_field(&hook, "name")?.extract()?;
         let mut owner = PythonSqlOwner::new(format!("hook:{name}"), HOOK_KIND, &hook)?;
         owner.own_refs = attached
             .get(&name)
@@ -203,7 +204,7 @@ fn loader_owners<'py>(
 ) -> PyResult<Vec<PythonSqlOwner<'py>>> {
     let py: Python<'py> = project.py();
     let mut sources_by_loader: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source: Bound<'py, PyAny> = source?;
         let loader: Option<String> = source
             .getattr("source_entry")?
@@ -213,16 +214,16 @@ fn loader_owners<'py>(
             sources_by_loader
                 .entry(loader)
                 .or_default()
-                .insert(source.getattr("name")?.extract()?);
+                .insert(native_field(&source, "name")?.extract()?);
         }
     }
     let read_definition = host::entry(py, UserCodeHost::ReadLoaderDefinition)?;
     let mut owners: Vec<PythonSqlOwner<'py>> = Vec::new();
-    for loader in discovered_inputs.getattr("loader_functions")?.try_iter()? {
+    for loader in native_field(discovered_inputs, "loader_functions")?.try_iter()? {
         let loader: Bound<'py, PyAny> = loader?;
-        let name: String = loader.getattr("name")?.extract()?;
+        let name: String = native_field(&loader, "name")?.extract()?;
         let mut upstream: Vec<(String, String)> = Vec::new();
-        for dependency in loader.getattr("depends_on")?.try_iter()? {
+        for dependency in native_field(&loader, "depends_on")?.try_iter()? {
             let dependency: Bound<'py, PyAny> = dependency?;
             if !dependency.is_callable() {
                 continue;
@@ -231,7 +232,7 @@ fn loader_owners<'py>(
             if definition.is_none() {
                 continue;
             }
-            let definition_name: String = definition.getattr("name")?.extract()?;
+            let definition_name: String = native_field(&definition, "name")?.extract()?;
             let shown: String = match dependency.getattr_opt("__name__")? {
                 Some(shown) => shown.extract()?,
                 None => definition_name.clone(),
@@ -341,7 +342,7 @@ fn python_report<'py>(
     }
     let literal_relation: Bound<'py, PyAny> =
         registry::class(reference_models.py(), RecordId::LiteralSqlRelation)?;
-    let relation_name: Bound<'py, PyAny> = reference_models.getattr("RelationName")?;
+    let relation_name: Bound<'py, PyAny> = native_field(&reference_models, "RelationName")?;
     let mut unmatched: Vec<Bound<'py, PyAny>> = Vec::with_capacity(report.unmatched.len());
     for row in &report.unmatched {
         let owner: &PythonSqlOwner<'py> = &owners[row.owner];
@@ -392,8 +393,8 @@ pub(crate) fn hard_coded_relation_remedy(
     upstream_loader_by_source: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
     let target: ResourceKey = (
-        r#ref.getattr("kind")?.getattr("value")?.extract()?,
-        r#ref.getattr("name")?.extract()?,
+        native_field(r#ref, "kind")?.getattr("value")?.extract()?,
+        native_field(r#ref, "name")?.extract()?,
     );
     let mut upstream_loaders: Vec<(String, String)> = Vec::new();
     if let Some(loaders) = upstream_loader_by_source.filter(|loaders| !loaders.is_none()) {

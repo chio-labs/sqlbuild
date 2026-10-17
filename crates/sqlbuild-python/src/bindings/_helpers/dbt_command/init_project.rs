@@ -22,6 +22,7 @@ use sqlbuild_config::dbt_profile::models::DbtProjectMetadata;
 
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_FILE;
@@ -43,19 +44,19 @@ struct InitPaths<'py> {
 #[pyo3(signature = (*, request))]
 fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let cwd: Bound<'py, PyAny> = request.getattr("cwd")?;
+    let cwd: Bound<'py, PyAny> = native_field(request, "cwd")?;
     let paths: InitPaths<'py> = init_paths(request)?;
-    let sqb_output_dir: Bound<'py, PyAny> = request.getattr("sqb_output_dir")?;
+    let sqb_output_dir: Bound<'py, PyAny> = native_field(request, "sqb_output_dir")?;
     let output_dir: Bound<'py, PyAny> = if sqb_output_dir.is_none() {
         joined(
-            &paths.dbt_project_dir.getattr("parent")?,
+            &native_field(&paths.dbt_project_dir, "parent")?,
             DEFAULT_OUTPUT_DIR,
         )?
     } else {
         resolved(&cwd, &sqb_output_dir)?
     };
     let project_file: Bound<'py, PyAny> = joined(&output_dir, PROJECT_FILE)?;
-    if truthy(&project_file, "exists")? && !request.getattr("overwrite")?.is_truthy()? {
+    if truthy(&project_file, "exists")? && !native_field(request, "overwrite")?.is_truthy()? {
         return Err(profile_error(
             py,
             format!(
@@ -73,7 +74,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
             ),
         ));
     }
-    let callbacks: Bound<'py, PyAny> = request.getattr("progress_callbacks")?;
+    let callbacks: Bound<'py, PyAny> = native_field(request, "progress_callbacks")?;
     progress(&callbacks, "start", "Inspecting dbt project and profile...")?;
     let metadata: DbtProjectMetadata = load_dbt_project_metadata(&paths.dbt_project_dir)?;
     let profile_name: Bound<'py, PyAny> = profile_name(request, &metadata)?;
@@ -97,12 +98,12 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
         &path_of(py, &PyString::new(py, &metadata.target_path).into_any())?,
     )?;
     let project_name: String = metadata.project_name.replace('-', "_");
-    let target_name: Bound<'py, PyAny> = selected.getattr("target_name")?;
+    let target_name: Bound<'py, PyAny> = native_field(&selected, "target_name")?;
     let toml: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::BuildDbtInitProjectToml)?,
         &[
             ("project_name", project_name.clone().into_bound_py_any(py)?),
-            ("adapter", normalized.getattr("adapter")?),
+            ("adapter", native_field(&normalized, "adapter")?),
             ("target_name", target_name.clone()),
             ("profile_name", profile_name.clone()),
             (
@@ -114,8 +115,11 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
                 display_path(&paths.profiles_dir, &output_dir)?,
             ),
             ("target_path", display_path(&target_path, &output_dir)?),
-            ("target_schema", normalized.getattr("target_schema")?),
-            ("target_database", normalized.getattr("target_database")?),
+            ("target_schema", native_field(&normalized, "target_schema")?),
+            (
+                "target_database",
+                native_field(&normalized, "target_database")?,
+            ),
         ],
     )?;
     progress(&callbacks, "complete", "Rendered dbt profile connection.")?;
@@ -123,14 +127,14 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
         .getattr("warnings")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    if !request.getattr("skip_dbt_debug")?.is_truthy()? {
+    if !native_field(request, "skip_dbt_debug")?.is_truthy()? {
         progress(&callbacks, "start", "Running dbt debug...")?;
         if let Some(warning) = dbt_debug_warning(&paths, &target_name.extract::<String>()?)? {
             warnings.push(PyString::new(py, &warning).into_any());
         }
         progress(&callbacks, "complete", "Finished dbt debug.")?;
     }
-    let dry_run: Bound<'py, PyAny> = request.getattr("dry_run")?;
+    let dry_run: Bound<'py, PyAny> = native_field(request, "dry_run")?;
     if !dry_run.is_truthy()? {
         progress(&callbacks, "start", "Writing SQLBuild project config...")?;
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
@@ -148,7 +152,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
             ("output_dir", output_dir),
             ("project_file", project_file),
             ("project_name", project_name.into_bound_py_any(py)?),
-            ("adapter", normalized.getattr("adapter")?),
+            ("adapter", native_field(&normalized, "adapter")?),
             ("target_name", target_name),
             ("profile_name", profile_name),
             ("toml", toml),
@@ -170,10 +174,14 @@ fn validate_dbt_init_project(request: &Bound<'_, PyAny>) -> Result<(), PyErr> {
 }
 
 fn init_paths<'py>(request: &Bound<'py, PyAny>) -> PyResult<InitPaths<'py>> {
-    let cwd: Bound<'py, PyAny> = request.getattr("cwd")?;
-    let dbt_project_dir: Bound<'py, PyAny> = resolved(&cwd, &request.getattr("dbt_project_dir")?)?;
-    let profiles_dir: Bound<'py, PyAny> =
-        profiles_dir(&cwd, &dbt_project_dir, &request.getattr("profiles_dir")?)?;
+    let cwd: Bound<'py, PyAny> = native_field(request, "cwd")?;
+    let dbt_project_dir: Bound<'py, PyAny> =
+        resolved(&cwd, &native_field(request, "dbt_project_dir")?)?;
+    let profiles_dir: Bound<'py, PyAny> = profiles_dir(
+        &cwd,
+        &dbt_project_dir,
+        &native_field(request, "profiles_dir")?,
+    )?;
     Ok(InitPaths {
         dbt_project_dir,
         profiles_dir,
@@ -185,7 +193,7 @@ fn profile_name<'py>(
     request: &Bound<'py, PyAny>,
     metadata: &DbtProjectMetadata,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let requested: Bound<'py, PyAny> = request.getattr("profile_name")?;
+    let requested: Bound<'py, PyAny> = native_field(request, "profile_name")?;
     if requested.is_truthy()? {
         return Ok(requested);
     }
@@ -197,7 +205,7 @@ fn selected_output<'py>(
     request: &Bound<'py, PyAny>,
     profile_name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let target_name: Option<String> = request.getattr("target_name")?.extract()?;
+    let target_name: Option<String> = native_field(request, "target_name")?.extract()?;
     load_selected_dbt_profile_output(
         &paths.profiles_dir,
         &profile_name.extract::<String>()?,

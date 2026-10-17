@@ -22,6 +22,7 @@ use crate::bindings::_helpers::diff_report::tolerances::cli_tolerance_overrides;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::types::CompilerDetach;
@@ -56,8 +57,11 @@ pub(crate) fn project_adapter<'py>(
     let name: Bound<'py, PyAny> = call(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", &discovered.getattr("project_config")?),
-            ("local_config", &discovered.getattr("local_config")?),
+            (
+                "project_config",
+                &native_field(discovered, "project_config")?,
+            ),
+            ("local_config", &native_field(discovered, "local_config")?),
         ],
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&name, project_dir)?;
@@ -167,8 +171,8 @@ pub(crate) fn prepare_query_diff<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let (adapter_name, adapter) = project_adapter(discovered, project_dir)?;
-    let selected_target: Bound<'py, PyAny> = request.getattr("selected_target")?;
-    let cli_vars: Bound<'py, PyAny> = request.getattr("cli_vars")?;
+    let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
+    let cli_vars: Bound<'py, PyAny> = native_field(request, "cli_vars")?;
     let config: Bound<'py, PyAny> = call(
         &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
         &[
@@ -216,14 +220,14 @@ pub(crate) fn prepare_query_diff<'py>(
     }
     let left_sql: String = query_input(
         py,
-        request.getattr("left_query")?,
-        request.getattr("left_query_file")?,
+        native_field(request, "left_query")?,
+        native_field(request, "left_query_file")?,
         "left",
     )?;
     let right_sql: String = query_input(
         py,
-        request.getattr("right_query")?,
-        request.getattr("right_query_file")?,
+        native_field(request, "right_query")?,
+        native_field(request, "right_query_file")?,
         "right",
     )?;
     let left_sql: String = read_only_query(py, &left_sql, "left", &adapter)?;
@@ -246,7 +250,7 @@ pub(crate) fn prepare_query_diff<'py>(
         };
         Ok(text.trim().to_owned())
     };
-    let verbose: bool = request.getattr("verbose")?.is_truthy()?;
+    let verbose: bool = native_field(request, "verbose")?.is_truthy()?;
     let examples = |name: &str| -> PyResult<Bound<'py, PyAny>> {
         object(
             py,
@@ -343,29 +347,31 @@ pub(crate) fn execute_query_diff<'py>(
     preparation: &Bound<'py, PyAny>,
 ) -> PyResult<(Bound<'py, PyAny>, PhaseSeconds)> {
     let py: Python<'py> = request.py();
-    let adapter: Bound<'py, PyAny> = preparation.getattr("adapter")?;
+    let adapter: Bound<'py, PyAny> = native_field(preparation, "adapter")?;
     let total_started: Instant = Instant::now();
     let mut phases: Vec<(String, f64)> = Vec::new();
     progress_line(py, "Query diff connection  START")?;
     let connection_started: Instant = Instant::now();
-    let connection: Bound<'py, PyAny> =
-        match adapter.call_method1("connect", (preparation.getattr("connection_config")?,)) {
-            Ok(connection) => connection,
-            Err(error) => {
-                progress_line(
-                    py,
-                    &format!(
-                        "Query diff connection  ERROR  ({:.2}s)",
-                        seconds(connection_started)
-                    ),
-                )?;
-                progress_line(
-                    py,
-                    &format!("Query diff total  ERROR  ({:.2}s)", seconds(total_started)),
-                )?;
-                return Err(error);
-            }
-        };
+    let connection: Bound<'py, PyAny> = match adapter.call_method1(
+        "connect",
+        (native_field(preparation, "connection_config")?,),
+    ) {
+        Ok(connection) => connection,
+        Err(error) => {
+            progress_line(
+                py,
+                &format!(
+                    "Query diff connection  ERROR  ({:.2}s)",
+                    seconds(connection_started)
+                ),
+            )?;
+            progress_line(
+                py,
+                &format!("Query diff total  ERROR  ({:.2}s)", seconds(total_started)),
+            )?;
+            return Err(error);
+        }
+    };
     phases.push(("connection".to_owned(), seconds(connection_started)));
     progress_line(
         py,
@@ -374,13 +380,13 @@ pub(crate) fn execute_query_diff<'py>(
     let lifecycle: Bound<'py, PyAny> = host::entry(py, ExecutorHost::QueryDiffArtifactLifecycle)?;
     let artifact = |side: &str| -> PyResult<Bound<'py, PyAny>> {
         call(
-            &lifecycle.getattr("build")?,
+            &native_field(&lifecycle, "build")?,
             &[
                 ("adapter", &adapter),
-                ("run_id", &preparation.getattr("run_id")?),
+                ("run_id", &native_field(preparation, "run_id")?),
                 ("side", &object(py, side)?),
-                ("database", &preparation.getattr("database")?),
-                ("schema", &preparation.getattr("schema")?),
+                ("database", &native_field(preparation, "database")?),
+                ("schema", &native_field(preparation, "schema")?),
             ],
         )
     };
@@ -398,7 +404,7 @@ pub(crate) fn execute_query_diff<'py>(
     let mut cleanup_errors: Vec<PyErr> = Vec::new();
     for item in created.iter().rev() {
         if let Err(error) = call(
-            &lifecycle.getattr("cleanup")?,
+            &native_field(&lifecycle, "cleanup")?,
             &[
                 ("adapter", &adapter),
                 ("connection", &connection),
@@ -468,7 +474,7 @@ fn compare_artifacts<'py>(
     (created, phases): (&mut Vec<Bound<'py, PyAny>>, &mut Vec<(String, f64)>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let adapter: Bound<'py, PyAny> = preparation.getattr("adapter")?;
+    let adapter: Bound<'py, PyAny> = native_field(preparation, "adapter")?;
     phases.push((
         "reconciliation".to_owned(),
         reconcile(preparation, connection, lifecycle)?,
@@ -479,7 +485,7 @@ fn compare_artifacts<'py>(
     let started: Instant = Instant::now();
     for (artifact, sql) in [(left, "left_sql"), (right, "right_sql")] {
         if let Err(error) = call(
-            &lifecycle.getattr("materialize")?,
+            &native_field(lifecycle, "materialize")?,
             &[
                 ("adapter", &adapter),
                 ("connection", connection),
@@ -505,7 +511,7 @@ fn compare_artifacts<'py>(
         py,
         &format!(
             "Query diff materialization  OK  ({}; expires {}; {materialization:.2}s)",
-            preparation.getattr("schema")?.str()?,
+            native_field(preparation, "schema")?.str()?,
             expires_at.call_method0("isoformat")?.str()?
         ),
     )?;
@@ -513,17 +519,17 @@ fn compare_artifacts<'py>(
     let started: Instant = Instant::now();
     let name: String = format!(
         "{} vs {}",
-        preparation.getattr("left_label")?.str()?,
-        preparation.getattr("right_label")?.str()?
+        native_field(preparation, "left_label")?.str()?,
+        native_field(preparation, "right_label")?.str()?
     );
     let pairs: [(&str, Bound<'py, PyAny>); 3] = [
         (
             "max_column_examples",
-            preparation.getattr("effective_max_column_examples")?,
+            native_field(preparation, "effective_max_column_examples")?,
         ),
         (
             "max_row_only_examples",
-            preparation.getattr("effective_max_row_only_examples")?,
+            native_field(preparation, "effective_max_row_only_examples")?,
         ),
         ("comparison_name", object(py, name)?),
     ];
@@ -536,8 +542,8 @@ fn compare_artifacts<'py>(
                 &[
                     ("adapter", &adapter),
                     ("connection", connection),
-                    ("left_relation", &left.getattr("relation")?),
-                    ("right_relation", &right.getattr("relation")?),
+                    ("left_relation", &native_field(left, "relation")?),
+                    ("right_relation", &native_field(right, "relation")?),
                     ("options", &options),
                 ],
             )
@@ -573,12 +579,12 @@ fn reconcile(
     let now: Bound<'_, PyAny> = imported(py, "datetime", "datetime")?
         .call_method1("now", (imported(py, "datetime", "UTC")?,))?;
     let cleaned: PyResult<Bound<'_, PyAny>> = call(
-        &lifecycle.getattr("cleanup_expired")?,
+        &native_field(lifecycle, "cleanup_expired")?,
         &[
-            ("adapter", &preparation.getattr("adapter")?),
+            ("adapter", &native_field(preparation, "adapter")?),
             ("connection", connection),
-            ("database", &preparation.getattr("database")?),
-            ("schema", &preparation.getattr("schema")?),
+            ("database", &native_field(preparation, "database")?),
+            ("schema", &native_field(preparation, "schema")?),
             ("now", &now),
         ],
     );
@@ -601,15 +607,15 @@ fn reconcile(
         py,
         &format!(
             "Query diff reconciliation  OK  ({} expired; {elapsed:.2}s)",
-            result.getattr("cleaned")?.len()?
+            native_field(&result, "cleaned")?.len()?
         ),
     )?;
-    for relation in result.getattr("untracked")?.try_iter()? {
+    for relation in native_field(&result, "untracked")?.try_iter()? {
         progress_line(
             py,
             &format!(
                 "Query diff reconciliation  WARNING  reserved-name relation lacks matching ownership evidence: {}",
-                relation?.getattr("name")?.str()?
+                native_field(&relation?, "name")?.str()?
             ),
         )?;
     }
@@ -651,14 +657,14 @@ fn inspect_inputs<'py>(
     (left, right): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let adapter: Bound<'py, PyAny> = preparation.getattr("adapter")?;
+    let adapter: Bound<'py, PyAny> = native_field(preparation, "adapter")?;
     let location = |artifact: &Bound<'py, PyAny>| -> PyResult<Bound<'py, PyTuple>> {
         PyTuple::new(
             py,
             [
-                artifact.getattr("database")?,
-                artifact.getattr("schema")?,
-                artifact.getattr("name")?,
+                native_field(artifact, "database")?,
+                native_field(artifact, "schema")?,
+                native_field(artifact, "name")?,
             ],
         )
     };
@@ -673,11 +679,11 @@ fn inspect_inputs<'py>(
     )?;
     for artifact in [left, right] {
         let exists: Bound<'py, PyAny> = call(
-            &lookup.getattr("exists")?,
+            &native_field(&lookup, "exists")?,
             &[
-                ("database", &artifact.getattr("database")?),
-                ("schema", &artifact.getattr("schema")?),
-                ("name", &artifact.getattr("name")?),
+                ("database", &native_field(artifact, "database")?),
+                ("schema", &native_field(artifact, "schema")?),
+                ("name", &native_field(artifact, "name")?),
             ],
         )?;
         if exists.is_truthy()? {
@@ -685,7 +691,7 @@ fn inspect_inputs<'py>(
                 py,
                 format!(
                     "query-diff artifact already exists: {}",
-                    artifact.getattr("relation")?.str()?
+                    native_field(artifact, "relation")?.str()?
                 ),
                 "C245",
                 Some("wait for its TTL cleanup or investigate the reserved-name relation"),
@@ -693,7 +699,7 @@ fn inspect_inputs<'py>(
         }
     }
     let ttl: Bound<'py, PyAny> = registry::class(py, RecordId::Duration)?
-        .call_method1("parse", (preparation.getattr("artifact_ttl")?,))?;
+        .call_method1("parse", (native_field(preparation, "artifact_ttl")?,))?;
     if ttl.is_none() {
         return Err(failure(
             py,
@@ -702,10 +708,10 @@ fn inspect_inputs<'py>(
             None,
         ));
     }
-    let max_columns: Option<i64> = request.getattr("max_columns")?.extract()?;
+    let max_columns: Option<i64> = native_field(request, "max_columns")?.extract()?;
     for (sql, label) in [("left_sql", "left_label"), ("right_sql", "right_label")] {
         let columns: Vec<String> = call(
-            &adapter.getattr("query_column_names")?,
+            &native_field(&adapter, "query_column_names")?,
             &[
                 ("connection", connection),
                 ("sql", &preparation.getattr(sql)?),

@@ -18,6 +18,7 @@ use crate::bindings::_helpers::cost_command::refresh::refresh_pending_cost_run;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
 use crate::bindings::_helpers::cost_command::sorting::{sort_history, sort_resources};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -36,8 +37,8 @@ struct CostRequest<'py> {
 impl<'py> CostRequest<'py> {
     fn read(request: &Bound<'py, PyAny>) -> PyResult<Self> {
         let py: Python<'py> = request.py();
-        let requested: Bound<'py, PyAny> = request.getattr("project_dir")?;
-        let order: Option<String> = request.getattr("order")?.extract()?;
+        let requested: Bound<'py, PyAny> = native_field(request, "project_dir")?;
+        let order: Option<String> = native_field(request, "order")?.extract()?;
         Ok(Self {
             request: request.clone(),
             project_dir: if requested.is_none() {
@@ -45,14 +46,14 @@ impl<'py> CostRequest<'py> {
             } else {
                 requested
             },
-            selector: request.getattr("selector")?.extract()?,
-            limit: request.getattr("limit")?.extract()?,
-            no_limit: request.getattr("no_limit")?.is_truthy()?,
+            selector: native_field(request, "selector")?.extract()?,
+            limit: native_field(request, "limit")?.extract()?,
+            no_limit: native_field(request, "no_limit")?.is_truthy()?,
             descending: order
                 .filter(|order| !order.is_empty())
                 .is_none_or(|order| order == DESCENDING_ORDER),
-            since: request.getattr("since")?.extract()?,
-            until: request.getattr("until")?.extract()?,
+            since: native_field(request, "since")?.extract()?,
+            until: native_field(request, "until")?.extract()?,
         })
     }
 
@@ -78,8 +79,7 @@ impl<'py> CostRequest<'py> {
             let options: Bound<'py, PyDict> = PyDict::new(py);
             options.set_item("parents", true)?;
             options.set_item("exist_ok", true)?;
-            path.getattr("parent")?
-                .call_method("mkdir", (), Some(&options))?;
+            native_field(&path, "parent")?.call_method("mkdir", (), Some(&options))?;
             let encoding: Bound<'py, PyDict> = PyDict::new(py);
             encoding.set_item("encoding", "utf-8")?;
             path.call_method("write_text", (format!("{payload}\n"),), Some(&encoding))?;
@@ -116,7 +116,7 @@ fn in_window(
     since: Option<&Bound<'_, PyAny>>,
     (until, until_is_date): (Option<&Bound<'_, PyAny>>, bool),
 ) -> PyResult<bool> {
-    let completed: Bound<'_, PyAny> = record.getattr("completed_at")?;
+    let completed: Bound<'_, PyAny> = native_field(record, "completed_at")?;
     if let Some(since) = since
         && !completed.ge(since)?
     {
@@ -224,7 +224,7 @@ fn resolve_run<'py>(request: &CostRequest<'py>) -> PyResult<Bound<'py, PyAny>> {
     }
     let run_ids: Vec<String> = records
         .iter()
-        .map(|record| record.getattr("run_id")?.extract())
+        .map(|record| native_field(record, "run_id")?.extract())
         .collect::<PyResult<_>>()?;
     let index: usize =
         select_cost_run(&run_ids, &request.selector).map_err(|error| cost_error(py, &error))?;
@@ -240,7 +240,8 @@ fn with_resources<'py>(
     let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let cost_changes: Bound<'py, PyDict> = PyDict::new(py);
     cost_changes.set_item("resources", PyTuple::new(py, resources)?)?;
-    let cost: Bound<'py, PyAny> = replace.call((record.getattr("cost")?,), Some(&cost_changes))?;
+    let cost: Bound<'py, PyAny> =
+        replace.call((native_field(record, "cost")?,), Some(&cost_changes))?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
     changes.set_item("cost", cost)?;
     replace.call((record,), Some(&changes))

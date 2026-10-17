@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_config::command_connection::errors::CommandConnectionError;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -42,7 +43,7 @@ pub(crate) fn expected_resolution_error(py: Python<'_>, error: &PyErr) -> PyResu
 pub(crate) fn resolution_message(py: Python<'_>, error: &PyErr) -> PyResult<String> {
     let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
     if error.is_instance(py, &registry::error(py, ErrorId::CliUser)?) {
-        return value.getattr("message")?.str()?.extract();
+        return native_field(&value, "message")?.str()?.extract();
     }
     value.str()?.extract()
 }

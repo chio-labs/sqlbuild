@@ -17,6 +17,7 @@ use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -88,25 +89,25 @@ pub(crate) fn compile_build_plan<'py>(context: &BuildContext<'py>) -> PyResult<B
             ),
             (
                 "on_connection_start",
-                connection.getattr("on_connection_start")?,
+                native_field(&connection, "on_connection_start")?,
             ),
             (
                 "on_connection_complete",
                 keyword_relay(
-                    connection.getattr("on_connection_complete")?,
+                    native_field(&connection, "on_connection_complete")?,
                     &CONNECTION_TIMING,
                 )?,
             ),
             (
                 "on_connection_error",
                 keyword_relay(
-                    connection.getattr("on_connection_error")?,
+                    native_field(&connection, "on_connection_error")?,
                     &CONNECTION_TIMING,
                 )?,
             ),
         ],
     )?;
-    let verbose: bool = context.request.getattr("verbose")?.is_truthy()?;
+    let verbose: bool = native_field(&context.request, "verbose")?.is_truthy()?;
     with_verbose_inspection(py, verbose, || {
         call_with(
             &registry::native(py, NativeAttr::RunCompilePipeline)?,
@@ -133,12 +134,15 @@ pub(crate) fn write_plan_text(
     let plan_text: String = call_with(
         &registry::native(py, NativeAttr::FormatPlan)?,
         &[
-            ("plan", pipeline.getattr("plan_output")?),
-            ("full_refresh", context.request.getattr("full_refresh")?),
+            ("plan", native_field(pipeline, "plan_output")?),
+            (
+                "full_refresh",
+                native_field(&context.request, "full_refresh")?,
+            ),
             ("use_color", boolean(py, context.use_color)),
             (
                 "python_plan_entries",
-                pipeline.getattr("python_plan_entries")?,
+                native_field(pipeline, "python_plan_entries")?,
             ),
             ("include_direct_freshness_diagnostics", boolean(py, false)),
         ],
@@ -166,7 +170,7 @@ pub(crate) fn enforce_build_plan_policies(
     };
     let sys: Bound<'_, PyAny> = py.import("sys")?.into_any();
     enforce_plan_policies(
-        &pipeline.getattr("plan_output")?,
+        &native_field(pipeline, "plan_output")?,
         (
             &gates,
             &context
@@ -178,7 +182,10 @@ pub(crate) fn enforce_build_plan_policies(
             &context.get("effective_target_name")?,
             &context.get("execution_limits")?,
         )?,
-        (&sys.getattr("stdin")?, &sys.getattr("stdout")?),
+        (
+            &native_field(&sys, "stdin")?,
+            &native_field(&sys, "stdout")?,
+        ),
     )
 }
 
@@ -188,12 +195,12 @@ pub(crate) fn write_compile_target(
     pipeline: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'_> = context.py();
-    let plan: Bound<'_, PyAny> = pipeline.getattr("plan_output")?;
+    let plan: Bound<'_, PyAny> = native_field(pipeline, "plan_output")?;
     let manifest: Bound<'_, PyAny> = if context.request_flag("manifest")? {
         call_with(
             &registry::native(py, NativeAttr::BuildManifest)?,
             &[
-                ("project", pipeline.getattr("project")?),
+                ("project", native_field(pipeline, "project")?),
                 ("plan_output", plan.clone()),
                 (
                     "project_name",
@@ -203,8 +210,8 @@ pub(crate) fn write_compile_target(
                         .getattr("name")?,
                 ),
                 ("adapter_type", context.get("adapter_name")?),
-                ("upstream_deps", plan.getattr("upstream_deps")?),
-                ("downstream_deps", plan.getattr("downstream_deps")?),
+                ("upstream_deps", native_field(&plan, "upstream_deps")?),
+                ("downstream_deps", native_field(&plan, "downstream_deps")?),
             ],
         )?
     } else {

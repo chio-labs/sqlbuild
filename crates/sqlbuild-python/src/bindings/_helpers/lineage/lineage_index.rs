@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -11,8 +12,8 @@ use sqlbuild_analysis::lineage_command::models::{LineageIndex, LineageKey, Linea
 /// A Python `CompiledObjectKey` as a lineage key.
 pub(crate) fn lineage_key(key: &Bound<'_, PyAny>) -> PyResult<LineageKey> {
     Ok(LineageKey {
-        resource_type: key.getattr("resource_type")?.str()?.extract()?,
-        name: key.getattr("name")?.extract()?,
+        resource_type: native_field(key, "resource_type")?.str()?.extract()?,
+        name: native_field(key, "name")?.extract()?,
     })
 }
 
@@ -95,30 +96,36 @@ fn project_nodes(project: &Bound<'_, PyAny>) -> PyResult<HashMap<LineageKey, Lin
     let mut add = |node: LineageNode| {
         nodes.entry(node.key.clone()).or_insert(node);
     };
-    for model in project.getattr("models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'_, PyAny> = model?;
         add(LineageNode {
-            key: lineage_key(&model.getattr("key")?)?,
-            relative_path: optional_text(model.getattr("relative_path")?)?,
+            key: lineage_key(&native_field(&model, "key")?)?,
+            relative_path: optional_text(native_field(&model, "relative_path")?)?,
             qualified_name: optional_text(
-                model.getattr("destination")?.getattr("qualified_name")?,
+                native_field(&model, "destination")?.getattr("qualified_name")?,
             )?,
         });
     }
-    for seed in project.getattr("seeds")?.try_iter()? {
+    for seed in native_field(project, "seeds")?.try_iter()? {
         let seed: Bound<'_, PyAny> = seed?;
         add(LineageNode {
-            key: lineage_key(&seed.getattr("key")?)?,
-            relative_path: optional_text(seed.getattr("seed_file")?.getattr("relative_path")?)?,
-            qualified_name: optional_text(seed.getattr("destination")?.getattr("qualified_name")?)?,
+            key: lineage_key(&native_field(&seed, "key")?)?,
+            relative_path: optional_text(
+                native_field(&seed, "seed_file")?.getattr("relative_path")?,
+            )?,
+            qualified_name: optional_text(
+                native_field(&seed, "destination")?.getattr("qualified_name")?,
+            )?,
         });
     }
-    for source in project.getattr("sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source: Bound<'_, PyAny> = source?;
         add(LineageNode {
-            key: lineage_key(&source.getattr("key")?)?,
-            relative_path: optional_text(source.getattr("source_file")?.getattr("relative_path")?)?,
-            qualified_name: source_relation_name(&source.getattr("source_entry")?)?,
+            key: lineage_key(&native_field(&source, "key")?)?,
+            relative_path: optional_text(
+                native_field(&source, "source_file")?.getattr("relative_path")?,
+            )?,
+            qualified_name: source_relation_name(&native_field(&source, "source_entry")?)?,
         });
     }
     Ok(nodes)
@@ -126,7 +133,7 @@ fn project_nodes(project: &Bound<'_, PyAny>) -> PyResult<HashMap<LineageKey, Lin
 
 /// The lineage index of a compiled `ProjectGraph`; every named key has a node.
 pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
-    let views: Bound<'_, PyAny> = graph.getattr("lineage_views")?;
+    let views: Bound<'_, PyAny> = native_field(graph, "lineage_views")?;
     let mut all_keys: Vec<(String, LineageKey)> = Vec::new();
     for item in views
         .getattr("all_keys")?
@@ -154,7 +161,8 @@ pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
         let (key, folder): (Bound<'_, PyAny>, String) = item?.extract()?;
         paths.push((lineage_key(&key)?, folder));
     }
-    let mut nodes: HashMap<LineageKey, LineageNode> = project_nodes(&graph.getattr("project")?)?;
+    let mut nodes: HashMap<LineageKey, LineageNode> =
+        project_nodes(&native_field(graph, "project")?)?;
     for (_, key) in &all_keys {
         nodes.entry(key.clone()).or_insert_with(|| LineageNode {
             key: key.clone(),
@@ -164,8 +172,8 @@ pub(crate) fn graph_index(graph: &Bound<'_, PyAny>) -> PyResult<LineageIndex> {
     }
     Ok(LineageIndex {
         nodes,
-        upstream: ordered_edges(&views.getattr("upstream_deps")?)?,
-        downstream: ordered_edges(&views.getattr("downstream_deps")?)?,
+        upstream: ordered_edges(&native_field(&views, "upstream_deps")?)?,
+        downstream: ordered_edges(&native_field(&views, "downstream_deps")?)?,
         tags,
         paths,
         all_keys,

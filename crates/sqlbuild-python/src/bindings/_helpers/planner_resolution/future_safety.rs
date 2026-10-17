@@ -5,6 +5,7 @@ use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::planner_resolution::cursor_safety::{
     horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -42,17 +43,17 @@ pub(crate) fn resolve_future_cursor_safety<'py>(
     let config = args.value("config")?;
     let clock = args.value("invocation_time")?;
     if config.is_none()
-        || config.getattr("max_distance")?.is_none()
+        || native_field(&config, "max_distance")?.is_none()
         || !args.value("cursor_type")?.eq("timestamp")?
         || clock.is_none()
         || args.flag("has_complete_override")?
     {
         return Ok(bounds);
     }
-    let distance = config.getattr("max_distance")?;
+    let distance = native_field(&config, "max_distance")?;
     let duration = safety_duration(&distance, true)?;
-    let start = bounds.getattr("start")?;
-    let end = bounds.getattr("end")?;
+    let start = native_field(&bounds, "start")?;
+    let end = native_field(&bounds, "end")?;
     if !timestamp_bound(&start)? || !timestamp_bound(&end)? {
         return Ok(bounds);
     }
@@ -83,7 +84,7 @@ pub(crate) fn resolve_future_cursor_safety<'py>(
     let mut determining: Option<(Bound<'py, PyAny>, Scalar)> = None;
     for item in evidence.try_iter()? {
         let item = item?;
-        let maximum = session.scalar(&item.getattr("maximum")?)?;
+        let maximum = session.scalar(&native_field(&item, "maximum")?)?;
         let smaller = if let Some((_, previous)) = &determining {
             session.checked(compare(&maximum, previous, &session))? == Ordering::Less
         } else {
@@ -93,7 +94,7 @@ pub(crate) fn resolve_future_cursor_safety<'py>(
             determining = Some((item, maximum));
         }
     }
-    if config.getattr("action")?.eq("error")? {
+    if native_field(&config, "action")?.eq("error")? {
         return Err(safety_error(
             py,
             ErrorId::FutureCursorSafety,
@@ -122,7 +123,7 @@ pub(crate) fn resolve_future_cursor_safety<'py>(
     let safety = call_with(
         &registry::class(py, RecordId::FutureCursorSafetyEvidence)?,
         &[
-            ("action", config.getattr("action")?),
+            ("action", native_field(&config, "action")?),
             ("max_distance", distance),
             (
                 "invocation_time",

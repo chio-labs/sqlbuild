@@ -11,6 +11,7 @@ use sqlbuild_sqltext::sql_references::models::{
 };
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
@@ -72,7 +73,7 @@ pub(crate) fn report_generated_references(
         classes,
         origin,
         loaded_macro,
-        macro_name: loaded_macro.getattr("name")?.extract()?,
+        macro_name: native_field(loaded_macro, "name")?.extract()?,
         resource: resource_kind(classes, origin.consumer)?,
     };
     for invalid_call in &scan.invalid_calls {
@@ -97,8 +98,10 @@ fn resource_kind(
         return Ok(None);
     }
     Ok(Some((
-        consumer.getattr("kind")?.getattr("value")?.extract()?,
-        consumer.getattr("name")?.extract()?,
+        native_field(consumer, "kind")?
+            .getattr("value")?
+            .extract()?,
+        native_field(consumer, "name")?.extract()?,
     )))
 }
 

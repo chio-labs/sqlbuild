@@ -25,6 +25,7 @@ use crate::bindings::_helpers::compile_attachment::sql_expansion_context::{
     SqlExpansionInputs, present,
 };
 use crate::bindings::_helpers::native_threads::interruptible_join::{Joined, join_interruptibly};
+use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::rules::lint_expansion::{
     LintExpansionSources, lint_expansion_inputs,
 };
@@ -86,15 +87,14 @@ struct EarlyLintPlan {
 /// The plan early SQL lint runs with, when the project selects SQL rules without a warm cache.
 fn early_lint_plan(inputs: &Bound<'_, PyAny>, dialect: &str) -> PyResult<Option<EarlyLintPlan>> {
     let py: Python<'_> = inputs.py();
-    let project_dir: Bound<'_, PyAny> = inputs
-        .getattr("discovered_inputs")?
-        .getattr("project_dir")?;
+    let project_dir: Bound<'_, PyAny> =
+        record_field(&record_field(inputs, "discovered_inputs")?, "project_dir")?;
     if project_dir.is_none() {
         return Ok(None);
     }
     let project_dir: PathBuf = project_dir.extract()?;
-    for diagnostic in inputs.getattr("diagnostics")?.try_iter()? {
-        if diagnostic?.getattr("is_error")?.is_truthy()? {
+    for diagnostic in record_field(inputs, "diagnostics")?.try_iter()? {
+        if record_field(&diagnostic?, "is_error")?.is_truthy()? {
             return Ok(None);
         }
     }
@@ -113,16 +113,16 @@ fn early_lint_plan(inputs: &Bound<'_, PyAny>, dialect: &str) -> PyResult<Option<
         return Ok(None);
     }
     let mut rows: Vec<RelationKeyRow> = Vec::new();
-    for model in inputs.getattr("model_inputs")?.try_iter()? {
+    for model in record_field(inputs, "model_inputs")?.try_iter()? {
         rows.push(model_key_row(&model?)?);
     }
     let mut seeds: Vec<Bound<'_, PyAny>> = Vec::new();
-    for seed in inputs.getattr("seed_inputs")?.try_iter()? {
-        seeds.push(seed?.getattr("schema_entry")?);
+    for seed in record_field(inputs, "seed_inputs")?.try_iter()? {
+        seeds.push(record_field(&seed?, "schema_entry")?);
     }
     let mut sources: Vec<Bound<'_, PyAny>> = Vec::new();
-    for source in inputs.getattr("source_inputs")?.try_iter()? {
-        sources.push(source?.getattr("source_entry")?);
+    for source in record_field(inputs, "source_inputs")?.try_iter()? {
+        sources.push(record_field(&source?, "source_entry")?);
     }
     let keys: RelationKeys = relation_keys(
         py,
@@ -212,7 +212,7 @@ fn start_early_lint(
         return Ok(None);
     };
     let mut compiled: HashMap<PathBuf, CompiledSource> = HashMap::new();
-    for model in inputs.getattr("model_inputs")?.try_iter()? {
+    for model in record_field(inputs, "model_inputs")?.try_iter()? {
         if let Some((path, expansion)) = model_lint_expansion(&model?)? {
             compiled.insert(path, expansion);
         }
@@ -220,8 +220,8 @@ fn start_early_lint(
     let work: EarlyLintWork = EarlyLintWork {
         project_dir: plan.project_dir.clone(),
         settings: plan.settings,
-        discovered: inputs.getattr("discovered_inputs")?.unbind(),
-        static_scope: inputs.getattr("declaration_scope")?.unbind(),
+        discovered: record_field(inputs, "discovered_inputs")?.unbind(),
+        static_scope: record_field(inputs, "declaration_scope")?.unbind(),
         compiled,
         stop: Arc::clone(stop),
     };
@@ -362,12 +362,12 @@ impl EarlySqlLint {
         slf.preparation = start_early_lint(inputs, dialect, &stop)?
             .map(|preparation| Py::new(py, preparation))
             .transpose()?;
-        let declaration_scope: Bound<'_, PyAny> = inputs.getattr("declaration_scope")?;
+        let declaration_scope: Bound<'_, PyAny> = record_field(inputs, "declaration_scope")?;
         slf.expansion_reuse = if declaration_scope.is_none() {
             None
         } else {
             Some(ExpansionReuse {
-                discovered_inputs: inputs.getattr("discovered_inputs")?.unbind(),
+                discovered_inputs: record_field(inputs, "discovered_inputs")?.unbind(),
                 declaration_scope: declaration_scope.unbind(),
             })
         };

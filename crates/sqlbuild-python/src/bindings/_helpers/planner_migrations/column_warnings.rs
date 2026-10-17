@@ -6,6 +6,7 @@ use crate::bindings::_helpers::planner_migrations::constants::{
     DONE, MISSING_ORIGIN_ALLOW_OUTCOME, MISSING_ORIGIN_CONFIRMATION_OUTCOME,
     MISSING_ORIGIN_DENY_OUTCOME,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyKeyError;
@@ -24,7 +25,7 @@ pub(super) fn warning<'py>(
         py,
         RecordId::PlanWarning,
         &[
-            ("model_name", entry.getattr("model_name")?),
+            ("model_name", native_field(entry, "model_name")?),
             (
                 "severity",
                 registry::class(py, RecordId::WarningSeverity)?.getattr(if error {
@@ -40,36 +41,36 @@ pub(super) fn warning<'py>(
 }
 
 pub(super) fn entry_warning<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
-    let destination = entry.getattr("destination")?;
-    let qualified = destination.getattr("qualified_name")?;
+    let destination = native_field(entry, "destination")?;
+    let qualified = native_field(&destination, "qualified_name")?;
     let relation: String = if qualified.is_truthy()? {
         qualified
     } else {
-        destination.getattr("name")?
+        native_field(&destination, "name")?
     }
     .extract()?;
-    let origin: String = entry.getattr("origin_column")?.extract()?;
-    let column: String = entry.getattr("destination_column")?.extract()?;
-    let name: String = entry.getattr("model_name")?.extract()?;
-    let decision: String = entry.getattr("decision")?.extract()?;
-    if decision == DONE && !entry.getattr("discovery")?.eq("manual")? {
+    let origin: String = native_field(entry, "origin_column")?.extract()?;
+    let column: String = native_field(entry, "destination_column")?.extract()?;
+    let name: String = native_field(entry, "model_name")?.extract()?;
+    let decision: String = native_field(entry, "decision")?.extract()?;
+    if decision == DONE && !native_field(entry, "discovery")?.eq("manual")? {
         return Ok(None);
     }
-    let completed = entry.getattr("completed_at")?;
+    let completed = native_field(entry, "completed_at")?;
     let completed: String = if completed.is_truthy()? {
         completed.call_method0("isoformat")?.extract()?
     } else {
         "unknown time".into()
     };
-    let target = entry.getattr("target_name")?;
+    let target = native_field(entry, "target_name")?;
     let target: String = if target.is_truthy()? {
         target.extract()?
     } else {
         "default".into()
     };
     let outcome: String =
-        missing_origin_outcome(&entry.getattr("missing_origin_policy")?)?.to_owned();
-    let message: String = entry.getattr("message")?.str()?.extract()?;
+        missing_origin_outcome(&native_field(entry, "missing_origin_policy")?)?.to_owned();
+    let message: String = native_field(entry, "message")?.str()?.extract()?;
     let Some((code, message)) = column_warning(
         &decision,
         &ColumnWarning {
@@ -89,7 +90,7 @@ pub(super) fn entry_warning<'py>(entry: &Bound<'py, PyAny>) -> PyResult<Option<B
         entry,
         code,
         &message,
-        decision != DONE && entry.getattr("blocks_build")?.is_truthy()?,
+        decision != DONE && native_field(entry, "blocks_build")?.is_truthy()?,
     )?))
 }
 
@@ -97,8 +98,8 @@ pub(super) fn unavailable<'py>(
     entry: &Bound<'py, PyAny>,
     reason: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let origin: String = entry.getattr("origin_column")?.extract()?;
-    let destination: String = entry.getattr("destination_column")?.extract()?;
+    let origin: String = native_field(entry, "origin_column")?.extract()?;
+    let destination: String = native_field(entry, "destination_column")?.extract()?;
     let facts = ColumnWarning {
         model_name: "",
         relation: "",

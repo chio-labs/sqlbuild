@@ -6,6 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::cursor::scalars::render_value;
 use crate::bindings::_helpers::plan_output::values::{dict, enum_value, items};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// `render(value=value)`.
 fn render<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -42,7 +43,7 @@ pub(crate) fn future_cursor_safety<'py>(
     if evidence.is_none() {
         return Ok(evidence.clone());
     }
-    let relation: Bound<'py, PyAny> = evidence.getattr("determining_relation")?;
+    let relation: Bound<'py, PyAny> = native_field(evidence, "determining_relation")?;
     let determining: Bound<'py, PyAny> = if relation.is_none() {
         relation
     } else {
@@ -52,21 +53,21 @@ pub(crate) fn future_cursor_safety<'py>(
                 ("relation", relation),
                 (
                     "cursor_column",
-                    evidence.getattr("determining_cursor_column")?,
+                    native_field(evidence, "determining_cursor_column")?,
                 ),
             ],
         )?
         .into_any()
     };
     let mut inputs: Vec<Bound<'py, PyDict>> = Vec::new();
-    for item in items(&evidence.getattr("inputs")?)? {
+    for item in items(&native_field(evidence, "inputs")?)? {
         inputs.push(dict(
             py,
             vec![
-                ("relation", item.getattr("relation")?),
-                ("cursor_column", item.getattr("cursor_column")?),
-                ("minimum", optional_render(item.getattr("minimum")?)?),
-                ("maximum", render(item.getattr("maximum")?)?),
+                ("relation", native_field(&item, "relation")?),
+                ("cursor_column", native_field(&item, "cursor_column")?),
+                ("minimum", optional_render(native_field(&item, "minimum")?)?),
+                ("maximum", render(native_field(&item, "maximum")?)?),
             ],
         )?);
     }
@@ -74,10 +75,10 @@ pub(crate) fn future_cursor_safety<'py>(
         py,
         vec![
             ("action", enum_value(evidence, "action")?),
-            ("max_distance", evidence.getattr("max_distance")?),
+            ("max_distance", native_field(evidence, "max_distance")?),
             (
                 "invocation_time",
-                render(evidence.getattr("invocation_time")?)?,
+                render(native_field(evidence, "invocation_time")?)?,
             ),
             (
                 "discovered_bounds",
@@ -93,11 +94,11 @@ pub(crate) fn future_cursor_safety<'py>(
             ),
             (
                 "future_start_detected",
-                evidence.getattr("future_start_detected")?,
+                native_field(evidence, "future_start_detected")?,
             ),
             (
                 "future_end_detected",
-                evidence.getattr("future_end_detected")?,
+                native_field(evidence, "future_end_detected")?,
             ),
             ("determining_input", determining),
             ("inputs", pyo3::types::PyList::new(py, inputs)?.into_any()),
@@ -118,34 +119,34 @@ pub(crate) fn maximum_start_safety<'py>(
         py,
         vec![
             ("action", enum_value(evidence, "action")?),
-            ("max_ahead", evidence.getattr("max_ahead")?),
+            ("max_ahead", native_field(evidence, "max_ahead")?),
             (
                 "invocation_time",
-                render(evidence.getattr("invocation_time")?)?,
+                render(native_field(evidence, "invocation_time")?)?,
             ),
             (
                 "physical_target_max",
-                render(evidence.getattr("physical_target_max")?)?,
+                render(native_field(evidence, "physical_target_max")?)?,
             ),
             (
                 "highest_eligible_target_max",
-                optional_render(evidence.getattr("highest_eligible_target_max")?)?,
+                optional_render(native_field(evidence, "highest_eligible_target_max")?)?,
             ),
             (
                 "effective_start",
-                render(evidence.getattr("effective_start")?)?,
+                render(native_field(evidence, "effective_start")?)?,
             ),
             (
                 "maximum_allowed_start",
-                render(evidence.getattr("maximum_allowed_start")?)?,
+                render(native_field(evidence, "maximum_allowed_start")?)?,
             ),
             (
                 "input",
                 dict(
                     py,
                     vec![
-                        ("relation", evidence.getattr("target_relation")?),
-                        ("cursor_column", evidence.getattr("cursor_column")?),
+                        ("relation", native_field(evidence, "target_relation")?),
+                        ("cursor_column", native_field(evidence, "cursor_column")?),
                     ],
                 )?
                 .into_any(),

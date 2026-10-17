@@ -16,6 +16,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const UTC_SUFFIX: &str = "Z";
 const UTC_OFFSET: &str = "+00:00";
@@ -125,7 +126,7 @@ pub(crate) fn now(py: Python<'_>) -> PyResult<UtcTime> {
 
 /// Whether a `datetime`'s `tzinfo` is exactly `UTC`.
 pub(crate) fn utc_zone(value: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(value.getattr("tzinfo")?.is(&utc(value.py())?))
+    Ok(native_field(value, "tzinfo")?.is(&utc(value.py())?))
 }
 
 /// `datetime.fromisoformat(text.replace("Z", "+00:00"))`, or `None` on `ValueError`.
@@ -157,25 +158,25 @@ fn texts(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 
 /// An `EventFilter`'s fields.
 pub(crate) fn event_filter_spec(value: &Bound<'_, PyAny>) -> PyResult<EventFilterSpec> {
-    let family: Bound<'_, PyAny> = value.getattr("family")?;
+    let family: Bound<'_, PyAny> = native_field(value, "family")?;
     Ok(EventFilterSpec {
-        invocation_id: optional_text(&value.getattr("invocation_id")?)?,
-        run_id: optional_text(&value.getattr("run_id")?)?,
-        producer: optional_text(&value.getattr("producer")?)?,
-        event_types: texts(&value.getattr("event_types")?)?,
+        invocation_id: optional_text(&native_field(value, "invocation_id")?)?,
+        run_id: optional_text(&native_field(value, "run_id")?)?,
+        producer: optional_text(&native_field(value, "producer")?)?,
+        event_types: texts(&native_field(value, "event_types")?)?,
         family: if family.is_none() {
             None
         } else {
-            Some(family.getattr("value")?.extract()?)
+            Some(native_field(&family, "value")?.extract()?)
         },
-        occurred_at_start: filter_time(&value.getattr("occurred_at_start")?)?,
-        occurred_at_end: filter_time(&value.getattr("occurred_at_end")?)?,
+        occurred_at_start: filter_time(&native_field(value, "occurred_at_start")?)?,
+        occurred_at_end: filter_time(&native_field(value, "occurred_at_end")?)?,
     })
 }
 
 /// A `RunStatus` member's status.
 fn run_status(value: &Bound<'_, PyAny>) -> PyResult<RunStatus> {
-    let text: String = value.getattr("value")?.extract()?;
+    let text: String = native_field(value, "value")?.extract()?;
     parsed_status(value.py(), &text)
 }
 
@@ -199,10 +200,10 @@ pub(crate) fn run_filter_spec(value: &Bound<'_, PyAny>) -> PyResult<RunFilterSpe
         .map(|item| item.and_then(|item| run_status(&item)))
         .collect::<PyResult<_>>()?;
     Ok(RunFilterSpec {
-        invocation_id: optional_text(&value.getattr("invocation_id")?)?,
+        invocation_id: optional_text(&native_field(value, "invocation_id")?)?,
         statuses,
-        created_at_start: filter_time(&value.getattr("created_at_start")?)?,
-        created_at_end: filter_time(&value.getattr("created_at_end")?)?,
+        created_at_start: filter_time(&native_field(value, "created_at_start")?)?,
+        created_at_end: filter_time(&native_field(value, "created_at_end")?)?,
     })
 }
 
@@ -214,13 +215,13 @@ pub(crate) fn known_event(event: &Bound<'_, PyAny>) -> PyResult<bool> {
 /// The `event_id` a known event carries or an opaque envelope holds as a string.
 pub(crate) fn event_id_of(event: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if known_event(event)? {
-        return text_of(&event.getattr("event_id")?);
+        return text_of(&native_field(event, "event_id")?);
     }
     text_of(&raw_field(event, "event_id")?)
 }
 
 fn raw_field<'py>(event: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    event.getattr("raw")?.call_method1("get", (name,))
+    native_field(event, "raw")?.call_method1("get", (name,))
 }
 
 /// `lifecycle_event_to_json(event)`.
@@ -257,11 +258,11 @@ fn opaque_occurred_at(event: &Bound<'_, PyAny>) -> PyResult<Option<UtcTime>> {
 pub(crate) fn envelope_of(event: &Bound<'_, PyAny>) -> PyResult<EventEnvelope> {
     let mut envelope = EventEnvelope::default();
     if known_event(event)? {
-        envelope.schema_version = event.getattr("schema_version")?.extract()?;
+        envelope.schema_version = native_field(event, "schema_version")?.extract()?;
         for (slot, name) in envelope.text_fields.iter_mut().zip(ENVELOPE_TEXT_FIELDS) {
             *slot = optional_text(&event.getattr(name)?)?;
         }
-        envelope.occurred_at = Some(utc_time(&event.getattr("occurred_at")?)?);
+        envelope.occurred_at = Some(utc_time(&native_field(event, "occurred_at")?)?);
         return Ok(envelope);
     }
     envelope.schema_version =
@@ -275,23 +276,23 @@ pub(crate) fn envelope_of(event: &Bound<'_, PyAny>) -> PyResult<EventEnvelope> {
 
 /// A `StoredEvent` as projection reads it.
 pub(crate) fn projection_fact(stored: &Bound<'_, PyAny>) -> PyResult<ProjectionFact> {
-    let event: Bound<'_, PyAny> = stored.getattr("event")?;
+    let event: Bound<'_, PyAny> = native_field(stored, "event")?;
     let mut run: Option<RunFact> = None;
     if known_event(&event)? {
-        let run_id: Bound<'_, PyAny> = event.getattr("run_id")?;
+        let run_id: Bound<'_, PyAny> = native_field(&event, "run_id")?;
         if !run_id.is_none() {
             run = Some(RunFact {
                 run_id: run_id.extract()?,
-                invocation_id: event.getattr("invocation_id")?.extract()?,
-                event_type: event.getattr("event_type")?.extract()?,
-                occurred_at: utc_time(&event.getattr("occurred_at")?)?,
+                invocation_id: native_field(&event, "invocation_id")?.extract()?,
+                event_type: native_field(&event, "event_type")?.extract()?,
+                occurred_at: utc_time(&native_field(&event, "occurred_at")?)?,
             });
         }
     }
     Ok(ProjectionFact {
-        storage_order: stored.getattr("storage_order")?.extract()?,
-        cursor: stored.getattr("cursor")?.extract()?,
-        received_at: utc_time(&stored.getattr("received_at")?)?,
+        storage_order: native_field(stored, "storage_order")?.extract()?,
+        cursor: native_field(stored, "cursor")?.extract()?,
+        received_at: utc_time(&native_field(stored, "received_at")?)?,
         run,
     })
 }
@@ -306,16 +307,16 @@ pub(crate) fn run_row(record: &Bound<'_, PyAny>) -> PyResult<RunRow> {
         utc_time(&value).map(Some)
     };
     Ok(RunRow {
-        run_id: record.getattr("run_id")?.extract()?,
-        invocation_id: record.getattr("invocation_id")?.extract()?,
-        created_at: utc_time(&record.getattr("created_at")?)?,
-        status: run_status(&record.getattr("status")?)?,
-        is_complete: record.getattr("is_complete")?.is_truthy()?,
-        last_event_cursor: record.getattr("last_event_cursor")?.extract()?,
-        last_storage_order: record.getattr("last_storage_order")?.extract()?,
-        command: optional_text(&record.getattr("command")?)?,
-        target: optional_text(&record.getattr("target")?)?,
-        environment: optional_text(&record.getattr("environment")?)?,
+        run_id: native_field(record, "run_id")?.extract()?,
+        invocation_id: native_field(record, "invocation_id")?.extract()?,
+        created_at: utc_time(&native_field(record, "created_at")?)?,
+        status: run_status(&native_field(record, "status")?)?,
+        is_complete: native_field(record, "is_complete")?.is_truthy()?,
+        last_event_cursor: native_field(record, "last_event_cursor")?.extract()?,
+        last_storage_order: native_field(record, "last_storage_order")?.extract()?,
+        command: optional_text(&native_field(record, "command")?)?,
+        target: optional_text(&native_field(record, "target")?)?,
+        environment: optional_text(&native_field(record, "environment")?)?,
         started_at: optional_time("started_at")?,
         ended_at: optional_time("ended_at")?,
     })

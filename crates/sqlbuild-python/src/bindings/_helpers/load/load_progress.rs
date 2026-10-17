@@ -15,6 +15,7 @@ use crate::bindings::_helpers::build_progress::terminal::start_spinner;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -38,16 +39,16 @@ pub(crate) fn load_result_text(result: &Bound<'_, PyAny>) -> PyResult<LoadResult
     let log_kind: Bound<'_, PyAny> =
         host::entry(py, AdapterHost::LifeCycleEventKind)?.getattr("LOG")?;
     let mut log_messages: Vec<String> = Vec::new();
-    for event in result.getattr("lifecycle_events")?.try_iter()? {
+    for event in native_field(result, "lifecycle_events")?.try_iter()? {
         let event: Bound<'_, PyAny> = event?;
-        if event.getattr("kind")?.eq(&log_kind)? {
-            log_messages.push(event.getattr("content")?.extract()?);
+        if native_field(&event, "kind")?.eq(&log_kind)? {
+            log_messages.push(native_field(&event, "content")?.extract()?);
         }
     }
-    let duration: Bound<'_, PyAny> = result.getattr("duration_ms")?;
+    let duration: Bound<'_, PyAny> = native_field(result, "duration_ms")?;
     Ok(LoadResultText {
-        source_name: result.getattr("source_name")?.extract()?,
-        loader_name: result.getattr("loader_name")?.str()?.extract()?,
+        source_name: native_field(result, "source_name")?.extract()?,
+        loader_name: native_field(result, "loader_name")?.str()?.extract()?,
         resource_kind: result
             .getattr("resource_kind")?
             .getattr("value")?
@@ -58,15 +59,15 @@ pub(crate) fn load_result_text(result: &Bound<'_, PyAny>) -> PyResult<LoadResult
                 .getattr("value")?
                 .extract::<String>()?,
         ),
-        rows_loaded: result.getattr("rows_loaded")?.extract()?,
+        rows_loaded: native_field(result, "rows_loaded")?.extract()?,
         duration_ms: if duration.is_none() {
             None
         } else {
             Some(duration.extract()?)
         },
         log_messages,
-        error_message: optional_text(result.getattr("error_message")?)?,
-        warning_messages: result.getattr("warning_messages")?.extract()?,
+        error_message: optional_text(native_field(result, "error_message")?)?,
+        warning_messages: native_field(result, "warning_messages")?.extract()?,
     })
 }
 
@@ -212,7 +213,7 @@ impl LoadProgressReporter {
         Ok(Self {
             is_tty: stream.call_method0("isatty")?.is_truthy()?,
             stream: stream.unbind(),
-            write_lock: lines.getattr("lock")?.unbind(),
+            write_lock: native_field(&lines, "lock")?.unbind(),
             lines: lines.unbind(),
             style: CliStyle {
                 use_color: arguments.value("use_color")?.is_truthy()?,
@@ -237,7 +238,7 @@ impl LoadProgressReporter {
         {
             let mut state = reporter.state();
             state.active = Some(ActiveSource {
-                name: source.getattr("name")?.extract()?,
+                name: native_field(source, "name")?.extract()?,
                 resource_kind: if loader_node { "loader" } else { "source" }.to_owned(),
             });
             state.message = String::new();
@@ -266,7 +267,7 @@ impl LoadProgressReporter {
         if !self.is_tty {
             return Ok(());
         }
-        let name: String = source.getattr("name")?.extract()?;
+        let name: String = native_field(source, "name")?.extract()?;
         {
             let mut state = self.state();
             match &state.active {

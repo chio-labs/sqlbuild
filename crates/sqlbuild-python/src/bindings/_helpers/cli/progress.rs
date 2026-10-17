@@ -17,6 +17,7 @@ use sqlbuild_core::progress::models::{
 use sqlbuild_core::terminal_events::models::TerminalRequest;
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;
 
@@ -121,13 +122,13 @@ fn optional_text(event: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String
 /// The facts of one lifecycle event that progress projection reads.
 fn progress_event(event: &Bound<'_, PyAny>) -> PyResult<ProgressEvent> {
     Ok(ProgressEvent {
-        event_id: event.getattr("event_id")?.extract()?,
-        event_type: event.getattr("event_type")?.extract()?,
+        event_id: native_field(event, "event_id")?.extract()?,
+        event_type: native_field(event, "event_type")?.extract()?,
         resource_id: optional_text(event, "resource_id")?,
         resource_attempt_id: optional_text(event, "resource_attempt_id")?,
         operation_id: optional_text(event, "operation_id")?,
         statement_id: optional_text(event, "statement_id")?,
-        payload: progress_payload(&event.getattr("payload")?)?,
+        payload: progress_payload(&native_field(event, "payload")?)?,
     })
 }
 
@@ -174,7 +175,7 @@ impl NativeProgressProjector {
         update: impl FnOnce(ProgressProjection) -> (ProgressProjection, Vec<String>, T),
     ) -> PyResult<T> {
         let coordinator: &Bound<'_, PyAny> = self.coordinator.bind(py);
-        let lock: Bound<'_, PyAny> = coordinator.getattr("lock")?;
+        let lock: Bound<'_, PyAny> = native_field(coordinator, "lock")?;
         lock.call_method0("acquire")?;
         let result: PyResult<T> = (|| {
             let (lines, value) = {
@@ -322,11 +323,11 @@ pub(crate) fn current_native_progress_projector(py: Python<'_>) -> PyResult<Boun
 #[pyfunction]
 fn machine_output_mode(args: &Bound<'_, PyAny>) -> PyResult<bool> {
     let mut dbt_args: Vec<String> = Vec::new();
-    for arg in args.getattr("dbt_args")?.try_iter()? {
+    for arg in native_field(args, "dbt_args")?.try_iter()? {
         dbt_args.push(arg?.str()?.extract()?);
     }
     Ok(output_mode(&OutputModeFacts {
-        json: args.getattr("json")?.is_truthy()?,
+        json: native_field(args, "json")?.is_truthy()?,
         command: optional_text(args, "command")?,
         lineage_format: optional_text(args, "lineage_format")?,
         query_format: optional_text(args, "query_format")?,
