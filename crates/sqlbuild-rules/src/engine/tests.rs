@@ -10,6 +10,8 @@ mod helpers;
 mod incremental_rules;
 #[path = "tests/test_scope_facts.rs"]
 mod scope_facts;
+#[path = "tests/test_speculative_rows.rs"]
+mod speculative_rows;
 #[path = "tests/test_sql_scanning.rs"]
 mod sql_scanning;
 #[path = "tests/test_sql_test_rules.rs"]

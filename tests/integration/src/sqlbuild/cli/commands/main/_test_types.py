@@ -165,6 +165,16 @@ class RulesIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class EmptyRuleSelectionTestCase:
+    """A compile that selects no rules, with the Rules configuration it still validates."""
+
+    description: str
+    configuration: str
+    expected_exit_code: int
+    expected_messages: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CustomHostSplitIntegrationTestCase:
     """A compile whose custom rules run on several hosts and must match one host."""
 
@@ -1138,3 +1148,32 @@ class ProviderAnnotationToleranceTestCase:
     annotation: str
     expected_exit_code: int
     expected_annotation_class_name: str | None
+
+
+@dataclass(frozen=True)
+class FirstModelErrorTestCase:
+    """Model files in path order and the one error compile reports for them."""
+
+    description: str
+    models: dict[str, str]
+    expected_message: str
+
+
+@dataclass(frozen=True)
+class HeaderColumnAuditBuildTestCase:
+    """Accepted values of a second model and whether its audits pass in DuckDB."""
+
+    description: str
+    accepted_values: str
+    expected_exit_code: int
+    expected_failed_models: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TemplatedHeaderDiagnosticsTestCase:
+    """A second model's templated column and where the first model's diagnostic points."""
+
+    description: str
+    amount_type: str
+    amount_description: str
+    expected_location: dict[str, object]

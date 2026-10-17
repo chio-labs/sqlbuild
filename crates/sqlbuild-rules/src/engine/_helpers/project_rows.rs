@@ -18,11 +18,11 @@ pub(crate) fn model_row(facts: &CompiledModelFacts) -> Result<ModelRow, String> 
     Ok(ModelRow {
         name: facts.name.clone(),
         relative_path: facts.relative_path.clone(),
-        query_sql: facts.query_sql.clone(),
+        query_sql: facts.query_sql.to_string(),
         authored_sql: if facts.authored_query_sql.is_empty() {
-            facts.authored_sql.clone()
+            facts.authored_sql.to_string()
         } else {
-            facts.authored_query_sql.clone()
+            facts.authored_query_sql.to_string()
         },
         config: facts.config.values.clone(),
         authored_config_keys: facts.config.header_keys.clone(),

@@ -30,6 +30,8 @@ use crate::bindings::_helpers::semantic_checks::type_recovery::items;
 use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 use crate::bindings::types::CompilerDetach;
 
+/// `SqlReferenceKind.UDF` and `SqlReferenceKind.TABLE_FUNCTION` values.
+const FUNCTION_REFERENCE_KINDS: [&str; 2] = ["udf", "table_fn"];
 const METADATA_CONFIG_KEYS: [&str; 4] = [
     "unique_key",
     "cursor",
@@ -444,18 +446,32 @@ fn metadata_model(classes: &StageClasses<'_>, model: &Bound<'_, PyAny>) -> PyRes
             upstreams.push((upstream.str()?.extract()?, column_names(&columns)?));
         }
     }
-    let mut calls_functions: bool = false;
-    for reference in native_field(model, "references")?.try_iter()? {
-        let kind: Bound<'_, PyAny> = native_field(&reference?, "ref_kind")?;
-        if kind.eq(&classes.udf_kind)? || kind.eq(&classes.table_function_kind)? {
-            calls_functions = true;
-            break;
+    let (name, query_sql, authored_sql, calls_functions) = match model.cast::<NativeCompiledModel>()
+    {
+        Ok(native) => native
+            .get()
+            .metadata_texts(model.py(), &FUNCTION_REFERENCE_KINDS)?,
+        Err(_) => {
+            let mut calls_functions: bool = false;
+            for reference in native_field(model, "references")?.try_iter()? {
+                let kind: Bound<'_, PyAny> = native_field(&reference?, "ref_kind")?;
+                if kind.eq(&classes.udf_kind)? || kind.eq(&classes.table_function_kind)? {
+                    calls_functions = true;
+                    break;
+                }
+            }
+            (
+                native_field(model, "name")?.extract()?,
+                native_field(model, "query_sql")?.extract()?,
+                native_field(model, "authored_sql")?.extract()?,
+                calls_functions,
+            )
         }
-    }
+    };
     Ok(MetadataModel {
-        name: native_field(model, "name")?.extract()?,
-        query_sql: native_field(model, "query_sql")?.extract()?,
-        authored_sql: native_field(model, "authored_sql")?.extract()?,
+        name,
+        query_sql,
+        authored_sql,
         checked: checked(classes, model)?,
         calls_functions,
         references,
@@ -480,8 +496,7 @@ fn metadata_audits(model: &Bound<'_, PyAny>) -> PyResult<Vec<MetadataAudit>> {
                 attached.push((None, audit));
             }
             for (index, name) in audited {
-                let column: Bound<'_, PyAny> = columns.bind(py).get_item(index)?;
-                for audit in native_field(&column, "audits")?.try_iter()? {
+                for audit in columns.specs[index].field(py, "audits")?.try_iter()? {
                     attached.push((Some(name.clone()), audit?));
                 }
             }

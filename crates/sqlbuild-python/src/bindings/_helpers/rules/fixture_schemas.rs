@@ -41,11 +41,11 @@ fn model_file_view<'py>(model: &Bound<'py, PyAny>) -> PyResult<ModelFileView<'py
     let py = model.py();
     if let Ok(native) = model.cast::<NativeModelFile>() {
         let native: &NativeModelFile = native.get();
-        let (file_path, relative_path) = native.paths(py);
+        let (file_path, relative_path) = native.path_objects(py)?;
         return Ok(ModelFileView {
-            file_path: file_path.clone(),
-            relative_path: relative_path.clone(),
-            header_values: native.header_value_dict(py).clone(),
+            file_path,
+            relative_path,
+            header_values: native.header_value_dict(py)?,
             header_column_locations: native.header_locations(py)?,
         });
     }

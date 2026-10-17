@@ -27,6 +27,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::constants::RULE_FIX_AVAILABLE_NOTE;
+use crate::bindings::_helpers::rules::early_builtin_rules::{EarlyRulesScope, EarlyRulesSettings};
 use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
 use crate::bindings::_helpers::rules::results::rules_progress;
 use crate::bindings::_helpers::rules::rule_dispatch::evaluate_rules;
@@ -150,7 +151,10 @@ pub(crate) fn analyze<'py>(
     let enabled: bool = !(native_field(selection, "select")?.is_truthy()?
         || native_field(selection, "exclude")?.is_truthy()?);
     let early_lint: Bound<'py, EarlySqlLint> = Bound::new(py, EarlySqlLint::new(enabled))?;
-    let analysis: PyResult<Bound<'py, PyAny>> = analyzed(py, &options, &early_lint);
+    let early_rules: EarlyRulesScope = EarlyRulesScope::new();
+    let analysis: PyResult<Bound<'py, PyAny>> =
+        analyzed(py, &options, (&early_lint, enabled.then_some(&early_rules)));
+    early_rules.stop(py);
     let _ = early_lint.borrow().stop(py);
     analysis
 }
@@ -172,11 +176,11 @@ struct ContractPhase<'py> {
     cpu_ms: i64,
 }
 
-/// `_analyze_compile_project`.
+/// `_analyze_compile_project`; `early_rules` is armed once the dialect is known, when present.
 fn analyzed<'py>(
     py: Python<'py>,
     options: &AnalysisOptions<'py>,
-    early_lint: &Bound<'py, EarlySqlLint>,
+    (early_lint, early_rules): (&Bound<'py, EarlySqlLint>, Option<&EarlyRulesScope>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let driver: Driver<'_, 'py> = Driver {
         py,
@@ -194,12 +198,22 @@ fn analyzed<'py>(
     } else {
         PyString::new(py, GENERIC_DIALECT).into_any()
     };
+    if let Some(early_rules) = early_rules {
+        early_rules.arm(EarlyRulesSettings {
+            project_dir: options.project_dir.extract()?,
+            dialect: lint_dialect.extract()?,
+            no_sql_analysis: options.no_sql_validation.is_truthy()?,
+        });
+    }
     let (graph, graph_ms): (Bound<'py, PyAny>, u64) =
         driver.graph((&discovered, &adapter), &lint_dialect)?;
     let project: Bound<'py, PyAny> = native_field(&graph, "project")?;
     let graph_failed: bool = any_error(&native_field(&project, "diagnostics")?)?;
     let mut early_lint_wait_ms: Bound<'py, PyAny> = 0_i64.into_pyobject(py)?.into_any();
     if graph_failed {
+        if let Some(early_rules) = early_rules {
+            early_rules.stop(py);
+        }
         early_lint_wait_ms = early_lint.borrow().stop(py)?.into_pyobject(py)?.into_any();
     }
     let (lineage, lineage_ms): (Bound<'py, PyAny>, u64) = driver.lineage(&graph, &dialect)?;

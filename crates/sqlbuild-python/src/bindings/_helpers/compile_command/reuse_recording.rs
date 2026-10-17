@@ -1,12 +1,15 @@
 //! What one full compile printed and left in each artifact, and storing it for compile reuse.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 use pyo3::exceptions::{PyException, PyOSError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
+
+use sqlbuild_core::posix_path::main::posix_abspath::posix_abspath;
 
 use crate::bindings::_helpers::compile_command::constants::{
     BYTES_PER_MEBIBYTE, REUSE_BYPASS_TIMING, REUSE_CHECK_TIMING, REUSE_HIT_TIMING,
@@ -101,11 +104,28 @@ impl CompileArtifactWrites {
 /// Where a compile notes the artifacts it writes; `None` outside a recorded compile.
 pub(crate) type ArtifactRecorder<'a> = Option<&'a Py<CompileArtifactWrites>>;
 
-/// `os.path.abspath(path)`.
+/// `os.path.abspath(path)`, computed natively on POSIX for UTF-8 paths and working directories.
 fn absolute(path: &Bound<'_, PyAny>) -> PyResult<String> {
-    imported(path.py(), "os.path", "abspath")?
+    absolute_path(path.py(), &path.extract::<PathBuf>()?)
+}
+
+/// `os.path.abspath(path)` of a native path.
+fn absolute_path(py: Python<'_>, path: &Path) -> PyResult<String> {
+    if cfg!(unix)
+        && let Some(found) = native_absolute(path)
+    {
+        return Ok(found);
+    }
+    imported(py, "os.path", "abspath")?
         .call1((path,))?
         .extract()
+}
+
+fn native_absolute(path: &Path) -> Option<String> {
+    let Ok(cwd) = std::env::current_dir() else {
+        return None;
+    };
+    Some(posix_abspath(cwd.to_str()?, path.to_str()?))
 }
 
 /// A new, empty recorder of one compile's artifact writes.
@@ -129,6 +149,23 @@ pub(crate) fn artifact_written(
     };
     recorder.get().record(
         absolute(path)?,
+        RecordedArtifact::Written(artifact_digest(contents)),
+    );
+    Ok(())
+}
+
+/// `artifact_written` for a native path.
+pub(crate) fn artifact_written_at(
+    py: Python<'_>,
+    recorder: ArtifactRecorder<'_>,
+    path: &Path,
+    contents: &[u8],
+) -> PyResult<()> {
+    let Some(recorder) = recorder else {
+        return Ok(());
+    };
+    recorder.get().record(
+        absolute_path(py, path)?,
         RecordedArtifact::Written(artifact_digest(contents)),
     );
     Ok(())

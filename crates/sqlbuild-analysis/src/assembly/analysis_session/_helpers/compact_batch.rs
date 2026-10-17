@@ -165,6 +165,7 @@ impl SessionCatalog {
         let mut shared: Vec<Option<SharedQuery>> = self.shared_queries(batch, &cleaned)?;
         self.shared_members += shared.iter().flatten().count();
         let mut query_digests: HashMap<&str, MemoKey> = HashMap::new();
+        let batch_digest: MemoKey = batch_key_digest(batch);
         let keys: Vec<Option<MemoKey>> = batch
             .members
             .iter()
@@ -174,7 +175,12 @@ impl SessionCatalog {
                 let query: MemoKey = *query_digests
                     .entry(share.key.as_str())
                     .or_insert_with(|| Sha256::digest(share.key.as_bytes()).into());
-                Some(shared_result_key(batch, member, share, &query))
+                Some(shared_result_key(
+                    batch,
+                    member,
+                    share,
+                    (&query, &batch_digest),
+                ))
             })
             .collect();
         for (member, sql) in batch.members.iter().zip(&cleaned) {
@@ -609,21 +615,23 @@ impl SessionCatalog {
                 }
             };
             query_indexes.push(query_index);
-            let template: Value = json!({
-                "queryIndex": query_index,
-                "references": lineage_resources(member, share.as_ref()),
-                "functionReturnTypes": function_return_types,
-                "declaredColumnOrder": declared_column_order(member, batch.nullability),
-                "recoverCteFacts": member.recover_cte_facts,
-                "richTypeInference": batch.rich_type_inference,
-            });
-            let template_index: usize =
-                *template_keys
-                    .entry(template.to_string())
-                    .or_insert_with(|| {
-                        templates.push(template);
-                        templates.len() - 1
-                    });
+            let references: Map<String, Value> = lineage_resources(member, share.as_ref());
+            let declared: Value = json!(declared_column_order(member, batch.nullability));
+            let member_template_identity: String =
+                json!([query_index, references, declared, member.recover_cte_facts]).to_string();
+            let template_index: usize = *template_keys
+                .entry(member_template_identity)
+                .or_insert_with(|| {
+                    templates.push(json!({
+                        "queryIndex": query_index,
+                        "references": references,
+                        "functionReturnTypes": function_return_types,
+                        "declaredColumnOrder": declared,
+                        "recoverCteFacts": member.recover_cte_facts,
+                        "richTypeInference": batch.rich_type_inference,
+                    }));
+                    templates.len() - 1
+                });
             let resource_names: Map<String, Value> = member
                 .lineage_references
                 .iter()
@@ -897,12 +905,19 @@ fn named_sources(
         .collect()
 }
 
-/// Digest of Python's `shared_result_keys` entry, given its shared query's digest.
+/// Digest of the settings every member of `batch` shares, hashed once per batch.
+fn batch_key_digest(batch: &Batch<'_>) -> MemoKey {
+    let shared: String =
+        json!([batch.rich_type_inference, batch.function_return_types]).to_string();
+    Sha256::digest(shared.as_bytes()).into()
+}
+
+/// Digest of Python's `shared_result_keys` entry, given its shared query's and batch's digests.
 fn shared_result_key(
     batch: &Batch<'_>,
     member: &BatchMember<'_>,
     share: &SharedQuery,
-    query: &MemoKey,
+    (query, batch_digest): (&MemoKey, &MemoKey),
 ) -> MemoKey {
     let reference_types: Vec<(&str, &str)> = member
         .lineage_references
@@ -911,14 +926,13 @@ fn shared_result_key(
         .collect();
     let rest: String = json!([
         member.recover_cte_facts,
-        batch.rich_type_inference,
-        batch.function_return_types,
         declared_column_order(member, batch.nullability),
         reference_types,
     ])
     .to_string();
     let mut hasher: Sha256 = Sha256::new();
     hasher.update(query);
+    hasher.update(batch_digest);
     hasher.update(rest.as_bytes());
     hasher.finalize().into()
 }

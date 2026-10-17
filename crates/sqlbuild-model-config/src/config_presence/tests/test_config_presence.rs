@@ -2,8 +2,12 @@ use crate::config_presence::_helpers::macro_calls::macro_call;
 use crate::config_presence::_helpers::scan::scan;
 use crate::config_presence::main::blocks_config_reuse::blocks_config_reuse;
 use crate::config_presence::main::contains_template::contains_template;
+use crate::config_presence::main::entry_macro_path::entry_macro_path;
 use crate::config_presence::main::mutable_config_value::mutable_config_value;
-use crate::config_presence::tests::test_types::{PresenceTestCase, ReuseTestCase};
+use crate::config_presence::models::MacroPath;
+use crate::config_presence::tests::test_types::{
+    EntryMacroPathTestCase, PresenceTestCase, ReuseTestCase,
+};
 use crate::tests::test_types::Value;
 
 #[test]
@@ -142,6 +146,54 @@ fn given_config_values_when_checking_reuse_then_python_answers_are_returned() {
                 mutable_config_value(&test_case.value)
             ),
             (test_case.expected_blocks_reuse, test_case.expected_mutable),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_config_entries_when_walking_for_macros_then_the_first_path_matches_python() {
+    let test_cases = [
+        EntryMacroPathTestCase {
+            description: "a plain scalar holds no macro",
+            key: Value::Str("materialized"),
+            value: Value::Str("table"),
+            expected_path: MacroPath::Absent,
+        },
+        EntryMacroPathTestCase {
+            description: "a nested mapping names every key down to the string",
+            key: Value::Str("columns"),
+            value: Value::Map(vec![(
+                Value::Str("id"),
+                Value::Map(vec![
+                    (Value::Str("type"), Value::Str("INTEGER")),
+                    (Value::Str("description"), Value::Str("@cents(id)")),
+                ]),
+            )]),
+            expected_path: MacroPath::Found(vec![
+                "columns".to_owned(),
+                "id".to_owned(),
+                "description".to_owned(),
+            ]),
+        },
+        EntryMacroPathTestCase {
+            description: "list items report the path of the list",
+            key: Value::Str("tags"),
+            value: Value::List(vec![Value::Str("daily"), Value::Str("@later()")]),
+            expected_path: MacroPath::Found(vec!["tags".to_owned()]),
+        },
+        EntryMacroPathTestCase {
+            description: "a mapping key that is not a string is skipped",
+            key: Value::Str("config"),
+            value: Value::Map(vec![(Value::Int(1), Value::Str("@skipped()"))]),
+            expected_path: MacroPath::Absent,
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            entry_macro_path(&test_case.key, &test_case.value),
+            test_case.expected_path,
             "{}",
             test_case.description
         );

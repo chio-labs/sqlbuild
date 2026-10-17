@@ -131,6 +131,14 @@ impl NativeCompiledProject {
         &self.facts
     }
 
+    /// A project holding only `facts`, which analyses can be recorded into apart from the compile's.
+    pub(crate) fn with_facts(facts: CompiledProjectFacts) -> Self {
+        Self {
+            facts,
+            ..Self::default()
+        }
+    }
+
     /// Retain facts a producer finished natively.
     pub(crate) fn retain(&mut self, facts: CompiledModelFacts) {
         record_model(&mut self.facts, facts);
@@ -162,12 +170,10 @@ impl NativeCompiledProject {
             };
             owners.push(model_owner(
                 record.name.clone(),
-                native_field(record.model_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
-                    .str()?
-                    .to_string(),
+                record.model_file.get().relative_text(py)?,
                 (
                     schema.audits.bind(py),
-                    (schema.columns.bind(py), &fact.columns),
+                    (schema.columns.as_ref(), &fact.columns),
                 ),
             )?);
         }
@@ -443,9 +449,7 @@ impl NativeCompiledProject {
             .iter()
             .map(|record| {
                 Ok((
-                    native_field(record.model_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
-                        .str()?
-                        .to_string(),
+                    record.model_file.get().relative_text(py)?,
                     record.references.clone(),
                 ))
             })
@@ -626,9 +630,9 @@ pub(crate) fn model_facts(model: ModelInputPy<'_>) -> PyResult<CompiledModelFact
     Ok(CompiledModelFacts {
         name,
         relative_path,
-        query_sql,
-        authored_query_sql,
-        authored_sql,
+        query_sql: query_sql.into(),
+        authored_query_sql: authored_query_sql.into(),
+        authored_sql: authored_sql.into(),
         config: ModelConfigFacts {
             values: config_values.0,
             encoding_error: config_values.1,

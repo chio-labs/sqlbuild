@@ -24,6 +24,8 @@ use crate::bindings::_helpers::scopes::scope_objects::{
 type PyObject = Py<PyAny>;
 
 const PATHLIB_MODULE: &str = "pathlib";
+/// The error `plain_value` raises for an integer outside 64 bits.
+const WIDE_INTEGER: &str = "Integer exceeds 64-bit range";
 
 fn texts(item: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<String>> {
     native_field(item, name)?
@@ -128,6 +130,47 @@ pub(crate) fn json_to_python(py: Python<'_>, value: JsonValue, tuples: bool) -> 
             dictionary.into_py_any(py)
         }
     }
+}
+
+/// `plain_value(int(integer))`: a 64-bit signed or unsigned number, else the wide-integer error.
+fn plain_integer(integer: &JsonInteger) -> PyResult<serde_json::Value> {
+    let Some(number) = integer.to_i128() else {
+        return Err(PyValueError::new_err(WIDE_INTEGER));
+    };
+    if let Ok(signed) = i64::try_from(number) {
+        return Ok(serde_json::Value::from(signed));
+    }
+    match u64::try_from(number) {
+        Ok(unsigned) => Ok(serde_json::Value::from(unsigned)),
+        Err(_) => Err(PyValueError::new_err(WIDE_INTEGER)),
+    }
+}
+
+/// `plain_value(json_to_python(value, False))` computed without building the Python value.
+pub(crate) fn json_to_plain(value: JsonValue) -> PyResult<serde_json::Value> {
+    Ok(match value {
+        JsonValue::Null => serde_json::Value::Null,
+        JsonValue::Bool(flag) => serde_json::Value::Bool(flag),
+        JsonValue::Integer(integer) => plain_integer(&integer)?,
+        JsonValue::Float(number) => serde_json::Number::from_f64(number)
+            .map_or(serde_json::Value::Null, serde_json::Value::Number),
+        JsonValue::String(text) => serde_json::Value::String(text),
+        JsonValue::Utf16(units) => serde_json::Value::String(String::from_utf16_lossy(&units)),
+        JsonValue::Array(items) => serde_json::Value::Array(
+            items
+                .into_iter()
+                .map(json_to_plain)
+                .collect::<PyResult<_>>()?,
+        ),
+        JsonValue::Object(entries) => {
+            let mut object: std::collections::BTreeMap<String, serde_json::Value> =
+                std::collections::BTreeMap::new();
+            for (key, item) in entries {
+                let _replaced = object.insert(key, json_to_plain(item)?);
+            }
+            serde_json::Value::Object(object.into_iter().collect())
+        }
+    })
 }
 
 /// `_value` of one metadata value; an unsupported type is the error Python's serializer raises.

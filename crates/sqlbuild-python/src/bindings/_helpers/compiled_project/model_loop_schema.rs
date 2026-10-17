@@ -1,5 +1,6 @@
 //! A model's `model_schema`: resolved, checked for visibility, and merged into its header columns.
 
+use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
@@ -7,6 +8,7 @@ use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, compile_error};
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::present;
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_fact;
+use crate::bindings::_helpers::model_config::header_metadata::HeaderColumn;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MODEL_SCHEMA_KEY: &str = "model_schema";
@@ -15,21 +17,11 @@ const TYPE_FIELD: &str = "type";
 const NULLABLE_FIELD: &str = "nullable";
 const DESCRIPTION_FIELD: &str = "description";
 const AUDITS_FIELD: &str = "audits";
-const MIGRATE_FROM_FIELD: &str = "migrate_from";
 const LOCATION_FIELD: &str = "location";
 const PATH_FIELD: &str = "path";
 const LINE_FIELD: &str = "line";
 const COLUMNS_FIELD: &str = "columns";
 const STRIP_METHOD: &str = "strip";
-/// `SchemaColumn` fields a named-schema column keeps when a header column augments it.
-const KEPT_NAMED_FIELDS: [&str; 6] = [
-    "name",
-    "type",
-    "nullable",
-    "description",
-    "meta",
-    "location",
-];
 
 /// The reusable schema a model names: its columns, name, description and enum column types.
 pub(crate) struct ModelSchema<'py> {
@@ -101,8 +93,8 @@ pub(crate) fn schema_enums<'py>(
 }
 
 /// Schema columns as Python specs paired with their native facts, in declaration order.
-pub(crate) struct DeclaredColumns<'py> {
-    pub(crate) specs: Vec<Bound<'py, PyAny>>,
+pub(crate) struct DeclaredColumns {
+    pub(crate) specs: Vec<HeaderColumn>,
     pub(crate) facts: Vec<SchemaColumnFact>,
 }
 
@@ -110,11 +102,11 @@ pub(crate) struct DeclaredColumns<'py> {
 pub(crate) fn merged_columns<'py>(
     context: &LoopContext<'_, 'py>,
     schema: &ModelSchema<'py>,
-    local: DeclaredColumns<'py>,
+    local: DeclaredColumns,
     model: (&str, &str, &Bound<'py, PyAny>),
-) -> PyResult<DeclaredColumns<'py>> {
+) -> PyResult<DeclaredColumns> {
     let (model_name, relative_path, model_path) = model;
-    let mut merged: DeclaredColumns<'py> = DeclaredColumns {
+    let mut merged: DeclaredColumns = DeclaredColumns {
         specs: Vec::new(),
         facts: Vec::new(),
     };
@@ -123,14 +115,14 @@ pub(crate) fn merged_columns<'py>(
         merged
             .facts
             .push(python_column_fact(&column, Some(model_path))?);
-        merged.specs.push(column);
+        merged.specs.push(HeaderColumn::from_python(column)?);
     }
     let keys: Vec<String> = merged
         .facts
         .iter()
         .map(|fact| fact.name.to_lowercase())
         .collect();
-    let mut additional: DeclaredColumns<'py> = DeclaredColumns {
+    let mut additional: DeclaredColumns = DeclaredColumns {
         specs: Vec::new(),
         facts: Vec::new(),
     };
@@ -162,15 +154,17 @@ pub(crate) fn merged_columns<'py>(
 
 fn augmented<'py>(
     context: &LoopContext<'_, 'py>,
-    (named, named_fact): (&Bound<'py, PyAny>, &SchemaColumnFact),
-    (local, local_fact): (&Bound<'py, PyAny>, SchemaColumnFact),
-) -> PyResult<(Bound<'py, PyAny>, SchemaColumnFact)> {
-    let py: Python<'py> = named.py();
-    let mut audits: Vec<Bound<'py, PyAny>> = native_field(named, AUDITS_FIELD)?
+    (named, named_fact): (&HeaderColumn, &SchemaColumnFact),
+    (local, local_fact): (&HeaderColumn, SchemaColumnFact),
+) -> PyResult<(HeaderColumn, SchemaColumnFact)> {
+    let py: Python<'py> = context.contracts.schema_column.py();
+    let mut audits: Vec<Bound<'py, PyAny>> = named
+        .field(py, AUDITS_FIELD)?
         .try_iter()?
         .collect::<PyResult<_>>()?;
     let mut fact: SchemaColumnFact = named_fact.clone();
-    for (audit, definition) in native_field(local, AUDITS_FIELD)?
+    for (audit, definition) in local
+        .field(py, AUDITS_FIELD)?
         .try_iter()?
         .zip(local_fact.audit_definitions)
     {
@@ -187,15 +181,23 @@ fn augmented<'py>(
             fact.audit_definitions.push(definition);
         }
     }
-    let fields: Bound<'py, PyDict> = PyDict::new(py);
-    for field in KEPT_NAMED_FIELDS {
-        fields.set_item(field, native_field(named, field)?)?;
-    }
-    fields.set_item(AUDITS_FIELD, PyTuple::new(py, audits)?)?;
-    fields.set_item(MIGRATE_FROM_FIELD, &local_fact.migrate_from)?;
+    let migrate_from = local_fact.migrate_from.clone().into_bound_py_any(py)?;
     fact.migrate_from = local_fact.migrate_from;
     Ok((
-        context.contracts.schema_column.call((), Some(&fields))?,
+        HeaderColumn::replaced(
+            &context.contracts.schema_column,
+            [
+                named.field(py, NAME_FIELD)?,
+                named.field(py, TYPE_FIELD)?,
+                named.field(py, NULLABLE_FIELD)?,
+                named.field(py, DESCRIPTION_FIELD)?,
+                named.field(py, "meta")?,
+                PyTuple::new(py, audits)?.into_any(),
+                named.field(py, LOCATION_FIELD)?,
+                migrate_from,
+            ],
+            [0, 1, 2, 3, 4, 6, 5, 7],
+        )?,
         fact,
     ))
 }
@@ -204,7 +206,7 @@ fn augmented<'py>(
 fn check_augmentation(
     context: &LoopContext<'_, '_>,
     local: &SchemaColumnFact,
-    named: &Bound<'_, PyAny>,
+    named: &HeaderColumn,
     model: (&str, &str),
 ) -> PyResult<()> {
     let (model_name, relative_path) = model;
@@ -224,7 +226,7 @@ fn check_augmentation(
             "model '{model_name}' in {relative_path} cannot override {} for named-schema column \
              '{name}' from {}; only audit augmentation is supported",
             overridden.join(", "),
-            origin(named)?
+            origin(&named.project(context.contracts.schema_column.py())?)?
         );
         return Err(compile_error(context.classes, &message, None));
     }
@@ -233,7 +235,7 @@ fn check_augmentation(
             "model '{model_name}' in {relative_path} redeclares named-schema column '{name}' from \
              {} without audits or migrate_from; only audit augmentation and column \
              migrations are supported",
-            origin(named)?
+            origin(&named.project(context.contracts.schema_column.py())?)?
         );
         return Err(compile_error(context.classes, &message, None));
     }

@@ -51,7 +51,7 @@ fn given_recorded_models_when_reading_then_order_and_latest_facts_are_kept() {
             .map(|facts| facts.name.as_str())
             .collect();
         let query_sql: Option<&str> =
-            model_facts(&project, "orders").map(|facts| facts.query_sql.as_str());
+            model_facts(&project, "orders").map(|facts| &*facts.query_sql);
 
         assert_eq!(order, test_case.expected_order, "{}", test_case.description);
         assert_eq!(

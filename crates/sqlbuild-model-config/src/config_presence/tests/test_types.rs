@@ -1,3 +1,4 @@
+use crate::config_presence::models::MacroPath;
 use crate::tests::test_types::Value;
 
 /// One authored config value and what each recursive scan finds in it.
@@ -14,4 +15,12 @@ pub(super) struct ReuseTestCase {
     pub(super) value: Value,
     pub(super) expected_blocks_reuse: bool,
     pub(super) expected_mutable: bool,
+}
+
+/// One top-level config entry and the macro path the walk reports for it.
+pub(super) struct EntryMacroPathTestCase {
+    pub(super) description: &'static str,
+    pub(super) key: Value,
+    pub(super) value: Value,
+    pub(super) expected_path: MacroPath,
 }

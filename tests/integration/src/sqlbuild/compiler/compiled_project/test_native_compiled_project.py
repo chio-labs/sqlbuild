@@ -13,14 +13,17 @@ import pytest
 from sqlbuild._native import (
     InferredColumn,
     InvalidQualifiedIdentityError,
+    SchemaColumn,
+    SchemaModelEntry,
     build_compiled_project,
     discover_project_inputs,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.cli.entry.main.entry import main
 from sqlbuild.compiler.compile.exceptions import CompileInputError
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
+    HeaderProjectionTestCase,
     ImmediateSyntaxErrorTestCase,
     ModelLoopErrorTestCase,
     ModelLoopParityTestCase,
@@ -52,6 +55,49 @@ from tests.integration.src.sqlbuild.compiler.graph.helpers import ORDERS_PROJECT
 
 if TYPE_CHECKING:
     from sqlbuild._native import CompileInputsView
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HeaderProjectionTestCase(
+            "enum and factory audits", HEADER_CONTRACT_FILES, "order_statuses", ("status", "total")
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_header_contracts_when_compiling_then_columns_project_only_on_public_access(
+    test_case: HeaderProjectionTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    write_files(project_dir=tmp_path, files=test_case.files)
+    constructed: list[SchemaColumn] = []
+
+    def counted(self: SchemaColumn, *args: Any, **kwargs: Any) -> None:
+        # Native records initialize their fields in __new__.
+        object.__init__(self)
+        constructed.append(self)
+
+    monkeypatch.setattr(SchemaColumn, "__init__", counted)
+    project: CompiledProjectView = build_compiled_project(
+        discovered_inputs=discover_project_inputs(project_dir=tmp_path),
+        adapter=DuckDbAdapter(),
+        resolved_connection={"database": "warehouse", "schema": "main"},
+    )
+    assert constructed == []
+    models: dict[str, CompiledModelView] = {model.name: model for model in project.models}
+    model: CompiledModelView = models[test_case.model_name]
+    entry: SchemaModelEntry | None = model.schema_entry
+    assert entry is not None
+    columns: tuple[SchemaColumn, ...] = entry.columns
+    assert tuple(column.name for column in columns) == test_case.expected_columns
+    assert columns[0].type == "VARCHAR"
+    assert [audit.definition_name for audit in columns[0].audits] == ["not_null", "accepted_values"]
+    assert columns[0].audits[1].arguments == {"values": ("PLACED", "SHIPPED")}
+    assert entry.audits[0].name == "positive_total"
+    assert len(constructed) == 2
+    assert model.schema_entry is entry
+    assert model.schema_entry.columns is columns
+    assert pickle.loads(pickle.dumps(columns)) == columns
 
 
 @pytest.mark.parametrize(

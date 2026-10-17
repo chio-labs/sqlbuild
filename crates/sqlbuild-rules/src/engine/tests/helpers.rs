@@ -1,6 +1,16 @@
+use std::path::{Path, PathBuf};
+
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
+
+use std::sync::atomic::AtomicBool;
+
+use crate::engine::main::answer_speculative_rows::answer_speculative_rows;
+use crate::engine::main::discard_speculative_rows::discard_speculative_rows;
+use crate::models::{
+    EvaluateRequest, Fault, RowsEvaluation, RowsRequest, SpeculativeAnswer, SpeculativeRows,
+};
 
 use crate::engine::_helpers::evaluation::evaluate_json;
 use crate::engine::_helpers::evaluation::evaluate_request as evaluate_parsed;
@@ -479,4 +489,102 @@ pub(crate) fn cached_paths(project_dir: &TempDir) -> Result<Vec<String>, String>
         .as_object()
         .map(|entries| entries.keys().cloned().collect())
         .unwrap_or_default())
+}
+
+const SPECULATIVE_CODE_IDENTITY: &str = "speculative-rows-test-build";
+pub(crate) const SPECULATIVE_CACHE_FILE: &str = "target/rules-cache/bulk/native.json";
+const SPECULATIVE_MEMO_FILE: &str = "target/rules-cache/bulk/native-response.json";
+
+pub(crate) fn speculative_rows_request(
+    project_dir: &Path,
+    cache_enabled: bool,
+    models: &[Value],
+) -> Result<RowsRequest, String> {
+    let mut request: Value = speculative_request_json(project_dir, cache_enabled);
+    request["models"] = Value::Array(models.to_vec());
+    let request: EvaluateRequest =
+        serde_json::from_value(request).map_err(|error| error.to_string())?;
+    Ok(RowsRequest {
+        request,
+        memo: cache_enabled.then(|| {
+            (
+                SPECULATIVE_CODE_IDENTITY.to_owned(),
+                project_dir.join(SPECULATIVE_MEMO_FILE),
+            )
+        }),
+    })
+}
+
+fn speculative_request_json(project_dir: &Path, cache_enabled: bool) -> Value {
+    json!({
+        "version": 1,
+        "project_dir": project_dir,
+        "dialect": "duckdb",
+        "config": {"select": ["SQBR"], "domains": ["commerce"], "cache": {"enabled": cache_enabled}},
+        "models": [],
+        "defer_suppressions": true
+    })
+}
+
+pub(crate) fn changed_orders_models(query: Option<&str>) -> Vec<Value> {
+    let mut models: Vec<Value> = orders_models();
+    let query: Value = query.map_or_else(|| models[0]["query_sql"].clone(), |query| json!(query));
+    models[0]["query_sql"] = query.clone();
+    models[0]["authored_sql"] = query;
+    models
+}
+
+pub(crate) fn evaluation_summary(
+    evaluation: &RowsEvaluation,
+) -> (Vec<Fault>, Vec<String>, u64, u64, u64, bool) {
+    (
+        evaluation.faults.clone(),
+        evaluation.selected_codes.clone(),
+        evaluation.evaluated_models,
+        evaluation.cache_hits,
+        evaluation.cache_misses,
+        evaluation.reused,
+    )
+}
+
+pub(crate) fn written_rules_files(project_dir: &Path) -> Vec<PathBuf> {
+    [SPECULATIVE_CACHE_FILE, SPECULATIVE_MEMO_FILE]
+        .iter()
+        .map(|file| project_dir.join(file))
+        .filter(|path| path.is_file())
+        .collect()
+}
+
+/// Discard a speculation after it ran a while; it never reports stopping.
+pub(crate) fn discard_after_running(
+    speculative: SpeculativeRows,
+    _project_dir: &Path,
+) -> Result<bool, String> {
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    discard_speculative_rows(speculative);
+    Ok(false)
+}
+
+/// Answer beside a speculation once the rules run was cancelled; whether the answer stopped.
+pub(crate) fn answer_after_stop(
+    speculative: SpeculativeRows,
+    project_dir: &Path,
+) -> Result<bool, String> {
+    Ok(matches!(
+        answer_speculative_rows(
+            speculative,
+            speculative_rows_request(project_dir, true, &orders_models())?,
+            &AtomicBool::new(true),
+        ),
+        SpeculativeAnswer::Stopped
+    ))
+}
+
+/// Drop a speculation at once; it never reports stopping.
+pub(crate) fn drop_at_once(
+    speculative: SpeculativeRows,
+    _project_dir: &Path,
+) -> Result<bool, String> {
+    drop(speculative);
+    Ok(false)
 }

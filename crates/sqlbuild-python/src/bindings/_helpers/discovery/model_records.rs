@@ -1,15 +1,18 @@
 //! SQL model files discovered natively and built as Python discovery records.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::types::{PyDict, PyString, PyTuple};
+use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_discovery::model_files::main::discover_model_files::discover_model_files as discover_models;
+use sqlbuild_discovery::model_files::main::model_file_stem::model_file_stem;
 use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOptions};
 use sqlbuild_discovery::models::{DiscoveredFile, FileOutcome, StageFailure};
+use std::path::Path;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
+use crate::bindings::_helpers::discovery::model_file_record::DiscoveredPaths;
 use crate::bindings::_helpers::discovery::project_files::{model_record, path_object};
 use crate::bindings::_helpers::discovery::raised::{failure_error, read_error, stage_error};
 use crate::bindings::_helpers::discovery::snapshot::{in_snapshot, project_root, project_tree};
@@ -20,8 +23,31 @@ use crate::bindings::models::NativeProjectTree;
 const PATHLIB_MODULE: &str = "pathlib";
 const STEM_ATTRIBUTE: &str = "stem";
 
-/// One discovered model file: its record, or the error building it raises.
-type ModelItem<'py> = (Bound<'py, PyAny>, PyResult<Bound<'py, PyAny>>);
+/// One discovered model file: its relative path and record, or the error building it raises.
+type ModelItem<'py> = (RelativePath<'py>, PyResult<Bound<'py, PyAny>>);
+
+/// A discovered file's relative path: native text, or the Python path already built for it.
+enum RelativePath<'py> {
+    Native(String),
+    Python(Bound<'py, PyAny>),
+}
+
+impl<'py> RelativePath<'py> {
+    fn object(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Self::Native(relative) => Path::new(relative).into_pyobject(py),
+            Self::Python(relative) => Ok(relative.clone()),
+        }
+    }
+
+    /// The model's name, its file stem.
+    fn name(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Self::Native(relative) => Ok(PyString::new(py, model_file_stem(relative)).into_any()),
+            Self::Python(relative) => native_field(relative, STEM_ATTRIBUTE),
+        }
+    }
+}
 
 /// Discover every model file natively, each as its record or the error it raises when built.
 fn model_items<'py>(
@@ -41,6 +67,15 @@ fn model_items<'py>(
         let path_class: Bound<'py, PyAny> = imported(py, PATHLIB_MODULE, "Path")?;
         let mut items: Vec<ModelItem<'py>> = Vec::with_capacity(files.len());
         for file in files {
+            let raw: bool = tree.get().inner.raw_relative(&file.relative_path).is_some();
+            if !raw && let FileOutcome::Parsed(model) = file.outcome {
+                let file_path: String = root.display_path(&file.relative_path);
+                let paths = DiscoveredPaths::Native(file.relative_path.clone(), file_path);
+                let built = model_record(py, model, paths, options.extract_implicit_alias_columns)?
+                    .map(|record| record.into_bound(py));
+                items.push((RelativePath::Native(file.relative_path), built));
+                continue;
+            }
             let relative_path: Bound<'py, PyAny> =
                 path_class.call1((path_object(py, &tree.get().inner, file.relative_path)?,))?;
             let file_path: Bound<'py, PyAny> = project_dir.div(&relative_path)?;
@@ -48,14 +83,14 @@ fn model_items<'py>(
                 FileOutcome::Parsed(model) => model_record(
                     py,
                     model,
-                    (file_path, relative_path.clone()),
+                    DiscoveredPaths::Python(file_path.unbind(), relative_path.clone().unbind()),
                     options.extract_implicit_alias_columns,
                 )?
                 .map(|record| record.into_bound(py)),
                 FileOutcome::Unreadable(failure) => Err(read_error(failure, &file_path)),
                 FileOutcome::Failed(failure) => Err(failure_error(py, failure)),
             };
-            items.push((relative_path, built));
+            items.push((RelativePath::Python(relative_path), built));
         }
         Ok(items)
     })
@@ -92,11 +127,16 @@ pub(crate) fn discovered_model_files<'py>(
     let mut records: Vec<Bound<'py, PyAny>> = Vec::with_capacity(items.len());
     for (relative_path, built) in items {
         if let Some(selected) = &selected
-            && !selected.contains(native_field(&relative_path, STEM_ATTRIBUTE)?)?
+            && !selected.contains(relative_path.name(py)?)?
         {
             continue;
         }
-        records.extend(faults.kept(&relative_path, built)?);
+        match built {
+            Ok(record) => records.push(record),
+            Err(error) => {
+                records.extend(faults.kept(&relative_path.object(py)?, Err(error))?);
+            }
+        }
     }
     record_tuple(py, records)
 }

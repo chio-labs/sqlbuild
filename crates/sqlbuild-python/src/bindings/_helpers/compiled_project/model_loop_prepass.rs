@@ -1,0 +1,69 @@
+//! Each model's native header facts, read before the ordered loop on a fixed pool off the GIL.
+
+use std::sync::{Arc, OnceLock};
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
+use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
+use sqlbuild_discovery::model_files::main::header_facts::header_facts;
+use sqlbuild_discovery::model_files::models::{EntryFacts, HeaderFacts};
+use sqlbuild_sqltext::compiler::models::AuthoredValue;
+
+use crate::bindings::_helpers::compiled_project::model_loop_host::ModelLoopRow;
+
+/// The compile pools' fixed worker count.
+const PREPASS_WORKERS: usize = 4;
+const WORKER_STACK_BYTES: usize = 16 * 1024 * 1024;
+
+static POOL: OnceLock<Result<ThreadPool, ThreadPoolBuildError>> = OnceLock::new();
+
+/// A model's native header values and the relative path parse messages name.
+pub(crate) type NativeHeader = (Arc<[(String, AuthoredValue)]>, String);
+
+/// An entry's facts only when its value is the header's own, so replaced values read from Python.
+pub(crate) fn own_entry<'a, 'py>(
+    facts: &'a HeaderFacts,
+    header: &Bound<'py, PyDict>,
+    (key, value): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<Option<&'a EntryFacts>> {
+    let Ok(name) = key.downcast::<PyString>() else {
+        return Ok(None);
+    };
+    let Ok(name) = name.to_str() else {
+        return Ok(None);
+    };
+    let Some(entry) = facts.entry(name) else {
+        return Ok(None);
+    };
+    Ok(header
+        .get_item(name)?
+        .filter(|own| own.is(value))
+        .map(|_| entry))
+}
+
+/// Each model's header facts on the compile pool, or in turn when the pool cannot start.
+pub(crate) fn all_header_facts(headers: &[Option<NativeHeader>]) -> Vec<Option<HeaderFacts>> {
+    let pool: &Result<ThreadPool, ThreadPoolBuildError> = POOL.get_or_init(|| {
+        ThreadPoolBuilder::new()
+            .num_threads(PREPASS_WORKERS)
+            .stack_size(WORKER_STACK_BYTES)
+            .thread_name(|index| format!("sqlbuild-model-prepass-{index}"))
+            .build()
+    });
+    match pool {
+        Ok(pool) => pool.install(|| headers.par_iter().map(facts_of).collect()),
+        Err(_) => headers.iter().map(facts_of).collect(),
+    }
+}
+
+fn facts_of(header: &Option<NativeHeader>) -> Option<HeaderFacts> {
+    let (values, path) = header.as_ref()?;
+    Some(header_facts(values, path))
+}
+
+/// The row's native header values and relative path, unless Python constructed its file.
+pub(crate) fn native_header(row: &ModelLoopRow) -> Option<NativeHeader> {
+    let values: &Arc<[(String, AuthoredValue)]> = row.model_file.get().native_header_values()?;
+    Some((Arc::clone(values), row.paths.relative_path.clone()))
+}

@@ -27,7 +27,7 @@ pub(crate) fn parse_model_headers(
         .into_iter()
         .map(|(value, offsets, error)| {
             Ok((
-                optional_authored_value_to_python(py, value)?,
+                optional_authored_value_to_python(py, value.as_ref())?,
                 offsets,
                 error,
             ))

@@ -1,15 +1,8 @@
-//! The first config field, in Python's walk order, whose string holds a macro call.
+//! The walk `validate_no_macros_in_config_value` makes over nested config values.
 
 use crate::config_presence::_helpers::macro_calls::macro_call;
 use crate::config_presence::models::MacroPath;
 use crate::types::{AuthoredNode, NodeKind};
-
-/// Walk config values as `validate_no_macros_in_config_value` does, skipping the `skipped` keys.
-pub fn first_macro_path<N: AuthoredNode>(values: &N, skipped: &[&str]) -> MacroPath {
-    let mut entries = values.entries();
-    entries.retain(|(key, _)| !skipped.iter().any(|name| key.is_text(name)));
-    walk_entries(&entries, &[])
-}
 
 fn walk<N: AuthoredNode>(node: &N, path: &[String]) -> MacroPath {
     match node.kind() {
@@ -30,7 +23,8 @@ fn walk<N: AuthoredNode>(node: &N, path: &[String]) -> MacroPath {
     }
 }
 
-fn walk_entries<N: AuthoredNode>(entries: &[(N, N)], path: &[String]) -> MacroPath {
+/// The first macro path among `entries`, string keys only, each below `path`.
+pub(crate) fn walk_entries<N: AuthoredNode>(entries: &[(N, N)], path: &[String]) -> MacroPath {
     for (key, value) in entries {
         if key.kind() != NodeKind::Str {
             continue;

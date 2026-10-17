@@ -8,7 +8,7 @@ use pyo3::types::{
 };
 use pyo3::{PyErr, pyclass, pymethods};
 use sqlbuild_model_config::config_presence::main::contains_template::contains_template;
-use sqlbuild_model_config::config_presence::main::first_macro_path::first_macro_path;
+use sqlbuild_model_config::config_presence::main::entry_macro_path::entry_macro_path;
 use sqlbuild_model_config::config_presence::models::MacroPath;
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::model_validation::main::retention_override::retention_override;
@@ -21,6 +21,7 @@ use sqlbuild_model_config::types::AuthoredNode;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, built_config};
+use crate::bindings::_helpers::compiled_project::model_loop_prepass::own_entry;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
@@ -29,6 +30,7 @@ use crate::bindings::_helpers::model_config::config_templates::{
 };
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 use crate::bindings::_helpers::model_config::project_defaults::project_defaults_mapping;
+use sqlbuild_discovery::model_files::models::{EntryFacts, HeaderFacts};
 
 const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 /// Hook keys in the sorted order `validate_model_hook_config` checks them.
@@ -164,14 +166,14 @@ impl NativeModelConfigBuilder {
     ) -> PyResult<Py<PyAny>> {
         let (matched_path_default, model_name) = model;
         let matched_path_default: Option<&str> = matched_path_default.as_deref();
-        compiler_guard(
-            || match self.built(py, &header, matched_path_default, &model_name)? {
+        compiler_guard(|| {
+            match self.built(py, (&header, None), matched_path_default, &model_name)? {
                 ConfigBuild::Built(built) => {
                     Ok(built_config(&classes, &built, matched_path_default)?.unbind())
                 }
                 ConfigBuild::Rejected(error) => Ok(error.into_any()),
-            },
-        )
+            }
+        })
     }
 }
 
@@ -192,11 +194,11 @@ impl NativeModelConfigBuilder {
     pub(crate) fn built<'py>(
         &self,
         py: Python<'py>,
-        header: &Bound<'py, PyDict>,
+        (header, facts): (&Bound<'py, PyDict>, Option<&HeaderFacts>),
         matched_path_default: Option<&str>,
         model_name: &str,
     ) -> PyResult<ConfigBuild<'py>> {
-        match self.build_config(py, header, matched_path_default, model_name) {
+        match self.build_config(py, (header, facts), matched_path_default, model_name) {
             Ok(built) => Ok(ConfigBuild::Built(built)),
             Err(Halt::Config(error)) => Ok(ConfigBuild::Rejected(native_config_error(py, error)?)),
             Err(Halt::Error(error)) => Err(error),
@@ -290,10 +292,11 @@ impl NativeModelConfigBuilder {
     fn build_config<'py>(
         &self,
         py: Python<'py>,
-        header: &Bound<'py, PyDict>,
+        input: HeaderInput<'_, 'py>,
         matched_path_default: Option<&str>,
         model_name: &str,
     ) -> Built<BuiltConfig<'py>> {
+        let header: &Bound<'py, PyDict> = input.0;
         check_header_tags(header, model_name)?;
         let path_values = matched_path_default
             .map(|key| self.path_default_values(py, key))
@@ -311,7 +314,7 @@ impl NativeModelConfigBuilder {
                 layered.del_item(key)?;
             }
         }
-        let has_templates = contains_template(&PyNode(layered.clone().into_any()));
+        let has_templates = templated(input, &layered)?;
         let mut expansion = Expansion {
             builder: self,
             py,
@@ -380,7 +383,7 @@ impl NativeModelConfigBuilder {
             header.get_item(TABLE_TYPE_KEY)?.map(PyNode).as_ref(),
             model_name,
         )?;
-        check_no_config_macros(&values)?;
+        check_no_config_macros(input, &values)?;
         Ok(BuiltConfig {
             values,
             header_keys: sorted_keys(header)?,
@@ -765,15 +768,58 @@ fn storage_free_values<'py>(
     Ok(values)
 }
 
-/// Raise for the first config field outside hooks holding a macro call, as Python's walk does.
-fn check_no_config_macros(values: &Bound<'_, PyDict>) -> Built<()> {
-    match first_macro_path(&PyNode(values.clone().into_any()), &HOOK_KEYS) {
-        MacroPath::Absent => Ok(()),
-        MacroPath::Found(path) => Err(Halt::Config(ConfigError::compile(format!(
-            "model config field '{}' does not allow macros",
-            path.join(".")
-        )))),
+/// A model's authored header and, when it was read natively, the header's facts.
+type HeaderInput<'a, 'py> = (&'a Bound<'py, PyDict>, Option<&'a HeaderFacts>);
+
+/// The facts of a config entry whose value is the header's own.
+fn header_entry<'a, 'py>(
+    (header, facts): HeaderInput<'a, 'py>,
+    entry: (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<Option<&'a EntryFacts>> {
+    match facts {
+        Some(facts) => own_entry(facts, header, entry),
+        None => Ok(None),
     }
+}
+
+/// `contains_template_data(values)`, reading the header's own entries from their facts.
+fn templated<'py>(input: HeaderInput<'_, 'py>, values: &Bound<'py, PyDict>) -> Built<bool> {
+    for (key, value) in values.iter() {
+        let found: bool = match header_entry(input, (&key, &value))? {
+            Some(facts) => facts.template,
+            None => contains_template(&PyNode(value)),
+        };
+        if found {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Raise for the first config field outside hooks holding a macro call, as Python's walk does.
+fn check_no_config_macros<'py>(
+    input: HeaderInput<'_, 'py>,
+    values: &Bound<'py, PyDict>,
+) -> Built<()> {
+    for (key, value) in values.iter() {
+        if HOOK_KEYS
+            .iter()
+            .any(|name| PyNode(key.clone()).is_text(name))
+        {
+            continue;
+        }
+        let found: MacroPath = match header_entry(input, (&key, &value))? {
+            Some(facts) => facts.macro_path.clone(),
+            None => entry_macro_path(&PyNode(key), &PyNode(value)),
+        };
+        if let MacroPath::Found(path) = found {
+            return Err(Halt::Config(ConfigError::compile(format!(
+                "model config field '{}' does not allow macros",
+                path.join(".")
+            ))));
+        }
+    }
+    Ok(())
 }
 
 fn sorted_keys(header: &Bound<'_, PyDict>) -> Built<Vec<String>> {

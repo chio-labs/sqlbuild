@@ -25,7 +25,6 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 const MODELS_FIELD: &str = "models";
 const RUN_ID_FIELD: &str = "run_id";
 const ENFORCE_EXPLICIT_FIELD: &str = "enforce_explicit_references";
-const FILE_PATH_ATTRIBUTE: &str = "file_path";
 const KEY_ATTRIBUTE: &str = "key";
 const DEPS_ATTRIBUTE: &str = "deps";
 const TAGS_ATTRIBUTE: &str = "tags";
@@ -504,8 +503,7 @@ impl NativeProjectView {
                 for record in owner.inputs() {
                     let expansion: Py<PyAny> = authored_expansion(&classes, record)?;
                     if !expansion.is_none(py) {
-                        let path: Bound<'_, PyAny> =
-                            native_field(record.model_file.bind(py), FILE_PATH_ATTRIBUTE)?;
+                        let path: Bound<'_, PyAny> = record.model_file.get().path_objects(py)?.0;
                         expansions.set_item(path, expansion)?;
                     }
                 }

@@ -36,9 +36,27 @@ pub(crate) fn plan_rule_run<'py>(
     let graph: Bound<'py, PyAny> = options.get("graph")?;
     let project: Bound<'py, PyAny> = field(&graph, "project")?;
     freed_memory_released(py)?;
-    let effective_config: Bound<'py, PyAny> =
-        resolved_ignore_selectors(&options.get("config")?, &project)?;
-    let project_dir: Bound<'py, PyAny> = options.get("project_dir")?.call_method0("resolve")?;
+    let selected_keys: Bound<'py, PyAny> = options.get("selected_keys")?;
+    rule_run_plan(
+        (
+            &project,
+            &options.get("config")?,
+            &options.get("project_dir")?,
+        ),
+        Some((&graph, &selected_keys)),
+        options.get("no_sql_analysis")?.is_truthy()?,
+    )
+}
+
+/// `plan_rule_run`'s plan of `project`, selected by `(graph, selected_keys)` when given.
+pub(crate) fn rule_run_plan<'py>(
+    (project, config, project_dir): (&Bound<'py, PyAny>, &Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    selection: Option<(&Bound<'py, PyAny>, &Bound<'py, PyAny>)>,
+    no_sql_analysis: bool,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = project.py();
+    let effective_config: Bound<'py, PyAny> = resolved_ignore_selectors(config, project)?;
+    let project_dir: Bound<'py, PyAny> = project_dir.call_method0("resolve")?;
     let include_custom: bool = references_custom_rules(&effective_config)?;
     let catalogue: Vec<Bound<'py, PyAny>> =
         rule_catalogue(&effective_config, &project_dir, include_custom)?;
@@ -57,8 +75,8 @@ pub(crate) fn plan_rule_run<'py>(
         Some(custom_payloads.clone()),
     )?;
     let mut skipped_type_proof_rules: Vec<Bound<'py, PyAny>> = Vec::new();
-    if options.get("no_sql_analysis")?.is_truthy()?
-        || !field(&project_attribute(&project, "settings")?, "sql_analysis")?.is_truthy()?
+    if no_sql_analysis
+        || !field(&project_attribute(project, "settings")?, "sql_analysis")?.is_truthy()?
     {
         let mut kept: Vec<Bound<'py, PyAny>> = Vec::with_capacity(selected.len());
         for rule in selected {
@@ -80,11 +98,13 @@ pub(crate) fn plan_rule_run<'py>(
     if !custom_rules.is_empty() {
         verify_custom_rules(&custom_rules, &project_dir)?;
     }
-    let model_paths: Option<Bound<'py, PyFrozenSet>> =
-        selected_model_paths(&graph, &options.get("selected_keys")?)?;
+    let model_paths: Option<Bound<'py, PyFrozenSet>> = match selection {
+        Some((graph, selected_keys)) => selected_model_paths(graph, selected_keys)?,
+        None => None,
+    };
     let selected_project: Bound<'py, PyAny> = match &model_paths {
         None => project.clone(),
-        Some(paths) => selected_models_project(&project, paths)?,
+        Some(paths) => selected_models_project(project, paths)?,
     };
     let mut codes: Vec<Bound<'py, PyAny>> = Vec::with_capacity(selected.len());
     for rule in &selected {
