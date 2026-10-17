@@ -1,5 +1,7 @@
 //! A model's MODEL header attached as its schema entry, by the native header parser.
 
+use std::sync::Arc;
+
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods, PyTuple, PyTupleMethods};
 use sqlbuild_analysis::compiled_project::models::{
@@ -28,7 +30,7 @@ use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::column_migrations::column_migration_error;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::header_metadata::{
-    audit_instances, parsed_audit_identity, schema_columns,
+    HeaderColumns, audit_instances, native_schema_column, parsed_audit_identity,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 
@@ -59,7 +61,7 @@ pub(crate) struct AttachedHeader<'py> {
 
 /// A header schema entry's Python contract objects, enum columns and retained fact.
 pub(crate) struct HeaderSchema<'py> {
-    pub(crate) columns: Bound<'py, PyTuple>,
+    pub(crate) columns: Arc<HeaderColumns>,
     pub(crate) audits: Bound<'py, PyTuple>,
     pub(crate) dynamic_columns: Bound<'py, PyTuple>,
     pub(crate) type_enforcement: bool,
@@ -104,11 +106,14 @@ pub(crate) fn header_schema<'py>(
         .map_err(|error| raised_config_error(py, error))?;
     let locations: Bound<'py, PyDict> = source.model_file.header_locations(py)?;
     let model_path: &Bound<'py, PyAny> = source.model_file.paths(py).1;
-    let local_columns: DeclaredColumns<'py> = DeclaredColumns {
-        specs: schema_columns(py, context.contracts, &parsed_columns, &locations)?,
+    let local_columns: DeclaredColumns = DeclaredColumns {
+        specs: parsed_columns
+            .iter()
+            .map(|column| native_schema_column(py, context.contracts, column, &locations))
+            .collect::<PyResult<_>>()?,
         facts: local_column_facts(&parsed_columns)?,
     };
-    let columns: DeclaredColumns<'py> = match source.schema {
+    let columns: DeclaredColumns = match source.schema {
         Some(schema) => merged_columns(
             context,
             schema,

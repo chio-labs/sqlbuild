@@ -1,5 +1,7 @@
 //! Header contract objects the model loop builds: factory audits, dynamic families, enum columns.
 
+use std::sync::Arc;
+
 use pyo3::BoundObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -8,6 +10,7 @@ use sqlbuild_model_config::header_metadata::models::DynamicFamily;
 
 use crate::bindings::_helpers::compiled_project::model_loop::LoopContext;
 use crate::bindings::_helpers::compiled_project::model_loop_schema::DeclaredColumns;
+use crate::bindings::_helpers::model_config::header_metadata::{HeaderColumn, HeaderColumns};
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const CASES_ATTRIBUTE: &str = "cases";
@@ -44,15 +47,6 @@ const COPIED_CASE_FIELDS: [&str; 8] = [
     "minimum_samples",
     "evidence_limit",
 ];
-/// `SchemaColumn` fields `dataclasses.replace` carries over unchanged.
-const KEPT_COLUMN_FIELDS: [&str; 6] = [
-    "name",
-    "nullable",
-    "description",
-    "meta",
-    "location",
-    "migrate_from",
-];
 const PIVOT_COLUMN_FIELD: &str = "pivot_column";
 const VALUE_COLUMN_FIELD: &str = "value_column";
 const AGGREGATE_FIELD: &str = "aggregate";
@@ -60,7 +54,7 @@ const NAME_PATTERN_FIELD: &str = "name_pattern";
 
 /// A model's enum-typed columns resolved to scalar types, and the usages they generate.
 pub(crate) struct EnumColumns<'py> {
-    pub(crate) columns: Bound<'py, PyTuple>,
+    pub(crate) columns: Arc<HeaderColumns>,
     pub(crate) facts: Vec<SchemaColumnFact>,
     /// Column name to its enum declaration, as `CompileModelInput.enum_columns` holds them.
     pub(crate) declarations: Bound<'py, PyDict>,
@@ -167,13 +161,13 @@ pub(crate) fn enum_columns<'py>(
         (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     ),
     values: &Bound<'py, PyDict>,
-    columns: DeclaredColumns<'py>,
+    columns: DeclaredColumns,
 ) -> PyResult<EnumColumns<'py>> {
     let py: Python<'py> = values.py();
     let (enums, (declarations, consumer)) = visible;
     if enums.is_empty() {
         return Ok(EnumColumns {
-            columns: PyTuple::new(py, columns.specs)?,
+            columns: Arc::new(HeaderColumns::new(columns.specs)),
             facts: columns.facts,
             declarations: PyDict::new(py),
             usages: Vec::new(),
@@ -184,7 +178,7 @@ pub(crate) fn enum_columns<'py>(
         None => false,
     };
     let resolved: Bound<'py, PyDict> = PyDict::new(py);
-    let mut resolved_columns: Vec<Bound<'py, PyAny>> = Vec::with_capacity(columns.specs.len());
+    let mut resolved_columns: Vec<HeaderColumn> = Vec::with_capacity(columns.specs.len());
     let mut facts: Vec<SchemaColumnFact> = Vec::with_capacity(columns.facts.len());
     for (column, mut fact) in columns.specs.into_iter().zip(columns.facts) {
         let key: &str = fact.data_type.as_deref().unwrap_or_default();
@@ -194,7 +188,8 @@ pub(crate) fn enum_columns<'py>(
             continue;
         };
         resolved.set_item(&fact.name, &declaration)?;
-        let mut audits: Vec<Bound<'py, PyAny>> = native_field(&column, AUDITS_FIELD)?
+        let mut audits: Vec<Bound<'py, PyAny>> = column
+            .field(py, AUDITS_FIELD)?
             .try_iter()?
             .collect::<PyResult<_>>()?;
         if enforced {
@@ -214,19 +209,26 @@ pub(crate) fn enum_columns<'py>(
         }
         let scalar_type: Bound<'py, PyAny> = native_field(&declaration, SCALAR_TYPE_ATTRIBUTE)?;
         fact.data_type = scalar_type.extract()?;
-        let fields: Bound<'py, PyDict> = PyDict::new(py);
-        for field in KEPT_COLUMN_FIELDS {
-            fields.set_item(field, native_field(&column, field)?)?;
-        }
-        fields.set_item(TYPE_FIELD, scalar_type)?;
-        fields.set_item(AUDITS_FIELD, PyTuple::new(py, audits)?)?;
-        resolved_columns.push(context.contracts.schema_column.call((), Some(&fields))?);
+        resolved_columns.push(HeaderColumn::replaced(
+            &context.contracts.schema_column,
+            [
+                column.field(py, "name")?,
+                scalar_type,
+                column.field(py, "nullable")?,
+                column.field(py, "description")?,
+                column.field(py, "meta")?,
+                PyTuple::new(py, audits)?.into_any(),
+                column.field(py, "location")?,
+                column.field(py, "migrate_from")?,
+            ],
+            [0, 2, 3, 4, 6, 7, 1, 5],
+        )?);
         facts.push(fact);
     }
     let usages: Vec<Bound<'py, PyAny>> =
         generated_usages(context, declarations, consumer, &resolved)?;
     Ok(EnumColumns {
-        columns: PyTuple::new(py, resolved_columns)?,
+        columns: Arc::new(HeaderColumns::new(resolved_columns)),
         facts,
         declarations: resolved,
         usages,

@@ -1,5 +1,7 @@
 //! A compiled model, read from the native compiled project that owns it.
 
+use std::sync::Arc;
+
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
@@ -22,6 +24,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
+use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::relation_keys::RelationKeyRow;
 
@@ -52,7 +55,7 @@ pub(crate) struct SqlRuleKey {
 }
 
 /// A schema's entry audits, column specs and each audited column's index and name.
-pub(crate) type AuditedSchema = (Py<PyTuple>, Py<PyTuple>, Vec<(usize, String)>);
+pub(crate) type AuditedSchema = (Py<PyTuple>, Arc<HeaderColumns>, Vec<(usize, String)>);
 
 /// `(name, type, nullability)` of one inferred output column.
 pub(crate) type InferredRow = (String, Option<String>, String);
@@ -355,10 +358,11 @@ impl NativeCompiledModel {
     /// The attached schema's declared `SchemaColumn`s, or `None` without a schema.
     pub(crate) fn declared_columns(&self, py: Python<'_>) -> PyResult<Option<Py<PyTuple>>> {
         self.read(py, |record, py| {
-            Ok(record
+            record
                 .schema
                 .as_ref()
-                .map(|schema| schema.columns.clone_ref(py)))
+                .map(|schema| schema.columns.project(py).map(Bound::unbind))
+                .transpose()
         })
     }
 
@@ -381,7 +385,7 @@ impl NativeCompiledModel {
                 .collect();
             Ok(Some((
                 schema.audits.clone_ref(py),
-                schema.columns.clone_ref(py),
+                schema.columns.clone(),
                 audited,
             )))
         })
@@ -639,14 +643,14 @@ impl NativeCompiledModel {
     /// Inferred columns, else the attached schema's declared columns, else zero.
     #[getter]
     pub(crate) fn output_column_count(&self, py: Python<'_>) -> PyResult<usize> {
-        self.read(py, |record, py| {
+        self.read(py, |record, _py| {
             if let Some(rows) = &compiled_of(record)?.analysis.inferred {
                 return Ok(rows.len());
             }
             Ok(record
                 .schema
                 .as_ref()
-                .map_or(0, |schema| schema.columns.bind(py).len()))
+                .map_or(0, |schema| schema.columns.specs.len()))
         })
     }
 

@@ -3,7 +3,8 @@
 use std::sync::OnceLock;
 
 use pyo3::exceptions::PyRuntimeError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use pyo3::{FromPyObject, IntoPyObject};
 use sqlbuild_model_config::header_metadata::models::{
@@ -11,7 +12,116 @@ use sqlbuild_model_config::header_metadata::models::{
 };
 
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::all_specs;
+use crate::bindings::_helpers::records::fields::field;
+use crate::bindings::_helpers::records::ids::RecordId;
+
+/// Native column fields; a Python record is constructed only for public consumers.
+pub(crate) struct HeaderColumn {
+    values: Option<[Py<PyAny>; 8]>,
+    class: Py<PyAny>,
+    projection: PyOnceLock<Py<PyAny>>,
+}
+
+impl HeaderColumn {
+    pub(crate) fn replaced<'py>(
+        class: &Bound<'py, PyAny>,
+        values: [Bound<'py, PyAny>; 8],
+        keyword_order: [usize; 8],
+    ) -> PyResult<Self> {
+        if class.is(&record_class(class.py(), RecordId::SchemaColumn)?) {
+            return Self::new(class, values);
+        }
+        let fields = PyDict::new(class.py());
+        for index in keyword_order {
+            fields.set_item(SCHEMA_COLUMN_FIELDS[index], &values[index])?;
+        }
+        Self::from_python(class.call((), Some(&fields))?)
+    }
+
+    pub(crate) fn field<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        let Some(values) = &self.values else {
+            return field(&self.project(py)?, name);
+        };
+        let index = SCHEMA_COLUMN_FIELDS
+            .iter()
+            .position(|field| *field == name)
+            .ok_or_else(|| PyRuntimeError::new_err("unknown column field"))?;
+        Ok(values[index].bind(py).clone())
+    }
+
+    pub(crate) fn project<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.projection
+            .get_or_try_init(py, || {
+                let values = self
+                    .values
+                    .as_ref()
+                    .ok_or_else(|| PyRuntimeError::new_err("missing column projection"))?;
+                contract_object(
+                    self.class.bind(py),
+                    values.each_ref().map(|value| value.bind(py).clone()),
+                )
+                .map(Bound::unbind)
+            })
+            .map(|value| value.bind(py).clone())
+    }
+
+    pub(crate) fn from_python(value: Bound<'_, PyAny>) -> PyResult<Self> {
+        let py = value.py();
+        let projection = PyOnceLock::new();
+        let class = value.get_type().into_any().unbind();
+        let _ = projection.set(py, value.unbind());
+        Ok(Self {
+            values: None,
+            class,
+            projection,
+        })
+    }
+
+    pub(crate) fn new<'py>(
+        class: &Bound<'py, PyAny>,
+        values: [Bound<'py, PyAny>; 8],
+    ) -> PyResult<Self> {
+        if !class.is(&record_class(class.py(), RecordId::SchemaColumn)?) {
+            return Self::from_python(contract_object(class, values)?);
+        }
+        checked_field_orders()?;
+        Ok(Self {
+            values: Some(values.map(Bound::unbind)),
+            class: class.clone().unbind(),
+            projection: PyOnceLock::new(),
+        })
+    }
+}
+
+/// Retained native columns and their shared, lazy public tuple.
+pub(crate) struct HeaderColumns {
+    pub(crate) specs: Vec<HeaderColumn>,
+    projection: PyOnceLock<Py<PyTuple>>,
+}
+
+impl HeaderColumns {
+    pub(crate) fn new(specs: Vec<HeaderColumn>) -> Self {
+        Self {
+            specs,
+            projection: PyOnceLock::new(),
+        }
+    }
+
+    pub(crate) fn project<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyTuple>> {
+        self.projection
+            .get_or_try_init(py, || {
+                let columns = self
+                    .specs
+                    .iter()
+                    .map(|column| column.project(py))
+                    .collect::<PyResult<Vec<_>>>()?;
+                PyTuple::new(py, columns).map(Bound::unbind)
+            })
+            .map(|value| value.bind(py).clone())
+    }
+}
 
 /// `SchemaColumn` fields in declaration order, the order its objects are built positionally in.
 const SCHEMA_COLUMN_FIELDS: [&str; 8] = [
@@ -171,6 +281,15 @@ fn schema_column<'py>(
     column: &ParsedColumn<PyNode<'py>>,
     locations: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    native_schema_column(py, classes, column, locations)?.project(py)
+}
+
+pub(crate) fn native_schema_column<'py>(
+    py: Python<'py>,
+    classes: &ContractClasses<'py>,
+    column: &ParsedColumn<PyNode<'py>>,
+    locations: &Bound<'py, PyDict>,
+) -> PyResult<HeaderColumn> {
     let location = locations
         .get_item(&column.name.0)?
         .unwrap_or_else(|| py.None().into_bound(py));
@@ -179,7 +298,7 @@ fn schema_column<'py>(
         .iter()
         .map(|audit| audit_instance(py, classes, audit, &location))
         .collect::<PyResult<Vec<_>>>()?;
-    contract_object(
+    HeaderColumn::new(
         &classes.schema_column,
         [
             column.name.0.clone(),

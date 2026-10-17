@@ -218,7 +218,7 @@ pub(crate) fn finished_record<'py>(
     };
     let schema: Option<SchemaRecord> = finished.header.schema.as_ref().map(|schema| SchemaRecord {
         description: finished.header.description.clone(),
-        columns: schema.columns.clone().unbind(),
+        columns: schema.columns.clone(),
         audits: schema.audits.clone().unbind(),
         dynamic_columns: schema.dynamic_columns.clone().unbind(),
         type_enforcement: schema.type_enforcement,
