@@ -7,6 +7,7 @@ import pytest
 from sqlbuild._native import (
     FixtureColumnInference,
     FixtureColumnInferences,
+    fixture_inference_count,
     infer_fixture_column_facts,
 )
 from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
@@ -15,7 +16,7 @@ from tests.unit.src.sqlbuild.compiler.planner.classes._test_types import (
 from tests.unit.src.sqlbuild.compiler.planner.classes.helpers import (
     FIXTURE_PROFILES,
     FIXTURE_QUERIES,
-    count_fixture_inferences,
+    reset_fixture_inference_count,
 )
 
 
@@ -41,15 +42,16 @@ from tests.unit.src.sqlbuild.compiler.planner.classes.helpers import (
     ids=lambda case: case.description,
 )
 def test_given_fixture_queries_when_inferring_then_matches_direct_inference_with_minimal_work(
-    test_case: FixtureColumnInferencesTestCase, monkeypatch: pytest.MonkeyPatch
+    test_case: FixtureColumnInferencesTestCase,
 ) -> None:
-    inferences: list[int] = count_fixture_inferences(monkeypatch)
+    reset_fixture_inference_count()
     memo: FixtureColumnInferences = FixtureColumnInferences()
 
     results: list[FixtureColumnInference | None] = [
         memo.infer(query_sql=FIXTURE_QUERIES[query], inference_profile=FIXTURE_PROFILES[profile])
         for query, profile in test_case.requests
     ]
+    inferences: int = fixture_inference_count()
 
     assert results == [
         infer_fixture_column_facts(
@@ -58,7 +60,7 @@ def test_given_fixture_queries_when_inferring_then_matches_direct_inference_with
         for query, profile in test_case.requests
     ]
     assert all(result is not None for result in results)
-    assert len(inferences) == test_case.expected_inferences
+    assert inferences == test_case.expected_inferences
 
 
 if __name__ == "__main__":

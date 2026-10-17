@@ -23,6 +23,7 @@ from sqlbuild._native import (
     DbtCommandResult,
     DbtEventStream,
     DbtEventStreamUpdate,
+    DbtNodeExecutionResult,
     DbtRunner,
     DiscoveredProjectInputs,
     DiscoveredSqlModelFile,
@@ -499,8 +500,9 @@ def fake_dbt_argv(
     lines: tuple[str, ...],
     sleep_seconds: float = 0.0,
     after_lines: tuple[str, ...] = (),
+    returncode: int = 0,
 ) -> tuple[str, ...]:
-    """argv of a stand-in dbt process printing `lines`, pausing, then printing `after_lines`."""
+    """argv of a stand-in dbt process printing `lines`, pausing, printing `after_lines`, exiting."""
 
     script: Path = directory / "fake_dbt.py"
     _ = script.write_text(
@@ -508,7 +510,33 @@ def fake_dbt_argv(
         f"sys.stdout.write({''.join(lines)!r})\n"
         "sys.stdout.flush()\n"
         f"time.sleep({sleep_seconds!r})\n"
-        f"sys.stdout.write({''.join(after_lines)!r})\n",
+        f"sys.stdout.write({''.join(after_lines)!r})\n"
+        f"sys.exit({returncode!r})\n",
         encoding="utf-8",
     )
     return (sys.executable, str(script))
+
+
+def dbt_result_line(result: DbtNodeExecutionResult) -> str:
+    """The dbt JSON log line that streams `result`."""
+
+    return (
+        json.dumps(
+            {
+                "data": {
+                    "execution_time": result.execution_time,
+                    "index": result.index,
+                    "total": result.total,
+                    "status": result.status,
+                    "node_info": {
+                        "node_name": result.node_name,
+                        "resource_type": result.resource_type,
+                        "node_status": result.status,
+                        "unique_id": result.unique_id,
+                    },
+                },
+                "info": {"level": "info", "name": "NodeFinished", "msg": result.status},
+            }
+        )
+        + "\n"
+    )

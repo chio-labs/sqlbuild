@@ -5,6 +5,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::dbt_events::stream::render_dbt_node_result;
 use crate::bindings::_helpers::dbt_interop::cli::parse_dbt_ls_json_lines;
+use crate::bindings::_helpers::dbt_interop::event_stream::execute_dbt_json_event_stream;
 use crate::bindings::_helpers::dbt_interop::execution::dbt_execution_ls_argv;
 use crate::bindings::_helpers::dbt_interop::runtime_results::{append_missing, result_ids};
 use crate::bindings::_helpers::records::construct::new_record_with;
@@ -105,7 +106,7 @@ fn progress(arguments: &KeywordArguments<'_>, message: &str) -> PyResult<()> {
 /// Execute selected dbt work and backfill results absent from its JSON event stream.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn execute_dbt_commands<'py>(
+pub(crate) fn execute_dbt_commands<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -178,19 +179,24 @@ fn execute_dbt_commands<'py>(
     if target.is_none() && !project_dir.is_none() {
         target = project_dir.call_method1("__truediv__", ("target",))?;
     }
-    let (returncode, streamed): (Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &registry::native(py, NativeAttr::ExecuteDbtJsonEventStream)?,
-        &[
-            ("argv", argv),
-            ("cwd", project_dir),
-            ("stream", arguments.value("stdout_stream")?),
-            ("use_color", arguments.value("use_color")?),
-            ("target_path", target.clone()),
-            ("display_total", total.clone()),
-            ("on_node_result", arguments.value("on_node_result")?),
-        ],
-    )?
-    .extract()?;
+    let (returncode, streamed): (Bound<'py, PyAny>, Bound<'py, PyAny>) =
+        execute_dbt_json_event_stream(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("argv", argv),
+                    ("cwd", project_dir),
+                    ("stream", arguments.value("stdout_stream")?),
+                    ("use_color", arguments.value("use_color")?),
+                    ("target_path", target.clone()),
+                    ("display_total", total.clone()),
+                    ("on_node_result", arguments.value("on_node_result")?),
+                ],
+            )?),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
+        .extract()?;
     progress(&arguments, "Finalizing dbt run...")?;
     let streamed_ids = result_ids(&streamed)?;
     let mut filtered: Vec<Bound<'py, PyAny>> = Vec::new();

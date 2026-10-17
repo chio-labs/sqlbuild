@@ -103,7 +103,7 @@ fn profile_connection<'py>(
 /// Resolve a raw connection config if it references a dbt profile.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn resolve_raw_dbt_profile_connection<'py>(
+pub(crate) fn resolve_raw_dbt_profile_connection<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

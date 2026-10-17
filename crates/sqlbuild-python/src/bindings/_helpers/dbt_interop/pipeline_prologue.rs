@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::discovery::discover_project_input
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::dbt_interop::cli::route_dbt_interop_args;
 use crate::bindings::_helpers::dbt_interop::graph::build_dbt_combined_graph;
 use crate::bindings::_helpers::dbt_interop::manifest::load_dbt_manifest_index;
@@ -181,15 +182,9 @@ fn compile_dbt_interop_project<'py>(
     let start = Instant::now();
     progress(&callback, "Compiling SQLBuild project...")?;
     let discovered = args.value("discovered_inputs")?;
-    let name = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered, "project_config")?,
-            ),
-            ("local_config", native_field(&discovered, "local_config")?),
-        ],
+    let name = resolve_effective_adapter_name(
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
     )?;
     let adapter = interop_adapter(&name, &args.value("project_dir")?)?;
     let resolver = Bound::new(

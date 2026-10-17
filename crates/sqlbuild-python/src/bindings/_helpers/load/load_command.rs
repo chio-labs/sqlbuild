@@ -17,11 +17,14 @@ use sqlbuild_core::load_command::main::render_load_ready::render_load_ready;
 use sqlbuild_core::load_command::models::{LoadCounts, LoadResultText};
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_target_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::load::load_progress::{
     LoadCallbackRelay, LoadProgressReporter, load_result_text,
@@ -91,12 +94,9 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;
     reject_unit_test_selectors(&select.clone(), &exclude.clone(), &discovered.clone())?;
     let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
-    let target_config: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveTargetConfig)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("selected_target", selected_target.clone()),
-        ],
+    let target_config: Bound<'py, PyAny> = build_effective_target_config(
+        &discovered.clone(),
+        Some(selected_target.clone()).filter(|value| !value.is_none()),
     )?;
     let defaults: LoaderDefaults<'py> = loader_defaults(
         &discovered,
@@ -269,25 +269,22 @@ fn prepare<'py>(
 ) -> PyResult<Preparation<'py>> {
     let py: Python<'py> = request.py();
     let discovered: &Bound<'py, PyAny> = &invocation.discovered;
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered, "project_config")?,
-            ),
-            ("local_config", native_field(discovered, "local_config")?),
-        ],
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &invocation.project_dir)?;
-    let connection_config: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("project_dir", invocation.project_dir.clone()),
-            ("selected_target", native_field(request, "selected_target")?),
-            ("cli_vars", native_field(request, "cli_vars")?),
-        ],
+    let connection_config: Bound<'py, PyAny> = resolve_project_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("project_dir", invocation.project_dir.clone()),
+                ("selected_target", native_field(request, "selected_target")?),
+                ("cli_vars", native_field(request, "cli_vars")?),
+            ],
+        )?),
     )?;
     check_reference_targets(invocation, (&adapter, &connection_config))?;
     let runtime: (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>) =

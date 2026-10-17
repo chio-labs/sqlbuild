@@ -12,6 +12,8 @@ use sqlbuild_core::dbt_command::main::render_dbt_init_summary::render_dbt_init_s
 use sqlbuild_core::dbt_command::models::DbtInitSummary;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::dbt_command::init_project::build_dbt_init_project;
+use crate::bindings::_helpers::dbt_command::init_project::validate_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -118,14 +120,9 @@ fn run_dbt_init_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
             ("progress_callbacks", callbacks),
         ],
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::ValidateDbtInitProject)?,
-        &[("request", init_request.clone())],
-    )?;
-    let result: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildDbtInitProject)?,
-        &[("request", init_request)],
-    )?;
+    validate_dbt_init_project(&init_request.clone())
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    let result: Bound<'_, PyAny> = build_dbt_init_project(&init_request)?;
     let style: CliStyle = CliStyle { use_color };
     let stdout: Bound<'_, PyAny> = stream(py, "stdout")?;
     if native_field(request, "dry_run")?.is_truthy()? {

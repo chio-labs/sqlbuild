@@ -4,12 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from sqlbuild import _native as native
 from sqlbuild._native import (
     DiscoveredProjectInputs,
     LocalConfig,
     LocalTargetConfig,
-    NormalizedDbtProfileConnection,
     ProjectConfig,
     ProjectConfigError,
     TargetConfig,
@@ -29,6 +27,7 @@ from tests.unit.src.sqlbuild.cli.commands._helpers.runtime._test_types import (
     ResolveEnvironmentConnectionConfigTestCase,
     ResolveProjectConnectionConfigTestCase,
 )
+from tests.unit.src.sqlbuild.cli.commands._helpers.runtime.helpers import write_dbt_profile
 
 
 @pytest.mark.parametrize(
@@ -255,26 +254,23 @@ def test_given_named_dbt_profile_connection_when_resolving_then_routes_downstrea
             name="demo",
             adapter="snowflake",
             default_target="dev",
-            connections={"dbt": {"source": "dbt_profile", "profile": "analytics", "target": "dev"}},
+            connections={
+                "dbt": {
+                    "source": "dbt_profile",
+                    "profile": "analytics",
+                    "target": "dev",
+                    "profiles_dir": "profiles",
+                }
+            },
             targets={"dev": TargetConfig(connection_name="dbt")},
         ),
         local_config=LocalConfig(),
     )
 
-    def resolve_raw_dbt_profile_connection(**kwargs: object) -> NormalizedDbtProfileConnection:
-        assert kwargs["raw_config"] == {
-            "source": "dbt_profile",
-            "profile": "analytics",
-            "target": "dev",
-        }
-        return NormalizedDbtProfileConnection(
-            adapter="snowflake", connection={"account": "acct", "database": "ANALYTICS"}
-        )
-
-    monkeypatch.setattr(
-        native,
-        "resolve_raw_dbt_profile_connection",
-        resolve_raw_dbt_profile_connection,
+    write_dbt_profile(
+        tmp_path / "profiles",
+        profile="analytics",
+        output={"type": "snowflake", "account": "acct", "database": "ANALYTICS"},
     )
 
     connection: dict[str, object] = resolve_project_connection_config(
@@ -293,7 +289,7 @@ def test_given_named_dbt_profile_connection_when_resolving_then_routes_downstrea
                 "source": "dbt_profile",
                 "profile": "analytics",
                 "target": "dev",
-                "profiles_dir": "../profiles",
+                "profiles_dir": "profiles",
                 "account": "override-acct",
                 "client_request_mfa_token": True,
             },
@@ -324,16 +320,10 @@ def test_given_dbt_profile_connection_when_resolving_then_merges_user_overrides(
         local_config=LocalConfig(),
     )
 
-    def resolve_raw_dbt_profile_connection(**kwargs: object) -> NormalizedDbtProfileConnection:
-        return NormalizedDbtProfileConnection(
-            adapter=BuiltinAdapter.SNOWFLAKE.value,
-            connection=test_case.profile_connection,
-        )
-
-    monkeypatch.setattr(
-        native,
-        "resolve_raw_dbt_profile_connection",
-        resolve_raw_dbt_profile_connection,
+    write_dbt_profile(
+        tmp_path / "profiles",
+        profile="analytics",
+        output={"type": "snowflake", **test_case.profile_connection},
     )
 
     connection: dict[str, object] = resolve_connection_config(

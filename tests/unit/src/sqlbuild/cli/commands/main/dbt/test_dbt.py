@@ -8,8 +8,6 @@ import pytest
 from _pytest.capture import CaptureResult
 
 from sqlbuild._native import (
-    DbtInitRequest,
-    DbtInitResult,
     DbtInteropCommand,
     DbtInteropExecutionRequest,
     DbtInteropPlan,
@@ -22,10 +20,15 @@ from tests.unit.src.sqlbuild.cli.commands.main.dbt._test_types import (
     DbtPlanProgressTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.dbt.helpers import (
+    MINIMAL_SQLBUILD_PROJECT,
     build_empty_dbt_plan,
     prepare_dbt_auto_init_dirs,
+    read_fake_dbt_args,
+    write_duckdb_sqlbuild_project,
+    write_fake_dbt_executable,
     write_minimal_sqlbuild_project,
 )
+from tests.unit.src.sqlbuild.integrations.dbt.profile.helpers import write_duckdb_dbt_workspace
 
 
 @pytest.mark.parametrize(
@@ -148,7 +151,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
         DbtDebugWrapperTestCase(
             description="debug runs dbt then SQLBuild diagnostics and skips SQLBuild connection",
             args=("--project-dir", "dbt_project", "--no-connection"),
-            expected_dbt_args=("--project-dir", "dbt_project", "--no-connection"),
+            expected_dbt_args=("debug", "--project-dir"),
             expected_sqlbuild_no_connection=True,
             expected_exit_code=0,
             dbt_exit_code=0,
@@ -163,7 +166,7 @@ def test_given_dbt_execution_command_when_running_then_routes_expected_stream_an
                 "--project-dir",
                 "dbt_project",
             ),
-            expected_dbt_args=("--project-dir", "dbt_project"),
+            expected_dbt_args=("debug", "--project-dir"),
             expected_sqlbuild_no_connection=False,
             expected_exit_code=1,
             dbt_exit_code=1,
@@ -177,34 +180,12 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    dbt_calls: list[tuple[Path, tuple[str, ...], object, object]] = []
-    sqlbuild_calls: list[tuple[Path | None, bool, bool, bool]] = []
-
-    def debug_dbt_from_project(
-        *,
-        project_dir: Path,
-        args: tuple[str, ...],
-        stdout_stream: object,
-        stderr_stream: object,
-    ) -> int:
-        dbt_calls.append((project_dir, args, stdout_stream, stderr_stream))
-        return test_case.dbt_exit_code
-
-    def run_sqlbuild_debug(
-        project_dir: Path | None,
-        no_color: bool,
-        no_connection: bool,
-        json_output: bool,
-    ) -> int:
-        sqlbuild_calls.append((project_dir, no_color, no_connection, json_output))
-        return 0
-
-    monkeypatch.setattr(
-        "sqlbuild._native.debug_dbt_from_project",
-        debug_dbt_from_project,
+    (tmp_path / "dbt_project").mkdir()
+    monkeypatch.setenv(
+        "DBT_EXECUTABLE",
+        str(write_fake_dbt_executable(tmp_path, exit_code=test_case.dbt_exit_code)),
     )
-    monkeypatch.setattr("sqlbuild._native.run_debug_command", run_sqlbuild_debug)
-    write_minimal_sqlbuild_project(tmp_path)
+    write_duckdb_sqlbuild_project(tmp_path)
 
     exit_code: int = run_dbt_command(
         command=DbtInteropCommand.DEBUG,
@@ -214,11 +195,16 @@ def test_given_dbt_debug_command_when_running_then_invokes_dbt_and_sqlbuild_debu
     )
 
     assert exit_code == test_case.expected_exit_code
-    assert dbt_calls == [(tmp_path, test_case.expected_dbt_args, sys.stdout, sys.stderr)]
-    assert sqlbuild_calls == [(tmp_path, True, test_case.expected_sqlbuild_no_connection, False)]
+    assert read_fake_dbt_args(tmp_path) == (
+        *test_case.expected_dbt_args,
+        str(tmp_path / "dbt_project"),
+    )
     captured: CaptureResult[str] = capsys.readouterr()
     for fragment in test_case.expected_stderr_fragments:
         assert fragment in captured.err
+    assert ("skipped by --no-connection" in captured.out) is (
+        test_case.expected_sqlbuild_no_connection
+    )
 
 
 @pytest.mark.parametrize(
@@ -256,25 +242,6 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
 ) -> None:
     dbt_project_dir: Path = prepare_dbt_auto_init_dirs(test_case=test_case, tmp_path=tmp_path)
     forwarded_project_dirs: list[Path] = []
-    init_requests: list[DbtInitRequest] = []
-
-    def run_dbt_profile_init(*, request: DbtInitRequest) -> DbtInitResult:
-        init_requests.append(request)
-        output_dir: Path | None = request.sqb_output_dir
-        assert output_dir is not None
-        output_dir.mkdir(parents=True, exist_ok=True)
-        (output_dir / "sqlbuild_project.toml").write_text(
-            'name = "demo"\nadapter = "duckdb"\n', encoding="utf-8"
-        )
-        return DbtInitResult(
-            output_dir=output_dir,
-            project_file=output_dir / "sqlbuild_project.toml",
-            project_name="demo",
-            adapter="duckdb",
-            target_name=request.target_name or "dev",
-            profile_name="demo",
-            toml='name = "demo"\n',
-        )
 
     def plan_dbt_interop_from_project(
         *,
@@ -289,10 +256,6 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
         return build_empty_dbt_plan()
 
     monkeypatch.setattr(
-        "sqlbuild._native.build_dbt_init_project",
-        run_dbt_profile_init,
-    )
-    monkeypatch.setattr(
         "sqlbuild._native.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
     )
@@ -306,7 +269,9 @@ def test_given_existing_sqlbuild_project_when_running_dbt_command_then_uses_expe
 
     assert exit_code == 0
     assert forwarded_project_dirs[0].name == test_case.expected_forwarded_project_dir_name
-    assert init_requests == []
+    assert (forwarded_project_dirs[0] / "sqlbuild_project.toml").read_text(encoding="utf-8") == (
+        MINIMAL_SQLBUILD_PROJECT
+    )
 
 
 @pytest.mark.parametrize(
@@ -342,27 +307,9 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     dbt_project_dir: Path = prepare_dbt_auto_init_dirs(test_case=test_case, tmp_path=tmp_path)
+    write_duckdb_dbt_workspace(dbt_project_dir)
     forwarded_project_dirs: list[Path] = []
     forwarded_args: list[tuple[str, ...]] = []
-    init_requests: list[DbtInitRequest] = []
-
-    def run_dbt_profile_init(*, request: DbtInitRequest) -> DbtInitResult:
-        init_requests.append(request)
-        assert request.progress_callbacks.start is not None
-        request.progress_callbacks.start("Inspecting dbt project and profile...")
-        output_dir: Path | None = request.sqb_output_dir
-        assert output_dir is not None
-        output_dir.mkdir(parents=True, exist_ok=True)
-        write_minimal_sqlbuild_project(output_dir)
-        return DbtInitResult(
-            output_dir=output_dir,
-            project_file=output_dir / "sqlbuild_project.toml",
-            project_name="demo",
-            adapter="duckdb",
-            target_name=request.target_name or "dev",
-            profile_name="demo",
-            toml='name = "demo"\n',
-        )
 
     def plan_dbt_interop_from_project(
         *,
@@ -377,10 +324,6 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
         forwarded_args.append(args)
         return build_empty_dbt_plan()
 
-    monkeypatch.setattr(
-        "sqlbuild._native.build_dbt_init_project",
-        run_dbt_profile_init,
-    )
     monkeypatch.setattr(
         "sqlbuild._native.plan_dbt_interop_from_project",
         plan_dbt_interop_from_project,
@@ -402,13 +345,8 @@ def test_given_missing_sqlbuild_twin_when_running_dbt_command_then_initializes_a
     assert forwarded_project_dirs[0].name == test_case.expected_forwarded_project_dir_name
     assert Path(forwarded_args[0][forwarded_args[0].index("--project-dir") + 1]).is_absolute()
     assert Path(forwarded_args[0][forwarded_args[0].index("--profiles-dir") + 1]).is_absolute()
-    assert bool(init_requests) is test_case.expected_init_called
-    request: DbtInitRequest = init_requests[0]
-    assert request.dbt_project_dir.name == test_case.expected_request_dbt_project_dir_name
-    assert getattr(request.profiles_dir, "as_posix", lambda: None)() == (
-        test_case.expected_request_profiles_dir
+    twin_config: str = (forwarded_project_dirs[0] / "sqlbuild_project.toml").read_text(
+        encoding="utf-8"
     )
-    assert request.target_name == test_case.expected_request_target_name
-    assert request.sqb_output_dir is not None
-    assert request.sqb_output_dir.name == "sqlbuild_project"
-    assert request.skip_dbt_debug is True
+    assert f'project_dir = "../{test_case.expected_request_dbt_project_dir_name}' in twin_config
+    assert f'target = "{test_case.expected_request_target_name}"' in twin_config

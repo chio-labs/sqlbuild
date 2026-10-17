@@ -101,7 +101,7 @@ fn skill_request(py: Python<'_>, project_dir: PathBuf) -> PyResult<SkillInstallR
 /// Write packaged SQLBuild skill content to configured agent locations.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn update_sqlbuild_skills<'py>(
+pub(crate) fn update_sqlbuild_skills<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {

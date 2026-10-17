@@ -77,7 +77,7 @@ struct Output<'py> {
 /// Run dbt and render SQLBuild-styled rows from JSON events; returns the exit code and results.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn execute_dbt_json_event_stream<'py>(
+pub(crate) fn execute_dbt_json_event_stream<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {

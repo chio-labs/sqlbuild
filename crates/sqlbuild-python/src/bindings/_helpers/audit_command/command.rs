@@ -15,6 +15,7 @@ use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_com
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords, within};
 use crate::bindings::_helpers::compile_driver::selection_phases::compile_static_command_context;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::command_plans::build_audit_command_plan;
@@ -110,15 +111,9 @@ fn compile_audits<'py>(
     let py: Python<'py> = request.py();
     let discovered: Bound<'py, PyAny> = native_field(invocation, "discovered_inputs")?;
     let adapter: Bound<'py, PyAny> = native_field(invocation, "adapter")?;
-    let resolver: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            (
-                "project_dir",
-                native_field(invocation, "effective_project_dir")?,
-            ),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
+        native_field(invocation, "effective_project_dir")?,
+        discovered.clone(),
     )?;
     let options: Bound<'py, PyAny> = new_record_with(
         py,

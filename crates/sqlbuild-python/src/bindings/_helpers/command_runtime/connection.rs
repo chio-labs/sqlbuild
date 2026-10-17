@@ -17,15 +17,15 @@ use crate::bindings::_helpers::command_runtime::runtime_errors::raised;
 use crate::bindings::_helpers::command_runtime::warehouses::{WarehouseInputs, apply_warehouse};
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
+    KeywordArguments, imported, keywords,
 };
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
+use crate::bindings::_helpers::dbt_interop::profile_connection::resolve_raw_dbt_profile_connection;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 const CONNECTION_OPTIONS: (&[&str], &[&str]) = (
     &["raw_config", "project_dir", "adapter_name"],
@@ -70,18 +70,21 @@ pub(crate) fn with_dbt_profile<'py>(
     (discovered_inputs, cli_vars): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = raw_config.py();
-    let profile: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveRawDbtProfileConnection)?,
-        &[
-            ("raw_config", config.clone().into_any()),
-            ("project_dir", project_dir.clone()),
-            ("adapter_name", adapter_name.clone()),
-            (
-                "project_config",
-                native_field(discovered_inputs, "project_config")?,
-            ),
-            ("cli_vars", cli_vars.clone()),
-        ],
+    let profile: Bound<'py, PyAny> = resolve_raw_dbt_profile_connection(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("raw_config", config.clone().into_any()),
+                ("project_dir", project_dir.clone()),
+                ("adapter_name", adapter_name.clone()),
+                (
+                    "project_config",
+                    native_field(discovered_inputs, "project_config")?,
+                ),
+                ("cli_vars", cli_vars.clone()),
+            ],
+        )?),
     )?;
     if profile.is_none() {
         return Ok(config);
@@ -242,7 +245,6 @@ pub(crate) fn project_connection_config<'py>(
     (project_dir, selected_target): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
     (cli_vars, require_connection): (&Bound<'py, PyAny>, bool),
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = project_dir.py();
     if require_connection {
         require_configured_connection(discovered_inputs, project_dir, selected_target)?;
     }
@@ -252,18 +254,9 @@ pub(crate) fn project_connection_config<'py>(
         Some(cli_vars.clone()).filter(|value| !value.is_none()),
     )?
     .cast_into()?;
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered_inputs, "project_config")?,
-            ),
-            (
-                "local_config",
-                native_field(discovered_inputs, "local_config")?,
-            ),
-        ],
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &native_field(discovered_inputs, "project_config")?,
+        &native_field(discovered_inputs, "local_config")?,
     )?;
     connection_config(
         &raw_config,

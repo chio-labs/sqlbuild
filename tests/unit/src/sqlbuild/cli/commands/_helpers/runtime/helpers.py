@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from sqlbuild._native import (
@@ -48,3 +49,13 @@ def write_case_adapter_file(*, project_dir: Path, contents: str) -> None:
 
     (project_dir / "adapters").mkdir(exist_ok=True)
     (project_dir / "adapters" / "custom.py").write_text(contents, encoding="utf-8")
+
+
+def write_dbt_profile(profiles_dir: Path, *, profile: str, output: dict[str, object]) -> None:
+    """Write a `profiles.yml` whose `profile` has one `dev` output with `output`'s fields."""
+
+    profiles_dir.mkdir(parents=True, exist_ok=True)
+    fields: str = "".join(f"      {name}: {json.dumps(value)}\n" for name, value in output.items())
+    (profiles_dir / "profiles.yml").write_text(
+        f"{profile}:\n  target: dev\n  outputs:\n    dev:\n{fields}", encoding="utf-8"
+    )

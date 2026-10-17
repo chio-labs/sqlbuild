@@ -10,11 +10,7 @@ from pathlib import Path
 
 import pytest
 
-import sqlbuild._native as native_module
-from sqlbuild._native import (
-    FixtureColumnInference,
-    infer_fixture_column_facts,
-)
+from sqlbuild._native import fixture_inference_count
 from sqlbuild.adapter.contract.models import ExpressionInferenceProfile
 
 ORDERS_SQL: str = 'SELECT o.order_id, o.amount_cents FROM __ref("stg_orders") AS o'
@@ -91,19 +87,10 @@ FIXTURE_QUERIES: dict[str, str] = {
 }
 
 
-def count_fixture_inferences(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Count every fixture inference computed instead of reused."""
+def reset_fixture_inference_count() -> None:
+    """Start counting fixture inferences computed instead of reused from zero."""
 
-    inferences: list[int] = []
-
-    def counting(
-        *, query_sql: str, inference_profile: ExpressionInferenceProfile
-    ) -> FixtureColumnInference | None:
-        inferences.append(1)
-        return infer_fixture_column_facts(query_sql=query_sql, inference_profile=inference_profile)
-
-    monkeypatch.setattr(native_module, "infer_fixture_column_facts", counting)
-    return inferences
+    fixture_inference_count(reset=True)
 
 
 class SqlTestsProject:

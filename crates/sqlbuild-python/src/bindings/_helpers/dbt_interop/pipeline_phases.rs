@@ -14,6 +14,7 @@ use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
 use crate::bindings::_helpers::dbt_interop::plan::render_dbt_interop_plan;
 use crate::bindings::_helpers::dbt_interop::plan_output::build_sqlbuild_plan_output;
 use crate::bindings::_helpers::dbt_interop::plan_output::{connection_config, connection_hooks};
+use crate::bindings::_helpers::dbt_interop::runtime_execution::execute_dbt_commands;
 use crate::bindings::_helpers::dbt_interop::sqlbuild_work::execute_dbt_sqlbuild_work;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -134,27 +135,30 @@ fn execute_dbt_without_state_tracking<'py>(
     let args = KeywordArguments::read(py, "execute_dbt_without_state_tracking", options, OPTIONS)?;
     let request = args.value("request")?;
     let invocation = args.value("invocation")?;
-    call_with(
-        &registry::native(py, NativeAttr::ExecuteDbtCommands)?,
-        &[
-            ("runner", native_field(&invocation, "runner")?),
-            ("options", native_field(&invocation, "dbt_options")?),
-            ("merged_argv", args.value("merged_dbt_argv")?),
-            (
-                "progress_stream",
-                native_field(&invocation, "output_stream")?,
-            ),
-            (
-                "stdout_stream",
-                native_field(&invocation, "dbt_output_stream")?,
-            ),
-            ("use_color", native_field(&request, "use_color")?),
-            (
-                "skip_message",
-                text(py, "Skipping dbt: no dbt work selected."),
-            ),
-            ("on_progress", native_field(&request, "on_progress")?),
-        ],
+    execute_dbt_commands(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("runner", native_field(&invocation, "runner")?),
+                ("options", native_field(&invocation, "dbt_options")?),
+                ("merged_argv", args.value("merged_dbt_argv")?),
+                (
+                    "progress_stream",
+                    native_field(&invocation, "output_stream")?,
+                ),
+                (
+                    "stdout_stream",
+                    native_field(&invocation, "dbt_output_stream")?,
+                ),
+                ("use_color", native_field(&request, "use_color")?),
+                (
+                    "skip_message",
+                    text(py, "Skipping dbt: no dbt work selected."),
+                ),
+                ("on_progress", native_field(&request, "on_progress")?),
+            ],
+        )?),
     )
 }
 

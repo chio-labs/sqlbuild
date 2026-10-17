@@ -241,7 +241,7 @@ fn execute_dbt_interop_from_project(request: &Bound<'_, PyAny>) -> PyResult<i64>
 /// Build an interop plan from actual project files, dbt artifacts and warehouse facts.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn plan_dbt_interop_from_project<'py>(
+pub(crate) fn plan_dbt_interop_from_project<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
@@ -324,7 +324,10 @@ fn plan_dbt_interop_from_project<'py>(
 /// Run dbt debug using SQLBuild's resolved dbt configuration.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn debug_dbt_from_project(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i64> {
+pub(crate) fn debug_dbt_from_project(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<i64> {
     let args = KeywordArguments::read(py, "debug_dbt_from_project", options, DEBUG_OPTIONS)?;
     let discovered = discover_project_inputs(
         py,

@@ -10,10 +10,12 @@ use sqlbuild_core::build_command::models::DurationLimit;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
@@ -144,28 +146,25 @@ pub(crate) fn resolve_build_context<'py>(
             ),
         ));
     }
-    let adapter_name: String = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered, "project_config")?,
-            ),
-            ("local_config", native_field(&discovered, "local_config")?),
-        ],
+    let adapter_name: String = resolve_effective_adapter_name(
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
     )?
     .extract()?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&text(py, &adapter_name), &project_dir)?;
     let limits: Bound<'py, PyAny> =
         execution_limits(&discovered, &target_name, (&adapter_name, &adapter))?;
-    let connection_config: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("project_dir", project_dir.clone()),
-            ("selected_target", selected_target),
-            ("cli_vars", native_field(request, "cli_vars")?),
-        ],
+    let connection_config: Bound<'py, PyAny> = resolve_project_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered.clone()),
+                ("project_dir", project_dir.clone()),
+                ("selected_target", selected_target),
+                ("cli_vars", native_field(request, "cli_vars")?),
+            ],
+        )?),
     )?;
     let machine_output: bool = native_field(request, "json_output")?.is_truthy()?;
     let debug: bool = native_field(request, "debug")?.is_truthy()?;

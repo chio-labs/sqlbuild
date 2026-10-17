@@ -4,11 +4,12 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
+use crate::bindings::_helpers::compile_attachment::declaration_scope::build_declaration_scope;
 use crate::bindings::_helpers::compile_attachment::declaration_scope::rebind_declaration_scope;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_vars;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
 use crate::bindings::_helpers::native_host::host;
@@ -36,13 +37,11 @@ fn declaration_scope<'py>(
             return Ok(rebound);
         }
     }
-    call_with(
-        &registry::native(py, NativeAttr::BuildDeclarationScope)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("loaded_macros", loaded_macros),
-            ("sql_lexical_syntax", sql_lexical_syntax),
-        ],
+    build_declaration_scope(
+        &discovered.clone(),
+        &loaded_macros,
+        &sql_lexical_syntax,
+        None,
     )
 }
 

@@ -12,6 +12,7 @@ use sqlbuild_core::dbt_command::main::render_dbt_auto_init::render_dbt_auto_init
 use sqlbuild_core::dbt_command::models::ForwardedArg;
 
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::dbt_command::init_project::build_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
 use crate::bindings::_helpers::records::construct::new_record_with;
 
@@ -121,10 +122,7 @@ pub(crate) fn ensure_twin_project<'py>(
             ("progress_callbacks", callbacks),
         ],
     )?;
-    let result: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildDbtInitProject)?,
-        &[("request", request)],
-    )?;
+    let result: Bound<'py, PyAny> = build_dbt_init_project(&request)?;
     let project_file: String = native_field(&result, "project_file")?.str()?.to_string();
     progress_stream.call_method1(
         "write",

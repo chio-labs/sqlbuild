@@ -16,14 +16,14 @@ use crate::bindings::_helpers::build_command::support::{
 use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::compile_driver::pipeline::run_compile_pipeline;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::manifest::builder::build_manifest;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::plan_text::format_plan;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
 
@@ -43,12 +43,9 @@ fn request_options<'py>(context: &BuildContext<'py>) -> PyResult<Bound<'py, PyAn
     let should_load_sources: Bound<'py, PyAny> = context.get("should_load_sources")?;
     let python_selectors: bool =
         context.request_flag("include_python")? || should_load_sources.is_truthy()?;
-    let resolver: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-        &[
-            ("project_dir", context.get("effective_project_dir")?),
-            ("discovered_inputs", context.get("discovered_inputs")?),
-        ],
+    let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
+        context.get("effective_project_dir")?,
+        context.get("discovered_inputs")?,
     )?;
     new_record_with(
         py,

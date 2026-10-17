@@ -13,15 +13,14 @@ use sqlbuild_core::load_command::main::select_load_entries::select_load_entries 
 use sqlbuild_core::load_command::models::{LoadEntry, LoadGraph};
 
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::contracts::spec_resolution::loader_destination_parts;
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
@@ -264,15 +263,9 @@ pub(crate) fn loader_defaults<'py>(
         Some(cli_vars.clone()).filter(|value| !value.is_none()),
     )?
     .downcast_into()?;
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered, "project_config")?,
-            ),
-            ("local_config", native_field(discovered, "local_config")?),
-        ],
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
     )?;
     let duckdb: Bound<'py, PyAny> =
         host::entry(py, AdapterHost::BuiltinAdapter)?.getattr("DUCKDB")?;

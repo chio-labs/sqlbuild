@@ -3,11 +3,11 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_core::dbt_command::constants::NO_CONNECTION_OPTION;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::dbt_command::auto_init::args_tuple;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, status, stream};
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::dbt_interop::pipeline::debug_dbt_from_project;
+use crate::bindings::_helpers::debug_command::run_debug::run_debug_command;
 
 /// Run `body` under a stderr status line that is always closed; returns its exit code.
 fn with_status(
@@ -33,32 +33,40 @@ pub(crate) fn run_dbt_debug(
     let py: Python<'_> = project_dir.py();
     let use_color: bool = !no_color && color_enabled(py)?;
     let dbt_code: i64 = with_status(py, ("Running dbt debug...", use_color), || {
-        call_with(
-            &registry::native(py, NativeAttr::DebugDbtFromProject)?,
-            &[
-                ("project_dir", project_dir.clone()),
-                ("args", args_tuple(py, args)?),
-                ("stdout_stream", stream(py, "stdout")?),
-                ("stderr_stream", stream(py, "stderr")?),
-            ],
-        )?
+        debug_dbt_from_project(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project_dir", project_dir.clone()),
+                    ("args", args_tuple(py, args)?),
+                    ("stdout_stream", stream(py, "stdout")?),
+                    ("stderr_stream", stream(py, "stderr")?),
+                ],
+            )?),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .extract()
     })?;
     stream(py, "stdout")?.call_method1("write", ("\n",))?;
     let sqlbuild_code: i64 =
         with_status(py, ("Running SQLBuild diagnostics...", use_color), || {
-            call_with(
-                &registry::native(py, NativeAttr::RunDebugCommand)?,
-                &[
-                    ("project_dir", project_dir.clone()),
-                    ("no_color", flag(py, no_color)),
-                    (
-                        "no_connection",
-                        flag(py, args.iter().any(|arg| arg == NO_CONNECTION_OPTION)),
-                    ),
-                    ("json_output", flag(py, false)),
-                ],
-            )?
+            run_debug_command(
+                py,
+                Some(keywords(
+                    py,
+                    &[
+                        ("project_dir", project_dir.clone()),
+                        ("no_color", flag(py, no_color)),
+                        (
+                            "no_connection",
+                            flag(py, args.iter().any(|arg| arg == NO_CONNECTION_OPTION)),
+                        ),
+                        ("json_output", flag(py, false)),
+                    ],
+                )?),
+            )
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
             .extract()
         })?;
     Ok(i32::from(dbt_code != 0 || sqlbuild_code != 0))

@@ -24,6 +24,7 @@ use crate::bindings::_helpers::command_runtime::runtime_errors::{
 use crate::bindings::_helpers::command_runtime::warehouse_scope::current_command_warehouse_scope;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
@@ -31,8 +32,7 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The `WarehouseGroup` whose warehouse is a target's `warehouses.build`; any other reads `query`.
 const BUILD_GROUP: &str = "build";
@@ -287,15 +287,9 @@ pub(crate) fn validate_cli_warehouse(
     };
     checked_cli_warehouse(py, &cli_warehouse)?;
     let discovered: Bound<'_, PyAny> = discover_project_configuration(py, &project_dir)?;
-    let adapter_name: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered, "project_config")?,
-            ),
-            ("local_config", native_field(&discovered, "local_config")?),
-        ],
+    let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
     )?;
     if !session_warehouse_support(py, &adapter_name, &project_dir)? {
         return Err(unsupported(py, &cli_warehouse, &adapter_name));

@@ -44,7 +44,9 @@ struct InitPaths<'py> {
 /// Create or render a minimal SQLBuild project from a dbt project.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(crate) fn build_dbt_init_project<'py>(
+    request: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let cwd: Bound<'py, PyAny> = native_field(request, "cwd")?;
     let paths: InitPaths<'py> = init_paths(request)?;
@@ -169,7 +171,7 @@ fn build_dbt_init_project<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
 /// Validate dbt init project and profile discovery before interactive prompting.
 #[pyfunction]
 #[pyo3(signature = (*, request))]
-fn validate_dbt_init_project(request: &Bound<'_, PyAny>) -> Result<(), PyErr> {
+pub(crate) fn validate_dbt_init_project(request: &Bound<'_, PyAny>) -> Result<(), PyErr> {
     let paths: InitPaths<'_> = init_paths(request)?;
     let metadata: DbtProjectMetadata = load_dbt_project_metadata(&paths.dbt_project_dir)?;
     let profile_name: Bound<'_, PyAny> = profile_name(request, &metadata)?;

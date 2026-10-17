@@ -28,8 +28,10 @@ use crate::bindings::_helpers::command_runtime::connection::resolve_target_conne
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
+use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
@@ -169,15 +171,9 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
         clone_policy(&discovered, (&destination, "allow_as_clone_destination"))?,
     );
     validate_clone_policy(targets, policy).map_err(|error| target_error(py, error))?;
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered, "project_config")?,
-            ),
-            ("local_config", native_field(&discovered, "local_config")?),
-        ],
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
     )?;
     let adapter: Bound<'py, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
     Ok(Invocation {
@@ -247,12 +243,9 @@ fn prepare<'py>(
     let pipeline: Bound<'py, PyAny> =
         within(&lifecycle(py, ("project", "project_compile"))?, |_| {
             progress.call_method1("on_progress", ("Preparing clone plan...",))?;
-            let resolver: Bound<'py, PyAny> = call_with(
-                &registry::native(py, NativeAttr::ResolveExternalSqlReferenceResolver)?,
-                &[
-                    ("project_dir", invocation.project_dir.clone()),
-                    ("discovered_inputs", invocation.discovered.clone()),
-                ],
+            let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
+                invocation.project_dir.clone(),
+                invocation.discovered.clone(),
             )?;
             let destination_connection: Bound<'py, PyAny> = new_record_with(
                 py,

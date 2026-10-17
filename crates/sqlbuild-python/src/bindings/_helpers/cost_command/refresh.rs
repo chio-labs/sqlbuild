@@ -10,9 +10,12 @@ use sqlbuild_core::cost_command::main::accepts_cost_refresh::accepts_cost_refres
 use sqlbuild_core::cost_command::models::CostCoverage;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_target_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::cost_report::functions::read_cost_run;
 use crate::bindings::_helpers::cost_report::functions::resolve_cost_run;
 use crate::bindings::_helpers::cost_report::functions::write_cost_run;
@@ -20,8 +23,6 @@ use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::NativeAttr;
-use crate::bindings::_helpers::records::registry;
 
 fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
     Ok(CostCoverage {
@@ -114,22 +115,13 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
         py,
         Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
-    let target_config: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveTargetConfig)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("selected_target", target_name.clone()),
-        ],
+    let target_config: Bound<'_, PyAny> = build_effective_target_config(
+        &discovered.clone(),
+        Some(target_name.clone()).filter(|value| !value.is_none()),
     )?;
-    let adapter_name: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered, "project_config")?,
-            ),
-            ("local_config", native_field(&discovered, "local_config")?),
-        ],
+    let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
+        &native_field(&discovered, "project_config")?,
+        &native_field(&discovered, "local_config")?,
     )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir)?;
     if !cost_aware(&adapter)? {
@@ -143,13 +135,16 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
     {
         return Ok(());
     }
-    let connection_config: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveProjectConnectionConfig)?,
-        &[
-            ("discovered_inputs", discovered),
-            ("project_dir", project_dir.clone()),
-            ("selected_target", target_name),
-        ],
+    let connection_config: Bound<'_, PyAny> = resolve_project_connection_config(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", discovered),
+                ("project_dir", project_dir.clone()),
+                ("selected_target", target_name),
+            ],
+        )?),
     )?;
     let run_id: Bound<'_, PyAny> = native_field(&record, "run_id")?;
     let ledger: Bound<'_, PyAny> = project_dir

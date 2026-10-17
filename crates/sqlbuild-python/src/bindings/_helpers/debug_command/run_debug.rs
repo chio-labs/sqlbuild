@@ -36,11 +36,11 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, within,
 };
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::RecordId;
 
 const DEBUG_OPTIONS: (&[&str], &[&str]) = (
     &[],
@@ -271,18 +271,9 @@ fn build_report(
         )?),
     )?;
     let files: DebugConfigFiles = debug_config_files(project_dir);
-    let adapter_name: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(&discovered_inputs, "project_config")?,
-            ),
-            (
-                "local_config",
-                native_field(&discovered_inputs, "local_config")?,
-            ),
-        ],
+    let adapter_name: Bound<'_, PyAny> = resolve_effective_adapter_name(
+        &native_field(&discovered_inputs, "project_config")?,
+        &native_field(&discovered_inputs, "local_config")?,
     )?;
     let adapter: Bound<'_, PyAny> = resolve_cli_adapter(&adapter_name, &project_dir_object)?;
     let context: DebugContext<'_> = DebugContext {
@@ -379,7 +370,10 @@ fn build_report(
 /// `sqb debug`: validate project config and the active connection; `1` when a check failed.
 #[pyfunction]
 #[pyo3(signature = (**options))]
-fn run_debug_command(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<i32> {
+pub(crate) fn run_debug_command(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<i32> {
     let arguments: KeywordArguments<'_> =
         KeywordArguments::read(py, "run_debug_command", options, DEBUG_OPTIONS)?;
     let project_dir: Bound<'_, PyAny> = arguments.value("project_dir")?;

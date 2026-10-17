@@ -16,8 +16,10 @@ use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
+use crate::bindings::_helpers::compile_driver::project::build_project_graph;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
@@ -76,16 +78,9 @@ fn discovered_adapter<'py>(
     project_dir: &Bound<'py, PyAny>,
     discovered: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = project_dir.py();
-    let adapter_name: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
-        &[
-            (
-                "project_config",
-                native_field(discovered, "project_config")?,
-            ),
-            ("local_config", native_field(discovered, "local_config")?),
-        ],
+    let adapter_name: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
     )?;
     resolve_cli_adapter(&adapter_name, project_dir)
 }
@@ -159,12 +154,15 @@ fn model_paths(
     if let Some(paths) = exact_model_paths(py, scope, (select, exclude))? {
         return Ok(paths);
     }
-    let graph: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::BuildProjectGraph)?,
-        &[
-            ("discovered_inputs", scope.discovered.clone()),
-            ("adapter", scope.adapter.clone()),
-        ],
+    let graph: Bound<'_, PyAny> = build_project_graph(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("discovered_inputs", scope.discovered.clone()),
+                ("adapter", scope.adapter.clone()),
+            ],
+        )?),
     )?;
     let keys: Bound<'_, PyAny> = select_project_graph(
         &graph.clone(),

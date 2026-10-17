@@ -2,7 +2,8 @@
 
 use std::collections::HashMap;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::assembly::analysis_session::main::projection_facts::projection_facts;
@@ -10,6 +11,7 @@ use sqlbuild_analysis::assembly::analysis_session::models::ProjectionFacts;
 use sqlbuild_core::panics::main::native_failure::native_failure;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
+use crate::bindings::_helpers::analysis_session::models::FixtureInferenceCount;
 use crate::bindings::_helpers::analysis_session::query_columns::ColumnsRow;
 use crate::bindings::_helpers::analysis_session::stage_functions::query_column_rows;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
@@ -22,14 +24,18 @@ use crate::bindings::types::CompilerDetach;
 const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";
 const LEGACY_MODE: &str = "legacy";
 
+/// Fixture column inferences computed in this process.
+static INFERENCES: PyOnceLock<Py<FixtureInferenceCount>> = PyOnceLock::new();
+
 /// `infer_fixture_column_facts(*, query_sql, inference_profile)`: a `FixtureColumnInference`.
 #[pyfunction]
 #[pyo3(signature = (**request))]
-fn infer_fixture_column_facts<'py>(
+pub(crate) fn infer_fixture_column_facts<'py>(
     request: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let request = Request::new("infer_fixture_column_facts", request)?;
     let py: Python<'py> = request.py();
+    inference_count(py)?.borrow_mut().computed += 1;
     let query_sql: String = request.get("query_sql")?.extract()?;
     let profile: Bound<'py, PyAny> = request.get("inference_profile")?;
     let query: Bound<'py, PyDict> = PyDict::new(py);
@@ -80,6 +86,27 @@ fn infer_fixture_column_facts<'py>(
     new_record(py, RecordId::FixtureColumnInference, (), Some(&arguments))
 }
 
+/// Fixture column inferences computed in this process, optionally clearing the count first.
+#[pyfunction]
+#[pyo3(signature = (*, reset = false))]
+fn fixture_inference_count(py: Python<'_>, reset: bool) -> PyResult<u64> {
+    let count = inference_count(py)?;
+    let mut count = count.borrow_mut();
+    if reset {
+        count.computed = 0;
+    }
+    Ok(count.computed)
+}
+
+/// The extension-wide fixture inference counter.
+fn inference_count(py: Python<'_>) -> PyResult<Bound<'_, FixtureInferenceCount>> {
+    Ok(INFERENCES
+        .get_or_try_init(py, || Py::new(py, FixtureInferenceCount::default()))?
+        .bind(py)
+        .clone())
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
-    module.add_function(wrap_pyfunction!(infer_fixture_column_facts, module)?)
+    module.add_function(wrap_pyfunction!(infer_fixture_column_facts, module)?)?;
+    module.add_function(wrap_pyfunction!(fixture_inference_count, module)?)
 }
