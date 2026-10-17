@@ -139,6 +139,10 @@ jobs:
     needs: compare
     if: ${{ always() && github.event_name == 'push' && needs.compare.outputs.regressed == 'true' }}
     runs-on: ubuntu-24.04
+    # Overlapping main runs report one at a time so they update a single regression issue.
+    concurrency:
+      group: release-performance-report
+      cancel-in-progress: false
     permissions:
       issues: write
     steps:
