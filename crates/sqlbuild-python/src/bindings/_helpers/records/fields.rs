@@ -5,8 +5,9 @@ use std::sync::{Mutex, OnceLock};
 
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyAttributeError, PyRuntimeError, PyTypeError};
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyResult, Python};
 use pyo3::pyclass::CompareOp;
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyStringMethods, PyTuple, PyTupleMethods,
     PyType, PyTypeMethods,
@@ -17,16 +18,25 @@ use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{
-    CACHED_PROPERTIES, CLASS_PROPERTIES, FROZEN_INSTANCE_ERROR, NATIVE_MODULE, ORDERED_RECORDS,
-    RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
+    CACHED_PROPERTIES, CLASS_PROPERTIES, ENUMS, FROZEN_INSTANCE_ERROR, NATIVE_MODULE,
+    ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
 };
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::getters::getter_field;
-use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
+use crate::bindings::_helpers::records::models::{
+    EnumSpec, FieldDefault, NativeRecord, RecordSpec,
+};
 use crate::bindings::_helpers::records::types::ClassProperty;
 
 /// How a test run treats `field` falling back to `getattr` on a native class: unset outside tests.
 pub(crate) const NATIVE_FIELD_STRICT_ENV_VAR: &str = "SQLBUILD_NATIVE_FIELD_STRICT";
+
+/// The string enum member attributes answered natively.
+const ENUM_VALUE_ATTRIBUTE: &str = "value";
+const ENUM_NAME_ATTRIBUTE: &str = "name";
+
+/// Native string enums by class object, for `.value` and `.name` reads answered from their members.
+static ENUM_CLASSES: PyOnceLock<HashMap<usize, &'static EnumSpec>> = PyOnceLock::new();
 
 /// Every registered record spec, in registration order.
 pub(crate) fn all_specs() -> impl Iterator<Item = &'static RecordSpec> {
@@ -66,6 +76,8 @@ pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Boun
                 .map(|found| found.into_bound(value.py()));
         }
     } else if let Some(found) = getter_field(value, name) {
+        return found;
+    } else if let Some(found) = enum_member_field(value, name) {
         return found;
     }
     strict_fallback(value, name)?;
@@ -186,6 +198,52 @@ fn property_value(
     let value: Py<PyAny> = property(record.as_any())?;
     store_cached(record, cached_name, &value)?;
     Ok(value)
+}
+
+/// `member.value` or `member.name` of a native string enum, from its declared members.
+fn enum_member_field<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> Option<PyResult<Bound<'py, PyAny>>> {
+    let wants_value: bool = match name {
+        ENUM_VALUE_ATTRIBUTE => true,
+        ENUM_NAME_ATTRIBUTE => false,
+        _ => return None,
+    };
+    let py: Python<'py> = value.py();
+    let classes: &HashMap<usize, &'static EnumSpec> =
+        match ENUM_CLASSES.get_or_try_init(py, || enum_classes(py)) {
+            Ok(classes) => classes,
+            Err(error) => return Some(Err(error)),
+        };
+    let spec: &EnumSpec = classes.get(&(value.get_type().as_ptr() as usize))?;
+    let Ok(member) = value.cast::<PyString>() else {
+        return None;
+    };
+    let text: String = match member.to_str() {
+        Ok(text) => text.to_owned(),
+        Err(error) => return Some(Err(error)),
+    };
+    let (member_name, member_value) = spec
+        .members
+        .iter()
+        .find(|(_, declared)| *declared == text)?;
+    let answer: &str = if wants_value {
+        member_value
+    } else {
+        member_name
+    };
+    Some(Ok(PyString::new(py, answer).into_any()))
+}
+
+fn enum_classes(py: Python<'_>) -> PyResult<HashMap<usize, &'static EnumSpec>> {
+    let module: Bound<'_, PyModule> = py.import(NATIVE_MODULE)?;
+    let mut classes: HashMap<usize, &'static EnumSpec> = HashMap::new();
+    for spec in ENUMS.iter().flat_map(|group| group.iter()) {
+        let class: Bound<'_, PyAny> = module.getattr(spec.name)?;
+        let _ = classes.insert(class.as_ptr() as usize, spec);
+    }
+    Ok(classes)
 }
 
 /// `mapping.get(key)`: a dict is read through the C API.
