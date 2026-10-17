@@ -1,6 +1,6 @@
 use crate::configuration::main::validate as config;
 use crate::constants::{API_VERSION, NATIVE_BUILD_IDENTITY};
-use crate::engine::_helpers::cache::{Cache, RuleCacheEntry};
+use crate::engine::_helpers::cache::{Cache, PendingBucketWrite, RuleCacheEntry};
 use crate::models::{
     EvaluateRequest, EvaluateResponse, Fault, Model, RuleMetadata, RuleScope, RulesCodeGrammar,
     RulesConfig,
@@ -20,13 +20,39 @@ use fensu_policy::lifecycle::models::{
 #[cfg(test)]
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 const NATIVE_RULE_WORKERS: usize = 4;
 const NATIVE_RULE_STACK_BYTES: usize = 16 * 1024 * 1024;
 const MODEL_RULES_IDENTITY_SEED: &[u8] = b"sqlbuild-rules-model-v2";
+const CANCELLED: &str = "native rules evaluation was cancelled";
+
+/// How one evaluation publishes its bulk rules cache bucket and whether it may stop early.
+pub(crate) struct EvaluationControl<'a> {
+    /// `None` writes the bucket at once; `Some` holds the write for the caller to publish.
+    pub(crate) deferred_bucket: Option<&'a RefCell<Option<PendingBucketWrite>>>,
+    /// Stops model evaluation between models once set.
+    pub(crate) cancel: Option<&'a AtomicBool>,
+}
+
+impl EvaluationControl<'_> {
+    /// Write the cache at once and never stop early, as an ordinary evaluation does.
+    pub(crate) fn immediate() -> Self {
+        Self {
+            deferred_bucket: None,
+            cancel: None,
+        }
+    }
+
+    fn cancelled(&self) -> bool {
+        self.cancel
+            .is_some_and(|cancel| cancel.load(Ordering::Acquire))
+    }
+}
 
 struct PendingModelRule<'a> {
     index: usize,
@@ -44,6 +70,7 @@ struct ModelRuleBatchContext<'a> {
     request: &'a EvaluateRequest,
     selected: &'a BTreeMap<String, &'a RuleMetadata>,
     threshold_overrides: &'a [ResolvedThresholdOverride],
+    cancel: Option<&'a AtomicBool>,
 }
 
 struct NativeModelRuleRequest<'a> {
@@ -61,6 +88,7 @@ struct NativeModelEvaluation {
 
 fn evaluate_native_models(
     input: NativeModelRuleRequest<'_>,
+    control: &EvaluationControl<'_>,
 ) -> Result<NativeModelEvaluation, String> {
     let NativeModelRuleRequest {
         context,
@@ -145,7 +173,13 @@ fn evaluate_native_models(
         bucket
             .entries
             .retain(|path, _| current.contains(path.as_str()) || project_dir.join(path).is_file());
-        cache.put_native_rules_bucket(model_rules_fingerprint, &bucket)?;
+        match control.deferred_bucket {
+            None => cache.put_native_rules_bucket(model_rules_fingerprint, &bucket)?,
+            Some(deferred) => {
+                *deferred.borrow_mut() =
+                    Some(cache.pending_native_rules_bucket(model_rules_fingerprint, bucket));
+            }
+        }
     }
     Ok(result)
 }
@@ -157,14 +191,21 @@ fn evaluate_pending_models(
     let evaluate_pending = |pending: PendingModelRule<'_>| CompletedModelRule {
         index: pending.index,
         identity: pending.identity,
-        faults: rules::evaluate_model(ModelEvaluationRequest {
-            model: pending.model,
-            config: &context.request.config,
-            selected: context.selected,
-            request: context.request,
-            threshold_overrides: context.threshold_overrides,
-        })
-        .and_then(|faults| scoped_faults(context.selected, faults, RuleScope::evaluates_models)),
+        faults: if context
+            .cancel
+            .is_some_and(|cancel| cancel.load(Ordering::Acquire))
+        {
+            Err(CANCELLED.to_owned())
+        } else {
+            rules::evaluate_model(ModelEvaluationRequest {
+                model: pending.model,
+                config: &context.request.config,
+                selected: context.selected,
+                request: context.request,
+                threshold_overrides: context.threshold_overrides,
+            })
+            .and_then(|faults| scoped_faults(context.selected, faults, RuleScope::evaluates_models))
+        },
     };
     if pending_models.len() <= 1 {
         return Ok(pending_models.into_iter().map(evaluate_pending).collect());
@@ -271,7 +312,16 @@ fn model_rules_fingerprint(
     fingerprint::fingerprint(selected, &model_config, dialect)
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_request(request: EvaluateRequest) -> Result<String, String> {
+    evaluate_request_with(request, &EvaluationControl::immediate())
+}
+
+/// Evaluate `request`, publishing its cache bucket and stopping early as `control` says.
+pub(crate) fn evaluate_request_with(
+    request: EvaluateRequest,
+    control: &EvaluationControl<'_>,
+) -> Result<String, String> {
     if request.version != API_VERSION {
         return Err(format!(
             "unsupported rules native API version {}; expected {API_VERSION}",
@@ -334,15 +384,23 @@ pub(crate) fn evaluate_request(request: EvaluateRequest) -> Result<String, Strin
         })?,
         RuleScope::evaluates_project,
     )?);
-    let native = evaluate_native_models(NativeModelRuleRequest {
-        context: ModelRuleBatchContext {
-            request: &request,
-            selected: &selected_by_code,
-            threshold_overrides: &threshold_overrides,
+    if control.cancelled() {
+        return Err(CANCELLED.to_owned());
+    }
+    let cancel: Option<&AtomicBool> = control.cancel;
+    let native = evaluate_native_models(
+        NativeModelRuleRequest {
+            context: ModelRuleBatchContext {
+                request: &request,
+                selected: &selected_by_code,
+                threshold_overrides: &threshold_overrides,
+                cancel,
+            },
+            cache: cache.as_ref(),
+            model_rules_fingerprint: &model_rules_fingerprint,
         },
-        cache: cache.as_ref(),
-        model_rules_fingerprint: &model_rules_fingerprint,
-    })?;
+        control,
+    )?;
     let cache_hits = native.hits;
     let cache_misses = native.misses;
     raw_faults.extend(native.faults);

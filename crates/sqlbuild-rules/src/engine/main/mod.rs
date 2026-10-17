@@ -1,5 +1,8 @@
+pub mod answer_speculative_rows;
 pub mod build_models;
 pub mod custom_host;
+pub mod discard_speculative_rows;
 pub mod evaluate_rows;
 pub mod finalize_rows;
 pub mod project_model_rows;
+pub mod start_speculative_rows;

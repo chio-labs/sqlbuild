@@ -259,3 +259,16 @@ pub(crate) struct DependencyTokenTestCase {
     pub expected_messages: &'static [&'static str],
     pub expected_columns: &'static [usize],
 }
+
+pub(crate) struct SpeculativeRowsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) cache_enabled: bool,
+    pub(crate) changed_query: Option<&'static str>,
+    pub(crate) expected_used: bool,
+}
+
+pub(crate) struct SpeculativeStopTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) end: fn(crate::models::SpeculativeRows, &std::path::Path) -> Result<bool, String>,
+    pub(crate) expected_stopped: bool,
+}

@@ -43,6 +43,34 @@ impl Cache {
     ) -> Result<(), String> {
         write_bucket(&self.native_rules_path, ruleset_identity, bucket)
     }
+
+    /// The write `put_native_rules_bucket` would make, held until it is published.
+    pub(crate) fn pending_native_rules_bucket(
+        &self,
+        ruleset_identity: &str,
+        bucket: RuleCacheBucket,
+    ) -> PendingBucketWrite {
+        PendingBucketWrite {
+            path: self.native_rules_path.clone(),
+            fingerprint: ruleset_identity.to_owned(),
+            bucket,
+        }
+    }
+}
+
+/// One bulk rules cache write that has not been made yet.
+#[derive(Debug)]
+pub(crate) struct PendingBucketWrite {
+    path: PathBuf,
+    fingerprint: String,
+    bucket: RuleCacheBucket,
+}
+
+impl PendingBucketWrite {
+    /// Make the write exactly as `Cache::put_native_rules_bucket` makes it.
+    pub(crate) fn publish(&self) -> Result<(), String> {
+        write_bucket(&self.path, &self.fingerprint, &self.bucket)
+    }
 }
 
 fn read_bucket(path: &Path, fingerprint: &str) -> Result<RuleCacheBucket, String> {

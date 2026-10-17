@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+
+use crate::errors::RowsError;
 use serde_json::Value;
 use std::collections::BTreeMap;
 
@@ -924,6 +926,30 @@ pub struct RowsRequest {
     pub request: EvaluateRequest,
     /// The compiled-code identity and memo path, when the rules cache is enabled.
     pub memo: Option<(String, std::path::PathBuf)>,
+}
+
+/// A built-in rules evaluation running speculatively on its own thread; dropping it cancels it.
+#[derive(Debug)]
+pub struct SpeculativeRows {
+    pub(crate) key: std::sync::Mutex<std::sync::mpsc::Receiver<Option<String>>>,
+    pub(crate) thread: Option<
+        std::thread::JoinHandle<
+            Result<Option<crate::engine::_helpers::memo::SpeculativeOutcome>, String>,
+        >,
+    >,
+    pub(crate) cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// How a request was answered beside a speculative evaluation.
+#[derive(Debug)]
+pub enum SpeculativeAnswer {
+    /// The request's evaluation, and whether the speculation evaluated exactly this request.
+    Answered {
+        evaluation: Result<RowsEvaluation, RowsError>,
+        used: bool,
+    },
+    /// `stop` was set while waiting; nothing was evaluated or written.
+    Stopped,
 }
 
 /// A rows request's decoded response.
