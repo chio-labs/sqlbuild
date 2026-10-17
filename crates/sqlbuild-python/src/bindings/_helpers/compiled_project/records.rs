@@ -14,9 +14,9 @@ use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelIn
 use crate::bindings::_helpers::compiled_project::project::{NativeCompiledProject, model_facts};
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::schema_facts::entry_schema_fact;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
 const DECIMAL_KIND: &str = "decimal";
@@ -39,7 +39,7 @@ pub(crate) fn replace<'py>(
 /// `value` when it already is a `class` record, else `class(**{field: getattr(value, field)})`.
 fn record<'py>(value: &Bound<'py, PyAny>, class: RecordId) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    let class: Bound<'py, PyAny> = registry::class(py, class)?;
+    let class: Bound<'py, PyAny> = record_class(py, class)?;
     if value.is_instance(&class)? {
         return Ok(value.clone());
     }
@@ -111,7 +111,7 @@ pub(crate) fn compiled_project_record<'py>(
     include_sql_expansions: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledProject)?;
+    let class: Bound<'py, PyAny> = record_class(py, RecordId::CompiledProject)?;
     if project.is_instance(&class)? {
         if include_sql_expansions {
             return Ok(project.clone());
@@ -129,7 +129,7 @@ pub(crate) fn compiled_project_record<'py>(
     ] {
         records_of(&fields, pair)?;
     }
-    class.call((), Some(&fields))
+    new_record(py, RecordId::CompiledProject, (), Some(&fields))
 }
 
 /// The model with these final binding diagnostics.
@@ -140,7 +140,7 @@ pub(crate) fn with_binding_diagnostics<'py>(
     diagnostics: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    if model.is_instance(&registry::class(py, RecordId::CompiledModel)?)? {
+    if model.is_instance(&record_class(py, RecordId::CompiledModel)?)? {
         return replace(model, &[("binding_diagnostics", diagnostics.clone())]);
     }
     model.call_method1("with_binding_diagnostics", (diagnostics,))
@@ -163,7 +163,7 @@ pub(crate) fn with_type_recovery<'py>(
             unchecked.push(column);
         }
     }
-    if !model.is_instance(&registry::class(py, RecordId::CompiledModel)?)? {
+    if !model.is_instance(&record_class(py, RecordId::CompiledModel)?)? {
         return model.call_method1("with_type_recovery", (diagnostics, unchecked));
     }
     let inferred: Bound<'py, PyAny> = native_field(model, "inferred_columns")?;
@@ -223,7 +223,7 @@ fn with_changes<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     let changes: Bound<'py, PyDict> = changes.unwrap_or_else(|| PyDict::new(py));
-    if value.is_instance(&registry::class(py, class)?)? {
+    if value.is_instance(&record_class(py, class)?)? {
         return imported(py, DATACLASSES_MODULE, "replace")?.call((value,), Some(&changes));
     }
     value.call_method("with_changes", (), Some(&changes))
@@ -253,7 +253,7 @@ pub(crate) fn compile_inputs_view<'py>(
     }
     let keywords: Bound<'py, PyDict> = fields.copy()?;
     keywords.set_item("native_project", native_project)?;
-    registry::class(py, RecordId::CompileProjectInputs)?.call((), Some(&keywords))
+    new_record(py, RecordId::CompileProjectInputs, (), Some(&keywords))
 }
 
 /// A typed SQL value as the plain value native consumers read.
@@ -391,8 +391,7 @@ pub(crate) fn record_model_analyses<'py>(
         .map(|model| model.extract::<PyRef<'py, NativeCompiledModel>>())
         .collect::<PyResult<_>>()?;
     let mut transferred: usize = NativeCompiledProject::record_view_analyses(project, views)?;
-    let nullable: Bound<'py, PyAny> =
-        registry::class(py, RecordId::InferredNullability)?.getattr("NULLABLE")?;
+    let nullable: Bound<'py, PyAny> = enum_member(py, RecordId::InferredNullability, "NULLABLE")?;
     for model in &models {
         if model.is_instance_of::<NativeCompiledModel>() {
             continue;

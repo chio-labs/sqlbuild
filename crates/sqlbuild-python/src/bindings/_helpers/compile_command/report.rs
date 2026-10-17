@@ -12,9 +12,7 @@ use sqlbuild_core::cli_text::models::{
 };
 
 use crate::bindings::_helpers::compile_command::surrogates::SurrogateText;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::compile_outputs::json_report::{
     emit_json_report, emit_orjson_report,
 };
@@ -22,9 +20,9 @@ use crate::bindings::_helpers::discovery::constants::SQL_HOOK_OUTPUT_FIELDS;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::coverage::semantic_coverage;
 
 const METADATA_MODULE: &str = "importlib.metadata";
@@ -782,7 +780,7 @@ fn test_resource<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> 
     let py: Python<'py> = test.py();
     let payload: Bound<'py, PyAny> = native_field(test, "payload")?;
     let expected_models: Bound<'py, PyList> =
-        if payload.is_instance(&registry::class(py, RecordId::CompiledModelSqlTestPayload)?)? {
+        if payload.is_instance(&record_class(py, RecordId::CompiledModelSqlTestPayload)?)? {
             PyList::new(
                 py,
                 payload
@@ -1069,8 +1067,9 @@ pub(crate) fn format_compile_error_json<'py>(
             native_field(&location, "column")?,
         )
     };
-    let diagnostic: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilerDiagnostic)?,
+    let diagnostic: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompilerDiagnostic,
         &[
             ("phase", any(py, "compile")?),
             ("severity", any(py, ERROR_SEVERITY)?),

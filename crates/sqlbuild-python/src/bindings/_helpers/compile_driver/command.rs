@@ -27,6 +27,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -335,8 +336,9 @@ fn analysis_options<'py>(
     status: &Status<'py>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = request.py();
-    let selection: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompileAnalysisSelection)?,
+    let selection: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompileAnalysisSelection,
         &[
             ("select", native_field(request, "select")?),
             ("exclude", native_field(request, "exclude")?),
@@ -365,8 +367,7 @@ fn analysis_options<'py>(
 /// Whether a rule finding failed the compile.
 fn rules_failed(analysis: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = analysis.py();
-    let rule_phase: Bound<'_, PyAny> =
-        registry::class(py, RecordId::DiagnosticPhase)?.getattr("RULE")?;
+    let rule_phase: Bound<'_, PyAny> = enum_member(py, RecordId::DiagnosticPhase, "RULE")?;
     for diagnostic in native_field(analysis, "diagnostics")?.try_iter()? {
         let diagnostic: Bound<'_, PyAny> = diagnostic?;
         if native_field(&diagnostic, "is_error")?.is_truthy()?

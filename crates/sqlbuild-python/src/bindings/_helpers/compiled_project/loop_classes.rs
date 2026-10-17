@@ -7,6 +7,7 @@ use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -31,7 +32,7 @@ fn dict<'py>(
 pub(crate) fn table_backed<'py>(py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
     TABLE_BACKED_MATERIALIZATIONS
         .iter()
-        .map(|name| registry::member(py, RecordId::MaterializationType, name))
+        .map(|name| enum_member(py, RecordId::MaterializationType, name))
         .collect()
 }
 
@@ -56,24 +57,24 @@ pub(crate) fn native_config_classes<'py>(
             ("table_backed", PyTuple::new(py, table_backed)?.into_any()),
             (
                 "compile_model_config",
-                registry::class(py, RecordId::CompileModelConfig)?,
+                record_class(py, RecordId::CompileModelConfig)?,
             ),
             (
                 "resolved_retention",
-                registry::class(py, RecordId::ResolvedTimeTravelRetention)?,
+                record_class(py, RecordId::ResolvedTimeTravelRetention)?,
             ),
             (
                 "retention_source",
-                registry::member(py, RecordId::TimeTravelRetentionSource, "MODEL")?,
+                enum_member(py, RecordId::TimeTravelRetentionSource, "MODEL")?,
             ),
             (
                 "resolved_table_type",
-                registry::class(py, RecordId::ResolvedTableType)?,
+                record_class(py, RecordId::ResolvedTableType)?,
             ),
-            ("table_type", registry::class(py, RecordId::TableType)?),
+            ("table_type", record_class(py, RecordId::TableType)?),
             (
                 "table_type_source",
-                registry::member(py, RecordId::TableTypeSource, "MODEL")?,
+                enum_member(py, RecordId::TableTypeSource, "MODEL")?,
             ),
             ("record_template_reads", record_template_reads.clone()),
         ],
@@ -89,7 +90,7 @@ fn named_records<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
     }
     let kinds: Vec<Bound<'py, PyAny>> = NAMED_KINDS
         .iter()
-        .map(|name| registry::member(py, RecordId::DeclarationKind, name))
+        .map(|name| enum_member(py, RecordId::DeclarationKind, name))
         .collect::<PyResult<_>>()?;
     let declarations: Bound<'py, PyAny> =
         native_field(resolver, "lookup")?.getattr("declarations")?;
@@ -119,8 +120,8 @@ fn schema_enums<'py>(resolver: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict
     if resolver.is_none() {
         return Ok(enums);
     }
-    let enum_kind: Bound<'py, PyAny> = registry::member(py, RecordId::DeclarationKind, "ENUM")?;
-    let enum_class: Bound<'py, PyAny> = registry::class(py, RecordId::EnumDeclaration)?;
+    let enum_kind: Bound<'py, PyAny> = enum_member(py, RecordId::DeclarationKind, "ENUM")?;
+    let enum_class: Bound<'py, PyAny> = record_class(py, RecordId::EnumDeclaration)?;
     let declarations: Bound<'py, PyAny> =
         native_field(resolver, "projection")?.getattr("declarations")?;
     for pair in declarations.call_method0("items")?.try_iter()? {
@@ -174,7 +175,7 @@ fn visibility_classes<'py>(
         let lookup: Bound<'py, PyAny> = native_field(&resolver, "lookup")?;
         let declarations: Bound<'py, PyAny> =
             native_field(&lookup, "index")?.getattr("declarations")?;
-        let private: Bound<'py, PyAny> = registry::member(py, RecordId::ScopeKind, "PRIVATE")?;
+        let private: Bound<'py, PyAny> = enum_member(py, RecordId::ScopeKind, "PRIVATE")?;
         let mut owners: Vec<Bound<'py, PyAny>> = Vec::new();
         for declaration in declarations.try_iter()? {
             let declaration: Bound<'py, PyAny> = declaration?;
@@ -203,31 +204,31 @@ fn visibility_classes<'py>(
             ("visible_declarations", visible_declarations.clone()),
             (
                 "resource_identity",
-                registry::class(py, RecordId::ResourceIdentity)?,
+                record_class(py, RecordId::ResourceIdentity)?,
             ),
             (
                 "declaration_identity",
-                registry::class(py, RecordId::DeclarationIdentity)?,
+                record_class(py, RecordId::DeclarationIdentity)?,
             ),
             (
                 "model_kind",
-                registry::member(py, RecordId::ResourceKind, "MODEL")?,
+                enum_member(py, RecordId::ResourceKind, "MODEL")?,
             ),
             (
                 "enum_kind",
-                registry::member(py, RecordId::DeclarationKind, "ENUM")?,
+                enum_member(py, RecordId::DeclarationKind, "ENUM")?,
             ),
             (
                 "constant_kind",
-                registry::member(py, RecordId::DeclarationKind, "CONSTANT")?,
+                enum_member(py, RecordId::DeclarationKind, "CONSTANT")?,
             ),
             (
                 "private_owner",
-                registry::member(py, RecordId::VisibilityReason, "PRIVATE_OWNER")?,
+                enum_member(py, RecordId::VisibilityReason, "PRIVATE_OWNER")?,
             ),
             (
                 "visibility_record",
-                registry::class(py, RecordId::VisibilityRecord)?,
+                record_class(py, RecordId::VisibilityRecord)?,
             ),
         ],
     )
@@ -235,49 +236,46 @@ fn visibility_classes<'py>(
 
 fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
     let compiled: Vec<(&str, Bound<'py, PyAny>)> = vec![
-        (
-            "object_key",
-            registry::class(py, RecordId::CompiledObjectKey)?,
-        ),
+        ("object_key", record_class(py, RecordId::CompiledObjectKey)?),
         (
             "relation_location",
-            registry::class(py, RecordId::CompiledRelationLocation)?,
+            record_class(py, RecordId::CompiledRelationLocation)?,
         ),
         (
             "inferred_column",
-            registry::class(py, RecordId::InferredColumn)?,
+            record_class(py, RecordId::InferredColumn)?,
         ),
         (
             "nullability",
-            registry::class(py, RecordId::InferredNullability)?,
+            record_class(py, RecordId::InferredNullability)?,
         ),
         (
             "compiler_diagnostic",
-            registry::class(py, RecordId::CompilerDiagnostic)?,
+            record_class(py, RecordId::CompilerDiagnostic)?,
         ),
         (
             "source_location",
-            registry::class(py, RecordId::SourceLocation)?,
+            record_class(py, RecordId::SourceLocation)?,
         ),
         (
             "compact_lineage_facts",
-            registry::class(py, RecordId::CompactLineageFacts)?,
+            record_class(py, RecordId::CompactLineageFacts)?,
         ),
         (
             "lineage_column_fact",
-            registry::class(py, RecordId::CompiledLineageColumnFact)?,
+            record_class(py, RecordId::CompiledLineageColumnFact)?,
         ),
         (
             "lineage_source_fact",
-            registry::class(py, RecordId::CompiledLineageSourceFact)?,
+            record_class(py, RecordId::CompiledLineageSourceFact)?,
         ),
         (
             "contract_proof",
-            registry::class(py, RecordId::DynamicColumnContractProof)?,
+            record_class(py, RecordId::DynamicColumnContractProof)?,
         ),
         (
             "family_proof",
-            registry::class(py, RecordId::DynamicColumnFamilyProof)?,
+            record_class(py, RecordId::DynamicColumnFamilyProof)?,
         ),
     ];
     dict(
@@ -285,24 +283,21 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         vec![
             (
                 "sql_reference",
-                registry::class(py, RecordId::CompileSqlReference)?,
+                record_class(py, RecordId::CompileSqlReference)?,
             ),
             (
                 "reference_kind",
-                registry::class(py, RecordId::SqlReferenceKind)?,
+                record_class(py, RecordId::SqlReferenceKind)?,
             ),
             (
                 "schema_model_entry",
-                registry::class(py, RecordId::SchemaModelEntry)?,
+                record_class(py, RecordId::SchemaModelEntry)?,
             ),
             (
                 "sql_expansion",
-                registry::class(py, RecordId::CompiledSqlExpansion)?,
+                record_class(py, RecordId::CompiledSqlExpansion)?,
             ),
-            (
-                "expansion_span",
-                registry::class(py, RecordId::ExpansionSpan)?,
-            ),
+            ("expansion_span", record_class(py, RecordId::ExpansionSpan)?),
             (
                 "audits",
                 dict(
@@ -327,11 +322,11 @@ fn input_view_classes<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
                     vec![
                         (
                             "function_argument",
-                            registry::class(py, RecordId::FunctionArgument)?,
+                            record_class(py, RecordId::FunctionArgument)?,
                         ),
                         (
                             "function_return_column",
-                            registry::class(py, RecordId::FunctionReturnColumn)?,
+                            record_class(py, RecordId::FunctionReturnColumn)?,
                         ),
                         (
                             "function_language",
@@ -384,7 +379,7 @@ pub(crate) fn model_loop_classes<'py>(
             ("provider_names", provider_names.into_bound_py_any(py)?),
             (
                 "python_hook_entry",
-                registry::class(py, RecordId::PythonHookEntry)?,
+                record_class(py, RecordId::PythonHookEntry)?,
             ),
             (
                 "signature",
@@ -405,7 +400,7 @@ pub(crate) fn model_loop_classes<'py>(
     dict(
         py,
         vec![
-            ("usage_record", registry::class(py, RecordId::UsageRecord)?),
+            ("usage_record", record_class(py, RecordId::UsageRecord)?),
             ("compile_error", registry::error(py, ErrorId::CompileInput)?),
             ("syntax_help", host("syntax_help")?),
             ("source_syntax_help", host("source_syntax_help")?),
@@ -415,21 +410,18 @@ pub(crate) fn model_loop_classes<'py>(
                 "scope_path_error",
                 registry::error(py, ErrorId::InvalidScopePath)?,
             ),
-            (
-                "sql_hook_entry",
-                registry::class(py, RecordId::SqlHookEntry)?,
-            ),
+            ("sql_hook_entry", record_class(py, RecordId::SqlHookEntry)?),
             (
                 "audit_factories",
                 by_attribute(audit_factories, "name")?.into_any(),
             ),
             (
                 "generated_usage",
-                registry::member(py, RecordId::UsageKind, "GENERATED")?,
+                enum_member(py, RecordId::UsageKind, "GENERATED")?,
             ),
             (
                 "contract_enforced",
-                registry::member(py, RecordId::ContractPolicy, "ENFORCED")?,
+                enum_member(py, RecordId::ContractPolicy, "ENFORCED")?,
             ),
             (
                 "model_schemas",
@@ -439,14 +431,14 @@ pub(crate) fn model_loop_classes<'py>(
             ("schema_enums", schema_enums(&resolver)?.into_any()),
             (
                 "compiler_diagnostic",
-                registry::class(py, RecordId::CompilerDiagnostic)?,
+                record_class(py, RecordId::CompilerDiagnostic)?,
             ),
             ("report_diagnostic", host("report_diagnostic")?),
             ("path_class", imported(py, "pathlib", "Path")?),
             ("external_resolver", external_resolver.clone()),
             (
                 "reference_kind",
-                registry::class(py, RecordId::SqlReferenceKind)?,
+                record_class(py, RecordId::SqlReferenceKind)?,
             ),
             (
                 "config",

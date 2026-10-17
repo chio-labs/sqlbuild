@@ -11,6 +11,7 @@ use sqlbuild_model_config::templates::models::DeferredSegment;
 
 use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -113,8 +114,9 @@ fn deferred_location<'py>(
             ("name", name.clone()),
         ],
     )?;
-    call_with(
-        &registry::class(py, RecordId::CompiledRelationLocation)?,
+    new_record_with(
+        py,
+        RecordId::CompiledRelationLocation,
         &[
             ("database", database),
             ("schema", schema),
@@ -309,10 +311,9 @@ fn resolve_model_deferral_inputs<'py>(
             &[],
         ),
     )?;
-    let inputs: Bound<'py, PyAny> = registry::class(py, RecordId::DeferralInputs)?;
     let defer_to: Bound<'py, PyAny> = arguments.value("defer_to")?;
     if defer_to.is_none() {
-        return inputs.call0();
+        return new_record(py, RecordId::DeferralInputs, (), None);
     }
     let project: Bound<'py, PyAny> = arguments.value("project")?;
     let adapter: Bound<'py, PyAny> = arguments.value("adapter")?;
@@ -336,8 +337,9 @@ fn resolve_model_deferral_inputs<'py>(
         &arguments.value("connection")?,
         locations.as_any(),
     )?;
-    call_with(
-        &inputs,
+    new_record_with(
+        py,
+        RecordId::DeferralInputs,
         &[
             ("deferred_locations", locations.into_any()),
             ("deferred_relations", relations.into_any()),

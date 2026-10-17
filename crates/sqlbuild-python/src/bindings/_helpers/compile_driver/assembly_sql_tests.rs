@@ -8,6 +8,7 @@ use crate::bindings::_helpers::compile_driver::assembly_checks::test_model_query
 use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compile_driver::stage_work::{SQL_TEST_ASSEMBLY, count_stage};
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -36,7 +37,7 @@ pub(crate) fn assembled_sql_tests<'py>(
         ));
     }
     let mocked_input: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompileModelSqlTestInputPayload)?;
+        record_class(py, RecordId::CompileModelSqlTestInputPayload)?;
     let mut tests: Vec<Bound<'py, PyAny>> = Vec::with_capacity(assemblies.len());
     for (test_input, assembly) in test_inputs.iter().zip(assemblies) {
         let failure: Bound<'py, PyAny> = native_field(&assembly, "failure")?;
@@ -98,7 +99,7 @@ fn with_model_queries<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = test.py();
     let payload: Bound<'py, PyAny> = native_field(test, "payload")?;
-    if !payload.is_instance(&registry::class(py, RecordId::CompiledModelSqlTestPayload)?)? {
+    if !payload.is_instance(&record_class(py, RecordId::CompiledModelSqlTestPayload)?)? {
         return Ok(test.clone());
     }
     let replace: Bound<'py, PyAny> = imported(py, DATACLASSES_MODULE, "replace")?;

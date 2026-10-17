@@ -20,9 +20,9 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::model_config::template_data::run_id;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_indexes::{
     public_declaration_indexes, public_model_schema_index,
 };
@@ -158,8 +158,9 @@ fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bou
         Some(target.compile_cache_dir.clone()),
     )?;
     let value_renderer: Bound<'py, PyAny> = native_field(&adapter_context, "value_renderer")?;
-    let model_context: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::ModelInputBuildContext)?,
+    let model_context: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::ModelInputBuildContext,
         &[
             ("effective_vars", target.vars.clone()),
             ("effective_settings", target.settings.clone()),
@@ -275,8 +276,9 @@ fn target_context<'py>(
         build_effective_settings(&project_config.clone(), &local_config.clone())?;
     let adapter_name: Bound<'py, PyAny> =
         resolve_effective_adapter_name(&project_config.clone(), &local_config)?;
-    let macro_context: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::MacroContext)?,
+    let macro_context: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::MacroContext,
         &[
             ("adapter_name", adapter_name),
             (

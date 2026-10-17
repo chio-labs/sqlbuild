@@ -15,6 +15,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::manifest::builder::build_manifest;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -175,16 +176,14 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
     } else {
         py.None().into_bound(py)
     };
-    let diagnostic: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::CompilerDiagnostic)?,
+    let diagnostic: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::CompilerDiagnostic,
         &[
-            (
-                "phase",
-                registry::class(py, RecordId::DiagnosticPhase)?.getattr("TEST")?,
-            ),
+            ("phase", enum_member(py, RecordId::DiagnosticPhase, "TEST")?),
             (
                 "severity",
-                registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
+                enum_member(py, RecordId::DiagnosticSeverity, "ERROR")?,
             ),
             ("code", native_field(&value, "code")?),
             ("message", value.str()?.into_any()),
@@ -207,8 +206,9 @@ pub(crate) fn write_artifacts<'py>(
     let target: Bound<'py, PyAny> = target_dir(project_dir)?;
     let written: Bound<'py, PyAny> = if skip_write {
         let zero: Bound<'py, PyAny> = 0_i64.into_pyobject(py)?.into_any();
-        call_with(
-            &registry::class(py, RecordId::WrittenTarget)?,
+        new_record_with(
+            py,
+            RecordId::WrittenTarget,
             &[
                 ("model_count", zero.clone()),
                 ("seed_count", zero.clone()),

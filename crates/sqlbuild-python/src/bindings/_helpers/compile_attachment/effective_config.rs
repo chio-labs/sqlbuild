@@ -13,6 +13,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 use crate::bindings::_helpers::model_config::template_data::{
     expanded_effective_vars, expanded_template_data, run_id,
 };
+use crate::bindings::_helpers::records::construct::{new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -60,7 +61,7 @@ pub(crate) fn build_effective_settings<'py>(
     local_config: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project_config.py();
-    let settings_class: Bound<'py, PyAny> = registry::class(py, RecordId::SettingsConfig)?;
+    let settings_class: Bound<'py, PyAny> = record_class(py, RecordId::SettingsConfig)?;
     let names: Vec<Bound<'py, PyAny>> = imported(py, "dataclasses", "fields")?
         .call1((&settings_class,))?
         .try_iter()?
@@ -76,7 +77,7 @@ pub(crate) fn build_effective_settings<'py>(
             PyList::new(py, names)?,
         ))?
         .downcast_into()?;
-    settings_class.call((), Some(&values))
+    new_record(py, RecordId::SettingsConfig, (), Some(&values))
 }
 
 /// Merge effective vars using the locked precedence order.

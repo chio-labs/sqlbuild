@@ -11,15 +11,15 @@ use crate::bindings::_helpers::compile_driver::deferral::{
 };
 use crate::bindings::_helpers::compile_driver::pipeline::compile_project_phase;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::compile_analysis_selection;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::planner_entries::command_plans::{
     resolve_static_command_scope, resolve_static_relation_context,
 };
 use crate::bindings::_helpers::planner_phases::scopes::resolve_planner_scopes;
 use crate::bindings::_helpers::planner_selection::unit_tests::split_project_unit_test_selectors;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
 
@@ -36,7 +36,7 @@ fn unit_test_selectors_applied<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
     let resolved: Bound<'py, PyAny> = if options.is_none() {
-        registry::class(py, RecordId::CompilePipelineOptions)?.call0()?
+        new_record(py, RecordId::CompilePipelineOptions, (), None)?
     } else {
         options.clone()
     };
@@ -73,15 +73,17 @@ fn planner_scopes<'py>(
     let py: Python<'py> = project.py();
     resolve_planner_scopes(
         project,
-        &call_with(
-            &registry::class(py, RecordId::PlannerSelection)?,
+        &new_record_with(
+            py,
+            RecordId::PlannerSelection,
             &[
                 ("select", native_field(selection, "select")?),
                 ("exclude", native_field(selection, "exclude")?),
             ],
         )?,
-        &call_with(
-            &registry::class(py, RecordId::PlannerPolicies)?,
+        &new_record_with(
+            py,
+            RecordId::PlannerPolicies,
             &[(
                 "auto_load_sources",
                 native_field(selection, "auto_load_sources")?,
@@ -259,8 +261,9 @@ pub(crate) fn compile_static_command_context<'py>(
         deferred_locations((&discovered, &adapter), &options, &project)?;
     let scope: Bound<'py, PyAny> = resolve_static_command_scope(
         &project,
-        &call_with(
-            &registry::class(py, RecordId::PlannerSelection)?,
+        &new_record_with(
+            py,
+            RecordId::PlannerSelection,
             &[
                 ("select", native_field(&options, "select")?),
                 ("exclude", native_field(&options, "exclude")?),
@@ -283,8 +286,9 @@ pub(crate) fn compile_static_command_context<'py>(
                 ("scope", scope.clone()),
                 (
                     "deferral",
-                    call_with(
-                        &registry::class(py, RecordId::DeferralInputs)?,
+                    new_record_with(
+                        py,
+                        RecordId::DeferralInputs,
                         &[
                             ("deferred_locations", deferred),
                             (
@@ -310,8 +314,9 @@ pub(crate) fn compile_static_command_context<'py>(
             ],
         )?),
     )?;
-    call_with(
-        &registry::class(py, RecordId::StaticCommandContext)?,
+    new_record_with(
+        py,
+        RecordId::StaticCommandContext,
         &[
             ("project", project),
             ("scope", scope),

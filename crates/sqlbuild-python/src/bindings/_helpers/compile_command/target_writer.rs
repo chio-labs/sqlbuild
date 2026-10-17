@@ -34,6 +34,7 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -201,8 +202,9 @@ fn written_target<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_dir.py();
     let [models, seeds, functions, audits, tests] = counts;
-    call_with(
-        &registry::class(py, RecordId::WrittenTarget)?,
+    new_record_with(
+        py,
+        RecordId::WrittenTarget,
         &[
             ("model_count", models.into_bound_py_any(py)?),
             ("seed_count", seeds.into_bound_py_any(py)?),
@@ -482,8 +484,9 @@ fn artifact_diagnostics<'py>(
     let py: Python<'py> = test.py();
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
     for message in native_field(artifact, "error_messages")?.try_iter()? {
-        diagnostics.push(call_with(
-            &registry::class(py, RecordId::CompilerDiagnostic)?,
+        diagnostics.push(new_record_with(
+            py,
+            RecordId::CompilerDiagnostic,
             &[
                 ("phase", "test".into_bound_py_any(py)?),
                 ("severity", "error".into_bound_py_any(py)?),

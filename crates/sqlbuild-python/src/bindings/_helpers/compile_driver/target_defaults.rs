@@ -8,9 +8,9 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeComp
 use crate::bindings::_helpers::compiled_project::function_views::NativeCompiledFunction;
 use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::compiled_project::seed_views::NativeCompiledSeed;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// The adapter defaults every compiled location falls back to.
 pub(crate) struct TargetDefaults<'py> {
@@ -177,8 +177,9 @@ fn resolved_target<'py>(
     {
         return Ok(target.clone());
     }
-    call_with(
-        &registry::class(py, RecordId::CompiledRelationLocation)?,
+    new_record_with(
+        py,
+        RecordId::CompiledRelationLocation,
         &[
             ("database", database),
             ("schema", schema),

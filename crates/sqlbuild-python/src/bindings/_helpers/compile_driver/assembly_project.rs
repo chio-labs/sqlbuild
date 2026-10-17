@@ -26,9 +26,9 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_errors::report_scope_index_errors;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 use crate::bindings::_helpers::semantic_checks::stage::{
@@ -392,5 +392,5 @@ fn project_view<'py>(
     }
     let arguments: Bound<'py, PyDict> = fields.copy()?;
     arguments.set_item("sql_expansions", sql_expansions)?;
-    registry::class(py, RecordId::CompiledProject)?.call((), Some(&arguments))
+    new_record(py, RecordId::CompiledProject, (), Some(&arguments))
 }

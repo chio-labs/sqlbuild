@@ -6,7 +6,6 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple, Py
 
 use crate::bindings::_helpers::analysis_session::stage_functions::dynamic_contract_proofs;
 use crate::bindings::_helpers::compile_driver::assembly_analysis::AnalysisContext;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::stage_work::{
     PIVOT_PROOFS, SESSION_PIVOT_PROOFS, count_stage,
 };
@@ -14,9 +13,9 @@ use crate::bindings::_helpers::project_assembly::models::{NativeModelFacts, Nati
 use crate::bindings::_helpers::project_assembly::native_resources::assemble_native_project_resources;
 use crate::bindings::_helpers::project_assembly::syntax_checks::model_syntax_checks;
 use crate::bindings::_helpers::project_assembly::syntax_checks::standalone_pivot_models;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 
 /// `NativeProjectFacts` of `inputs`: resources, syntax validity, deps and standalone pivot proofs.
@@ -88,8 +87,9 @@ pub(crate) fn native_project_facts<'py>(
 /// The declared relation facts standalone pivot proofs read.
 pub(crate) fn pivot_tables<'py>(context: &AnalysisContext<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.profile.py();
-    call_with(
-        &registry::class(py, RecordId::NativePivotTables)?,
+    new_record_with(
+        py,
+        RecordId::NativePivotTables,
         &[
             (
                 "dialect",

@@ -13,6 +13,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -48,7 +49,6 @@ fn declaration_scope<'py>(
 /// Each model file's own enum and constant declarations, by file path.
 fn local_declarations<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = discovered.py();
-    let context: Bound<'py, PyAny> = registry::class(py, RecordId::DeclarationResolutionContext)?;
     let by_name = |declarations: Bound<'py, PyAny>| -> PyResult<Bound<'py, PyAny>> {
         let named: Bound<'py, PyDict> = PyDict::new(py);
         for declaration in declarations.try_iter()? {
@@ -62,8 +62,9 @@ fn local_declarations<'py>(discovered: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         let model_file: Bound<'py, PyAny> = model_file?;
         local.set_item(
             native_field(&model_file, "file_path")?,
-            call_with(
-                &context,
+            new_record_with(
+                py,
+                RecordId::DeclarationResolutionContext,
                 &[
                     (
                         "enums",
@@ -116,8 +117,9 @@ impl SqlExpansionInputs {
 
     /// These inputs as a `SqlExpansionContext` record.
     pub(crate) fn record<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        call_with(
-            &registry::class(py, RecordId::SqlExpansionContext)?,
+        new_record_with(
+            py,
+            RecordId::SqlExpansionContext,
             &[
                 ("effective_vars", self.effective_vars.bind(py).clone()),
                 ("loaded_macros", self.loaded_macros.bind(py).clone()),
@@ -201,8 +203,9 @@ pub(crate) fn sql_expansion_inputs(sources: ExpansionSources<'_>) -> PyResult<Sq
     let collection_rendering: Bound<'_, PyAny> =
         resolve_effective_collection_rendering(&project_config.clone(), &py.None().into_bound(py))
             .and_then(|value| value.into_bound_py_any(py))?;
-    let macro_context: Bound<'_, PyAny> = call_with(
-        &registry::class(py, RecordId::MacroContext)?,
+    let macro_context: Bound<'_, PyAny> = new_record_with(
+        py,
+        RecordId::MacroContext,
         &[
             (
                 "adapter_name",

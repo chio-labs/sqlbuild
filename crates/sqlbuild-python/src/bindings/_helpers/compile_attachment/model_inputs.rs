@@ -17,6 +17,9 @@ use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::construct::{
+    enum_member, new_record, new_record_with, record_class,
+};
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::macro_expansion_result::macro_expansion_classes;
 
@@ -89,7 +92,7 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ),
             (
                 "declaration_context",
-                registry::class(py, RecordId::DeclarationResolutionContext)?,
+                record_class(py, RecordId::DeclarationResolutionContext)?,
             ),
             (
                 "macro_argument_error",
@@ -98,9 +101,7 @@ fn macro_inputs<'py>(context: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
             ("expansion", macro_expansion_classes(py)?.into_any()),
             (
                 "generic_syntax",
-                registry::class(py, RecordId::SqlLexicalSyntax)?
-                    .call0()?
-                    .getattr("native_mapping")?,
+                new_record(py, RecordId::SqlLexicalSyntax, (), None)?.getattr("native_mapping")?,
             ),
         ],
     )
@@ -116,11 +117,11 @@ fn sql_hook_inputs<'py>(
         vec![
             (
                 "named_sql_hook_entry",
-                registry::class(py, RecordId::NamedSqlHookEntry)?,
+                record_class(py, RecordId::NamedSqlHookEntry)?,
             ),
             (
                 "python_hook_entry",
-                registry::class(py, RecordId::PythonHookEntry)?,
+                record_class(py, RecordId::PythonHookEntry)?,
             ),
             ("hook_files", native_field(discovered, "sql_hook_files")?),
             ("effective_vars", native_field(context, "effective_vars")?),
@@ -136,11 +137,11 @@ fn sql_hook_inputs<'py>(
             ("explicit_kinds", explicit_reference_kinds(py)?.into_any()),
             (
                 "declaration_identity",
-                registry::class(py, RecordId::DeclarationIdentity)?,
+                record_class(py, RecordId::DeclarationIdentity)?,
             ),
             (
                 "sql_hook_kind",
-                registry::class(py, RecordId::DeclarationKind)?.getattr("SQL_HOOK")?,
+                enum_member(py, RecordId::DeclarationKind, "SQL_HOOK")?,
             ),
         ],
     )
@@ -194,8 +195,9 @@ pub(crate) fn build_model_inputs<'py>(
         imported(py, "pathlib", "Path")?.call0()?
     };
     let project_config_path: Bound<'py, PyAny> = root.div(PROJECT_CONFIG_FILENAME)?;
-    let config_inputs: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::NativeModelConfigInputs)?,
+    let config_inputs: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::NativeModelConfigInputs,
         &[
             (
                 "project_config",
@@ -233,7 +235,7 @@ pub(crate) fn build_model_inputs<'py>(
             ),
             (
                 "visible_declarations",
-                registry::class(py, RecordId::VisibleModelDeclarations)?,
+                record_class(py, RecordId::VisibleModelDeclarations)?,
             ),
             ("config_session", session),
             ("syntax_help", opt_out_help(py, true)?),

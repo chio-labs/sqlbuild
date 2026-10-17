@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compile_driver::plan_result::{
 };
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, imported, keywords,
 };
 use crate::bindings::_helpers::compile_driver::selection_phases::{
     apply_unit_test_selectors, resolve_configured_rule_selection,
@@ -23,6 +23,7 @@ use crate::bindings::_helpers::diagnostics::trackers::current_tracker;
 use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -81,7 +82,7 @@ fn compiled_phase<'py>(
     let options: Bound<'py, PyAny> = if options.is_truthy()? {
         options.clone()
     } else {
-        registry::class(py, RecordId::CompilePipelineOptions)?.call0()?
+        new_record(py, RecordId::CompilePipelineOptions, (), None)?
     };
     let configured: Bound<'py, PyAny> = native_field(&options, "connection_config")?;
     let connection_config: Bound<'py, PyAny> = if configured.is_none() {
@@ -134,8 +135,9 @@ fn compiled_phase<'py>(
         on_progress,
         &format!("Compiled project. ({compile_seconds:.2}s)"),
     )?;
-    call_with(
-        &registry::class(py, RecordId::CompiledProjectPhaseResult)?,
+    new_record_with(
+        py,
+        RecordId::CompiledProjectPhaseResult,
         &[
             ("project", project),
             ("connection_config", connection_config),
@@ -155,8 +157,7 @@ fn reject_compile_errors(
 ) -> PyResult<()> {
     let py: Python<'_> = project.py();
     let plan_sql_tests: bool = native_field(options, "plan_sql_tests")?.is_truthy()?;
-    let sql_test: Bound<'_, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("SQL_TEST")?;
+    let sql_test: Bound<'_, PyAny> = enum_member(py, RecordId::CompiledResourceType, "SQL_TEST")?;
     let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
     for diagnostic in native_field(project, "diagnostics")?.try_iter()? {
         let diagnostic: Bound<'_, PyAny> = diagnostic?;
@@ -259,8 +260,9 @@ fn run_rules_gate<'py>(
     let mut config: Bound<'py, PyAny> =
         load_rules_config(py, project_dir.extract()?)?.into_bound(py);
     if native_field(options, "no_cache")?.is_truthy()? {
-        let cache: Bound<'py, PyAny> = call_with(
-            &registry::class(py, RecordId::RulesCacheConfig)?,
+        let cache: Bound<'py, PyAny> = new_record_with(
+            py,
+            RecordId::RulesCacheConfig,
             &[("enabled", false.into_pyobject(py)?.to_owned().into_any())],
         )?;
         config = imported(py, "dataclasses", "replace")?
@@ -303,8 +305,9 @@ fn run_rules_gate<'py>(
     if !findings.is_truthy()? {
         return Ok(());
     }
-    let summary: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::RulesResult)?,
+    let summary: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::RulesResult,
         &[
             ("findings", findings),
             (

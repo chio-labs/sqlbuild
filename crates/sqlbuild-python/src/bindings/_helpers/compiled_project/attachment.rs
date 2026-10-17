@@ -26,6 +26,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -59,7 +60,7 @@ fn items<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, 
 
 /// `{member.value: member for member in enum_class}` of a native string enum.
 fn native_by_value(py: Python<'_>, class: RecordId) -> PyResult<Bound<'_, PyDict>> {
-    members_by_value(&registry::class(py, class)?)
+    members_by_value(&record_class(py, class)?)
 }
 
 fn members_by_value<'py>(enum_class: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
@@ -175,8 +176,7 @@ pub(crate) fn attach_resources<'py>(
     let defaults: Bound<'py, PyAny> = discovered_inputs
         .getattr("project_config")?
         .getattr("defaults")?;
-    let function_kind: Bound<'py, PyAny> =
-        registry::member(py, RecordId::ResourceKind, "FUNCTION")?;
+    let function_kind: Bound<'py, PyAny> = enum_member(py, RecordId::ResourceKind, "FUNCTION")?;
     let functions = NativeCompiledProject::attach_functions(
         native_project,
         (
@@ -216,7 +216,7 @@ pub(crate) fn attach_resources<'py>(
         (
             attr(&defaults, "contract")?,
             validate,
-            registry::member(py, RecordId::ResourceKind, "SOURCE")?.unbind(),
+            enum_member(py, RecordId::ResourceKind, "SOURCE")?.unbind(),
         ),
     )?;
     PyTuple::new(
@@ -336,7 +336,7 @@ fn sql_test_settings<'py>(
         ("scenario_input", RecordId::CompileSqlScenarioInput),
         ("scenario_cte", RecordId::CompileSqlScenarioCte),
     ] {
-        settings.set_item(key, registry::class(py, class)?)?;
+        settings.set_item(key, record_class(py, class)?)?;
     }
     settings.set_item(
         "modes",
@@ -344,15 +344,15 @@ fn sql_test_settings<'py>(
     )?;
     settings.set_item(
         "test_kind",
-        registry::member(py, RecordId::ResourceKind, "TEST")?,
+        enum_member(py, RecordId::ResourceKind, "TEST")?,
     )?;
     settings.set_item(
         "scenario_kind",
-        registry::member(py, RecordId::ResourceKind, "SCENARIO")?,
+        enum_member(py, RecordId::ResourceKind, "SCENARIO")?,
     )?;
     settings.set_item(
         "runtime_usage",
-        registry::member(py, RecordId::UsageKind, "RUNTIME")?,
+        enum_member(py, RecordId::UsageKind, "RUNTIME")?,
     )?;
     settings.set_item("render_parameter", parameter_renderer(value_renderer)?)?;
     settings.set_item(
@@ -361,7 +361,7 @@ fn sql_test_settings<'py>(
     )?;
     settings.set_item(
         "source_location",
-        registry::class(py, RecordId::SourceLocation)?,
+        record_class(py, RecordId::SourceLocation)?,
     )?;
     settings.set_item("scan_store", scan_cache.call_method0("opened")?)?;
     settings.set_item(
@@ -390,7 +390,7 @@ fn audit_block_row(block: Bound<'_, PyAny>) -> PyResult<AuditBlockRow> {
 
 fn audit_file_row(file: Bound<'_, PyAny>) -> PyResult<AuditFileRow> {
     let py: Python<'_> = file.py();
-    let generic: Bound<'_, PyAny> = registry::member(py, RecordId::DeclarationKind, "AUDIT")?;
+    let generic: Bound<'_, PyAny> = enum_member(py, RecordId::DeclarationKind, "AUDIT")?;
     Ok((
         text(&file, "file_path")?,
         text(&file, "relative_path")?,
@@ -413,16 +413,18 @@ fn builtin_audit_file<'py>(
     let path_class: Bound<'py, PyAny> = imported(py, PATHLIB_MODULE, "Path")?;
     let relative_path: Bound<'py, PyAny> =
         path_class.call1((format!("audits/generic/{name}.sql"),))?;
-    let block: Bound<'py, PyAny> = call_with(
-        &registry::class(py, RecordId::DiscoveredAuditBlock)?,
+    let block: Bound<'py, PyAny> = new_record_with(
+        py,
+        RecordId::DiscoveredAuditBlock,
         &[
             ("audit_index", 0.into_bound_py_any(py)?),
             ("header_values", PyDict::new(py).into_any()),
             ("sql_body", sql_body.into_bound_py_any(py)?),
         ],
     )?;
-    call_with(
-        &registry::class(py, RecordId::DiscoveredAuditFile)?,
+    new_record_with(
+        py,
+        RecordId::DiscoveredAuditFile,
         &[
             (
                 "file_path",
@@ -463,15 +465,15 @@ fn audit_settings<'py>(
     settings.set_item("builtins", builtins)?;
     settings.set_item(
         "declaration_identity",
-        registry::class(py, RecordId::DeclarationIdentity)?,
+        record_class(py, RecordId::DeclarationIdentity)?,
     )?;
     settings.set_item(
         "singular_kind",
-        registry::member(py, RecordId::DeclarationKind, "SINGULAR_AUDIT")?,
+        enum_member(py, RecordId::DeclarationKind, "SINGULAR_AUDIT")?,
     )?;
     settings.set_item(
         "audit_kind",
-        registry::member(py, RecordId::DeclarationKind, "AUDIT")?,
+        enum_member(py, RecordId::DeclarationKind, "AUDIT")?,
     )?;
     settings.set_item(
         "resource_kinds",
@@ -510,12 +512,12 @@ fn diagnostic_settings<'py>(
     let settings: Bound<'py, PyDict> = PyDict::new(py);
     settings.set_item(
         "compiler_diagnostic",
-        registry::class(py, RecordId::CompilerDiagnostic)?,
+        record_class(py, RecordId::CompilerDiagnostic)?,
     )?;
     settings.set_item("compile_error", registry::error(py, ErrorId::CompileInput)?)?;
     settings.set_item(
         "source_location",
-        registry::class(py, RecordId::SourceLocation)?,
+        record_class(py, RecordId::SourceLocation)?,
     )?;
     settings.set_item("path_class", imported(py, PATHLIB_MODULE, "Path")?)?;
     settings.set_item("model_files", items(discovered, "model_files")?)?;

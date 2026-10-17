@@ -9,12 +9,10 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
 
 use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_metric;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, unicode_sorted_dumps};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const ANALYSIS_CACHE_VERSION: i64 = 13;
 const ANALYSIS_ALGORITHM_FINGERPRINT: &str = "model-sql-analysis-v21-completed-star-shapes";
@@ -73,8 +71,9 @@ pub(crate) fn analysis_cache_context<'py>(
         Err(error) if json_failure(py, &error) => return Ok(None),
         Err(error) => return Err(error),
     };
-    let context = call_with(
-        &registry::class(py, RecordId::AnalysisCacheContext)?,
+    let context = new_record_with(
+        py,
+        RecordId::AnalysisCacheContext,
         &[
             ("root", root.clone()),
             (

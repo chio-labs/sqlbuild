@@ -43,9 +43,9 @@ use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, produ
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
 
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
@@ -485,10 +485,7 @@ fn project_inputs<'py>(
     }
     fields.push(("adapter_file", declarations.get_item("adapter_file")?));
     fields.push(("native_session", declarations.get_item("native_session")?));
-    call_with(
-        &registry::class(py, RecordId::DiscoveredProjectInputs)?,
-        &fields,
-    )
+    new_record_with(py, RecordId::DiscoveredProjectInputs, &fields)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

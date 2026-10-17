@@ -6,6 +6,7 @@ use pyo3::types::PyTuple;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::compile_driver::stage_work::{DECLARATION_SCOPES, count_stage};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -30,8 +31,9 @@ fn scope_build<'py>(
     let py: Python<'py> = discovered.py();
     let resolver: Bound<'py, PyAny> =
         declaration_scope_resolver(discovered, &index, (loaded_macros, &lookup))?;
-    call_with(
-        &registry::class(py, RecordId::DeclarationScopeBuild)?,
+    new_record_with(
+        py,
+        RecordId::DeclarationScopeBuild,
         &[
             ("loaded_macros", loaded_macros.clone()),
             ("index", index),

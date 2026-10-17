@@ -25,9 +25,9 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::project_assembly::declared_relations::{
     DeclaredRelations, declared_relations,
 };
+use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 
 const GENERIC_DIALECT: &str = "generic";
@@ -127,8 +127,7 @@ pub(crate) fn analysis_context<'py>(
 /// `_build_dynamic_families_by_table`: enforced contract models' dynamic column families.
 fn dynamic_families_by_table<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = inputs.py();
-    let enforced: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ContractPolicy)?.getattr("ENFORCED")?;
+    let enforced: Bound<'py, PyAny> = enum_member(py, RecordId::ContractPolicy, "ENFORCED")?;
     let families: Bound<'py, PyDict> = PyDict::new(py);
     for model_input in native_field(inputs, "model_inputs")?.try_iter()? {
         let model_input: Bound<'py, PyAny> = model_input?;
@@ -305,8 +304,7 @@ fn record_expression_shapes<'py>(
             "zip() argument 2 is {relation} than argument 1"
         )));
     }
-    let unknown: Bound<'py, PyAny> =
-        registry::class(py, RecordId::InferredNullability)?.getattr("UNKNOWN")?;
+    let unknown: Bound<'py, PyAny> = enum_member(py, RecordId::InferredNullability, "UNKNOWN")?;
     for (source_input, shape) in sources.iter().zip(shapes) {
         if shape.is_none() {
             continue;
@@ -351,7 +349,7 @@ fn model_analyses<'py>(
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let names: &Bound<'py, PyAny> = request.analysis_model_names.bind(py);
     let mode: &Bound<'py, PyAny> = request.column_lineage_mode.bind(py);
-    let lineage_mode: Bound<'py, PyAny> = registry::class(py, RecordId::ColumnLineageMode)?;
+    let lineage_mode: Bound<'py, PyAny> = record_class(py, RecordId::ColumnLineageMode)?;
     let rich: bool = mode.eq(native_field(&lineage_mode, "RICH")?)?;
     let allow_compact: bool = mode.eq(native_field(&lineage_mode, "FAST")?)? || rich;
     let flags: (Bound<'py, PyAny>, Bound<'py, PyAny>) = (

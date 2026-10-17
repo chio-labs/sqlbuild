@@ -4,11 +4,13 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::validated_model_cursor_sql;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
+use crate::bindings::_helpers::records::construct::{
+    enum_member, new_record, new_record_with, record_class,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 use crate::bindings::_helpers::render::macro_expansion_result::{
     ExpansionRequest, expansion_result,
@@ -39,7 +41,7 @@ pub(crate) fn test_model_query_overrides<'py>(
     let py: Python<'py> = inputs.py();
     let overrides: Bound<'py, PyDict> = PyDict::new(py);
     let payload: Bound<'py, PyAny> = native_field(test_input, "payload")?;
-    if !payload.is_instance(&registry::class(
+    if !payload.is_instance(&record_class(
         py,
         RecordId::CompileModelSqlTestInputPayload,
     )?)? {
@@ -119,8 +121,9 @@ fn model_macro_context<'py>(inputs: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         &native_field(inputs, "local_config")?,
     )
     .and_then(|value| value.into_bound_py_any(py))?;
-    call_with(
-        &registry::class(py, RecordId::MacroContext)?,
+    new_record_with(
+        py,
+        RecordId::MacroContext,
         &[
             ("adapter_name", adapter_name),
             (
@@ -143,17 +146,16 @@ pub(crate) fn compiled_sql_scenarios<'py>(
     inputs: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = inputs.py();
-    let scenario_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledSqlScenario)?;
-    let key_class: Bound<'py, PyAny> = registry::class(py, RecordId::CompiledObjectKey)?;
     let resource_type: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("SQL_SCENARIO")?;
+        enum_member(py, RecordId::CompiledResourceType, "SQL_SCENARIO")?;
     let mut scenarios: Vec<Bound<'py, PyAny>> = Vec::new();
     for scenario_input in native_field(inputs, "scenario_inputs")?.try_iter()? {
         let scenario_input: Bound<'py, PyAny> = scenario_input?;
         let scenario_file: Bound<'py, PyAny> = native_field(&scenario_input, "scenario_file")?;
         let name: Bound<'py, PyAny> = native_field(&scenario_file, "name")?;
-        let key: Bound<'py, PyAny> = call_with(
-            &key_class,
+        let key: Bound<'py, PyAny> = new_record_with(
+            py,
+            RecordId::CompiledObjectKey,
             &[
                 ("resource_type", resource_type.clone()),
                 ("name", name.clone()),
@@ -178,7 +180,12 @@ pub(crate) fn compiled_sql_scenarios<'py>(
             "ownership_root",
             native_field(&scenario_file, "ownership_root")?,
         )?;
-        scenarios.push(scenario_class.call((), Some(&fields))?);
+        scenarios.push(new_record(
+            py,
+            RecordId::CompiledSqlScenario,
+            (),
+            Some(&fields),
+        )?);
     }
     PyTuple::new(py, scenarios)
 }
