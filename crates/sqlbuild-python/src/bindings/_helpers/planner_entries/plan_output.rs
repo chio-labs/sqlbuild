@@ -741,7 +741,7 @@ pub(crate) fn plan_selected_sql_tests<'py>(
 /// Return model closures resolved natively in one project batch, keyed by SQL test key.
 #[pyfunction]
 #[pyo3(signature = (*, project, tests))]
-fn sql_test_model_chain_names_by_key<'py>(
+pub(crate) fn sql_test_model_chain_names_by_key<'py>(
     project: &Bound<'py, PyAny>,
     tests: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {

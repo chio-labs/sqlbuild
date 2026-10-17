@@ -23,6 +23,8 @@ pub(crate) const LINEAGE_GRAPH_BUILDS: &str = "lineage_graph_builds";
 pub(crate) const PROJECT_GRAPHS: &str = "build_project_graph";
 pub(crate) const FORMAT_LINT_BATCHES: &str = "format_lint_batches";
 pub(crate) const FORMAT_LINT_FILES: &str = "format_lint_files";
+pub(crate) const SQL_TEST_ARTIFACT_PLANS: &str = "plan_compiled_sql_test_artifacts";
+pub(crate) const SQL_TEST_MODEL_CHAINS: &str = "sql_test_model_chain_names_by_key";
 
 /// Compile stage runs since the last reset, by stage.
 #[pyclass]

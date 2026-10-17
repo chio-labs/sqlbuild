@@ -26,6 +26,9 @@ use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_t
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
+use crate::bindings::_helpers::compile_driver::stage_work::{
+    SQL_TEST_ARTIFACT_PLANS, SQL_TEST_MODEL_CHAINS, count_stage,
+};
 use crate::bindings::_helpers::compile_outputs::artifacts::{
     publish_staged_artifacts, remove_stale_artifacts,
 };
@@ -34,12 +37,13 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::planner_entries::plan_output::sql_test_model_chain_names_by_key;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
-use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
-use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::sql_test_glue::plan_driver::plan_compiled_sql_test_artifacts;
 
 const COMPILED_DIR: &str = "compiled";
 const MODELS_DIR: &str = "models";
@@ -362,17 +366,21 @@ fn planned_artifacts<'py>(
         ],
     )?;
     within(&lifecycle, |entered| {
-        let artifacts: Vec<Py<PyAny>> = call_with(
-            &registry::native(py, NativeAttr::PlanCompiledSqlTestArtifacts)?,
-            &[
-                ("project", project.clone()),
-                ("tests", PyTuple::new(py, tests)?.into_any()),
-                ("adapter", adapter.clone()),
-                (
-                    "sql_analysis_enabled",
-                    native_field(project, "settings")?.getattr("sql_analysis")?,
-                ),
-            ],
+        count_stage(py, SQL_TEST_ARTIFACT_PLANS, 1)?;
+        let artifacts: Vec<Py<PyAny>> = plan_compiled_sql_test_artifacts(
+            py,
+            Some(keywords(
+                py,
+                &[
+                    ("project", project.clone()),
+                    ("tests", PyTuple::new(py, tests)?.into_any()),
+                    ("adapter", adapter.clone()),
+                    (
+                        "sql_analysis_enabled",
+                        native_field(&native_field(project, "settings")?, "sql_analysis")?,
+                    ),
+                ],
+            )?),
         )?
         .try_iter()?
         .map(|artifact| artifact.map(Bound::unbind))
@@ -403,10 +411,9 @@ fn plan_tests<'py>(
         None
     } else {
         let context: IdentityContext<'py> = identity_context(project, adapter)?;
-        let chains: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::SqlTestModelChainNamesByKey)?,
-            &[("project", project.clone()), ("tests", tests.clone())],
-        )?;
+        count_stage(py, SQL_TEST_MODEL_CHAINS, 1)?;
+        let chains: Bound<'py, PyAny> =
+            sql_test_model_chain_names_by_key(project, &tests)?.into_any();
         Some((context, chains))
     };
     let mut pending: Vec<PendingTest> = Vec::new();
