@@ -130,7 +130,10 @@ fn group_value(target: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<
     } else {
         QUERY_GROUP
     };
-    optional_text(&native_field(target, "warehouses")?.getattr(attribute)?)
+    optional_text(&native_field(
+        &native_field(target, "warehouses")?,
+        attribute,
+    )?)
 }
 
 /// The active target's authored, unexpanded warehouse for one command group.

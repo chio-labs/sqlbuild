@@ -3,13 +3,14 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyTuple;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_project::function_views::NativeCompiledFunction;
 use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::compiled_project::seed_views::NativeCompiledSeed;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The adapter defaults every compiled location falls back to.
@@ -45,7 +46,6 @@ pub(crate) fn apply_target_defaults<'py>(
     defaults: &TargetDefaults<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
@@ -60,15 +60,12 @@ pub(crate) fn apply_target_defaults<'py>(
             )?
             .into_any()
         } else {
-            replace.call(
-                (&model,),
-                Some(&keywords(
-                    py,
-                    &[(
-                        "destination",
-                        resolved_target(&native_field(&model, "destination")?, defaults)?,
-                    )],
-                )?),
+            replaced(
+                &model,
+                &[(
+                    "destination",
+                    resolved_target(&native_field(&model, "destination")?, defaults)?,
+                )],
             )?
         });
     }
@@ -86,15 +83,12 @@ pub(crate) fn apply_target_defaults<'py>(
             )?
             .into_any()
         } else {
-            replace.call(
-                (&seed,),
-                Some(&keywords(
-                    py,
-                    &[(
-                        "destination",
-                        resolved_target(&native_field(&seed, "destination")?, defaults)?,
-                    )],
-                )?),
+            replaced(
+                &seed,
+                &[(
+                    "destination",
+                    resolved_target(&native_field(&seed, "destination")?, defaults)?,
+                )],
             )?
         });
     }

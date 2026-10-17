@@ -244,7 +244,7 @@ pub(crate) fn prepare_query_diff<'py>(
     .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .downcast_into()?;
     let label = |name: &str, default: &str| -> PyResult<String> {
-        let value: Bound<'py, PyAny> = request.getattr(name)?;
+        let value: Bound<'py, PyAny> = native_field(request, name)?;
         let text: String = if value.is_truthy()? {
             value.extract()?
         } else {
@@ -256,7 +256,7 @@ pub(crate) fn prepare_query_diff<'py>(
     let examples = |name: &str| -> PyResult<Bound<'py, PyAny>> {
         object(
             py,
-            effective_max_examples(request.getattr(name)?.extract()?, verbose),
+            effective_max_examples(native_field(request, name)?.extract()?, verbose),
         )
     };
     call(
@@ -307,7 +307,7 @@ pub(crate) fn execution_options<'py>(
     extra: &[(&str, &Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let attribute = |name: &str| request.getattr(name);
+    let attribute = |name: &str| native_field(request, name);
     let sampling: Bound<'py, PyAny> = call(
         &host::entry(py, ExecutorHost::RowDiffSamplingOverride)?,
         &[
@@ -492,7 +492,7 @@ fn compare_artifacts<'py>(
                 ("adapter", &adapter),
                 ("connection", connection),
                 ("artifact", artifact),
-                ("sql", &preparation.getattr(sql)?),
+                ("sql", &native_field(preparation, sql)?),
                 ("expires_at", &expires_at),
             ],
         ) {
@@ -716,11 +716,11 @@ fn inspect_inputs<'py>(
             &native_field(&adapter, "query_column_names")?,
             &[
                 ("connection", connection),
-                ("sql", &preparation.getattr(sql)?),
+                ("sql", &native_field(preparation, sql)?),
             ],
         )?
         .extract()?;
-        let label: String = preparation.getattr(label)?.extract()?;
+        let label: String = native_field(preparation, label)?.extract()?;
         query_column_problem(&label, &columns, max_columns)
             .map_err(|error| user_failure(py, error))?;
     }

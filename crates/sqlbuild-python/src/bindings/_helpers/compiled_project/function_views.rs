@@ -15,6 +15,7 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const TABLE_FUNCTION_TYPE: &str = "table_fn";
 const SCALAR_FUNCTION_TYPE: &str = "udf";
@@ -511,24 +512,22 @@ function_getters!(NativeCompiledFunction, {
     #[getter]
     fn relative_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_function(&self.owner, self.index, py, |function, py| {
-            Ok(function
-                .attached
-                .function_file
-                .bind(py)
-                .getattr(FUNCTION_FILE_ATTRIBUTE)?
-                .unbind())
+            Ok(native_field(
+                function.attached.function_file.bind(py),
+                FUNCTION_FILE_ATTRIBUTE,
+            )?
+            .unbind())
         })
     }
 
     #[getter]
     fn source_file_path(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         read_function(&self.owner, self.index, py, |function, py| {
-            Ok(function
-                .attached
-                .function_file
-                .bind(py)
-                .getattr(FILE_PATH_ATTRIBUTE)?
-                .unbind())
+            Ok(native_field(
+                function.attached.function_file.bind(py),
+                FILE_PATH_ATTRIBUTE,
+            )?
+            .unbind())
         })
     }
 

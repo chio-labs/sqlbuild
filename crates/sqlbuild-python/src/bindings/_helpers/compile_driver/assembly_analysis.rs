@@ -15,7 +15,7 @@ use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, Assem
 use crate::bindings::_helpers::compile_driver::compile_timings::{
     record_compile_cpu_timing, record_compile_timing,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::{
     EXPRESSION_SHAPES, MODEL_ANALYSIS, count_stage,
 };
@@ -27,6 +27,7 @@ use crate::bindings::_helpers::project_assembly::declared_relations::{
 };
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 
@@ -168,7 +169,6 @@ fn profile_with_catalog<'py>(
     column_types: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
-    let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let profile: Bound<'py, PyAny> = if inference_profile.is_truthy()? {
         inference_profile.clone()
     } else {
@@ -192,21 +192,18 @@ fn profile_with_catalog<'py>(
         Some(native) if Some(native) != name.as_deref() => PyString::new(py, native).into_any(),
         _ => dialect,
     };
-    let profile: Bound<'py, PyAny> = replace.call(
-        (profile.clone(),),
-        Some(&keywords(
-            py,
-            &[
-                ("semantic_known_functions", known_functions),
-                ("semantic_known_types", known_types),
-                ("quoted_identifiers_ignore_case", ignore_case),
-                ("sql_analysis_dialect", native),
-                (
-                    "function_return_types",
-                    function_return_types(inputs, &profile)?.into_any(),
-                ),
-            ],
-        )?),
+    let profile: Bound<'py, PyAny> = replaced(
+        &profile.clone(),
+        &[
+            ("semantic_known_functions", known_functions),
+            ("semantic_known_types", known_types),
+            ("quoted_identifiers_ignore_case", ignore_case),
+            ("sql_analysis_dialect", native),
+            (
+                "function_return_types",
+                function_return_types(inputs, &profile)?.into_any(),
+            ),
+        ],
     )?;
     let dialect: Bound<'py, PyAny> = native_field(&profile, "sql_analysis_dialect")?;
     let dialect: String = if dialect.is_truthy()? {
@@ -230,10 +227,7 @@ fn profile_with_catalog<'py>(
         )?,
     )?
     .into_any();
-    replace.call(
-        (profile,),
-        Some(&keywords(py, &[("binding_catalog", catalog)])?),
-    )
+    replaced(&profile, &[("binding_catalog", catalog)])
 }
 
 /// The profile's function return types with each scalar project function's analysis name.

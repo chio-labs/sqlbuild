@@ -141,7 +141,8 @@ fn write_timings(context: &BuildContext<'_>, timings: &PhaseTimings) -> PyResult
 /// Write the phases the tracker measured before an exceptional exit, to stderr without colour.
 pub(crate) fn write_partial_timings(py: Python<'_>, tracker: &Bound<'_, PyAny>) -> PyResult<()> {
     let snapshot: Bound<'_, PyAny> = tracker.call_method0("snapshot")?;
-    let seconds = |name: &str| -> PyResult<Option<f64>> { snapshot.getattr(name)?.extract() };
+    let seconds =
+        |name: &str| -> PyResult<Option<f64>> { native_field(&snapshot, name)?.extract() };
     let timings: PhaseTimings = PhaseTimings {
         compile_seconds: seconds("compile_seconds")?,
         planning_seconds: seconds("planning_seconds")?,
@@ -385,7 +386,8 @@ pub(crate) fn complete_direct_build<'py>(
     render_build_cost(&record, &context.stream, context.use_color)?;
     if context.verbose {
         let timings: Bound<'py, PyAny> = native_field(result, "timings")?;
-        let seconds = |name: &str| -> PyResult<Option<f64>> { timings.getattr(name)?.extract() };
+        let seconds =
+            |name: &str| -> PyResult<Option<f64>> { native_field(&timings, name)?.extract() };
         write_timings(
             context,
             &PhaseTimings {

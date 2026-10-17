@@ -31,6 +31,7 @@ use crate::bindings::_helpers::build_progress::terminal::{
 };
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 
 const RUNTIME_LOGGER: &str = "sqlbuild.executor.runtime";
@@ -562,8 +563,7 @@ impl BuildProgressCallbacks {
             ) {
                 let options: Bound<'_, PyDict> = PyDict::new(py);
                 options.set_item("duration_ms", duration_ms.trunc() as i64)?;
-                result =
-                    imported(py, "dataclasses", "replace")?.call((node_result,), Some(&options))?;
+                result = replaced_keywords(node_result, &options)?;
             }
         }
         let written: PyResult<()> = Self::write_node_result(slf, &result, kind);

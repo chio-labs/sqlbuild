@@ -153,7 +153,7 @@ fn exception(py: Python<'_>, error: &PyErr) -> bool {
 fn connection_timing(reporter: &Bound<'_, PyAny>, method: &str, started: Instant) -> PyResult<()> {
     let py: Python<'_> = reporter.py();
     call_with(
-        &reporter.getattr(method)?,
+        &native_field(reporter, method)?,
         &[
             ("connection_count", PyInt::new(py, 1).into_any()),
             (
@@ -319,7 +319,7 @@ fn finding_text(finding: Bound<'_, PyAny>) -> PyResult<ContractFindingText> {
 fn resource_text(item: Bound<'_, PyAny>) -> PyResult<ContractResourceText> {
     let mut parts: Vec<String> = Vec::new();
     for field in ["database", "schema", "relation"] {
-        let value: Bound<'_, PyAny> = item.getattr(field)?;
+        let value: Bound<'_, PyAny> = native_field(&item, field)?;
         if value.is_truthy()? {
             parts.push(value.str()?.to_string());
         }

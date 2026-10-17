@@ -23,7 +23,7 @@ const CHECK_KIND: &str = "check";
 const DEFAULT_MATERIALIZATION: &str = "view";
 
 fn attribute<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    value.getattr(name)
+    native_field(value, name)
 }
 
 fn text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {

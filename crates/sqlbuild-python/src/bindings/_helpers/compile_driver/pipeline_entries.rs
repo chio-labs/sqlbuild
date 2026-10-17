@@ -55,7 +55,7 @@ pub(crate) fn compile_analysis_selection<'py>(
     let py: Python<'py> = options.py();
     let mut has_python_nodes: bool = false;
     for name in PYTHON_NODE_FUNCTIONS {
-        if discovered.getattr(name)?.is_truthy()? {
+        if native_field(discovered, name)?.is_truthy()? {
             has_python_nodes = true;
             break;
         }
@@ -133,7 +133,7 @@ pub(crate) fn plan_has_executable_work<'py>(
     )?;
     let plan: Bound<'py, PyAny> = arguments.value("plan")?;
     for name in PLAN_WORK_ENTRIES {
-        if plan.getattr(name)?.is_truthy()? {
+        if native_field(&plan, name)?.is_truthy()? {
             return Ok(true);
         }
     }

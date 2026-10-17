@@ -159,7 +159,7 @@ fn python_sql_owners<'py>(
     let py: Python<'py> = project.py();
     let mut owners: Vec<PythonSqlOwner<'py>> = Vec::new();
     for (label, attribute) in NODE_OWNERS {
-        for node in discovered_inputs.getattr(attribute)?.try_iter()? {
+        for node in native_field(discovered_inputs, attribute)?.try_iter()? {
             let node: Bound<'py, PyAny> = node?;
             let name: String = native_field(&node, "name")?.extract()?;
             owners.push(PythonSqlOwner::new(

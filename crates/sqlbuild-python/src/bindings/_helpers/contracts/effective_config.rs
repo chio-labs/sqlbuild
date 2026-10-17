@@ -119,7 +119,7 @@ fn field_owner<'py>(
     field: &TargetField,
 ) -> PyResult<Bound<'py, PyAny>> {
     match field.group {
-        Some(group) => target.getattr(group),
+        Some(group) => native_field(target, group),
         None => Ok(target.clone()),
     }
 }
@@ -128,7 +128,7 @@ fn field_value<'py>(
     target: &Bound<'py, PyAny>,
     field: &TargetField,
 ) -> PyResult<FieldValue<Key<'py>, Value<'py>>> {
-    let value: Bound<'py, PyAny> = field_owner(target, field)?.getattr(field.name)?;
+    let value: Bound<'py, PyAny> = native_field(&field_owner(target, field)?, field.name)?;
     match (field.rule, value.is_none()) {
         (MergeRule::Overlay { .. }, true) => Ok(FieldValue::Scalar(None)),
         (MergeRule::Overlay { .. }, false) => Ok(FieldValue::Scalar(Some(value))),
@@ -321,7 +321,12 @@ pub(crate) fn effective_config_settings<'py>(
     let read = |settings: &Bound<'py, PyAny>| -> PyResult<Pairs<'py>> {
         names
             .iter()
-            .map(|name| Ok((key(name.as_any())?, settings.getattr(name)?)))
+            .map(|name| {
+                Ok((
+                    key(name.as_any())?,
+                    native_field(settings, &name.to_cow()?)?,
+                ))
+            })
             .collect()
     };
     let overridden: Vec<Key<'py>> = overrides

@@ -260,7 +260,7 @@ pub(crate) fn envelope_of(event: &Bound<'_, PyAny>) -> PyResult<EventEnvelope> {
     if known_event(event)? {
         envelope.schema_version = native_field(event, "schema_version")?.extract()?;
         for (slot, name) in envelope.text_fields.iter_mut().zip(ENVELOPE_TEXT_FIELDS) {
-            *slot = optional_text(&event.getattr(name)?)?;
+            *slot = optional_text(&native_field(event, name)?)?;
         }
         envelope.occurred_at = Some(utc_time(&native_field(event, "occurred_at")?)?);
         return Ok(envelope);
@@ -300,7 +300,7 @@ pub(crate) fn projection_fact(stored: &Bound<'_, PyAny>) -> PyResult<ProjectionF
 /// A `RunRecord` as a projected run.
 pub(crate) fn run_row(record: &Bound<'_, PyAny>) -> PyResult<RunRow> {
     let optional_time = |name: &str| -> PyResult<Option<UtcTime>> {
-        let value: Bound<'_, PyAny> = record.getattr(name)?;
+        let value: Bound<'_, PyAny> = native_field(record, name)?;
         if value.is_none() {
             return Ok(None);
         }

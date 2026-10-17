@@ -137,7 +137,7 @@ fn function_sql(adapter: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyRe
         "entry_point",
         "packages",
     ] {
-        arguments.push((field, function.getattr(field)?));
+        arguments.push((field, native_field(function, field)?));
     }
     let statements: Vec<String> = adapter
         .getattr("render_create_function")?
@@ -218,7 +218,7 @@ fn written_target<'py>(
 }
 
 fn length(value: &Bound<'_, PyAny>, field: &str) -> PyResult<usize> {
-    value.getattr(field)?.len()
+    native_field(value, field)?.len()
 }
 
 /// Write the planner's compiled output under `target_dir`.

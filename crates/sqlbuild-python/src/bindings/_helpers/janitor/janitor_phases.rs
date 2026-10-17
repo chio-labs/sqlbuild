@@ -191,7 +191,7 @@ fn candidate_count(plan: &Bound<'_, PyAny>) -> PyResult<usize> {
         .getattr("drops")?
         .len()?;
     for field in CANDIDATE_FIELDS {
-        count += plan.getattr(field)?.len()?;
+        count += native_field(plan, field)?.len()?;
     }
     Ok(count)
 }

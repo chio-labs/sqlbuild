@@ -162,10 +162,7 @@ impl NativeCompiledProject {
             };
             owners.push(model_owner(
                 record.name.clone(),
-                record
-                    .model_file
-                    .bind(py)
-                    .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                native_field(record.model_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
                     .str()?
                     .to_string(),
                 (
@@ -176,12 +173,10 @@ impl NativeCompiledProject {
         }
         for source in &self.sources {
             let attached: &AttachedSource = source.attached();
-            let path: String = attached
-                .source_file
-                .bind(py)
-                .getattr(RELATIVE_PATH_ATTRIBUTE)?
-                .str()?
-                .to_string();
+            let path: String =
+                native_field(attached.source_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
+                    .str()?
+                    .to_string();
             owners.push(resource_owner(
                 SOURCE_OWNER,
                 attached.name.clone(),
@@ -199,14 +194,10 @@ impl NativeCompiledProject {
                 SEED_OWNER,
                 name.to_owned(),
                 (
-                    seed_file
-                        .bind(py)
-                        .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                    native_field(seed_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
                         .str()?
                         .to_string(),
-                    schema_file
-                        .bind(py)
-                        .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                    native_field(schema_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
                         .str()?
                         .to_string(),
                 ),
@@ -452,10 +443,7 @@ impl NativeCompiledProject {
             .iter()
             .map(|record| {
                 Ok((
-                    record
-                        .model_file
-                        .bind(py)
-                        .getattr(RELATIVE_PATH_ATTRIBUTE)?
+                    native_field(record.model_file.bind(py), RELATIVE_PATH_ATTRIBUTE)?
                         .str()?
                         .to_string(),
                     record.references.clone(),

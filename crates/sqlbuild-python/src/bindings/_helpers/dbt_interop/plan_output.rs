@@ -13,7 +13,7 @@ use crate::bindings::_helpers::compile_attachment::effective_config::build_effec
 use crate::bindings::_helpers::compile_driver::deferral::resolve_model_deferral_inputs;
 use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hooks;
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, keywords,
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -21,6 +21,7 @@ use crate::bindings::_helpers::planner_entries::display_plan::build_display_only
 use crate::bindings::_helpers::planner_entries::execution_plan::build_execution_plan;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -100,7 +101,7 @@ pub(crate) fn connection_hooks<'py>(
             pairs.push((
                 name,
                 keyword_relay(
-                    reporter.getattr(name)?,
+                    native_field(reporter, name)?,
                     &["connection_count", "elapsed_seconds"],
                 )?,
             ));
@@ -121,7 +122,7 @@ fn open_connection<'py>(
         native_field(hooks, "on_connection_start")?,
     )];
     for name in ["on_connection_complete", "on_connection_error"] {
-        let callback = hooks.getattr(name)?;
+        let callback = native_field(hooks, name)?;
         pairs.push((
             name,
             if callback.is_none() {
@@ -292,10 +293,7 @@ pub(crate) fn attach_sqlbuild_plan_output<'py>(
     if output.is_none() {
         return Ok(plan);
     }
-    imported(py, "dataclasses", "replace")?.call(
-        (plan,),
-        Some(&keywords(py, &[("sqlbuild_plan_output", output)])?),
-    )
+    replaced(&plan, &[("sqlbuild_plan_output", output)])
 }
 
 /// Prefer stderr for dbt subprocess failure details, retaining Python whitespace semantics.

@@ -40,22 +40,22 @@ const MEASUREMENT_MODE: &str = "MEASUREMENT";
 
 /// `getattr(value, name)` extracted.
 fn attr<'py, T: pyo3::FromPyObject<'py>>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<T> {
-    value.getattr(name)?.extract()
+    native_field(value, name)?.extract()
 }
 
 /// `str(value.<name>)`.
 fn text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    Ok(value.getattr(name)?.str()?.to_string())
+    Ok(native_field(value, name)?.str()?.to_string())
 }
 
 /// `value.<path>.stem`.
 fn stem(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    attr(&value.getattr(name)?, "stem")
+    attr(&native_field(value, name)?, "stem")
 }
 
 /// Each item of the iterable `value.<name>`.
 fn items<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    value.getattr(name)?.try_iter()?.collect()
+    native_field(value, name)?.try_iter()?.collect()
 }
 
 /// `{member.value: member for member in enum_class}` of a native string enum.
@@ -113,7 +113,7 @@ fn either<'py>(
     defaults: &Bound<'py, PyAny>,
     (preferred, fallback): (&str, &str),
 ) -> PyResult<Option<String>> {
-    let value: Bound<'py, PyAny> = defaults.getattr(preferred)?;
+    let value: Bound<'py, PyAny> = native_field(defaults, preferred)?;
     if value.is_none() {
         return attr(defaults, fallback);
     }
@@ -558,7 +558,7 @@ fn diagnostic_settings<'py>(
                     native_field(hook, "name")?,
                     text(hook, "relative_path")?.into_bound_py_any(py)?,
                     native_field(hook, "contents")?,
-                    hook.getattr(DESCRIPTION_KEY)?,
+                    native_field(hook, DESCRIPTION_KEY)?,
                 ],
             )
         })

@@ -37,7 +37,7 @@ const ORIGIN_ENTRY_GROUPS: [&str; 3] = [
 fn entries<'py>(pipeline: &Bound<'py, PyAny>, groups: &[&str]) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut found: Vec<Bound<'py, PyAny>> = Vec::new();
     for group in groups {
-        for entry in pipeline.getattr(*group)?.try_iter()? {
+        for entry in native_field(pipeline, group)?.try_iter()? {
             found.push(entry?);
         }
     }
@@ -223,7 +223,7 @@ fn execution_input<'py>(
         "destination_seed_entries",
         "destination_function_entries",
     ] {
-        fields.push((group, pipeline.getattr(group)?));
+        fields.push((group, native_field(pipeline, group)?));
     }
     fields.extend([
         ("execution_order", native_field(&plan, "execution_order")?),
@@ -279,7 +279,7 @@ fn copy_fingerprints<'py>(
         "origin_seed_entries",
         "destination_seed_entries",
     ] {
-        fields.push((group, pipeline.getattr(group)?));
+        fields.push((group, native_field(pipeline, group)?));
     }
     fields.extend([
         ("adapter", invocation.adapter.clone()),

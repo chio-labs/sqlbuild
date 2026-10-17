@@ -4,12 +4,13 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::validated_model_cursor_sql;
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::records::construct::{
     enum_member, new_record, new_record_with, record_class,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::render::declaration_values::declaration_scope_resolver;
 use crate::bindings::_helpers::render::macro_expansion_result::{
@@ -51,15 +52,12 @@ pub(crate) fn test_model_query_overrides<'py>(
     if !macro_mocks.is_truthy()? {
         return Ok(overrides);
     }
-    let macro_context: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?.call(
-        (model_macro_context(inputs)?,),
-        Some(&keywords(
-            py,
-            &[(
-                "_enforce_explicit_references",
-                PyBool::new(py, false).to_owned().into_any(),
-            )],
-        )?),
+    let macro_context: Bound<'py, PyAny> = replaced(
+        &model_macro_context(inputs)?,
+        &[(
+            "_enforce_explicit_references",
+            PyBool::new(py, false).to_owned().into_any(),
+        )],
     )?;
     let declaration_scope: Bound<'py, PyAny> = native_field(inputs, "declaration_scope")?;
     let lookup: Bound<'py, PyAny> = if declaration_scope.is_none() {
@@ -170,7 +168,7 @@ pub(crate) fn compiled_sql_scenarios<'py>(
             ],
         )?;
         for field in SCENARIO_FIELDS {
-            fields.set_item(field, scenario_input.getattr(field)?)?;
+            fields.set_item(field, native_field(&scenario_input, field)?)?;
         }
         fields.set_item(
             "source_path",

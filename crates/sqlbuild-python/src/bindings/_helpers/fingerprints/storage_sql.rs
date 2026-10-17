@@ -66,7 +66,7 @@ fn stored_fingerprint(fingerprint: &Bound<'_, PyAny>) -> PyResult<StoredFingerpr
 }
 
 fn formatted(fingerprint: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    fingerprint.getattr(name)?.str()?.extract()
+    native_field(fingerprint, name)?.str()?.extract()
 }
 
 fn storage_error(py: Python<'_>, error: FingerprintStorageError) -> PyErr {

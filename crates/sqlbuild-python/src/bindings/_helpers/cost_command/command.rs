@@ -25,6 +25,7 @@ use crate::bindings::_helpers::cost_report::functions::list_cost_runs;
 use crate::bindings::_helpers::cost_report::functions::resolve_cost_run;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 
 /// The request fields every cost view reads.
 struct CostRequest<'py> {
@@ -242,14 +243,12 @@ fn with_resources<'py>(
     resources: &[Bound<'py, PyAny>],
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = record.py();
-    let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let cost_changes: Bound<'py, PyDict> = PyDict::new(py);
     cost_changes.set_item("resources", PyTuple::new(py, resources)?)?;
-    let cost: Bound<'py, PyAny> =
-        replace.call((native_field(record, "cost")?,), Some(&cost_changes))?;
+    let cost: Bound<'py, PyAny> = replaced_keywords(&native_field(record, "cost")?, &cost_changes)?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
     changes.set_item("cost", cost)?;
-    replace.call((record,), Some(&changes))
+    replaced_keywords(record, &changes)
 }
 
 fn run_detail(request: &CostRequest<'_>) -> PyResult<i32> {

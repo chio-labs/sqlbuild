@@ -135,7 +135,7 @@ impl<'py> Buckets<'py> {
                 ("function", function.clone()),
             ];
             for field in kind.fields {
-                pairs.push((field, read.getattr(*field)?));
+                pairs.push((field, native_field(&read, field)?));
             }
             pairs.push(("provider_usages", provider_usages(function, providers)?));
             let get = |name: &str| -> PyResult<Bound<'py, PyAny>> {

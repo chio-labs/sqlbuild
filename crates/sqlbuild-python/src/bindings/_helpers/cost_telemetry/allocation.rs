@@ -23,7 +23,8 @@ const PENDING_MESSAGE: &str = "Snowflake query history is not complete yet.";
 
 /// One `QueryCostObservation` as a native query, in the run when its run ID matches.
 pub(crate) fn cost_query(observation: &Bound<'_, PyAny>, run_id: &str) -> PyResult<CostQuery> {
-    let text = |name: &str| -> PyResult<Option<String>> { observation.getattr(name)?.extract() };
+    let text =
+        |name: &str| -> PyResult<Option<String>> { native_field(observation, name)?.extract() };
     Ok(CostQuery {
         query_id: native_field(observation, "query_id")?.extract()?,
         warehouse: WarehouseKey {

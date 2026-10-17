@@ -44,11 +44,11 @@ impl<'py> BuildContext<'py> {
     }
 
     pub(crate) fn request_flag(&self, name: &str) -> PyResult<bool> {
-        self.request.getattr(name)?.is_truthy()
+        native_field(&self.request, name)?.is_truthy()
     }
 
     pub(crate) fn get(&self, name: &str) -> PyResult<Bound<'py, PyAny>> {
-        self.invocation.getattr(name)
+        native_field(&self.invocation, name)
     }
 
     /// The requested concurrency, or the project setting.

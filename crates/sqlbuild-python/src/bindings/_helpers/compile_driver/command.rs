@@ -29,6 +29,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
@@ -65,12 +66,9 @@ pub(crate) fn run_compile_command<'py>(
     };
     let path_class: Bound<'py, PyAny> = imported(py, "pathlib", "Path")?;
     let effective_request: Bound<'py, PyAny> = if native_field(&request, "project_dir")?.is_none() {
-        imported(py, "dataclasses", "replace")?.call(
-            (request.clone(),),
-            Some(&keywords(
-                py,
-                &[("project_dir", path_class.call_method0("cwd")?)],
-            )?),
+        replaced(
+            &request.clone(),
+            &[("project_dir", path_class.call_method0("cwd")?)],
         )?
     } else {
         request.clone()
@@ -400,7 +398,7 @@ fn timings_ms<'py>(
         ("rule_cache_hits", "rule_cache_hits"),
         ("rule_cache_misses", "rule_cache_misses"),
     ] {
-        timings.set_item(key, analysis.getattr(attribute)?)?;
+        timings.set_item(key, native_field(analysis, attribute)?)?;
     }
     timings.set_item("write_ms", write_ms)?;
     for (key, value) in timing_milliseconds(detailed_timings) {

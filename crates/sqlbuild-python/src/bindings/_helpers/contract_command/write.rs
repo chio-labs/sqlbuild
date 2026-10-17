@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::format_command::files::write_file_atomically;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::refactor::contract_edits::edit_contract_model;
 use crate::bindings::_helpers::refactor::contract_edits::edit_contract_source;
@@ -200,5 +201,5 @@ fn replaced<'py>(
     for (name, field) in fields {
         keywords.set_item(*name, field)?;
     }
-    imported(py, "dataclasses", "replace")?.call((value,), Some(&keywords))
+    replaced_keywords(value, &keywords)
 }

@@ -13,13 +13,14 @@ use sqlbuild_core::load_command::main::select_load_entries::select_load_entries 
 use sqlbuild_core::load_command::models::{LoadEntry, LoadGraph};
 
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::contracts::spec_resolution::loader_destination_parts;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -47,22 +48,21 @@ pub(crate) fn environment_sources<'py>(
     target_config: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = discovered.py();
-    let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
     let mut sources: Vec<Bound<'py, PyAny>> = Vec::new();
     for source_file in native_field(discovered, "source_files")?.try_iter()? {
         for source in native_field(&source_file?, "source_entries")?.try_iter()? {
             let source: Bound<'py, PyAny> = source?;
             let changes: Bound<'py, PyDict> = PyDict::new(py);
             for field in ["database", "schema"] {
-                let value: Bound<'py, PyAny> = source.getattr(field)?;
+                let value: Bound<'py, PyAny> = native_field(&source, field)?;
                 let effective: Bound<'py, PyAny> = if !value.is_none() || target_config.is_none() {
                     value
                 } else {
-                    target_config.getattr(field)?
+                    native_field(target_config, field)?
                 };
                 changes.set_item(field, effective)?;
             }
-            sources.push(replace.call((source,), Some(&changes))?);
+            sources.push(replaced_keywords(&source, &changes)?);
         }
     }
     Ok(sources)
@@ -239,7 +239,7 @@ fn first_truthy<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_config.py();
     if !target_config.is_none() {
-        let value: Bound<'py, PyAny> = target_config.getattr(field)?;
+        let value: Bound<'py, PyAny> = native_field(target_config, field)?;
         if value.is_truthy()? {
             return Ok(value);
         }

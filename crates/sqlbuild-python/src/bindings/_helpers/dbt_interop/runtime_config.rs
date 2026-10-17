@@ -65,7 +65,7 @@ fn write_outputs(py: Python<'_>, outcome: &DbtExecutionOutcome) -> PyResult<()> 
             Stream::Stdout => "stdout",
             Stream::Stderr => "stderr",
         };
-        sys.getattr(name)?.call_method1("write", (text,))?;
+        native_field(&sys, name)?.call_method1("write", (text,))?;
     }
     Ok(())
 }

@@ -57,7 +57,7 @@ pub(crate) struct Outcome<'py> {
 }
 
 fn count(value: &Bound<'_, PyAny>, name: &str) -> PyResult<usize> {
-    value.getattr(name)?.len()
+    native_field(value, name)?.len()
 }
 
 fn validated_date(py: Python<'_>, value: Option<Bound<'_, PyAny>>) -> PyResult<Option<String>> {
@@ -66,10 +66,7 @@ fn validated_date(py: Python<'_>, value: Option<Bound<'_, PyAny>>) -> PyResult<O
     };
     let datetime: Bound<'_, PyAny> = py.import("datetime")?.into_any();
     for kind in ["date", "datetime"] {
-        match datetime
-            .getattr(kind)?
-            .call_method1("fromisoformat", (&value,))
-        {
+        match native_field(&datetime, kind)?.call_method1("fromisoformat", (&value,)) {
             Ok(_) => return Ok(Some(value.extract()?)),
             Err(error) if error.is_instance_of::<PyValueError>(py) => {}
             Err(error) => return Err(error),
@@ -283,7 +280,7 @@ fn verbose_callback<'py>(
     name: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     if context.verbose {
-        return callbacks.getattr(name);
+        return native_field(callbacks, name);
     }
     Ok(none(context.py()))
 }
@@ -303,7 +300,7 @@ pub(crate) fn execute_build_plan<'py>(
     let callbacks: &Bound<'py, PyAny> = &preparation.callbacks;
     let lifecycle: &DirectPythonLifecycle = preparation.lifecycle.get();
     let [start_ts, end_ts, start_int, end_int] = &preparation.cursors;
-    let request = |name: &str| context.request.getattr(name);
+    let request = |name: &str| native_field(&context.request, name);
     let runtime: Bound<'py, PyAny> = call_with(
         &host::entry(py, ExecutorHost::BuildRuntimeParams)?,
         &[
@@ -493,7 +490,7 @@ fn check_runtime<'py>(
 fn names_of<'py>(values: &Bound<'py, PyAny>, attribute: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
     values
         .try_iter()?
-        .map(|value| value?.getattr(attribute))
+        .map(|value| native_field(&value?, attribute))
         .collect()
 }
 

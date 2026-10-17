@@ -135,7 +135,7 @@ fn previous_records<'py>(
     let mut database: Option<Bound<'py, PyAny>> = None;
     let mut schemas: BTreeSet<String> = BTreeSet::new();
     for collection in ["models", "seeds", "functions"] {
-        for item in project.getattr(collection)?.try_iter()? {
+        for item in native_field(project, collection)?.try_iter()? {
             let destination: Bound<'py, PyAny> = native_field(&item?, "destination")?;
             let destination_database: Bound<'py, PyAny> = native_field(&destination, "database")?;
             if database.is_none() && !destination_database.is_none() {

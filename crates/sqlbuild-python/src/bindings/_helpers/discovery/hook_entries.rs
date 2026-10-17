@@ -25,7 +25,7 @@ fn sql_hook<'py>(entry: &Bound<'py, PyAny>, sql_fields: &[String]) -> PyResult<B
         let Some(name) = SQL_HOOK_FIELDS.iter().find(|name| **name == field) else {
             return Err(pyo3::exceptions::PyKeyError::new_err(field.clone()));
         };
-        let mut value: Bound<'py, PyAny> = entry.getattr(*name)?;
+        let mut value: Bound<'py, PyAny> = native_field(entry, name)?;
         if value.is_none() {
             continue;
         }

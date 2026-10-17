@@ -80,7 +80,7 @@ pub(crate) fn expanded_macros<'py>(
     let declarations: Bound<'py, PyAny> = if classes.scoped {
         let fields: Bound<'py, PyDict> = PyDict::new(py);
         for field in CONTEXT_FIELDS {
-            fields.set_item(field, visible.declarations.getattr(field)?)?;
+            fields.set_item(field, native_field(&visible.declarations, field)?)?;
         }
         fields.set_item("consumer", &visible.consumer)?;
         classes.declaration_context.call((), Some(&fields))?

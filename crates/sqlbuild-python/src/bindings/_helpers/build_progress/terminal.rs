@@ -109,7 +109,7 @@ fn stop_progress_spinners(py: Python<'_>) -> PyResult<()> {
         if native_field(&thread, "name")?.eq(SPINNER_THREAD_NAME)?
             && thread.hasattr(STOP_EVENT_ATTRIBUTE)?
         {
-            thread.getattr(STOP_EVENT_ATTRIBUTE)?.call_method0("set")?;
+            native_field(&thread, STOP_EVENT_ATTRIBUTE)?.call_method0("set")?;
             spinners.push(thread);
         }
     }

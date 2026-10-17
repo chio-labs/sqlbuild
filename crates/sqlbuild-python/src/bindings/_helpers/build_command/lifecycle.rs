@@ -24,6 +24,7 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_scope::loaders::build_intermediate_source_map;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const SUCCESS_STATUS: &str = "success";
@@ -152,7 +153,6 @@ impl DirectPythonLifecycle {
             .collect::<PyResult<_>>()?;
         let functions: Bound<'py, PyAny> = frozenset(py, &functions)?;
         let ingress: &Bound<'py, PyAny> = self.ingress_loader_names.bind(py);
-        let replace: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?;
         let mut handoff: Vec<Bound<'py, PyAny>> = Vec::new();
         for loader in loaders {
             let keeps_all: bool = !ingress.contains(native_field(&loader, "name")?)?;
@@ -165,7 +165,7 @@ impl DirectPythonLifecycle {
             }
             let changes: Bound<'py, PyDict> = PyDict::new(py);
             changes.set_item("depends_on", tuple(py, &dependencies)?)?;
-            handoff.push(replace.call((loader,), Some(&changes))?);
+            handoff.push(replaced_keywords(&loader, &changes)?);
         }
         tuple(py, &handoff)
     }
@@ -241,7 +241,7 @@ fn scheduled_sql_names(plan: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
         .call1((native_field(plan, "execution_order")?,))?;
     let mut names: HashSet<String> = HashSet::new();
     for kind in ["model_entries", "seed_entries", "source_load_entries"] {
-        for entry in plan.getattr(kind)?.try_iter()? {
+        for entry in native_field(plan, kind)?.try_iter()? {
             let entry: Bound<'_, PyAny> = entry?;
             if scheduled.contains(native_field(&entry, "key")?)? {
                 names.insert(native_field(&entry, "name")?.extract()?);
@@ -355,7 +355,7 @@ fn task_asset_names(
 ) -> PyResult<Vec<String>> {
     let mut known: HashSet<String> = HashSet::new();
     for kind in ["task_functions", "asset_functions"] {
-        for node in discovered.getattr(kind)?.try_iter()? {
+        for node in native_field(discovered, kind)?.try_iter()? {
             known.insert(native_field(&node?, "name")?.extract()?);
         }
     }

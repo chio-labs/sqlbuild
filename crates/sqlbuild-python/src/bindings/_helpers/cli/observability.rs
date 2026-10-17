@@ -102,7 +102,7 @@ fn log_exporter_summary(summary: &Bound<'_, PyAny>) -> PyResult<()> {
     let py: Python<'_> = summary.py();
     let mut fields: Vec<(&str, Bound<'_, PyAny>)> = Vec::new();
     for name in COUNT_FIELDS.into_iter().chain(SUMMARY_FIELDS) {
-        fields.push((name, summary.getattr(name)?));
+        fields.push((name, native_field(summary, name)?));
     }
     log_debug(py, "Event exporter delivery summary", &fields)?;
     for exporter in native_field(summary, "per_exporter")?.try_iter()? {
@@ -111,10 +111,10 @@ fn log_exporter_summary(summary: &Bound<'_, PyAny>) -> PyResult<()> {
         let mut fields: Vec<(&str, Bound<'_, PyAny>)> =
             vec![("exporter_name", native_field(&exporter, "exporter_name")?)];
         for name in COUNT_FIELDS {
-            fields.push((name, counts.getattr(name)?));
+            fields.push((name, native_field(&counts, name)?));
         }
         for name in SUMMARY_FIELDS {
-            fields.push((name, summary.getattr(name)?));
+            fields.push((name, native_field(summary, name)?));
         }
         log_debug(py, "Event exporter accounting", &fields)?;
     }

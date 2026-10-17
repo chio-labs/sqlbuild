@@ -18,11 +18,11 @@ const MEASUREMENT: &str = "measurement";
 const FAILED: &str = "failed";
 
 pub(crate) fn text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    Ok(value.getattr(name)?.str()?.to_string())
+    Ok(native_field(value, name)?.str()?.to_string())
 }
 
 pub(crate) fn optional(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
-    let field: Bound<'_, PyAny> = value.getattr(name)?;
+    let field: Bound<'_, PyAny> = native_field(value, name)?;
     if field.is_none() {
         return Ok(None);
     }
@@ -30,15 +30,14 @@ pub(crate) fn optional(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<
 }
 
 fn texts(value: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<String>> {
-    value
-        .getattr(name)?
+    native_field(value, name)?
         .try_iter()?
         .map(|item| Ok(item?.str()?.to_string()))
         .collect()
 }
 
 fn items<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Vec<Bound<'py, PyAny>>> {
-    value.getattr(name)?.try_iter()?.collect()
+    native_field(value, name)?.try_iter()?.collect()
 }
 
 fn duration(value: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {

@@ -436,7 +436,7 @@ fn audit_payload<'py>(
     let document: Bound<'py, PyAny> = json.call_method1("loads", (payload,))?;
     let counts: Bound<'py, PyDict> = PyDict::new(py);
     for field in ["attempted_count", "written_count", "failed_count"] {
-        counts.set_item(field, projection.getattr(field)?)?;
+        counts.set_item(field, native_field(&projection, field)?)?;
     }
     document.set_item("audit_result_projection", &counts)?;
     if native_field(&projection, "degraded")?.is_truthy()? {
@@ -444,7 +444,7 @@ fn audit_payload<'py>(
         let reason: Bound<'py, PyDict> = PyDict::new(py);
         reason.set_item("reason", PROJECTION_FAILURE)?;
         for field in ["attempted_count", "written_count", "failed_count"] {
-            reason.set_item(field, projection.getattr(field)?)?;
+            reason.set_item(field, native_field(&projection, field)?)?;
         }
         let reasons: Bound<'py, PyList> = PyList::empty(py);
         reasons.append(reason)?;

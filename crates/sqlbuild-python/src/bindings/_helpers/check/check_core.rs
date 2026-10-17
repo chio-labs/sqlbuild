@@ -128,7 +128,7 @@ pub(crate) fn record_python_run_state_results<'py>(
     }
     let node_by_name: Bound<'py, PyDict> = PyDict::new(py);
     for attribute in ["task_functions", "asset_functions"] {
-        for node in discovered_inputs.getattr(attribute)?.try_iter()? {
+        for node in native_field(discovered_inputs, attribute)?.try_iter()? {
             let node: Bound<'py, PyAny> = node?;
             node_by_name.set_item(
                 native_field(&node, "name")?,
@@ -292,8 +292,7 @@ fn located<'py>(
         SEED_KIND => "seed_locations",
         _ => return Ok(None),
     };
-    let location: Bound<'py, PyAny> = plan_output
-        .getattr(attribute)?
+    let location: Bound<'py, PyAny> = native_field(plan_output, attribute)?
         .call_method1("get", (native_field(reference, "name")?,))?;
     Ok((!location.is_none()).then_some(location))
 }

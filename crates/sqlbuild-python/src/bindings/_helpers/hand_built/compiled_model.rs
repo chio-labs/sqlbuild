@@ -223,7 +223,7 @@ fn located<'py>(
             "code", "message", "line", "column", "start", "end", "severity",
         ]
         .into_iter()
-        .map(|name| item.getattr(name))
+        .map(|name| native_field(&item, name))
         .collect::<PyResult<_>>()?;
         rows.push(PyTuple::new(py, fields)?.into_any());
     }
@@ -248,7 +248,7 @@ fn located<'py>(
                 let fields: Vec<Object<'py>> =
                     ["source_start", "source_end", "output_start", "output_end"]
                         .into_iter()
-                        .map(|name| span.getattr(name))
+                        .map(|name| native_field(&span, name))
                         .collect::<PyResult<_>>()?;
                 rows.push(PyTuple::new(py, fields)?.into_any());
             }

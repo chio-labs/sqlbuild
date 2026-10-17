@@ -326,7 +326,7 @@ pub(crate) fn stop_event_exporter_threads(py: Python<'_>) -> PyResult<()> {
         .try_iter()?
     {
         let thread: Bound<'_, PyAny> = thread?;
-        let Ok(worker) = thread.getattr(WORKER_ATTRIBUTE) else {
+        let Ok(worker) = native_field(&thread, WORKER_ATTRIBUTE) else {
             continue;
         };
         if let Ok(worker) = worker.downcast::<DispatcherWorker>() {

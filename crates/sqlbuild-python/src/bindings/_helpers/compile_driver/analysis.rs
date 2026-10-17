@@ -24,6 +24,7 @@ use crate::bindings::_helpers::planner_selection::selectors::select_project_grap
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::constants::RULE_FIX_AVAILABLE_NOTE;
 use crate::bindings::_helpers::rules::early_sql_lint::EarlySqlLint;
@@ -356,9 +357,9 @@ impl<'py> Driver<'_, 'py> {
             (self.early_lint.getattr("start")?,),
             Some(&keywords(py, &[("dialect", lint_dialect.clone())])?),
         )?;
-        let analysis_selection: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?.call(
-            (options.analysis_selection.clone(),),
-            Some(&keywords(py, &[("on_inputs_ready", on_inputs_ready)])?),
+        let analysis_selection: Bound<'py, PyAny> = replaced(
+            &options.analysis_selection.clone(),
+            &[("on_inputs_ready", on_inputs_ready)],
         )?;
         let lineage_mode: Bound<'py, PyAny> = column_lineage_mode(
             py,

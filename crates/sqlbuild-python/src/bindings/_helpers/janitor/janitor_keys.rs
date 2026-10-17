@@ -179,7 +179,7 @@ pub(crate) fn relation_age_timestamp<'py>(
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let mut latest: Option<Bound<'py, PyAny>> = None;
     for field in ["created_at", "last_altered_at"] {
-        let value: Bound<'py, PyAny> = relation.getattr(field)?;
+        let value: Bound<'py, PyAny> = native_field(relation, field)?;
         if value.is_none() {
             continue;
         }

@@ -6,9 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_command::support::{boolean, emit, none, text, tuple};
 use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, imported, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::dbt_interop::execution::render_dbt_execution_summary_footer;
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;
@@ -19,6 +17,7 @@ use crate::bindings::_helpers::dbt_interop::runtime_execution::execute_dbt_comma
 use crate::bindings::_helpers::dbt_interop::sqlbuild_work::execute_dbt_sqlbuild_work;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const OPTIONS: (&[&str], &[&str]) = (
@@ -83,15 +82,12 @@ pub(crate) fn write_dbt_execution_plan_text(
     let display = if merged.is_none() {
         plan
     } else {
-        imported(py, "dataclasses", "replace")?.call(
-            (plan,),
-            Some(&keywords(
-                py,
-                &[
-                    ("dbt_command_argv", merged),
-                    ("supplemental_dbt_command_argvs", tuple(py, &[])?),
-                ],
-            )?),
+        replaced(
+            &plan,
+            &[
+                ("dbt_command_argv", merged),
+                ("supplemental_dbt_command_argvs", tuple(py, &[])?),
+            ],
         )?
     };
     let limit = if native_field(&request, "verbose")?.is_truthy()? {

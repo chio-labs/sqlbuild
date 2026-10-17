@@ -6,6 +6,7 @@ use pyo3::types::{PyString, PyTuple};
 use sqlbuild_core::dbt_events::models::{DbtNodeMessage, DbtNodeResult};
 
 use crate::bindings::_helpers::records::construct::new_record_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 fn optional<'py, T: pyo3::IntoPyObject<'py>>(
@@ -76,7 +77,7 @@ pub(crate) fn python_result<'py>(
 }
 
 fn field<T: for<'a> pyo3::FromPyObject<'a>>(value: &Bound<'_, PyAny>, name: &str) -> PyResult<T> {
-    value.getattr(name)?.extract()
+    native_field(value, name)?.extract()
 }
 
 /// A Python `DbtNodeExecutionResult` as plain data.

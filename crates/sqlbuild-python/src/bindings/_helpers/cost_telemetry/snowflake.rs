@@ -22,6 +22,7 @@ use crate::bindings::_helpers::cost_telemetry::ledger::read_ledger;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const DEADLINE_SECONDS: f64 = 10.0;
@@ -444,7 +445,7 @@ fn ledger_attributed<'py>(
         pyo3::types::PyDictMethods::get_item(ledger, native_field(observation, "query_id")?)?;
     let field = |name: &str| -> PyResult<Bound<'py, PyAny>> {
         match &entry {
-            Some(entry) => entry.getattr(name),
+            Some(entry) => native_field(entry, name),
             None => Ok(py.None().into_bound(py)),
         }
     };
@@ -452,7 +453,7 @@ fn ledger_attributed<'py>(
     changes.set_item("run_id", field("run_id")?)?;
     changes.set_item("resource_type", field("resource_type")?)?;
     changes.set_item("resource_name", field("resource_name")?)?;
-    imported(py, "dataclasses", "replace")?.call((observation,), Some(&changes))
+    replaced_keywords(observation, &changes)
 }
 
 /// Collection inputs read from the keyword arguments.

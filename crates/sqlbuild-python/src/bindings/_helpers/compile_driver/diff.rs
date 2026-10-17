@@ -64,7 +64,7 @@ fn diff_graph<'py>(project: &Bound<'py, PyAny>, keys: &KeyIndexes<'py>) -> PyRes
     let lineage: Bound<'py, PyAny> = project_lineage_views(py, project)?;
     let mut graph: DiffGraph = DiffGraph::default();
     for attribute in ["models", "sources", "seeds"] {
-        for resource in project.getattr(attribute)?.try_iter()? {
+        for resource in native_field(project, attribute)?.try_iter()? {
             let resource: Bound<'py, PyAny> = resource?;
             let name: String = native_field(&resource, "name")?.extract()?;
             graph

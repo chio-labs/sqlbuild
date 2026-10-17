@@ -228,8 +228,8 @@ fn source_texts<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>
         }
     }
     for (collection, file) in [("sources", "source_file"), ("sql_tests", "test_file")] {
-        for resource in project.getattr(collection)?.try_iter()? {
-            let file: Bound<'py, PyAny> = resource?.getattr(file)?;
+        for resource in native_field(project, collection)?.try_iter()? {
+            let file: Bound<'py, PyAny> = native_field(&resource?, file)?;
             texts.set_item(
                 native_field(&file, "relative_path")?,
                 native_field(&file, "contents")?,
@@ -464,7 +464,7 @@ fn location_json<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
         ],
     )?;
     for key in ["end_line", "end_column"] {
-        let value: Bound<'py, PyAny> = location.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(location, key)?;
         if !value.is_none() {
             payload.set_item(key, value)?;
         }
@@ -495,7 +495,7 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         payload.set_item("resource_type", resource_type.str()?)?;
     }
     for key in ["resource_name", "column_name"] {
-        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(diagnostic, key)?;
         if !value.is_none() {
             payload.set_item(key, value)?;
         }
@@ -505,7 +505,7 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         payload.set_item("path", path.str()?)?;
     }
     for key in ["line", "column"] {
-        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(diagnostic, key)?;
         if !value.is_none() {
             payload.set_item(key, value)?;
         }
@@ -542,7 +542,7 @@ fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, P
         payload.set_item("help", help)?;
     }
     for key in ["notes", "affected_rules"] {
-        let value: Bound<'py, PyAny> = diagnostic.getattr(key)?;
+        let value: Bound<'py, PyAny> = native_field(diagnostic, key)?;
         if value.is_truthy()? {
             payload.set_item(
                 key,
@@ -873,8 +873,7 @@ fn resources<'py>(
     collection: &str,
     resource: impl Fn(&Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let items: Vec<Bound<'py, PyDict>> = project
-        .getattr(collection)?
+    let items: Vec<Bound<'py, PyDict>> = native_field(project, collection)?
         .try_iter()?
         .map(|item| resource(&item?))
         .collect::<PyResult<_>>()?;
@@ -953,7 +952,7 @@ pub(crate) fn format_compile_json(
         has_errors = has_errors || native_field(diagnostic, "is_error")?.is_truthy()?;
         diagnostics.push(diagnostic_json(diagnostic)?);
     }
-    let length = |collection: &str| -> PyResult<usize> { project.getattr(collection)?.len() };
+    let length = |collection: &str| -> PyResult<usize> { native_field(project, collection)?.len() };
     let summary: Bound<'_, PyDict> = dict(
         py,
         vec![

@@ -108,7 +108,7 @@ fn lifecycle<'py>(py: Python<'py>, (kind, name): (&str, &str)) -> PyResult<Bound
 fn target_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     for config in ["project_config", "local_config"] {
-        for name in native_field(&discovered.getattr(config)?, "targets")?.try_iter()? {
+        for name in native_field(&native_field(discovered, config)?, "targets")?.try_iter()? {
             names.insert(name?.extract()?);
         }
     }

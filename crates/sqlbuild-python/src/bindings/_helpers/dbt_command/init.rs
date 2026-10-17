@@ -63,7 +63,7 @@ fn dbt_project_dir<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAn
 }
 
 fn text(result: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    Ok(result.getattr(name)?.str()?.to_string())
+    Ok(native_field(result, name)?.str()?.to_string())
 }
 
 fn summary(result: &Bound<'_, PyAny>) -> PyResult<DbtInitSummary> {

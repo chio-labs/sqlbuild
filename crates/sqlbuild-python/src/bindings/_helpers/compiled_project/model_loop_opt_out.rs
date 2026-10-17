@@ -14,6 +14,7 @@ use crate::bindings::_helpers::compiled_project::model_loop::{
 };
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::{HOOK_KEYS, present};
 use crate::bindings::_helpers::project_assembly::resources::{syntax_error_message, syntax_valid};
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const OPT_OUT_KEYS: [&str; 2] = ["sql_analysis", "sql_validation"];
 const CURSOR_TYPE_KEY: &str = "cursor_type";
@@ -150,7 +151,7 @@ fn hook_statements(
         return Ok(vec![text.extract()?]);
     }
     if value.is_instance(&context.classes.sql_hook_entry)? {
-        return hook_statements(context, &value.getattr(STATEMENT_ATTRIBUTE)?);
+        return hook_statements(context, &native_field(value, STATEMENT_ATTRIBUTE)?);
     }
     let mut statements: Vec<String> = Vec::new();
     if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
@@ -181,14 +182,15 @@ fn location<'py>(
     model: &OptOutModel<'_, 'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.config.py();
-    let header_keys: Vec<String> = model.config.getattr(HEADER_KEYS_ATTRIBUTE)?.extract()?;
+    let header_keys: Vec<String> = native_field(model.config, HEADER_KEYS_ATTRIBUTE)?.extract()?;
     let (path, position): (&str, TextPosition) = if header_keys
         .iter()
         .any(|key| OPT_OUT_KEYS.contains(&key.as_str()))
     {
         (model.relative_path, opt_out_position(model.contents, 0))
     } else {
-        let path_key: Option<String> = model.config.getattr(PATH_DEFAULT_ATTRIBUTE)?.extract()?;
+        let path_key: Option<String> =
+            native_field(model.config, PATH_DEFAULT_ATTRIBUTE)?.extract()?;
         let config_path: &Path = Path::new(&model_loop.project_config_path);
         let config_text: String = if config_path.is_file() {
             std::fs::read_to_string(config_path)?

@@ -398,7 +398,7 @@ fn imported_python_paths(python: &Bound<'_, PyDict>) -> PyResult<usize> {
     let mut groups: Vec<Bound<'_, PyAny>> = vec![python.get_item("providers")?];
     let nodes: Bound<'_, PyAny> = python.get_item("python_nodes")?;
     for group in PYTHON_NODE_GROUPS {
-        groups.push(nodes.getattr(group)?);
+        groups.push(native_field(&nodes, group)?);
     }
     for field in [
         "materialization_files",
@@ -433,8 +433,7 @@ fn project_inputs<'py>(
     let tuple_of = |group: &str| -> PyResult<Bound<'py, PyAny>> {
         Ok(PyTuple::new(
             py,
-            nodes
-                .getattr(group)?
+            native_field(&nodes, group)?
                 .try_iter()?
                 .collect::<PyResult<Vec<_>>>()?,
         )?

@@ -95,7 +95,7 @@ pub(crate) fn timestamp_check(value: &Bound<'_, PyAny>) -> PyResult<()> {
 pub(crate) fn known_event_check(event: &Bound<'_, PyAny>) -> PyResult<()> {
     let mut correlations: Vec<(&'static str, bool)> = Vec::new();
     for field in CORRELATION_FIELDS {
-        correlations.push((field, !event.getattr(field)?.is_none()));
+        correlations.push((field, !native_field(event, field)?.is_none()));
     }
     let facts = KnownEventFacts {
         schema_version: native_field(event, "schema_version")?.extract()?,

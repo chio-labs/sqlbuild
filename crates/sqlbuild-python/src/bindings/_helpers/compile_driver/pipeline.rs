@@ -13,9 +13,7 @@ use crate::bindings::_helpers::compile_driver::plan_result::{
     PlanningInputs, connection_with_hooks, pipeline_result,
 };
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, imported, keywords,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::compile_driver::selection_phases::{
     apply_unit_test_selectors, resolve_configured_rule_selection,
 };
@@ -25,6 +23,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progress};
@@ -175,7 +174,7 @@ fn reject_compile_errors(
     let helps: Bound<'_, PySet> = PySet::empty(py)?;
     for diagnostic in &errors {
         let or_one = |name: &str| -> PyResult<String> {
-            let value: Bound<'_, PyAny> = diagnostic.getattr(name)?;
+            let value: Bound<'_, PyAny> = native_field(diagnostic, name)?;
             Ok(if value.is_truthy()? {
                 value.str()?.to_string()
             } else {
@@ -265,8 +264,7 @@ fn run_rules_gate<'py>(
             RecordId::RulesCacheConfig,
             &[("enabled", false.into_pyobject(py)?.to_owned().into_any())],
         )?;
-        config = imported(py, "dataclasses", "replace")?
-            .call((config,), Some(&keywords(py, &[("cache", cache)])?))?;
+        config = replaced(&config, &[("cache", cache)])?;
     }
     progress(on_progress, "Evaluating configured rules...")?;
     let started: f64 = monotonic(py)?;
@@ -365,21 +363,18 @@ fn planned<'py>(
     }
     let result: Bound<'py, PyAny> = result?;
     write_plan_capture(&native_field(&result, "plan_output")?)?;
-    imported(py, "dataclasses", "replace")?.call(
-        (result,),
-        Some(&keywords(
-            py,
-            &[
-                (
-                    "compile_seconds",
-                    native_field(compiled, "compile_seconds")?,
-                ),
-                (
-                    "planning_seconds",
-                    planning_seconds.into_pyobject(py)?.into_any(),
-                ),
-            ],
-        )?),
+    replaced(
+        &result,
+        &[
+            (
+                "compile_seconds",
+                native_field(compiled, "compile_seconds")?,
+            ),
+            (
+                "planning_seconds",
+                planning_seconds.into_pyobject(py)?.into_any(),
+            ),
+        ],
     )
 }
 

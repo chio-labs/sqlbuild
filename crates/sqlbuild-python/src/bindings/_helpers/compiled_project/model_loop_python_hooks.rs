@@ -11,6 +11,7 @@ use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, compi
 use crate::bindings::_helpers::compiled_project::model_loop_named::{
     PYTHON_HOOK_DECLARATION, named_usages,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// Hook keys in the sorted order `validate_python_hook_config` reads them.
 const SORTED_HOOK_KEYS: [&str; 2] = ["post_hooks", "pre_hooks"];
@@ -67,7 +68,7 @@ impl HookSignatures {
         let entries: Vec<(&str, usize, Bound<'py, PyAny>)> = python_entries(context, values)?;
         let functions: &Bound<'py, PyDict> = &context.classes.hooks.functions;
         for (hook_key, index, entry) in &entries {
-            let name: String = entry.getattr(NAME_FIELD)?.extract()?;
+            let name: String = native_field(entry, NAME_FIELD)?.extract()?;
             let site: HookSite<'_> = HookSite {
                 model_name,
                 hook_key,
@@ -88,8 +89,7 @@ impl HookSignatures {
                 );
                 return Err(compile_error(context.classes, &message, None));
             };
-            let kwargs: Vec<String> = entry
-                .getattr(KWARGS_FIELD)?
+            let kwargs: Vec<String> = native_field(entry, KWARGS_FIELD)?
                 .downcast_into::<PyDict>()?
                 .keys()
                 .extract()?;
@@ -102,7 +102,7 @@ impl HookSignatures {
         }
         let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
         for (_, _, entry) in &entries {
-            let name: String = entry.getattr(NAME_FIELD)?.extract()?;
+            let name: String = native_field(entry, NAME_FIELD)?.extract()?;
             usages.extend(named_usages(
                 context,
                 (&PYTHON_HOOK_DECLARATION, &name),
@@ -127,7 +127,7 @@ impl HookSignatures {
             .classes
             .hooks
             .signature
-            .call1((function.getattr(FUNCTION_FIELD)?,))?
+            .call1((native_field(function, FUNCTION_FIELD)?,))?
             .extract()?;
         self.by_name
             .borrow_mut()

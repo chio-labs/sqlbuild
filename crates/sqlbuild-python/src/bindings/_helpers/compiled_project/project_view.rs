@@ -20,6 +20,7 @@ use crate::bindings::_helpers::compiled_project::source_views::NativeCompiledSou
 use crate::bindings::_helpers::graph::project_graph::{
     NativeProjectGraph, ResourceRow, project_graph,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MODELS_FIELD: &str = "models";
 const RUN_ID_FIELD: &str = "run_id";
@@ -504,7 +505,7 @@ impl NativeProjectView {
                     let expansion: Py<PyAny> = authored_expansion(&classes, record)?;
                     if !expansion.is_none(py) {
                         let path: Bound<'_, PyAny> =
-                            record.model_file.bind(py).getattr(FILE_PATH_ATTRIBUTE)?;
+                            native_field(record.model_file.bind(py), FILE_PATH_ATTRIBUTE)?;
                         expansions.set_item(path, expansion)?;
                     }
                 }
@@ -536,9 +537,10 @@ impl NativeProjectView {
                     rows.push(match seed.cast::<NativeCompiledSeed>() {
                         Ok(native) => native.get().graph_row(py)?,
                         Err(_) => {
-                            let tags: Bound<'_, PyAny> = seed
-                                .getattr(SCHEMA_ENTRY_ATTRIBUTE)?
-                                .getattr(TAGS_ATTRIBUTE)?;
+                            let tags: Bound<'_, PyAny> = native_field(
+                                &native_field(&seed, SCHEMA_ENTRY_ATTRIBUTE)?,
+                                TAGS_ATTRIBUTE,
+                            )?;
                             resource_row(&seed, Some(&tags))?
                         }
                     });
@@ -548,7 +550,7 @@ impl NativeProjectView {
                     rows.push(match function.cast::<NativeCompiledFunction>() {
                         Ok(native) => native.get().graph_row(py)?,
                         Err(_) => {
-                            let tags: Bound<'_, PyAny> = function.getattr(TAGS_ATTRIBUTE)?;
+                            let tags: Bound<'_, PyAny> = native_field(&function, TAGS_ATTRIBUTE)?;
                             resource_row(&function, Some(&tags))?
                         }
                     });
@@ -567,7 +569,7 @@ fn resource_row(
     tags: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<ResourceRow> {
     let mut deps: Vec<(String, String)> = Vec::new();
-    for key in resource.getattr(DEPS_ATTRIBUTE)?.try_iter()? {
+    for key in native_field(resource, DEPS_ATTRIBUTE)?.try_iter()? {
         deps.push(key_row(&key?)?);
     }
     let mut tag_names: Vec<String> = Vec::new();
@@ -577,7 +579,7 @@ fn resource_row(
         }
     }
     Ok((
-        key_row(&resource.getattr(KEY_ATTRIBUTE)?)?,
+        key_row(&native_field(resource, KEY_ATTRIBUTE)?)?,
         deps,
         tag_names,
         None,
@@ -587,7 +589,9 @@ fn resource_row(
 /// `(resource type, name)` of a `CompiledObjectKey`.
 pub(crate) fn key_row(key: &Bound<'_, PyAny>) -> PyResult<(String, String)> {
     Ok((
-        key.getattr(RESOURCE_TYPE_ATTRIBUTE)?.str()?.extract()?,
-        key.getattr(NAME_ATTRIBUTE)?.extract()?,
+        native_field(key, RESOURCE_TYPE_ATTRIBUTE)?
+            .str()?
+            .extract()?,
+        native_field(key, NAME_ATTRIBUTE)?.extract()?,
     ))
 }

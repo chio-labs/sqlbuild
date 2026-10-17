@@ -469,7 +469,7 @@ pub(crate) fn dispatch_command<'py>(
 
 /// The parsed values that select a route, read from the namespace.
 pub(crate) fn command_facts(args: &Bound<'_, PyAny>) -> PyResult<CommandFacts> {
-    let attr = |name: &str| args.getattr(name);
+    let attr = |name: &str| native_field(args, name);
     let flag = |name: &str| -> PyResult<bool> { attr(name)?.is_truthy() };
     let present = |name: &str| -> PyResult<bool> { Ok(!attr(name)?.is_none()) };
     let command: Option<String> = optional_text(&attr("command")?)?;

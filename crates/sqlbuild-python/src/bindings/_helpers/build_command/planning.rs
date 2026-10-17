@@ -39,7 +39,7 @@ pub(crate) fn run_defer_clone_prephase(context: &BuildContext<'_>) -> PyResult<(
 fn request_options<'py>(context: &BuildContext<'py>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = context.py();
     let request: &Bound<'py, PyAny> = &context.request;
-    let field = |name: &str| request.getattr(name);
+    let field = |name: &str| native_field(request, name);
     let should_load_sources: Bound<'py, PyAny> = context.get("should_load_sources")?;
     let python_selectors: bool =
         context.request_flag("include_python")? || should_load_sources.is_truthy()?;

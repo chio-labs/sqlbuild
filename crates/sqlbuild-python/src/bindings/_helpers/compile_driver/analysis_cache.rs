@@ -12,6 +12,7 @@ use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_m
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, unicode_sorted_dumps};
 use crate::bindings::_helpers::records::construct::new_record_with;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const ANALYSIS_CACHE_VERSION: i64 = 13;
@@ -193,7 +194,7 @@ fn inference_profile_payload<'py>(
         "semantic_known_functions",
         "semantic_known_types",
     ] {
-        payload.set_item(field, profile.getattr(field)?)?;
+        payload.set_item(field, native_field(profile, field)?)?;
     }
     payload.set_item("function_nullability_rules", rules)?;
     payload.set_item(

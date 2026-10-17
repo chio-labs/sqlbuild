@@ -75,7 +75,7 @@ fn optional_text(value: Bound<'_, PyAny>) -> PyResult<Option<String>> {
 /// A source entry's `database.schema.table`, as far as it is set.
 fn source_relation_name(entry: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     let part = |name: &str| -> PyResult<Option<String>> {
-        match entry.getattr(name) {
+        match native_field(entry, name) {
             Ok(value) if !value.is_none() => Ok(Some(value.extract()?)),
             _ => Ok(None),
         }

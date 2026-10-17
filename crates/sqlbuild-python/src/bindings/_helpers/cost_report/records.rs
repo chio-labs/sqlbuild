@@ -24,24 +24,26 @@ pub(crate) fn artifact_error(py: Python<'_>, error: &CostArtifactError) -> PyErr
 }
 
 fn text(value: &Bound<'_, PyAny>, field: &str) -> PyResult<String> {
-    value.getattr(field)?.extract()
+    native_field(value, field)?.extract()
 }
 
 fn optional_text(value: &Bound<'_, PyAny>, field: &str) -> PyResult<Option<String>> {
-    value.getattr(field)?.extract()
+    native_field(value, field)?.extract()
 }
 
 /// `str(value.<field>)`, the text a `Decimal` field is stored as.
 fn decimal(value: &Bound<'_, PyAny>, field: &str) -> PyResult<String> {
-    Ok(value.getattr(field)?.str()?.to_string())
+    Ok(native_field(value, field)?.str()?.to_string())
 }
 
 fn integer(value: &Bound<'_, PyAny>, field: &str) -> PyResult<i64> {
-    value.getattr(field)?.extract()
+    native_field(value, field)?.extract()
 }
 
 fn timestamp(value: &Bound<'_, PyAny>, field: &str) -> PyResult<String> {
-    value.getattr(field)?.call_method0("isoformat")?.extract()
+    native_field(value, field)?
+        .call_method0("isoformat")?
+        .extract()
 }
 
 fn resource(value: &Bound<'_, PyAny>) -> PyResult<CostResource> {

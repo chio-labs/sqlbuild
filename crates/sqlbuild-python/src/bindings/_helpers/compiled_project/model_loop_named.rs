@@ -11,6 +11,7 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::compiled_project::model_loop::LoopContext;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const NAME_FIELD: &str = "name";
 const PATH_FIELD: &str = "path";
@@ -105,7 +106,7 @@ pub(crate) fn resource_named_usages<'py>(
     }
     let fields: Bound<'py, PyDict> = PyDict::new(py);
     fields.set_item(CONSUMER_FIELD, consumer)?;
-    fields.set_item(DECLARATION_FIELD, record.getattr(IDENTITY_FIELD)?)?;
+    fields.set_item(DECLARATION_FIELD, native_field(&record, IDENTITY_FIELD)?)?;
     Ok(vec![context.classes.usage_record.call((), Some(&fields))?])
 }
 
@@ -145,22 +146,22 @@ pub(crate) fn scope_path_message(declared: &DeclaredScope, label: &str) -> Strin
 
 /// The scope facts of a Python `DeclarationRecord`.
 fn declared_scope(record: &Bound<'_, PyAny>) -> PyResult<DeclaredScope> {
-    let scope: String = record
-        .getattr(SCOPE_FIELD)?
-        .getattr(VALUE_FIELD)?
-        .extract()?;
-    let owner: Bound<'_, PyAny> = record.getattr(IDENTITY_FIELD)?.getattr(OWNER_FIELD)?;
+    let scope: String =
+        native_field(&native_field(record, SCOPE_FIELD)?, VALUE_FIELD)?.extract()?;
+    let owner: Bound<'_, PyAny> =
+        native_field(&native_field(record, IDENTITY_FIELD)?, OWNER_FIELD)?;
     let owner: Option<ResourceIdentity> = if owner.is_none() {
         None
     } else {
-        let kind: String = owner.getattr(KIND_FIELD)?.getattr(VALUE_FIELD)?.extract()?;
-        let name: String = owner.getattr(NAME_FIELD)?.extract()?;
+        let kind: String =
+            native_field(&native_field(&owner, KIND_FIELD)?, VALUE_FIELD)?.extract()?;
+        let name: String = native_field(&owner, NAME_FIELD)?.extract()?;
         ResourceKind::parse(&kind).map(|kind| ResourceIdentity { kind, name })
     };
     Ok(DeclaredScope {
         scope: ScopeKind::parse(&scope).unwrap_or(ScopeKind::Global),
         owner,
-        owning_path: record.getattr(OWNING_PATH_FIELD)?.extract()?,
+        owning_path: native_field(record, OWNING_PATH_FIELD)?.extract()?,
     })
 }
 
@@ -179,21 +180,17 @@ fn report_inaccessible(
         .and_then(Path::to_str)
         .filter(|parent| !parent.is_empty())
         .unwrap_or(CURRENT_FOLDER);
-    let owning_path: Bound<'_, PyAny> = record.getattr(OWNING_PATH_FIELD)?;
+    let owning_path: Bound<'_, PyAny> = native_field(record, OWNING_PATH_FIELD)?;
     let owner: String = if owning_path.is_truthy()? {
         owning_path.str()?.to_string()
     } else {
-        record
-            .getattr(OWNERSHIP_ROOT_FIELD)?
-            .getattr(PATH_FIELD)?
+        native_field(&native_field(record, OWNERSHIP_ROOT_FIELD)?, PATH_FIELD)?
             .str()?
             .to_string()
     };
-    let record_path: String = record.getattr(PATH_FIELD)?.str()?.to_string();
-    let scope: String = record
-        .getattr(SCOPE_FIELD)?
-        .getattr(VALUE_FIELD)?
-        .extract()?;
+    let record_path: String = native_field(record, PATH_FIELD)?.str()?.to_string();
+    let scope: String =
+        native_field(&native_field(record, SCOPE_FIELD)?, VALUE_FIELD)?.extract()?;
     let (label_text, role) = (kind.label, kind.role);
     let fields: Bound<'_, PyDict> = PyDict::new(py);
     fields.set_item("phase", "compile")?;

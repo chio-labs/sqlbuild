@@ -119,7 +119,7 @@ fn progress_payload(payload: &Bound<'_, PyAny>) -> PyResult<ProgressPayload> {
 }
 
 fn optional_text(event: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
-    event.getattr(name)?.extract()
+    native_field(event, name)?.extract()
 }
 
 /// The facts of one lifecycle event that progress projection reads.

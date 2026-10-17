@@ -1,7 +1,7 @@
 //! The retention and table type a model inherits from its target and materialization defaults.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyString, PyTuple};
+use pyo3::types::{PyBool, PyString, PyStringMethods, PyTuple};
 
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -25,7 +25,7 @@ fn defaults_entry<'py>(
         return Ok(None);
     }
     let name: &Bound<'py, PyString> = materialized.downcast()?;
-    materialization_defaults.getattr(name).map(Some)
+    native_field(materialization_defaults, &name.to_cow()?).map(Some)
 }
 
 fn retention<'py>(

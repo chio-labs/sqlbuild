@@ -176,8 +176,8 @@ pub(crate) fn resolve_effective_scenario_config<'py>(
             Ok((
                 *field,
                 override_or(
-                    local_limits.getattr(*field)?,
-                    project_limits.getattr(*field)?,
+                    native_field(&local_limits, field)?,
+                    native_field(&project_limits, field)?,
                 ),
             ))
         })

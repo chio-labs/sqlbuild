@@ -71,10 +71,10 @@ fn project_columns(project: &Bound<'_, PyAny>) -> PyResult<Vec<ProjectColumns>> 
         ("sources", "source_entry", LineageResourceType::Source),
         ("seeds", "schema_entry", LineageResourceType::Seed),
     ] {
-        for resource in project.getattr(attribute)?.try_iter()? {
+        for resource in native_field(project, attribute)?.try_iter()? {
             let resource: Bound<'_, PyAny> = resource?;
             let mut typed: TypedColumns = Vec::new();
-            for column in native_field(&resource.getattr(entry)?, "columns")?.try_iter()? {
+            for column in native_field(&native_field(&resource, entry)?, "columns")?.try_iter()? {
                 let column: Bound<'_, PyAny> = column?;
                 typed.push((
                     native_field(&column, "name")?.extract()?,

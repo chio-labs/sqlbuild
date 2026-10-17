@@ -6,7 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_state::freshness::main::single_value_problem::single_value_problem;
 use sqlbuild_state::freshness::models::QueryShape;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::freshness::support::{
     OBSERVATION_ERROR, exception_text, freshness_error, presumed_utc_datetime, presumed_utc_value,
     text,
@@ -19,6 +19,7 @@ use crate::bindings::_helpers::records::construct::{
     enum_from_value, enum_member, new_record, new_record_with,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use crate::bindings::_helpers::state_rows::freshness::{normalize, version_hash};
@@ -83,7 +84,7 @@ fn replaced_source<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let changes: Bound<'py, PyDict> = PyDict::new(source.py());
     changes.set_item("freshness", config)?;
-    imported(source.py(), "dataclasses", "replace")?.call((source,), Some(&changes))
+    replaced_keywords(source, &changes)
 }
 
 fn adapter_strategy(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {

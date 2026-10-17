@@ -16,7 +16,7 @@ use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::build_command::policies::enforce_model_execution_limit_binding;
 use crate::bindings::_helpers::clone::clone_pipeline::run_clone_pipeline_with_options;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
@@ -28,6 +28,7 @@ use crate::bindings::_helpers::planner_scope::scope::build_planner_scope;
 use crate::bindings::_helpers::planner_selection::unit_tests::split_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const VIEW_MATERIALIZATION: &str = "view";
@@ -353,10 +354,8 @@ fn executed_clone<'py>(
               _: Option<&Bound<'_, PyDict>>|
               -> PyResult<Py<PyAny>> {
             let py: Python<'_> = arguments.py();
-            let inputs: Bound<'_, PyAny> = imported(py, "dataclasses", "replace")?.call(
-                (prepared.0.bind(py),),
-                Some(&keywords(py, &[("on_item", arguments.get_item(0)?)])?),
-            )?;
+            let inputs: Bound<'_, PyAny> =
+                replaced(prepared.0.bind(py), &[("on_item", arguments.get_item(0)?)])?;
             Ok(prepared
                 .1
                 .bind(py)

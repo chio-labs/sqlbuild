@@ -39,7 +39,7 @@ fn explicit_reference_kinds(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let kinds: Bound<'_, PyAny> = host::entry(py, UserCodeHost::SqlResourceRefKind)?;
     let built: Bound<'_, PyDict> = PyDict::new(py);
     for (call_kind, member) in EXPLICIT_REFERENCE_KINDS {
-        built.set_item(call_kind, kinds.getattr(member)?)?;
+        built.set_item(call_kind, native_field(&kinds, member)?)?;
     }
     Ok(built)
 }

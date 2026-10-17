@@ -97,7 +97,8 @@ pub(crate) struct SqlExpansionInputs {
 impl SqlExpansionInputs {
     /// The inputs a `SqlExpansionContext` record holds.
     pub(crate) fn from_record(record: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let field = |name: &str| -> PyResult<Py<PyAny>> { Ok(record.getattr(name)?.unbind()) };
+        let field =
+            |name: &str| -> PyResult<Py<PyAny>> { Ok(native_field(record, name)?.unbind()) };
         Ok(Self {
             effective_vars: field("effective_vars")?,
             loaded_macros: field("loaded_macros")?,

@@ -458,7 +458,7 @@ fn selector_views<'py>(
 fn view_options<'py>(views: &Bound<'py, PyAny>, names: &[&str]) -> PyResult<Bound<'py, PyDict>> {
     let options: Bound<'py, PyDict> = PyDict::new(views.py());
     for name in names {
-        options.set_item(*name, views.getattr(*name)?)?;
+        options.set_item(*name, native_field(views, name)?)?;
     }
     Ok(options)
 }

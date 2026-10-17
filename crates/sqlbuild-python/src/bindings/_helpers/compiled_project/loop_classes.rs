@@ -349,7 +349,7 @@ pub(crate) fn by_attribute<'py>(
     let keyed: Bound<'py, PyDict> = PyDict::new(items.py());
     for item in items.try_iter()? {
         let item: Bound<'py, PyAny> = item?;
-        keyed.set_item(item.getattr(attribute)?, item)?;
+        keyed.set_item(native_field(&item, attribute)?, item)?;
     }
     Ok(keyed)
 }

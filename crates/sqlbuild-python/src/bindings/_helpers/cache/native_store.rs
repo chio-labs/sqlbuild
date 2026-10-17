@@ -99,8 +99,8 @@ pub(crate) fn compiled_code_identity(py: Python<'_>) -> PyResult<String> {
 
 /// `compiled_code_identity`, looked up on the extension module so tests can replace it.
 pub(crate) fn current_code_identity(py: Python<'_>) -> PyResult<String> {
-    crate::bindings::_helpers::cache::native_store::compiled_code_identity(py)
-        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
+    registry::native(py, NativeAttr::CompiledCodeIdentity)?
+        .call0()?
         .extract()
 }
 

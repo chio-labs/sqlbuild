@@ -472,7 +472,7 @@ impl<'py> AuditScope<'_, 'py> {
             }),
             severity,
             run_scope,
-            always_run: instance.getattr(ALWAYS_RUN_KEY)?.is_truthy()?,
+            always_run: native_field(instance, ALWAYS_RUN_KEY)?.is_truthy()?,
             usages: PyTuple::new(py, usages)?.unbind(),
             name: native_field(instance, "name")?.extract()?,
             description: native_field(instance, "description")?.extract()?,

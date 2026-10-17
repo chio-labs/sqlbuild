@@ -90,7 +90,7 @@ pub(crate) fn qualified_name(value: &Bound<'_, PyAny>) -> PyResult<String> {
 /// `getattr(value, name, None)`.
 fn attribute_or_none<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
-    match value.getattr(name) {
+    match native_field(value, name) {
         Ok(attribute) => Ok(attribute),
         Err(error) if error.is_instance_of::<pyo3::exceptions::PyAttributeError>(py) => {
             Ok(py.None().into_bound(py))
@@ -369,7 +369,7 @@ impl<'py> CaptureEncoder<'py> {
                 Some(names) => Some(
                     names
                         .iter()
-                        .map(|name| Ok(((*name).to_owned(), value.getattr(*name)?)))
+                        .map(|name| Ok(((*name).to_owned(), native_field(value, name)?)))
                         .collect::<PyResult<_>>()?,
                 ),
                 None => instance_attributes(value)?,
@@ -442,7 +442,7 @@ fn instance_attributes<'py>(value: &Bound<'py, PyAny>) -> PyResult<Option<Attrib
             if SKIPPED_SLOTS.contains(&text.as_str()) || !value.hasattr(text.as_str())? {
                 continue;
             }
-            let item: Bound<'py, PyAny> = value.getattr(text.as_str())?;
+            let item: Bound<'py, PyAny> = native_field(value, text.as_str())?;
             attributes = with_entry(attributes, text, item);
         }
     }

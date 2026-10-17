@@ -263,7 +263,7 @@ fn reuse_check<'py>(
     project_dir: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = request.py();
-    let flag = |name: &str| -> PyResult<bool> { request.getattr(name)?.is_truthy() };
+    let flag = |name: &str| -> PyResult<bool> { native_field(request, name)?.is_truthy() };
     let use_color: bool = !flag("no_color")? && stdout_supports_color(py)?;
     let check: Bound<'py, PyDict> = PyDict::new(py);
     check.set_item("project_dir", project_dir)?;
@@ -446,7 +446,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
         "skip_contracts",
         "skip_write",
     ] {
-        profiling = profiling || flags.getattr(name)?.is_truthy()?;
+        profiling = profiling || native_field(&flags, name)?.is_truthy()?;
     }
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = Vec::new();
     for name in [
@@ -460,7 +460,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
         "no_cache",
         "no_sql_validation",
     ] {
-        fields.push((name, request.getattr(name)?));
+        fields.push((name, native_field(request, name)?));
     }
     fields.push((
         "lineage_mode",
@@ -471,7 +471,7 @@ fn reuse_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
             .into_any(),
     ));
     for name in ["select", "exclude", "cli_vars", "debug"] {
-        fields.push((name, request.getattr(name)?));
+        fields.push((name, native_field(request, name)?));
     }
     fields.push(("profiling", profiling.into_bound_py_any(py)?));
     call_with(&host::entry(py, REUSE_REQUEST)?, &fields)

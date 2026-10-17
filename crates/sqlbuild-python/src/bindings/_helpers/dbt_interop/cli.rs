@@ -48,7 +48,7 @@ fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
 }
 
 fn attribute_text(object: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>> {
-    optional_text(&object.getattr(name)?)
+    optional_text(&native_field(object, name)?)
 }
 
 fn texts(values: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
@@ -265,7 +265,7 @@ pub(crate) fn raised(py: Python<'_>, class_name: ErrorId, error: DbtCliError) ->
 
 fn parsed_flags(parsed: &Bound<'_, PyAny>) -> PyResult<DbtParsedFlags> {
     let value = |name: &str| attribute_text(parsed, name);
-    let flag = |name: &str| -> PyResult<bool> { parsed.getattr(name)?.is_truthy() };
+    let flag = |name: &str| -> PyResult<bool> { native_field(parsed, name)?.is_truthy() };
     Ok(DbtParsedFlags {
         select: texts(&native_field(parsed, "select")?)?,
         exclude: texts(&native_field(parsed, "exclude")?)?,

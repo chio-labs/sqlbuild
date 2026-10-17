@@ -157,7 +157,7 @@ fn cost_record<'py>(
         "started_at",
         "completed_at",
     ] {
-        fields.push((name, finalization.getattr(name)?));
+        fields.push((name, native_field(finalization, name)?));
     }
     fields.push(("cost", summary));
     fields.push((

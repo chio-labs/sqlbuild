@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::graph::python_lifecycle::build_python_sql_run_lifecycle;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
+use crate::bindings::_helpers::records::fields::replaced;
 use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -12,7 +13,7 @@ use sqlbuild_analysis::python_plan::main::ordered_python_names::ordered_python_n
 use sqlbuild_analysis::python_plan::main::upstream_closure::upstream_closure;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
+    KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
@@ -149,12 +150,9 @@ pub(crate) fn build_python_run_plan_outputs<'py>(
         &run_selection,
         (&graph, &kinds),
     )?);
-    let plan_output: Bound<'py, PyAny> = imported(py, "dataclasses", "replace")?.call(
-        (plan_output,),
-        Some(&keywords(
-            py,
-            &[("warnings", PyTuple::new(py, warnings)?.into_any())],
-        )?),
+    let plan_output: Bound<'py, PyAny> = replaced(
+        &plan_output,
+        &[("warnings", PyTuple::new(py, warnings)?.into_any())],
     )?;
     let selection: Bound<'py, PyAny> = new_record_with(
         py,
@@ -224,8 +222,7 @@ fn plan_entries<'py>(
         ("ingress_python_node_names", "PRE_SQL_INGRESS"),
         ("read_side_python_node_names", "READ_SIDE"),
     ] {
-        let selected: Vec<String> = lifecycle
-            .getattr(attribute)?
+        let selected: Vec<String> = native_field(lifecycle, attribute)?
             .try_iter()?
             .map(|name| name?.extract())
             .collect::<PyResult<_>>()?;
@@ -241,7 +238,7 @@ fn plan_entries<'py>(
                 if value.is_none() {
                     Ok(py.None().into_bound(py))
                 } else {
-                    value.getattr(name)
+                    native_field(value, name)
                 }
             };
             entries.push(new_record_with(

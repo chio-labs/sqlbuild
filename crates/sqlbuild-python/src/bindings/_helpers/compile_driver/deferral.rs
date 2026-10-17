@@ -71,7 +71,7 @@ fn deferred_locations<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let locations: Bound<'py, PyDict> = PyDict::new(project.py());
     for attribute in ["models", "seeds"] {
-        for resource in project.getattr(attribute)?.try_iter()? {
+        for resource in native_field(project, attribute)?.try_iter()? {
             let resource: Bound<'py, PyAny> = resource?;
             let location: Bound<'py, PyAny> =
                 deferred_location(&native_field(&resource, "destination")?, naming)?;

@@ -36,7 +36,7 @@ struct Vocabulary<'py> {
 }
 
 fn attribute_value<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    value.getattr(name)
+    native_field(value, name)
 }
 
 fn optional_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -160,7 +160,7 @@ fn python_node<'py>(
     let py: Python<'py> = discovered.py();
     let get = |name: &str| attribute_value(discovered, name);
     let (metadata_field, metadata) = kind_metadata(py, kind, discovered)?;
-    let kind_member: Bound<'py, PyAny> = vocabulary.kinds.getattr(kind)?;
+    let kind_member: Bound<'py, PyAny> = native_field(&vocabulary.kinds, kind)?;
     let usages: Bound<'py, PyAny> = provider_usages(&get("function")?, &vocabulary.providers)?;
     let mut identity: Bound<'py, PyAny> = get("identity")?;
     if identity.is_none() {
@@ -262,7 +262,7 @@ pub(crate) fn python_node_graph<'py>(
     };
     let mut nodes: Vec<Bound<'py, PyAny>> = Vec::new();
     for (collection, kind, documented) in KINDS {
-        for discovered in discovered_inputs.getattr(collection)?.try_iter()? {
+        for discovered in native_field(discovered_inputs, collection)?.try_iter()? {
             nodes.push(python_node(&vocabulary, (kind, documented), &discovered?)?);
         }
     }

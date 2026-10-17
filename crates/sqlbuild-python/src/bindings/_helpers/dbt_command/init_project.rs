@@ -323,7 +323,7 @@ fn dbt_debug_warning(paths: &InitPaths<'_>, target_name: &str) -> PyResult<Optio
 }
 
 fn progress(callbacks: &Bound<'_, PyAny>, name: &str, message: &str) -> PyResult<()> {
-    let callback: Bound<'_, PyAny> = callbacks.getattr(name)?;
+    let callback: Bound<'_, PyAny> = native_field(callbacks, name)?;
     if !callback.is_none() {
         callback.call1((message,))?;
     }

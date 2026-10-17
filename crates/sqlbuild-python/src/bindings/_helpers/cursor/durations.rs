@@ -43,7 +43,7 @@ pub(crate) fn parse_cursor_duration<'py>(
 }
 
 fn duration_span(duration: &Bound<'_, PyAny>) -> PyResult<DurationSpan> {
-    let field = |name: &str| -> PyResult<i64> { duration.getattr(name)?.extract() };
+    let field = |name: &str| -> PyResult<i64> { native_field(duration, name)?.extract() };
     Ok(DurationSpan {
         months: field("years")? * MONTHS_PER_YEAR + field("months")?,
         days: field("days")?,

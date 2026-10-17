@@ -214,7 +214,7 @@ fn parse_cli_arguments(
             Stream::Stdout => "stdout",
             Stream::Stderr => "stderr",
         };
-        let file: Bound<'_, PyAny> = sys.getattr(name)?;
+        let file: Bound<'_, PyAny> = native_field(&sys, name)?;
         if file.is_none() {
             continue;
         }

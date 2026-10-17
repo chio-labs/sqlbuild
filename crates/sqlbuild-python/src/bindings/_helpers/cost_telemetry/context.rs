@@ -69,7 +69,7 @@ fn or_current<'py>(
     if !value.is_none() || current.is_none() {
         return Ok(value);
     }
-    current.getattr(field)
+    native_field(current, field)
 }
 
 fn scope_of(context: Bound<'_, PyAny>) -> CostScope {

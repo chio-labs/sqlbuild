@@ -189,7 +189,7 @@ fn option_fields<'a, 'py>(
 ) -> PyResult<Vec<(&'a str, Bound<'py, PyAny>)>> {
     names
         .iter()
-        .map(|name| Ok((*name, options.getattr(*name)?)))
+        .map(|name| Ok((*name, native_field(options, name)?)))
         .collect()
 }
 

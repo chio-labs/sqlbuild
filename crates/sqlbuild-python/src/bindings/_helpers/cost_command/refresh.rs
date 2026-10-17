@@ -23,6 +23,7 @@ use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::replaced_keywords;
 
 fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
     Ok(CostCoverage {
@@ -173,8 +174,7 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     let changes: Bound<'_, PyDict> = PyDict::new(py);
     changes.set_item("cost", summary)?;
-    let refreshed: Bound<'_, PyAny> =
-        imported(py, "dataclasses", "replace")?.call((record,), Some(&changes))?;
+    let refreshed: Bound<'_, PyAny> = replaced_keywords(&record, &changes)?;
     write_cost_run(py, project_dir.extract::<std::path::PathBuf>()?, &refreshed)
         .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(())

@@ -50,7 +50,7 @@ fn compile_input_error(py: Python<'_>, message: String, code: &str) -> PyErr {
 }
 
 fn text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    value.getattr(name)?.extract()
+    native_field(value, name)?.extract()
 }
 
 /// External reference resolver backed by a dbt manifest index.

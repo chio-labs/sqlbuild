@@ -277,7 +277,7 @@ fn target_default<'py>(
     adapter: &Bound<'py, PyAny>,
     (field, fallback): (&str, &str),
 ) -> PyResult<Bound<'py, PyAny>> {
-    let value: Bound<'py, PyAny> = project.getattr(field)?;
+    let value: Bound<'py, PyAny> = native_field(project, field)?;
     if value.is_none() {
         adapter.call_method0(fallback)
     } else {

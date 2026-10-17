@@ -251,9 +251,8 @@ pub(crate) fn expanded_authored_sql<'py>(
         let macro_declarations: Bound<'py, PyAny> = if resolver.is_none() {
             py.None().into_bound(py)
         } else {
-            let contexts: Bound<'py, NativeDeclarationContexts> = resolver
-                .getattr(NATIVE_CONTEXTS_ATTRIBUTE)?
-                .downcast_into()?;
+            let contexts: Bound<'py, NativeDeclarationContexts> =
+                native_field(resolver, NATIVE_CONTEXTS_ATTRIBUTE)?.downcast_into()?;
             contexts
                 .get()
                 .resolved_context(resolver, file_path, None)?
@@ -287,7 +286,7 @@ fn template_text(
     field: &str,
     label: &str,
 ) -> PyResult<Option<String>> {
-    let raw: Bound<'_, PyAny> = owner.getattr(field)?;
+    let raw: Bound<'_, PyAny> = native_field(owner, field)?;
     if raw.is_none() {
         return Ok(None);
     }
