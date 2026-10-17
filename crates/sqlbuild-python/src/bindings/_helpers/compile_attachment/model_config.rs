@@ -9,9 +9,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compiled_project::loop_classes::table_backed;
 use crate::bindings::_helpers::model_config::model_config_builder::NativeModelConfigBuilder;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// Capture the project inputs every model's native config build and validation read.
 #[pyfunction]
@@ -21,8 +21,8 @@ pub(crate) fn native_model_config_session<'py>(
     validator: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
-    let project_config: Bound<'py, PyAny> = native_field(&inputs, "project_config")?;
-    let target: Bound<'py, PyAny> = native_field(&inputs, "target_config")?;
+    let project_config: Bound<'py, PyAny> = native_field(inputs, "project_config")?;
+    let target: Bound<'py, PyAny> = native_field(inputs, "target_config")?;
     let declared: Bound<'py, PyAny> = native_field(&project_config, "materialization_defaults")?;
     let materialization_defaults: Bound<'py, PyAny> = if declared.is_truthy()? {
         declared
@@ -43,7 +43,10 @@ pub(crate) fn native_model_config_session<'py>(
     let target_namespace: Option<(Bound<'py, PyAny>, Bound<'py, PyAny>)> = if target.is_none() {
         None
     } else {
-        Some((native_field(&target, "database")?, native_field(&target, "schema")?))
+        Some((
+            native_field(&target, "database")?,
+            native_field(&target, "schema")?,
+        ))
     };
     let builder: Bound<'py, PyAny> = Bound::new(
         py,
@@ -54,13 +57,13 @@ pub(crate) fn native_model_config_session<'py>(
                 hook_entries,
             ),
             (
-                native_field(&inputs, "effective_vars")?.downcast_into()?,
+                native_field(inputs, "effective_vars")?.downcast_into()?,
                 unicode_environment(py)?,
             ),
             (
                 (
-                    native_field(&inputs, "effective_target_name")?,
-                    native_field(&inputs, "run_id")?,
+                    native_field(inputs, "effective_target_name")?,
+                    native_field(inputs, "run_id")?,
                 ),
                 target_namespace,
             ),
@@ -78,7 +81,10 @@ pub(crate) fn native_model_config_session<'py>(
     call_with(
         &registry::class(py, RecordId::NativeModelConfigSession)?,
         &[
-            ("path_defaults", native_field(&project_config, "path_defaults")?),
+            (
+                "path_defaults",
+                native_field(&project_config, "path_defaults")?,
+            ),
             ("builder", builder),
             ("validator", validator.clone()),
             ("inherited_storage", inherited.into_any()),

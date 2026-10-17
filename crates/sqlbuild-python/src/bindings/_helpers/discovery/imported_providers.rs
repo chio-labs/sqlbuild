@@ -15,8 +15,8 @@ use crate::bindings::_helpers::discovery::imported_modules::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const PROVIDER_ERROR: ErrorId = ErrorId::ProviderDiscovery;
 const SINK_ERROR: ErrorId = ErrorId::EventExporterDiscovery;
@@ -41,7 +41,7 @@ fn provider_name<'py>(
     relative_path: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = provider_class.py();
-    let explicit: Bound<'py, PyAny> = native_field(&provider_class, "provider_name")?;
+    let explicit: Bound<'py, PyAny> = native_field(provider_class, "provider_name")?;
     if !explicit.is_none() {
         reject_invalid_identity(&explicit, relative_path)?;
     }
@@ -273,10 +273,10 @@ fn exporter_provider_usages<'py>(
     (project, providers): (&ProjectDir<'py>, &Bound<'py, PyDict>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
-    let function: Bound<'py, PyAny> = native_field(&declaration, "function")?;
-    let name: String = native_field(&declaration, "name")?.extract()?;
+    let function: Bound<'py, PyAny> = native_field(declaration, "function")?;
+    let name: String = native_field(declaration, "name")?.extract()?;
     let relative_path: String = project
-        .relative(&native_field(&declaration, "file_path")?)?
+        .relative(&native_field(declaration, "file_path")?)?
         .str()?
         .extract()?;
     let empty: Bound<'py, PyAny> = imported(py, "inspect", "Parameter")?.getattr("empty")?;

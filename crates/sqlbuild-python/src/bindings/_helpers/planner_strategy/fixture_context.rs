@@ -53,7 +53,7 @@ pub(crate) fn planning_context(
         Some(models) => models,
         None => {
             let models = PyDict::new(py);
-            for model in native_field(&project, "models")?.try_iter()? {
+            for model in native_field(project, "models")?.try_iter()? {
                 let model = model?;
                 models.set_item(model_reads::name_object(&model)?, &model)?;
             }

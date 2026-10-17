@@ -9,9 +9,9 @@ use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// The `ClonePipelineResult` fields after the two projects, in `run_clone_planning` order.
 const PLANNED_FIELDS: [&str; 8] = [
@@ -53,15 +53,18 @@ fn compiled_environment<'py>(
                     "resolved_connection",
                     native_field(&pipeline.connection, "config")?,
                 ),
-                ("no_sql_validation", native_field(&options, "no_sql_validation")?),
+                (
+                    "no_sql_validation",
+                    native_field(options, "no_sql_validation")?,
+                ),
                 (
                     "analysis_selection",
                     call_with(
                         &registry::class(py, RecordId::CompileAnalysisSelection)?,
-                        &[("no_cache", native_field(&options, "no_cache")?)],
+                        &[("no_cache", native_field(options, "no_cache")?)],
                     )?,
                 ),
-                ("cli_vars", native_field(&options, "cli_vars")?),
+                ("cli_vars", native_field(options, "cli_vars")?),
                 ("external_sql_reference_resolver", pipeline.resolver.clone()),
             ],
         )?),
@@ -76,8 +79,8 @@ fn read_target_name<'py>(
     let py: Python<'py> = target_name.py();
     let deferred: Bound<'py, PyAny> = resolve_target_config(
         py,
-        &native_field(&discovered, "project_config")?,
-        &native_field(&discovered, "local_config")?,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
         target_name,
     )?
     .getattr("defer_sources_to")?;

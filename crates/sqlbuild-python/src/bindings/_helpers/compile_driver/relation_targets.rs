@@ -12,6 +12,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
 const SHARED_EXCEPTIONS_MODULE: &str = "sqlbuild.errors.contracts.exceptions";
@@ -27,9 +28,9 @@ impl<'py> RefKinds<'py> {
     fn load(py: Python<'py>) -> PyResult<Self> {
         let kinds: Bound<'py, PyAny> = host::entry(py, UserCodeHost::SqlResourceRefKind)?;
         Ok(Self {
-            model: kinds.getattr("MODEL")?,
-            seed: kinds.getattr("SEED")?,
-            source: kinds.getattr("SOURCE")?,
+            model: native_field(&kinds, "MODEL")?,
+            seed: native_field(&kinds, "SEED")?,
+            source: native_field(&kinds, "SOURCE")?,
         })
     }
 }
@@ -145,8 +146,8 @@ fn resolved_relation<'py>(
     if !planned.is_none() {
         return Ok(planned);
     }
-    let kind: Bound<'py, PyAny> = reference.getattr("kind")?;
-    let name: Bound<'py, PyAny> = reference.getattr("name")?;
+    let kind: Bound<'py, PyAny> = native_field(reference, "kind")?;
+    let name: Bound<'py, PyAny> = native_field(reference, "name")?;
     if kind.eq(&kinds.source)? {
         return Err(shared_error(
             py,
@@ -164,8 +165,8 @@ fn resolved_relation<'py>(
     let mut location: Option<Bound<'py, PyAny>> = None;
     for resource in resources.try_iter()? {
         let resource: Bound<'py, PyAny> = resource?;
-        if resource.getattr("name")?.eq(&name)? {
-            location = Some(resource.getattr("destination")?);
+        if native_field(&resource, "name")?.eq(&name)? {
+            location = Some(native_field(&resource, "destination")?);
             break;
         }
     }
@@ -174,7 +175,7 @@ fn resolved_relation<'py>(
             py,
             format!(
                 "Python node references unknown {} '{}'",
-                kind.getattr("value")?.str()?,
+                native_field(&kind, "value")?.str()?,
                 name.str()?
             ),
         ));
@@ -204,8 +205,8 @@ fn planned_relation<'py>(
     kinds: &RefKinds<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = adapter.py();
-    let kind: Bound<'py, PyAny> = reference.getattr("kind")?;
-    let name: Bound<'py, PyAny> = reference.getattr("name")?;
+    let kind: Bound<'py, PyAny> = native_field(reference, "kind")?;
+    let name: Bound<'py, PyAny> = native_field(reference, "name")?;
     if kind.eq(&kinds.source)? {
         let source: Bound<'py, PyAny> = plan_output
             .getattr("python_source_entries")?

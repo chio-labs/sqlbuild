@@ -12,6 +12,7 @@ use crate::bindings::_helpers::planner_scope::loaders::expand_selected_loader_de
 use crate::bindings::_helpers::planner_scope::values::{edges, keys};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
 use crate::bindings::_helpers::planner_selection::selectors::resolve_graph_selection;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -22,7 +23,6 @@ use sqlbuild_analysis::planner_scope::main::{
     managed_sources::managed_sources, source_selectors::source_selectors,
 };
 use std::collections::HashSet;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 #[pyfunction]
 #[pyo3(signature = (*, selected_keys, upstream_deps, project))]
@@ -32,9 +32,12 @@ pub(crate) fn managed_source_upstream_keys<'py>(
     project: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyFrozenSet>> {
     let mut managed: HashSet<String> = HashSet::new();
-    for source in native_field(&project, "sources")?.try_iter()? {
+    for source in native_field(project, "sources")?.try_iter()? {
         let source = source?;
-        if !native_field(&source, "source_entry")?.getattr("loader")?.is_none() {
+        if !native_field(&source, "source_entry")?
+            .getattr("loader")?
+            .is_none()
+        {
             managed.insert(native_field(&source, "name")?.extract()?);
         }
     }
@@ -73,7 +76,8 @@ pub(crate) fn build_planner_scope<'py>(
     let auto_load = args.value("auto_load_sources")?.is_truthy()?;
     let mut upstream = build_execution_upstream_deps(&project)?.into_any();
     let mut downstream = build_downstream_deps(&upstream)?.into_any();
-    let lineage: Bound<'py, NativeProjectGraph> = native_field(&project, "lineage_graph")?.cast_into()?;
+    let lineage: Bound<'py, NativeProjectGraph> =
+        native_field(&project, "lineage_graph")?.cast_into()?;
     let all_keys = lineage_graph_names(py, lineage.borrow())?.into_any();
     let mut selected = args.value("selected_keys")?;
     if selected.is_none() {

@@ -6,6 +6,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestPlanOptions;
@@ -15,7 +16,6 @@ use crate::bindings::_helpers::sql_test_glue::planning::{
 };
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyTuple};
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 pub(super) fn chains<'py>(
     project: &Bound<'py, PyAny>,
@@ -26,7 +26,7 @@ pub(super) fn chains<'py>(
         return Ok(PyTuple::empty(py).into_any());
     }
     let request = ChainRequest {
-        models: native_field(&project, "models")?.extract()?,
+        models: native_field(project, "models")?.extract()?,
         tests: tests.extract()?,
         lexical_syntax: project
             .getattr("sql_lexical_syntax")?
@@ -76,7 +76,7 @@ pub(crate) fn planned<'py>(
     let functions = super::plan_rendering::functions(project, adapter)?;
     let overrides = super::plan_rendering::overrides(project, tests, adapter)?;
     let request = PlanningRequest {
-        models: native_field(&project, "models")?.extract()?,
+        models: native_field(project, "models")?.extract()?,
         rendered_model_sql: model_sql.extract()?,
         functions: functions.extract()?,
         tests: tests.extract()?,

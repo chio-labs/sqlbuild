@@ -10,10 +10,10 @@ use crate::bindings::_helpers::discovery::python_module_files::discover_python_m
 use crate::bindings::_helpers::event_exporting::scope::current_scope;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// One project directory under discovery.
 pub(crate) struct ProjectDir<'py> {

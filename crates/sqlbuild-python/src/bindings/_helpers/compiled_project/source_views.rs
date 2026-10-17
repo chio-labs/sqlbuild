@@ -185,7 +185,7 @@ impl NativeSourceInput {
             let attached: &AttachedSource = &source.attached;
             Ok((
                 attached.name.clone(),
-                !native_field(&attached.entry.bind(py), "loader")?.is_none(),
+                !native_field(attached.entry.bind(py), "loader")?.is_none(),
                 attached.database.clone(),
                 attached.schema.clone(),
             ))

@@ -2,11 +2,11 @@
 
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const COMPILE_TYPES_MODULE: &str = "sqlbuild.compiler.compile.types";
 

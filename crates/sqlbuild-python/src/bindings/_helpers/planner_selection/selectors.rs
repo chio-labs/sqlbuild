@@ -20,9 +20,9 @@ use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
 use crate::bindings::_helpers::graph::views::{GraphViewMappings, graph_from_view_mappings};
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const VIEW_OPTIONS: &[&str] = &[
     "all_keys",
@@ -225,11 +225,11 @@ fn match_project_selector<'py>(
         tag_index,
         path_index,
     })?;
-    let value: Bound<'py, PyString> = native_field(&parsed, "value")?.downcast_into()?;
+    let value: Bound<'py, PyString> = native_field(parsed, "value")?.downcast_into()?;
     let carrier: Carrier<'py> = Carrier::new(py, std::slice::from_ref(&value), || {
         Ok(graph_names(graph.graph()))
     })?;
-    let kind: String = native_field(&parsed, "kind")?.str()?.extract()?;
+    let kind: String = native_field(parsed, "kind")?.str()?.extract()?;
     selected(
         &carrier,
         match_selector(graph.graph(), &kind, &carrier.send(&value)?)

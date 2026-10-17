@@ -15,6 +15,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::dag_artifact::artifact::build_dag_json;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::manifest::builder::build_manifest;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -55,19 +56,21 @@ pub(crate) fn manifest_payload<'py>(
     }
     let started: f64 = monotonic(py)?;
     status.start("Building manifest...")?;
-    let discovered: Bound<'py, PyAny> = analysis.getattr("discovered_inputs")?;
-    let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
-    let graph: Bound<'py, PyAny> = analysis.getattr("graph")?;
-    let adapter_type: Bound<'py, PyAny> =
-        resolve_effective_adapter_name(&project_config, &discovered.getattr("local_config")?)?;
+    let discovered: Bound<'py, PyAny> = native_field(analysis, "discovered_inputs")?;
+    let project_config: Bound<'py, PyAny> = native_field(&discovered, "project_config")?;
+    let graph: Bound<'py, PyAny> = native_field(analysis, "graph")?;
+    let adapter_type: Bound<'py, PyAny> = resolve_effective_adapter_name(
+        &project_config,
+        &native_field(&discovered, "local_config")?,
+    )?;
     let payload: Bound<'py, PyAny> = build_manifest(Some(&keywords(
         py,
         &[
-            ("project", graph.getattr("project")?),
+            ("project", native_field(&graph, "project")?),
             ("plan_output", py.None().into_bound(py)),
-            ("project_name", project_config.getattr("name")?),
+            ("project_name", native_field(&project_config, "name")?),
             ("adapter_type", adapter_type),
-            ("graph", graph.getattr("native")?),
+            ("graph", native_field(&graph, "native")?),
         ],
     )?))?
     .into_bound(py)
@@ -107,7 +110,7 @@ pub(crate) fn write_dag_artifact<'py>(
     let py: Python<'py> = analysis.py();
     let started: f64 = monotonic(py)?;
     status.start("Writing DAG artifact...")?;
-    let discovered: Bound<'py, PyAny> = analysis.getattr("discovered_inputs")?;
+    let discovered: Bound<'py, PyAny> = native_field(analysis, "discovered_inputs")?;
     let python_graph: Bound<'py, PyAny> = python_node_graph(&discovered)?;
     let path: Bound<'py, PyAny> = resolved_dag_path(project_dir, dag_path)?;
     let project_name: String = discovered
@@ -115,7 +118,7 @@ pub(crate) fn write_dag_artifact<'py>(
         .getattr("name")?
         .extract()?;
     let dag_json: String = build_dag_json(
-        &analysis.getattr("graph")?,
+        &native_field(analysis, "graph")?,
         &project_name,
         Some(&python_graph),
     )?;
@@ -146,8 +149,8 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
         Ok(planning_diagnostics(
             &target_dir(project_dir)?,
             (
-                &analysis.getattr("adapter")?,
-                &analysis.getattr("graph")?.getattr("project")?,
+                &native_field(analysis, "adapter")?,
+                &native_field(analysis, "graph")?.getattr("project")?,
             ),
             Prepared {
                 planned_tests: None,
@@ -168,7 +171,7 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
     }
     let reference_error: Bound<'py, PyAny> = registry::error(py, ErrorId::SqlTestReference)?;
     let location: Bound<'py, PyAny> = if value.is_instance(&reference_error)? {
-        value.getattr("location")?
+        native_field(&value, "location")?
     } else {
         py.None().into_bound(py)
     };
@@ -183,9 +186,9 @@ pub(crate) fn sql_test_planning_diagnostics<'py>(
                 "severity",
                 registry::class(py, RecordId::DiagnosticSeverity)?.getattr("ERROR")?,
             ),
-            ("code", value.getattr("code")?),
+            ("code", native_field(&value, "code")?),
             ("message", value.str()?.into_any()),
-            ("help", value.getattr("help")?),
+            ("help", native_field(&value, "help")?),
             ("location", location),
         ],
     )?;
@@ -221,7 +224,7 @@ pub(crate) fn write_artifacts<'py>(
             py.None().into_bound(py)
         } else {
             call_with(
-                &prepared_artifacts.getattr("publish")?,
+                &native_field(prepared_artifacts, "publish")?,
                 &[
                     ("target_dir", target.clone()),
                     ("manifest", manifest.clone()),
@@ -232,8 +235,8 @@ pub(crate) fn write_artifacts<'py>(
             write_static_target(
                 &target,
                 (
-                    &analysis.getattr("adapter")?,
-                    &analysis.getattr("graph")?.getattr("project")?,
+                    &native_field(analysis, "adapter")?,
+                    &native_field(analysis, "graph")?.getattr("project")?,
                 ),
                 manifest,
                 Prepared {

@@ -8,6 +8,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{PyErr, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 
@@ -105,13 +106,15 @@ pub(crate) fn report_compile_diagnostic(
     if let Ok(collector) = collector.cast::<CollectedCompileDiagnostics>() {
         return collector.get().add(py, key, diagnostic);
     }
-    let location: Bound<'_, PyAny> = diagnostic.getattr("location")?;
-    let path: Bound<'_, PyAny> = diagnostic.getattr("path")?;
+    let location: Bound<'_, PyAny> = native_field(diagnostic, "location")?;
+    let path: Bound<'_, PyAny> = native_field(diagnostic, "path")?;
     let pointer: String = if !location.is_none() {
         format!(
             "\n  --> {}:{}",
-            location.getattr("path")?.call_method0("as_posix")?.str()?,
-            location.getattr("line")?.str()?
+            native_field(&location, "path")?
+                .call_method0("as_posix")?
+                .str()?,
+            native_field(&location, "line")?.str()?
         )
     } else if !path.is_none() {
         format!("\n  --> {}", path.call_method0("as_posix")?.str()?)
@@ -119,9 +122,9 @@ pub(crate) fn report_compile_diagnostic(
         String::new()
     };
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
-    keywords.set_item("code", diagnostic.getattr("code")?)?;
-    keywords.set_item("help", diagnostic.getattr("help")?)?;
-    let message: String = format!("{}{pointer}", diagnostic.getattr("message")?.str()?);
+    keywords.set_item("code", native_field(diagnostic, "code")?)?;
+    keywords.set_item("help", native_field(diagnostic, "help")?)?;
+    let message: String = format!("{}{pointer}", native_field(diagnostic, "message")?.str()?);
     Err(PyErr::from_value(
         registry::error(py, ErrorId::CompileInput)?.call((message,), Some(&keywords))?,
     ))

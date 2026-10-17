@@ -9,6 +9,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, keywords,
 };
 use crate::bindings::_helpers::graph::project_graph::{CompiledProjectGraph, NativeProjectGraph};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -62,7 +63,7 @@ pub(crate) fn compile_analysis_selection<'py>(
         }
     }
     let selection: Bound<'py, PyAny> = registry::class(py, RecordId::CompileAnalysisSelection)?;
-    let no_cache: Bound<'py, PyAny> = options.getattr("no_cache")?;
+    let no_cache: Bound<'py, PyAny> = native_field(options, "no_cache")?;
     if (options
         .getattr("resolve_python_run_selectors")?
         .is_truthy()?
@@ -77,9 +78,12 @@ pub(crate) fn compile_analysis_selection<'py>(
     call_with(
         &selection,
         &[
-            ("select", options.getattr("select")?),
-            ("exclude", options.getattr("exclude")?),
-            ("auto_load_sources", options.getattr("auto_load_sources")?),
+            ("select", native_field(options, "select")?),
+            ("exclude", native_field(options, "exclude")?),
+            (
+                "auto_load_sources",
+                native_field(options, "auto_load_sources")?,
+            ),
             ("no_cache", no_cache),
         ],
     )
@@ -103,7 +107,8 @@ pub(crate) fn build_project_graph_from_compiled_project<'py>(
 
 /// The project's natively held graph; dict views are built only when a boundary reads them.
 pub(crate) fn project_graph<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let native: Bound<'py, NativeProjectGraph> = project.getattr("lineage_graph")?.cast_into()?;
+    let native: Bound<'py, NativeProjectGraph> =
+        native_field(project, "lineage_graph")?.cast_into()?;
     Ok(Bound::new(
         project.py(),
         CompiledProjectGraph::new(project.clone().unbind(), native.unbind()),
@@ -153,9 +158,12 @@ pub(crate) fn build_static_pipeline_result<'py>(
     call_with(
         &registry::class(py, RecordId::CompilePipelineResult)?,
         &[
-            ("project", context.getattr("project")?),
+            ("project", native_field(&context, "project")?),
             ("plan_output", arguments.value("plan_output")?),
-            ("compile_seconds", context.getattr("compile_seconds")?),
+            (
+                "compile_seconds",
+                native_field(&context, "compile_seconds")?,
+            ),
             ("planning_seconds", PyFloat::new(py, 0.0).into_any()),
         ],
     )
@@ -192,12 +200,15 @@ fn run_compile_only_pipeline<'py>(
     call_with(
         &registry::class(py, RecordId::CompilePipelineResult)?,
         &[
-            ("project", compiled.getattr("project")?),
+            ("project", native_field(&compiled, "project")?),
             (
                 "plan_output",
                 registry::class(py, RecordId::PlanOutput)?.call0()?,
             ),
-            ("compile_seconds", compiled.getattr("compile_seconds")?),
+            (
+                "compile_seconds",
+                native_field(&compiled, "compile_seconds")?,
+            ),
             ("planning_seconds", PyFloat::new(py, 0.0).into_any()),
         ],
     )

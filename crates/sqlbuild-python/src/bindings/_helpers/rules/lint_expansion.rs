@@ -15,9 +15,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const COMPILE_FIRST_MESSAGE: &str = "compiler-integrated Rules check the SQL your project \
     actually produces, so the project must compile first";

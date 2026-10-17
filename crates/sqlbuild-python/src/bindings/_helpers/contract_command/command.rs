@@ -26,9 +26,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const GENERATE_ACTION: &str = "generate";
 
@@ -89,10 +89,13 @@ fn select_resources<'py>(
             py,
             &[
                 ("discovered_inputs", discovered.clone()),
-                ("adapter", native_field(&context, "adapter")?),
-                ("selected_target", native_field(&request, "from_target")?),
-                ("cli_vars", native_field(&request, "cli_vars")?),
-                ("resolved_connection", native_field(&context, "connection_config")?),
+                ("adapter", native_field(context, "adapter")?),
+                ("selected_target", native_field(request, "from_target")?),
+                ("cli_vars", native_field(request, "cli_vars")?),
+                (
+                    "resolved_connection",
+                    native_field(context, "connection_config")?,
+                ),
                 ("analysis_selection", analysis),
             ],
         )?),
@@ -105,8 +108,8 @@ fn select_resources<'py>(
         &registry::native(py, NativeAttr::SelectProjectGraph)?,
         &[
             ("graph", graph.clone()),
-            ("select", native_field(&request, "select")?),
-            ("exclude", native_field(&request, "exclude")?),
+            ("select", native_field(request, "select")?),
+            ("exclude", native_field(request, "exclude")?),
         ],
     )?;
     let compiled: Bound<'py, PyAny> = native_field(&graph, "project")?;
@@ -165,11 +168,11 @@ fn compare<'py>(
     progress: &Progress<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let adapter: Bound<'py, PyAny> = native_field(&context, "adapter")?;
+    let adapter: Bound<'py, PyAny> = native_field(context, "adapter")?;
     let reporter: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ConnectionProgressReporter)?,
         &[
-            ("adapter_name", native_field(&context, "adapter_name")?),
+            ("adapter_name", native_field(context, "adapter_name")?),
             ("stream", progress.stream.clone()),
             (
                 "use_color",
@@ -180,7 +183,7 @@ fn compare<'py>(
     let connection_started: Instant = Instant::now();
     reporter.call_method1("on_connection_start", (1,))?;
     let connection: Bound<'py, PyAny> =
-        match adapter.call_method1("connect", (native_field(&context, "connection_config")?,)) {
+        match adapter.call_method1("connect", (native_field(context, "connection_config")?,)) {
             Ok(connection) => connection,
             Err(error) => {
                 if exception(py, &error) {
@@ -192,7 +195,7 @@ fn compare<'py>(
     let compared: PyResult<Bound<'py, PyAny>> = (|| {
         connection_timing(&reporter, "on_connection_complete", connection_started)?;
         let count: usize = selection.models.len() + selection.sources.len();
-        let target: String = native_field(&request, "from_target")?.str()?.to_string();
+        let target: String = native_field(request, "from_target")?.str()?.to_string();
         let status: Bound<'py, PyAny> = progress.status()?;
         let started: Instant = Instant::now();
         status.call_method1(
@@ -259,10 +262,10 @@ fn write_updates<'py>(
     status.call_method1("start", ("Updating repository contracts...",))?;
     let write: ContractWrite<'py> = ContractWrite {
         project_dir: project_dir.clone(),
-        overwrite: native_field(&request, "overwrite")?,
-        adapter: native_field(&context, "adapter")?,
-        resolved_connection: native_field(&context, "connection_config")?,
-        cli_vars: native_field(&request, "cli_vars")?,
+        overwrite: native_field(request, "overwrite")?,
+        adapter: native_field(context, "adapter")?,
+        resolved_connection: native_field(context, "connection_config")?,
+        cli_vars: native_field(request, "cli_vars")?,
     };
     let updated: Bound<'py, PyAny> = match write_contracts(&write, graph, &result) {
         Ok(updated) => updated,
@@ -323,7 +326,7 @@ fn resource_text(item: Bound<'_, PyAny>) -> PyResult<ContractResourceText> {
 
 fn report(result: &Bound<'_, PyAny>) -> PyResult<ContractReport> {
     Ok(ContractReport {
-        from_target: native_field(&result, "from_target")?.str()?.to_string(),
+        from_target: native_field(result, "from_target")?.str()?.to_string(),
         resources: result
             .getattr("evidence")?
             .try_iter()?
@@ -339,12 +342,13 @@ fn report(result: &Bound<'_, PyAny>) -> PyResult<ContractReport> {
 
 fn progress_for<'py>(request: &Bound<'py, PyAny>) -> PyResult<Progress<'py>> {
     let py: Python<'py> = request.py();
-    let json_output: bool = native_field(&request, "json_output")?.is_truthy()?;
+    let json_output: bool = native_field(request, "json_output")?.is_truthy()?;
     let stream: Bound<'py, PyAny> =
         py.import("sys")?
             .getattr(if json_output { "stderr" } else { "stdout" })?;
-    let use_color: bool =
-        !native_field(&request, "no_color")?.is_truthy()? && !json_output && stdout_supports_color(py)?;
+    let use_color: bool = !native_field(request, "no_color")?.is_truthy()?
+        && !json_output
+        && stdout_supports_color(py)?;
     Ok(Progress { stream, use_color })
 }
 
@@ -352,17 +356,17 @@ fn progress_for<'py>(request: &Bound<'py, PyAny>) -> PyResult<Progress<'py>> {
 #[pyfunction]
 #[pyo3(signature = (*, request))]
 fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<i32> {
-    let action: String = native_field(&request, "action")?.str()?.to_string();
+    let action: String = native_field(request, "action")?.str()?.to_string();
     let generate_write: bool =
-        action == GENERATE_ACTION && native_field(&request, "write")?.is_truthy()?;
-    if native_field(&request, "overwrite")?.is_truthy()? && !generate_write {
+        action == GENERATE_ACTION && native_field(request, "write")?.is_truthy()?;
+    if native_field(request, "overwrite")?.is_truthy()? && !generate_write {
         return Err(user_error(
             py,
             "contract --overwrite requires generate --write",
             "C471",
         ));
     }
-    let requested_dir: Bound<'_, PyAny> = native_field(&request, "project_dir")?;
+    let requested_dir: Bound<'_, PyAny> = native_field(request, "project_dir")?;
     let project_dir: Bound<'_, PyAny> = if requested_dir.is_truthy()? {
         requested_dir
     } else {
@@ -375,12 +379,12 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     call_with(
         &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
         &[
-            ("select", native_field(&request, "select")?),
-            ("exclude", native_field(&request, "exclude")?),
+            ("select", native_field(request, "select")?),
+            ("exclude", native_field(request, "exclude")?),
             ("discovered_inputs", discovered.clone()),
         ],
     )?;
-    let from_target: Bound<'_, PyAny> = native_field(&request, "from_target")?;
+    let from_target: Bound<'_, PyAny> = native_field(request, "from_target")?;
     if !discovered
         .getattr("project_config")?
         .getattr("targets")?
@@ -395,7 +399,7 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
     let context: Bound<'_, PyAny> = resolve_adapter_connection_context(
         &discovered,
         &project_dir,
-        (py.None().into_bound(py), native_field(&request, "cli_vars")?),
+        (py.None().into_bound(py), native_field(request, "cli_vars")?),
         true,
     )?;
     let selection: Selection<'_> = select_resources(request, &discovered, &context)?;
@@ -414,7 +418,7 @@ fn run_contract_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<
         )?;
     }
     let report: ContractReport = report(&result)?;
-    let rendered: String = if native_field(&request, "json_output")?.is_truthy()? {
+    let rendered: String = if native_field(request, "json_output")?.is_truthy()? {
         render_contract_json(&report)
             .map_err(|error| PyValueError::new_err(format!("{error:?}")))?
     } else {

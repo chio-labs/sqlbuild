@@ -8,6 +8,7 @@ use crate::bindings::_helpers::compile_driver::assembly_checks::test_model_query
 use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compile_driver::stage_work::{SQL_TEST_ASSEMBLY, count_stage};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::compiled_tests::assemble_native_sql_tests;
@@ -38,22 +39,24 @@ pub(crate) fn assembled_sql_tests<'py>(
         registry::class(py, RecordId::CompileModelSqlTestInputPayload)?;
     let mut tests: Vec<Bound<'py, PyAny>> = Vec::with_capacity(assemblies.len());
     for (test_input, assembly) in test_inputs.iter().zip(assemblies) {
-        let failure: Bound<'py, PyAny> = assembly.getattr("failure")?;
+        let failure: Bound<'py, PyAny> = native_field(&assembly, "failure")?;
         let kind: Option<String> = if failure.is_none() {
             None
         } else {
-            Some(failure.getattr("kind")?.extract()?)
+            Some(native_field(&failure, "kind")?.extract()?)
         };
-        let mut test: Bound<'py, PyAny> = assembly.getattr("test")?;
+        let mut test: Bound<'py, PyAny> = native_field(&assembly, "test")?;
         if test.is_none() {
             return Err(assembly_error(py, &failure, kind.as_deref())?);
         }
-        for item in assembly.getattr("diagnostics")?.try_iter()? {
+        for item in native_field(&assembly, "diagnostics")?.try_iter()? {
             let (key, diagnostic): (Bound<'py, PyAny>, Bound<'py, PyAny>) = item?.extract()?;
             report_compile_diagnostic(&key, &diagnostic)?;
         }
-        let payload: Bound<'py, PyAny> = test_input.getattr("payload")?;
-        if payload.is_instance(&mocked_input)? && payload.getattr("macro_mocks")?.is_truthy()? {
+        let payload: Bound<'py, PyAny> = native_field(test_input, "payload")?;
+        if payload.is_instance(&mocked_input)?
+            && native_field(&payload, "macro_mocks")?.is_truthy()?
+        {
             test = with_model_queries(
                 &test,
                 test_model_query_overrides(test_input, inputs)?.as_any(),
@@ -78,7 +81,7 @@ fn assembly_error(
     let message: String = if failure.is_none() {
         String::new()
     } else {
-        failure.getattr("message")?.extract()?
+        native_field(failure, "message")?.extract()?
     };
     if kind == Some(SQL_TEST_INPUT_FAILURE) {
         let error: Bound<'_, PyAny> =
@@ -94,7 +97,7 @@ fn with_model_queries<'py>(
     queries: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = test.py();
-    let payload: Bound<'py, PyAny> = test.getattr("payload")?;
+    let payload: Bound<'py, PyAny> = native_field(test, "payload")?;
     if !payload.is_instance(&registry::class(py, RecordId::CompiledModelSqlTestPayload)?)? {
         return Ok(test.clone());
     }

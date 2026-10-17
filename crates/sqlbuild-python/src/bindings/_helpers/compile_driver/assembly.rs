@@ -19,6 +19,7 @@ use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::compiled_project::records::record_model_analyses;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 
 const STAGE_REACHED: &str = "assembly stopped before the requested stage";
 const EXPRESSION_SHAPES_STAGE: &str = "expression_shapes";
@@ -151,11 +152,12 @@ fn collected_project<'py>(
         within(&collector, |violations| {
             Ok((referenced_project(py, request)?, violations.clone()))
         })?;
-    let collected: Bound<'py, PyAny> = violations.getattr("diagnostics")?;
+    let collected: Bound<'py, PyAny> = native_field(&violations, "diagnostics")?;
     if !collected.is_truthy()? {
         return Ok(built);
     }
-    let diagnostics: Bound<'py, PyTuple> = chained(&built.getattr("diagnostics")?, &collected)?;
+    let diagnostics: Bound<'py, PyTuple> =
+        chained(&native_field(&built, "diagnostics")?, &collected)?;
     project_with(
         &built,
         Some(keywords(py, &[("diagnostics", diagnostics.into_any())])?),
@@ -199,24 +201,26 @@ fn referenced_project(py: Python<'_>, request: AssemblyRequest) -> PyResult<Boun
         assembled_project(py, &request)?
     };
     let project: Bound<'_, PyAny> =
-        with_native_project(&project, &inputs.getattr("native_project")?)?;
+        with_native_project(&project, &native_field(&inputs, "native_project")?)?;
     let references: Bound<'_, PyAny> = explicit_reference_report(
         py,
         &project,
-        &inputs.getattr("discovered_inputs")?,
+        &native_field(&inputs, "discovered_inputs")?,
         inputs
             .getattr("project_config")?
             .getattr("references")?
             .getattr("enforce_explicit")?
             .extract()?,
     )?;
-    let reference_diagnostics: Bound<'_, PyAny> = references.getattr("diagnostics")?;
-    let unmatched: Bound<'_, PyAny> = references.getattr("unmatched")?;
+    let reference_diagnostics: Bound<'_, PyAny> = native_field(&references, "diagnostics")?;
+    let unmatched: Bound<'_, PyAny> = native_field(&references, "unmatched")?;
     if !reference_diagnostics.is_truthy()? && !unmatched.is_truthy()? {
         return Ok(project);
     }
-    let diagnostics: Bound<'_, PyTuple> =
-        chained(&project.getattr("diagnostics")?, &reference_diagnostics)?;
+    let diagnostics: Bound<'_, PyTuple> = chained(
+        &native_field(&project, "diagnostics")?,
+        &reference_diagnostics,
+    )?;
     project_with(
         &project,
         Some(keywords(
@@ -238,8 +242,8 @@ fn with_native_project<'py>(
     if native_project.is_none() {
         return Ok(project.clone());
     }
-    record_model_analyses(native_project.cast()?, &project.getattr("models")?)?;
-    if project.getattr("native_project")?.is(native_project) {
+    record_model_analyses(native_project.cast()?, &native_field(project, "models")?)?;
+    if native_field(project, "native_project")?.is(native_project) {
         return Ok(project.clone());
     }
     project_with(

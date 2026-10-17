@@ -43,6 +43,7 @@ use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, produ
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
@@ -242,7 +243,7 @@ fn assembled_inputs<'py>(
         .getattr("setting_overrides")?
         .contains(SQL_ANALYSIS_SETTING_KEY)?
     {
-        local_config.getattr("settings")?.getattr("sql_analysis")?
+        native_field(&local_config, "settings")?.getattr("sql_analysis")?
     } else {
         project_config
             .getattr("settings")?
@@ -343,7 +344,7 @@ fn completed(lifecycle: &Bound<'_, PyAny>, item_count: usize) -> PyResult<()> {
         &[("item_count", item_count.into_pyobject(py)?.into_any())],
     )?;
     call_with(
-        &lifecycle.getattr("completed")?,
+        &native_field(lifecycle, "completed")?,
         &[("metadata", metadata.into_any())],
     )?;
     Ok(())
@@ -409,7 +410,7 @@ fn imported_python_paths(python: &Bound<'_, PyDict>) -> PyResult<usize> {
     }
     for group in groups {
         for item in group.try_iter()? {
-            paths.add(item?.getattr("relative_path")?)?;
+            paths.add(native_field(&item?, "relative_path")?)?;
         }
     }
     Ok(paths.len())

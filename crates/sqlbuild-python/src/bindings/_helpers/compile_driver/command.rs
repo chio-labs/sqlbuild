@@ -27,6 +27,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     Status, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
@@ -58,11 +59,11 @@ fn run_compile_command<'py>(
     reuse_attempt: Option<Bound<'py, PyAny>>,
 ) -> PyResult<i64> {
     let total_start: f64 = match &reuse_attempt {
-        Some(attempt) => attempt.getattr("started")?.extract()?,
+        Some(attempt) => native_field(attempt, "started")?.extract()?,
         None => monotonic(py)?,
     };
     let path_class: Bound<'py, PyAny> = imported(py, "pathlib", "Path")?;
-    let effective_request: Bound<'py, PyAny> = if request.getattr("project_dir")?.is_none() {
+    let effective_request: Bound<'py, PyAny> = if native_field(&request, "project_dir")?.is_none() {
         imported(py, "dataclasses", "replace")?.call(
             (request.clone(),),
             Some(&keywords(
@@ -100,7 +101,7 @@ fn bypass_attempt<'py>(
     started: f64,
 ) -> PyResult<Bound<'py, PyAny>> {
     let path_class: Bound<'py, PyAny> = imported(py, "pathlib", "Path")?;
-    let project_dir: Bound<'py, PyAny> = request.getattr("project_dir")?;
+    let project_dir: Bound<'py, PyAny> = native_field(request, "project_dir")?;
     let project_dir: Bound<'py, PyAny> = if project_dir.is_truthy()? {
         project_dir
     } else {
@@ -120,14 +121,14 @@ fn bypass_attempt<'py>(
 fn compile_status<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let none: Bound<'py, PyAny> = py.None().into_bound(py);
-    if request.getattr("json_output")?.is_truthy()? {
+    if native_field(request, "json_output")?.is_truthy()? {
         return Ok(none);
     }
     let stdout: Bound<'py, PyAny> = py.import("sys")?.getattr("stdout")?;
     if !stdout.hasattr("isatty")? || !stdout.call_method0("isatty")?.is_truthy()? {
         return Ok(none);
     }
-    let use_color: bool = !request.getattr("no_color")?.is_truthy()?;
+    let use_color: bool = !native_field(request, "no_color")?.is_truthy()?;
     status_reporter(&stdout, use_color)
 }
 
@@ -217,7 +218,7 @@ fn recorded_compile<'py>(
                         .into_any(),
                 ),
                 ("dag_artifact_path", outcome.dag_artifact_path),
-                ("json_output", request.getattr("json_output")?),
+                ("json_output", native_field(request, "json_output")?),
             ],
         )?),
     );
@@ -234,7 +235,7 @@ fn compiled_with_status<'py>(
     (total_start, reuse_timings): (f64, &Bound<'py, PyAny>),
 ) -> PyResult<CommandOutcome<'py>> {
     let py: Python<'py> = request.py();
-    let project_dir: Bound<'py, PyAny> = request.getattr("project_dir")?;
+    let project_dir: Bound<'py, PyAny> = native_field(request, "project_dir")?;
     let project_dir: Bound<'py, PyAny> = if project_dir.is_none() {
         imported(py, "pathlib", "Path")?.call_method0("cwd")?
     } else {
@@ -242,7 +243,7 @@ fn compiled_with_status<'py>(
     };
     let prepared_artifacts: &Bound<'py, PyAny> = &recorders.prepared_artifacts;
     call_with(
-        &prepared_artifacts.getattr("remove_abandoned_staging")?,
+        &native_field(prepared_artifacts, "remove_abandoned_staging")?,
         &[("target_dir", target_dir(&project_dir)?)],
     )?;
     let analysis: Bound<'py, PyAny> = analyze(
@@ -254,13 +255,13 @@ fn compiled_with_status<'py>(
         .getattr("profile_flags")?
         .getattr("skip_write")?
         .is_truthy()?;
-    let manifest_requested: bool = request.getattr("manifest")?.is_truthy()?;
+    let manifest_requested: bool = native_field(request, "manifest")?.is_truthy()?;
     let manifest: Bound<'py, PyAny> =
         manifest_payload(manifest_requested && !rules_failed, &analysis, status)?;
     let dag_path: Bound<'py, PyAny> = if rules_failed {
         py.None().into_bound(py)
     } else {
-        request.getattr("dag_path")?
+        native_field(request, "dag_path")?
     };
     let recorder: Option<&Py<CompileArtifactWrites>> = Some(&recorders.artifact_writes);
     write_dag_artifact((&dag_path, &project_dir), (&analysis, recorder), status)?;
@@ -285,28 +286,28 @@ fn compiled_with_status<'py>(
         analysis
             .getattr("diagnostics")?
             .try_iter()?
-            .chain(written.getattr("diagnostics")?.try_iter()?)
+            .chain(native_field(&written, "diagnostics")?.try_iter()?)
             .chain(withheld.try_iter()?)
             .collect::<PyResult<Vec<_>>>()?,
     )?;
     let mut exit_code: i64 = 0;
     for diagnostic in diagnostics.as_any().try_iter()? {
-        if diagnostic?.getattr("is_error")?.is_truthy()? {
+        if native_field(&diagnostic?, "is_error")?.is_truthy()? {
             exit_code = 1;
             break;
         }
     }
     close_status(status)?;
-    if let Some(skipped_note) =
-        format_skipped_type_proof_rules(analysis.getattr("skipped_type_proof_rules")?.extract()?)
-    {
+    if let Some(skipped_note) = format_skipped_type_proof_rules(
+        native_field(&analysis, "skipped_type_proof_rules")?.extract()?,
+    ) {
         output.call_method1("print_stderr_line", (format!("note: {skipped_note}"),))?;
     }
     let dag_artifact_path: Bound<'py, PyAny> =
-        if rules_failed || request.getattr("dag_path")?.is_none() {
+        if rules_failed || native_field(request, "dag_path")?.is_none() {
             py.None().into_bound(py)
         } else {
-            resolved_dag_path(&project_dir, &request.getattr("dag_path")?)?
+            resolved_dag_path(&project_dir, &native_field(request, "dag_path")?)?
         };
     let outcome: CommandOutcome<'py> = CommandOutcome {
         exit_code,
@@ -337,20 +338,23 @@ fn analysis_options<'py>(
     let selection: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::CompileAnalysisSelection)?,
         &[
-            ("select", request.getattr("select")?),
-            ("exclude", request.getattr("exclude")?),
-            ("no_cache", request.getattr("no_cache")?),
+            ("select", native_field(request, "select")?),
+            ("exclude", native_field(request, "exclude")?),
+            ("no_cache", native_field(request, "no_cache")?),
         ],
     )?;
     keywords(
         py,
         &[
             ("project_dir", project_dir.clone()),
-            ("no_sql_validation", request.getattr("no_sql_validation")?),
-            ("selected_target", request.getattr("selected_target")?),
-            ("lineage_mode", request.getattr("lineage_mode")?),
-            ("cli_vars", request.getattr("cli_vars")?),
-            ("profile_flags", request.getattr("profile_flags")?),
+            (
+                "no_sql_validation",
+                native_field(request, "no_sql_validation")?,
+            ),
+            ("selected_target", native_field(request, "selected_target")?),
+            ("lineage_mode", native_field(request, "lineage_mode")?),
+            ("cli_vars", native_field(request, "cli_vars")?),
+            ("profile_flags", native_field(request, "profile_flags")?),
             ("analysis_selection", selection),
             ("status", status.0.clone()),
             ("prepared_artifacts", recorders.prepared_artifacts.clone()),
@@ -363,10 +367,10 @@ fn rules_failed(analysis: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py: Python<'_> = analysis.py();
     let rule_phase: Bound<'_, PyAny> =
         registry::class(py, RecordId::DiagnosticPhase)?.getattr("RULE")?;
-    for diagnostic in analysis.getattr("diagnostics")?.try_iter()? {
+    for diagnostic in native_field(analysis, "diagnostics")?.try_iter()? {
         let diagnostic: Bound<'_, PyAny> = diagnostic?;
-        if diagnostic.getattr("is_error")?.is_truthy()?
-            && diagnostic.getattr("phase")?.is(&rule_phase)
+        if native_field(&diagnostic, "is_error")?.is_truthy()?
+            && native_field(&diagnostic, "phase")?.is(&rule_phase)
         {
             return Ok(true);
         }
@@ -417,23 +421,25 @@ fn record_output<'py>(
     output: &Bound<'py, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'py> = request.py();
-    let graph: Bound<'py, PyAny> = analysis.getattr("graph")?;
-    let selected_keys: Bound<'py, PyAny> = analysis.getattr("selected_keys")?;
-    let validation_enabled: Bound<'py, PyAny> =
-        PyBool::new(py, !request.getattr("no_sql_validation")?.is_truthy()?)
-            .to_owned()
-            .into_any();
+    let graph: Bound<'py, PyAny> = native_field(analysis, "graph")?;
+    let selected_keys: Bound<'py, PyAny> = native_field(analysis, "selected_keys")?;
+    let validation_enabled: Bound<'py, PyAny> = PyBool::new(
+        py,
+        !native_field(request, "no_sql_validation")?.is_truthy()?,
+    )
+    .to_owned()
+    .into_any();
     let shared: [(&str, Bound<'py, PyAny>); 7] = [
         ("graph", graph.clone()),
         ("written", written.clone()),
-        ("manifest", request.getattr("manifest")?),
-        ("lineage", analysis.getattr("lineage")?),
-        ("lineage_mode", request.getattr("lineage_mode")?),
+        ("manifest", native_field(request, "manifest")?),
+        ("lineage", native_field(analysis, "lineage")?),
+        ("lineage_mode", native_field(request, "lineage_mode")?),
         ("diagnostics", diagnostics.clone().into_any()),
         ("selected_keys", selected_keys.clone()),
     ];
     let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = shared.to_vec();
-    let rendered: Bound<'py, PyString> = if request.getattr("json_output")?.is_truthy()? {
+    let rendered: Bound<'py, PyString> = if native_field(request, "json_output")?.is_truthy()? {
         let notice: Option<Bound<'py, PyString>> =
             json_semantic_notice(&graph, &selected_keys, validation_enabled.is_truthy()?)?;
         if let Some(notice) = notice {
@@ -447,7 +453,7 @@ fn record_output<'py>(
         )
     } else {
         let use_color: bool =
-            !request.getattr("no_color")?.is_truthy()? && stdout_supports_color(py)?;
+            !native_field(request, "no_color")?.is_truthy()? && stdout_supports_color(py)?;
         arguments.push((
             "use_color",
             PyBool::new(py, use_color).to_owned().into_any(),

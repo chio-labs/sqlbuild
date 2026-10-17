@@ -26,6 +26,7 @@ use crate::bindings::_helpers::compiled_project::records::project_with;
 use crate::bindings::_helpers::contracts::contract_diagnostics::promotion_conflict_diagnostics;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_collection_rendering;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
@@ -137,12 +138,13 @@ fn python_compiled_project<'py>(
     named_target_schema_strategy(discovered, adapter, request.selected_target.bind(py))?;
     managed_loader_target_isolation(discovered, adapter, request.resolved_connection.bind(py))?;
     let selection: &Bound<'py, PyAny> = request.analysis_selection.bind(py);
-    let no_cache: bool = !selection.is_none() && selection.getattr("no_cache")?.is_truthy()?;
+    let no_cache: bool =
+        !selection.is_none() && native_field(selection, "no_cache")?.is_truthy()?;
     let compile_inputs: Bound<'py, PyAny> = record_compile_timing("attachment_ms", || {
         frontier_compile_inputs(py, request, no_cache)
     })?;
     if !selection.is_none() {
-        let on_inputs_ready: Bound<'py, PyAny> = selection.getattr("on_inputs_ready")?;
+        let on_inputs_ready: Bound<'py, PyAny> = native_field(selection, "on_inputs_ready")?;
         if !on_inputs_ready.is_none() {
             call_with(&on_inputs_ready, &[("inputs", compile_inputs.clone())])?;
         }
@@ -168,7 +170,7 @@ fn python_compiled_project<'py>(
                 ),
                 (
                     "analysis_cache_dir",
-                    compile_inputs.getattr("compile_cache_dir")?,
+                    native_field(&compile_inputs, "compile_cache_dir")?,
                 ),
                 ("analysis_model_names", analysis_model_names),
             ],
@@ -187,7 +189,7 @@ fn targeted_project<'py>(
     let discovered: &Bound<'py, PyAny> = request.discovered_inputs.bind(py);
     let adapter: &Bound<'py, PyAny> = request.adapter.bind(py);
     managed_write_schemas(adapter, project)?;
-    let effective_schema: Bound<'py, PyAny> = project.getattr("effective_target_schema")?;
+    let effective_schema: Bound<'py, PyAny> = native_field(project, "effective_target_schema")?;
     let default_schema: Bound<'py, PyAny> = if effective_schema.is_truthy()? {
         effective_schema
     } else {
@@ -196,13 +198,13 @@ fn targeted_project<'py>(
     let defaults: TargetDefaults<'py> = TargetDefaults {
         default_schema,
         default_database: adapter.call_method0("default_database")?,
-        render_qualified_name: adapter.getattr("render_qualified_name")?,
+        render_qualified_name: native_field(adapter, "render_qualified_name")?,
         python_functions_inherit_default_namespace: adapter
             .call_method0("python_functions_inherit_default_namespace")?,
     };
     let project: Bound<'py, PyAny> = apply_target_defaults(project, &defaults)?;
-    let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
-    let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
+    let project_config: Bound<'py, PyAny> = native_field(discovered, "project_config")?;
+    let local_config: Bound<'py, PyAny> = native_field(discovered, "local_config")?;
     let adapter_name: Bound<'py, PyAny> =
         resolve_effective_adapter_name(&project_config, &local_config.clone())
             .and_then(|value| value.into_bound_py_any(py))?;
@@ -248,7 +250,7 @@ fn frontier_compile_inputs<'py>(
     let discovered: &Bound<'py, PyAny> = request.discovered_inputs.bind(py);
     let adapter: &Bound<'py, PyAny> = request.adapter.bind(py);
     let collection_rendering: Bound<'py, PyAny> = resolve_effective_collection_rendering(
-        &discovered.getattr("project_config")?,
+        &native_field(discovered, "project_config")?,
         &py.None().into_bound(py),
     )
     .and_then(|value| value.into_bound_py_any(py))?;
@@ -261,7 +263,10 @@ fn frontier_compile_inputs<'py>(
                 "python_functions_inherit_default_namespace",
                 adapter.call_method0("python_functions_inherit_default_namespace")?,
             ),
-            ("sql_lexical_syntax", adapter.getattr("sql_lexical_syntax")?),
+            (
+                "sql_lexical_syntax",
+                native_field(adapter, "sql_lexical_syntax")?,
+            ),
         ],
     )?;
     let inputs: InputsRequest = InputsRequest {

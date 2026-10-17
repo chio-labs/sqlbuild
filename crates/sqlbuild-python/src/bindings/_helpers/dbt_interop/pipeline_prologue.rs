@@ -13,11 +13,11 @@ use crate::bindings::_helpers::dbt_interop::reference_resolver::DbtCompileRefere
 use crate::bindings::_helpers::dbt_interop::runtime_config::{
     interop_adapter, manifest_path, parse_dbt_execution_args, plan_options, vars_mapping,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use pyo3::{pyfunction, wrap_pyfunction};
 use std::time::Instant;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const COMPILE_OPTIONS: (&[&str], &[&str]) = (
     &[
@@ -66,21 +66,21 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
     request: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = request.py();
-    let mut executable = native_field(&request, "dbt_executable")?;
+    let mut executable = native_field(request, "dbt_executable")?;
     if !executable.is_truthy()? {
         executable = registry::native(py, NativeAttr::ResolveDbtExecutable)?.call0()?;
     }
-    let mut stream = native_field(&request, "progress_stream")?;
+    let mut stream = native_field(request, "progress_stream")?;
     if !stream.is_truthy()? {
         stream = py.import("sys")?.getattr("stdout")?;
     }
-    let command = native_field(&request, "command")?;
-    let parsed = parse_dbt_execution_args(&command, &native_field(&request, "args")?)?;
+    let command = native_field(request, "command")?;
+    let parsed = parse_dbt_execution_args(&command, &native_field(request, "args")?)?;
     let routed = call_with(
         &registry::native(py, NativeAttr::RouteDbtInteropArgs)?,
         &[("command", command), ("parsed", parsed)],
     )?;
-    let project_dir = native_field(&request, "project_dir")?;
+    let project_dir = native_field(request, "project_dir")?;
     let discovered = discover_project_inputs(
         py,
         Some(keywords(py, &[("project_dir", project_dir.clone())])?),
@@ -97,14 +97,14 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
         &dbt_args,
     )?
     .into_any();
-    let mut runner = native_field(&request, "dbt_runner")?;
+    let mut runner = native_field(request, "dbt_runner")?;
     if !runner.is_truthy()? {
         runner = call_with(
             &registry::native(py, NativeAttr::DbtRunner)?,
             &[("dbt_executable", executable.clone())],
         )?;
     }
-    let dbt_stream = native_field(&request, "dbt_stdout_stream")?;
+    let dbt_stream = native_field(request, "dbt_stdout_stream")?;
     call_with(
         &registry::class(py, RecordId::DbtInteropInvocation)?,
         &[
@@ -118,7 +118,10 @@ pub(crate) fn resolve_dbt_execution_invocation<'py>(
                     stream
                 },
             ),
-            ("effective_sqlbuild_args", native_field(&routed, "sqlbuild_args")?),
+            (
+                "effective_sqlbuild_args",
+                native_field(&routed, "sqlbuild_args")?,
+            ),
             ("routed", routed),
             ("discovered_inputs", discovered),
             ("dbt_options", options),
@@ -181,7 +184,10 @@ fn compile_dbt_interop_project<'py>(
     let name = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", native_field(&discovered, "project_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
             ("local_config", native_field(&discovered, "local_config")?),
         ],
     )?;
@@ -244,7 +250,10 @@ fn resolve_dbt_interop_plan<'py>(
         &registry::class(py, RecordId::DbtInteropCommandArgs)?,
         &[
             ("select", tuple.call1((native_field(&routed, "select")?,))?),
-            ("exclude", tuple.call1((native_field(&routed, "exclude")?,))?),
+            (
+                "exclude",
+                tuple.call1((native_field(&routed, "exclude")?,))?,
+            ),
             (
                 "dbt_command_args",
                 tuple.call1((native_field(&routed, "dbt_args")?,))?,
@@ -253,7 +262,10 @@ fn resolve_dbt_interop_plan<'py>(
                 "sqlbuild_command_args",
                 tuple.call1((native_field(&invocation, "effective_sqlbuild_args")?,))?,
             ),
-            ("dbt_executable", native_field(&invocation, "dbt_executable")?),
+            (
+                "dbt_executable",
+                native_field(&invocation, "dbt_executable")?,
+            ),
             ("sqlbuild_executable", args.value("sqlbuild_executable")?),
         ],
     )?;

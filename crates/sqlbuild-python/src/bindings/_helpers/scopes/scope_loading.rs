@@ -20,6 +20,7 @@ use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, bridg
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::scopes::scope_cache::{
@@ -30,7 +31,6 @@ use crate::bindings::_helpers::scopes::scope_tolerant::scope_tolerant_index;
 use crate::bindings::_helpers::scopes::scope_validation::scope_index_with_compile_usages;
 use crate::bindings::_helpers::sql_test_glue::constants::SQL_TEST_EXPECTED_MODELS_SCAN_ALGORITHM;
 use pyo3::IntoPyObjectExt;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SCOPE_CACHE_DIRECTORY_NAME: &str = "declaration-scopes-v2";
 const SCOPE_CACHE_FILENAME: &str = "scope-index.json";

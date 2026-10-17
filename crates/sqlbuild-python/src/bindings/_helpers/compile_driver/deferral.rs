@@ -11,6 +11,7 @@ use sqlbuild_model_config::templates::models::DeferredSegment;
 
 use crate::bindings::_helpers::authored_values::project_vars::render_project_var_text;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 
@@ -72,8 +73,8 @@ fn deferred_locations<'py>(
         for resource in project.getattr(attribute)?.try_iter()? {
             let resource: Bound<'py, PyAny> = resource?;
             let location: Bound<'py, PyAny> =
-                deferred_location(&resource.getattr("destination")?, naming)?;
-            locations.set_item(resource.getattr("name")?, location)?;
+                deferred_location(&native_field(&resource, "destination")?, naming)?;
+            locations.set_item(native_field(&resource, "name")?, location)?;
         }
     }
     Ok(locations)
@@ -85,15 +86,15 @@ fn deferred_location<'py>(
     naming: &DeferredNaming<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target.py();
-    let logical_schema: Bound<'py, PyAny> = target.getattr("logical_schema")?;
-    let logical_database: Bound<'py, PyAny> = target.getattr("logical_database")?;
+    let logical_schema: Bound<'py, PyAny> = native_field(target, "logical_schema")?;
+    let logical_database: Bound<'py, PyAny> = native_field(target, "logical_database")?;
     let mut schema: Bound<'py, PyAny> = target_field(
-        &naming.target_config.getattr("schema")?,
+        &native_field(&naming.target_config, "schema")?,
         &logical_schema,
         &naming.effective_vars,
     )?;
     let mut database: Bound<'py, PyAny> = target_field(
-        &naming.target_config.getattr("database")?,
+        &native_field(&naming.target_config, "database")?,
         &logical_database,
         &naming.effective_vars,
     )?;
@@ -103,7 +104,7 @@ fn deferred_location<'py>(
     if database.is_none() {
         database = naming.default_database.clone();
     }
-    let name: Bound<'py, PyAny> = target.getattr("name")?;
+    let name: Bound<'py, PyAny> = native_field(target, "name")?;
     let qualified_name: Bound<'py, PyAny> = call_with(
         &naming.render_qualified_name,
         &[
@@ -205,7 +206,8 @@ fn deferred_target_config<'py>(
     current_target_name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = discovered.py();
-    let targets: Bound<'py, PyAny> = discovered.getattr("project_config")?.getattr("targets")?;
+    let targets: Bound<'py, PyAny> =
+        native_field(discovered, "project_config")?.getattr("targets")?;
     let name: String = defer_to.str()?.to_cow()?.into_owned();
     if !targets.contains(defer_to)? {
         return Err(planner_error(
@@ -253,14 +255,14 @@ fn deferred_relations<'py>(
     let mut database: Bound<'py, PyAny> = py.None().into_bound(py);
     for location in locations.call_method0("values")?.try_iter()? {
         let location: Bound<'py, PyAny> = location?;
-        let schema: Bound<'py, PyAny> = location.getattr("schema")?;
+        let schema: Bound<'py, PyAny> = native_field(&location, "schema")?;
         if !schema.is_none() {
             let schema: String = schema.extract()?;
             if !schemas.contains(&schema) {
                 schemas.push(schema);
             }
         }
-        let location_database: Bound<'py, PyAny> = location.getattr("database")?;
+        let location_database: Bound<'py, PyAny> = native_field(&location, "database")?;
         if !location_database.is_none() && database.is_none() {
             database = location_database;
         }
@@ -271,7 +273,7 @@ fn deferred_relations<'py>(
     }
     schemas.sort();
     let relations: Bound<'py, PyAny> = call_with(
-        &adapter.getattr("list_relations")?,
+        &native_field(adapter, "list_relations")?,
         &[
             ("connection", connection.clone()),
             ("database", database),
@@ -280,7 +282,7 @@ fn deferred_relations<'py>(
     )?;
     for relation in relations.try_iter()? {
         let relation: Bound<'py, PyAny> = relation?;
-        relations_by_name.set_item(relation.getattr("name")?, relation)?;
+        relations_by_name.set_item(native_field(&relation, "name")?, relation)?;
     }
     Ok(relations_by_name)
 }
@@ -317,16 +319,16 @@ fn resolve_model_deferral_inputs<'py>(
     let target_config: Bound<'py, PyAny> = deferred_target_config(
         &arguments.value("discovered_inputs")?,
         &defer_to,
-        &project.getattr("effective_target_name")?,
+        &native_field(&project, "effective_target_name")?,
     )?;
     let locations: Bound<'py, PyDict> = deferred_locations(
         &project,
         &DeferredNaming {
             target_config,
-            effective_vars: project.getattr("effective_vars")?,
+            effective_vars: native_field(&project, "effective_vars")?,
             default_schema: adapter.call_method0("default_schema")?,
             default_database: adapter.call_method0("default_database")?,
-            render_qualified_name: adapter.getattr("render_qualified_name")?,
+            render_qualified_name: native_field(&adapter, "render_qualified_name")?,
         },
     )?;
     let relations: Bound<'py, PyDict> = deferred_relations(

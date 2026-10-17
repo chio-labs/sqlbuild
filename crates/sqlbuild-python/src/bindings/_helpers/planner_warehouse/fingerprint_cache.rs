@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_migrations::fingerprint::fingerprint;
 use crate::bindings::_helpers::planner_migrations::fingerprint::migration_fingerprint_ref_names;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_warehouse::models::FingerprintWork;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::PyRefMut;
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -21,7 +22,6 @@ use sqlbuild_analysis::planner_warehouse::main::fingerprint_cache_shared_digest:
 use sqlbuild_analysis::planner_warehouse::models::FingerprintCacheKey;
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const CACHE_DIRECTORY_NAME: &str = "migration-fingerprints-v1";
 const CACHE_DATABASE_NAME: &str = "migration-fingerprints.sqlite3";

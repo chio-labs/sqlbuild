@@ -14,6 +14,7 @@ use crate::bindings::_helpers::project_assembly::models::{NativeModelFacts, Nati
 use crate::bindings::_helpers::project_assembly::native_resources::assemble_native_project_resources;
 use crate::bindings::_helpers::project_assembly::syntax_checks::model_syntax_checks;
 use crate::bindings::_helpers::project_assembly::syntax_checks::standalone_pivot_models;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
@@ -26,8 +27,8 @@ pub(crate) fn native_project_facts<'py>(
     session: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = inputs.py();
-    let model_inputs: Bound<'py, PyAny> = inputs.getattr("model_inputs")?;
-    let dialect: Bound<'py, PyAny> = context.profile.getattr("sql_analysis_dialect")?;
+    let model_inputs: Bound<'py, PyAny> = native_field(inputs, "model_inputs")?;
+    let dialect: Bound<'py, PyAny> = native_field(&context.profile, "sql_analysis_dialect")?;
     let (succeeded, positions): (Bound<'py, PyAny>, Bound<'py, PyAny>) = match &context.analyses {
         Some(analyses) => (
             analyses.succeeded.clone().into_any(),
@@ -54,8 +55,8 @@ pub(crate) fn native_project_facts<'py>(
         context,
         session,
     )?;
-    let deps: Bound<'py, PyAny> = resources.getattr("model_deps")?;
-    let syntax_valid: Bound<'py, PyAny> = resources.getattr("model_syntax_valid")?;
+    let deps: Bound<'py, PyAny> = native_field(&resources, "model_deps")?;
+    let syntax_valid: Bound<'py, PyAny> = native_field(&resources, "model_syntax_valid")?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
     for index in 0..model_inputs.len()? {
         let proof: Bound<'py, PyAny> = match proofs.get_item(index)? {
@@ -90,7 +91,10 @@ pub(crate) fn pivot_tables<'py>(context: &AnalysisContext<'py>) -> PyResult<Boun
     call_with(
         &registry::class(py, RecordId::NativePivotTables)?,
         &[
-            ("dialect", context.profile.getattr("sql_analysis_dialect")?),
+            (
+                "dialect",
+                native_field(&context.profile, "sql_analysis_dialect")?,
+            ),
             ("column_types_by_table", context.column_types.clone()),
             (
                 "authoritative_column_types_by_table",

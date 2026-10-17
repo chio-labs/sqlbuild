@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_phases::models::IdentityWork;
 use crate::bindings::_helpers::planner_phases::models::PlannerIdentityContext;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, native, replace};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
@@ -16,7 +17,6 @@ use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{Py, PyRefMut, Python};
 use std::collections::{BTreeMap, HashSet};
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 static IDENTITY_WORK: PyOnceLock<Py<IdentityWork>> = PyOnceLock::new();
 
@@ -48,12 +48,12 @@ fn version_identities<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     identity_work(project.py())?.identity_builds += 1;
     direct_model_version_identities(
-        (&native_field(&project, "functions")?, &scope),
-        native_field(&project, "sql_analysis_dialect")?.extract()?,
+        (&native_field(project, "functions")?, &scope),
+        native_field(project, "sql_analysis_dialect")?.extract()?,
         (
-            &native_field(&project, "seeds")?,
+            &native_field(project, "seeds")?,
             &project.py().None().into_bound(project.py()),
-            &native_field(&project, "hook_functions")?,
+            &native_field(project, "hook_functions")?,
         ),
     )
 }
@@ -102,7 +102,7 @@ fn reusable_model_names(
     let stale = class_field(identities, |i: &PlannerIdentityContext| {
         &i.stale_warning_identities
     })?;
-    for name in native_field(&execution_changes, "models")?.try_iter()? {
+    for name in native_field(execution_changes, "models")?.try_iter()? {
         let name = name?;
         let same = |field: &str| -> PyResult<bool> {
             execution
@@ -185,7 +185,7 @@ pub(crate) fn detect_stale_warning_changes<'py>(
         for key in &remaining {
             *work
                 .stale_detections
-                .entry(native_field(&key, "name")?.extract()?)
+                .entry(native_field(key, "name")?.extract()?)
                 .or_default() += 1;
         }
     }

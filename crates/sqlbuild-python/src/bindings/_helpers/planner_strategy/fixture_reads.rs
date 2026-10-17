@@ -21,8 +21,8 @@ use crate::bindings::_helpers::planner_strategy::constants::HIGH_CONFIDENCE;
 use crate::bindings::_helpers::planner_strategy::fixture_context::work_counts;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
-use crate::bindings::types::CompilerDetach;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::types::CompilerDetach;
 
 /// The columns each fixture must supply for the chain's models, and the fixtures read through a star.
 pub(crate) fn required_fixture_columns(

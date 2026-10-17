@@ -20,6 +20,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::model_config::template_data::run_id;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_indexes::{
@@ -123,7 +124,7 @@ pub(crate) fn attached_inputs<'py>(
         within(&collector, |violations| {
             Ok((compile_inputs(py, request)?, violations.clone()))
         })?;
-    let collected: Bound<'py, PyAny> = violations.getattr("diagnostics")?;
+    let collected: Bound<'py, PyAny> = native_field(&violations, "diagnostics")?;
     if !collected.is_truthy()? {
         return Ok(built);
     }
@@ -148,15 +149,15 @@ fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bou
     let target: TargetContext<'py> = target_context(request, &discovered, &adapter_context)?;
     let run_id: Bound<'py, PyAny> = run_id(&request.run_id.bind(py).clone())?;
     let loaded_macros: Bound<'py, PyAny> = host::entry(py, UserCodeHost::LoadProjectMacros)?
-        .call1((discovered.getattr("macro_files")?,))?;
-    let syntax: Bound<'py, PyAny> = adapter_context.getattr("sql_lexical_syntax")?;
+        .call1((native_field(&discovered, "macro_files")?,))?;
+    let syntax: Bound<'py, PyAny> = native_field(&adapter_context, "sql_lexical_syntax")?;
     let declaration_scope: Bound<'py, PyAny> = build_declaration_scope(
         &discovered,
         &loaded_macros,
         &syntax,
         Some(target.compile_cache_dir.clone()),
     )?;
-    let value_renderer: Bound<'py, PyAny> = adapter_context.getattr("value_renderer")?;
+    let value_renderer: Bound<'py, PyAny> = native_field(&adapter_context, "value_renderer")?;
     let model_context: Bound<'py, PyAny> = call_with(
         &registry::class(py, RecordId::ModelInputBuildContext)?,
         &[
@@ -166,16 +167,19 @@ fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bou
             ("effective_target_name", target.target_name.clone()),
             ("run_id", run_id.clone()),
             ("macro_context", target.macro_context.clone()),
-            ("loaded_macros", declaration_scope.getattr("loaded_macros")?),
+            (
+                "loaded_macros",
+                native_field(&declaration_scope, "loaded_macros")?,
+            ),
             ("value_renderer", value_renderer.clone()),
             (
                 "collection_rendering",
-                adapter_context.getattr("collection_rendering")?,
+                native_field(&adapter_context, "collection_rendering")?,
             ),
             ("sql_lexical_syntax", syntax.clone()),
             (
                 "declaration_resolver",
-                declaration_scope.getattr("resolver")?,
+                native_field(&declaration_scope, "resolver")?,
             ),
         ],
     )?;
@@ -189,8 +193,11 @@ fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bou
     let fields: Bound<'py, PyDict> = keywords(
         py,
         &[
-            ("project_config", discovered.getattr("project_config")?),
-            ("local_config", discovered.getattr("local_config")?),
+            (
+                "project_config",
+                native_field(&discovered, "project_config")?,
+            ),
+            ("local_config", native_field(&discovered, "local_config")?),
             ("discovered_inputs", discovered.clone()),
             ("sql_lexical_syntax", syntax),
             ("run_id", run_id),
@@ -208,7 +215,10 @@ fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bou
             ),
             ("effective_vars", target.vars.clone()),
             ("macro_context", target.macro_context.clone()),
-            ("loaded_macros", declaration_scope.getattr("loaded_macros")?),
+            (
+                "loaded_macros",
+                native_field(&declaration_scope, "loaded_macros")?,
+            ),
             ("public_enums", models.enums.clone()),
             ("public_constants", models.constants.clone()),
             ("model_inputs", models.inputs.clone()),
@@ -223,7 +233,7 @@ fn compile_inputs<'py>(py: Python<'py>, request: &InputsRequest) -> PyResult<Bou
                 "external_sql_reference_resolver",
                 request.external_sql_reference_resolver.bind(py).clone(),
             ),
-            ("scope_index", declaration_scope.getattr("index")?),
+            ("scope_index", native_field(&declaration_scope, "index")?),
             ("declaration_scope", declaration_scope),
         ],
     )?;
@@ -247,8 +257,8 @@ fn target_context<'py>(
     )?;
     let target_name: Bound<'py, PyAny> = selected.get_item(0)?;
     let target: Bound<'py, PyAny> = selected.get_item(1)?;
-    let project_config: Bound<'py, PyAny> = discovered.getattr("project_config")?;
-    let local_config: Bound<'py, PyAny> = discovered.getattr("local_config")?;
+    let project_config: Bound<'py, PyAny> = native_field(discovered, "project_config")?;
+    let local_config: Bound<'py, PyAny> = native_field(discovered, "local_config")?;
     let cli_vars: Bound<'py, PyAny> = request.cli_vars.bind(py).clone();
     let cli_vars: Bound<'py, PyAny> = if cli_vars.is_none() {
         PyDict::new(py).into_any()
@@ -269,16 +279,19 @@ fn target_context<'py>(
         &registry::class(py, RecordId::MacroContext)?,
         &[
             ("adapter_name", adapter_name),
-            ("sql_analysis_enabled", settings.getattr("sql_analysis")?),
+            (
+                "sql_analysis_enabled",
+                native_field(&settings, "sql_analysis")?,
+            ),
             ("target_name", target_name.clone()),
             ("vars", vars.clone()),
             (
                 "_value_renderer",
-                adapter_context.getattr("value_renderer")?,
+                native_field(adapter_context, "value_renderer")?,
             ),
             (
                 "_collection_rendering",
-                adapter_context.getattr("collection_rendering")?,
+                native_field(adapter_context, "collection_rendering")?,
             ),
             (
                 "_enforce_explicit_references",
@@ -375,7 +388,7 @@ fn attached_resources<'py>(
 ) -> PyResult<AttachedResources<'py>> {
     let py: Python<'py> = discovered.py();
     let context: &Bound<'py, PyAny> = &models.context;
-    let settings: Bound<'py, PyAny> = context.getattr("effective_settings")?;
+    let settings: Bound<'py, PyAny> = native_field(context, "effective_settings")?;
     let resources: Bound<'py, PyAny> = attach_resources(
         py,
         Some(keywords(
@@ -389,8 +402,8 @@ fn attached_resources<'py>(
                         py,
                         [
                             settings.clone(),
-                            context.getattr("target_config")?,
-                            context.getattr("macro_context")?.getattr("adapter_name")?,
+                            native_field(context, "target_config")?,
+                            native_field(context, "macro_context")?.getattr("adapter_name")?,
                         ],
                     )?
                     .into_any(),
@@ -401,7 +414,10 @@ fn attached_resources<'py>(
                 ),
                 (
                     "python_functions_inherit_default_namespace",
-                    adapter_context.getattr("python_functions_inherit_default_namespace")?,
+                    native_field(
+                        adapter_context,
+                        "python_functions_inherit_default_namespace",
+                    )?,
                 ),
             ],
         )?),
@@ -421,13 +437,16 @@ fn attached_resources<'py>(
                         py,
                         [
                             settings,
-                            adapter_context.getattr("value_renderer")?,
-                            context.getattr("sql_lexical_syntax")?,
+                            native_field(adapter_context, "value_renderer")?,
+                            native_field(context, "sql_lexical_syntax")?,
                         ],
                     )?
                     .into_any(),
                 ),
-                ("scan_cache", declaration_scope.getattr("sql_test_scans")?),
+                (
+                    "scan_cache",
+                    native_field(declaration_scope, "sql_test_scans")?,
+                ),
                 ("source_inputs", sources.clone()),
             ],
         )?),
@@ -452,8 +471,8 @@ fn effective_connection<'py>(
         return Ok(resolved);
     }
     build_effective_connection(
-        &discovered.getattr("project_config")?,
-        &discovered.getattr("local_config")?,
+        &native_field(discovered, "project_config")?,
+        &native_field(discovered, "local_config")?,
         &target.target.clone(),
         &target.vars.clone(),
     )

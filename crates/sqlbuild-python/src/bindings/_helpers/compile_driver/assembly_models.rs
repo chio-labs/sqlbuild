@@ -20,6 +20,7 @@ use crate::bindings::_helpers::project_assembly::syntax_checks::model_placeholde
 use crate::bindings::_helpers::project_assembly::syntax_validation::{
     ParseOptions, validate_hook_sql_syntax, validate_sql_syntax,
 };
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::macro_calls::top_level_macro_call_names;
@@ -44,10 +45,13 @@ pub(crate) fn compiled_models<'py>(
     let py: Python<'py> = inputs.py();
     let analysis_enabled: bool = context.sql_analysis_enabled.is_truthy()?;
     let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
-    for (index, model_input) in inputs.getattr("model_inputs")?.try_iter()?.enumerate() {
+    for (index, model_input) in native_field(inputs, "model_inputs")?
+        .try_iter()?
+        .enumerate()
+    {
         let model_input: Bound<'py, PyAny> = model_input?;
         let sql_analysis_enabled: bool = analysis_enabled
-            && model_input.getattr("sql_validation_enabled")?.is_truthy()?
+            && native_field(&model_input, "sql_validation_enabled")?.is_truthy()?
             && selected_for_analysis(&model_input, names)?;
         let request: ModelRequest<'_, 'py> = ModelRequest {
             model_input: &model_input,
@@ -68,13 +72,15 @@ fn compiled_model<'py>(
     let model_input: &Bound<'py, PyAny> = request.model_input;
     let py: Python<'py> = model_input.py();
     let model_name: Bound<'py, PyAny> = model_stem(model_input)?;
-    let syntax_validated: bool = request.native_model.getattr("syntax_valid")?.is_truthy()?;
-    let config_values: Bound<'py, PyAny> = model_input.getattr("config")?.getattr("values")?;
+    let syntax_validated: bool =
+        native_field(&request.native_model, "syntax_valid")?.is_truthy()?;
+    let config_values: Bound<'py, PyAny> =
+        native_field(model_input, "config")?.getattr("values")?;
     let analysis_query_sql: Bound<'py, PyAny> = PyString::new(
         py,
         &analysis_cursor_sql(
             py,
-            &model_input.getattr("query_sql")?.extract::<String>()?,
+            &native_field(model_input, "query_sql")?.extract::<String>()?,
             &config_values.call_method1("get", ("cursor_type",))?,
         )?,
     )
@@ -84,11 +90,11 @@ fn compiled_model<'py>(
         Some(values) => values.clone().into_any(),
         None => py.None().into_bound(py),
     };
-    let input_validated: bool = model_input.getattr("sql_validation_enabled")?.is_truthy()?;
+    let input_validated: bool = native_field(model_input, "sql_validation_enabled")?.is_truthy()?;
     let location = || -> PyResult<(String, Bound<'py, PyAny>)> {
         Ok((
             model_name.extract()?,
-            model_input.getattr("model_file")?.getattr("file_path")?,
+            native_field(model_input, "model_file")?.getattr("file_path")?,
         ))
     };
     let syntax = || -> PyResult<ParseOptions> {
@@ -97,7 +103,7 @@ fn compiled_model<'py>(
                 .as_ref()
                 .map(|values| values.extract())
                 .transpose()?,
-            context.profile.getattr("sql_analysis_dialect")?.extract()?,
+            native_field(&context.profile, "sql_analysis_dialect")?.extract()?,
         ))
     };
     let validate_sql = || -> PyResult<()> {
@@ -150,7 +156,7 @@ fn compiled_model<'py>(
     } else if request.sql_validation_enabled && validates {
         validate_sql()?;
     }
-    let declared_macro_deps: Bound<'py, PyAny> = model_input.getattr("macro_deps")?;
+    let declared_macro_deps: Bound<'py, PyAny> = native_field(model_input, "macro_deps")?;
     let macro_deps: Bound<'py, PyAny> = if declared_macro_deps.is_truthy()? {
         declared_macro_deps
     } else {
@@ -169,10 +175,10 @@ fn compiled_model<'py>(
         return model_input.call_method1(
             "compiled_model",
             ((
-                native_model.getattr("deps")?,
+                native_field(native_model, "deps")?,
                 session_analysis,
                 fallback,
-                native_model.getattr("dynamic_contract")?,
+                native_field(native_model, "dynamic_contract")?,
                 macro_list,
             ),),
         );
@@ -184,13 +190,13 @@ fn compiled_model<'py>(
             ("fallback", fallback),
             (
                 "standalone_proof",
-                native_model.getattr("dynamic_contract")?,
+                native_field(native_model, "dynamic_contract")?,
             ),
         ],
     )?;
     hand_built_model(
         model_input,
-        &native_model.getattr("deps")?,
+        &native_field(native_model, "deps")?,
         &analysis,
         &macro_deps,
     )
@@ -239,8 +245,8 @@ pub(crate) fn project_binding_diagnostics<'py>(
     };
     for model in models.as_any().try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        if analyses.positions.contains(model.getattr("name")?)? {
-            for diagnostic in model.getattr("binding_diagnostics")?.try_iter()? {
+        if analyses.positions.contains(native_field(&model, "name")?)? {
+            for diagnostic in native_field(&model, "binding_diagnostics")?.try_iter()? {
                 diagnostics.push(diagnostic?);
             }
         }

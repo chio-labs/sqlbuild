@@ -20,6 +20,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, 
 use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 
@@ -44,17 +45,17 @@ pub(crate) fn pipeline_result<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = project.py();
     let discovered: &Bound<'py, PyAny> = inputs.discovered_inputs;
-    let select: Bound<'py, PyAny> = options.getattr("select")?;
-    let exclude: Bound<'py, PyAny> = options.getattr("exclude")?;
+    let select: Bound<'py, PyAny> = native_field(options, "select")?;
+    let exclude: Bound<'py, PyAny> = native_field(options, "exclude")?;
     let (deferred_locations, deferred_relations): Deferral<'py> =
-        deferral(inputs, project, &options.getattr("defer_to")?)?;
+        deferral(inputs, project, &native_field(options, "defer_to")?)?;
     let empty = || -> PyResult<Bound<'py, PyAny>> { Ok(PyFrozenSet::empty(py)?.into_any()) };
     let mut selected_sql_keys: Bound<'py, PyAny> = py.None().into_bound(py);
     let mut selected_python_node_names: Bound<'py, PyAny> = empty()?;
     let mut python_read_source_names: Bound<'py, PyAny> = empty()?;
     let mut run_selection: Bound<'py, PyAny> = py.None().into_bound(py);
-    let sql_test_selection: Bound<'py, PyAny> = options.getattr("sql_test_selection")?;
-    if !sql_test_selection.getattr("models_selected")?.is_truthy()? {
+    let sql_test_selection: Bound<'py, PyAny> = native_field(options, "sql_test_selection")?;
+    if !native_field(&sql_test_selection, "models_selected")?.is_truthy()? {
         selected_sql_keys = empty()?;
     } else if options
         .getattr("resolve_python_run_selectors")?
@@ -66,8 +67,8 @@ pub(crate) fn pipeline_result<'py>(
         )?;
         run_selection =
             run_selection_from_inputs((select.extract()?, exclude.extract()?), &graph, discovered)?;
-        selected_sql_keys = run_selection.getattr("sql_keys")?;
-        selected_python_node_names = run_selection.getattr("python_node_names")?;
+        selected_sql_keys = native_field(&run_selection, "sql_keys")?;
+        selected_python_node_names = native_field(&run_selection, "python_node_names")?;
         python_read_source_names = python_read_source_names_for(
             py,
             Some(keywords(
@@ -138,14 +139,17 @@ pub(crate) fn pipeline_result<'py>(
                 ("deferral", deferral),
                 ("policies", policies),
                 ("on_progress", on_progress.clone()),
-                ("project_config", discovered.getattr("project_config")?),
-                ("local_config", discovered.getattr("local_config")?),
+                (
+                    "project_config",
+                    native_field(discovered, "project_config")?,
+                ),
+                ("local_config", native_field(discovered, "local_config")?),
             ],
         )?),
     )?;
     let custom_materializations: Bound<'py, PyAny> =
         host::entry(py, UserCodeHost::LoadCustomMaterializations)?
-            .call1((discovered.getattr("materialization_files")?,))?;
+            .call1((native_field(discovered, "materialization_files")?,))?;
     let python_outputs: Bound<'py, PyAny> = build_python_run_plan_outputs(
         py,
         Some(keywords(
@@ -162,15 +166,15 @@ pub(crate) fn pipeline_result<'py>(
         &registry::class(py, RecordId::CompilePipelineResult)?,
         &[
             ("project", project.clone()),
-            ("plan_output", python_outputs.getattr("plan_output")?),
+            ("plan_output", native_field(&python_outputs, "plan_output")?),
             ("custom_materializations", custom_materializations),
             (
                 "python_node_names",
-                python_outputs.getattr("selected_python_node_names")?,
+                native_field(&python_outputs, "selected_python_node_names")?,
             ),
             (
                 "python_plan_entries",
-                python_outputs.getattr("python_plan_entries")?,
+                native_field(&python_outputs, "python_plan_entries")?,
             ),
         ],
     )
@@ -207,7 +211,7 @@ fn deferral<'py>(
                 ("defer_to", defer_to.clone()),
                 (
                     "current_target_name",
-                    project.getattr("effective_target_name")?,
+                    native_field(project, "effective_target_name")?,
                 ),
             ],
         )?),
@@ -221,7 +225,7 @@ fn deferral<'py>(
                 &[
                     ("project", project.clone()),
                     ("deferred_target_config", target_config),
-                    ("effective_vars", project.getattr("effective_vars")?),
+                    ("effective_vars", native_field(project, "effective_vars")?),
                     ("default_schema", adapter.call_method0("default_schema")?),
                     (
                         "default_database",
@@ -229,7 +233,7 @@ fn deferral<'py>(
                     ),
                     (
                         "render_qualified_name",
-                        adapter.getattr("render_qualified_name")?,
+                        native_field(adapter, "render_qualified_name")?,
                     ),
                 ],
             )?),
@@ -259,7 +263,7 @@ pub(crate) fn connection_with_hooks<'py>(
     hooks: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = adapter.py();
-    let on_start: Bound<'py, PyAny> = hooks.getattr("on_connection_start")?;
+    let on_start: Bound<'py, PyAny> = native_field(hooks, "on_connection_start")?;
     if !on_start.is_none() {
         on_start.call1((SINGLE_CONNECTION,))?;
     }
@@ -273,14 +277,14 @@ pub(crate) fn connection_with_hooks<'py>(
     {
         Ok(connection) => connection,
         Err(error) => {
-            let on_error: Bound<'py, PyAny> = hooks.getattr("on_connection_error")?;
+            let on_error: Bound<'py, PyAny> = native_field(hooks, "on_connection_error")?;
             if error.is_instance_of::<PyException>(hooks.py()) && !on_error.is_none() {
                 on_error.call((SINGLE_CONNECTION,), Some(&elapsed(started)?))?;
             }
             return Err(error);
         }
     };
-    let on_complete: Bound<'py, PyAny> = hooks.getattr("on_connection_complete")?;
+    let on_complete: Bound<'py, PyAny> = native_field(hooks, "on_connection_complete")?;
     if !on_complete.is_none() {
         on_complete.call((SINGLE_CONNECTION,), Some(&elapsed(started)?))?;
     }

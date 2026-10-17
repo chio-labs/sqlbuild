@@ -1,8 +1,8 @@
 //! Computed attributes of the natively hosted discovery and pipeline records.
 
+use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult};
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// SQL scalar type labels by logical value kind.
 const SCALAR_TYPE_LABELS: [(&str, &str); 6] = [
@@ -24,7 +24,7 @@ pub(crate) fn constant_logical_type(declaration: &Bound<'_, PyAny>) -> PyResult<
 
 /// `ConstantDeclaration.scalar_type`: the SQL scalar type label, or the upper-cased logical type.
 pub(crate) fn constant_scalar_type(declaration: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let value: Bound<'_, PyAny> = native_field(&declaration, "value")?;
+    let value: Bound<'_, PyAny> = native_field(declaration, "value")?;
     let kind: String = native_field(&value, "kind")?.str()?.extract()?;
     if let Some((_, label)) = SCALAR_TYPE_LABELS.iter().find(|(name, _)| *name == kind) {
         return label.into_py_any(declaration.py());

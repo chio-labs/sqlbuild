@@ -18,9 +18,9 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SELECTION_CODE: &str = "S007";
 
@@ -77,8 +77,11 @@ fn discovered_adapter<'py>(
     let adapter_name: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::ResolveEffectiveAdapterName)?,
         &[
-            ("project_config", native_field(&discovered, "project_config")?),
-            ("local_config", native_field(&discovered, "local_config")?),
+            (
+                "project_config",
+                native_field(discovered, "project_config")?,
+            ),
+            ("local_config", native_field(discovered, "local_config")?),
         ],
     )?;
     resolve_cli_adapter(&adapter_name, project_dir)
@@ -91,7 +94,7 @@ fn selectors<'py>(py: Python<'py>, values: &[String]) -> PyResult<Bound<'py, PyA
 /// Model names and resolved files, by configured name or file stem.
 fn model_names_and_paths(scope: &Scope<'_, '_>) -> PyResult<Vec<(String, PathBuf)>> {
     let mut pairs: Vec<(String, PathBuf)> = Vec::new();
-    for model_file in native_field(&scope.discovered, "model_files")?.try_iter()? {
+    for model_file in native_field(scope.discovered, "model_files")?.try_iter()? {
         let model_file: Bound<'_, PyAny> = model_file?;
         let relative_path: Bound<'_, PyAny> = native_field(&model_file, "relative_path")?;
         let configured: Bound<'_, PyAny> = model_file
@@ -178,7 +181,10 @@ fn model_paths(
         }
     }
     let mut paths: BTreeSet<PathBuf> = BTreeSet::new();
-    for model in native_field(&graph, "project")?.getattr("models")?.try_iter()? {
+    for model in native_field(&graph, "project")?
+        .getattr("models")?
+        .try_iter()?
+    {
         let model: Bound<'_, PyAny> = model?;
         if names.contains(&native_field(&model, "name")?.extract::<String>()?) {
             let relative: PathBuf = native_field(&model, "relative_path")?.extract()?;

@@ -150,8 +150,8 @@ pub(crate) fn direct_model_version_identities<'py>(
     }
     let model_metadata: Bound<'py, PyDict> = PyDict::new(py);
     let model_local: Bound<'py, PyDict> = PyDict::new(py);
-    let models_by_name: Bound<'py, PyAny> = native_field(&scope, "models_by_name")?;
-    for key in native_field(&scope, "execution_order")?.try_iter()? {
+    let models_by_name: Bound<'py, PyAny> = native_field(scope, "models_by_name")?;
+    for key in native_field(scope, "execution_order")?.try_iter()? {
         let key: Bound<'py, PyAny> = key?;
         let order_key: GraphKey = graph_key(&key)?;
         graph.execution_order.push(order_key.clone());

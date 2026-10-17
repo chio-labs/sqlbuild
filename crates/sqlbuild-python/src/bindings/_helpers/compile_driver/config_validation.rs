@@ -14,6 +14,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObjectExt;
@@ -54,7 +55,7 @@ fn target_names(config: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 /// Reject a local SQL analysis opt-out the project forbids.
 fn reject_local_sql_analysis_opt_out(config: &ProjectConfiguration<'_, '_>) -> PyResult<()> {
     let py: Python<'_> = config.project_dir.py();
-    let local_settings: Bound<'_, PyAny> = config.local_config.getattr("settings")?;
+    let local_settings: Bound<'_, PyAny> = native_field(config.local_config, "settings")?;
     let flags: Bound<'_, PyTuple> = PyTuple::new(
         py,
         [
@@ -75,11 +76,11 @@ fn reject_local_sql_analysis_opt_out(config: &ProjectConfiguration<'_, '_>) -> P
 
 /// The first target, by name, that selects a command-group warehouse.
 fn first_configured_group(config: &Bound<'_, PyAny>) -> PyResult<Option<(String, String, String)>> {
-    let targets: Bound<'_, PyAny> = config.getattr("targets")?;
+    let targets: Bound<'_, PyAny> = native_field(config, "targets")?;
     let mut names: Vec<String> = target_names(config)?;
     names.sort();
     for name in names {
-        let warehouses: Bound<'_, PyAny> = targets.get_item(&name)?.getattr("warehouses")?;
+        let warehouses: Bound<'_, PyAny> = native_field(&targets.get_item(&name)?, "warehouses")?;
         for group in WAREHOUSE_GROUPS {
             let value: Bound<'_, PyAny> = warehouses.getattr(group)?;
             if !value.is_none() {
@@ -134,7 +135,7 @@ fn reject_group(
 fn reject_unsupported_target_warehouses(config: &ProjectConfiguration<'_, '_>) -> PyResult<()> {
     let py: Python<'_> = config.project_dir.py();
     if let Some(group) = first_configured_group(config.project_config)? {
-        let adapter_name: Bound<'_, PyAny> = config.project_config.getattr("adapter")?;
+        let adapter_name: Bound<'_, PyAny> = native_field(config.project_config, "adapter")?;
         if !session_warehouse_support(py, &adapter_name, config.project_dir)? {
             return Err(reject_group(
                 py,

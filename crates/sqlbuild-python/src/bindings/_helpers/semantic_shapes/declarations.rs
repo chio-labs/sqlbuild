@@ -2,8 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 
 const UNKNOWN: &str = "UNKNOWN";
 

@@ -23,6 +23,7 @@ use crate::bindings::_helpers::diagnostics::trackers::current_tracker;
 use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::{format_rules_result, rules_progress};
@@ -82,12 +83,12 @@ fn compiled_phase<'py>(
     } else {
         registry::class(py, RecordId::CompilePipelineOptions)?.call0()?
     };
-    let configured: Bound<'py, PyAny> = options.getattr("connection_config")?;
+    let configured: Bound<'py, PyAny> = native_field(&options, "connection_config")?;
     let connection_config: Bound<'py, PyAny> = if configured.is_none() {
         build_effective_connection_config(
             discovered,
-            Some(options.getattr("selected_target")?),
-            Some(options.getattr("cli_vars")?),
+            Some(native_field(&options, "selected_target")?),
+            Some(native_field(&options, "cli_vars")?),
         )?
     } else {
         configured
@@ -103,12 +104,18 @@ fn compiled_phase<'py>(
                 &[
                     ("discovered_inputs", discovered.clone()),
                     ("adapter", adapter.clone()),
-                    ("selected_target", options.getattr("selected_target")?),
-                    ("no_sql_validation", options.getattr("no_sql_validation")?),
-                    ("cli_vars", options.getattr("cli_vars")?),
+                    (
+                        "selected_target",
+                        native_field(&options, "selected_target")?,
+                    ),
+                    (
+                        "no_sql_validation",
+                        native_field(&options, "no_sql_validation")?,
+                    ),
+                    ("cli_vars", native_field(&options, "cli_vars")?),
                     (
                         "external_sql_reference_resolver",
-                        options.getattr("external_sql_reference_resolver")?,
+                        native_field(&options, "external_sql_reference_resolver")?,
                     ),
                     ("resolved_connection", connection_config.clone()),
                     ("analysis_selection", selection),
@@ -147,14 +154,14 @@ fn reject_compile_errors(
     on_progress: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let py: Python<'_> = project.py();
-    let plan_sql_tests: bool = options.getattr("plan_sql_tests")?.is_truthy()?;
+    let plan_sql_tests: bool = native_field(options, "plan_sql_tests")?.is_truthy()?;
     let sql_test: Bound<'_, PyAny> =
         registry::class(py, RecordId::CompiledResourceType)?.getattr("SQL_TEST")?;
     let mut errors: Vec<Bound<'_, PyAny>> = Vec::new();
-    for diagnostic in project.getattr("diagnostics")?.try_iter()? {
+    for diagnostic in native_field(project, "diagnostics")?.try_iter()? {
         let diagnostic: Bound<'_, PyAny> = diagnostic?;
-        if diagnostic.getattr("is_error")?.is_truthy()?
-            && (plan_sql_tests || diagnostic.getattr("resource_type")?.ne(&sql_test)?)
+        if native_field(&diagnostic, "is_error")?.is_truthy()?
+            && (plan_sql_tests || native_field(&diagnostic, "resource_type")?.ne(&sql_test)?)
         {
             errors.push(diagnostic);
         }
@@ -176,13 +183,13 @@ fn reject_compile_errors(
         };
         lines.push(format!(
             "[{}] {}:{}:{}: {}",
-            diagnostic.getattr("code")?.str()?,
-            diagnostic.getattr("path")?.str()?,
+            native_field(diagnostic, "code")?.str()?,
+            native_field(diagnostic, "path")?.str()?,
             or_one("line")?,
             or_one("column")?,
-            diagnostic.getattr("message")?.str()?,
+            native_field(diagnostic, "message")?.str()?,
         ));
-        helps.add(diagnostic.getattr("help")?)?;
+        helps.add(native_field(diagnostic, "help")?)?;
     }
     let help: Bound<'_, PyAny> = if helps.len() == 1 {
         helps.pop().unwrap_or_else(|| py.None().into_bound(py))
@@ -193,7 +200,7 @@ fn reject_compile_errors(
         (lines.join("\n"),),
         Some(&keywords(
             py,
-            &[("code", first.getattr("code")?), ("help", help)],
+            &[("code", native_field(first, "code")?), ("help", help)],
         )?),
     )?;
     Err(PyErr::from_value(error))
@@ -222,10 +229,10 @@ fn run_compile_pipeline<'py>(
     } else {
         hooks
     };
-    let on_progress: Bound<'py, PyAny> = hooks.getattr("on_progress")?;
+    let on_progress: Bound<'py, PyAny> = native_field(&hooks, "on_progress")?;
     let compiled: Bound<'py, PyAny> =
         compiled_phase((&discovered, &adapter), &options, &on_progress)?;
-    let project: Bound<'py, PyAny> = compiled.getattr("project")?;
+    let project: Bound<'py, PyAny> = native_field(&compiled, "project")?;
     let graph: Bound<'py, PyAny> = project_graph(&project)?;
     run_rules_gate(
         (&discovered, &adapter),
@@ -243,7 +250,7 @@ fn run_rules_gate<'py>(
 ) -> PyResult<()> {
     let py: Python<'py> = discovered.py();
     let rules_error: Bound<'py, PyAny> = registry::error(py, ErrorId::Rules)?;
-    let project_dir: Bound<'py, PyAny> = discovered.getattr("project_dir")?;
+    let project_dir: Bound<'py, PyAny> = native_field(discovered, "project_dir")?;
     if project_dir.is_none() {
         return Err(PyErr::from_value(
             rules_error.call1(("compiler rules require a resolved project directory",))?,
@@ -251,7 +258,7 @@ fn run_rules_gate<'py>(
     }
     let mut config: Bound<'py, PyAny> =
         load_rules_config(py, project_dir.extract()?)?.into_bound(py);
-    if options.getattr("no_cache")?.is_truthy()? {
+    if native_field(options, "no_cache")?.is_truthy()? {
         let cache: Bound<'py, PyAny> = call_with(
             &registry::class(py, RecordId::RulesCacheConfig)?,
             &[("enabled", false.into_pyobject(py)?.to_owned().into_any())],
@@ -280,7 +287,10 @@ fn run_rules_gate<'py>(
                 ("project_dir", project_dir),
                 ("dialect", dialect),
                 ("selected_keys", selected_keys),
-                ("no_sql_analysis", options.getattr("no_sql_validation")?),
+                (
+                    "no_sql_analysis",
+                    native_field(options, "no_sql_validation")?,
+                ),
             ],
         )?),
     )?;
@@ -289,7 +299,7 @@ fn run_rules_gate<'py>(
         let message: String = rules_progress(elapsed, &result, true)?;
         on_progress.call1((message,))?;
     }
-    let findings: Bound<'py, PyAny> = result.getattr("findings")?;
+    let findings: Bound<'py, PyAny> = native_field(&result, "findings")?;
     if !findings.is_truthy()? {
         return Ok(());
     }
@@ -297,13 +307,16 @@ fn run_rules_gate<'py>(
         &registry::class(py, RecordId::RulesResult)?,
         &[
             ("findings", findings),
-            ("evaluated_models", result.getattr("evaluated_models")?),
+            (
+                "evaluated_models",
+                native_field(&result, "evaluated_models")?,
+            ),
             (
                 "unevaluated_resources",
-                result.getattr("unevaluated_resources")?,
+                native_field(&result, "unevaluated_resources")?,
             ),
-            ("cache_hits", result.getattr("cache_hits")?),
-            ("cache_misses", result.getattr("cache_misses")?),
+            ("cache_hits", native_field(&result, "cache_hits")?),
+            ("cache_misses", native_field(&result, "cache_misses")?),
         ],
     )?;
     let rendered: String = format_rules_result(&summary, false)?;
@@ -323,8 +336,11 @@ fn planned<'py>(
     let started: f64 = monotonic(py)?;
     let mut connection: Option<Bound<'py, PyAny>> = None;
     let result: PyResult<Bound<'py, PyAny>> = (|| {
-        let opened: Bound<'py, PyAny> =
-            connection_with_hooks(adapter, &compiled.getattr("connection_config")?, hooks)?;
+        let opened: Bound<'py, PyAny> = connection_with_hooks(
+            adapter,
+            &native_field(compiled, "connection_config")?,
+            hooks,
+        )?;
         connection = Some(opened.clone());
         pipeline_result(
             &PlanningInputs {
@@ -332,9 +348,9 @@ fn planned<'py>(
                 adapter,
                 connection: &opened,
             },
-            &compiled.getattr("project")?,
+            &native_field(compiled, "project")?,
             options,
-            &hooks.getattr("on_progress")?,
+            &native_field(hooks, "on_progress")?,
         )
     })();
     if let Some(connection) = connection.filter(|connection| !connection.is_none()) {
@@ -345,13 +361,16 @@ fn planned<'py>(
         tracker.setattr("planning_seconds", planning_seconds)?;
     }
     let result: Bound<'py, PyAny> = result?;
-    write_plan_capture(&result.getattr("plan_output")?)?;
+    write_plan_capture(&native_field(&result, "plan_output")?)?;
     imported(py, "dataclasses", "replace")?.call(
         (result,),
         Some(&keywords(
             py,
             &[
-                ("compile_seconds", compiled.getattr("compile_seconds")?),
+                (
+                    "compile_seconds",
+                    native_field(compiled, "compile_seconds")?,
+                ),
                 (
                     "planning_seconds",
                     planning_seconds.into_pyobject(py)?.into_any(),

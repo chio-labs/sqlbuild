@@ -16,10 +16,10 @@ use crate::bindings::_helpers::planner_strategy::fixture_sql::{
 };
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
 use crate::bindings::_helpers::planner_strategy::types::FixtureKey;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::constants::FIXTURE_PREFIXES;
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 /// Report every statically provable fixture defect or return the completed fixture SQL groups.
 pub(super) fn validated_fixtures<'py>(
@@ -50,7 +50,7 @@ pub(super) fn validated_fixtures<'py>(
     let completion = complete_fixtures(context, adapter, (&chain, groups.as_any()))?;
     let mut errors: BTreeSet<String> = BTreeSet::new();
     for diagnostic in &completion.diagnostics {
-        let key = native_field(&diagnostic, "key")?;
+        let key = native_field(diagnostic, "key")?;
         errors.insert(format!(
             "{}: {}",
             fixture_location(
@@ -58,7 +58,7 @@ pub(super) fn validated_fixtures<'py>(
                 &key.get_item(0)?,
                 &key.get_item(1)?.extract::<String>()?
             )?,
-            native_field(&diagnostic, "message")?.extract::<String>()?
+            native_field(diagnostic, "message")?.extract::<String>()?
         ));
     }
     let inferred_by_fixture = &completion.inferred_by_fixture;
@@ -142,7 +142,7 @@ pub(super) fn validated_fixtures<'py>(
                 let label = if expected_output {
                     "expected output".to_owned()
                 } else {
-                    format!("mock {}", native_field(&kind, "value")?.extract::<String>()?)
+                    format!("mock {}", native_field(kind, "value")?.extract::<String>()?)
                 };
                 errors.insert(format!(
                     "{}: {label} '{name}' column '{}' has incompatible type {}; resource type is {}. Use an explicit CAST, ARRAY_CONSTRUCT, or PARSE_JSON as appropriate",
@@ -155,7 +155,7 @@ pub(super) fn validated_fixtures<'py>(
         }
     }
     if !errors.is_empty() {
-        let test_name: String = native_field(&test, "name")?.extract()?;
+        let test_name: String = native_field(test, "name")?.extract()?;
         return Ok(Err(errors
             .into_iter()
             .map(|error| format!("SQL test '{test_name}': {error}"))
@@ -185,12 +185,12 @@ pub(super) fn fixture_location(
     resource_type: &Bound<'_, PyAny>,
     name: &str,
 ) -> PyResult<String> {
-    let value: String = native_field(&resource_type, "value")?.extract()?;
+    let value: String = native_field(resource_type, "value")?.extract()?;
     let prefix = FIXTURE_PREFIXES
         .iter()
         .find_map(|(kind, prefix)| (*kind == value).then_some(*prefix))
         .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(value))?;
-    let test_file = native_field(&test, "test_file")?;
+    let test_file = native_field(test, "test_file")?;
     let line = fixture_line(
         &native_field(&test_file, "contents")?.extract::<String>()?,
         &format!("{prefix}{name}"),

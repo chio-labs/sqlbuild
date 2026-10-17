@@ -14,13 +14,13 @@ use crate::bindings::_helpers::analysis::schema_request::{
 };
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::_helpers::semantic_shapes::shapes::{
     model_inputs, project_shapes, published_shape,
 };
-use crate::bindings::_helpers::records::fields::field as native_field;
 
 const BINDING_UNKNOWN_TABLE_INTERNAL_CODE: &str = "B000";
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -131,12 +131,12 @@ fn rebound_models<'py>(
 ) -> PyResult<Vec<Object<'py>>> {
     let py: Python<'py> = project.py();
     let by_name: Bound<'py, PyDict> = PyDict::new(py);
-    for model in native_field(&project, "models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Object<'py> = model?;
         by_name.set_item(native_field(&model, "name")?, &model)?;
     }
     let graph: Bound<'py, PyDict> = PyDict::new(py);
-    for model in native_field(&project, "models")?.try_iter()? {
+    for model in native_field(project, "models")?.try_iter()? {
         let model: Object<'py> = model?;
         let mut upstream: Vec<Object<'py>> = Vec::new();
         for reference in native_field(&model, "references")?.try_iter()? {
@@ -165,7 +165,9 @@ fn rebound_models<'py>(
             .getattr("config")?
             .getattr("values")?
             .call_method1("get", ("sql_analysis",))?;
-        if !selected_keys.contains(native_field(&model, "key")?)? || opted.is(PyBool::new(py, false)) {
+        if !selected_keys.contains(native_field(&model, "key")?)?
+            || opted.is(PyBool::new(py, false))
+        {
             continue;
         }
         let mut reads_changed: bool = false;
@@ -255,17 +257,19 @@ fn validated_diagnostics<'py>(
     dialect: &Object<'py>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = project.py();
-    let functions: Object<'py> = native_field(&project, "functions")?;
+    let functions: Object<'py> = native_field(project, "functions")?;
     let known_functions: Object<'py> = PyTuple::new(py, function_names(&functions)?)?.into_any();
     let known_types: Object<'py> =
         PyTuple::new(py, declared_types(&functions, shapes.as_any())?)?.into_any();
-    let ignores: bool =
-        binding_catalog::ignores_quoted_case(&native_field(&project, "effective_connection")?, dialect)?;
+    let ignores: bool = binding_catalog::ignores_quoted_case(
+        &native_field(project, "effective_connection")?,
+        dialect,
+    )?;
     let mut requests: Vec<Object<'py>> = Vec::with_capacity(models.len());
     for model in models {
         let query_sql: String = analysis_cursor_sql(
             py,
-            &native_field(&model, "query_sql")?.extract::<String>()?,
+            &native_field(model, "query_sql")?.extract::<String>()?,
             &model
                 .getattr("config")?
                 .getattr("values")?
@@ -305,7 +309,7 @@ fn validated_diagnostics<'py>(
     let mut diagnostics: Vec<Object<'py>> = Vec::new();
     for ((model, request), result) in models.iter().zip(&requests).zip(results.try_iter()?) {
         let result: Object<'py> = result?;
-        let expansion: Option<Object<'py>> = expansions.get_item(native_field(&model, "name")?)?;
+        let expansion: Option<Object<'py>> = expansions.get_item(native_field(model, "name")?)?;
         let mut mapper: Option<Object<'py>> = None;
         for diagnostic in native_field(&result, "diagnostics")?.try_iter()? {
             let diagnostic: Object<'py> = diagnostic?;
@@ -314,7 +318,7 @@ fn validated_diagnostics<'py>(
             }
             let built: Object<'py> = match mapper.take() {
                 Some(built) => built,
-                None => positions(model, &native_field(&request, "sql")?, expansion.as_ref())?,
+                None => positions(model, &native_field(request, "sql")?, expansion.as_ref())?,
             };
             let position: Object<'py> = native_field(&built, "position")?;
             mapper = Some(built);
@@ -339,8 +343,8 @@ fn validated_diagnostics<'py>(
                     ("code", native_field(&diagnostic, "code")?),
                     ("message", native_field(&diagnostic, "message")?),
                     ("resource_type", model_type.clone()),
-                    ("resource_name", native_field(&model, "name")?),
-                    ("path", native_field(&model, "relative_path")?),
+                    ("resource_name", native_field(model, "name")?),
+                    ("path", native_field(model, "relative_path")?),
                     ("line", line),
                     ("column", column),
                 ],
@@ -357,12 +361,12 @@ fn positions<'py>(
     expansion: Option<&Object<'py>>,
 ) -> PyResult<Object<'py>> {
     let py: Python<'py> = model.py();
-    let authored_query: Object<'py> = native_field(&model, "authored_query_sql")?;
+    let authored_query: Object<'py> = native_field(model, "authored_query_sql")?;
     let mut passes: Vec<Object<'py>> = Vec::new();
     let expanded: Object<'py> = match expansion {
         None => authored_query.clone(),
         Some(expansion) => {
-            for spans in native_field(&expansion, "passes")?.try_iter()? {
+            for spans in native_field(expansion, "passes")?.try_iter()? {
                 let mut rows: Vec<Object<'py>> = Vec::new();
                 for span in spans?.try_iter()? {
                     let span: Object<'py> = span?;
@@ -375,11 +379,11 @@ fn positions<'py>(
                 }
                 passes.push(PyTuple::new(py, rows)?.into_any());
             }
-            native_field(&expansion, "expanded_sql")?
+            native_field(expansion, "expanded_sql")?
         }
     };
     let request: Bound<'py, PyDict> = PyDict::new(py);
-    request.set_item("authored", native_field(&model, "authored_sql")?)?;
+    request.set_item("authored", native_field(model, "authored_sql")?)?;
     request.set_item("query", authored_query)?;
     request.set_item("expanded", expanded)?;
     request.set_item("cleaned", cleaned)?;
@@ -443,8 +447,10 @@ fn placeholders<'py>(model: &Object<'py>) -> PyResult<Object<'py>> {
 }
 
 fn ignores_quoted_case<'py>(project: &Object<'py>, dialect: &Object<'py>) -> PyResult<Object<'py>> {
-    let ignores: bool =
-        binding_catalog::ignores_quoted_case(&native_field(&project, "effective_connection")?, dialect)?;
+    let ignores: bool = binding_catalog::ignores_quoted_case(
+        &native_field(project, "effective_connection")?,
+        dialect,
+    )?;
     Ok(PyBool::new(project.py(), ignores).to_owned().into_any())
 }
 
