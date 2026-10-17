@@ -19,7 +19,6 @@ import sqlbuild._native as plan_artifacts_module
 from sqlbuild._native import (
     CompilerStage,
     CustomHostObserver,
-    NativeQueryColumns,
     NativeSqlTestArtifact,
     NativeSqlTestPlanningError,
     PlannedStaticSqlTests,
@@ -671,24 +670,10 @@ def write_expression_source_project(
     (project_dir / "models" / "orders.sql").write_text(model_sql, encoding="utf-8")
 
 
-def record_source_rebinding_analyses(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Record every model query analysed again against inspected source columns."""
+def source_rebinding_analyses() -> int:
+    """Model queries analysed again against inspected source columns since the last reset."""
 
-    analysed: list[str] = []
-    original: Callable[..., tuple[NativeQueryColumns, ...]] = (
-        native_module.infer_native_query_columns
-    )
-
-    def recording(**kwargs: Any) -> tuple[NativeQueryColumns, ...]:
-        analysed.extend(query.sql for query in filter(_reanalysis, kwargs["queries"]))
-        return original(**kwargs)
-
-    monkeypatch.setattr(native_module, "infer_native_query_columns", recording)
-    return analysed
-
-
-def _reanalysis(query: Any) -> bool:
-    return query.mode == "reanalysis"
+    return native_module.compile_stage_work_info().get("source_rebinding_analyses", 0)
 
 
 def eager_output_column_scans(*, capture_dir: Path) -> tuple[int, int]:

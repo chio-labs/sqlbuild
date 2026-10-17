@@ -1,13 +1,10 @@
 """Test helpers for native rules engine boundaries."""
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from operator import attrgetter
 from pathlib import Path
 from typing import Any, cast
-
-import pytest
 
 import sqlbuild._native as native
 from sqlbuild._native import (
@@ -23,7 +20,6 @@ from sqlbuild._native import (
     DiscoveredSqlTestBlock,
     DiscoveredSqlTestFile,
     Finding,
-    NativeRulesEvaluation,
     NativeRulesRequest,
     Rule,
     RuleExemption,
@@ -51,10 +47,6 @@ RULES_SKILL_PATHS: tuple[str, ...] = (
 _MODEL_SQL: str = "WITH final AS (SELECT 1 AS id) SELECT id FROM final"
 
 
-_BUILD_RULES_REQUEST: Callable[..., NativeRulesRequest] = native.build_rules_request
-_SCOPE_PROJECTION: Callable[..., dict[str, Any]] = native.scope_metadata_projection
-
-
 def project_with_scope(*, index: ScopeIndex) -> CompiledProjectView:
     """Return a minimal compiled project carrying canonical scope facts."""
 
@@ -67,44 +59,33 @@ def project_with_scope(*, index: ScopeIndex) -> CompiledProjectView:
     return project_with(project=project, scope_index=index)
 
 
-def captured_native_request(
-    *, monkeypatch: pytest.MonkeyPatch, project: CompiledProjectView, project_dir: Path
-) -> dict[str, Any]:
-    """Evaluate through the Python boundary and capture the header and rows handed to Rust."""
+def present_metadata(scope_index: dict[str, Any]) -> dict[str, Any]:
+    """`scope_index` with each declaration's absent metadata kinds dropped, as projected."""
 
-    captured: dict[str, Any] = {}
+    declarations: list[dict[str, Any]] = [
+        {**declaration, "metadata": _present(declaration["metadata"])}
+        for declaration in scope_index["declarations"]
+    ]
+    return {**scope_index, "declarations": declarations}
 
-    def scope_metadata_projection(**kwargs: Any) -> dict[str, Any]:
-        projection: dict[str, Any] = _SCOPE_PROJECTION(**kwargs)
-        captured.update(scope_index=projection)
-        return projection
 
-    def build_rules_request(**kwargs: Any) -> object:
-        request: NativeRulesRequest = _BUILD_RULES_REQUEST(**kwargs)
-        captured.update(cast(dict[str, Any], json.loads(request.sql_facts_json())))
-        return request
+def _present(metadata: dict[str, Any]) -> dict[str, Any]:
+    return dict(filter(lambda item: item[1] is not None, metadata.items()))
 
-    def evaluate_rules_request(request: object) -> NativeRulesEvaluation:
-        return NativeRulesEvaluation(
-            findings=(),
-            selected_codes=(),
-            evaluated_models=0,
-            cache_hits=0,
-            cache_misses=0,
-            built_in_ms=0,
-            reused=False,
-        )
 
-    monkeypatch.setattr(native, "scope_metadata_projection", scope_metadata_projection)
-    monkeypatch.setattr(native, "build_rules_request", build_rules_request)
-    monkeypatch.setattr(native, "evaluate_rules_request", evaluate_rules_request)
-    native.evaluate_native_rules(
+def captured_native_request(*, project: CompiledProjectView, project_dir: Path) -> dict[str, Any]:
+    """Build the native rules request for `project` and return the facts it carries."""
+
+    request: NativeRulesRequest = native.build_rules_request(
         project=project,
         config=RulesConfig(cache=RulesCacheConfig(enabled=False)),
         project_dir=project_dir,
-        catalogue=(),
+        dialect="generic",
+        initial_findings=(),
+        custom_payloads=[],
+        include_type_proof=False,
     )
-    return captured
+    return cast(dict[str, Any], json.loads(request.sql_facts_json()))
 
 
 def direct_sql_test(*, mode: SqlTestMode, name: str, block_index: int) -> CompiledSqlTest:

@@ -11,6 +11,7 @@ use sqlbuild_analysis::semantic_checks::models::{
 use crate::bindings::_helpers::analysis::model_reads::{inferred_names, lineage_inputs};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
+use crate::bindings::_helpers::compiled_project::records::with_binding_diagnostics;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;
 use crate::bindings::_helpers::semantic_checks::metadata::{ShapeRows, shape_rows};
@@ -81,12 +82,9 @@ pub(crate) fn completed_diagnostics<'py>(
                     .into_iter()
                     .map(|position| rebuilt[position].clone())
                     .collect();
-                updated.push(classes.call(
-                    &classes.with_binding_diagnostics,
-                    &[
-                        ("model", model),
-                        ("diagnostics", &PyTuple::new(py, selected)?.into_any()),
-                    ],
+                updated.push(with_binding_diagnostics(
+                    model,
+                    &PyTuple::new(py, selected)?.into_any(),
                 )?);
             }
             PyTuple::new(py, updated)?.into_any()

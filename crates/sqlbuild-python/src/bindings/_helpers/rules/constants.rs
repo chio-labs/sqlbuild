@@ -26,3 +26,6 @@ pub(crate) const CUSTOM_HOST_CANCELLED_MARKER: &str = "cancelled";
 pub(crate) const TYPE_PROOF_RULE_CODES: [&str; 1] = ["SQBRCONTRACT105"];
 /// Runtime identity custom-rule hosts and their cache entries record.
 pub(crate) const CUSTOM_HOST_RUNTIME_VERSION: &str = "sqlbuild-rules-custom-v3";
+
+/// Native rules evaluations answered from the response memo.
+pub(crate) const RULES_MEMO_REUSES: &str = "rules_memo_reuses";

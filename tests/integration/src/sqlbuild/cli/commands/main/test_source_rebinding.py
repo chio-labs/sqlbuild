@@ -6,11 +6,12 @@ from pathlib import Path
 
 import pytest
 
+import sqlbuild._native as native
 from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import SourceRebindingTestCase
 from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
     execute_duckdb_sql,
-    record_source_rebinding_analyses,
+    source_rebinding_analyses,
     write_expression_source_project,
 )
 
@@ -45,7 +46,6 @@ def test_given_expression_source_when_planning_then_rebinds_only_on_new_column_e
     test_case: SourceRebindingTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     execute_duckdb_sql(
         db_path=tmp_path / "orders.duckdb",
@@ -56,7 +56,7 @@ def test_given_expression_source_when_planning_then_rebinds_only_on_new_column_e
         source_expression=test_case.source_expression,
         model_sql=test_case.model_sql,
     )
-    analysed: list[str] = record_source_rebinding_analyses(monkeypatch)
+    _ = native.compile_stage_work_info(reset=True)
     _ = capsys.readouterr()
 
     exit_code: int = main(["--project-dir", str(tmp_path), "--no-color", "plan"])
@@ -64,7 +64,7 @@ def test_given_expression_source_when_planning_then_rebinds_only_on_new_column_e
     output: str = "".join(capsys.readouterr())
     assert exit_code == test_case.expected_exit_code, output
     assert test_case.expected_fragment in output
-    assert bool(analysed) is test_case.expected_rebinding
+    assert (source_rebinding_analyses() > 0) is test_case.expected_rebinding
 
 
 if __name__ == "__main__":

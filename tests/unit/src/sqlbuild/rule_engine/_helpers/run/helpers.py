@@ -1,25 +1,12 @@
-from collections.abc import Callable
-
 import pytest
 
-import sqlbuild._native as native
 from sqlbuild import _native
-from sqlbuild._native import NativeRulesEvaluation, NativeRulesRequest
 
 
-def record_reuse(*, monkeypatch: pytest.MonkeyPatch) -> list[bool]:
-    """Record whether each natively evaluated request was answered from the response memo."""
+def memo_reuses() -> int:
+    """Native rules evaluations answered from the response memo since the last reset."""
 
-    reused: list[bool] = []
-    evaluate: Callable[[NativeRulesRequest], NativeRulesEvaluation] = _native.evaluate_rules_request
-
-    def recording(request: NativeRulesRequest) -> NativeRulesEvaluation:
-        evaluation: NativeRulesEvaluation = evaluate(request)
-        reused.append(evaluation.reused)
-        return evaluation
-
-    monkeypatch.setattr(native, "evaluate_rules_request", recording)
-    return reused
+    return _native.compile_stage_work_info().get("rules_memo_reuses", 0)
 
 
 def rebuild_identity(*, monkeypatch: pytest.MonkeyPatch) -> None:

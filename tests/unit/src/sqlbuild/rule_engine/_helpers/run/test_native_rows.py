@@ -13,8 +13,8 @@ from tests.unit.src.sqlbuild.rule_engine._helpers.run._test_types import (
     NativeRowsMemoTestCase,
 )
 from tests.unit.src.sqlbuild.rule_engine._helpers.run.helpers import (
+    memo_reuses,
     rebuild_identity,
-    record_reuse,
 )
 from tests.unit.src.sqlbuild.rule_engine.main.evaluate.helpers import build_project
 
@@ -59,19 +59,23 @@ def test_given_memoized_response_from_another_build_when_evaluating_natively_the
     tmp_path: Path,
     test_case: NativeRowsMemoTestCase,
 ) -> None:
-    reused: list[bool] = record_reuse(monkeypatch=monkeypatch)
+    _ = native.compile_stage_work_info(reset=True)
+    reused: list[bool] = []
     config_values: dict[str, object] = {"materialized": "table"}
 
     cold: RulesResult = evaluate_contract_rule(
         config_values=config_values, project_dir=tmp_path, cache_enabled=True
     )
+    reused.append(memo_reuses() == 1)
     rebuild_identity(monkeypatch=monkeypatch)
     rebuilt: RulesResult = evaluate_contract_rule(
         config_values=config_values, project_dir=tmp_path, cache_enabled=True
     )
+    reused.append(memo_reuses() == 1)
     warm: RulesResult = evaluate_contract_rule(
         config_values=config_values, project_dir=tmp_path, cache_enabled=True
     )
+    reused.append(memo_reuses() == 1)
 
     assert tuple(reused) == test_case.expected_reused
     assert rebuilt.findings == warm.findings == cold.findings

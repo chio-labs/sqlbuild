@@ -317,7 +317,7 @@ pub(crate) fn serialize_scope_report(
 /// `scope_metadata_projection` of one `ScopeIndex`, as the dictionary Python builds.
 #[pyfunction]
 #[pyo3(name = "scope_metadata_projection", signature = (*, index))]
-fn metadata_projection(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+pub(crate) fn metadata_projection(py: Python<'_>, index: &Bound<'_, PyAny>) -> PyResult<PyObject> {
     let index: ProjectionIndex = projection_index(read_index(index)?);
     let projection: JsonValue = scope_metadata_projection(&index);
     json_to_python(py, projection, false)

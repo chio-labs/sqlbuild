@@ -1,3 +1,4 @@
+pub(crate) mod constants;
 pub(crate) mod coverage;
 pub(crate) mod declarations;
 pub(crate) mod registration;

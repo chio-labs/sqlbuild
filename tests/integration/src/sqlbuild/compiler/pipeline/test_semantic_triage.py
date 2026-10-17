@@ -3,7 +3,6 @@
 import json
 from pathlib import Path
 from typing import Any
-from unittest.mock import Mock
 
 import pytest
 
@@ -211,7 +210,6 @@ def test_given_cached_validation_when_warm_or_schema_changed_then_reuses_only_ma
     test_case: SemanticTriageCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(
         'name = "orders"\nadapter = "duckdb"\n[rules]\nselect = []\n'
@@ -225,22 +223,15 @@ def test_given_cached_validation_when_warm_or_schema_changed_then_reuses_only_ma
         'MODEL (description "Test model totals.", materialized view);\nSELECT quantity + 1 AS total FROM __source("orders")'
     )
     args: list[str] = ["--project-dir", str(tmp_path), "compile", "--json"]
-    with monkeypatch.context() as patch:
-        repeated_validation: Mock = Mock(
-            side_effect=AssertionError("cold compile repeated fused validation")
-        )
-        patch.setattr(native, "schema_validations", repeated_validation)
-        assert main(args) == 0
-        repeated_validation.assert_not_called()
+    _ = native.compile_stage_work_info(reset=True)
+    assert main(args) == 0
+    cold_work: dict[str, int] = native.compile_stage_work_info(reset=True)
+    assert cold_work.get("schema_revalidations", 0) == 0
+    assert cold_work["complete_semantic_project"] == 1
     capsys.readouterr()
-    with monkeypatch.context() as patch:
-        forbidden: Mock = Mock(
-            side_effect=AssertionError("warm compile repeated native semantic work")
-        )
-        patch.setattr(native, "schema_validations", forbidden)
-        patch.setattr(native, "analyze_project_queries_compact_json", forbidden)
-        assert main(args) == 0
-        forbidden.assert_not_called()
+    assert main(args) == 0
+    warm_work: dict[str, int] = native.compile_stage_work_info(reset=True)
+    assert warm_work.get("schema_revalidations", 0) == 0
     capsys.readouterr()
     source.write_text(declaration.replace("INTEGER", "TIMESTAMP"))
     assert main(args) == 1

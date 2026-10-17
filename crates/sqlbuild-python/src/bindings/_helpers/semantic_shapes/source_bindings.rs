@@ -12,12 +12,16 @@ use crate::bindings::_helpers::analysis::binding_catalog::{
 use crate::bindings::_helpers::analysis::schema_request::{
     SchemaRequestParts, schema_validation_request,
 };
+use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_query_columns;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::semantic_shapes::constants::SOURCE_REBINDING_ANALYSES;
 use crate::bindings::_helpers::semantic_shapes::declarations::{declared_types, function_names};
 use crate::bindings::_helpers::semantic_shapes::shapes::{
     model_inputs, project_shapes, published_shape,
@@ -156,7 +160,6 @@ fn rebound_models<'py>(
         .call_method0("static_order")?;
     let query_class: Object<'py> = record_class(py, RecordId::NativeColumnQuery)?;
     let unknown: Object<'py> = enum_member(py, RecordId::InferredNullability, "UNKNOWN")?;
-    let infer: Object<'py> = registry::native(py, NativeAttr::InferNativeQueryColumns)?;
     let mut affected: HashSet<String> = HashSet::new();
     let mut models: Vec<Object<'py>> = Vec::new();
     for name in order.try_iter()? {
@@ -206,15 +209,16 @@ fn rebound_models<'py>(
                 ("references", native_field(&model, "references")?),
             ],
         )?;
-        let analysis: Object<'py> = call(
-            &infer,
+        count_stage(py, SOURCE_REBINDING_ANALYSES, 1)?;
+        let analysis: Object<'py> = infer_native_query_columns(Some(&keywords(
+            py,
             &[
                 ("queries", PyTuple::new(py, [query])?.into_any()),
                 ("profile", profile.clone()),
                 ("column_types_by_table", inputs.clone().into_any()),
                 ("column_nullability_by_table", nullability.into_any()),
             ],
-        )?
+        )?))?
         .get_item(0)?;
         let inferred: Object<'py> = native_field(&analysis, "columns")?;
         let mut all_inputs_closed: bool = true;

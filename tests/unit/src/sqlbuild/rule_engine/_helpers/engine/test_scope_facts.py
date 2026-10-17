@@ -15,6 +15,7 @@ from tests.unit.src.sqlbuild.compiler.scopes.helpers import scope_index
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import ScopePayloadTestCase
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine.helpers import (
     captured_native_request,
+    present_metadata,
     project_with_scope,
 )
 
@@ -30,12 +31,11 @@ def test_given_compiler_scope_index_when_evaluating_native_then_payload_equals_s
     index: ScopeIndex = scope_index()
 
     request: dict[str, Any] = captured_native_request(
-        monkeypatch=monkeypatch,
         project=project_with_scope(index=index),
         project_dir=tmp_path,
     )
 
-    assert (request["scope_index"] == scope_metadata_projection(index=index)) is (
+    assert (present_metadata(request["scope_index"]) == scope_metadata_projection(index=index)) is (
         test_case.expected_result
     )
     assert request["scope_index"]["declarations"][0]["metadata"]["constant"] == {
@@ -68,12 +68,10 @@ def test_given_complete_and_partial_scope_indexes_when_evaluating_then_completen
     )
 
     complete_request: dict[str, Any] = captured_native_request(
-        monkeypatch=monkeypatch,
         project=project_with_scope(index=complete),
         project_dir=tmp_path,
     )
     partial_request: dict[str, Any] = captured_native_request(
-        monkeypatch=monkeypatch,
         project=project_with_scope(index=partial),
         project_dir=tmp_path,
     )
@@ -104,12 +102,10 @@ def test_given_unsorted_and_absolute_scope_facts_when_projecting_then_order_is_s
     second: ScopeIndex = replace(first, declarations=tuple(reversed(first.declarations)))
 
     first_request: dict[str, Any] = captured_native_request(
-        monkeypatch=monkeypatch,
         project=project_with_scope(index=first),
         project_dir=tmp_path,
     )
     second_request: dict[str, Any] = captured_native_request(
-        monkeypatch=monkeypatch,
         project=project_with_scope(index=second),
         project_dir=tmp_path,
     )
