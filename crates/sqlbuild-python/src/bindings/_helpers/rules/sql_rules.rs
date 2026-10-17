@@ -292,7 +292,8 @@ fn model_rule_identities(run: &SqlRun<'_, '_>, lint_key: &str) -> PyResult<Vec<(
             models.push((model.path, key.authored_sql, key.query_sql, key.contract));
         }
     }
-    let keys: BTreeMap<String, String> = model_rule_keys(lint_key, run.codes, &models);
+    let keys: BTreeMap<String, String> =
+        model_rule_keys(run.project.py(), lint_key, run.codes, &models);
     Ok(models
         .into_iter()
         .map(|(path, ..)| {

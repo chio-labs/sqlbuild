@@ -17,7 +17,7 @@ use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::rules::findings::FindingClasses;
 use sqlbuild_rules::rule_cache::main::lint_key::lint_key;
 use sqlbuild_rules::rule_cache::main::lookup_rule_cache::lookup_rule_cache;
-use sqlbuild_rules::rule_cache::main::model_rule_key::model_rule_key;
+use sqlbuild_rules::rule_cache::main::model_rule_keys::model_rule_keys as parallel_model_rule_keys;
 use sqlbuild_rules::rule_cache::main::parse_rule_cache::parse_rule_cache;
 use sqlbuild_rules::rule_cache::main::rule_cache_text::rule_cache_text;
 use sqlbuild_rules::rule_cache::models::{CacheLookup, CachedEntry, LintKeyInput, ModelKeyInput};
@@ -56,29 +56,35 @@ fn sql_rule_lint_key(config: &Bound<'_, PyAny>) -> PyResult<String> {
 #[pyfunction]
 #[pyo3(signature = (*, lint_key, codes, models))]
 fn sql_model_rule_keys(
+    py: Python<'_>,
     lint_key: &str,
     codes: Vec<String>,
     models: Vec<(String, String, String, Option<String>)>,
 ) -> BTreeMap<String, String> {
-    model_rule_keys(lint_key, &codes, &models)
+    model_rule_keys(py, lint_key, &codes, &models)
 }
 
 /// Each model path's SQL rule cache key from `(path, authored_sql, query_sql, contract)`.
+/// Hashed in parallel with the GIL released: the inputs are owned Rust strings.
 pub(crate) fn model_rule_keys(
+    py: Python<'_>,
     lint_key: &str,
     codes: &[String],
     models: &[(String, String, String, Option<String>)],
 ) -> BTreeMap<String, String> {
+    let inputs: Vec<ModelKeyInput<'_>> = models
+        .iter()
+        .map(|(_, authored_sql, query_sql, contract)| ModelKeyInput {
+            authored_sql,
+            query_sql,
+            contract: contract.as_deref(),
+        })
+        .collect();
+    let keys: Vec<String> = py.detach(|| parallel_model_rule_keys(lint_key, codes, &inputs));
     models
         .iter()
-        .map(|(path, authored_sql, query_sql, contract)| {
-            let model = ModelKeyInput {
-                authored_sql,
-                query_sql,
-                contract: contract.as_deref(),
-            };
-            (path.clone(), model_rule_key(lint_key, codes, &model))
-        })
+        .map(|(path, ..)| path.clone())
+        .zip(keys)
         .collect()
 }
 
