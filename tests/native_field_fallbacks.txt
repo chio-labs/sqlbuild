@@ -175,6 +175,13 @@ crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/plan_output.rs	Connecti
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/plan.rs	DbtInteropSkipReason.value
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/runtime_execution.rs	CliStyle.use_color
 crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/runtime_execution.rs	TransientStatusReporter.complete
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/sqlbuild_work.rs	BuildProgressCallbacks.on_node_complete
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/sqlbuild_work.rs	BuildProgressCallbacks.on_node_start
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/sqlbuild_work.rs	BuildProgressCallbacks.on_sub_progress
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/sqlbuild_work.rs	ConnectionProgressReporter.on_connection_complete
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/sqlbuild_work.rs	ConnectionProgressReporter.on_connection_error
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/sqlbuild_work.rs	ConnectionProgressReporter.on_connection_start
+crates/sqlbuild-python/src/bindings/_helpers/dbt_interop/sqlbuild_work.rs	DbtInteropCommand.value
 crates/sqlbuild-python/src/bindings/_helpers/debug_command/run_debug.rs	WarehouseGroup.value
 crates/sqlbuild-python/src/bindings/_helpers/diff_report/support.rs	CliUserError.code
 crates/sqlbuild-python/src/bindings/_helpers/diff_report/support.rs	CliUserError.help
