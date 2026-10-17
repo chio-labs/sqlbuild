@@ -14,9 +14,9 @@ use crate::bindings::_helpers::planner_scope::sources::build_source_load_entries
 use crate::bindings::_helpers::planner_strategy::audit_entries::build_selected_audit_entries;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestAssembly;
 use crate::bindings::_helpers::sql_test_glue::plan_assembly::assemble_sql_test_plans;
 use crate::bindings::_helpers::sql_test_glue::plan_driver::resolve_sql_test_model_chains;
@@ -196,7 +196,7 @@ fn hook_provider_usages<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py = entry.py();
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
-    let python_hook = registry::class(py, RecordId::PythonHookEntry)?;
+    let python_hook = record_class(py, RecordId::PythonHookEntry)?;
     let mut hooks: Vec<Bound<'py, PyAny>> = Vec::new();
     for field in ["pre_hooks", "post_hooks"] {
         let hook_entry = entry.getattr(field)?;

@@ -12,6 +12,7 @@ use crate::bindings::_helpers::planner_scenario::graph::plan_scenario_graph;
 use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::relations::build_scenario_relation_plan;
 use crate::bindings::_helpers::planner_scenario::values::string;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -70,12 +71,13 @@ pub(crate) fn build_cli_scenario_plan<'py>(
         ("model_names", "MODEL"),
     ] {
         for name in graph.getattr(field)?.try_iter()? {
-            identities.push(call_with(
-                &registry::class(py, RecordId::ScenarioArtifactIdentity)?,
+            identities.push(new_record_with(
+                py,
+                RecordId::ScenarioArtifactIdentity,
                 &[
                     (
                         "kind",
-                        registry::class(py, RecordId::ScenarioArtifactKind)?.getattr(kind)?,
+                        enum_member(py, RecordId::ScenarioArtifactKind, kind)?,
                     ),
                     ("logical_name", name?),
                 ],
@@ -156,7 +158,7 @@ fn namespace<'py>(
 
 fn raise_for_warnings(warnings: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = warnings.py();
-    let severity = registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?;
+    let severity = enum_member(py, RecordId::WarningSeverity, "ERROR")?;
     let mut messages: Vec<String> = Vec::new();
     let mut code = None;
     for warning in warnings.try_iter()? {

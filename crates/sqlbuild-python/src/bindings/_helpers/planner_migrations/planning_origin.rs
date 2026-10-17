@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::constants::QUALIFIED_RELATION_MAX_PARTS;
 use crate::bindings::_helpers::planner_migrations::models::ModelMigrationRequest;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -23,10 +24,7 @@ pub(super) fn location<'py>(
     )?;
     let mut fields = fields.to_vec();
     fields.push(("qualified_name", qualified));
-    call_with(
-        &registry::class(runtime.py(), RecordId::CompiledRelationLocation)?,
-        &fields,
-    )
+    new_record_with(runtime.py(), RecordId::CompiledRelationLocation, &fields)
 }
 
 fn named<'py>(

@@ -9,9 +9,9 @@ use crate::bindings::_helpers::planner_scenario::constants::{
 };
 use crate::bindings::_helpers::planner_scenario::models::ScenarioRelations;
 use crate::bindings::_helpers::planner_scenario::values::error;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods};
 
@@ -120,8 +120,9 @@ pub(crate) fn build_scenario_relation_plan<'py>(
         };
         seed_fixtures.set_item(name, target)?;
     }
-    call_with(
-        &registry::class(py, RecordId::ScenarioRelationPlan)?,
+    new_record_with(
+        py,
+        RecordId::ScenarioRelationPlan,
         &[
             ("scenario_name", native_field(graph, "name")?),
             ("relation_map", args.relation_map.clone()),
@@ -162,8 +163,9 @@ fn target_for_artifact<'py>(
             ("name", physical.clone()),
         ],
     )?;
-    call_with(
-        &registry::class(py, RecordId::CompiledRelationLocation)?,
+    new_record_with(
+        py,
+        RecordId::CompiledRelationLocation,
         &[
             ("database", database),
             ("schema", schema),

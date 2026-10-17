@@ -13,8 +13,8 @@ use crate::bindings::_helpers::planner_phases::objects::{
 use crate::bindings::_helpers::planner_warehouse::constants::{
     MODEL_HOOK_CONFIG_KEYS, SQL_HOOK_ENTRY,
 };
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
@@ -50,7 +50,7 @@ fn hook_source_reads(
 ) -> PyResult<Vec<String>> {
     let mut names: Vec<String> = Vec::new();
     let py = model.py();
-    let hook_entry = registry::class(py, SQL_HOOK_ENTRY)?;
+    let hook_entry = record_class(py, SQL_HOOK_ENTRY)?;
     let source_kind = host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
     let values = native_field(model, "config")?.getattr("values")?;
     for key in MODEL_HOOK_CONFIG_KEYS {

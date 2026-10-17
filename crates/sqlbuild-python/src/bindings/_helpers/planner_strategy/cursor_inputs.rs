@@ -10,7 +10,6 @@ use sqlbuild_analysis::planner_strategy::models::{CursorInputColumnCheck, Cursor
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::model_config::config_values::{config_cursor_bound, config_str};
 use crate::bindings::_helpers::planner_identity::metadata::or_empty;
@@ -21,9 +20,9 @@ use crate::bindings::_helpers::planner_strategy::constants::{
 use crate::bindings::_helpers::planner_strategy::lineage::resolve_lineage_reference;
 use crate::bindings::_helpers::planner_strategy::models::CursorInputLookups;
 use crate::bindings::_helpers::planner_strategy::values::{input_error, text};
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 
 /// A model's authored config values.
@@ -207,7 +206,7 @@ fn input_kind<'py>(
         SOURCE_REFERENCE => "source",
         _ => return Ok(py.None().into_bound(py)),
     };
-    registry::class(py, RecordId::GraphResourceKind)?.call1((value,))
+    enum_from_value(py, RecordId::GraphResourceKind, value)
 }
 
 /// A producer model's terminal cursor bound parsed with the consumer's cursor type.
@@ -268,7 +267,6 @@ pub(crate) fn build_cursor_input_relations<'py>(
         Some(cursor_type) if cursor_type.is_truthy()? => cursor_type,
         _ => PyString::new(py, TIMESTAMP_CURSOR).into_any(),
     };
-    let class: Bound<'py, PyAny> = registry::class(py, RecordId::CursorInputRelation)?;
     let mut relations: Vec<Bound<'py, PyAny>> = Vec::new();
     let watermarks: Bound<'py, PyAny> =
         native_field(&resolve_cursor_input_roles(&model)?, "watermark_inputs")?;
@@ -297,8 +295,9 @@ pub(crate) fn build_cursor_input_relations<'py>(
             None => py.None().into_bound(py),
         };
         let model_backed: bool = kind == MODEL_REFERENCE && model_locations.contains(&name)?;
-        relations.push(call_with(
-            &class,
+        relations.push(new_record_with(
+            py,
+            RecordId::CursorInputRelation,
             &[
                 ("relation", PyString::new(py, &relation).into_any()),
                 ("cursor_column", column),

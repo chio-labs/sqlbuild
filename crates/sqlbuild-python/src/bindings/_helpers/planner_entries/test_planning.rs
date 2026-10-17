@@ -14,13 +14,11 @@ use pyo3::types::PyDict;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;
 use crate::bindings::_helpers::planner_entries::plan_output::plan_selected_sql_tests;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const TEST_PLANNING_THREAD: &str = "sqlbuild-test-planning";
 /// How long interpreter exit waits for SQL test planning threads still running native code.
@@ -180,8 +178,9 @@ pub(crate) fn start_planning(
     enabled: bool,
 ) -> PyResult<Py<SqlTestPlanning>> {
     if !enabled {
-        let empty = call_with(
-            &registry::class(py, RecordId::PlannedSqlTests)?,
+        let empty = new_record_with(
+            py,
+            RecordId::PlannedSqlTests,
             &[
                 ("selected_keys", request.selected_keys.bind(py).clone()),
                 (

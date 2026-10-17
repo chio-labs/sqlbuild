@@ -14,9 +14,9 @@ use crate::bindings::_helpers::planner_migrations::planning_origin::{
 };
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyString, PyTuple,
@@ -32,7 +32,7 @@ fn declared<'py>(item: &Bound<'py, PyAny>) -> PyResult<Option<ModelMigrationRequ
     let materialization = config(item, "materialized")?;
     Ok(Some(ModelMigrationRequest {
         model: item.clone(),
-        discovery: registry::class(py, RecordId::MigrationDiscovery)?.getattr("MANUAL")?,
+        discovery: enum_member(py, RecordId::MigrationDiscovery, "MANUAL")?,
         raw_origin: Some(origin.call_method0("strip")?),
         origin_location: None,
         origin_model: py.None().into_bound(py),
@@ -168,7 +168,7 @@ fn finish<'py>(
         )?;
         let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
         let snapshots_config = if project_config.is_none() {
-            registry::class(py, RecordId::SnapshotsConfig)?.call0()?
+            new_record(py, RecordId::SnapshotsConfig, (), None)?
         } else {
             native_field(&project_config, "snapshots")?
         };

@@ -1,16 +1,16 @@
 //! Snapshot conversion and cursor window policy boundary.
 
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::conversion::{CursorSession, algebra_error};
 use crate::bindings::_helpers::cursor::scalars::try_parse;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::maximum_safety::apply_maximum_start_policy;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -71,7 +71,7 @@ pub(super) fn duration(value: &Bound<'_, PyAny>) -> PyResult<Option<DurationSpan
     if value.is_none() {
         return Ok(None);
     }
-    let class = registry::class(value.py(), RecordId::Duration)?;
+    let class = record_class(value.py(), RecordId::Duration)?;
     let parsed = if value.is_instance(&class)? {
         value.clone()
     } else {
@@ -193,11 +193,11 @@ pub(crate) fn compute_cursor_bounds<'py>(
             &["cursor_grain", "maximum_start_policy"],
         ),
     )?;
-    let bounds_class = registry::class(py, RecordId::CursorBounds)?;
     if args.flag("is_microbatch")? {
         let sentinel = host::entry(py, ExecutorHost::BoundSentinel)?;
-        return call_with(
-            &bounds_class,
+        return new_record_with(
+            py,
+            RecordId::CursorBounds,
             &[
                 ("start", native_field(&sentinel, "START")?),
                 ("end", native_field(&sentinel, "END")?),
@@ -261,15 +261,16 @@ pub(crate) fn compute_cursor_bounds<'py>(
         ),
     ]);
     let replayed = apply_typed_cursor_replay_policy(py, Some(keywords(py, &replay_args)?))?;
-    let bounds = call_with(
-        &bounds_class,
+    let bounds = new_record_with(
+        py,
+        RecordId::CursorBounds,
         &[("start", replayed), ("end", session.python_scalar(&end)?)],
     )?;
     let policy = args.value("maximum_start_policy")?;
     let policy = if policy.is_truthy()? {
         policy
     } else {
-        registry::class(py, RecordId::MaximumStartPolicyInputs)?.call0()?
+        new_record(py, RecordId::MaximumStartPolicyInputs, (), None)?
     };
     let mut policy_args = vec![
         ("bounds", bounds),

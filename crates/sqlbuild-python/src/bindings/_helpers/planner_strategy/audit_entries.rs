@@ -8,6 +8,7 @@ use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::audits::{
     reads_outside_target_lineage, resolve_attachment_kind, resolve_effective_run_scope,
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::{
@@ -15,7 +16,7 @@ use pyo3::types::{
 };
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 use crate::bindings::_helpers::planner_strategy::constants::{
     AUDIT_TYPES_MODULE, COMPILE_TYPES_MODULE, MODEL_ATTACHMENT, SOURCE_ATTACHMENT,
@@ -23,7 +24,6 @@ use crate::bindings::_helpers::planner_strategy::constants::{
 use crate::bindings::_helpers::planner_strategy::models::AuditPlanning;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 /// Render and validate one audit query with the supplied adapter callbacks.
 fn render_query<'py>(
@@ -185,7 +185,7 @@ fn plan_audit<'py>(
     ] {
         values.set_item(field, value)?;
     }
-    registry::class(py, RecordId::AuditPlanEntry)?.call((), Some(&values))
+    new_record(py, RecordId::AuditPlanEntry, (), Some(&values))
 }
 
 /// Select attached audits by their logical target and singular audits by dependency overlap.
@@ -202,10 +202,10 @@ pub(crate) fn audit_is_selected(
         let target_value = imported(py, COMPILE_TYPES_MODULE, "AttachedAuditTargetKind")?
             .call1((kind,))?
             .getattr("value")?;
-        let resource_type =
-            registry::class(py, RecordId::CompiledResourceType)?.call1((target_value,))?;
-        let key = call_with(
-            &registry::class(py, RecordId::CompiledObjectKey)?,
+        let resource_type = enum_from_value(py, RecordId::CompiledResourceType, target_value)?;
+        let key = new_record_with(
+            py,
+            RecordId::CompiledObjectKey,
             &[("resource_type", resource_type), ("name", name)],
         )?;
         return selected_keys.contains(key);

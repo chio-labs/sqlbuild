@@ -13,6 +13,7 @@ use crate::bindings::_helpers::planner_resolution::cursor_safety::{
     horizon, replace, safety_duration, safety_error, timestamp_bound, utc_clock,
 };
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -184,15 +185,16 @@ pub(crate) fn apply_maximum_start_policy<'py>(
     };
     let relation = native_field(&snapshot, "target_relation")?;
     let column = native_field(&snapshot, "destination_cursor_column")?;
-    let evidence = call_with(
-        &registry::class(py, RecordId::MaximumStartSafetyEvidence)?,
+    let evidence = new_record_with(
+        py,
+        RecordId::MaximumStartSafetyEvidence,
         &[
             ("action", native_field(&config, "action")?),
             ("max_ahead", native_field(&config, "max_ahead")?),
             (
                 "invocation_time",
                 call_with(
-                    &registry::class(py, RecordId::TimestampValue)?,
+                    &record_class(py, RecordId::TimestampValue)?,
                     &[("value", utc_clock(&clock)?)],
                 )?,
             ),

@@ -9,9 +9,9 @@ use crate::bindings::_helpers::plan_output::display::{
     aligned_timestamp_bounds, resolve_effective_microbatch_batch_size,
 };
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const MICROBATCH_MODE: &str = "microbatch";
 const TIMESTAMP_CURSOR: &str = "timestamp";
@@ -86,15 +86,13 @@ fn count_batches(
     let (start, end) = (native_field(bounds, "start")?, native_field(bounds, "end")?);
     if cursor_type == TIMESTAMP_CURSOR {
         let duration: Bound<'_, PyAny> =
-            registry::class(py, RecordId::Duration)?.call_method1("parse", (batch_size,))?;
+            record_class(py, RecordId::Duration)?.call_method1("parse", (batch_size,))?;
         if duration.is_none() {
             return Ok(None);
         }
         let temporal = |value: &Bound<'_, PyAny>| -> PyResult<bool> {
-            Ok(
-                value.is_instance(&registry::class(py, RecordId::DateValue)?)?
-                    || value.is_instance(&registry::class(py, RecordId::TimestampValue)?)?,
-            )
+            Ok(value.is_instance(&record_class(py, RecordId::DateValue)?)?
+                || value.is_instance(&record_class(py, RecordId::TimestampValue)?)?)
         };
         if !temporal(&start)? || !temporal(&end)? {
             return Ok(None);
@@ -112,7 +110,7 @@ fn count_batches(
     if cursor_type != INTEGER_CURSOR {
         return Ok(None);
     }
-    let integer: Bound<'_, PyAny> = registry::class(py, RecordId::IntegerValue)?;
+    let integer: Bound<'_, PyAny> = record_class(py, RecordId::IntegerValue)?;
     if !start.is_instance(&integer)? || !end.is_instance(&integer)? {
         return Ok(None);
     }

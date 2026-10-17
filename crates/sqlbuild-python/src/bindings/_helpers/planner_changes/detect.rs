@@ -4,6 +4,7 @@ use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -45,7 +46,6 @@ use crate::bindings::_helpers::planner_identity::metadata::{
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
 const CHANGES_LOGGER: &str = "sqlbuild.planner.changes";
@@ -100,7 +100,6 @@ pub(crate) fn detect_changes<'py>(
     let models: Bound<'py, PyDict> =
         scope_model_changes((project, scope, snapshot), None, expected)?;
     let functions: Bound<'py, PyDict> = PyDict::new(py);
-    let result_class: Bound<'py, PyAny> = registry::class(py, RecordId::FunctionChangeResult)?;
     let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
     let recorded: Bound<'py, PyAny> =
         native_field(snapshot, "fingerprints")?.getattr("functions")?;
@@ -146,10 +145,14 @@ pub(crate) fn detect_changes<'py>(
             };
             arguments.push(("reason", planner_enum(py, RecordId::PlanReason, reason)?));
         }
-        functions.set_item(name, call_with(&result_class, &arguments)?)?;
+        functions.set_item(
+            name,
+            new_record_with(py, RecordId::FunctionChangeResult, &arguments)?,
+        )?;
     }
-    call_with(
-        &registry::class(py, RecordId::PlannerChangeResults)?,
+    new_record_with(
+        py,
+        RecordId::PlannerChangeResults,
         &[
             ("models", models.into_any()),
             ("functions", functions.into_any()),
@@ -273,8 +276,7 @@ pub(crate) fn scope_model_changes<'py>(
         function_local_hashes,
         hook_version_hashes: hook_version_hashes.into_any(),
     };
-    let model_kind: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
+    let model_kind: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
     let models_by_name: Bound<'py, PyAny> = native_field(scope, "models_by_name")?;
     let changes: Bound<'py, PyDict> = PyDict::new(py);
@@ -746,8 +748,9 @@ impl<'py> ChangeResult<'py> {
                 .into_pyobject(py)
                 .map(|flag| flag.to_owned().into_any())
         };
-        call_with(
-            &registry::class(py, RecordId::ChangeDetectionResult)?,
+        new_record_with(
+            py,
+            RecordId::ChangeDetectionResult,
             &[
                 ("model_name", self.model_name),
                 ("change_kind", kind),

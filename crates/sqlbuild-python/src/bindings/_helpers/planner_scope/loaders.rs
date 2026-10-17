@@ -6,9 +6,9 @@ use crate::bindings::_helpers::graph::views::edge_dict;
 use crate::bindings::_helpers::planner_scope::values::{
     dependency_names, edges, keys, loader_graph, loader_names, project_graph,
 };
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::planner_scope::main::{
@@ -68,7 +68,7 @@ pub(crate) fn loader_to_source_entry<'py>(
     let meta = PyDict::new(py);
     meta.set_item("sqlbuild_loader_node", true)?;
     kwargs.set_item("meta", meta)?;
-    registry::class(py, RecordId::SourceEntry)?.call((), Some(&kwargs))
+    new_record(py, RecordId::SourceEntry, (), Some(&kwargs))
 }
 
 pub(crate) fn intermediate_map<'py>(

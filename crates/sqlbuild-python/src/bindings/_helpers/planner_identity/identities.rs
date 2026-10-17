@@ -15,18 +15,16 @@ use sqlbuild_analysis::planner_identity::main::model_local_identity_hash::model_
 use sqlbuild_analysis::planner_identity::models::{GraphKey, IdentityGraph, IdentityNode};
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_identity::hashing::{graph_key, model_query_hash};
 use crate::bindings::_helpers::planner_identity::metadata::{
     function_local_hashes, model_version_identity_metadata_json, seed_identity,
 };
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DATACLASSES_MODULE: &str = "dataclasses";
 
@@ -197,8 +195,9 @@ pub(crate) fn direct_model_version_identities<'py>(
             version_hashes.set_item(&name, model_hash)?;
         }
     }
-    call_with(
-        &registry::class(py, RecordId::DirectModelVersionIdentities)?,
+    new_record_with(
+        py,
+        RecordId::DirectModelVersionIdentities,
         &[
             ("function_local_hashes", function_hashes.into_any()),
             ("seed_version_hashes", seed_hashes.into_any()),

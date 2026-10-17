@@ -11,6 +11,7 @@ use crate::bindings::_helpers::planner_migrations::model_handover::{
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationDecisionRequest,
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -40,7 +41,7 @@ pub(super) fn decision<'py>(entry: &Bound<'py, PyAny>, name: &str) -> PyResult<B
         entry,
         &[(
             "decision",
-            registry::class(entry.py(), RecordId::MigrationDecision)?.call1((name,))?,
+            enum_from_value(entry.py(), RecordId::MigrationDecision, name)?,
         )],
     )
 }
@@ -101,11 +102,11 @@ pub(super) fn decide<'py>(
             ("discovery", request.discovery.clone()),
             (
                 "decision",
-                registry::class(py, RecordId::MigrationDecision)?.getattr("MIGRATE")?,
+                enum_member(py, RecordId::MigrationDecision, "MIGRATE")?,
             ),
             (
                 "compatibility",
-                registry::class(py, RecordId::MigrationCompatibility)?.getattr("NOT_CHECKED")?,
+                enum_member(py, RecordId::MigrationCompatibility, "NOT_CHECKED")?,
             ),
             ("origin_model", origin_model),
             ("origin", origin.clone()),

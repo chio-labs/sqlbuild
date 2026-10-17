@@ -12,9 +12,9 @@ use crate::bindings::_helpers::planner_migrations::old_names::declared_column_al
 use crate::bindings::_helpers::planner_migrations::old_names::old_name_view_skip_reason;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyBool, PyList, PyTuple};
 
@@ -29,7 +29,7 @@ impl<'py> OldNamePlanner<'py> {
         let py = runtime.py();
         let project_config = runtime_field(&runtime, |runtime| &runtime.project_config)?;
         let config = if project_config.is_none() {
-            registry::class(py, RecordId::MigrationsConfig)?.call0()?
+            new_record(py, RecordId::MigrationsConfig, (), None)?
         } else {
             native_field(&project_config, "migrations")?
         };
@@ -303,7 +303,7 @@ impl<'py> OldNamePlanner<'py> {
             }
         }
         let retention = native_field(history, "required")?.getattr("view_retention")?;
-        let duration = registry::class(py, RecordId::Duration)?.call_method1(
+        let duration = record_class(py, RecordId::Duration)?.call_method1(
             "parse",
             (if retention.is_truthy()? {
                 retention.clone()
@@ -387,5 +387,5 @@ impl<'py> OldNamePlanner<'py> {
 }
 
 fn action<'py>(runtime: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(runtime.py(), RecordId::OldNameViewAction)?.getattr(name)
+    enum_member(runtime.py(), RecordId::OldNameViewAction, name)
 }

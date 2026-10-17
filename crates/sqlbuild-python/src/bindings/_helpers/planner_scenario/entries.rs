@@ -1,7 +1,7 @@
 //! Existing seed and function plan dataclass construction.
 
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
 use crate::bindings::_helpers::planner_identity::metadata::build_compiled_function_fingerprint_sql;
 use crate::bindings::_helpers::planner_resolution::orchestration::resolve_function_sql;
@@ -10,9 +10,9 @@ use crate::bindings::_helpers::planner_scenario::{
     models::SqlContext, sql::required_target, values::error,
 };
 use crate::bindings::_helpers::planner_strategy::model_entries::extract_seed_columns;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::PyString;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
@@ -47,8 +47,9 @@ pub(super) fn seed_entries<'py>(
             &name.extract::<String>()?,
             "seed",
         )?;
-        result.push(call_with(
-            &registry::class(py, RecordId::SeedPlanEntry)?,
+        result.push(new_record_with(
+            py,
+            RecordId::SeedPlanEntry,
             &[
                 ("key", native_field(&seed, "key")?),
                 ("name", native_field(&seed, "name")?),
@@ -130,7 +131,7 @@ pub(super) fn function_entry<'py>(
     ] {
         fields.push((name, function.getattr(name)?));
     }
-    call_with(&registry::class(py, RecordId::FunctionPlanEntry)?, &fields)
+    new_record_with(py, RecordId::FunctionPlanEntry, &fields)
 }
 
 #[pyfunction]

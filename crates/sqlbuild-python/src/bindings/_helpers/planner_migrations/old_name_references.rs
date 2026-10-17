@@ -7,9 +7,9 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, text};
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::relations::match_project_relation;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple};
@@ -133,7 +133,7 @@ pub(super) fn errors<'py>(
                 ("model_name", py.None().into_bound(py)),
                 (
                     "severity",
-                    registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?,
+                    enum_member(py, RecordId::WarningSeverity, "ERROR")?,
                 ),
                 (
                     "message",

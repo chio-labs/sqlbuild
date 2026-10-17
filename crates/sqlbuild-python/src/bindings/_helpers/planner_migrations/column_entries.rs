@@ -14,9 +14,9 @@ use crate::bindings::_helpers::planner_migrations::constants::{AUTOMATIC, DONE};
 use crate::bindings::_helpers::planner_migrations::models::{CheckedColumns, ColumnCandidate};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::state_rows::migration_projections::newest_column;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PyTuple};
@@ -96,8 +96,7 @@ pub(super) fn decide<'py>(
             (origin.is_some(), has_destination),
             outputs.contains(&origin_key),
         );
-        let decision =
-            registry::class(py, RecordId::ColumnMigrationDecision)?.call1((decision_name,))?;
+        let decision = enum_from_value(py, RecordId::ColumnMigrationDecision, decision_name)?;
         if discovery == AUTOMATIC && native_field(&decision, "blocks_build")?.is_truthy()? {
             continue;
         }
@@ -119,7 +118,7 @@ pub(super) fn decide<'py>(
                 ("destination_column", destination),
                 (
                     "discovery",
-                    registry::class(py, RecordId::MigrationDiscovery)?.call1((discovery,))?,
+                    enum_from_value(py, RecordId::MigrationDiscovery, discovery)?,
                 ),
                 ("decision", decision),
                 (
@@ -206,8 +205,7 @@ pub(super) fn checked<'py>(
                 &[
                     (
                         "decision",
-                        registry::class(py, RecordId::ColumnMigrationDecision)?
-                            .getattr("UNSUPPORTED")?,
+                        enum_member(py, RecordId::ColumnMigrationDecision, "UNSUPPORTED")?,
                     ),
                     ("message", reason.clone()),
                 ],

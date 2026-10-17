@@ -9,9 +9,9 @@ use crate::bindings::_helpers::planner_migrations::discovery_events::{
 use crate::bindings::_helpers::planner_migrations::models::{
     ModelMigrationDeclaration, ModelMigrationRequest,
 };
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{
     PyDict, PyDictMethods, PyFrozenSet, PyListMethods, PySet, PySetMethods, PyString, PyTuple,
@@ -145,8 +145,7 @@ pub(super) fn automatic<'py>(
         if let Some((location, origin_model)) = origin {
             requests.push(ModelMigrationRequest {
                 model: item.clone(),
-                discovery: registry::class(py, RecordId::MigrationDiscovery)?
-                    .getattr("AUTOMATIC")?,
+                discovery: enum_member(py, RecordId::MigrationDiscovery, "AUTOMATIC")?,
                 raw_origin: None,
                 origin_location: Some(location),
                 origin_model,
@@ -179,7 +178,7 @@ pub(super) fn warnings<'py>(
         if selected.contains(&name)? {
             warnings.push(native(py, RecordId::PlanWarning, &[
                 ("model_name", PyString::new(py, &name).into_any()),
-                ("severity", registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?),
+                ("severity", enum_member(py, RecordId::WarningSeverity, "WARNING")?),
                 ("message", PyString::new(py, &format!("'{name}' matches {detail}; no automatic migration was inferred. Add migrate_from to choose one.")).into_any()),
                 ("code", PyString::new(py, "M107").into_any()),
             ])?);

@@ -28,9 +28,9 @@ use crate::bindings::_helpers::planner_warehouse::snapshot::{
     SnapshotRequest, inspection_concurrency,
 };
 use crate::bindings::_helpers::planner_warehouse::watermarks::validate_watermark_column;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::references::source_relations::render_source_relation;
 use pyo3::IntoPyObject;
 use pyo3::exceptions::PyException;
@@ -870,7 +870,7 @@ fn eligible_target_maxes<'py>(
                 (
                     "is_date",
                     horizon
-                        .is_instance(&registry::class(py, DATE_VALUE)?)?
+                        .is_instance(&record_class(py, DATE_VALUE)?)?
                         .into_pyobject(py)?
                         .to_owned()
                         .into_any(),

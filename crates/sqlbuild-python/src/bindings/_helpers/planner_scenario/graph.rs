@@ -1,13 +1,12 @@
 //! Convert project views into pure scenario dependency facts.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::graph::keys::{KeyCache, native_key};
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_GRAPH_VALIDATION;
 use crate::bindings::_helpers::planner_scenario::values::string;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::PyTuple;
 use sqlbuild_analysis::planner_scenario::main::graph::graph;
@@ -60,8 +59,9 @@ pub(crate) fn plan_scenario_graph<'py>(
     let output = graph(&input);
     input.targets.sort();
     input.assertions.sort();
-    let plan = call_with(
-        &registry::class(py, RecordId::ScenarioGraphPlan)?,
+    let plan = new_record_with(
+        py,
+        RecordId::ScenarioGraphPlan,
         &[
             ("key", native_field(scenario, "key")?),
             ("name", native_field(scenario, "name")?),
@@ -103,17 +103,14 @@ pub(crate) fn plan_scenario_graph<'py>(
             ("model_name", py.None().into_bound(py)),
             (
                 "severity",
-                registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?,
+                enum_member(py, RecordId::WarningSeverity, "ERROR")?,
             ),
             ("message", string(py, &message)),
         ];
         if coded {
             values.push(("code", string(py, SCENARIO_PLAN_GRAPH_VALIDATION)));
         }
-        warnings.push(call_with(
-            &registry::class(py, RecordId::PlanWarning)?,
-            &values,
-        )?);
+        warnings.push(new_record_with(py, RecordId::PlanWarning, &values)?);
     }
     Ok((plan, PyTuple::new(py, warnings)?))
 }

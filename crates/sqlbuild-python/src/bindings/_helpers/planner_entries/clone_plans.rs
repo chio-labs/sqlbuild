@@ -23,9 +23,9 @@ use crate::bindings::_helpers::planner_resolution::orchestration::{Resolution, r
 use crate::bindings::_helpers::planner_selection::selectors::resolve_graph_selection;
 use crate::bindings::_helpers::planner_strategy::strategy::materialization_of;
 use crate::bindings::_helpers::planner_warehouse::source_columns::gather_source_columns;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::PyRef;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
@@ -272,7 +272,9 @@ fn clone_source_entries<'py>(
         let qualified = adapter
             .getattr("render_qualified_name")?
             .call((), Some(&kwargs))?;
-        let destination = registry::class(py, RecordId::CompiledRelationLocation)?.call(
+        let destination = new_record(
+            py,
+            RecordId::CompiledRelationLocation,
             (),
             Some(&{
                 let location = PyDict::new(py);

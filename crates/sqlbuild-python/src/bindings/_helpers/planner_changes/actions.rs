@@ -4,10 +4,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const INCREMENTAL_MATERIALIZATION: &str = "incremental";
 const CREATE_TABLE_ACTION: &str = "create_table";
@@ -20,9 +19,7 @@ pub(crate) fn resolve_model_actions<'py>(
     changes: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = scope.py();
-    let model_kind: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?;
-    let action_class: Bound<'py, PyAny> = registry::class(py, RecordId::ResolvedModelAction)?;
+    let model_kind: Bound<'py, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let selected: Bound<'py, PyAny> = native_field(scope, "selected_keys")?;
     let models_by_name: Bound<'py, PyAny> = native_field(scope, "models_by_name")?;
     let model_changes: Bound<'py, PyAny> = native_field(changes, "models")?;
@@ -40,11 +37,16 @@ pub(crate) fn resolve_model_actions<'py>(
         let backfill: Bound<'py, PyAny> = native_field(&change, "backfill")?;
         resolved.set_item(
             name,
-            call_with(&action_class, &[("change", change), ("backfill", backfill)])?,
+            new_record_with(
+                py,
+                RecordId::ResolvedModelAction,
+                &[("change", change), ("backfill", backfill)],
+            )?,
         )?;
     }
-    call_with(
-        &registry::class(py, RecordId::PlannerResolvedActions)?,
+    new_record_with(
+        py,
+        RecordId::PlannerResolvedActions,
         &[("models", resolved.into_any())],
     )
 }

@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::models::HostId;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -36,7 +37,7 @@ pub(crate) fn planner_model<'py>(
     name: RecordId,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::class(py, name)?, fields)
+    new_record_with(py, name, fields)
 }
 
 /// `sqlbuild._native.name(**fields)`.
@@ -72,7 +73,7 @@ pub(crate) fn native_member<'py>(
     class: RecordId,
     value: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    registry::class(py, class)?.call1((value,))
+    new_record(py, class, (value,), None)
 }
 
 /// `PlannerInputError(message, code=code, help=help)`.
@@ -167,12 +168,13 @@ pub(crate) fn model_key<'py>(
     py: Python<'py>,
     name: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(
-        &registry::class(py, RecordId::CompiledObjectKey)?,
+    new_record_with(
+        py,
+        RecordId::CompiledObjectKey,
         &[
             (
                 "resource_type",
-                registry::class(py, RecordId::CompiledResourceType)?.getattr("MODEL")?,
+                enum_member(py, RecordId::CompiledResourceType, "MODEL")?,
             ),
             ("name", name.clone()),
         ],

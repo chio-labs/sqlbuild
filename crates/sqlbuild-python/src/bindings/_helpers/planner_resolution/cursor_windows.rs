@@ -4,6 +4,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -22,14 +23,14 @@ fn decide_empty_cursor_inputs<'py>(
     has_window_start: bool,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = empty_input_names.py();
-    let class = registry::class(py, RecordId::EmptyCursorInputDecision)?;
     if !empty_input_names.is_truthy()?
         || !empty_inputs(waits_for_every_input, inputs_with_rows, has_window_start)
     {
-        return class.call0();
+        return new_record(py, RecordId::EmptyCursorInputDecision, (), None);
     }
-    call_with(
-        &class,
+    new_record_with(
+        py,
+        RecordId::EmptyCursorInputDecision,
         &[
             ("input_names", empty_input_names.clone()),
             (
@@ -49,7 +50,12 @@ pub(crate) fn cursor_inputs_without_rows<'py>(
         .getattr("unreadable_input_names")?
         .is_truthy()?
     {
-        return registry::class(cursor_snapshot.py(), RecordId::EmptyCursorInputDecision)?.call0();
+        return new_record(
+            cursor_snapshot.py(),
+            RecordId::EmptyCursorInputDecision,
+            (),
+            None,
+        );
     }
     let rows = native_field(cursor_snapshot, "upstream_maxes")?.is_truthy()?
         || cursor_snapshot
@@ -94,13 +100,15 @@ pub(crate) fn empty_cursor_window<'py>(
     };
     let mut bound = parse_value(&raw, &kind)?;
     if cursor_start.is_none() && !kind.eq("integer")? {
-        bound = call_with(
-            &registry::class(py, RecordId::TimestampValue)?,
+        bound = new_record_with(
+            py,
+            RecordId::TimestampValue,
             &[("value", native_field(&bound, "value")?)],
         )?;
     }
-    call_with(
-        &registry::class(py, RecordId::CursorBounds)?,
+    new_record_with(
+        py,
+        RecordId::CursorBounds,
         &[("start", bound.clone()), ("end", bound)],
     )
 }

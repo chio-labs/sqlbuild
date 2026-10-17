@@ -22,10 +22,11 @@ use sqlbuild_analysis::planner_identity::models::{AvailableUpstreams, GraphKey, 
 use crate::bindings::_helpers::analysis::explicit_references::{
     GateRow, HookRow, native_execution_gate_edges,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::graph::algorithms::{closure, inverted};
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::planner_identity::hashing::graph_key;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -373,11 +374,11 @@ pub(crate) fn check_buildability<'py>(
             Some(name_set(&deferred_relations)?)
         },
     };
-    let entry_class: Bound<'py, PyAny> = registry::class(py, RecordId::MissingUpstream)?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for missing in missing_upstreams(&selected, &deps, &available) {
-        entries.push(call_with(
-            &entry_class,
+        entries.push(new_record_with(
+            py,
+            RecordId::MissingUpstream,
             &[
                 ("key", objects.object(&missing.key)),
                 (

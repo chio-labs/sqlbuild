@@ -27,9 +27,9 @@ use crate::bindings::_helpers::plan_output::python_identity::{
     definition_source_text, dependency_source_text,
 };
 use crate::bindings::_helpers::plan_output::values::{items, optional_text, text, texts};
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const SKIP_ACTION: &str = "skip";
 const QUERY_CHANGED: &str = "query_changed";
@@ -416,7 +416,7 @@ fn report(arguments: &KeywordArguments<'_>) -> PyResult<PlanTextReport> {
     let display_options: Bound<'_, PyAny> = {
         let given: Bound<'_, PyAny> = arguments.value("display_options")?;
         if given.is_none() {
-            registry::class(py, RecordId::DisplayOptions)?.call0()?
+            new_record(py, RecordId::DisplayOptions, (), None)?
         } else {
             given
         }

@@ -29,6 +29,7 @@ use crate::bindings::_helpers::planner_resolution::cursor_windows::without_desti
 use crate::bindings::_helpers::planner_resolution::future_safety::resolve_future_cursor_safety;
 use crate::bindings::_helpers::planner_resolution::values::string;
 use crate::bindings::_helpers::planner_strategy::model_entries::resolve_microbatch_lookback;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -171,8 +172,9 @@ fn timestamp_value<'py>(clock: &Bound<'py, PyAny>, scalar: &Scalar) -> PyResult<
     let ScalarValue::Timestamp(timestamp) = &scalar.value else {
         return Ok(clock.py().None().into_bound(clock.py()));
     };
-    call_with(
-        &registry::class(clock.py(), RecordId::TimestampValue)?,
+    new_record_with(
+        clock.py(),
+        RecordId::TimestampValue,
         &[("value", replaced(clock, &timestamp.local, timestamp.fold)?)],
     )
 }
@@ -223,8 +225,9 @@ fn rolling_window_bounds<'py>(
         handle: None,
     };
     let (start, end) = session.checked(rolling_window(&clock, &span, grain))?;
-    let mut bounds = call_with(
-        &registry::class(py, RecordId::CursorBounds)?,
+    let mut bounds = new_record_with(
+        py,
+        RecordId::CursorBounds,
         &[
             ("start", timestamp_value(&moment, &start)?),
             ("end", timestamp_value(&moment, &end)?),
@@ -313,8 +316,9 @@ fn snapshot_bounds<'py>(
     request: BoundsRequest<'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = model.py();
-    let policy = call_with(
-        &registry::class(py, RecordId::MaximumStartPolicyInputs)?,
+    let policy = new_record_with(
+        py,
+        RecordId::MaximumStartPolicyInputs,
         &[
             ("config", inputs.policies.1.clone()),
             ("invocation_time", inputs.invocation_time.clone()),

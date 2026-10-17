@@ -32,9 +32,9 @@ use crate::bindings::_helpers::planner_strategy::strategy::{
     model_warning_records, resolve_schema_actions, warning_inputs,
 };
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::records::registry;
 
 /// Model config keys copied to the plan entry as optional strings, with their entry fields.
 const STRING_FIELDS: [(&str, &str); 15] = [
@@ -146,7 +146,7 @@ fn on_schema_change<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny
         return Ok(raw);
     }
     if raw.is_instance_of::<PyString>() {
-        match registry::class(py, RecordId::OnSchemaChange)?.call1((&raw,)) {
+        match enum_from_value(py, RecordId::OnSchemaChange, &raw) {
             Ok(policy) => return Ok(policy),
             Err(error) if !error.is_instance_of::<PyValueError>(py) => return Err(error),
             Err(_) => {}
@@ -355,8 +355,9 @@ fn ddl_cursor_bounds<'py>(request: &ModelEntryDecisions<'py>) -> PyResult<Bound<
     Ok(
         if request.runtime_owned_cursor_bounds && !request.cursor_column.is_none() {
             let sentinel: Bound<'py, PyAny> = host::entry(py, ExecutorHost::BoundSentinel)?;
-            call_with(
-                &registry::class(py, RecordId::CursorBounds)?,
+            new_record_with(
+                py,
+                RecordId::CursorBounds,
                 &[
                     ("start", native_field(&sentinel, "START")?),
                     ("end", native_field(&sentinel, "END")?),
@@ -569,7 +570,6 @@ pub(crate) fn assemble_model_plan_entry<'py>(
         text(&request.materialization_type)? == CUSTOM_MATERIALIZATION,
         &entry,
     )?;
-    let plan_entry: Bound<'py, PyAny> =
-        registry::class(py, RecordId::ModelPlanEntry)?.call((), Some(&entry))?;
+    let plan_entry: Bound<'py, PyAny> = new_record(py, RecordId::ModelPlanEntry, (), Some(&entry))?;
     Ok((plan_entry, warnings))
 }

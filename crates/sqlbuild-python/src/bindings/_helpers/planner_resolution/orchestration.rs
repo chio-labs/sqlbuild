@@ -18,6 +18,7 @@ use crate::bindings::_helpers::planner_resolution::refs::{
     resolve_udf_references,
 };
 use crate::bindings::_helpers::planner_resolution::sources::resolve_sources;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -106,7 +107,7 @@ impl<'py> Resolution<'py> {
 
     fn hook(&self, value: Bound<'py, PyAny>, label: &str) -> PyResult<Bound<'py, PyAny>> {
         let py = value.py();
-        if value.is_instance(&registry::class(py, RecordId::SqlHookEntry)?)? {
+        if value.is_instance(&record_class(py, RecordId::SqlHookEntry)?)? {
             let kwargs = PyDict::new(py);
             kwargs.set_item(
                 "statement",

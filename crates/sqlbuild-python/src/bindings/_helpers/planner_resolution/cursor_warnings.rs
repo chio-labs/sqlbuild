@@ -1,11 +1,10 @@
 //! Prominent warnings for applied future-end and automatic-start cursor safety.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::scalars::render_value;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -80,13 +79,14 @@ pub(crate) fn with_cursor_safety_warnings<'py>(
         (maximum_start_message(bounds)?, START_CAPPED_CODE),
     ] {
         let Some(message) = message else { continue };
-        all.push(call_with(
-            &registry::class(py, RecordId::PlanWarning)?,
+        all.push(new_record_with(
+            py,
+            RecordId::PlanWarning,
             &[
                 ("model_name", model_name.clone()),
                 (
                     "severity",
-                    registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?,
+                    enum_member(py, RecordId::WarningSeverity, "WARNING")?,
                 ),
                 ("code", string(py, code)),
                 ("message", string(py, &message)),

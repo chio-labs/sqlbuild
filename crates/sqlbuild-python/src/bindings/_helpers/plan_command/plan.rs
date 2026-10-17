@@ -24,9 +24,9 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::plan_json::format_plan_json;
 use crate::bindings::_helpers::plan_output::plan_text::format_plan;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const COMMAND_NAME: &str = "plan";
 const DEFAULT_SECTION_ENTRIES: i64 = 50;
@@ -222,7 +222,7 @@ fn compile_pipeline<'py>(
     )?;
     options.set_item("record_migration_fingerprints", false)?;
     let pipeline_options: Bound<'py, PyAny> =
-        registry::class(py, RecordId::CompilePipelineOptions)?.call((), Some(&options))?;
+        new_record(py, RecordId::CompilePipelineOptions, (), Some(&options))?;
     run_compile_pipeline(
         py,
         Some(keywords(
@@ -275,7 +275,7 @@ fn write_output(
                 ("use_color", flag(py, invocation.use_color)),
                 (
                     "display_options",
-                    registry::class(py, RecordId::DisplayOptions)?.call((), Some(&display))?,
+                    new_record(py, RecordId::DisplayOptions, (), Some(&display))?,
                 ),
                 ("python_plan_entries", python_entries),
                 ("include_direct_freshness_diagnostics", flag(py, false)),

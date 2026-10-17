@@ -3,6 +3,7 @@
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::planner_resolution::cursor_bounds::duration;
+use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -44,10 +45,8 @@ pub(super) fn safety_duration(value: &Bound<'_, PyAny>, future: bool) -> PyResul
 
 pub(super) fn timestamp_bound(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = value.py();
-    Ok(
-        value.is_instance(&registry::class(py, RecordId::DateValue)?)?
-            || value.is_instance(&registry::class(py, RecordId::TimestampValue)?)?,
-    )
+    Ok(value.is_instance(&record_class(py, RecordId::DateValue)?)?
+        || value.is_instance(&record_class(py, RecordId::TimestampValue)?)?)
 }
 
 pub(super) fn utc_clock<'py>(clock: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -63,7 +62,7 @@ pub(super) fn horizon<'py>(
     let py = session.py();
     let (clock, grain) = clock_and_grain;
     let mut clock = utc_clock(clock)?;
-    let date_only = discovered.is_instance(&registry::class(py, RecordId::DateValue)?)?;
+    let date_only = discovered.is_instance(&record_class(py, RecordId::DateValue)?)?;
     if date_only
         || native_field(discovered, "value")?
             .getattr("tzinfo")?
@@ -74,10 +73,7 @@ pub(super) fn horizon<'py>(
             &[("tzinfo", py.None().into_bound(py))],
         )?;
     }
-    let clock = call_with(
-        &registry::class(py, RecordId::TimestampValue)?,
-        &[("value", clock)],
-    )?;
+    let clock = new_record_with(py, RecordId::TimestampValue, &[("value", clock)])?;
     let grain = if grain.is_truthy()? {
         session.grain(grain)?.unwrap_or(Grain::Second)
     } else {

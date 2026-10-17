@@ -14,9 +14,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::catalogue::build_rule_catalogue;
 use crate::bindings::_helpers::rules::guidance::{format_rule, install_rules_skills};
 use crate::bindings::_helpers::rules::results::{
@@ -258,7 +258,7 @@ fn run_rule_selection(
         fields.set_item(field, result.getattr(field)?)?;
     }
     let text: String = format_rules_result(
-        &registry::class(py, RecordId::RulesResult)?.call((), Some(&fields))?,
+        &new_record(py, RecordId::RulesResult, (), Some(&fields))?,
         native_field(request, "json_output")?.is_truthy()?,
     )?;
     print_line(py, &text, false)?;

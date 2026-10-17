@@ -15,9 +15,9 @@ use crate::bindings::_helpers::planner_phases::objects::{
     planner_model, replace, sorted_names, text, tuple,
 };
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
+use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
@@ -118,7 +118,7 @@ pub(crate) fn plan_table_types<'py>(
         .getattr("snapshot")?
         .getattr("existing_relations")?;
     let adapter = runtime_field(runtime, |runtime| &runtime.adapter)?;
-    let materialization = registry::class(py, RecordId::MaterializationType)?;
+    let materialization = record_class(py, RecordId::MaterializationType)?;
     let mut entries: Vec<_> = Vec::new();
     for model in models {
         let config = native_field(&model, "config")?;

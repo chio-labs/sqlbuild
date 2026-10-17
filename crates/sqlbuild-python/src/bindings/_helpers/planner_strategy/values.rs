@@ -1,6 +1,7 @@
 //! Conversions between the planner's Python models and the native strategy rows.
 
 use crate::bindings::_helpers::planner_changes::results::native_enum;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString};
@@ -13,7 +14,6 @@ use sqlbuild_analysis::planner_strategy::models::{
     ChangeFacts, MaterializationType, PlanChangeKind, WarningRow, WarningSeverity,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -137,8 +137,9 @@ pub(crate) fn plan_warning<'py>(
         WarningSeverity::Warning => "warning",
         WarningSeverity::Info => "info",
     };
-    call_with(
-        &registry::class(py, RecordId::PlanWarning)?,
+    new_record_with(
+        py,
+        RecordId::PlanWarning,
         &[
             ("model_name", model_name.clone()),
             (

@@ -5,6 +5,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_identity::hashing::model_definition_hash;
 use crate::bindings::_helpers::planner_phases::objects::object;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{NativeItem, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -35,7 +36,7 @@ pub(super) fn model<'py>(
     name: RecordId,
     fields: &[(&str, Bound<'py, PyAny>)],
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::class(py, name)?, fields)
+    new_record_with(py, name, fields)
 }
 
 pub(super) fn native<'py>(

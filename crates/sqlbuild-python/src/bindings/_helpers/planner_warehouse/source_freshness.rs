@@ -12,9 +12,9 @@ use crate::bindings::_helpers::planner_phases::objects::{
 };
 use crate::bindings::_helpers::planner_warehouse::constants::RUN_SCOPE;
 use crate::bindings::_helpers::planner_warehouse::snapshot::{destination_nodes, lower};
+use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::PyDict as KeywordDict;
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
@@ -57,7 +57,7 @@ pub(crate) fn source_freshness_unknown_warnings<'py>(
                     ("model_name", py.None().into_bound(py)),
                     (
                         "severity",
-                        registry::class(py, RecordId::WarningSeverity)?.getattr("WARNING")?,
+                        enum_member(py, RecordId::WarningSeverity, "WARNING")?,
                     ),
                     ("message", text(py, &message)),
                 ],

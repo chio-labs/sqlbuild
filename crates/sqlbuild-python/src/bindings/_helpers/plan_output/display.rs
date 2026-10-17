@@ -18,14 +18,16 @@ use sqlbuild_core::plan_display::main::model_materialization_label::model_materi
 use sqlbuild_core::plan_display::main::model_resource_type::model_resource_type as resource_type;
 use sqlbuild_core::plan_display::models::{ModelLabelFacts, ParsedBound};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::{
     render_value, to_exclusive, to_inclusive, try_parse,
 };
 use crate::bindings::_helpers::plan_output::values::{optional_text, text};
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, new_record_with, record_class,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const DATETIME_MODULE: &str = "datetime";
 
@@ -70,7 +72,7 @@ fn cursor_typing<'py>(
     } else {
         PyString::new(py, DEFAULT_CURSOR_GRAIN).into_any()
     };
-    let grain: Bound<'py, PyAny> = registry::class(py, RecordId::CursorGrain)?.call1((grain,))?;
+    let grain: Bound<'py, PyAny> = enum_from_value(py, RecordId::CursorGrain, grain)?;
     Ok((effective, grain))
 }
 
@@ -109,8 +111,9 @@ pub(crate) fn resolve_bounded_cursor_override<'py>(
     ) else {
         return Ok(None);
     };
-    call_with(
-        &registry::class(py, RecordId::CursorBounds)?,
+    new_record_with(
+        py,
+        RecordId::CursorBounds,
         &[("start", start), ("end", to_exclusive(&end, &grain)?)],
     )
     .map(Some)
@@ -216,7 +219,7 @@ pub(crate) fn resolve_effective_microbatch_batch_size(
     effective_grain: &str,
 ) -> Result<String, PyErr> {
     effective_microbatch_batch_size(batch_size, effective_grain).map_err(|error| {
-        registry::class(py, RecordId::CursorGrain)
+        record_class(py, RecordId::CursorGrain)
             .and_then(|grain| grain.call1((error.0,)))
             .err()
             .unwrap_or_else(|| PyValueError::new_err("unknown cursor grain"))
@@ -226,7 +229,7 @@ pub(crate) fn resolve_effective_microbatch_batch_size(
 fn as_datetime<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = value.py();
     let inner: Bound<'py, PyAny> = native_field(value, "value")?;
-    if value.is_instance(&registry::class(py, RecordId::TimestampValue)?)? {
+    if value.is_instance(&record_class(py, RecordId::TimestampValue)?)? {
         return Ok(inner);
     }
     let datetime: Bound<'py, PyAny> = imported(py, DATETIME_MODULE, "datetime")?;

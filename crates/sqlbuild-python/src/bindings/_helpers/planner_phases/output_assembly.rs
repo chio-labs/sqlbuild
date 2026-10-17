@@ -1,7 +1,6 @@
 //! Plan output assembly: storage policies, warnings and direct-mode metadata.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::plan_output::plan_output_fields;
@@ -21,9 +20,9 @@ use crate::bindings::_helpers::planner_phases::retention::{plan_retention, plan_
 use crate::bindings::_helpers::planner_phases::runtime::runtime_field;
 use crate::bindings::_helpers::planner_phases::runtime::warehouse_field;
 use crate::bindings::_helpers::planner_warehouse::source_freshness::source_freshness_unknown_warnings;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
@@ -63,7 +62,7 @@ impl<'py> PlanOutputFields<'py> {
             }
             self.set("metadata", metadata.into_any());
         }
-        call_with(&registry::class(py, RecordId::PlanOutput)?, &self.fields)
+        new_record_with(py, RecordId::PlanOutput, &self.fields)
     }
 }
 

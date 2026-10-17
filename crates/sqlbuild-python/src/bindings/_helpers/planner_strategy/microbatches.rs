@@ -18,13 +18,14 @@ use sqlbuild_analysis::planner_strategy::types::Timeline;
 use sqlbuild_cursor::algebra::main::parse_duration::parse_duration;
 use sqlbuild_cursor::algebra::models::{DurationDigits, DurationSpan};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::cursor::durations::shifted_moment;
 use crate::bindings::_helpers::plan_output::display::aligned_timestamp_bounds;
 use crate::bindings::_helpers::planner_strategy::values::text;
+use crate::bindings::_helpers::records::construct::{
+    enum_from_value, new_record_with, record_class,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 
 const INTEGER_CURSOR: &str = "integer";
 const TIMESTAMP_CURSOR: &str = "timestamp";
@@ -87,7 +88,7 @@ fn typed_bounds<'py>(
     for value in [&start, &end] {
         let mut typed: bool = false;
         for class in classes {
-            typed = typed || value.is_instance(&registry::class(py, *class)?)?;
+            typed = typed || value.is_instance(&record_class(py, *class)?)?;
         }
         if !typed {
             return Ok(None);
@@ -157,8 +158,9 @@ fn cursor_bounds<'py>(
     end: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = start.py();
-    call_with(
-        &registry::class(py, RecordId::CursorBounds)?,
+    new_record_with(
+        py,
+        RecordId::CursorBounds,
         &[("start", start), ("end", end)],
     )
 }
@@ -169,7 +171,7 @@ fn cursor_value<'py>(
     class: RecordId,
     value: Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
-    call_with(&registry::class(py, class)?, &[("value", value)])
+    new_record_with(py, class, &[("value", value)])
 }
 
 /// One concrete range capped to `max_batches` batch windows from the end the action keeps.
@@ -273,7 +275,7 @@ pub(crate) fn microbatch_limit_config<'py>(
             .filter(|action| action.is_instance_of::<PyString>());
         if let (Some(max_batches), Some(action)) = (max_batches, action) {
             let action: Bound<'py, PyAny> =
-                registry::class(py, RecordId::MicrobatchLimitAction)?.call1((action,))?;
+                enum_from_value(py, RecordId::MicrobatchLimitAction, action)?;
             return Ok((Some(max_batches), Some(action)));
         }
     }

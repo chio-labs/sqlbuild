@@ -1,13 +1,13 @@
 //! Existing old-name planner models at the native decision boundary.
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::relation;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PySet, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
@@ -136,13 +136,14 @@ pub(crate) fn old_name_claim_errors<'py>(
             }
             let message =
                 claim_message(&name.extract::<String>()?, &view, &arguments.value("now")?)?;
-            errors.push(call_with(
-                &registry::class(py, RecordId::PlanWarning)?,
+            errors.push(new_record_with(
+                py,
+                RecordId::PlanWarning,
                 &[
                     ("model_name", name.clone()),
                     (
                         "severity",
-                        registry::class(py, RecordId::WarningSeverity)?.getattr("ERROR")?,
+                        enum_member(py, RecordId::WarningSeverity, "ERROR")?,
                     ),
                     ("message", message.into_pyobject(py)?.into_any()),
                     ("code", "M114".into_pyobject(py)?.into_any()),

@@ -2,9 +2,7 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
 use crate::bindings::_helpers::compiled_project::records::compiled_model_record;
 use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
@@ -23,9 +21,9 @@ use crate::bindings::_helpers::planner_scenario::{
 };
 use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fixtures as complete_relation_fixtures;
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
+use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 
@@ -68,7 +66,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
     let snapshot = if snapshot.is_truthy()? {
         snapshot
     } else {
-        registry::class(py, RecordId::WarehouseSnapshot)?.call0()?
+        new_record(py, RecordId::WarehouseSnapshot, (), None)?
     };
     let columns = args.value("source_warehouse_columns")?;
     let columns = if columns.is_truthy()? {
@@ -158,7 +156,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
                         ("full_refresh", PyBool::new(py, true).to_owned().into_any()),
                         (
                             "cursor_overrides",
-                            registry::class(py, RecordId::CursorOverridePair)?.call0()?,
+                            new_record(py, RecordId::CursorOverridePair, (), None)?,
                         ),
                     ],
                 )?),
@@ -170,8 +168,9 @@ pub(crate) fn build_scenario_execution_plan<'py>(
         }
     }
     let (expected, assertions) = expectations(&scenario, &context)?;
-    let plan = call_with(
-        &registry::class(py, RecordId::ScenarioExecutionPlan)?,
+    let plan = new_record_with(
+        py,
+        RecordId::ScenarioExecutionPlan,
         &[
             ("key", native_field(&scenario, "key")?),
             ("name", native_field(&scenario, "name")?),
@@ -205,7 +204,7 @@ fn complete_fixtures<'py>(
         ("MODEL", "__ref__"),
         ("SEED", "__seed__"),
     ] {
-        let kind = registry::class(py, RecordId::CompiledResourceType)?.getattr(kind)?;
+        let kind = enum_member(py, RecordId::CompiledResourceType, kind)?;
         groups.push(PyTuple::new(
             py,
             [kind, extract_fixtures(scenario, prefix)?.into_any()],
@@ -297,8 +296,9 @@ fn expectations<'py>(
             &native_field(&cte, "sql_body")?.extract::<String>()?,
             false,
         )?;
-        expected.push(call_with(
-            &registry::class(py, RecordId::ScenarioExpectedExpectationPlan)?,
+        expected.push(new_record_with(
+            py,
+            RecordId::ScenarioExpectedExpectationPlan,
             &[
                 ("model_name", string(py, name)),
                 ("actual_destination", target),
@@ -315,8 +315,9 @@ fn expectations<'py>(
             &native_field(&cte, "sql_body")?.extract::<String>()?,
             false,
         )?;
-        assertions.push(call_with(
-            &registry::class(py, RecordId::ScenarioAssertionExpectationPlan)?,
+        assertions.push(new_record_with(
+            py,
+            RecordId::ScenarioAssertionExpectationPlan,
             &[
                 (
                     "name",

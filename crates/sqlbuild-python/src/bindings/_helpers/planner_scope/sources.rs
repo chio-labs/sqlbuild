@@ -4,9 +4,9 @@ use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_scope::loaders::intermediate_map;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyTuple};
 use pyo3::types::{PyDictMethods, PySetMethods};
@@ -56,7 +56,6 @@ pub(crate) fn build_source_load_entries<'py>(
     is_reload: bool,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py = execution_order.py();
-    let class = registry::class(py, RecordId::SourceLoadPlanEntry)?;
     let kinds = host::entry(py, ExecutorHost::ExecutionResourceKind)?;
     let mut entries: Vec<Bound<'py, PyAny>> = Vec::new();
     for key in execution_order.try_iter()? {
@@ -113,7 +112,12 @@ pub(crate) fn build_source_load_entries<'py>(
                 native_field(&integration, "kind")?
             },
         )?;
-        entries.push(class.call((), Some(&kwargs))?);
+        entries.push(new_record(
+            py,
+            RecordId::SourceLoadPlanEntry,
+            (),
+            Some(&kwargs),
+        )?);
     }
     PyTuple::new(py, entries)
 }

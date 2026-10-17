@@ -2,15 +2,15 @@
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationCompatibilityResult,
 };
+use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::registry;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
@@ -43,15 +43,16 @@ fn blocking<'py>(
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "append_new_columns".to_owned())
     };
-    registry::class(
+    new_record(
         py,
         if snapshot {
             RecordId::SnapshotSchemaChangePolicy
         } else {
             RecordId::OnSchemaChange
         },
-    )?
-    .call1((&policy,))?;
+        (&policy,),
+        None,
+    )?;
     let mut findings: Vec<CompatibilityFinding> = Vec::new();
     for finding in findings_in.try_iter()? {
         let finding = finding?;
@@ -137,8 +138,9 @@ pub(super) fn check_migration_compatibility<'py>(
         model_reads::name_object(&model)?,
         check.origin_columns.clone(),
     )?;
-    let snapshot = call_with(
-        &registry::class(py, RecordId::WarehouseSnapshot)?,
+    let snapshot = new_record_with(
+        py,
+        RecordId::WarehouseSnapshot,
         &[
             ("existing_relations", relations.into_any()),
             ("existing_columns", columns.into_any()),
@@ -198,7 +200,7 @@ fn result<'py>(
     findings: Bound<'py, PyTuple>,
 ) -> PyResult<MigrationCompatibilityResult<'py>> {
     Ok(MigrationCompatibilityResult {
-        status: registry::class(py, RecordId::MigrationCompatibility)?.call1((status,))?,
+        status: enum_from_value(py, RecordId::MigrationCompatibility, status)?,
         findings: findings.into_any(),
     })
 }

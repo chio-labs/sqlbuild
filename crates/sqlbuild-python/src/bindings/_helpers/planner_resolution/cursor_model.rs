@@ -27,6 +27,7 @@ use crate::bindings::_helpers::planner_resolution::cursor_windows::without_desti
 use crate::bindings::_helpers::planner_resolution::future_safety::resolve_future_cursor_safety;
 use crate::bindings::_helpers::planner_resolution::models::ModelSqlRequest;
 use crate::bindings::_helpers::planner_resolution::values::string;
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::records::registry;
@@ -45,8 +46,9 @@ fn config<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAn
 
 fn unbounded(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     let sentinel = host::entry(py, ExecutorHost::BoundSentinel)?;
-    call_with(
-        &registry::class(py, RecordId::CursorBounds)?,
+    new_record_with(
+        py,
+        RecordId::CursorBounds,
         &[
             ("start", native_field(&sentinel, "START")?),
             ("end", native_field(&sentinel, "END")?),
@@ -202,8 +204,9 @@ pub(crate) fn compute_model_cursor_bounds<'py>(
     } else {
         py.None().into_bound(py)
     };
-    let policy = call_with(
-        &registry::class(py, RecordId::MaximumStartPolicyInputs)?,
+    let policy = new_record_with(
+        py,
+        RecordId::MaximumStartPolicyInputs,
         &[
             ("config", start_config),
             (
