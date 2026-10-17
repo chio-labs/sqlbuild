@@ -4966,6 +4966,8 @@ _SLOW_LINT_MACRO: str = (
     "import time\n\n\n"
     "def slow_total(amount: str) -> str:\n"
     '    """Return the amount, pausing for the macro tests that only SQL lint expands."""\n'
+    "    if amount == 'model_amount':\n"
+    "        time.sleep(2.0)\n"
     "    if amount == 'slow_amount':\n"
     "        with open(os.environ['SLOW_MACRO_MARKER'], 'a', encoding='utf-8') as marker:\n"
     "            marker.write('expanding\\n')\n"
@@ -4985,7 +4987,8 @@ def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
         ),
         "models/slow_total.sql": (
             'MODEL (description "Slow total");\n'
-            'SELECT @slow_total("amount") AS amount FROM (SELECT 5 AS amount) AS input_values\n'
+            'SELECT @slow_total("model_amount") AS amount\n'
+            "FROM (SELECT 5 AS model_amount) AS input_values\n"
         ),
         **{
             f"tests/slow_total_{index}.sql": (
@@ -5001,3 +5004,9 @@ def slow_lint_model_files(*, model_count: int) -> dict[str, str]:
             for index in range(model_count)
         },
     }
+
+
+def restore_default_interrupt() -> None:
+    """Give a spawned command default Ctrl-C handling even when its parent ignores SIGINT."""
+
+    _ = signal.signal(signal.SIGINT, signal.SIG_DFL)

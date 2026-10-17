@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
@@ -145,16 +146,19 @@ fn rules_bulk_cache_path(project_dir: PathBuf, file_name: &str) -> PathBuf {
 }
 
 /// Hand freed glibc heap pages back to the OS; a no-op elsewhere or without `malloc_trim`.
-pub(crate) fn freed_memory_released(py: Python<'_>) {
+pub(crate) fn freed_memory_released(py: Python<'_>) -> PyResult<()> {
     if !cfg!(target_os = "linux") {
-        return;
+        return Ok(());
     }
     let trim = || -> PyResult<()> {
         let process: Bound<'_, PyAny> = imported(py, CTYPES_MODULE, "CDLL")?.call1((py.None(),))?;
         let _ = native_field(&process, "malloc_trim")?.call1((0,))?;
         Ok(())
     };
-    let _ = trim();
+    match trim() {
+        Err(error) if !error.is_instance_of::<PyException>(py) => Err(error),
+        _ => Ok(()),
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
