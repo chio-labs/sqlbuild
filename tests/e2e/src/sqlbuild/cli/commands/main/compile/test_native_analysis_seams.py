@@ -11,6 +11,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     NativeAnalysisSeamTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    CompileReuseRun,
     prepare_compile_reuse_project,
     seam_recording_compile,
 )
@@ -43,7 +44,7 @@ def test_given_project_when_compiling_then_native_seams_answer(
 ) -> None:
     prepared_project: Path = tmp_path / "orders"
     prepare_compile_reuse_project(project_dir=prepared_project)
-    native_run = seam_recording_compile(
+    native_run: CompileReuseRun = seam_recording_compile(
         project_dir=prepared_project, monkeypatch=monkeypatch, capsys=capsys
     )
 

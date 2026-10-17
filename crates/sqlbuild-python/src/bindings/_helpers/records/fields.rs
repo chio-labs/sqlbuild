@@ -25,6 +25,9 @@ use crate::bindings::_helpers::records::getters::getter_field;
 use crate::bindings::_helpers::records::models::{FieldDefault, NativeRecord, RecordSpec};
 use crate::bindings::_helpers::records::types::ClassProperty;
 
+/// How a test run treats `field` falling back to `getattr` on a native class: unset outside tests.
+pub(crate) const NATIVE_FIELD_STRICT_ENV_VAR: &str = "SQLBUILD_NATIVE_FIELD_STRICT";
+
 /// Every registered record spec, in registration order.
 pub(crate) fn all_specs() -> impl Iterator<Item = &'static RecordSpec> {
     RECORDS.iter().flat_map(|group| group.iter())
@@ -69,20 +72,19 @@ pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Boun
     value.getattr(name)
 }
 
-/// How a test run treats `field` falling back to `getattr` on a native class: unset outside tests.
-pub(crate) const NATIVE_FIELD_STRICT_ENV_VAR: &str = "SQLBUILD_NATIVE_FIELD_STRICT";
-
 /// A strict-mode setting: record fallbacks to a file, or fail on any fallback missing from an allowlist.
 enum StrictFields {
     Record(String, Mutex<HashSet<String>>),
-    Enforce(HashSet<String>),
+    Enforce(Result<HashSet<String>, String>),
 }
 
 fn strict_fields() -> Option<&'static StrictFields> {
     static STRICT: OnceLock<Option<StrictFields>> = OnceLock::new();
     STRICT
         .get_or_init(|| {
-            let setting: String = std::env::var(NATIVE_FIELD_STRICT_ENV_VAR).ok()?;
+            let setting: String = std::env::var_os(NATIVE_FIELD_STRICT_ENV_VAR)?
+                .to_string_lossy()
+                .into_owned();
             if let Some(path) = setting.strip_prefix("record:") {
                 return Some(StrictFields::Record(
                     path.to_owned(),
@@ -90,16 +92,24 @@ fn strict_fields() -> Option<&'static StrictFields> {
                 ));
             }
             let path: &str = setting.strip_prefix("enforce:")?;
-            let allowed: HashSet<String> = std::fs::read_to_string(path)
-                .unwrap_or_default()
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                .map(str::to_owned)
-                .collect();
-            Some(StrictFields::Enforce(allowed))
+            Some(StrictFields::Enforce(
+                std::fs::read_to_string(path)
+                    .map(|listed| allowlist_entries(&listed))
+                    .map_err(|error| format!("cannot read native field allowlist {path}: {error}")),
+            ))
         })
         .as_ref()
+}
+
+/// The non-comment entries of an allowlist file.
+fn allowlist_entries(listed: &str) -> HashSet<String> {
+    let mut entries: HashSet<String> = HashSet::new();
+    for line in listed.lines().map(str::trim) {
+        if !line.is_empty() && !line.starts_with('#') {
+            let _ = entries.insert(line.to_owned());
+        }
+    }
+    entries
 }
 
 /// In strict test runs, record or reject a `getattr` fallback on one of SQLBuild's own native classes.
@@ -115,13 +125,14 @@ fn strict_fallback(value: &Bound<'_, PyAny>, name: &str) -> PyResult<()> {
     let caller: &std::panic::Location<'_> = std::panic::Location::caller();
     let entry: String = format!("{}\t{}.{name}", caller.file(), class.qualname()?);
     match strict {
-        StrictFields::Enforce(allowed) if !allowed.contains(&entry) => {
+        StrictFields::Enforce(Err(error)) => Err(PyRuntimeError::new_err(error.clone())),
+        StrictFields::Enforce(Ok(allowed)) if !allowed.contains(&entry) => {
             Err(PyRuntimeError::new_err(format!(
                 "native field read fell back to Python: {}",
                 entry.replace('\t', " ")
             )))
         }
-        StrictFields::Enforce(_) => Ok(()),
+        StrictFields::Enforce(Ok(_)) => Ok(()),
         StrictFields::Record(path, seen) => {
             let new: bool = seen
                 .lock()
