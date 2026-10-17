@@ -18,6 +18,8 @@ use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
@@ -164,14 +166,12 @@ fn model_paths(
             ("adapter", scope.adapter.clone()),
         ],
     )?;
-    let keys: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::SelectProjectGraph)?,
-        &[
-            ("graph", graph.clone()),
-            ("select", selectors(py, select)?),
-            ("exclude", selectors(py, exclude)?),
-        ],
-    )?;
+    let keys: Bound<'_, PyAny> = select_project_graph(
+        &graph.clone(),
+        &selectors(py, select)?,
+        &selectors(py, exclude)?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     let model_type: Bound<'_, PyAny> = enum_member(py, RecordId::CompiledResourceType, "MODEL")?;
     let mut names: BTreeSet<String> = BTreeSet::new();
     for key in keys.try_iter()? {
@@ -347,13 +347,10 @@ pub(crate) fn resolve_lint_inputs<'py>(
             ],
         )?),
     )?;
-    call_with(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", selectors(py, select)?),
-            ("exclude", selectors(py, exclude)?),
-            ("discovered_inputs", discovered.clone()),
-        ],
+    reject_unit_test_selectors(
+        &selectors(py, select)?,
+        &selectors(py, exclude)?,
+        &discovered.clone(),
     )?;
     let adapter: Bound<'py, PyAny> = discovered_adapter(project_dir, &discovered)?;
     if select.is_empty() && exclude.is_empty() {

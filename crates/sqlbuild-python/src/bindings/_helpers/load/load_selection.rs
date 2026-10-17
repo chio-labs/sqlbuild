@@ -12,9 +12,11 @@ use sqlbuild_core::load_command::main::load_reference_loaders::load_reference_lo
 use sqlbuild_core::load_command::main::select_load_entries::select_load_entries as select_entries;
 use sqlbuild_core::load_command::models::{LoadEntry, LoadGraph};
 
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
+use crate::bindings::_helpers::contracts::spec_resolution::loader_destination_parts;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
@@ -127,13 +129,11 @@ impl<'py> LoadProject<'py> {
         } else {
             destination
         };
-        let parts: Bound<'py, PyAny> = call_with(
-            &registry::native(py, NativeAttr::LoaderDestinationPartsFunction)?,
-            &[
-                ("destination", destination),
-                ("default_database", defaults.database.clone()),
-                ("default_schema", defaults.schema.clone()),
-            ],
+        let parts: Bound<'py, PyAny> = loader_destination_parts(
+            py,
+            &destination.extract::<String>()?,
+            Some(defaults.database.clone()).filter(|value| !value.is_none()),
+            Some(defaults.schema.clone()).filter(|value| !value.is_none()),
         )?;
         let meta: Bound<'py, PyDict> = PyDict::new(py);
         meta.set_item(LOADER_NODE_KEY, true)?;
@@ -258,13 +258,10 @@ pub(crate) fn loader_defaults<'py>(
     ),
 ) -> PyResult<LoaderDefaults<'py>> {
     let py: Python<'py> = discovered.py();
-    let connection: Bound<'py, PyDict> = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveConnectionConfig)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("selected_target", selected_target.clone()),
-            ("cli_vars", cli_vars.clone()),
-        ],
+    let connection: Bound<'py, PyDict> = build_effective_connection_config(
+        &discovered.clone(),
+        Some(selected_target.clone()).filter(|value| !value.is_none()),
+        Some(cli_vars.clone()).filter(|value| !value.is_none()),
     )?
     .downcast_into()?;
     let adapter_name: Bound<'py, PyAny> = call_with(

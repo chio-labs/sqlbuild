@@ -8,7 +8,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyTuple}
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::discovery::description_inputs::externally_described_models;
 use crate::bindings::_helpers::format_command::files::{
     FormatChange, file_dictionary, overlaid, persist_changes, sorted_items,
@@ -17,6 +17,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::dsl_headers::{header_violations, rules_config};
+use crate::bindings::_helpers::rules::fixture_formatting::format_redundant_fixture_nulls;
 use crate::bindings::_helpers::rules::lint_pipeline::{LintViolationRow, ViolationClasses};
 use crate::bindings::_helpers::rules::lint_text::apply_lint_suppressions;
 use sqlbuild_rules::dsl_headers::main::scan_headers::scan_headers;
@@ -61,15 +62,13 @@ fn fixture_autofix<'py>(
     let Some((discovered, syntax)) = fixture_inputs else {
         return Ok(PyDict::new(py));
     };
-    Ok(call_with(
-        &registry::native(py, NativeAttr::FormatRedundantFixtureNulls)?,
-        &[
-            ("files", files.clone().into_any()),
-            ("project_dir", request.project_dir.clone()),
-            ("discovered_inputs", discovered.clone()),
-            ("sql_lexical_syntax", syntax.clone()),
-        ],
-    )?
+    Ok(format_redundant_fixture_nulls(
+        &files.clone().into_any().cast_into::<PyDict>()?,
+        &request.project_dir.clone(),
+        &discovered.clone(),
+        &syntax.clone(),
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
     .downcast_into::<PyDict>()?)
 }
 
@@ -215,29 +214,32 @@ fn plan_rule_fixes<'py>(
     files: &Bound<'py, PyDict>,
 ) -> PyResult<(Bound<'py, PyDict>, Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py: Python<'py> = files.py();
-    let result: Bound<'py, PyAny> = call_with(
-        &registry::native(py, NativeAttr::PlanRuleFixes)?,
-        &[
-            ("project_dir", request.project_dir.clone()),
-            ("files", files.clone().into_any()),
-            ("config", request.config.clone()),
-            (
-                "adapter",
-                request
-                    .adapter
-                    .map_or_else(|| py.None().into_bound(py), Clone::clone),
-            ),
-            (
-                "discovered_inputs",
-                request
-                    .discovered
-                    .map_or_else(|| py.None().into_bound(py), Clone::clone),
-            ),
-            (
-                "enabled",
-                PyBool::new(py, request.fix).to_owned().into_any(),
-            ),
-        ],
+    let result: Bound<'py, PyAny> = crate::bindings::_helpers::rules::fix_session::plan_rule_fixes(
+        py,
+        Some(keywords(
+            py,
+            &[
+                ("project_dir", request.project_dir.clone()),
+                ("files", files.clone().into_any()),
+                ("config", request.config.clone()),
+                (
+                    "adapter",
+                    request
+                        .adapter
+                        .map_or_else(|| py.None().into_bound(py), Clone::clone),
+                ),
+                (
+                    "discovered_inputs",
+                    request
+                        .discovered
+                        .map_or_else(|| py.None().into_bound(py), Clone::clone),
+                ),
+                (
+                    "enabled",
+                    PyBool::new(py, request.fix).to_owned().into_any(),
+                ),
+            ],
+        )?),
     )?;
     Ok((
         result.get_item(0)?.downcast_into::<PyDict>()?,

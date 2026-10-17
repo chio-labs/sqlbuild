@@ -17,6 +17,8 @@ use sqlbuild_core::load_command::main::render_load_ready::render_load_ready;
 use sqlbuild_core::load_command::models::{LoadCounts, LoadResultText};
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
+use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
@@ -31,11 +33,14 @@ use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
+use crate::bindings::_helpers::result_output::documents::format_load_execution_json;
+use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 
 const LOADER_NODE_KEY: &str = "sqlbuild_loader_node";
 const EXECUTION_COMMAND: &str = "sqb load";
@@ -84,14 +89,7 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
     )?;
     let select: Bound<'py, PyAny> = native_field(request, "select")?;
     let exclude: Bound<'py, PyAny> = native_field(request, "exclude")?;
-    call_with(
-        &registry::native(py, NativeAttr::RejectUnitTestSelectors)?,
-        &[
-            ("select", select.clone()),
-            ("exclude", exclude.clone()),
-            ("discovered_inputs", discovered.clone()),
-        ],
-    )?;
+    reject_unit_test_selectors(&select.clone(), &exclude.clone(), &discovered.clone())?;
     let selected_target: Bound<'py, PyAny> = native_field(request, "selected_target")?;
     let target_config: Bound<'py, PyAny> = call_with(
         &registry::native(py, NativeAttr::BuildEffectiveTargetConfig)?,
@@ -292,23 +290,19 @@ fn prepare<'py>(
         ],
     )?;
     check_reference_targets(invocation, (&adapter, &connection_config))?;
-    let runtime: (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>) = call_with(
-        &registry::native(py, NativeAttr::BuildEffectiveRuntimeConfig)?,
-        &[
-            ("discovered_inputs", discovered.clone()),
-            ("selected_target", native_field(request, "selected_target")?),
-            ("cli_vars", native_field(request, "cli_vars")?),
-        ],
-    )?
-    .extract()?;
+    let runtime: (Bound<'py, PyAny>, Bound<'py, PyAny>, Bound<'py, PyAny>) =
+        build_effective_runtime_config(
+            &discovered.clone(),
+            Some(native_field(request, "selected_target")?).filter(|value| !value.is_none()),
+            Some(native_field(request, "cli_vars")?).filter(|value| !value.is_none()),
+        )
+        .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
+        .extract()?;
     let requested: Bound<'py, PyAny> = native_field(request, "concurrency")?;
     let concurrency: i64 = if requested.is_none() {
-        call_with(
-            &registry::native(py, NativeAttr::BuildEffectiveSettingsConfig)?,
-            &[("discovered_inputs", discovered.clone())],
-        )?
-        .getattr("concurrency")?
-        .extract()?
+        build_effective_settings_config(&discovered.clone())?
+            .getattr("concurrency")?
+            .extract()?
     } else {
         requested.extract()?
     };
@@ -509,21 +503,16 @@ fn execute<'py>(
 
 fn write_json(request: &Bound<'_, PyAny>, results: &[Bound<'_, PyAny>]) -> PyResult<()> {
     let py: Python<'_> = request.py();
-    let payload: Bound<'_, PyAny> = call_with(
-        &registry::native(py, NativeAttr::FormatLoadExecutionJson)?,
-        &[("results", PyTuple::new(py, results)?.into_any())],
-    )?;
-    call_with(
-        &registry::native(py, NativeAttr::WriteExecutionJsonOutput)?,
-        &[
-            ("payload", payload),
-            ("json_output", native_field(request, "json_output")?),
-            (
-                "json_output_path",
-                native_field(request, "json_output_path")?,
-            ),
-        ],
-    )?;
+    let payload: Bound<'_, PyAny> =
+        format_load_execution_json(py, PyTuple::new(py, results)?.into_any())
+            .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
+    write_execution_json_output(
+        py,
+        payload,
+        native_field(request, "json_output")?.extract::<bool>()?,
+        native_field(request, "json_output_path")?,
+    )
+    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
     Ok(())
 }
 
