@@ -286,3 +286,13 @@ class ScenarioHelperCteE2ETestCase:
     unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_json_expected_results: tuple[dict[str, object], ...] = field(default_factory=tuple)
     expected_json_assertion_results: tuple[dict[str, object], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioHelperShadowingE2ETestCase:
+    """Test case for a scenario check that redefines a helper CTE name."""
+
+    description: str
+    check_ctes: str
+    expected_output_fragment: str
+    unexpected_output_fragment: str

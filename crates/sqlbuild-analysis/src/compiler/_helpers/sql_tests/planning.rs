@@ -63,8 +63,8 @@ pub(crate) const MOCK_CTE_PREFIXES: [&str; 5] = [
     DBT_REF_PREFIX,
     TABLE_FUNCTION_PREFIX,
 ];
-const EXPECTED_PREFIX: &str = "__expected__";
-const ASSERT_PREFIX: &str = "__assert__";
+pub(crate) const EXPECTED_PREFIX: &str = "__expected__";
+pub(crate) const ASSERT_PREFIX: &str = "__assert__";
 const REF_FUNCTION: &str = "__ref";
 const SOURCE_FUNCTION: &str = "__source";
 const SEED_FUNCTION: &str = "__seed";

@@ -11,6 +11,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario._test_types import (
     ScenarioHelperCteE2ETestCase,
+    ScenarioHelperShadowingE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.scenario.helpers import (
     build_helper_scenario_project_files,
@@ -173,3 +174,53 @@ def test_given_scenario_helper_ctes_when_testing_then_checks_read_them(
         == test_case.expected_json_assertion_results
     )
     assert len(assertion_results) == len(test_case.expected_json_assertion_results)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        ScenarioHelperShadowingE2ETestCase(
+            description="an assertion redefines a helper CTE name",
+            check_ctes=(
+                "__assert__flags_match AS (\n"
+                "  WITH expected_rows AS (SELECT 'o2' AS order_id)\n"
+                '  SELECT order_id FROM __ref("order_flags")\n'
+                "  WHERE order_id NOT IN (SELECT order_id FROM expected_rows)\n"
+                ")"
+            ),
+            expected_output_fragment="redefines helper CTE 'expected_rows'",
+            unexpected_output_fragment="Duplicate CTE name",
+        ),
+        ScenarioHelperShadowingE2ETestCase(
+            description="expected output redefines a helper CTE name",
+            check_ctes=(
+                "__expected__order_flags AS (\n"
+                "  WITH expected_rows AS (SELECT 'o1' AS order_id, FALSE AS is_cancelled)\n"
+                "  SELECT order_id, 'placed' AS status, is_cancelled FROM expected_rows\n"
+                ")"
+            ),
+            expected_output_fragment="redefines helper CTE 'expected_rows'",
+            unexpected_output_fragment="Duplicate CTE name",
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_scenario_check_redefining_a_helper_when_compiling_then_reports_a_compile_error(
+    test_case: ScenarioHelperShadowingE2ETestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="scenario_helper_shadowing",
+        repo_files=build_helper_scenario_project_files(
+            helper_ctes=_EXPECTED_ROWS, check_ctes=test_case.check_ctes
+        ),
+    )
+
+    compiled: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile"), project_dir=project_dir
+    )
+
+    output: str = compiled.stdout + compiled.stderr
+    assert compiled.returncode != 0, output
+    assert test_case.expected_output_fragment in output, output
+    assert test_case.unexpected_output_fragment not in output, output

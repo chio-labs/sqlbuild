@@ -412,6 +412,8 @@ pub struct ScenarioExpectedColumns {
 pub struct ScenarioScopeInput<'a> {
     /// Every non-check CTE by authored name; a fixture body is what a check reading it sees.
     pub ctes: &'a [(String, String)],
+    /// The scenario's `__expected__` and `__assert__` CTEs, checked against helper names.
+    pub checks: &'a [(String, String)],
     pub lexical: LexicalSyntax,
     pub dialect: Option<&'a str>,
     pub file_label: &'a str,

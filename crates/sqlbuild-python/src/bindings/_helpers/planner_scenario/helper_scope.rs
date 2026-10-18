@@ -36,6 +36,7 @@ pub(super) fn scenario_helper_scope(
         native_field(&context.adapter, "sql_analysis_dialect_name")?.extract()?;
     helper_scope(&ScenarioScopeInput {
         ctes: &ctes,
+        checks: &[],
         lexical: syntax.into(),
         dialect: dialect.as_deref(),
         file_label: &context.label,

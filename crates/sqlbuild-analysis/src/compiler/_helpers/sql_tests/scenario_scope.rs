@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 use crate::compiler::_helpers::sql_tests::cte_slices::SliceDialect;
 use crate::compiler::_helpers::sql_tests::helper_scope::{ScopeGraph, ScopeRequest};
 use crate::compiler::_helpers::sql_tests::planning::{
-    DBT_REF_PREFIX, REF_PREFIX, SEED_PREFIX, SOURCE_PREFIX, SqlTestPatterns, TestFixtures,
+    ASSERT_PREFIX, DBT_REF_PREFIX, EXPECTED_PREFIX, REF_PREFIX, SEED_PREFIX, SOURCE_PREFIX,
+    SqlTestPatterns, TestFixtures,
 };
 use crate::compiler::models::{ScenarioHelperScope, ScenarioScopeInput, SqlTestCte};
 
@@ -15,7 +16,7 @@ const FIXTURE_PREFIXES: [&str; 4] = [REF_PREFIX, SOURCE_PREFIX, SEED_PREFIX, DBT
 /// Index every helper, including ones that call references, and every fixture as a mock.
 pub(crate) fn helper_scope(input: &ScenarioScopeInput<'_>) -> Result<ScenarioHelperScope, String> {
     let patterns = SqlTestPatterns::new(input.lexical.clone()).map_err(plain)?;
-    let fixtures = scenario_fixtures(input.ctes);
+    let fixtures = scenario_fixtures(input.ctes, input.checks);
     let read_helper_names: Vec<String> = fixtures
         .helpers
         .iter()
@@ -34,7 +35,7 @@ pub(crate) fn helper_scope(input: &ScenarioScopeInput<'_>) -> Result<ScenarioHel
     Ok(ScenarioHelperScope { graph, patterns })
 }
 
-fn scenario_fixtures(ctes: &[(String, String)]) -> TestFixtures {
+fn scenario_fixtures(ctes: &[(String, String)], checks: &[(String, String)]) -> TestFixtures {
     let mut fixtures = TestFixtures {
         mock_refs: BTreeMap::new(),
         mock_sources: BTreeMap::new(),
@@ -63,6 +64,15 @@ fn scenario_fixtures(ctes: &[(String, String)]) -> TestFixtures {
         };
         if let Some((_, key)) = fixture {
             group.insert(key.to_owned(), sql.clone());
+        }
+    }
+    for (name, sql) in checks {
+        if let Some(model) = name.strip_prefix(EXPECTED_PREFIX) {
+            fixtures.expected.insert(model.to_owned(), sql.clone());
+        } else if let Some(assertion) = name.strip_prefix(ASSERT_PREFIX) {
+            fixtures
+                .assertions
+                .push((assertion.to_owned(), sql.clone()));
         }
     }
     fixtures

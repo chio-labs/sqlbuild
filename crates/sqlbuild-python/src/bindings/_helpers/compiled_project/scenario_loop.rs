@@ -104,8 +104,15 @@ impl<'py> TestScope<'_, 'py> {
         ctes: &SqlScenarioCtes,
         relative_path: &str,
     ) -> PyResult<Vec<SqlTestCteText>> {
+        let checks: Vec<(String, String)> = ctes
+            .expected
+            .iter()
+            .chain(&ctes.assertions)
+            .cloned()
+            .collect();
         let scope: ScenarioHelperScope = scenario_helper_scope(&ScenarioScopeInput {
             ctes: &ctes.authored,
+            checks: &checks,
             lexical: self.model_loop.syntax.clone(),
             dialect: None,
             file_label: relative_path,

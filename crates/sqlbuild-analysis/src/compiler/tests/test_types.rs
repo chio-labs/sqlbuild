@@ -220,3 +220,10 @@ pub(crate) struct ScenarioHelperScopeTestCase {
     pub(crate) fixtures: bool,
     pub(crate) expected_sql: &'static str,
 }
+
+pub(crate) struct ScenarioHelperShadowTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) check_name: &'static str,
+    pub(crate) check_sql: &'static str,
+    pub(crate) expected_rejected: bool,
+}
