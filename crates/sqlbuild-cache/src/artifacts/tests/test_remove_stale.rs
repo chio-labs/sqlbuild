@@ -129,6 +129,10 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
         let removed =
             remove_stale_unless_unchanged(&compiled, &first, &stamp, test_case.racy_window_ns)
                 .expect("first pass");
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        let settled =
+            remove_stale_unless_unchanged(&compiled, &first, &stamp, test_case.racy_window_ns)
+                .expect("settling pass");
         let stamped: bool = stamp.is_file();
         std::thread::sleep(std::time::Duration::from_millis(30));
         (test_case.change)(folder.path());
@@ -143,8 +147,8 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
                 .expect("second pass");
 
         assert_eq!(
-            (removed, stamped),
-            (1, test_case.expected_stamped),
+            (removed, settled, stamped),
+            (1, 0, test_case.expected_stamped),
             "{}: first pass",
             test_case.description
         );
