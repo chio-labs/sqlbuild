@@ -1,6 +1,6 @@
 //! Python's `build_sql_test_block`: validate one TEST block's header against its SQL.
 
-use crate::sql_tests::_helpers::header::{cursor_bound, header_checks, test_mode};
+use crate::sql_tests::_helpers::header::{cursor_bound, header_checks, header_timeout, test_mode};
 use crate::sql_tests::_helpers::parameters::{entry, parameters_and_cases};
 use crate::sql_tests::constants::{CURSOR_END_KEY, CURSOR_START_KEY, MODEL_MODE, NAME_KEY};
 use crate::sql_tests::models::SqlTestBlock;
@@ -32,7 +32,9 @@ pub fn sql_test_block(
              supported for model tests, not mode '{mode}'"
         ));
     }
+    let timeout = header_timeout(header, "TEST()", file_path)?;
     Ok(SqlTestBlock {
+        timeout,
         name,
         mode,
         parameters,

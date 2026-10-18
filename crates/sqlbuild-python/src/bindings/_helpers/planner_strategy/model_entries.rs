@@ -8,6 +8,9 @@ use pyo3::{IntoPyObject, pyfunction};
 use sqlbuild_analysis::planner_strategy::main::microbatch_lookback::microbatch_lookback;
 use sqlbuild_analysis::planner_strategy::main::table_type_ddl::table_type_ddl;
 use sqlbuild_analysis::planner_strategy::models::{CursorTypeCheck, LookbackConfig};
+use sqlbuild_model_config::execution_limits::constants::MODEL_MAX_DURATION_KEY;
+use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
+use sqlbuild_model_config::execution_limits::models::ExecutionLimit;
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
@@ -366,6 +369,38 @@ fn ddl_cursor_bounds<'py>(request: &ModelEntryDecisions<'py>) -> PyResult<Bound<
     )
 }
 
+/// The model's `max_duration`, its whole seconds, and the configuration layer that set it.
+fn execution_limit_fields<'py>(
+    model: &Bound<'py, PyAny>,
+    values: &Bound<'py, PyAny>,
+    entry: &Bound<'py, PyDict>,
+) -> PyResult<()> {
+    let Some(text) = config_str(values, MODEL_MAX_DURATION_KEY)? else {
+        return Ok(());
+    };
+    let text: String = text.extract()?;
+    let seconds: Option<u64> = match parse_execution_limit(&text) {
+        Some(ExecutionLimit::Seconds(seconds)) => Some(seconds),
+        Some(ExecutionLimit::Disabled) | None => None,
+    };
+    let config: Bound<'py, PyAny> = native_field(model, "config")?;
+    let from_header: bool =
+        native_field(&config, "model_header_keys")?.contains(MODEL_MAX_DURATION_KEY)?;
+    let matched: Option<String> = native_field(&config, "matched_path_default")?.extract()?;
+    let source: String = match (from_header, matched) {
+        (true, _) => "MODEL() header".to_owned(),
+        (false, Some(glob)) => format!("[path_defaults.\"{glob}\"] or the [defaults] it inherits"),
+        (false, None) => "[defaults]".to_owned(),
+    };
+    entry.set_item("max_duration", text)?;
+    entry.set_item("max_duration_seconds", seconds)?;
+    entry.set_item(
+        "max_duration_source",
+        format!("{MODEL_MAX_DURATION_KEY} in {source}"),
+    )?;
+    Ok(())
+}
+
 /// Copy the model's authored strategy, cursor, batch and snapshot settings onto the entry.
 fn config_fields<'py>(
     request: &ModelEntryDecisions<'py>,
@@ -538,6 +573,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
         entry.set_item(field, native_field(change, field)?)?;
     }
     config_fields(request, &values, &entry)?;
+    execution_limit_fields(model, &values, &entry)?;
     entry.set_item("unique_key", unique_key)?;
     entry.set_item("merge_exclude_columns", merge_exclude)?;
     entry.set_item("table_type", table_type)?;

@@ -5073,12 +5073,15 @@ def fit_auxiliary_relation_name(*, base_name: str, suffix: str, identifier_limit
 def merge_microbatch_intervals(
     *, intervals: Sequence[MicrobatchInterval], cursor_type: str
 ) -> tuple[MicrobatchInterval, ...]: ...
+def execution_limit_seconds(text: str) -> int | None: ...
 def render_sql_test_comparison_sql(
     test_entries: Sequence[SqlTestPlanEntry],
     *,
     set_difference_operator: str = "EXCEPT",
     sql_analysis_dialect: str | None = None,
     probe_step_index: int | None = None,
+    output_step_index: int | None = None,
+    actual_relations: Mapping[int, str] | None = None,
 ) -> list[str]: ...
 def render_sql_test_difference_sample_sql(
     *,
@@ -5088,6 +5091,7 @@ def render_sql_test_difference_sample_sql(
     sample_limit: int,
     set_difference_operator: str = "EXCEPT",
     sql_analysis_dialect: str | None = None,
+    actual_relation: str | None = None,
 ) -> str: ...
 def describe_missing_expected_columns(
     *, model_name: str, expected_columns: Sequence[str], available_columns: Iterable[str]
@@ -7655,6 +7659,7 @@ class BuildCommandRequest(NativeRecord):
     max_microbatches: int | None
     selection_diagnostics: bool
     selector_files: tuple[SelectorFileSummary, ...]
+    test_timeout: str | None
     def __init__(
         self,
         project_dir: Path | None = None,
@@ -7691,6 +7696,7 @@ class BuildCommandRequest(NativeRecord):
         max_microbatches: int | None = None,
         selection_diagnostics: bool = False,
         selector_files: tuple[SelectorFileSummary, ...] = (),
+        test_timeout: str | None = None,
     ) -> None: ...
 
 class BuildInvocation(NativeRecord):
@@ -8213,6 +8219,7 @@ class ScenarioTestCommandRequest(NativeRecord):
     limit_inputs: ScenarioSnapshotLimitInputs
     json_output: bool
     json_output_path: Path | None
+    scenario_timeout: str | None
     def __init__(
         self,
         project_dir: Path | None = None,
@@ -8230,6 +8237,7 @@ class ScenarioTestCommandRequest(NativeRecord):
         limit_inputs: ScenarioSnapshotLimitInputs = ...,
         json_output: bool = False,
         json_output_path: Path | None = None,
+        scenario_timeout: str | None = None,
     ) -> None: ...
 
 class ScenarioCaptureCommandRequest(NativeRecord):
@@ -8316,6 +8324,7 @@ class TestCommandRequest(NativeRecord):
     concurrency: int | None
     case_name: str | None
     inspect: bool
+    test_timeout: str | None
     def __init__(
         self,
         project_dir: Path | None = None,
@@ -8330,6 +8339,7 @@ class TestCommandRequest(NativeRecord):
         concurrency: int | None = None,
         case_name: str | None = None,
         inspect: bool = False,
+        test_timeout: str | None = None,
     ) -> None: ...
 
 class RefactorCommandRequest(NativeRecord):
@@ -13575,12 +13585,20 @@ class ExecutionLimitsConfig(NativeRecord):
     max_duration: str | None
     max_duration_seconds: int | None
     remediation: str | None
+    test_timeout: str | None
+    test_timeout_seconds: int | None
+    scenario_timeout: str | None
+    scenario_timeout_seconds: int | None
     def __init__(
         self,
         max_models: int | None = ...,
         max_duration: str | None = ...,
         max_duration_seconds: int | None = ...,
         remediation: str | None = ...,
+        test_timeout: str | None = ...,
+        test_timeout_seconds: int | None = ...,
+        scenario_timeout: str | None = ...,
+        scenario_timeout_seconds: int | None = ...,
     ) -> None: ...
 
 class TargetDiffConfig(NativeRecord):
@@ -13712,6 +13730,11 @@ class SettingsConfig(NativeRecord):
     table_promotion_mode: str | None
     default_audit_severity: AuditSeverity | None
     default_audit_run_scope: str | None
+    unit_test_max_real_models: int
+    test_timeout: str
+    test_timeout_seconds: int | None
+    scenario_timeout: str | None
+    scenario_timeout_seconds: int | None
     def __init__(
         self,
         sql_analysis: bool = ...,
@@ -13725,6 +13748,11 @@ class SettingsConfig(NativeRecord):
         table_promotion_mode: str | None = ...,
         default_audit_severity: AuditSeverity | None = ...,
         default_audit_run_scope: str | None = ...,
+        unit_test_max_real_models: int = ...,
+        test_timeout: str = ...,
+        test_timeout_seconds: int | None = ...,
+        scenario_timeout: str | None = ...,
+        scenario_timeout_seconds: int | None = ...,
     ) -> None: ...
     @property
     def sql_validation(self) -> bool: ...
@@ -13847,6 +13875,7 @@ class DefaultsConfig(NativeRecord):
     batch_size: str | int | None
     batch_concurrency: int | None
     max_microbatches: int | None
+    max_duration: str | None
     unaccounted_partition_policy: str | None
     replay_on_change: str | None
     row_diff_exclude_columns: tuple[str, ...]
@@ -13883,6 +13912,7 @@ class DefaultsConfig(NativeRecord):
         batch_size: str | int | None = ...,
         batch_concurrency: int | None = ...,
         max_microbatches: int | None = ...,
+        max_duration: str | None = ...,
         unaccounted_partition_policy: str | None = ...,
         replay_on_change: str | None = ...,
         row_diff_exclude_columns: tuple[str, ...] = ...,
@@ -15679,6 +15709,9 @@ class ModelPlanEntry(NativeRecord):
     custom_config: dict[str, object]
     custom_placeholders: dict[str, str]
     column_rename_hints: tuple[ColumnRenameHint, ...]
+    max_duration: str | None
+    max_duration_seconds: int | None
+    max_duration_source: str | None
     def __init__(
         self,
         key: CompiledObjectKey,
@@ -15759,6 +15792,9 @@ class ModelPlanEntry(NativeRecord):
         custom_config: dict[str, object] = ...,
         custom_placeholders: dict[str, str] = ...,
         column_rename_hints: tuple[ColumnRenameHint, ...] = ...,
+        max_duration: str | None = ...,
+        max_duration_seconds: int | None = ...,
+        max_duration_source: str | None = ...,
     ) -> None: ...
 
 class CloneSourcePlanEntry(NativeRecord):
@@ -15972,6 +16008,9 @@ class SqlTestPlanEntry(NativeRecord):
     scope_deps: tuple[CompiledObjectKey, ...]
     function_deps: tuple[CompiledObjectKey, ...]
     sql_analysis_enabled: bool
+    real_model_count: int | None
+    timeout: str | None
+    timeout_seconds: int | None
     def __init__(
         self,
         key: CompiledObjectKey,
@@ -15994,6 +16033,9 @@ class SqlTestPlanEntry(NativeRecord):
         scope_deps: tuple[CompiledObjectKey, ...] = ...,
         function_deps: tuple[CompiledObjectKey, ...] = ...,
         sql_analysis_enabled: bool = ...,
+        real_model_count: int | None = ...,
+        timeout: str | None = ...,
+        timeout_seconds: int | None = ...,
     ) -> None: ...
 
 class ScenarioRelationMap(NativeRecord):

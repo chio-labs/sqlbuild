@@ -12,6 +12,8 @@ from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar, Token
 from types import TracebackType
 
+from sqlbuild.runtime.execution_limits.classes.item_deadline import ItemDeadline
+from sqlbuild.runtime.execution_limits.main.current_item_deadline import current_item_deadline
 from sqlbuild.runtime.observability._helpers.dispatcher import (
     current_event_dispatcher,
     dispatcher_scope,
@@ -82,6 +84,8 @@ class StatementLifecycle:
         )
         self._pending_failure: tuple[BaseException, str | None, str | None] | None = None
         self._statement_facts: tuple[str, str] | None = None
+        self._item_deadline: ItemDeadline | None = None
+        self._terminal_query_id: str | None = None
 
     @staticmethod
     @contextmanager
@@ -120,6 +124,9 @@ class StatementLifecycle:
         self._started_monotonic = self._clock()
         self._execution_owner_key = execution_owner_key
         self._publish(event_type="statement_started", payload=self._base_payload())
+        self._item_deadline = current_item_deadline()
+        if self._item_deadline is not None:
+            self._item_deadline.statement_started()
         self._owner_token = _STATEMENT_LIFECYCLE_OWNER.set(self)
         self._monitor = StatementMonitor(
             on_submitted=lambda query_id: self.submitted(query_id=query_id),
@@ -150,6 +157,8 @@ class StatementLifecycle:
             payload["query_id"] = query_id
         if job_id is not None:
             payload["job_id"] = job_id
+        if self._item_deadline is not None:
+            self._item_deadline.statement_submitted(query_id=query_id or job_id)
         self._publish(event_type="statement_submitted", payload=payload)
 
     def set_query_id_provider(self, provider: Callable[[], str | None]) -> None:
@@ -270,6 +279,9 @@ class StatementLifecycle:
                     self.failed(error=exc_value)
         finally:
             self._stop_monitor()
+            if self._item_deadline is not None:
+                self._item_deadline.statement_finished(query_id=self._terminal_query_id)
+                self._item_deadline = None
             if self._owner_token is not None:
                 _STATEMENT_LIFECYCLE_OWNER.reset(self._owner_token)
                 self._owner_token = None
@@ -317,6 +329,8 @@ class StatementLifecycle:
         if self._terminal:
             return
         self._terminal = True
+        terminal_id: JSONValue | None = payload.get("query_id") or payload.get("job_id")
+        self._terminal_query_id = terminal_id if isinstance(terminal_id, str) else None
         self._publish(event_type=event_type, payload=payload)
 
     def _defer_completed(

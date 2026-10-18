@@ -2837,10 +2837,25 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return f"'{value}'"
 
     def interrupt_connection(self, connection: Any) -> bool:
-        """Cancel a connection's running statement from another thread; False if unsupported."""
+        """Abort the connection's running statements through Snowflake's cancel request."""
 
-        del connection
-        return False
+        connection.active_statements.cancel(raw_connection=connection.raw_connection)
+        return True
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        """Run the output query once and read its persisted result through RESULT_SCAN."""
+
+        del name
+        cursor: Any = self.execute(connection=connection, sql=sql)
+        query_id: object | None = getattr(cursor, "sfqid", None)
+        if not isinstance(query_id, str) or not query_id:
+            return None
+        return f"TABLE(RESULT_SCAN('{query_id}'))"
+
+    def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:
+        """Persisted query results expire on their own; there is nothing to drop."""
+
+        del connection, relation
 
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
         """Return whether ``list_relations`` reports every relation in this scope."""

@@ -5,6 +5,7 @@
 pub mod config_presence;
 pub mod declarations;
 pub mod errors;
+pub mod execution_limits;
 pub mod header_metadata;
 pub mod model_validation;
 pub mod name_patterns;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from sqlbuild._native import (
@@ -18,7 +19,11 @@ _LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
 
 
 def missing_expected_columns_message(
-    *, test_entry: SqlTestPlanEntry, adapter: BaseAdapter, connection: Any
+    *,
+    test_entry: SqlTestPlanEntry,
+    adapter: BaseAdapter,
+    connection: Any,
+    relations: Mapping[int, str] | None = None,
 ) -> str | None:
     """Probe actual step columns after a failed comparison and describe missing ones."""
 
@@ -26,7 +31,11 @@ def missing_expected_columns_message(
         if step.expected_columns is None or step.expected_cte_sql is None:
             continue
         available_columns: frozenset[str] | None = _probe_actual_columns(
-            test_entry=test_entry, step_index=step_index, adapter=adapter, connection=connection
+            test_entry=test_entry,
+            step_index=step_index,
+            adapter=adapter,
+            connection=connection,
+            relations=relations or {},
         )
         if available_columns is None:
             continue
@@ -41,13 +50,19 @@ def missing_expected_columns_message(
 
 
 def _probe_actual_columns(
-    *, test_entry: SqlTestPlanEntry, step_index: int, adapter: BaseAdapter, connection: Any
+    *,
+    test_entry: SqlTestPlanEntry,
+    step_index: int,
+    adapter: BaseAdapter,
+    connection: Any,
+    relations: Mapping[int, str],
 ) -> frozenset[str] | None:
     (sql,) = render_sql_test_comparison_sql(
         (test_entry,),
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
         probe_step_index=step_index,
+        actual_relations=dict(relations),
     )
     if not sql:
         return None

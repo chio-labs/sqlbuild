@@ -1,5 +1,7 @@
 //! Render executable SQL test and scenario comparison queries from planned entries.
 
+use std::collections::HashMap;
+
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{FromPyObject, pyfunction, wrap_pyfunction};
@@ -23,6 +25,8 @@ pub(crate) struct RenderSettings {
     set_difference_operator: String,
     sql_analysis_dialect: Option<String>,
     probe_step_index: Option<usize>,
+    output_step_index: Option<usize>,
+    actual_relations: HashMap<usize, String>,
 }
 
 impl RenderSettings {
@@ -32,6 +36,8 @@ impl RenderSettings {
                 .unwrap_or_else(|| DEFAULT_SET_DIFFERENCE.to_owned()),
             sql_analysis_dialect: optional_value(options, "sql_analysis_dialect")?,
             probe_step_index: optional_value(options, "probe_step_index")?,
+            output_step_index: optional_value(options, "output_step_index")?,
+            actual_relations: optional_value(options, "actual_relations")?.unwrap_or_default(),
         })
     }
 }
@@ -76,8 +82,19 @@ fn rendered_comparisons(
             &settings.set_difference_operator,
             settings.sql_analysis_dialect.as_deref(),
         )?;
-        if let (Some(index), Some(fields)) = (settings.probe_step_index, request.as_object_mut()) {
-            fields.insert("probeStepIndex".to_owned(), json!(index));
+        if let Some(fields) = request.as_object_mut() {
+            if let Some(index) = settings.probe_step_index {
+                fields.insert("probeStepIndex".to_owned(), json!(index));
+            }
+            if let Some(index) = settings.output_step_index {
+                fields.insert("outputStepIndex".to_owned(), json!(index));
+            }
+            if !settings.actual_relations.is_empty() {
+                fields.insert(
+                    "actualRelations".to_owned(),
+                    json!(settings.actual_relations),
+                );
+            }
         }
         requests.push(request);
     }
@@ -110,6 +127,8 @@ pub(crate) fn single_comparison_sql(
             .extract()?,
         sql_analysis_dialect: adapter.call_method0("sql_analysis_dialect")?.extract()?,
         probe_step_index: None,
+        output_step_index: None,
+        actual_relations: HashMap::new(),
     };
     rendered_comparisons(entry.py(), std::slice::from_ref(entry), &settings)?
         .into_iter()
@@ -183,6 +202,7 @@ fn render_sql_test_difference_sample_sql(
         "direction": request.get("direction")?.extract::<String>()?,
         "sampleLimit": request.get("sample_limit")?.extract::<i64>()?,
         "useTopClause": settings.sql_analysis_dialect.as_deref() == Some(TOP_CLAUSE_DIALECT),
+        "actualRelation": optional_value::<String>(options, "actual_relation")?,
     }))
     .map_err(value_error)?;
     let response: String = py

@@ -96,6 +96,11 @@ pub(crate) fn planned<'py>(
         .extract()?,
         render_sql: artifact || options.render_sql,
         include_plan: !artifact && options.include_plan,
+        max_unit_test_real_models: native_field(
+            &native_field(project, "settings")?,
+            "unit_test_max_real_models",
+        )?
+        .extract()?,
     };
     let (rows, planning_ns, rendering_ns) = match plan_compiled_sql_tests(py, request) {
         Ok(value) => value,

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from sqlbuild._native import SqlTestParameterDeclaration, SqlValue
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.runtime.execution_limits.models import ItemTimeoutReport
 
 
 @dataclass(frozen=True)
@@ -62,3 +63,5 @@ class SqlTestExecutionResult:
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None
+    real_model_count: int | None = None
+    timeout: ItemTimeoutReport | None = None

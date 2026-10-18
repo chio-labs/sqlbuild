@@ -24,6 +24,12 @@ _APPROVED_BOUNDARIES: dict[str, frozenset[tuple[str, str]]] = {
     "adapters/bigquery/classes/bigquery_connection.py": frozenset(
         {("_BigQueryConnection.query_job", "query")}
     ),
+    "adapters/databricks/classes/databricks_connection.py": frozenset(
+        {("_DatabricksConnection._run_setting", "execute")}
+    ),
+    "adapters/postgres/classes/postgres_connection.py": frozenset(
+        {("_PostgresConnection._apply_statement_timeout", "execute")}
+    ),
 }
 _RAW_FACTORY_METHODS: frozenset[str] = frozenset({"cursor"})
 

@@ -5,7 +5,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyList};
 
 /// Each default in `project_defaults_to_mapping`'s order, and whether a falsy value is unset.
-const DEFAULT_KEYS: [(&str, bool); 30] = [
+const DEFAULT_KEYS: [(&str, bool); 31] = [
     ("materialized", false),
     ("database", false),
     ("schema", false),
@@ -27,6 +27,7 @@ const DEFAULT_KEYS: [(&str, bool); 30] = [
     ("batch_size", false),
     ("batch_concurrency", false),
     ("max_microbatches", false),
+    ("max_duration", false),
     ("unaccounted_partition_policy", false),
     ("replay_on_change", false),
     ("row_diff_exclude_columns", true),

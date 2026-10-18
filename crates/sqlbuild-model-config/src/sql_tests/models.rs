@@ -26,4 +26,5 @@ pub struct SqlTestBlock {
     pub cases: Vec<SqlTestCase>,
     pub cursor_start: Option<String>,
     pub cursor_end: Option<String>,
+    pub timeout: Option<String>,
 }

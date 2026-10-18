@@ -31,6 +31,9 @@ use crate::compiler::_helpers::sql_tests::reader_references::{
     CompilerReads, assertion_ref_targets, calls_reference, unresolvable_call,
     unresolved_reference_error,
 };
+use crate::compiler::_helpers::sql_tests::real_model_limit::{
+    RealModelChain, real_model_limit_message,
+};
 use crate::compiler::_helpers::sql_tests::relation_markers::relation_marker_calls;
 use crate::compiler::_helpers::sql_tests::rendering::{
     RenderRequest, render_comparison_sql, render_dialect, rendered_chain_steps,
@@ -94,6 +97,7 @@ struct ProjectContext {
     patterns: SqlTestPatterns,
     render_dialect: Arc<Dialect>,
     rejects_nested_with: bool,
+    max_real_models: Option<usize>,
     /// Each model query's reserved CTE name, since every test reading the model checks it.
     reserved_ctes: Arc<Mutex<HashMap<String, Option<String>>>>,
 }
@@ -469,7 +473,7 @@ pub(crate) fn resolve_chains(request: SqlTestChainBatch) -> Result<Vec<Vec<Strin
                 let fixtures = classify_fixtures(authored_ctes, expected_ctes, assertion_ctes);
                 let expected_names =
                     chain_root_names(expected_model_names, &reads, &fixtures, &patterns);
-                Ok(topo_sort_model_chain(TopoSortRequest {
+                Ok(topo_sort_model_chain(&TopoSortRequest {
                     expected_names: &expected_names,
                     models: &models,
                     overrides: &model_query_overrides,
@@ -537,6 +541,7 @@ pub(crate) fn plan_batch(request: SqlTestPlanBatch) -> Result<SqlTestPlanBatchOu
         patterns: SqlTestPatterns::new(request.lexical_syntax)?,
         render_dialect,
         rejects_nested_with,
+        max_real_models: request.max_unit_test_real_models,
         reserved_ctes: Arc::new(Mutex::new(HashMap::new())),
     };
     let workers = request.workers.clamp(1, MAX_WORKERS);
@@ -683,6 +688,8 @@ fn plan_direct_test(
         set_difference_operator: context.set_difference_operator.clone(),
         sql_analysis_dialect: Some(context.dialect.clone()),
         probe_step_index: None,
+        actual_relations: HashMap::new(),
+        output_step_index: None,
     };
     Ok(PlannedResponse {
         request,
@@ -755,13 +762,50 @@ fn plan_model_test(
         &fixtures,
         &context.patterns,
     );
-    let ordered_names = topo_sort_model_chain(TopoSortRequest {
+    let topo_request = TopoSortRequest {
         expected_names: &expected_names,
         models: &context.models,
         overrides: &plan.model_query_overrides,
         mock_refs: &fixtures.mock_refs,
         patterns: &context.patterns,
-    });
+    };
+    let ordered_names = topo_sort_model_chain(&topo_request);
+    if let Some(limit) = context.max_real_models {
+        let real_models: Vec<String> = ordered_names
+            .iter()
+            .filter(|name| context.models.contains_key(*name))
+            .cloned()
+            .collect();
+        let chain = RealModelChain {
+            test_name: &plan.test_name,
+            file_label: &plan.file_label,
+            roots: &expected_names,
+            real_models: &real_models,
+            limit,
+        };
+        if let Some(message) =
+            real_model_limit_message(&chain, |name| real_model_inputs(&topo_request, name))
+        {
+            return Ok(PlannedResponse {
+                request: RenderRequest {
+                    chain: Vec::new(),
+                    assertions: Vec::new(),
+                    sql_analysis_enabled: context.sql_analysis_enabled,
+                    set_difference_operator: context.set_difference_operator.clone(),
+                    sql_analysis_dialect: Some(context.dialect.clone()),
+                    probe_step_index: None,
+                    actual_relations: HashMap::new(),
+                    output_step_index: None,
+                },
+                model_names: real_models,
+                warnings: vec![SqlTestPlanWarning {
+                    model_name: None,
+                    severity: "error",
+                    message,
+                }],
+            });
+        }
+    }
     let mut warnings: Vec<SqlTestPlanWarning> = Vec::new();
     let mut reported_missing_mocks: HashSet<(&'static str, String)> = HashSet::new();
     let mut reachable_mocks: HashSet<String> = HashSet::new();
@@ -928,6 +972,8 @@ fn plan_model_test(
         set_difference_operator: context.set_difference_operator.clone(),
         sql_analysis_dialect: Some(context.dialect.clone()),
         probe_step_index: None,
+        actual_relations: HashMap::new(),
+        output_step_index: None,
     };
     Ok(PlannedResponse {
         request,
@@ -1302,28 +1348,31 @@ fn classify_fixtures(
     fixtures
 }
 
-fn topo_sort_model_chain(request: TopoSortRequest<'_>) -> Vec<String> {
+fn topo_sort_model_chain(request: &TopoSortRequest<'_>) -> Vec<String> {
     let mut roots: Vec<String> = request.expected_names.to_vec();
     roots.sort();
-    depth_first_postorder(roots, |name| {
-        let Some(model) = request.models.get(name) else {
-            return Vec::new();
-        };
-        let mut dependencies: Vec<String> = match request.overrides.get(name) {
-            Some(override_sql) => marker_names(
-                &request.patterns.reference,
-                &request.patterns.lexical,
-                override_sql,
-            ),
-            None => model.model_dependencies.clone(),
-        };
-        dependencies.retain(|dependency| {
-            !request.mock_refs.contains_key(dependency) && request.models.contains_key(dependency)
-        });
-        dependencies.sort();
-        dependencies.dedup();
-        dependencies
-    })
+    depth_first_postorder(roots, |name| real_model_inputs(request, name))
+}
+
+/// The unmocked project models one chain model reads, sorted and deduplicated.
+fn real_model_inputs(request: &TopoSortRequest<'_>, name: &str) -> Vec<String> {
+    let Some(model) = request.models.get(name) else {
+        return Vec::new();
+    };
+    let mut dependencies: Vec<String> = match request.overrides.get(name) {
+        Some(override_sql) => marker_names(
+            &request.patterns.reference,
+            &request.patterns.lexical,
+            override_sql,
+        ),
+        None => model.model_dependencies.clone(),
+    };
+    dependencies.retain(|dependency| {
+        !request.mock_refs.contains_key(dependency) && request.models.contains_key(dependency)
+    });
+    dependencies.sort();
+    dependencies.dedup();
+    dependencies
 }
 
 fn analyze_and_resolve_sql(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, Final
 
@@ -16,6 +17,7 @@ from sqlbuild.executor.testing.models import (
     StepResult,
 )
 from sqlbuild.executor.testing.types import SqlTestDifferenceDirection, SqlTestOutcome
+from sqlbuild.runtime.execution_limits.exceptions import ItemTimeoutError
 
 _ROW_LIMIT: Final[int] = 3
 _COLUMN_LIMIT: Final[int] = 12
@@ -30,18 +32,23 @@ def add_difference_samples(
     test_entry: SqlTestPlanEntry,
     adapter: BaseAdapter,
     connection: Any,
+    relations: Mapping[int, str] | None = None,
 ) -> list[StepResult]:
     """Attach bounded, redacted samples to failed expected-output steps."""
 
     sampled_results: list[StepResult] = []
-    expected_steps: tuple[ChainStep, ...] = tuple(
-        step for step in test_entry.chain if step.expected_cte_sql is not None
+    expected_steps: tuple[tuple[int, ChainStep], ...] = tuple(
+        (index, step)
+        for index, step in enumerate(test_entry.chain)
+        if step.expected_cte_sql is not None
     )
+    stored: Mapping[int, str] = relations or {}
     for step_index, step_result in enumerate(step_results):
         if step_index >= len(expected_steps) or step_result.outcome != SqlTestOutcome.FAIL:
             sampled_results.append(step_result)
             continue
-        step: ChainStep = expected_steps[step_index]
+        chain_index, step = expected_steps[step_index]
+        actual_relation: str | None = stored.get(chain_index)
         unexpected_samples: tuple[SqlTestDifferenceSample, ...] = ()
         missing_samples: tuple[SqlTestDifferenceSample, ...] = ()
         if step_result.unexpected_row_count is not None and step_result.unexpected_row_count > 0:
@@ -51,6 +58,7 @@ def add_difference_samples(
                 direction=SqlTestDifferenceDirection.UNEXPECTED,
                 adapter=adapter,
                 connection=connection,
+                actual_relation=actual_relation,
             )
         if step_result.missing_row_count is not None and step_result.missing_row_count > 0:
             missing_samples = _best_effort_difference_samples(
@@ -59,6 +67,7 @@ def add_difference_samples(
                 direction=SqlTestDifferenceDirection.MISSING,
                 adapter=adapter,
                 connection=connection,
+                actual_relation=actual_relation,
             )
         sampled_results.append(
             replace(
@@ -107,6 +116,7 @@ def _fetch_difference_samples(
     direction: SqlTestDifferenceDirection,
     adapter: BaseAdapter,
     connection: Any,
+    actual_relation: str | None,
 ) -> tuple[SqlTestDifferenceSample, ...]:
     sql: str = render_sql_test_difference_sample_sql(
         test_entry=test_entry,
@@ -115,6 +125,7 @@ def _fetch_difference_samples(
         sample_limit=_ROW_LIMIT,
         set_difference_operator=adapter.render_set_difference_operator(),
         sql_analysis_dialect=adapter.sql_analysis_dialect(),
+        actual_relation=actual_relation,
     )
     cursor: Any = adapter.execute(connection=connection, sql=sql)
     description: Any | None = getattr(cursor, "description", None)
@@ -144,6 +155,7 @@ def _best_effort_difference_samples(
     direction: SqlTestDifferenceDirection,
     adapter: BaseAdapter,
     connection: Any,
+    actual_relation: str | None,
 ) -> tuple[SqlTestDifferenceSample, ...]:
     """Return samples when available without replacing a known comparison failure."""
 
@@ -154,7 +166,10 @@ def _best_effort_difference_samples(
             direction=direction,
             adapter=adapter,
             connection=connection,
+            actual_relation=actual_relation,
         )
+    except ItemTimeoutError:
+        raise
     except Exception as error:
         log_debug_event(
             logger=_LOGGER,

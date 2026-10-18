@@ -106,6 +106,16 @@ class StrictAdapter(
         ...
 
     @abstractmethod
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        """Evaluate a unit test's actual output once and return a relation reading it."""
+        ...
+
+    @abstractmethod
+    def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:
+        """Remove a relation `create_sql_test_output` returned."""
+        ...
+
+    @abstractmethod
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
         """Return whether ``list_relations`` reports every relation in this scope."""
         ...

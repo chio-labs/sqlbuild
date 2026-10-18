@@ -33,3 +33,4 @@ DUCKDB_NOT_FOUND_ERROR_CLASS_NAMES: frozenset[str] = frozenset(
     {"CatalogException", "BinderException"}
 )
 DUCKDB_MISSING_OBJECT_MARKER: str = "does not exist"
+CANCELLABLE_DURATION_LIMIT_SECONDS: int = 2_147_483

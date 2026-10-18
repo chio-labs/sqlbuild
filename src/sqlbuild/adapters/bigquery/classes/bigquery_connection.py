@@ -1,10 +1,17 @@
 """BigQuery connection wrapper."""
 
+import math
+import threading
 from typing import Any
 
 from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
 from sqlbuild.adapters.bigquery.constants import SELECT_STATEMENT_TYPE
+from sqlbuild.runtime.execution_limits.classes.item_deadline import ItemDeadline
+from sqlbuild.runtime.execution_limits.main.current_execution_deadline import (
+    current_execution_deadline,
+)
+from sqlbuild.runtime.execution_limits.models import ExecutionDeadline
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 
 
@@ -14,6 +21,8 @@ class _BigQueryConnection:
     def __init__(self, *, client: Any, location: str | None) -> None:
         self.client: Any = client
         self.location: str | None = location
+        self._active_jobs: dict[int, Any] = {}
+        self._jobs_lock: threading.Lock = threading.Lock()
 
     def execute(self, sql: str) -> _BigQueryCursor:
         with StatementLifecycle(adapter="bigquery", sql=sql, intent="execute") as lifecycle:
@@ -21,7 +30,7 @@ class _BigQueryConnection:
             job_id: str | None = _job_id(job=job)
             lifecycle.submitted(job_id=job_id)
             try:
-                cursor: _BigQueryCursor = _BigQueryCursor(job.result())
+                cursor: _BigQueryCursor = _BigQueryCursor(self.job_result(job))
             except Exception as error:
                 lifecycle.failed(error=error, job_id=job_id)
                 raise
@@ -34,7 +43,38 @@ class _BigQueryConnection:
             return cursor
 
     def query_job(self, sql: str) -> Any:
-        return self.client.query(sql, location=self.location)
+        deadline: ExecutionDeadline | ItemDeadline | None = current_execution_deadline()
+        if deadline is None:
+            return self.client.query(sql, location=self.location)
+        deadline.enforce()
+        from google.cloud import bigquery
+
+        return self.client.query(
+            sql,
+            location=self.location,
+            job_config=bigquery.QueryJobConfig(
+                job_timeout_ms=max(1, math.ceil(deadline.remaining_seconds * 1000))
+            ),
+        )
+
+    def job_result(self, job: Any) -> Any:
+        """Wait for a job while it is registered for cancellation at a deadline."""
+
+        with self._jobs_lock:
+            self._active_jobs[id(job)] = job
+        try:
+            return job.result()
+        finally:
+            with self._jobs_lock:
+                self._active_jobs.pop(id(job), None)
+
+    def cancel_active_jobs(self) -> None:
+        """Request cancellation of every job this connection is waiting on."""
+
+        with self._jobs_lock:
+            jobs: list[Any] = list(self._active_jobs.values())
+        for job in jobs:
+            job.cancel()
 
     def close(self) -> None:
         close: object | None = getattr(self.client, "close", None)

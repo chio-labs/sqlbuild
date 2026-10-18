@@ -35,3 +35,5 @@ pub(crate) const WARN: &str = "warn";
 pub(crate) const ERROR: &str = "error";
 pub(crate) const INSUFFICIENT: &str = "insufficient";
 pub(crate) const DELTA_AND_FINAL: &str = "delta_and_final";
+pub(crate) const TIMEOUT_OUTCOME: &str = "timeout";
+pub(crate) const TIMEOUT_CODE: &str = "C417";

@@ -44,6 +44,8 @@ struct DifferenceSampleRequest {
     sample_limit: usize,
     #[serde(default)]
     use_top_clause: bool,
+    #[serde(default)]
+    actual_relation: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +70,10 @@ pub(crate) struct RenderRequest {
     pub(crate) sql_analysis_dialect: Option<String>,
     #[serde(default)]
     pub(crate) probe_step_index: Option<usize>,
+    #[serde(default)]
+    pub(crate) actual_relations: HashMap<usize, String>,
+    #[serde(default)]
+    pub(crate) output_step_index: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -460,6 +466,15 @@ impl RenderCteState {
         Ok(())
     }
 
+    /// Read already materialised model outputs instead of recomputing their CTEs.
+    fn substitute(&mut self, substitutions: &[(String, String)]) {
+        for (key, body) in substitutions {
+            if let Some(cte) = self.lifted.iter_mut().find(|cte| cte.key == *key) {
+                cte.body.clone_from(body);
+            }
+        }
+    }
+
     fn definitions(&mut self) -> Vec<String> {
         std::mem::take(&mut self.lifted)
             .iter()
@@ -613,7 +628,10 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest) -> Result<Str
         step.comparison_body_sql.is_some(),
     );
     let suffix = cte_state.unique_suffix(&step.model_name);
-    let actual_sql = cte_state.actual_step_sql(step, &suffix, enabled)?;
+    let actual_sql = match request.actual_relation.as_deref() {
+        Some(relation) => relation_select(relation),
+        None => cte_state.actual_step_sql(step, &suffix, enabled)?,
+    };
     let expected_sql = cte_state.expected_step_sql(step, expected_input, enabled)?;
     let mut cte_parts = cte_state.definitions();
     cte_parts.push(cte_definition_sql("__actual", &actual_sql));
@@ -634,11 +652,46 @@ fn render_difference_sample_sql(request: &DifferenceSampleRequest) -> Result<Str
         )
     };
     let projection = compared_projection(step);
-    Ok(format!(
+    let statement = format!(
         "WITH {}\n{bounded_select} FROM (SELECT {projection} FROM {left} {} SELECT {projection} FROM {right}) AS __sqlbuild_difference{limit_clause}",
         cte_parts.join(",\n"),
         request.set_difference_operator,
-    ))
+    );
+    if request.actual_relation.is_none() {
+        return Ok(statement);
+    }
+    Ok(pruned_statement(&statement, cte_state.dialect))
+}
+
+/// A query reading every row of an already materialised actual output.
+fn relation_select(relation: &str) -> String {
+    format!("SELECT * FROM {relation}")
+}
+
+/// The statement without top-level CTEs nothing reads, or unchanged when it cannot be sliced.
+fn pruned_statement(statement: &str, dialect: SliceDialect) -> String {
+    let Ok(Some(split)) = split_top_level_with(statement, dialect) else {
+        return statement.to_string();
+    };
+    let used = used_ctes(&split, dialect);
+    if used.iter().all(|used| *used) {
+        return statement.to_string();
+    }
+    let definitions: Vec<String> = split
+        .ctes
+        .iter()
+        .zip(used)
+        .filter(|(_, used)| *used)
+        .map(|(cte, _)| cte_definition_sql(cte.header, cte.body))
+        .collect();
+    if definitions.is_empty() {
+        return split.body.trim_start().to_string();
+    }
+    format!(
+        "WITH {}\n{}",
+        definitions.join(",\n"),
+        split.body.trim_start()
+    )
 }
 
 /// Columns compared for an expected-output step: the listed expected columns, else every column.
@@ -667,6 +720,8 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest) -> Result<String, S
     let mut select_parts: Vec<String> = Vec::new();
     let rendered_steps = rendered_chain_steps(&request.chain, &request.assertions);
     let mut probe_actual_cte: Option<String> = None;
+    let mut output_actual_cte: Option<String> = None;
+    let mut substitutions: Vec<(String, String)> = Vec::new();
 
     for (step_index, step) in request.chain.iter().enumerate() {
         let suffix = cte_state.unique_suffix(&step.model_name);
@@ -675,10 +730,23 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest) -> Result<String, S
         if !rendered_steps[step_index] {
             continue;
         }
-        let actual_sql = cte_state.actual_step_sql(step, &suffix, enabled)?;
+        let actual_sql = match request.actual_relations.get(&step_index) {
+            Some(relation) => {
+                substitutions.push((
+                    cte_key(&model_cte_name(&step.model_name, &suffix)),
+                    relation_select(relation),
+                ));
+                relation_select(relation)
+            }
+            None => cte_state.actual_step_sql(step, &suffix, enabled)?,
+        };
         comparison_ctes.push((actual_cte.clone(), actual_sql));
         if request.probe_step_index == Some(step_index) {
             probe_actual_cte = Some(actual_cte.clone());
+        }
+        if request.output_step_index == Some(step_index) {
+            output_actual_cte = Some(actual_cte.clone());
+            break;
         }
         let Some(expected_input) = step.expected_cte_sql.as_deref() else {
             continue;
@@ -696,6 +764,22 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest) -> Result<String, S
             request.set_difference_operator,
             request.set_difference_operator,
         ));
+    }
+
+    if request.output_step_index.is_some() {
+        let Some(actual_cte) = output_actual_cte else {
+            return Ok(String::new());
+        };
+        cte_state.verify_isolated_names(&comparison_ctes)?;
+        cte_state.substitute(&substitutions);
+        let mut cte_parts = cte_state.definitions();
+        cte_parts.extend(
+            comparison_ctes
+                .iter()
+                .map(|(name, sql)| cte_definition_sql(name, sql)),
+        );
+        let statement = format!("WITH {}\nSELECT * FROM {actual_cte}", cte_parts.join(",\n"));
+        return Ok(pruned_statement(&statement, cte_state.dialect));
     }
 
     for (assertion_index, assertion) in request
@@ -722,25 +806,37 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest) -> Result<String, S
         return Ok(String::new());
     }
     cte_state.verify_isolated_names(&comparison_ctes)?;
+    cte_state.substitute(&substitutions);
+    let dialect = cte_state.dialect;
     let mut cte_parts = cte_state.definitions();
     cte_parts.extend(
         comparison_ctes
             .iter()
             .map(|(name, sql)| cte_definition_sql(name, sql)),
     );
+    let single_read = !request.actual_relations.is_empty();
     if request.probe_step_index.is_some() {
         return Ok(probe_actual_cte.map_or_else(String::new, |actual_cte| {
-            format!(
+            let statement = format!(
                 "WITH {}\nSELECT * FROM {actual_cte} WHERE 1 = 0",
                 cte_parts.join(",\n")
-            )
+            );
+            if single_read {
+                pruned_statement(&statement, dialect)
+            } else {
+                statement
+            }
         }));
     }
-    Ok(format!(
+    let statement = format!(
         "WITH {}\n{}",
         cte_parts.join(",\n"),
         select_parts.join("\nUNION ALL\n")
-    ))
+    );
+    if single_read {
+        return Ok(pruned_statement(&statement, dialect));
+    }
+    Ok(statement)
 }
 
 fn sanitize_cte_suffix(model_name: &str) -> String {

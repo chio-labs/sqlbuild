@@ -651,6 +651,9 @@ const R_MODEL_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("custom_config", FieldDefault::EmptyDict),
         FieldSpec::new("custom_placeholders", FieldDefault::EmptyDict),
         FieldSpec::new("column_rename_hints", FieldDefault::EmptyTuple),
+        FieldSpec::new("max_duration", FieldDefault::None),
+        FieldSpec::new("max_duration_seconds", FieldDefault::None),
+        FieldSpec::new("max_duration_source", FieldDefault::None),
     ],
 };
 const R_CLONE_SOURCE_PLAN_ENTRY: RecordSpec = RecordSpec {
@@ -808,6 +811,9 @@ const R_SQL_TEST_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("scope_deps", FieldDefault::EmptyTuple),
         FieldSpec::new("function_deps", FieldDefault::EmptyTuple),
         FieldSpec::new("sql_analysis_enabled", FieldDefault::True),
+        FieldSpec::new("real_model_count", FieldDefault::None),
+        FieldSpec::new("timeout", FieldDefault::None),
+        FieldSpec::new("timeout_seconds", FieldDefault::None),
     ],
 };
 const R_SCENARIO_RELATION_MAP: RecordSpec = RecordSpec {

@@ -10,6 +10,7 @@ use crate::project::_helpers::fields::{
 };
 use crate::project::_helpers::help::{change_policy_problem, change_policy_toml_help};
 use crate::project::_helpers::keys::{Place, reject_removed_virtual_keys, validate_allowed_keys};
+use crate::project::_helpers::sections::item_timeout;
 use crate::project::constants::{
     BATCH_CONCURRENCY_KEY, CHANGE_POLICY_KEYS, CONTRACT_POLICIES, DEFAULTS_KEYS, DISABLED_VALUE,
     GLOB_SEGMENTS, INHERIT_VALUE, MATERIALIZATION_DEFAULT_KEYS, MAX_MICROBATCHES_KEY,
@@ -176,6 +177,8 @@ pub(crate) fn load_defaults(payload: Option<&ConfigValue>, file: ConfigFile) -> 
         ),
         ("tags", tags),
     ]);
+    let (max_duration, _) = item_timeout(mapping, "max_duration", ("defaults", file), None)?;
+    fields.push(("max_duration", max_duration));
     Ok(object("DefaultsConfig", fields))
 }
 

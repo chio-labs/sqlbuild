@@ -78,6 +78,8 @@ pub(crate) enum ExecutorHost {
     RunTestPipeline,
     SelectScenarioSnapshotCaptureCandidates,
     TestPipelineCallbacks,
+    RunItemTimeouts,
+    ScenarioTestSettings,
     ExecutePythonChecks,
     ExecuteIngressPythonLoaderNodes,
     RunIngressPythonLoaderNodes,
@@ -531,6 +533,16 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
     },
     HostEntry {
         name: "TestPipelineCallbacks",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "RunItemTimeouts",
+        kind: HostKind::Class,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "ScenarioTestSettings",
         kind: HostKind::Class,
         edge: HostEdge::Executor,
     },

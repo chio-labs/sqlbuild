@@ -406,6 +406,8 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "select_scenario_snapshot_capture_candidates",
     ),
     "TestPipelineCallbacks": ("sqlbuild.executor.pipeline.models", "TestPipelineCallbacks"),
+    "RunItemTimeouts": ("sqlbuild.runtime.execution_limits.models", "RunItemTimeouts"),
+    "ScenarioTestSettings": ("sqlbuild.executor.scenario.models", "ScenarioTestSettings"),
     "execute_python_checks": (
         "sqlbuild.executor.python_nodes.main._checks",
         "execute_python_checks",

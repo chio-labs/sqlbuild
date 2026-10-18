@@ -36,6 +36,7 @@ from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.runtime.execution_limits.models import RunItemTimeouts
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
@@ -63,6 +64,7 @@ def run_test_pipeline(
     callbacks: TestPipelineCallbacks | None = None,
     run_id: str | None = None,
     max_concurrency: int = 1,
+    timeouts: RunItemTimeouts | None = None,
 ) -> tuple[SqlTestExecutionResult, ...]:
     """Execute all SQL unit tests from a compiled plan."""
 
@@ -122,6 +124,7 @@ def run_test_pipeline(
             on_test_start=resolved_callbacks.on_test_start,
             on_test_complete=resolved_callbacks.on_test_complete,
             run_id=canonical_run_id,
+            timeouts=timeouts or RunItemTimeouts(),
         )
         return results
     except BaseException as error:
@@ -141,6 +144,7 @@ def _run_tests(
     on_test_start: Callable[[SqlTestPlanEntry], None] | None,
     on_test_complete: Callable[[SqlTestExecutionResult], None] | None,
     run_id: str,
+    timeouts: RunItemTimeouts,
 ) -> tuple[SqlTestExecutionResult, ...]:
     if worker_count == 1:
         serial_results: list[SqlTestExecutionResult] = []
@@ -153,6 +157,7 @@ def _run_tests(
                 on_test_start=on_test_start,
                 before_test_start=None,
                 run_id=run_id,
+                timeouts=timeouts,
             )
             serial_results.append(result)
             if on_test_complete is not None:
@@ -180,6 +185,7 @@ def _run_tests(
                         on_test_start=on_test_start,
                         before_test_start=lambda index=index: start_coordinator.wait(index=index),
                         run_id=run_id,
+                        timeouts=timeouts,
                     ),
                 )
             )
@@ -201,6 +207,7 @@ def _execute_test_entry_with_pooled_connection(
     on_test_start: Callable[[SqlTestPlanEntry], None] | None,
     before_test_start: Callable[[], None] | None,
     run_id: str,
+    timeouts: RunItemTimeouts,
 ) -> SqlTestExecutionResult:
     connection: Any = connection_pool.get()
     try:
@@ -212,6 +219,7 @@ def _execute_test_entry_with_pooled_connection(
             on_test_start=on_test_start,
             before_test_start=before_test_start,
             run_id=run_id,
+            timeouts=timeouts,
         )
     finally:
         connection_pool.put(connection)
@@ -226,6 +234,7 @@ def _execute_test_entry(
     on_test_start: Callable[[SqlTestPlanEntry], None] | None,
     before_test_start: Callable[[], None] | None,
     run_id: str,
+    timeouts: RunItemTimeouts,
 ) -> SqlTestExecutionResult:
     with ResourceAttemptLifecycle(
         resource_id=sql_test_resource_id(
@@ -248,7 +257,12 @@ def _execute_test_entry(
                 missing_functions=missing_functions,
             )
             if missing_functions
-            else execute_sql_test(test_entry=entry, adapter=adapter, connection=connection)
+            else execute_sql_test(
+                test_entry=entry,
+                adapter=adapter,
+                connection=connection,
+                timeouts=timeouts,
+            )
         )
         if result.outcome != SqlTestOutcome.PASS:
             lifecycle.failed(error_code=result.error_code)

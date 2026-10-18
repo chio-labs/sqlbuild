@@ -1,6 +1,6 @@
 //! Header keys native discovery accepts, sorted by code point as Python sorts them.
 
-pub(crate) const SQL_MODEL_HEADER_KEYS: [&str; 67] = [
+pub(crate) const SQL_MODEL_HEADER_KEYS: [&str; 68] = [
     "alias",
     "append_cursor_inclusive",
     "audit_factories",
@@ -36,6 +36,7 @@ pub(crate) const SQL_MODEL_HEADER_KEYS: [&str; 67] = [
     "invalidate_hard_deletes",
     "lookback",
     "materialized",
+    "max_duration",
     "max_microbatches",
     "merge_exclude_columns",
     "microbatch_limit",
@@ -92,7 +93,7 @@ pub(crate) const SQL_AUDIT_HEADER_KEYS: [&str; 11] = [
     "value",
 ];
 pub(crate) const SQL_HOOK_HEADER_KEYS: [&str; 1] = ["description"];
-pub(crate) const SQL_TEST_HEADER_KEYS: [&str; 7] = [
+pub(crate) const SQL_TEST_HEADER_KEYS: [&str; 8] = [
     "cases",
     "cursor_end",
     "cursor_start",
@@ -100,8 +101,9 @@ pub(crate) const SQL_TEST_HEADER_KEYS: [&str; 7] = [
     "name",
     "parameters",
     "sql_analysis",
+    "timeout",
 ];
-pub(crate) const SQL_SCENARIO_HEADER_KEYS: [&str; 2] = ["description", "tags"];
+pub(crate) const SQL_SCENARIO_HEADER_KEYS: [&str; 3] = ["description", "tags", "timeout"];
 /// The fields a SQL hook entry reports, in output order.
 pub(crate) const SQL_HOOK_OUTPUT_FIELDS: [&str; 6] = [
     "statement",

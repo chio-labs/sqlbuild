@@ -26,6 +26,7 @@ from sqlbuild.executor.scenario.models import (
     ScenarioRunOptions,
     ScenarioRunResult,
     ScenarioSnapshotStateResult,
+    ScenarioTestSettings,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -118,7 +119,7 @@ def test_given_selected_scenarios_when_running_scenario_test_pipeline_then_orche
             connection_config={"database": "pipeline.duckdb"},
             adapter=adapter,
             project_name="waffle_shop",
-            retain=False,
+            settings=ScenarioTestSettings(retain=False),
             on_scenario_start=lambda scenario: started_names.append(scenario.name),
             on_scenario_complete=complete_scenario,
         )
@@ -176,7 +177,7 @@ def test_given_warehouse_test_pipeline_when_connecting_then_publishes_connection
             connection_config={"database": "pipeline.duckdb"},
             adapter=adapter,
             project_name="waffle_shop",
-            retain=False,
+            settings=ScenarioTestSettings(retain=False),
         )
 
     assert tuple(event.event_type for event in lifecycle_events) == test_case.expected_event_types

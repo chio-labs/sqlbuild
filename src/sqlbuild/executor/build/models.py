@@ -35,6 +35,7 @@ from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.python_nodes.models import SqlResourceRef
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback, NodeStartCallback
+from sqlbuild.runtime.execution_limits.models import RunItemTimeouts
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,7 @@ class BuildRuntimeParams:
     ) = None
     microbatch_lease_check: Callable[[], None] | None = None
     project_relations: Mapping[SqlResourceRef, str] | None = None
+    test_timeouts: RunItemTimeouts | None = None
 
 
 @dataclass(frozen=True)

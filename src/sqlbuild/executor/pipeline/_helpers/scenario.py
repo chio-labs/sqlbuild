@@ -37,6 +37,10 @@ from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,
     open_worker_connections,
 )
+from sqlbuild.executor.pipeline._helpers.scenario_timeouts import (
+    scenario_timeout,
+    timed_out_scenario_result,
+)
 from sqlbuild.executor.pipeline._helpers.settings import resolve_promotion_mode
 from sqlbuild.executor.scenario.classes.prepared_scenario_schemas import PreparedScenarioSchemas
 from sqlbuild.executor.scenario.classes.running_scenarios import RunningScenarios
@@ -59,10 +63,14 @@ from sqlbuild.executor.scenario.models import (
     ScenarioRunResult,
     ScenarioSnapshotCaptureRunResult,
     ScenarioSnapshotStateResult,
+    ScenarioTestSettings,
 )
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.models import ConnectionHooks
+from sqlbuild.runtime.execution_limits.main.item_deadline_scope import item_deadline_scope
+from sqlbuild.runtime.execution_limits.models import ItemTimeoutPolicy
+from sqlbuild.runtime.execution_limits.types import ItemKind
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
@@ -123,8 +131,7 @@ def run_scenario_test_pipeline(
     connection_config: dict[str, object],
     adapter: BaseAdapter,
     project_name: str,
-    retain: bool,
-    concurrency: int = 1,
+    settings: ScenarioTestSettings,
     connection_hooks: ConnectionHooks | None = None,
     on_scenario_start: Callable[[CompiledSqlScenario], None] | None = None,
     on_scenario_complete: Callable[
@@ -134,7 +141,13 @@ def run_scenario_test_pipeline(
 ) -> tuple[ScenarioRunResult, ...]:
     """Execute selected scenarios from a compiled project."""
 
-    worker_count: int = max(1, min(concurrency, len(scenarios)))
+    retain: bool = settings.retain
+    policies: dict[str, ItemTimeoutPolicy | None] = {
+        scenario.name: scenario_timeout(scenario=scenario, timeouts=settings.timeouts)
+        for scenario in scenarios
+    }
+
+    worker_count: int = max(1, min(settings.concurrency, len(scenarios)))
     running: RunningScenarios = RunningScenarios(adapter=adapter)
     scheduling: _ScenarioScheduling = _ScenarioScheduling(
         worker_count=worker_count,
@@ -162,14 +175,24 @@ def run_scenario_test_pipeline(
             connection: Any = connection_pool.get()
             running.start(scenario_plan=scenario_plan, connection=connection)
             try:
-                return execute_scenario_run(
-                    scenario_plan=scenario_plan,
+                with item_deadline_scope(
+                    kind=ItemKind.SCENARIO,
+                    name=scenario_plan.name,
+                    policy=policies.get(scenario_plan.name),
                     adapter=adapter,
                     connection=connection,
-                    run_id=pipeline_result.project.run_id,
-                    retain=retain,
-                    options=options,
-                )
+                ) as deadline:
+                    result: ScenarioRunResult = execute_scenario_run(
+                        scenario_plan=scenario_plan,
+                        adapter=adapter,
+                        connection=connection,
+                        run_id=pipeline_result.project.run_id,
+                        retain=retain,
+                        options=options,
+                    )
+                if deadline is not None and deadline.expired:
+                    return timed_out_scenario_result(result=result, report=deadline.report())
+                return result
             finally:
                 running.finish(connection=connection)
                 connection_pool.put(connection)

@@ -1,5 +1,7 @@
 //! TEST header fields: name, mode, analysis flag and cursor bounds.
 
+use crate::execution_limits::constants::TIMEOUT_KEY;
+use crate::execution_limits::main::parse_execution_limit::parse_execution_limit;
 use crate::sql_tests::_helpers::mode::defined_modes;
 use crate::sql_tests::_helpers::parameters::entry;
 use crate::sql_tests::constants::{
@@ -21,6 +23,24 @@ pub(crate) fn cursor_bound(
         }
         Some(_) => Err(format!(
             "TEST() {key} in '{file_path}' must be a non-empty string or an integer"
+        )),
+    }
+}
+
+/// A header's validated `timeout`: a positive fixed duration or `disabled`.
+pub(crate) fn header_timeout(
+    header: &[(RawKey, RawSqlValue)],
+    header_name: &str,
+    file_path: &str,
+) -> Result<Option<String>, String> {
+    match entry(header, TIMEOUT_KEY) {
+        None | Some(RawSqlValue::Null) => Ok(None),
+        Some(RawSqlValue::Str(text)) if parse_execution_limit(text).is_some() => {
+            Ok(Some(text.trim().to_owned()))
+        }
+        Some(_) => Err(format!(
+            "{header_name} timeout in '{file_path}' must be a positive fixed duration such as \
+             \"45s\" or \"2m\", or \"disabled\""
         )),
     }
 }

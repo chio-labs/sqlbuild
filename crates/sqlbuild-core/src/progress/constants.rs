@@ -99,6 +99,7 @@ pub(crate) const PLANNING_COMPLETION_PREFIXES: [&str; 14] = [
 pub(crate) const ASSERTION_PREFIX: &str = "assertion ";
 pub(crate) const PASS_OUTCOME: &str = "pass";
 pub(crate) const ERROR_OUTCOME: &str = "error";
+pub(crate) const TIMEOUT_OUTCOME: &str = "timeout";
 /// Inspection SQL longer than this many characters is cut.
 pub(crate) const SQL_PREVIEW_LENGTH: usize = 160;
 pub(crate) const EXECUTION_TITLE: &str = "Execution";

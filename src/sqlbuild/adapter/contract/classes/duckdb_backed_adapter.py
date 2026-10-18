@@ -37,6 +37,7 @@ from sqlbuild.adapter.contract.classes.snapshot_sql import SnapshotSql
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
+    CANCELLABLE_DURATION_LIMIT_SECONDS,
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
     DUCKDB_MISSING_OBJECT_MARKER,
@@ -112,6 +113,19 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         escape_string_prefix=True, nested_block_comments=True
     )
     relation_grants_supported: ClassVar[bool] = False
+
+    execution_duration_limit_seconds: ClassVar[int | None] = CANCELLABLE_DURATION_LIMIT_SECONDS
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        """Store a unit test's actual output once in a session temporary table."""
+
+        _ = self.execute(connection=connection, sql=f"CREATE TEMPORARY TABLE {name} AS {sql}")
+        return name
+
+    def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:
+        """Drop the temporary table `create_sql_test_output` created."""
+
+        _ = self.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {relation}")
 
     def interrupt_connection(self, connection: Any) -> bool:
         """Cancel a connection's running statement from another thread; False if unsupported."""

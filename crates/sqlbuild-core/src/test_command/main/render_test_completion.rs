@@ -3,7 +3,7 @@
 use crate::cli_text::main::format_coded_error::format_coded_error;
 use crate::cli_text::main::format_summary_footer::format_summary_footer;
 use crate::cli_text::models::{CliStyle, SummaryCount};
-use crate::test_command::constants::{DEFAULT_ERROR, ERROR_LABEL, ERROR_LABEL_WIDTH};
+use crate::test_command::constants::{DEFAULT_ERROR, ERROR_LABEL, ERROR_LABEL_WIDTH, TIMEOUT_CODE};
 use crate::test_command::models::TestFailure;
 use crate::text::main::python_splitlines::python_splitlines;
 
@@ -51,15 +51,19 @@ pub fn render_test_completion(
     failures: &[TestFailure],
     style: CliStyle,
 ) -> String {
-    let summary: String = format_summary_footer(
-        style,
-        &[
-            count("PASS", passed),
-            count("FAIL", total - passed),
-            count("TOTAL", total),
-        ],
-        None,
-    );
+    let timed_out: usize = failures
+        .iter()
+        .filter(|failure| failure.error_code.as_deref() == Some(TIMEOUT_CODE))
+        .count();
+    let mut counts: Vec<SummaryCount> = vec![
+        count("PASS", passed),
+        count("FAIL", total - passed - timed_out.min(total - passed)),
+    ];
+    if timed_out > 0 {
+        counts.push(count("TIMEOUT", timed_out));
+    }
+    counts.push(count("TOTAL", total));
+    let summary: String = format_summary_footer(style, &counts, None);
     let mut rendered: String = format!("\n{summary}");
     if !failures.is_empty() {
         let mut lines: Vec<String> = vec![style.error_strong("Failures:"), String::new()];

@@ -62,6 +62,7 @@ pub(crate) struct PlanningRequest<'py> {
     pub(crate) lexical_syntax: LexicalSyntaxInput,
     pub(crate) render_sql: bool,
     pub(crate) include_plan: bool,
+    pub(crate) max_unit_test_real_models: Option<usize>,
 }
 
 /// The chain request: compiled models and the tests whose chains to resolve.
@@ -139,6 +140,7 @@ fn planning_batch(mut request: PlanningRequest<'_>) -> PyResult<SqlTestPlanBatch
         render_sql: request.render_sql,
         include_plan: request.include_plan,
         lexical_syntax: request.lexical_syntax.into(),
+        max_unit_test_real_models: request.max_unit_test_real_models,
     })
 }
 

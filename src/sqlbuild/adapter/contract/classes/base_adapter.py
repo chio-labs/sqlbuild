@@ -111,6 +111,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     views_read_with_reader_access: ClassVar[bool] = False
     allows_implicit_managed_write_schema: ClassVar[bool] = False
     execution_duration_limit_seconds: ClassVar[int | None] = None
+    statement_cancellation_is_asynchronous: ClassVar[bool] = False
     metadata_inspection_concurrency: ClassVar[int] = 1
     supports_session_warehouse: ClassVar[bool] = False
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
@@ -154,6 +155,17 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
 
         del connection
         return False
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        """A relation holding a unit test's evaluated output, or `None` to compare inline."""
+
+        del connection, sql, name
+        return None
+
+    def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:
+        """Remove a relation `create_sql_test_output` returned."""
+
+        del connection, relation
 
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
         """Return whether ``list_relations`` reports every relation in this scope."""

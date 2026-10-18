@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
+
+import pytest
 
 
 class FetchedRows:
@@ -139,3 +142,122 @@ def execute_through_cursor(*, connection: MetadataConnection, sql: str) -> Metad
     """Adapter execute stub that runs SQL on a fresh fake cursor."""
 
     return connection.cursor().execute(sql)
+
+
+BLOCKING_SQL: str = "SELECT * FROM orders"
+
+
+class BlockingCursor:
+    """A DB-API cursor whose query blocks until another thread cancels it."""
+
+    def __init__(self, *, executed: list[str], started: threading.Event) -> None:
+        self.executed: list[str] = executed
+        self.started: threading.Event = started
+        self.cancelled: threading.Event = threading.Event()
+        self.connection: object | None = None
+        self.description: object | None = None
+        self.rowcount: int = -1
+        self._request_id: str = "11111111-1111-4111-8111-111111111111"
+        self.sfqid: str | None = None
+        self.statement_params: dict[str, str] | None = None
+
+    def execute(self, sql: str, *args: Any, **kwargs: Any) -> BlockingCursor:
+        del args
+        self.executed.append(sql)
+        self.statement_params = kwargs.get("_statement_params")
+        responses: dict[bool, Callable[[], BlockingCursor]] = {
+            True: self._block_until_cancelled,
+            False: lambda: self,
+        }
+        return responses[sql == BLOCKING_SQL]()
+
+    def _block_until_cancelled(self) -> BlockingCursor:
+        self.started.set()
+        assert self.cancelled.wait(timeout=5), "statement was not cancelled"
+        raise RuntimeError("statement cancelled")
+
+    def cancel(self) -> None:
+        self.cancelled.set()
+
+    def close(self) -> None:
+        return None
+
+
+class CancellableRawConnection:
+    """A raw driver connection exposing each driver's cancel entry point."""
+
+    def __init__(self) -> None:
+        self.executed: list[str] = []
+        self.cursors: list[BlockingCursor] = []
+        self.cancel_requests: list[tuple[str, str]] = []
+        self.started: threading.Event = threading.Event()
+        self._conn: CancellableRawConnection = self
+
+    def cursor(self) -> BlockingCursor:
+        cursor: BlockingCursor = BlockingCursor(executed=self.executed, started=self.started)
+        cursor.connection = self
+        self.cursors.append(cursor)
+        return cursor
+
+    def execute(self, sql: str) -> None:
+        self.executed.append(sql)
+
+    def cancel_safe(self) -> None:
+        self._cancel_running()
+
+    def cancel(self) -> None:
+        self._cancel_running()
+
+    def _cancel_query(self, sql: str, request_id: str) -> dict[str, bool]:
+        self.cancel_requests.append((sql, request_id))
+        self._cancel_running()
+        return {"success": True}
+
+    def _cancel_running(self) -> None:
+        for cursor in self.cursors:
+            cursor.cancel()
+
+
+def cancel_from_watchdog(*, adapter: Any, connection: Any, raw: CancellableRawConnection) -> None:
+    """Run a blocking query while another thread asks the adapter to cancel it."""
+
+    def watchdog() -> None:
+        assert raw.started.wait(timeout=5)
+        assert adapter.interrupt_connection(connection) is True
+
+    thread: threading.Thread = threading.Thread(target=watchdog)
+    thread.start()
+    with pytest.raises(RuntimeError, match="statement cancelled"):
+        connection.execute(BLOCKING_SQL)
+    thread.join(timeout=5)
+
+
+class CancellableJob:
+    """A BigQuery job whose result blocks until it is cancelled."""
+
+    def __init__(self) -> None:
+        self.job_id: str = "job-1"
+        self.cancelled: threading.Event = threading.Event()
+        self.waiting: threading.Event = threading.Event()
+
+    def result(self) -> list[object]:
+        self.waiting.set()
+        assert self.cancelled.wait(timeout=5), "job was not cancelled"
+        raise RuntimeError("statement cancelled")
+
+    def cancel(self) -> bool:
+        self.cancelled.set()
+        return True
+
+
+class CancellableJobClient:
+    """A BigQuery client returning one cancellable job and recording each job config."""
+
+    def __init__(self) -> None:
+        self.job: CancellableJob = CancellableJob()
+        self.job_configs: list[Any] = []
+
+    def query(self, sql: str, **kwargs: Any) -> CancellableJob:
+        del sql
+        self.job_configs.append(kwargs.get("job_config"))
+        return self.job

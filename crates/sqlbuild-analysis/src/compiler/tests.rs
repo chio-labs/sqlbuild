@@ -2,6 +2,8 @@
 mod helpers;
 #[path = "tests/simple_template/helpers.rs"]
 mod simple_template_helpers;
+#[path = "tests/single_read/helpers.rs"]
+mod single_read_helpers;
 #[path = "tests/test_sql_test_cte_rename.rs"]
 mod sql_test_cte_rename;
 #[path = "tests/test_sql_test_cte_slices.rs"]

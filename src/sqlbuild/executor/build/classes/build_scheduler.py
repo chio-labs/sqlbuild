@@ -50,6 +50,10 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build._helpers.end_audits import run_end_audits
 from sqlbuild.executor.build._helpers.indexes import build_execution_indexes
+from sqlbuild.executor.build._helpers.model_timeouts import (
+    model_timeout_policy,
+    timed_out_model_result,
+)
 from sqlbuild.executor.build._helpers.retention import (
     apply_table_type_conversion,
     materialization_recreates_relation,
@@ -122,6 +126,8 @@ from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCal
 from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
     enforce_execution_deadline,
 )
+from sqlbuild.runtime.execution_limits.main.item_deadline_scope import item_deadline_scope
+from sqlbuild.runtime.execution_limits.types import ItemKind
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
@@ -921,6 +927,7 @@ class BuildScheduler:
                 adapter=self._adapter,
                 connection=connection,
                 quality_scope="model",
+                timeouts=self._runtime.test_timeouts,
             )
         duration: int = int((time.monotonic() - start) * 1000)
         log_debug_event(
@@ -1014,10 +1021,19 @@ class BuildScheduler:
             sqlbuild_event="start",
             sqlbuild_kind=model_entry.materialization_type,
         )
-        with diagnostics_context(
-            sqlbuild_subject="model",
-            sqlbuild_name=model_entry.name,
-            sqlbuild_kind=model_entry.materialization_type,
+        with (
+            diagnostics_context(
+                sqlbuild_subject="model",
+                sqlbuild_name=model_entry.name,
+                sqlbuild_kind=model_entry.materialization_type,
+            ),
+            item_deadline_scope(
+                kind=ItemKind.MODEL,
+                name=model_entry.name,
+                policy=model_timeout_policy(model_entry),
+                adapter=self._adapter,
+                connection=connection,
+            ) as deadline,
         ):
             try:
                 table_type_entry: TableTypePlanEntry | None = self._table_type_entries.get(
@@ -1111,6 +1127,8 @@ class BuildScheduler:
                     error_code=BUILD_WORKER_FAILED_CODE,
                     error_message=str(error),
                 )
+        if deadline is not None and deadline.expired and result.status != ExecutionStatus.SUCCESS:
+            result = timed_out_model_result(result=result, report=deadline.report())
         duration: int = int((time.monotonic() - start) * 1000)
         completed_result: ModelExecutionResult = dataclasses.replace(result, duration_ms=duration)
         log_debug_event(

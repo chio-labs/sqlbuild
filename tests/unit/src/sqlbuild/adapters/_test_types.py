@@ -164,3 +164,10 @@ class DuckDbRowCountEstimateTestCase:
     name: str
     expected_row_count: int | None
     expected_detail: str | None = None
+
+
+@dataclass(frozen=True)
+class StatementCancellationTestCase:
+    description: str
+    expected_limit_range: tuple[int, int]
+    expected_asynchronous: bool

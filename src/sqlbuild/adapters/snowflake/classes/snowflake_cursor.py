@@ -13,7 +13,11 @@ from typing import Any
 from uuid import uuid4
 
 from sqlbuild._native import SQLBUILD_QUERY_TAG_APP, CostContext, record_statement
+from sqlbuild.adapters.snowflake.classes.snowflake_active_statements import (
+    SnowflakeActiveStatements,
+)
 from sqlbuild.cost.models import CostResourceContext, StatementExecutionTelemetry
+from sqlbuild.runtime.execution_limits.classes.item_deadline import ItemDeadline
 from sqlbuild.runtime.execution_limits.main.current_execution_deadline import (
     current_execution_deadline,
 )
@@ -31,7 +35,10 @@ _STATEMENT_TIMEOUT_PARAMETER: str = "STATEMENT_TIMEOUT_IN_SECONDS"
 _STATEMENT_PARAMETER_ERROR_FRAGMENT: str = "STATEMENT PARAMETER"
 _RAW_CURSOR_ATTRIBUTE: str = "raw_cursor"
 _ON_EXECUTED_ATTRIBUTE: str = "on_executed"
-_OWN_ATTRIBUTES: frozenset[str] = frozenset({_RAW_CURSOR_ATTRIBUTE, _ON_EXECUTED_ATTRIBUTE})
+_STATEMENTS_ATTRIBUTE: str = "statements"
+_OWN_ATTRIBUTES: frozenset[str] = frozenset(
+    {_RAW_CURSOR_ATTRIBUTE, _ON_EXECUTED_ATTRIBUTE, _STATEMENTS_ATTRIBUTE}
+)
 _EXECUTEMANY_INTENT: str = "executemany"
 
 
@@ -45,9 +52,16 @@ def _statement_id() -> str:
 class _SnowflakeCursor:
     """Delegate cursor operations while tagging and recording executed statements."""
 
-    def __init__(self, raw_cursor: Any, *, on_executed: StatementListener | None = None) -> None:
+    def __init__(
+        self,
+        raw_cursor: Any,
+        *,
+        on_executed: StatementListener | None = None,
+        statements: SnowflakeActiveStatements | None = None,
+    ) -> None:
         object.__setattr__(self, _RAW_CURSOR_ATTRIBUTE, raw_cursor)
         object.__setattr__(self, _ON_EXECUTED_ATTRIBUTE, on_executed)
+        object.__setattr__(self, _STATEMENTS_ATTRIBUTE, statements or SnowflakeActiveStatements())
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name in _OWN_ATTRIBUTES:
@@ -129,7 +143,11 @@ class _SnowflakeCursor:
             ),
         ) as lifecycle:
             try:
-                result: Any = operation(sql, *args, **kwargs)
+                statements: SnowflakeActiveStatements = object.__getattribute__(
+                    self, _STATEMENTS_ATTRIBUTE
+                )
+                with statements.running(raw_cursor=self.raw_cursor, sql=sql):
+                    result: Any = operation(sql, *args, **kwargs)
             except Exception as error:
                 if query_tag_injected and _can_retry_without_query_tag(
                     cursor=self.raw_cursor,
@@ -308,7 +326,7 @@ def _with_query_tag(
 
 
 def _with_execution_deadline(*, kwargs: dict[str, Any]) -> dict[str, Any]:
-    deadline: ExecutionDeadline | None = current_execution_deadline()
+    deadline: ExecutionDeadline | ItemDeadline | None = current_execution_deadline()
     if deadline is None:
         return dict(kwargs)
     deadline.enforce()

@@ -21,6 +21,7 @@ from sqlbuild.executor.scenario.classes.prepared_scenario_schemas import Prepare
 from sqlbuild.executor.scenario.classes.scenario_interrupts import ScenarioInterrupts
 from sqlbuild.executor.scenario.types import ScenarioLocalRunStatus, ScenarioSnapshotState
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.execution_limits.models import RunItemTimeouts
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,15 @@ class ScenarioLocalReplaySource:
     lexical_syntax: SqlLexicalSyntax
     capture_adapter: str | None = None
     capture_dialect: str | None = None
+
+
+@dataclass(frozen=True)
+class ScenarioTestSettings:
+    """Cleanup, concurrency and time-limit settings for one warehouse scenario test run."""
+
+    retain: bool
+    concurrency: int = 1
+    timeouts: RunItemTimeouts | None = None
 
 
 @dataclass(frozen=True)
