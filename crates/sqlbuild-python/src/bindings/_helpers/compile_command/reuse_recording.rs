@@ -81,6 +81,22 @@ impl CompileArtifactWrites {
     }
 }
 
+impl CompileArtifactWrites {
+    /// Every recorded artifact's absolute path, with its digest when this compile wrote it.
+    pub(crate) fn written_digests(&self) -> HashMap<String, Option<String>> {
+        self.locked()
+            .iter()
+            .map(|(path, artifact)| {
+                let digest: Option<String> = match artifact {
+                    RecordedArtifact::Written(digest) => Some(digest.clone()),
+                    RecordedArtifact::Kept { .. } => None,
+                };
+                (path.clone(), digest)
+            })
+            .collect()
+    }
+}
+
 #[pymethods]
 impl CompileArtifactWrites {
     /// Every recorded artifact by absolute path, as `(digest, size, mtime_ns)`.
@@ -234,6 +250,13 @@ impl RecordedCompileOutput {
 
     fn locked(&self) -> std::sync::MutexGuard<'_, PrintedOutput> {
         self.output.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Output already printed or recorded elsewhere: its stderr lines and its report.
+    pub(crate) fn recorded(stderr_lines: Vec<Py<PyString>>, stdout: Py<PyString>) -> Self {
+        Self {
+            output: Mutex::new((stderr_lines, Some(stdout))),
+        }
     }
 }
 
@@ -480,6 +503,25 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
             ("rules", reuse_rules(py, true)?.into_any()),
         ],
     )?;
+    if let Some(mut capture) = crate::bindings::_helpers::compile_delta::context::take_capture() {
+        capture.environment_names = native_field(&facts.input_reads, "environment_names")?
+            .try_iter()?
+            .map(|name| name?.extract::<String>())
+            .collect::<PyResult<_>>()?;
+        let json_output: bool = facts.json_output.is_truthy()?;
+        match crate::bindings::_helpers::compile_delta::image::ProjectImage::from_capture(
+            capture,
+            json_output,
+        ) {
+            Ok(image) => crate::bindings::_helpers::compile_delta::context::set_pending_image(
+                image.encode().ok(),
+            ),
+            Err(reason) => {
+                let _ = reuse_logger(py)?
+                    .call_method1("debug", ("Compile reuse kept no project image: %s", reason))?;
+            }
+        }
+    }
     let (outcome, digested): (String, Bound<'_, PyAny>) =
         facts.native.call_method1("record", (payload,))?.extract()?;
     let _ = reuse_logger(py)?.call_method1(

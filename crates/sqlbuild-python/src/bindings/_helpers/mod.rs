@@ -14,6 +14,7 @@ pub(crate) mod clone;
 pub(crate) mod command_runtime;
 pub(crate) mod compile_attachment;
 pub(crate) mod compile_command;
+pub(crate) mod compile_delta;
 pub(crate) mod compile_driver;
 pub(crate) mod compile_outputs;
 pub(crate) mod compile_records;

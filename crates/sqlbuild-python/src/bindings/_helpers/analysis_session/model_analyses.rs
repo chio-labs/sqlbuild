@@ -206,6 +206,15 @@ fn run_session<'py>(
         nullability.call_method1("setdefault", (&name, defaults))?;
     }
     let (additions, analysis_names, succeeded) = session.borrow_mut().finish(py)?;
+    if let Some(tables) = session
+        .borrow()
+        .finished_session()
+        .and_then(|finished| finished.relation_tables())
+    {
+        crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+            capture.relations = Some(tables.clone());
+        });
+    }
     record_catalog_changes(catalog, additions, &analysis_names, (&types, &nullability))?;
     record_cache(py, python, session.borrow().cache_stats())?;
     let positions: Bound<'py, PyDict> = PyDict::new(py);

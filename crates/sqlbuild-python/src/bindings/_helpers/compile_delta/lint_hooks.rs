@@ -1,0 +1,101 @@
+//! The SQL lint keys a full compile leaves for its image, and a delta compile's use of them.
+
+use std::collections::{BTreeSet, HashMap};
+use std::path::{Path, PathBuf};
+
+use pyo3::PyResult;
+
+use crate::bindings::_helpers::compile_delta::context::{
+    capture, capturing, delta_unsupported, injection,
+};
+use crate::bindings::_helpers::rules::lint_pipeline::{LintFile, lint_sources};
+
+/// Each model file's lint cache key: recorded for the image, and in a delta compile the whole
+/// project's keys with the recompiled models' keys fresh.
+pub(crate) fn model_identities(fresh: Vec<(String, String)>) -> PyResult<Vec<(String, String)>> {
+    let Some(injection) = injection() else {
+        if capturing() {
+            let keys: Vec<(String, String)> = fresh.clone();
+            capture(|capture| capture.lint_model_keys = Some(keys));
+        }
+        return Ok(fresh);
+    };
+    let Some(stored) = injection.lint_model_keys.as_ref() else {
+        return Err(delta_unsupported(
+            "the lint keys of the models were not recorded",
+        ));
+    };
+    let mut fresh: HashMap<String, String> = fresh.into_iter().collect();
+    let whole: Vec<(String, String)> = stored
+        .iter()
+        .map(|(path, key)| match fresh.remove(path) {
+            Some(key) => (path.clone(), key),
+            None => (path.clone(), key.clone()),
+        })
+        .collect();
+    if !fresh.is_empty() {
+        return Err(delta_unsupported(
+            "a recompiled model has no recorded lint key",
+        ));
+    }
+    capture(|capture| capture.lint_model_keys = Some(whole.clone()));
+    Ok(whole)
+}
+
+/// The changed files a delta compile lints, read from the project.
+pub(crate) fn changed_files(project_dir: &Path) -> PyResult<Vec<LintFile>> {
+    let Some(injection) = injection() else {
+        return Ok(Vec::new());
+    };
+    let selected: BTreeSet<PathBuf> = injection
+        .changed_paths
+        .iter()
+        .map(|path| {
+            let path: PathBuf = project_dir.join(path);
+            std::fs::canonicalize(&path).unwrap_or(path)
+        })
+        .collect();
+    lint_sources(project_dir, Some(&selected), None)
+}
+
+/// Each non-model file's lint cache key, in walk order: recorded for the image, and in a delta
+/// compile the whole project's keys with the changed files' keys fresh.
+pub(crate) fn file_keys(
+    project_dir: &Path,
+    fresh: Vec<(PathBuf, String, Option<String>)>,
+) -> PyResult<Vec<(PathBuf, String, Option<String>)>> {
+    let Some(injection) = injection() else {
+        if capturing() {
+            let keys: Vec<(String, Option<String>)> = fresh
+                .iter()
+                .map(|(_, path, key)| (path.clone(), key.clone()))
+                .collect();
+            capture(|capture| capture.lint_file_keys = Some(keys));
+        }
+        return Ok(fresh);
+    };
+    let Some(stored) = injection.lint_file_keys.as_ref() else {
+        return Err(delta_unsupported(
+            "the lint keys of the project files were not recorded",
+        ));
+    };
+    let mut fresh: HashMap<String, (PathBuf, String, Option<String>)> =
+        fresh.into_iter().map(|row| (row.1.clone(), row)).collect();
+    let whole: Vec<(PathBuf, String, Option<String>)> = stored
+        .iter()
+        .map(|(path, key)| {
+            fresh
+                .remove(path)
+                .unwrap_or_else(|| (project_dir.join(path), path.clone(), key.clone()))
+        })
+        .collect();
+    if !fresh.is_empty() {
+        return Err(delta_unsupported("a changed file has no recorded lint key"));
+    }
+    let keys: Vec<(String, Option<String>)> = whole
+        .iter()
+        .map(|(_, path, key)| (path.clone(), key.clone()))
+        .collect();
+    capture(|capture| capture.lint_file_keys = Some(keys));
+    Ok(whole)
+}

@@ -105,6 +105,7 @@ fn parse_model_contents(
         removed_keys: request.removed_keys,
         extract_implicit_alias_columns: request.extract_implicit_alias_columns,
         extract_output_column_locations: request.extract_output_column_locations,
+        path_filter: None,
     };
     let parsed = py
         .compiler_detach(|| Ok(parse_model_text(&request.file_path, contents, &options)))

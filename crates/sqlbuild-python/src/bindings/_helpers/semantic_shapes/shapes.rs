@@ -317,6 +317,7 @@ fn model_shapes<'py>(
     let mut pending: Vec<Bound<'py, PyAny>> = native_field(project, "models")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
+    crate::bindings::_helpers::compile_delta::report_hooks::inject_model_shapes(&pending, shapes)?;
     while !pending.is_empty() {
         let mut remaining: Vec<Bound<'py, PyAny>> = Vec::new();
         for model in &pending {
@@ -362,7 +363,7 @@ fn model_shapes<'py>(
         }
         pending = remaining;
     }
-    Ok(())
+    crate::bindings::_helpers::compile_delta::report_hooks::record_model_shapes(project, shapes)
 }
 
 fn all_known(names: &[String], shapes: &Bound<'_, PyDict>) -> PyResult<bool> {

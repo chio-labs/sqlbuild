@@ -58,9 +58,12 @@ impl NativeModelValidator {
 /// Model, seed, source, function and table function names discovered in `inputs`.
 fn discovered_names(inputs: &Bound<'_, PyAny>) -> PyResult<ResourceNames> {
     let model_stem = |file: &Bound<'_, PyAny>| stem(file, FILE_PATH_ATTRIBUTE);
-    let models: HashSet<String> = each(inputs, "model_files", model_stem)?
+    let mut models: HashSet<String> = each(inputs, "model_files", model_stem)?
         .into_iter()
         .collect();
+    if let Some(injection) = crate::bindings::_helpers::compile_delta::context::injection() {
+        models.extend(injection.model_names.iter().cloned());
+    }
     let mut seeds: HashSet<String> = HashSet::new();
     for schema in native_field(inputs, "schema_files")?.try_iter()? {
         seeds.extend(each(&schema?, "seed_entries", column_name)?);
