@@ -348,8 +348,17 @@ pub(crate) fn parse_sources_document<'py>(
         .map_err(|error| {
             parse_error(py, error, SOURCE_PARSE_ERROR).unwrap_or_else(|error| error)
         })?;
+    let referenced: Option<std::collections::BTreeSet<String>> =
+        crate::bindings::_helpers::compile_delta::context::injection()
+            .and_then(|injection| injection.source_names.clone());
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(sources.len());
     for source in &sources {
+        if let Some(referenced) = &referenced
+            && let Ok(name) = source.name.0.extract::<String>()
+            && !referenced.contains(&name)
+        {
+            continue;
+        }
         built.push(source_entry(py, &classes, source)?);
     }
     PyTuple::new(py, built)

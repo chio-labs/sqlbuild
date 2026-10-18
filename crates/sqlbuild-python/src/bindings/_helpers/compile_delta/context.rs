@@ -111,6 +111,8 @@ pub(crate) struct DeltaInjection {
     pub(crate) model_subjects: Option<Vec<(String, String, Option<String>)>>,
     /// The files that changed since the stored compile, as project-relative POSIX paths.
     pub(crate) changed_paths: BTreeSet<String>,
+    /// The only sources discovery keeps, those the rerun models read; `None` keeps every one.
+    pub(crate) source_names: Option<BTreeSet<String>>,
     /// The whole project's SQL lint cache keys, as the image recorded them.
     pub(crate) lint_model_keys: Option<Vec<(String, String)>>,
     pub(crate) lint_file_keys: Option<Vec<(String, Option<String>)>>,

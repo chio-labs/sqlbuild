@@ -41,6 +41,8 @@ pub(crate) const ERRORS_ON_DELTA_PATH: bool = true;
 /// How many times a changed relation shape may pull its dependents into the delta.
 const MAX_ROUNDS: usize = 4;
 const MODELS_ROOT: &str = "models/";
+/// The upstream kind of a source a model reads.
+const SOURCE_KIND: &str = "source";
 const TESTS_ROOT: &str = "tests/";
 const SQL_SUFFIX: &str = ".sql";
 /// Under verification, the delta's own report is kept here for inspection.
@@ -154,6 +156,8 @@ fn changes_of(
 #[derive(Clone, Debug, Default)]
 struct Rerun {
     changed: BTreeSet<String>,
+    /// The sources the rerun models read, the only ones discovery keeps; `None` keeps all.
+    sources: Option<BTreeSet<String>>,
     models: BTreeSet<String>,
     model_paths: BTreeSet<String>,
     test_paths: BTreeSet<String>,
@@ -252,11 +256,16 @@ fn returned(image: &mut ProjectImage, injection: DeltaInjection) {
 }
 
 /// `injection` set up to rerun `rerun`.
-fn for_rerun(mut injection: DeltaInjection, rerun: &Rerun) -> DeltaInjection {
+fn for_rerun(
+    mut injection: DeltaInjection,
+    rerun: &Rerun,
+    sources_read: Option<BTreeSet<String>>,
+) -> DeltaInjection {
     injection.model_paths = rerun.model_paths.clone();
     injection.test_paths = rerun.test_paths.clone();
     injection.rerun_names = rerun.names();
     injection.changed_paths = rerun.changed.clone();
+    injection.source_names = sources_read;
     injection
 }
 
@@ -464,7 +473,20 @@ pub(crate) fn run<'py>(
             return fallback("too many models would compile again");
         }
         rerun = rerun.with_tests(&image, &changed_tests);
-        let (outcome, back) = round(request, attempt, (for_rerun(injection, &rerun), &rerun))?;
+        let sources_read: Option<BTreeSet<String>> =
+            (!image.diagnostics.iter().any(outside_resources)).then(|| {
+                image
+                    .models
+                    .iter()
+                    .filter(|model| rerun.models.contains(&model.name))
+                    .flat_map(|model| &model.upstream)
+                    .filter(|(kind, _)| kind == SOURCE_KIND)
+                    .map(|(_, name)| name.clone())
+                    .collect()
+            });
+        rerun.sources = sources_read.clone();
+        let injection_for_round: DeltaInjection = for_rerun(injection, &rerun, sources_read);
+        let (outcome, back) = round(request, attempt, (injection_for_round, &rerun))?;
         let ran: Round<'py> = match outcome {
             RoundOutcome::Ran(ran) => *ran,
             RoundOutcome::Stop(outcome) => return Ok(outcome),
@@ -623,6 +645,16 @@ fn first_rerun(
     Ok((rerun, changed_tests))
 }
 
+/// Whether a stored diagnostic concerns a file other than a model or SQL test, which a delta
+/// compile then reads in full.
+fn outside_resources(diagnostic: &CapturedDiagnostic) -> bool {
+    diagnostic
+        .paths
+        .iter()
+        .any(|path| !path.starts_with(MODELS_ROOT) && !path.starts_with(TESTS_ROOT))
+        || diagnostic.paths.is_empty() && diagnostic.resource_name.is_none()
+}
+
 /// Log how long the delta has run, for profiling.
 pub(crate) fn trace(py: Python<'_>, phase: &str, started: std::time::Instant) -> PyResult<()> {
     let milliseconds: u128 = started.elapsed().as_millis();
@@ -699,6 +731,7 @@ fn finished<'py>(
                 let scope: SpliceScope<'_> = SpliceScope {
                     models: &rerun.models,
                     tests: &rerun.tests,
+                    sources: rerun.sources.as_ref(),
                 };
                 spliced_report(&stored_output.stdout, &delta_stdout, &scope)
             },

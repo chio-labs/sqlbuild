@@ -119,6 +119,8 @@ fn member<'a>(found: &'a [(String, Span)], key: &str) -> Option<&'a Span> {
 pub(crate) struct SpliceScope<'a> {
     pub(crate) models: &'a BTreeSet<String>,
     pub(crate) tests: &'a BTreeSet<String>,
+    /// The sources the delta discovered, when it discovered only some; `None` when all.
+    pub(crate) sources: Option<&'a BTreeSet<String>>,
 }
 
 /// The string at `path` in the item spanning `span`: the first member of each key in turn.
@@ -225,14 +227,19 @@ fn spliced_resources(
     let mut cursor: usize = base_span.0;
     for (key, span) in &base_members {
         let delta_list: &Span = member(&delta_members, key).ok_or(key.clone())?;
-        let replacement: Option<Option<String>> = match key.as_str() {
-            "models" => spliced_items(base, *span, delta, *delta_list, |document, item| {
+        let replacement: Option<Option<String>> = match (key.as_str(), scope.sources) {
+            ("sources", Some(sources)) => {
+                spliced_items(base, *span, delta, *delta_list, |document, item| {
+                    item_field(document, item, &["name"]).filter(|name| sources.contains(name))
+                })
+            }
+            ("models", _) => spliced_items(base, *span, delta, *delta_list, |document, item| {
                 item_field(document, item, &["name"]).filter(|name| scope.models.contains(name))
             }),
-            "tests" => spliced_items(base, *span, delta, *delta_list, |document, item| {
+            ("tests", _) => spliced_items(base, *span, delta, *delta_list, |document, item| {
                 item_field(document, item, &["name"]).filter(|name| scope.tests.contains(name))
             }),
-            "audits" => spliced_items(base, *span, delta, *delta_list, |document, item| {
+            ("audits", _) => spliced_items(base, *span, delta, *delta_list, |document, item| {
                 let owner: Option<String> =
                     item_field(document, item, &["attached_to", "resource_type"]);
                 let name: Option<String> = item_field(document, item, &["attached_to", "name"]);
