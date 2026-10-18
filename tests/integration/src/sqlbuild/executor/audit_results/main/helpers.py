@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.audit_results.constants import AUDIT_RESULT_COLUMNS, COLUMN_AUDIT_META_JSON
 from sqlbuild.executor.audit_results.models import AuditResultRecord
@@ -74,3 +75,10 @@ def build_record() -> AuditResultRecord:
         metadata_json='{"owner":"data"}',
         reused=False,
     )
+
+
+def failing_column_read(**kwargs: object) -> tuple[ColumnInfo, ...]:
+    """A column read that fails, as a warehouse metadata outage would."""
+
+    del kwargs
+    raise RuntimeError("metadata service unavailable")

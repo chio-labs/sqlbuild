@@ -30,9 +30,18 @@ def ensure_meta_column(
 ) -> bool:
     """Add the meta column to a table created before it existed; report whether it exists."""
 
-    if _meta_column_present(
-        connection=connection, database=database, schema=schema, evolution=evolution
-    ):
+    try:
+        present: bool = _meta_column_present(
+            connection=connection, database=database, schema=schema, evolution=evolution
+        )
+    except Exception as error:
+        _LOGGER.warning(
+            "Audit result meta was not stored because the columns of the result table could "
+            "not be read (%s)",
+            error,
+        )
+        return False
+    if present:
         return True
     statements: tuple[str, ...] = evolution.render_add_columns(
         destination=build_qualified_table_name(
@@ -51,7 +60,7 @@ def ensure_meta_column(
         for statement in statements:
             _ = execute(connection=connection, sql=statement)
     except Exception as error:
-        if _meta_column_present(
+        if _meta_column_added_concurrently(
             connection=connection, database=database, schema=schema, evolution=evolution
         ):
             return True
@@ -62,6 +71,21 @@ def ensure_meta_column(
         )
         return False
     return True
+
+
+def _meta_column_added_concurrently(
+    *,
+    connection: Any,
+    database: str | None,
+    schema: str,
+    evolution: AuditResultColumnEvolution,
+) -> bool:
+    try:
+        return _meta_column_present(
+            connection=connection, database=database, schema=schema, evolution=evolution
+        )
+    except Exception:
+        return False
 
 
 def _meta_column_present(

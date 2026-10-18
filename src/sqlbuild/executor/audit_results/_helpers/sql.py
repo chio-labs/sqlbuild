@@ -133,36 +133,6 @@ def insert_columns(
     return tuple(column for column in AUDIT_RESULT_COLUMNS if column != COLUMN_AUDIT_META_JSON)
 
 
-def build_read_latest_sql(
-    *,
-    database: str | None,
-    schema: str,
-    audit_name: str,
-    binding_key: str,
-    execution_fingerprint: str,
-    run_scope_phase: str,
-    limit: int,
-    render_qualified_name: Callable[..., str | None],
-) -> str:
-    qualified_name: str = build_qualified_table_name(
-        database=database, schema=schema, render_qualified_name=render_qualified_name
-    )
-    predicates: tuple[tuple[str, str], ...] = (
-        (COLUMN_AUDIT_NAME, audit_name),
-        (COLUMN_BINDING_KEY, binding_key),
-        (COLUMN_EXECUTION_FINGERPRINT, execution_fingerprint),
-        (COLUMN_RUN_SCOPE_PHASE, run_scope_phase),
-    )
-    where_sql: str = " AND ".join(
-        f"{column} = {_column_literal(column=column, value=value)}" for column, value in predicates
-    )
-    return (
-        f"SELECT {', '.join(AUDIT_RESULT_COLUMNS)} FROM {qualified_name} "
-        f"WHERE {where_sql} ORDER BY {COLUMN_OCCURRED_AT} DESC, {COLUMN_RESULT_ID} DESC "
-        f"LIMIT {limit}"
-    )
-
-
 def _record_values(*, record: AuditResultRecord, columns: tuple[str, ...]) -> str:
     values: dict[str, object | None] = {
         COLUMN_RESULT_ID: record.result_id,

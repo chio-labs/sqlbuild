@@ -24,3 +24,12 @@ class AuditResultMetaWriteTestCase:
     audit_meta_json: str | None
     expected_meta_column: bool
     expected_meta: tuple[str | None, ...]
+
+
+@dataclass(frozen=True)
+class AuditResultMetaUnreadableColumnsTestCase:
+    """One meta write whose column read fails."""
+
+    description: str
+    expected_row_count: int
+    expected_meta_column: bool

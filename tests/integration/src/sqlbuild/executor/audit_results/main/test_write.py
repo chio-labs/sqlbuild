@@ -14,6 +14,7 @@ from sqlbuild.executor.audit_results.constants import (
 from sqlbuild.executor.audit_results.main._write import write_audit_result_records
 from sqlbuild.executor.audit_results.models import AuditResultColumnEvolution, AuditResultRecord
 from tests.integration.src.sqlbuild.executor.audit_results.main._test_types import (
+    AuditResultMetaUnreadableColumnsTestCase,
     AuditResultMetaWriteTestCase,
     AuditResultWriteTestCase,
 )
@@ -21,6 +22,7 @@ from tests.integration.src.sqlbuild.executor.audit_results.main.helpers import (
     LEGACY_AUDIT_RESULT_COLUMNS,
     build_record,
     create_legacy_results_table,
+    failing_column_read,
     leave_results_table_absent,
 )
 
@@ -178,6 +180,56 @@ def test_given_results_table_generation_when_writing_meta_then_column_is_added_a
     assert (COLUMN_AUDIT_META_JSON in columns) is test_case.expected_meta_column
     assert columns[: len(LEGACY_AUDIT_RESULT_COLUMNS)] == LEGACY_AUDIT_RESULT_COLUMNS
     assert stored_meta == test_case.expected_meta
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AuditResultMetaUnreadableColumnsTestCase(
+            description="legacy table whose columns cannot be read keeps the record without meta",
+            expected_row_count=1,
+            expected_meta_column=False,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_unreadable_columns_when_writing_meta_then_record_is_written_without_meta(
+    test_case: AuditResultMetaUnreadableColumnsTestCase,
+    tmp_path: Path,
+) -> None:
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    connection: Any = adapter.connect({"database": str(tmp_path / "audit_results.duckdb")})
+    record: AuditResultRecord = replace(build_record(), audit_meta_json='{"region":"emea"}')
+    try:
+        create_legacy_results_table(adapter, connection)
+        write_audit_result_records(
+            connection=connection,
+            execute=adapter.execute,
+            database=None,
+            schema="main",
+            records=(record,),
+            render_qualified_name=adapter.render_qualified_name,
+            render_framework_type=adapter.render_framework_type,
+            render_create_table_sql=adapter.render_create_audit_result_table_sql,
+            render_create_index_sqls=adapter.render_create_audit_result_index_sqls,
+            column_evolution=AuditResultColumnEvolution(
+                read_columns=failing_column_read, render_add_columns=adapter.render_add_columns
+            ),
+        )
+        row_count: int = connection.execute(
+            "SELECT COUNT(*) FROM main._sqlbuild_audit_results"
+        ).fetchone()[0]
+        columns: tuple[str, ...] = tuple(
+            column.name
+            for column in adapter.get_columns(
+                connection=connection, database=None, schema="main", name="_sqlbuild_audit_results"
+            )
+        )
+    finally:
+        adapter.close(connection)
+
+    assert row_count == test_case.expected_row_count
+    assert (COLUMN_AUDIT_META_JSON in columns) is test_case.expected_meta_column
 
 
 if __name__ == "__main__":
