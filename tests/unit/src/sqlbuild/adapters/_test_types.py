@@ -171,3 +171,13 @@ class StatementCancellationTestCase:
     description: str
     expected_limit_range: tuple[int, int]
     expected_asynchronous: bool
+
+
+@dataclass(frozen=True)
+class BigQueryQueuedJobTestCase:
+    """One BigQuery job that waits in a queue before it runs."""
+
+    description: str
+    pending_polls: int
+    poll_seconds: float
+    expected_maximum_running_seconds: float

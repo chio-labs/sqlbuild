@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 
 import pytest
@@ -17,22 +18,25 @@ from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
 from sqlbuild.runtime.execution_limits.main.execution_deadline_scope import (
     execution_deadline_scope,
 )
-from sqlbuild.runtime.execution_limits.main.item_deadline_scope import item_deadline_scope
-from sqlbuild.runtime.execution_limits.main.item_deadline_suspended import (
-    item_deadline_suspended,
+from sqlbuild.runtime.execution_limits.main.execution_deadlines_suspended import (
+    execution_deadlines_suspended,
 )
+from sqlbuild.runtime.execution_limits.main.item_deadline_scope import item_deadline_scope
 from sqlbuild.runtime.execution_limits.models import ItemTimeoutPolicy, ItemTimeoutReport
 from sqlbuild.runtime.execution_limits.types import CancellationOutcome, ItemKind
 from tests.unit.src.sqlbuild.runtime.execution_limits._test_types import (
     DeadlineCancellationTestCase,
     EarliestDeadlineTestCase,
+    HeldClockTestCase,
     IdleExpiryTestCase,
+    NestedDeadlineTestCase,
     NoPolicyTestCase,
     SuspendedCleanupTestCase,
 )
 from tests.unit.src.sqlbuild.runtime.execution_limits.helpers import (
     FakeCancellingAdapter,
     FakeRefusingAdapter,
+    run_finished_statement,
     run_statement_until_cancelled,
 )
 
@@ -108,29 +112,117 @@ def test_given_running_statement_when_item_deadline_expires_then_cancellation_ou
     "test_case",
     [
         IdleExpiryTestCase(
-            description="model with no running statement",
+            description="model past its limit between statements",
             kind=ItemKind.MODEL,
+            statements_run=1,
+            expected_expired=True,
+            expected_outcome=CancellationOutcome.NOT_NEEDED,
+            expected_interrupted=False,
+        ),
+        IdleExpiryTestCase(
+            description="rendering before the first statement does not count",
+            kind=ItemKind.TEST,
+            statements_run=0,
+            expected_expired=False,
             expected_outcome=CancellationOutcome.NOT_NEEDED,
             expected_interrupted=False,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_no_running_statement_when_item_deadline_expires_then_cancellation_is_not_needed(
+def test_given_no_running_statement_when_limit_passes_then_only_started_items_expire(
     test_case: IdleExpiryTestCase,
 ) -> None:
     adapter: FakeCancellingAdapter = FakeCancellingAdapter(result=True, asynchronous=False)
 
     with item_deadline_scope(
-        kind=test_case.kind, name="orders", policy=_EXPIRED, adapter=adapter, connection=None
+        kind=test_case.kind, name="orders", policy=_ONE_SECOND, adapter=adapter, connection=None
     ) as deadline:
-        time.sleep(0.05)
-        with pytest.raises(ItemTimeoutError):
+        for _ in range(test_case.statements_run):
+            run_finished_statement()
+        time.sleep(1.1)
+        with contextlib.suppress(ItemTimeoutError):
             enforce_execution_deadline()
 
     assert isinstance(deadline, ItemDeadline)
+    assert deadline.expired == test_case.expected_expired
     assert adapter.interrupted.is_set() == test_case.expected_interrupted
     assert deadline.report().cancellation == test_case.expected_outcome
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NestedDeadlineTestCase(
+            description="enclosing model limit cancels a test statement inside it",
+            outer_seconds=1,
+            inner_seconds=3600,
+            expected_expired_name="orders_model",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_nested_deadlines_when_enclosing_one_expires_then_inner_statement_is_cancelled(
+    test_case: NestedDeadlineTestCase,
+) -> None:
+    adapter: FakeCancellingAdapter = FakeCancellingAdapter(result=True, asynchronous=False)
+
+    with item_deadline_scope(
+        kind=ItemKind.MODEL,
+        name="orders_model",
+        policy=ItemTimeoutPolicy(
+            limit=f"{test_case.outer_seconds}s", seconds=test_case.outer_seconds, source="test"
+        ),
+        adapter=adapter,
+        connection=None,
+    ) as outer:
+        with item_deadline_scope(
+            kind=ItemKind.TEST,
+            name="orders_test",
+            policy=ItemTimeoutPolicy(
+                limit=f"{test_case.inner_seconds}s", seconds=test_case.inner_seconds, source="test"
+            ),
+            adapter=adapter,
+            connection=None,
+        ) as inner:
+            assert inner is not None
+            assert inner.remaining_seconds <= test_case.outer_seconds
+            run_statement_until_cancelled(adapter=adapter, finished_query_id=None)
+            with pytest.raises(ItemTimeoutError) as raised:
+                enforce_execution_deadline()
+
+    assert outer is not None
+    assert outer.expired
+    assert test_case.expected_expired_name in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HeldClockTestCase(
+            description="queued or cleanup time is not running time",
+            held_seconds=0.3,
+            expected_maximum_running_seconds=0.2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_held_clock_when_time_passes_then_running_time_excludes_it(
+    test_case: HeldClockTestCase,
+) -> None:
+    adapter: FakeCancellingAdapter = FakeCancellingAdapter(result=True, asynchronous=False)
+
+    with item_deadline_scope(
+        kind=ItemKind.TEST, name="orders", policy=_ONE_SECOND, adapter=adapter, connection=None
+    ) as deadline:
+        assert deadline is not None
+        run_finished_statement()
+        deadline.hold()
+        time.sleep(test_case.held_seconds)
+        deadline.release()
+        running: float = deadline.running_seconds()
+
+    assert running < test_case.expected_maximum_running_seconds
 
 
 @pytest.mark.parametrize(
@@ -146,8 +238,9 @@ def test_given_expired_item_when_suspended_for_cleanup_then_statements_are_allow
     with item_deadline_scope(
         kind=ItemKind.TEST, name="orders", policy=_EXPIRED, adapter=adapter, connection=None
     ):
+        run_finished_statement()
         time.sleep(0.05)
-        with item_deadline_suspended():
+        with execution_deadlines_suspended():
             enforce_execution_deadline()
             enforced: bool = True
 

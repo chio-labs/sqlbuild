@@ -426,3 +426,14 @@ class ModelTimeoutJsonE2ETestCase:
     description: str
     expected_status: str
     expected_summary_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class TransactionTimeoutE2ETestCase:
+    """A model whose limit expires inside its promotion transaction."""
+
+    description: str
+    max_duration: str
+    expected_output_fragments: tuple[str, ...]
+    expected_published_rows: tuple[tuple[int, int], ...]
+    expected_later_model_rows: tuple[tuple[int], ...]

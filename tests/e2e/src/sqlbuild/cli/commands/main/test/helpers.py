@@ -1227,6 +1227,8 @@ def build_deep_shared_missing_mock_project_files(*, layers: int) -> dict[str, st
             'adapter = "duckdb"\n\n'
             "[connection]\n"
             'database = "deep_demo.duckdb"\n\n'
+            "[settings]\n"
+            f"unit_test_max_real_models = {2 * layers + 2}\n\n"
             "[defaults]\n"
             'materialized = "table"\n'
         ),
@@ -2006,5 +2008,39 @@ def slow_model_files(*, max_duration: str) -> dict[str, str]:
         ),
         "models/customers.sql": (
             "MODEL (description 'Customers.', materialized table);\n\nSELECT 100 AS customer_id\n"
+        ),
+    }
+
+
+SLOW_SWAP_ADAPTER: str = (
+    "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n\n"
+    "class DuckDbSlowSwapAdapter(DuckDbAdapter):\n"
+    "    adapter_name = 'duckdb_slow_swap'\n\n"
+    "    def render_swap(self, *, left, right):\n"
+    "        first, *rest = super().render_swap(left=left, right=right)\n"
+    "        if 'order_totals' not in left:\n"
+    "            return (first, *rest)\n"
+    "        return (first, 'SELECT COUNT(*) FROM range(100000000000)', *rest)\n"
+)
+
+
+def slow_promotion_files(
+    *, database: Path, max_duration: str, order_total: int, customer_id: int
+) -> dict[str, str]:
+    """A model whose promotion swap is slow on a rebuild, and an independent model after it."""
+
+    return {
+        "sqlbuild_project.toml": COST_GUARD_PROJECT_TOML.replace(
+            'adapter = "duckdb"', 'adapter = "duckdb_slow_swap"'
+        ).replace('database = "warehouse.duckdb"', f'database = "{database}"'),
+        "adapters/duckdb_slow_swap.py": SLOW_SWAP_ADAPTER,
+        "models/order_totals.sql": (
+            "MODEL (description 'Order totals.', materialized table, "
+            f'max_duration "{max_duration}");\n\n'
+            f"SELECT 1 AS order_id, {order_total} AS total\n"
+        ),
+        "models/z_customers.sql": (
+            "MODEL (description 'Customers.', materialized table);\n\n"
+            f"SELECT {customer_id} AS customer_id\n"
         ),
     }

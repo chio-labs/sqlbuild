@@ -110,6 +110,9 @@ from sqlbuild.adapters.postgres.constants import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.diagnostics.main.log_sql import log_sql
+from sqlbuild.runtime.execution_limits.main.execution_deadlines_suspended import (
+    execution_deadlines_suspended,
+)
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 
 
@@ -143,15 +146,29 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     )
 
     def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
-        """Store a unit test's actual output once in a session temporary table."""
+        """Store a unit test's output in a temporary table of one transaction, for poolers."""
 
-        _ = self.execute(connection=connection, sql=f"CREATE TEMPORARY TABLE {name} AS {sql}")
+        if connection.claim_sql_test_transaction():
+            _ = self.execute(connection=connection, sql="BEGIN")
+        try:
+            _ = self.execute(
+                connection=connection,
+                sql=f"CREATE TEMPORARY TABLE {name} ON COMMIT DROP AS {sql}",
+            )
+        except BaseException:
+            with execution_deadlines_suspended():
+                self.drop_sql_test_output(connection=connection, relation=name)
+            raise
         return name
 
     def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:
-        """Drop the temporary table `create_sql_test_output` created."""
+        """End the test's transaction, which drops its outputs, or drop one inside a caller's."""
 
-        _ = self.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {relation}")
+        if connection.release_sql_test_transaction():
+            _ = self.execute(connection=connection, sql="ROLLBACK")
+            return
+        if connection.in_transaction():
+            _ = self.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {relation}")
 
     def interrupt_connection(self, connection: Any) -> bool:
         """Cancel a connection's running statement from another thread; False if unsupported."""
@@ -781,7 +798,8 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 ]
             )
         finally:
-            connection.execute("ROLLBACK")
+            with execution_deadlines_suspended():
+                connection.execute("ROLLBACK")
         return same_view_definition(definition=definition, sql=probe)
 
     def render_relation_revokes(

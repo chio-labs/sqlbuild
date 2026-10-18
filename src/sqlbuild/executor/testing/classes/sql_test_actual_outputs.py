@@ -15,8 +15,8 @@ from sqlbuild.runtime.execution_limits.exceptions import (
     ExecutionDurationLimitError,
     ItemTimeoutError,
 )
-from sqlbuild.runtime.execution_limits.main.item_deadline_suspended import (
-    item_deadline_suspended,
+from sqlbuild.runtime.execution_limits.main.execution_deadlines_suspended import (
+    execution_deadlines_suspended,
 )
 
 _LOGGER: logging.Logger = logging.getLogger("sqlbuild.execution")
@@ -44,7 +44,7 @@ class SqlTestActualOutputs:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        self._release()
+        self.release()
 
     def materialize(self) -> dict[int, str]:
         """Store each compared step's output, or return no relations to compare inline."""
@@ -67,7 +67,7 @@ class SqlTestActualOutputs:
                     name=f"{_OUTPUT_PREFIX}_{token}_{index}",
                 )
                 if relation is None:
-                    self._release()
+                    self.release()
                     return {}
                 if relation.startswith(_OUTPUT_PREFIX):
                     self._created.append(relation)
@@ -81,15 +81,17 @@ class SqlTestActualOutputs:
                 test_name=self._test_entry.name,
                 sqlbuild_error=DiagnosticRecordRedactor.text(str(error)),
             )
-            self._release()
+            self.release()
             return {}
         return dict(self.relations)
 
-    def _release(self) -> None:
+    def release(self) -> None:
+        """Drop every stored output; later comparisons run inline."""
+
         created: list[str] = list(self._created)
         self._created.clear()
         self.relations.clear()
-        with item_deadline_suspended():
+        with execution_deadlines_suspended():
             for relation in created:
                 try:
                     self._adapter.drop_sql_test_output(

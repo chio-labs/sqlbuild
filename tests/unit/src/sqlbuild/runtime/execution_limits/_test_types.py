@@ -30,6 +30,8 @@ class DeadlineCancellationTestCase:
 class IdleExpiryTestCase:
     description: str
     kind: ItemKind
+    statements_run: int
+    expected_expired: bool
     expected_outcome: CancellationOutcome
     expected_interrupted: bool
 
@@ -52,3 +54,18 @@ class EarliestDeadlineTestCase:
 class NoPolicyTestCase:
     description: str
     expected_deadline: None
+
+
+@dataclass(frozen=True)
+class NestedDeadlineTestCase:
+    description: str
+    outer_seconds: int
+    inner_seconds: int
+    expected_expired_name: str
+
+
+@dataclass(frozen=True)
+class HeldClockTestCase:
+    description: str
+    held_seconds: float
+    expected_maximum_running_seconds: float

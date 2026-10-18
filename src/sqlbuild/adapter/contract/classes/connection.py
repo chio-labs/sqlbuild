@@ -16,6 +16,9 @@ from sqlbuild.runtime.execution_limits.exceptions import (
 from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
     enforce_execution_deadline,
 )
+from sqlbuild.runtime.execution_limits.main.execution_deadlines_suspended import (
+    execution_deadlines_suspended,
+)
 from sqlbuild.runtime.execution_limits.main.tracked_statement_connection import (
     tracked_statement_connection,
 )
@@ -42,7 +45,7 @@ class ConnectionMixin(ABC):
                     result: Any = self._execute(connection=connection, sql=sql)
             except Exception as error:
                 try:
-                    enforce_execution_deadline()
+                    enforce_execution_deadline(after_failure=True)
                 except (ExecutionDurationLimitError, ItemTimeoutError) as deadline_error:
                     raise deadline_error from error
                 attributed_error: Exception = attribute_failed_sql(error=error, sql=sql)
@@ -102,7 +105,8 @@ class ConnectionMixin(ABC):
             self.commit(connection)
         except BaseException:
             open_transactions.discard(id(connection))
-            self.rollback(connection)
+            with execution_deadlines_suspended():
+                self.rollback(connection)
             raise
 
     def supports_transactions(self) -> bool:

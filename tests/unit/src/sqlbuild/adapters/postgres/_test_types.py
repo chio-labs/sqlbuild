@@ -125,3 +125,30 @@ class PostgresDependentViewRebindTestCase:
     description: str
     catalog_rows: tuple[tuple[object, ...], ...]
     expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DeadlineTransactionTestCase:
+    """One transaction whose item deadline expires before a later statement."""
+
+    description: str
+    expected_statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqlTestOutputTransactionTestCase:
+    """One unit test output stored and released inside the test's own transaction."""
+
+    description: str
+    setup_statements: tuple[str, ...]
+    expected_statements: tuple[str, ...]
+    expected_in_transaction: bool
+
+
+@dataclass(frozen=True)
+class FailedSqlTestOutputTestCase:
+    """One unit test output whose creation fails inside the test's own transaction."""
+
+    description: str
+    expected_statements: tuple[str, ...]
+    expected_in_transaction: bool

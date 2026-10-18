@@ -62,7 +62,7 @@ def execute_sql_test(
             if deadline is None:
                 raise
             return timed_out_result(test_entry=test_entry, report=deadline.report())
-    if deadline is not None and deadline.expired:
+    if deadline is not None and deadline.expired and result.outcome == SqlTestOutcome.ERROR:
         return timed_out_result(test_entry=test_entry, report=deadline.report())
     return replace(result, real_model_count=test_entry.real_model_count)
 

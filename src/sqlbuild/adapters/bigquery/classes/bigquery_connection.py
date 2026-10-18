@@ -2,15 +2,22 @@
 
 import math
 import threading
+import time
 from typing import Any
 
 from sqlbuild.adapters.bigquery._helpers.statement_telemetry import affected_rows
 from sqlbuild.adapters.bigquery.classes.bigquery_cursor import _BigQueryCursor
-from sqlbuild.adapters.bigquery.constants import SELECT_STATEMENT_TYPE
+from sqlbuild.adapters.bigquery.constants import (
+    PENDING_JOB_POLL_SECONDS,
+    PENDING_JOB_STATE,
+    SELECT_STATEMENT_TYPE,
+)
 from sqlbuild.runtime.execution_limits.classes.item_deadline import ItemDeadline
+from sqlbuild.runtime.execution_limits.main.current_build_deadline import current_build_deadline
 from sqlbuild.runtime.execution_limits.main.current_execution_deadline import (
     current_execution_deadline,
 )
+from sqlbuild.runtime.execution_limits.main.current_item_deadline import current_item_deadline
 from sqlbuild.runtime.execution_limits.models import ExecutionDeadline
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 
@@ -43,17 +50,21 @@ class _BigQueryConnection:
             return cursor
 
     def query_job(self, sql: str) -> Any:
+        """Submit a job; only the whole-build limit becomes a job timeout, as it counts queueing."""
+
         deadline: ExecutionDeadline | ItemDeadline | None = current_execution_deadline()
-        if deadline is None:
+        if deadline is not None:
+            deadline.enforce()
+        build: ExecutionDeadline | None = current_build_deadline()
+        if build is None:
             return self.client.query(sql, location=self.location)
-        deadline.enforce()
         from google.cloud import bigquery
 
         return self.client.query(
             sql,
             location=self.location,
             job_config=bigquery.QueryJobConfig(
-                job_timeout_ms=max(1, math.ceil(deadline.remaining_seconds * 1000))
+                job_timeout_ms=max(1, math.ceil(build.remaining_seconds * 1000))
             ),
         )
 
@@ -63,6 +74,7 @@ class _BigQueryConnection:
         with self._jobs_lock:
             self._active_jobs[id(job)] = job
         try:
+            _wait_while_pending(job=job, deadline=current_item_deadline())
             return job.result()
         finally:
             with self._jobs_lock:
@@ -80,6 +92,20 @@ class _BigQueryConnection:
         close: object | None = getattr(self.client, "close", None)
         if callable(close):
             close()
+
+
+def _wait_while_pending(*, job: Any, deadline: ItemDeadline | None) -> None:
+    """Stop an item's clock while its job waits in a queue, so only running time counts."""
+
+    if deadline is None or getattr(job, "state", None) != PENDING_JOB_STATE:
+        return
+    deadline.hold()
+    try:
+        while getattr(job, "state", None) == PENDING_JOB_STATE:
+            time.sleep(PENDING_JOB_POLL_SECONDS)
+            job.reload()
+    finally:
+        deadline.release()
 
 
 def _job_id(*, job: Any) -> str | None:

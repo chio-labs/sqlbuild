@@ -24,7 +24,7 @@ def tracked_statement_connection(*, adapter: Any, connection: Any) -> Generator[
         registries.append(invocation)
     deadline: ItemDeadline | None = current_item_deadline_context.get()
     if deadline is not None:
-        registries.append(deadline.connections)
+        registries.extend(enclosing.connections for enclosing in deadline.chain())
     for registry in registries:
         registry.add(adapter=adapter, connection=connection)
     try:

@@ -49,3 +49,12 @@ def run_statement_until_cancelled(
         deadline.statement_submitted(query_id="query-1")
         assert adapter.interrupted.wait(timeout=5)
         deadline.statement_finished(query_id=finished_query_id)
+
+
+def run_finished_statement() -> None:
+    """Run one fake statement to completion under the current item deadline."""
+
+    deadline: ItemDeadline | None = current_item_deadline()
+    assert deadline is not None
+    deadline.statement_started()
+    deadline.statement_finished(query_id=None)

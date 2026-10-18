@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from typing import Any
 
 
@@ -29,6 +30,10 @@ class ActiveConnections:
             else:
                 self._connections[id(connection)] = (adapter, connection, count - 1)
 
-    def snapshot(self) -> list[tuple[Any, Any]]:
+    def cancel_running[ResultT](self, *, cancel: Callable[[Any, Any], ResultT]) -> list[ResultT]:
+        """Cancel each still-registered statement, holding the lock so none can be replaced."""
+
         with self._lock:
-            return [(adapter, connection) for adapter, connection, _ in self._connections.values()]
+            return [
+                cancel(adapter, connection) for adapter, connection, _ in self._connections.values()
+            ]

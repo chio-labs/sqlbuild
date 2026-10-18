@@ -15,6 +15,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     RealModelLimitE2ETestCase,
     ScenarioTimeoutE2ETestCase,
     SingleReadComparisonE2ETestCase,
+    TransactionTimeoutE2ETestCase,
     UnitTestTimeoutE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
@@ -23,10 +24,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     SLOW_SCALAR_SQL,
     build_order_chain_files,
     slow_model_files,
+    slow_promotion_files,
     stored_test_outputs,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
+    query_duckdb,
     run_sqb,
     table_exists,
 )
@@ -413,6 +416,67 @@ def test_given_slow_scenario_when_limit_expires_then_scenario_times_out(
     assert result.returncode == 1, output
     for fragment in test_case.expected_output_fragments:
         assert fragment in output, output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TransactionTimeoutE2ETestCase(
+            description="expiry inside the promotion swap keeps the published table",
+            max_duration="2s",
+            expected_output_fragments=(
+                "[C417] Model 'order_totals' timed out after",
+                "Limit set by:  max_duration in MODEL() header",
+                "z_customers          OK",
+                "PASS=1  WARN=0  FAIL=0  TIMEOUT=1",
+            ),
+            expected_published_rows=((1, 10),),
+            expected_later_model_rows=((200,),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_limit_expiring_in_promotion_when_building_then_published_table_is_kept(
+    tmp_path: Path, test_case: TransactionTimeoutE2ETestCase
+) -> None:
+    database: Path = tmp_path / "shop" / "warehouse.duckdb"
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="shop",
+        repo_files=slow_promotion_files(
+            database=database,
+            max_duration=test_case.max_duration,
+            order_total=10,
+            customer_id=100,
+        ),
+    )
+    first: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--concurrency", "1"), project_dir=project_dir
+    )
+    assert first.returncode == 0, first.stdout + first.stderr
+    changed_files: dict[str, str] = slow_promotion_files(
+        database=database, max_duration=test_case.max_duration, order_total=20, customer_id=200
+    )
+    relative_path: str
+    for relative_path in ("models/order_totals.sql", "models/z_customers.sql"):
+        (project_dir / relative_path).write_text(changed_files[relative_path])
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--concurrency", "1"), project_dir=project_dir
+    )
+    output: str = result.stdout + result.stderr
+
+    assert result.returncode == 1, output
+    for fragment in test_case.expected_output_fragments:
+        assert fragment in output, output
+    assert (
+        tuple(query_duckdb(db_path=database, sql="SELECT order_id, total FROM main.order_totals"))
+        == test_case.expected_published_rows
+    )
+    assert (
+        tuple(query_duckdb(db_path=database, sql="SELECT customer_id FROM main.z_customers"))
+        == test_case.expected_later_model_rows
+    )
 
 
 if __name__ == "__main__":

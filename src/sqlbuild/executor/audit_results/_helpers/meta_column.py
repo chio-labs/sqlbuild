@@ -84,7 +84,8 @@ def _meta_column_added_concurrently(
         return _meta_column_present(
             connection=connection, database=database, schema=schema, evolution=evolution
         )
-    except Exception:
+    except Exception as error:
+        _LOGGER.debug("Audit result columns could not be re-read after adding meta: %s", error)
         return False
 
 

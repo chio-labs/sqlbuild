@@ -184,6 +184,7 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         backslash_escape_quotes=frozenset({"'"}), line_comment_prefixes=frozenset({"--", "//"})
     )
     execution_duration_limit_seconds: ClassVar[int | None] = MAX_STATEMENT_TIMEOUT_SECONDS
+    statement_limit_excludes_queueing: ClassVar[bool] = True
     metadata_inspection_concurrency: ClassVar[int] = _METADATA_INSPECTION_CONCURRENCY
     exact_column_inspection_limit: ClassVar[int] = _EXACT_COLUMN_INSPECTION_LIMIT
 

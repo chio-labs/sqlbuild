@@ -16,13 +16,22 @@ from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapt
 from sqlbuild.adapters.snowflake.classes.snowflake_connection import _SnowflakeConnection
 from sqlbuild.adapters.sqlserver.classes.sqlserver_adapter import SqlServerAdapter
 from sqlbuild.adapters.sqlserver.classes.sqlserver_connection import _SqlServerConnection
+from sqlbuild.runtime.execution_limits.main.execution_deadline_scope import (
+    execution_deadline_scope,
+)
 from sqlbuild.runtime.execution_limits.main.item_deadline_scope import item_deadline_scope
 from sqlbuild.runtime.execution_limits.models import ItemTimeoutPolicy
 from sqlbuild.runtime.execution_limits.types import ItemKind
-from tests.unit.src.sqlbuild.adapters._test_types import StatementCancellationTestCase
+from tests.unit.src.sqlbuild.adapters._test_types import (
+    BigQueryQueuedJobTestCase,
+    StatementCancellationTestCase,
+)
 from tests.unit.src.sqlbuild.adapters.helpers import (
+    BLOCKING_SQL,
+    CancellableJob,
     CancellableJobClient,
     CancellableRawConnection,
+    QueuedJob,
     cancel_from_watchdog,
 )
 
@@ -51,14 +60,22 @@ def test_given_postgres_deadline_when_executing_then_statement_timeout_bounds_an
         kind=ItemKind.TEST, name="orders", policy=_POLICY, adapter=None, connection=connection
     ):
         cancel_from_watchdog(adapter=PostgresAdapter(), connection=connection, raw=raw)
-    limit_statement: str = raw.executed[0]
+        outside_transaction: list[str] = list(raw.executed)
+        raw.executed.clear()
+        _ = connection.execute("BEGIN")
+        _ = connection.execute("SELECT 1")
+        _ = connection.execute("ROLLBACK")
+    in_transaction: list[str] = list(raw.executed)
     raw.executed.clear()
     _ = connection.execute("SELECT 1")
 
-    assert limit_statement.startswith("SET statement_timeout = ")
+    assert outside_transaction == [BLOCKING_SQL]
+    assert in_transaction[0] == "BEGIN"
+    assert in_transaction[1].startswith("SET LOCAL statement_timeout = ")
     low, high = test_case.expected_limit_range
-    assert low <= int(limit_statement.rsplit(" ", 1)[1]) <= high
-    assert raw.executed == ["RESET statement_timeout", "SELECT 1"]
+    assert low <= int(in_transaction[1].rsplit(" ", 1)[1]) <= high
+    assert in_transaction[2:] == ["SELECT 1", "ROLLBACK"]
+    assert raw.executed == ["SELECT 1"]
     assert PostgresAdapter.statement_cancellation_is_asynchronous == test_case.expected_asynchronous
 
 
@@ -166,9 +183,11 @@ def test_given_bigquery_deadline_when_executing_then_job_timeout_set_and_job_can
     client: CancellableJobClient = CancellableJobClient()
     connection: _BigQueryConnection = _BigQueryConnection(client=client, location=None)
     adapter: BigQueryAdapter = BigQueryAdapter()
+    blocking_job: CancellableJob = CancellableJob()
+    client.job = blocking_job
 
     def watchdog() -> None:
-        assert client.job.waiting.wait(timeout=5)
+        assert blocking_job.waiting.wait(timeout=5)
         assert adapter.interrupt_connection(connection) is True
 
     thread: threading.Thread = threading.Thread(target=watchdog)
@@ -179,10 +198,50 @@ def test_given_bigquery_deadline_when_executing_then_job_timeout_set_and_job_can
         with pytest.raises(RuntimeError, match="statement cancelled"):
             _ = connection.execute("SELECT * FROM orders")
     thread.join(timeout=5)
+    client.job = QueuedJob(pending_polls=0, poll_seconds=0.0)
+    with execution_deadline_scope(
+        max_duration_seconds=60, max_duration="60s", target_name="dev", remediation=None
+    ):
+        _ = connection.execute("SELECT * FROM orders")
 
     low, high = test_case.expected_limit_range
-    assert low <= int(client.job_configs[0].job_timeout_ms) <= high
+    assert client.job_configs[0] is None
+    assert low <= int(client.job_configs[1].job_timeout_ms) <= high
     assert BigQueryAdapter.statement_cancellation_is_asynchronous == test_case.expected_asynchronous
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BigQueryQueuedJobTestCase(
+            description="queued job time is excluded from the item running time",
+            pending_polls=8,
+            poll_seconds=0.05,
+            expected_maximum_running_seconds=0.2,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_queued_bigquery_job_when_waiting_then_item_clock_is_stopped(
+    test_case: BigQueryQueuedJobTestCase, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client: CancellableJobClient = CancellableJobClient()
+    client.job = QueuedJob(pending_polls=test_case.pending_polls, poll_seconds=0.0)
+    connection: _BigQueryConnection = _BigQueryConnection(client=client, location=None)
+    monkeypatch.setattr(
+        "sqlbuild.adapters.bigquery.classes.bigquery_connection.PENDING_JOB_POLL_SECONDS",
+        test_case.poll_seconds,
+    )
+
+    with item_deadline_scope(
+        kind=ItemKind.TEST, name="orders", policy=_POLICY, adapter=None, connection=connection
+    ) as deadline:
+        _ = connection.execute("SELECT * FROM orders")
+        assert deadline is not None
+        running: float = deadline.running_seconds()
+
+    assert client.job_configs == [None]
+    assert running < test_case.expected_maximum_running_seconds
 
 
 if __name__ == "__main__":

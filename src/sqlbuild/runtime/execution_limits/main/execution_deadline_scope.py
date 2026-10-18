@@ -65,5 +65,6 @@ def execution_deadline_scope(
 
 
 def _cancel_running(*, active: ActiveConnections) -> None:
-    for adapter, connection in active.snapshot():
-        _ = cancel_connection(adapter=adapter, connection=connection)
+    _ = active.cancel_running(
+        cancel=lambda adapter, connection: cancel_connection(adapter=adapter, connection=connection)
+    )

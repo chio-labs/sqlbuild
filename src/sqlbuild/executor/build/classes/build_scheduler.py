@@ -107,6 +107,7 @@ from sqlbuild.executor.run.models import (
     ModelMaterializationContext,
 )
 from sqlbuild.executor.run.types import MicrobatchBatchExecutor
+from sqlbuild.executor.scheduling.classes.recovering_connection_pool import RecoveringConnectionPool
 from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
@@ -123,6 +124,7 @@ from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
+from sqlbuild.runtime.execution_limits.classes.connection_recovery import ConnectionRecovery
 from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
     enforce_execution_deadline,
 )
@@ -250,7 +252,12 @@ class BuildScheduler:
         self._failed_sources: set[str] = set()
 
         self._completion_queue: queue.Queue[NodeCompletion] = queue.Queue()
-        self._connection_pool: queue.Queue[Any] = queue.Queue()
+        self._connection_recovery: ConnectionRecovery = ConnectionRecovery(
+            adapter=adapter, connect=lambda: adapter.connect(dict(connection_config))
+        )
+        self._connection_pool: queue.Queue[Any] = RecoveringConnectionPool(
+            recovery=self._connection_recovery
+        )
 
         self._in_degree: dict[CompiledObjectKey, int] = {}
         self._selected_execution_keys: frozenset[CompiledObjectKey] = frozenset(
@@ -276,10 +283,13 @@ class BuildScheduler:
         self._compute_in_degrees()
         self._seed_ready_queue()
 
-        if self._max_concurrency == 1:
-            self._run_serial()
-        else:
-            self._run_concurrent()
+        try:
+            if self._max_concurrency == 1:
+                self._run_serial()
+            else:
+                self._run_concurrent()
+        finally:
+            self._close_replacement_connections()
 
         enforce_execution_deadline()
         self._skip_remaining()
@@ -333,6 +343,11 @@ class BuildScheduler:
                 database=database, schema=schema
             ):
                 self._adapter.execute(connection=self._scheduler_connection, sql=index_sql)
+
+    def _close_replacement_connections(self) -> None:
+        """Close connections opened to replace broken ones; the originals belong to the caller."""
+
+        self._connection_recovery.close_replacements()
 
     def _init_connection_pool(self) -> None:
         connection: Any
@@ -405,6 +420,7 @@ class BuildScheduler:
                     | SqlTestExecutionResult
                     | LoadExecutionResult
                 ) = self._execute_node(key=key, connection=connection)
+                connection = self._connection_recovery.usable(connection)
                 self._handle_completion(key=key, result=result)
         finally:
             self._connection_pool.put(connection)
