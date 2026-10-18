@@ -23,6 +23,10 @@ use crate::bindings::_helpers::records::fields::mapping_items;
 const VALUE_RENDERER_FIELD: &str = "_value_renderer";
 /// Nesting at which a value counts as too deep to key, as Python's recursion limit stops it.
 const MAX_DEPTH: usize = 900;
+/// Stack left below which one more level of `canonical` moves onto a new stack segment.
+const CANONICAL_RED_ZONE: usize = 128 * 1024;
+/// Size of each stack segment `canonical` grows by.
+const CANONICAL_STACK_GROWTH: usize = 2 * 1024 * 1024;
 
 create_exception!(_native, UncacheableValue, pyo3::exceptions::PyException);
 
@@ -99,8 +103,14 @@ impl<'py> CanonicalTypes<'py> {
         })
     }
 
-    /// `_canonical(value)`.
+    /// `_canonical(value)`, on a stack that grows so nesting up to `MAX_DEPTH` cannot overflow it.
     fn canonical(&self, value: &Bound<'py, PyAny>, depth: usize) -> PyResult<JsonValue> {
+        stacker::maybe_grow(CANONICAL_RED_ZONE, CANONICAL_STACK_GROWTH, || {
+            self.canonical_level(value, depth)
+        })
+    }
+
+    fn canonical_level(&self, value: &Bound<'py, PyAny>, depth: usize) -> PyResult<JsonValue> {
         if depth >= MAX_DEPTH {
             return Err(PyRecursionError::new_err(
                 "maximum recursion depth exceeded",

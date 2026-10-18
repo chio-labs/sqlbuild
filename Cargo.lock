@@ -1262,6 +1262,7 @@ dependencies = [
  "sqlbuild-scopes",
  "sqlbuild-sqltext",
  "sqlbuild-state",
+ "stacker",
 ]
 
 [[package]]
