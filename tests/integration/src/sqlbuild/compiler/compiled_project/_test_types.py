@@ -86,6 +86,15 @@ class NativeSourceAttachmentTestCase:
 
 
 @dataclass(frozen=True)
+class NativeSourceKeysTestCase:
+    """Sources whose declared keys native views answer as their attached entries do."""
+
+    description: str
+    source_yml: str
+    expected_keys: dict[str, tuple[tuple[str, ...], ...]]
+
+
+@dataclass(frozen=True)
 class NativeSourceErrorTestCase:
     """A source the native loop rejects while attaching it."""
 

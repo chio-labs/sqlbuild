@@ -189,3 +189,13 @@ def startup_install(directory: Path) -> tuple[Path, Path, Path]:
     startup: Path = site_packages / "catalog.pth"
     _ = startup.write_text(str(old) + "\n", encoding="utf-8")
     return program, startup, new
+
+
+def compiled_files(project_dir: Path) -> dict[str, bytes]:
+    """Every compiled SQL artifact under the project's target, by relative path."""
+
+    compiled: Path = project_dir / "target" / "compiled"
+    return {
+        path.relative_to(compiled).as_posix(): path.read_bytes()
+        for path in sorted(compiled.rglob("*.sql"))
+    }

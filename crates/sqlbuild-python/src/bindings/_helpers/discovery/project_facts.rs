@@ -1,6 +1,7 @@
 //! The facts cross-file validation reads, taken from Python's `DiscoveredProjectInputs`.
 
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
+use crate::bindings::_helpers::records::fields::{field as native_field, path_stem};
 use pyo3::FromPyObject;
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
@@ -95,7 +96,7 @@ fn optional_text(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String
 
 /// `str(Path(...).stem)` of the path attribute `name`.
 pub(crate) fn stem(owner: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
-    native_field(&native_field(owner, name)?, "stem")?.extract()
+    path_stem(&native_field(owner, name)?)
 }
 
 /// `(resource.name, str(resource.relative_path))`.
@@ -106,8 +107,15 @@ fn named(resource: &Bound<'_, PyAny>) -> PyResult<NamedPath> {
     })
 }
 
-/// `(file.file_path.stem, str(file.relative_path))`.
+/// `(file.file_path.stem, str(file.relative_path))`; a native model file answers from its texts.
 fn stem_named(file: &Bound<'_, PyAny>) -> PyResult<NamedPath> {
+    if let Ok(model_file) = file.cast::<NativeModelFile>() {
+        let texts: ModelFileTexts = model_file.get().path_texts(file.py())?;
+        return Ok(NamedPath {
+            name: texts.name,
+            path: texts.relative_path,
+        });
+    }
     Ok(NamedPath {
         name: stem(file, "file_path")?,
         path: text(file, "relative_path")?,

@@ -48,7 +48,7 @@ type LineageItem = (String, u8, u8, Vec<(String, String, String)>);
 /// `(name, pivot column, value column, aggregate, type, name pattern)`.
 pub(crate) type FamilyRow = (String, String, String, String, String, Option<String>);
 /// A model's name, SQL, placeholders, references, lineage, required names, flags and pivot.
-type ModelRow = (
+pub(crate) type ModelRow = (
     String,
     String,
     Pairs,

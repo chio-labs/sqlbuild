@@ -1,5 +1,7 @@
 //! The compile-lifetime binding catalog: known relation shapes around one native project catalog.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyDictMethods, PyModule, PyModuleMethods, PyResult, Python,
@@ -50,12 +52,19 @@ pub(crate) struct BindingCatalog {
     pub(crate) expression_shapes: Py<PyDict>,
     #[pyo3(get)]
     pub(crate) native: Py<ProjectCatalog>,
+    /// Whether binding preparation has added relations to `schemas`.
+    pub(crate) extended: AtomicBool,
 }
 
 /// A catalog's dialect, case mode, known functions and known types.
 pub(crate) type CatalogKey = (String, bool, Vec<String>, Vec<String>);
 
 impl BindingCatalog {
+    /// Whether `schemas` holds exactly the relations it was created with and later given.
+    pub(crate) fn unextended(&self) -> bool {
+        !self.extended.load(Ordering::Relaxed)
+    }
+
     /// A catalog for `key` that starts with `relations`.
     pub(crate) fn create(
         py: Python<'_>,
@@ -80,6 +89,7 @@ impl BindingCatalog {
             quoted_ignore_case,
             analysis_shapes: PyDict::new(py).unbind(),
             expression_shapes: PyDict::new(py).unbind(),
+            extended: AtomicBool::new(false),
             native: Py::new(py, native)?,
         })
     }
@@ -103,6 +113,7 @@ impl BindingCatalog {
             }
         }
         if !additions.is_empty() {
+            self.extended.store(true, Ordering::Relaxed);
             let relations: Relations = conversions::relations(additions.as_any())?;
             self.native.borrow_mut(py).inner.update_relations(relations);
         }
@@ -207,6 +218,7 @@ impl BindingCatalog {
             analysis_shapes: self.analysis_shapes.bind(py).copy()?.unbind(),
             expression_shapes: self.expression_shapes.bind(py).copy()?.unbind(),
             native: Py::new(py, native)?,
+            extended: AtomicBool::new(true),
         })
     }
 

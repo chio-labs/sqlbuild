@@ -1,14 +1,17 @@
 //! The `sqb compile` command: analysis, output phases, reuse recording and printed output.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyBool, PyDict, PyDictMethods, PyMapping, PyString, PyTuple};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{
+    PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyMapping, PyString, PyTuple,
+};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use std::rc::Rc;
 
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::report::{
-    format_compile_json, format_compile_text, json_semantic_notice,
+    format_compile_json_with_notice, format_compile_text,
 };
 use crate::bindings::_helpers::compile_command::reuse_recording::write_reusable_compile;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
@@ -35,6 +38,23 @@ use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::rules::results::format_skipped_type_proof_rules;
 
 const BYPASS_OUTCOME: &str = "bypass";
+
+/// Compile state kept alive for process exit to reclaim, once a launcher defers teardown.
+static RETAINED_UNTIL_EXIT: PyOnceLock<Py<PyList>> = PyOnceLock::new();
+
+/// Let compiles in this process leave their project state for process exit to reclaim.
+#[pyfunction]
+fn defer_compile_teardown_to_exit(py: Python<'_>) {
+    let _ = RETAINED_UNTIL_EXIT.get_or_init(py, || PyList::empty(py).unbind());
+}
+
+/// Keep `value` alive until the process exits when teardown is deferred.
+fn retain_until_exit(value: &Bound<'_, PyAny>) -> PyResult<()> {
+    match RETAINED_UNTIL_EXIT.get(value.py()) {
+        Some(retained) => retained.bind(value.py()).append(value),
+        None => Ok(()),
+    }
+}
 
 /// What one full compile reports for reuse recording.
 struct CommandOutcome<'py> {
@@ -87,8 +107,9 @@ pub(crate) fn run_compile_command<'py>(
         (&output, &status),
         total_start,
     );
-    if was_enabled {
-        gc.call_method0("enable")?;
+    let deferred: bool = RETAINED_UNTIL_EXIT.get(py).is_some();
+    if deferred || was_enabled {
+        gc.call_method0(if deferred { "freeze" } else { "enable" })?;
     }
     exit_code
 }
@@ -168,6 +189,7 @@ fn recorded_compile<'py>(
                             ),
                         ],
                     )?;
+                    retain_until_exit(&manager)?;
                     within(&manager, |prepared_artifacts| {
                         let recorders: Recorders<'py> = Recorders {
                             detailed_timings: Rc::clone(detailed_timings),
@@ -248,6 +270,7 @@ fn compiled_with_status<'py>(
         py,
         &analysis_options(request, &project_dir, recorders, status)?,
     )?;
+    retain_until_exit(&analysis)?;
     let rules_failed: bool = rules_failed(&analysis)?;
     let skip_write: bool = native_field(request, "profile_flags")?
         .getattr("skip_write")?
@@ -435,16 +458,15 @@ fn record_output<'py>(
     ];
     let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = shared.to_vec();
     let rendered: Bound<'py, PyString> = if native_field(request, "json_output")?.is_truthy()? {
-        let notice: Option<Bound<'py, PyString>> =
-            json_semantic_notice(&graph, &selected_keys, validation_enabled.is_truthy()?)?;
-        if let Some(notice) = notice {
-            output.call_method1("print_stderr_line", (notice,))?;
-        }
         arguments.push(("timings_ms", timings.clone().into_any()));
         arguments.push(("sql_validation_enabled", validation_enabled));
+        let print_notice = |notice: Bound<'py, PyString>| -> PyResult<()> {
+            output.call_method1("print_stderr_line", (notice,))?;
+            Ok(())
+        };
         PyString::new(
             py,
-            &format_compile_json(py, Some(keywords(py, &arguments)?))?,
+            &format_compile_json_with_notice(py, Some(keywords(py, &arguments)?), print_notice)?,
         )
     } else {
         let use_color: bool =
@@ -461,5 +483,6 @@ fn record_output<'py>(
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_function(wrap_pyfunction!(defer_compile_teardown_to_exit, module)?)?;
     module.add_function(wrap_pyfunction!(run_compile_command, module)?)
 }

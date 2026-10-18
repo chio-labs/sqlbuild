@@ -11,6 +11,7 @@ from sqlbuild.compiler.compile.types import CompiledProjectView, CompiledSourceV
 from tests.integration.src.sqlbuild.compiler.compiled_project._test_types import (
     NativeSourceAttachmentTestCase,
     NativeSourceErrorTestCase,
+    NativeSourceKeysTestCase,
 )
 from tests.integration.src.sqlbuild.compiler.compiled_project.helpers import (
     column_metadata,
@@ -97,6 +98,44 @@ def test_given_source_when_compiling_then_native_project_holds_its_attached_entr
         )
         == test_case.expected_usages
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        NativeSourceKeysTestCase(
+            description="column and table unique audits with templated column metadata",
+            source_yml=(
+                "sources:\n"
+                "  - name: raw_orders\n"
+                "    audits:\n      - unique:\n          column: order_id\n"
+                "    columns:\n"
+                "      - name: order_id\n        type: INTEGER\n        nullable: false\n"
+                "        description: Order in ${region}.\n"
+                "      - name: customer_id\n        type: INTEGER\n"
+                "        audits:\n          - unique\n          - not_null\n"
+                "  - name: raw_events\n"
+                "    columns:\n      - name: event_id\n        type: INTEGER\n"
+            ),
+            expected_keys={"source:raw_orders": (("customer_id",), ("order_id",))},
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_keyed_sources_when_deriving_relation_keys_then_native_views_match_entries(
+    test_case: NativeSourceKeysTestCase, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project: CompiledProjectView
+    project, _ = compile_source_project(
+        project_dir=tmp_path, source_yml=test_case.source_yml, monkeypatch=monkeypatch
+    )
+
+    from_entries: dict[str, tuple[tuple[str, ...], ...]] = _native.declared_relation_keys(
+        model_rows=(), seeds=(), sources=tuple(source.source_entry for source in project.sources)
+    )
+    compiled: dict[str, tuple[tuple[str, ...], ...]] = _native.compiled_relation_keys(project)
+    assert from_entries == test_case.expected_keys
+    assert {identity: compiled[identity] for identity in from_entries} == from_entries
 
 
 @pytest.mark.parametrize(

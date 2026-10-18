@@ -1,6 +1,6 @@
 //! Native facts of declared schema columns and families, read once from their Python specs.
 
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::{field as native_field, record_attribute_opt};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use sqlbuild_analysis::compiled_project::models::{
     DynamicFamilyFact, ModelSchemaFact, SchemaColumnFact,
@@ -116,7 +116,11 @@ pub(crate) fn family_fact(family: &DynamicFamily) -> DynamicFamilyFact {
 
 /// An attribute's value, `None` when it is missing or `None`.
 fn present<'py>(spec: &Bound<'py, PyAny>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
-    Ok(spec.getattr_opt(name)?.filter(|value| !value.is_none()))
+    let value: Option<Bound<'py, PyAny>> = match record_attribute_opt(spec, name) {
+        Some(value) => value?,
+        None => spec.getattr_opt(name)?,
+    };
+    Ok(value.filter(|value| !value.is_none()))
 }
 
 fn optional<'py, T: pyo3::FromPyObject<'py>>(

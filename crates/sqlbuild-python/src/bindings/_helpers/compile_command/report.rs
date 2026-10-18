@@ -176,15 +176,7 @@ impl<'py> ReportInputs<'py> {
     }
 
     fn semantic_notice(&self, reader: &SurrogateText) -> PyResult<Option<String>> {
-        let mut reasons: Vec<(String, Vec<String>)> = Vec::new();
-        for (name, values) in self.semantic_coverage()?.iter() {
-            let values: Vec<String> = values
-                .try_iter()?
-                .map(|value| reader.text(&value?))
-                .collect::<PyResult<_>>()?;
-            reasons.push((reader.text(&name)?, values));
-        }
-        Ok(notice_text(&reasons))
+        coverage_notice(&self.semantic_coverage()?, reader)
     }
 
     /// `written.target_dir / "compiled"` relative to its `target` directory, POSIX style.
@@ -396,27 +388,20 @@ pub(crate) fn format_compile_text<'py>(
     reader.python(py, &compile_text(&report))
 }
 
-/// The partial semantic-check notice of the selected models, printed beside `--json` output.
-pub(crate) fn json_semantic_notice<'py>(
-    graph: &Bound<'py, PyAny>,
-    selected_keys: &Bound<'py, PyAny>,
-    sql_validation_enabled: bool,
-) -> PyResult<Option<Bound<'py, PyString>>> {
-    let py: Python<'py> = graph.py();
-    let reader: SurrogateText = SurrogateText::default();
-    let notice: Option<String> = ReportInputs {
-        project: native_field(graph, "project")?,
-        graph: graph.clone(),
-        written: py.None().into_bound(py),
-        manifest: false,
-        lineage: py.None().into_bound(py),
-        diagnostics: Vec::new(),
-        lineage_mode: String::new(),
-        selected_keys: selected_keys.clone(),
-        sql_validation_enabled,
+/// The partial semantic-check notice of these coverage reasons, or `None` when complete.
+fn coverage_notice(
+    coverage: &Bound<'_, PyDict>,
+    reader: &SurrogateText,
+) -> PyResult<Option<String>> {
+    let mut reasons: Vec<(String, Vec<String>)> = Vec::new();
+    for (name, values) in coverage.iter() {
+        let values: Vec<String> = values
+            .try_iter()?
+            .map(|value| reader.text(&value?))
+            .collect::<PyResult<_>>()?;
+        reasons.push((reader.text(&name)?, values));
     }
-    .semantic_notice(&reader)?;
-    notice.map(|notice| reader.python(py, &notice)).transpose()
+    Ok(notice_text(&reasons))
 }
 
 fn dict<'py>(
@@ -929,9 +914,37 @@ pub(crate) fn format_compile_json(
     py: Python<'_>,
     options: Option<Bound<'_, PyDict>>,
 ) -> PyResult<String> {
-    let arguments: KeywordArguments<'_> =
+    compile_json(py, options, None::<fn(Bound<'_, PyString>) -> PyResult<()>>)
+}
+
+/// `format_compile_json`, first handing the selected models' partial-check notice to `notice`.
+pub(crate) fn format_compile_json_with_notice<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+    notice: impl FnOnce(Bound<'py, PyString>) -> PyResult<()>,
+) -> PyResult<String> {
+    compile_json(py, options, Some(notice))
+}
+
+fn compile_json<'py>(
+    py: Python<'py>,
+    options: Option<Bound<'py, PyDict>>,
+    notice: Option<impl FnOnce(Bound<'py, PyString>) -> PyResult<()>>,
+) -> PyResult<String> {
+    let arguments: KeywordArguments<'py> =
         KeywordArguments::read(py, "format_compile_json", options, REPORT_OPTIONS)?;
-    let inputs: ReportInputs<'_> = ReportInputs::read(&arguments)?;
+    let inputs: ReportInputs<'py> = ReportInputs::read(&arguments)?;
+    let coverage: Option<Bound<'py, PyDict>> = match notice {
+        Some(notice) => {
+            let coverage: Bound<'py, PyDict> = inputs.semantic_coverage()?;
+            let reader: SurrogateText = SurrogateText::default();
+            if let Some(text) = coverage_notice(&coverage, &reader)? {
+                notice(reader.python(py, &text)?)?;
+            }
+            Some(coverage)
+        }
+        None => None,
+    };
     let project: &Bound<'_, PyAny> = &inputs.project;
     let mut has_errors: bool = false;
     let mut diagnostics: Vec<Bound<'_, PyDict>> = Vec::new();
@@ -1019,7 +1032,11 @@ pub(crate) fn format_compile_json(
             ("diagnostics", PyList::new(py, diagnostics)?.into_any()),
             (
                 "semantic_checks_partial",
-                inputs.semantic_coverage()?.into_any(),
+                match coverage {
+                    Some(coverage) => coverage,
+                    None => inputs.semantic_coverage()?,
+                }
+                .into_any(),
             ),
             ("compile_timings", arguments.value("timings_ms")?),
             ("lineage_mode", any(py, inputs.lineage_mode.as_str())?),

@@ -34,7 +34,7 @@ use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledSource, LintFile, LintOutcome, LintRequest, LintSettings, lint, lint_sources,
 };
 use crate::bindings::_helpers::rules::relation_keys::{
-    RelationKeyRow, RelationKeys, relation_keys,
+    RelationKeyRow, RelationKeys, relation_keys, source_key_input,
 };
 use crate::bindings::_helpers::rules::rule_cache::stored_entries;
 use crate::bindings::_helpers::rules::rules_config::rules_config_of;
@@ -122,7 +122,7 @@ fn early_lint_plan(inputs: &Bound<'_, PyAny>, dialect: &str) -> PyResult<Option<
     }
     let mut sources: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in record_field(inputs, "source_inputs")?.try_iter()? {
-        sources.push(record_field(&source?, "source_entry")?);
+        sources.push(source_key_input(&source?)?);
     }
     let keys: RelationKeys = relation_keys(
         py,

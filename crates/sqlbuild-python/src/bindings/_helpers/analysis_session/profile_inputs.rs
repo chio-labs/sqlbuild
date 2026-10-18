@@ -64,14 +64,19 @@ pub(crate) fn shape_rows(shapes: &Bound<'_, PyAny>) -> PyResult<Shapes> {
     let mut rows: Shapes = Vec::new();
     for item in mapping_items(shapes)?.try_iter()? {
         let (name, shape): (String, Bound<'_, PyAny>) = item?.extract()?;
-        let mut pairs: Pairs = Vec::new();
-        for column in mapping_items(&shape)?.try_iter()? {
-            let (column, value): (String, Bound<'_, PyAny>) = column?.extract()?;
-            pairs.push((column, value.str()?.extract()?));
-        }
-        rows.push((name, pairs));
+        rows.push((name, text_pairs(&shape)?));
     }
     Ok(rows)
+}
+
+/// `{column: value}` as ordered pairs, each value as `str(value)`.
+pub(crate) fn text_pairs(shape: &Bound<'_, PyAny>) -> PyResult<Pairs> {
+    let mut pairs: Pairs = Vec::new();
+    for column in mapping_items(shape)?.try_iter()? {
+        let (column, value): (String, Bound<'_, PyAny>) = column?.extract()?;
+        pairs.push((column, value.str()?.extract()?));
+    }
+    Ok(pairs)
 }
 
 /// A `{key: value}` text mapping's items in order.

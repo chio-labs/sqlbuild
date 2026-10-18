@@ -611,36 +611,39 @@ pub(crate) fn write_static_target<'py>(
         )?;
         managed.push(path);
     }
-    batch.flush(py)?;
-    for function in native_field(project, "functions")?.try_iter()? {
-        let function: Bound<'py, PyAny> = function?;
-        if native_field(&function, "destination")?
-            .getattr("qualified_name")?
-            .is_none()
-        {
-            continue;
+    batch.flush_in_background(py)?;
+    let queued: PyResult<WrittenTests<'py>> = (|| {
+        for function in native_field(project, "functions")?.try_iter()? {
+            let function: Bound<'py, PyAny> = function?;
+            if native_field(&function, "destination")?
+                .getattr("qualified_name")?
+                .is_none()
+            {
+                continue;
+            }
+            let sql: String = function_sql(adapter, &function)?;
+            let path: Bound<'py, PyAny> = compiled.div(function_output_path(
+                &native_field(&function, "relative_path")?,
+                &native_field(&function, "language")?,
+            )?)?;
+            batch.queue_sql(&path, &sql)?;
+            managed.push(path);
         }
-        let sql: String = function_sql(adapter, &function)?;
-        let path: Bound<'py, PyAny> = compiled.div(function_output_path(
-            &native_field(&function, "relative_path")?,
-            &native_field(&function, "language")?,
-        )?)?;
-        batch.queue_sql(&path, &sql)?;
-        managed.push(path);
-    }
-    batch.flush(py)?;
-    for audit in native_field(project, "audits")?.try_iter()? {
-        let audit: Bound<'py, PyAny> = audit?;
-        let path: Bound<'py, PyAny> = compiled.div(AUDITS_DIR)?.div(audit_output_path(&audit)?)?;
-        batch.queue_sql(
-            &path,
-            &native_field(&audit, "sql_body")?.extract::<String>()?,
-        )?;
-        managed.push(path);
-    }
-    batch.flush(py)?;
-    let (test_paths, diagnostics) =
-        write_static_tests(target_dir, (adapter, project), prepared, &mut batch)?;
+        batch.flush_in_background(py)?;
+        for audit in native_field(project, "audits")?.try_iter()? {
+            let audit: Bound<'py, PyAny> = audit?;
+            let path: Bound<'py, PyAny> =
+                compiled.div(AUDITS_DIR)?.div(audit_output_path(&audit)?)?;
+            batch.queue_sql(
+                &path,
+                &native_field(&audit, "sql_body")?.extract::<String>()?,
+            )?;
+            managed.push(path);
+        }
+        batch.flush_in_background(py)?;
+        write_static_tests(target_dir, (adapter, project), prepared, &mut batch)
+    })();
+    let (test_paths, diagnostics) = batch.settle(py, queued)?;
     managed.extend(test_paths);
     if remove_stale_files {
         let mut paths: Vec<PathBuf> = managed_models;

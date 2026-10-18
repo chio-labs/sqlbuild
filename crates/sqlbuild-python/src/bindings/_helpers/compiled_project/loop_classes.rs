@@ -389,17 +389,14 @@ pub(crate) fn model_loop_classes<'py>(
     )?;
     let record: Bound<'py, PyDict> = dict(
         py,
-        vec![
-            ("replace", imported(py, "dataclasses", "replace")?),
-            (
-                "declaration_rows",
-                pyo3::wrap_pyfunction!(
-                    crate::bindings::_helpers::compiled_project::records::declaration_rows,
-                    py
-                )?
-                .into_any(),
-            ),
-        ],
+        vec![(
+            "declaration_rows",
+            pyo3::wrap_pyfunction!(
+                crate::bindings::_helpers::compiled_project::records::declaration_rows,
+                py
+            )?
+            .into_any(),
+        )],
     )?;
     dict(
         py,

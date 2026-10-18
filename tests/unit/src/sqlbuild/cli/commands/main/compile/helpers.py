@@ -609,3 +609,51 @@ def staged_then_published(
         _ = artifacts.planning_diagnostics()
         before_publish(target)
         return artifacts.publish(target_dir=target, manifest=None)
+
+
+class FunctionRenderFailingAdapter(DuckDbAdapter):
+    """A DuckDB adapter whose function rendering fails after the model group is handed off."""
+
+    def render_create_function(
+        self,
+        *,
+        destination: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        return_columns: tuple[Any, ...] = (),
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
+    ) -> tuple[str, ...]:
+        raise ValueError(f"function rendering failed for {destination}")
+
+
+class FunctionRenderInterruptedAdapter(DuckDbAdapter):
+    """A DuckDB adapter interrupted while rendering a function after the model group."""
+
+    def render_create_function(
+        self,
+        *,
+        destination: str,
+        arguments: tuple[Any, ...],
+        returns: str,
+        body_sql: str,
+        return_columns: tuple[Any, ...] = (),
+        language: FunctionLanguage = FunctionLanguage.SQL,
+        runtime_version: str | None = None,
+        entry_point: str | None = None,
+        packages: tuple[str, ...] = (),
+    ) -> tuple[str, ...]:
+        raise KeyboardInterrupt(destination)
+
+
+class BlockedModelStaging(StagingEveryProject):
+    """Stage artifacts into a staging tree whose model directory is a file."""
+
+    def create_staging_directory(self, staging_dir: Path) -> None:
+        super().create_staging_directory(staging_dir)
+        blocker: Path = staging_dir / "compiled" / "models" / "staging"
+        blocker.parent.mkdir(parents=True)
+        _ = blocker.write_text("not a directory\n", encoding="utf-8")

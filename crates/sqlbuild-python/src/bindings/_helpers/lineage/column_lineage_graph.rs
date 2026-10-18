@@ -18,10 +18,32 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_items;
 
+/// Where a compact model's facts are: given, or projected from its compiled model on first read.
+pub(crate) enum CompactColumns {
+    Facts(Py<PyAny>),
+    /// A compiled model whose `fast_lineage_columns` are the facts, and their upstream count.
+    Model {
+        model: Py<PyAny>,
+        edges: usize,
+    },
+}
+
 /// One compact model's facts and root-star flag.
-struct CompactModel {
-    columns: Py<PyAny>,
-    has_star: bool,
+pub(crate) struct CompactModel {
+    pub(crate) columns: CompactColumns,
+    pub(crate) has_star: bool,
+}
+
+impl CompactModel {
+    /// The model's lineage facts as Python objects.
+    fn facts<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match &self.columns {
+            CompactColumns::Facts(columns) => Ok(columns.bind(py).clone()),
+            CompactColumns::Model { model, .. } => {
+                native_field(model.bind(py), "fast_lineage_columns")
+            }
+        }
+    }
 }
 
 /// The Python objects one edge record materialises from.
@@ -103,30 +125,12 @@ impl ProjectColumnLineage {
             let _ = compact.insert(
                 name.extract()?,
                 CompactModel {
-                    columns: columns.unbind(),
+                    columns: CompactColumns::Facts(columns.unbind()),
                     has_star,
                 },
             );
         }
-        let mut edge_counts: HashMap<String, usize> = HashMap::new();
-        for name in &model_order {
-            if let Some(model) = compact.get(name) {
-                let count: usize = fact_edge_count(&classes, model.columns.bind(cls.py()))?;
-                let _ = edge_counts.insert(name.clone(), count);
-            }
-        }
-        for item in mapping_items(models)?.try_iter()? {
-            let (name, model): (String, Bound<'_, PyAny>) = item?.extract()?;
-            let _ = edge_counts.insert(name, upstream_count(&native_field(&model, "columns")?)?);
-        }
-        Ok(Self {
-            models: models.clone().unbind(),
-            compact,
-            model_order,
-            edges: None,
-            records: None,
-            edge_counts,
-        })
+        Self::compacted(&classes, models, compact, model_order)
     }
 
     /// Return model lineage, expanding compact model facts on first access.
@@ -144,7 +148,7 @@ impl ProjectColumnLineage {
                     continue;
                 }
                 let lineage: Bound<'_, PyAny> =
-                    model_from_facts(&classes, name, compact.columns.bind(py), compact.has_star)?;
+                    model_from_facts(&classes, name, &compact.facts(py)?, compact.has_star)?;
                 models.set_item(name, lineage)?;
             }
             slf.compact.clear();
@@ -275,6 +279,38 @@ impl ProjectColumnLineage {
 }
 
 impl ProjectColumnLineage {
+    /// Indexed project lineage of built `models` and `compact` facts, in `model_order`.
+    pub(crate) fn compacted(
+        classes: &LineageClasses<'_>,
+        models: &Bound<'_, PyAny>,
+        compact: HashMap<String, CompactModel>,
+        model_order: Vec<String>,
+    ) -> PyResult<Self> {
+        let py: Python<'_> = models.py();
+        let mut edge_counts: HashMap<String, usize> = HashMap::new();
+        for name in &model_order {
+            if let Some(model) = compact.get(name) {
+                let count: usize = match &model.columns {
+                    CompactColumns::Facts(columns) => fact_edge_count(classes, columns.bind(py))?,
+                    CompactColumns::Model { edges, .. } => *edges,
+                };
+                let _ = edge_counts.insert(name.clone(), count);
+            }
+        }
+        for item in mapping_items(models)?.try_iter()? {
+            let (name, model): (String, Bound<'_, PyAny>) = item?.extract()?;
+            let _ = edge_counts.insert(name, upstream_count(&native_field(&model, "columns")?)?);
+        }
+        Ok(Self {
+            models: models.clone().unbind(),
+            compact,
+            model_order,
+            edges: None,
+            records: None,
+            edge_counts,
+        })
+    }
+
     /// Build fast edge records from the compact facts, or the expanded models, in model order.
     fn ensure_records(&mut self, classes: &LineageClasses<'_>) -> PyResult<()> {
         if self.records.is_some() {
@@ -285,7 +321,7 @@ impl ProjectColumnLineage {
         let models: Bound<'_, PyAny> = self.models.bind(py).clone();
         for name in &self.model_order {
             if let Some(compact) = self.compact.get(name) {
-                builder.push_facts(classes, name, compact.columns.bind(py))?;
+                builder.push_facts(classes, name, &compact.facts(py)?)?;
                 continue;
             }
             let model: Bound<'_, PyAny> = mapping_get(&models, name)?;

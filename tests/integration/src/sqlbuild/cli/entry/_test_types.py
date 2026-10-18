@@ -73,3 +73,12 @@ class SelectorCompileTestCase:
     description: str
     args: tuple[str, ...]
     expected_model: bytes
+
+
+@dataclass(frozen=True)
+class LaunchedTeardownTestCase:
+    """One compile command line and the reuse hits its repeated launched run reports."""
+
+    description: str
+    args: tuple[str, ...]
+    expected_hits: int

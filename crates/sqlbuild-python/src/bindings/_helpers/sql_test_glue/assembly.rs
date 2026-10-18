@@ -13,7 +13,10 @@ use sqlbuild_analysis::compiler::models::{
 use sqlbuild_core::panics::main::native_failure::native_failure;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
+use crate::bindings::_helpers::records::fields::{
+    field as native_field, path_posix_text, path_stem,
+};
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;
 
@@ -69,6 +72,29 @@ pub(crate) fn assemble_compiled_sql_tests(
 }
 
 fn assembly_model(model: &Bound<'_, PyAny>) -> PyResult<SqlTestAssemblyModel> {
+    if let Ok(native) = model.cast::<NativeModelInput>() {
+        return native.get().read(model.py(), |record, _| {
+            let unscanned_macro_source = if record.macro_deps.is_empty() {
+                Some(record.macro_source_sql.to_string()).filter(|sql| sql.contains(MACRO_TOKEN))
+            } else {
+                None
+            };
+            Ok(SqlTestAssemblyModel {
+                name: record.name.clone(),
+                macro_deps: record.macro_deps.clone(),
+                unscanned_macro_source,
+                references: record
+                    .references
+                    .iter()
+                    .map(|(kind, name, package, _)| SqlTestAssemblyReference {
+                        kind: kind.clone(),
+                        name: name.clone(),
+                        package: package.clone(),
+                    })
+                    .collect(),
+            })
+        });
+    }
     let macro_deps: Vec<String> = native_field(model, "macro_deps")?.extract()?;
     let unscanned_macro_source = if macro_deps.is_empty() {
         Some(native_field(model, "macro_source_sql")?.extract::<String>()?)
@@ -123,9 +149,9 @@ fn assembly_test(test: &Bound<'_, PyAny>) -> PyResult<SqlTestAssemblyTest> {
     };
     Ok(SqlTestAssemblyTest {
         block_name: native_field(&test_block, "name")?.extract()?,
-        file_stem: native_field(&native_field(&test_file, "file_path")?, "stem")?.extract()?,
-        relative_path: relative_path.call_method0("as_posix")?.extract()?,
-        relative_stem: native_field(&relative_path, "stem")?.extract()?,
+        file_stem: path_stem(&native_field(&test_file, "file_path")?)?,
+        relative_path: path_posix_text(&relative_path)?,
+        relative_stem: path_stem(&relative_path)?,
         contents: native_field(&test_file, "contents")?.extract()?,
         block_sql: native_field(&test_block, "sql_body")?.extract()?,
         block_index: native_field(&test_block, "test_index")?.extract()?,

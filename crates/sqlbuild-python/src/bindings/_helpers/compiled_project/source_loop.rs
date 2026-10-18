@@ -1,7 +1,7 @@
 //! `build_source_inputs`: every discovered source attached natively into the compiled project.
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxMode};
 use sqlbuild_attachments::cursor_intrinsics::main::intrinsic_free::intrinsic_free;
 use sqlbuild_attachments::cursor_intrinsics::models::IntrinsicCheck;
@@ -415,8 +415,39 @@ fn expanded_audit(
     replaced_spec(audit, &changes)
 }
 
+/// `dataclasses.replace(value, **changes)`, or `value` itself when every change keeps its field.
 fn replaced_spec(value: &Bound<'_, PyAny>, changes: &Bound<'_, PyDict>) -> PyResult<Py<PyAny>> {
-    replaced(value.py(), value, changes)
+    for (name, changed) in changes.iter() {
+        let current: Bound<'_, PyAny> = native_field(value, &name.extract::<String>()?)?;
+        if !same_value(&current, &changed)? {
+            return replaced(value.py(), value, changes);
+        }
+    }
+    Ok(value.clone().unbind())
+}
+
+/// Whether `changed` is `current` or an equal value of the same type, element by element.
+fn same_value(current: &Bound<'_, PyAny>, changed: &Bound<'_, PyAny>) -> PyResult<bool> {
+    if current.is(changed) {
+        return Ok(true);
+    }
+    if !current.get_type().is(changed.get_type()) {
+        return Ok(false);
+    }
+    if let (Ok(current), Ok(changed)) =
+        (current.downcast::<PyTuple>(), changed.downcast::<PyTuple>())
+    {
+        if current.len() != changed.len() {
+            return Ok(false);
+        }
+        for (left, right) in current.iter().zip(changed.iter()) {
+            if !left.is(&right) {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+    current.eq(changed)
 }
 
 /// `validate_source_expression_syntax`: the expression parses as a FROM target.

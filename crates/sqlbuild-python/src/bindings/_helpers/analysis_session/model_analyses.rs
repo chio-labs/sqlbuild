@@ -2,23 +2,27 @@
 
 use std::path::PathBuf;
 
-use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::{IntoPyDict, PyDict, PyDictMethods, PyFrozenSet, PyList, PyString, PyTuple};
+use pyo3::types::{IntoPyDict, PyDict, PyDictMethods, PyFrozenSet, PyString};
 use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
+
+use crate::bindings::_helpers::analysis::binding_catalog::BindingCatalog;
+use crate::bindings::_helpers::project_assembly::declared_relations::DeclaredShapes;
 
 use crate::bindings::_helpers::analysis_session::profile_inputs::{
     case_sensitive_shapes, nullability_rules, profile_dialect, return_types, shape_rows,
 };
 use crate::bindings::_helpers::analysis_session::session::{
-    CacheStatsRow, NativeModelAnalysisSession, RequestRow, start_model_analysis_session,
+    CacheStatsRow, FamilyRow, ModelRow, NativeModelAnalysisSession, RequestRow,
+    start_model_analysis_session,
 };
 use crate::bindings::_helpers::analysis_session::stage_functions::family_rows;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::cache::native_store::{content_digest, current_code_identity};
 use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
-    AttachedSchema, attached_schema, input_model_name,
+    AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
+    input_reference_rows,
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
@@ -37,7 +41,7 @@ const STORE_FILE_NAME: &str = "model-analyses.bin";
 const STORE_VERSION: &str = "native-model-analysis-store-v1";
 
 /// What one compile's model analysis reads: the analysed models and the relation facts.
-pub(crate) struct ModelAnalysisRequest<'py> {
+pub(crate) struct ModelAnalysisRequest<'a, 'py> {
     pub(crate) model_inputs: Vec<Bound<'py, PyAny>>,
     pub(crate) profile: Bound<'py, PyAny>,
     pub(crate) column_types: Bound<'py, PyAny>,
@@ -47,6 +51,8 @@ pub(crate) struct ModelAnalysisRequest<'py> {
     pub(crate) rich_type_inference: bool,
     /// The `AnalysisCacheContext`, or `None` when the analysis store is bypassed.
     pub(crate) cache: Bound<'py, PyAny>,
+    /// Native rows of the three declaration maps, when the caller built them alongside.
+    pub(crate) declared: Option<&'a DeclaredShapes>,
 }
 
 /// Each analysed model's position in the finished session, those that succeeded, and the session.
@@ -59,7 +65,7 @@ pub(crate) struct ModelAnalyses<'py> {
 
 /// Each model's analysis by name and the finished session; a native internal failure raises.
 pub(crate) fn analyze_models<'py>(
-    request: &ModelAnalysisRequest<'py>,
+    request: &ModelAnalysisRequest<'_, 'py>,
 ) -> PyResult<ModelAnalyses<'py>> {
     let py: Python<'py> = request.profile.py();
     if request.model_inputs.is_empty() {
@@ -71,7 +77,7 @@ pub(crate) fn analyze_models<'py>(
     }
     let catalog: Bound<'py, PyAny> = native_field(&request.profile, "binding_catalog")?;
     let (rules, adapter_rules) = nullability_rules(&request.profile)?;
-    let session_request: RequestRow = session_request(request, &catalog, rules)?.extract()?;
+    let session_request: RequestRow = session_request(request, &catalog, rules)?;
     let (cache, adapter) = match adapter_rules {
         Some((adapter, nullability)) => (None, Some((adapter, nullability))),
         None => (analysis_store(request)?, None),
@@ -90,36 +96,71 @@ pub(crate) fn analyze_models<'py>(
 
 /// The session request row, in the order the native session reads it.
 fn session_request<'py>(
-    request: &ModelAnalysisRequest<'py>,
+    request: &ModelAnalysisRequest<'_, 'py>,
     catalog: &Bound<'py, PyAny>,
     rules: Vec<(String, String)>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = catalog.py();
+) -> PyResult<RequestRow> {
     let profile: &Bound<'py, PyAny> = &request.profile;
-    let mut families: Vec<(String, Vec<_>)> = Vec::new();
+    let mut families: Vec<(String, Vec<FamilyRow>)> = Vec::new();
     for item in mapping_items(&request.dynamic_families)?.try_iter()? {
         let (name, declared): (String, Bound<'py, PyAny>) = item?.extract()?;
         families.push((name, family_rows(&declared)?));
     }
-    let items: Vec<Bound<'py, PyAny>> = vec![
-        profile_dialect(profile)?.into_bound_py_any(py)?,
-        case_sensitive_shapes(profile, &native_field(profile, "sql_analysis_dialect")?)?
-            .into_bound_py_any(py)?,
-        return_types(profile)?.into_bound_py_any(py)?,
-        rules.into_bound_py_any(py)?,
-        request.rich_type_inference.into_bound_py_any(py)?,
-        shape_rows(&request.column_types)?.into_bound_py_any(py)?,
-        shape_rows(&request.nullability)?.into_bound_py_any(py)?,
-        shape_rows(&request.complete_schemas)?.into_bound_py_any(py)?,
-        shape_rows(&native_field(catalog, "schemas")?)?.into_bound_py_any(py)?,
-        families.into_bound_py_any(py)?,
-        model_rows(py, &request.model_inputs)?,
-    ];
-    Ok(PyTuple::new(py, items)?.into_any())
+    let (types, nullability, complete, schemas): (Shapes, Shapes, Shapes, Shapes) =
+        match declared_rows(request, catalog)? {
+            Some(rows) => rows,
+            None => (
+                shape_rows(&request.column_types)?,
+                shape_rows(&request.nullability)?,
+                shape_rows(&request.complete_schemas)?,
+                shape_rows(&native_field(catalog, "schemas")?)?,
+            ),
+        };
+    Ok((
+        profile_dialect(profile)?,
+        case_sensitive_shapes(profile, &native_field(profile, "sql_analysis_dialect")?)?,
+        return_types(profile)?,
+        Some(rules),
+        request.rich_type_inference,
+        types,
+        nullability,
+        complete,
+        schemas,
+        families,
+        model_rows(profile.py(), &request.model_inputs)?,
+    ))
+}
+
+/// The caller's native declaration rows when they still match the maps and catalog they mirror.
+fn declared_rows(
+    request: &ModelAnalysisRequest<'_, '_>,
+    catalog: &Bound<'_, PyAny>,
+) -> PyResult<Option<(Shapes, Shapes, Shapes, Shapes)>> {
+    let Some(declared) = request.declared else {
+        return Ok(None);
+    };
+    let Ok(binding) = catalog.downcast::<BindingCatalog>() else {
+        return Ok(None);
+    };
+    let complete: &Shapes = declared.complete.rows();
+    let unchanged: bool = binding.borrow().unextended()
+        && binding.borrow().schemas.bind(catalog.py()).len() == complete.len()
+        && request.complete_schemas.len()? == complete.len()
+        && request.column_types.len()? == declared.types.rows().len()
+        && request.nullability.len()? == declared.nullability.rows().len();
+    if !unchanged {
+        return Ok(None);
+    }
+    Ok(Some((
+        declared.types.rows().clone(),
+        declared.nullability.rows().clone(),
+        complete.clone(),
+        complete.clone(),
+    )))
 }
 
 /// The analysis store's path and environment, or None where Python bypasses its cache.
-fn analysis_store(request: &ModelAnalysisRequest<'_>) -> PyResult<Option<(PathBuf, String)>> {
+fn analysis_store(request: &ModelAnalysisRequest<'_, '_>) -> PyResult<Option<(PathBuf, String)>> {
     let context: &Bound<'_, PyAny> = &request.cache;
     if context.is_none() {
         return Ok(None);
@@ -138,7 +179,7 @@ fn analysis_store(request: &ModelAnalysisRequest<'_>) -> PyResult<Option<(PathBu
 
 /// Run and finish the session, leaving Python's catalog and metrics as its analysis did.
 fn run_session<'py>(
-    request: &ModelAnalysisRequest<'py>,
+    request: &ModelAnalysisRequest<'_, 'py>,
     catalog: &Bound<'py, PyAny>,
     session: &Bound<'py, NativeModelAnalysisSession>,
 ) -> PyResult<ModelAnalyses<'py>> {
@@ -249,25 +290,15 @@ fn record_metrics((hits, misses, bypasses): (usize, usize, usize)) -> PyResult<(
 }
 
 /// Each model's native request row, in analysis order.
-fn model_rows<'py>(
-    py: Python<'py>,
-    model_inputs: &[Bound<'py, PyAny>],
-) -> PyResult<Bound<'py, PyAny>> {
+fn model_rows<'py>(py: Python<'py>, model_inputs: &[Bound<'py, PyAny>]) -> PyResult<Vec<ModelRow>> {
     let enforced: Bound<'py, PyAny> = enum_member(py, RecordId::ContractPolicy, "ENFORCED")?;
     let snapshot: Bound<'py, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
-    let mut rows: Vec<Bound<'py, PyAny>> = Vec::with_capacity(model_inputs.len());
+    let mut rows: Vec<ModelRow> = Vec::with_capacity(model_inputs.len());
     for model_input in model_inputs {
         let values: Bound<'py, PyAny> = native_field(model_input, "config")?.getattr("values")?;
         let get = |key: &str| mapping_get(&values, key);
-        let query_sql: Bound<'py, PyAny> = PyString::new(
-            py,
-            &analysis_cursor_sql(
-                py,
-                &native_field(model_input, "query_sql")?.extract::<String>()?,
-                &get("cursor_type")?,
-            )?,
-        )
-        .into_any();
+        let query_sql: String =
+            analysis_cursor_sql(py, &input_query_sql(model_input)?, &get("cursor_type")?)?;
         let mut placeholders: Vec<(String, String)> = Vec::new();
         let raw: Bound<'py, PyAny> = get("placeholders")?;
         if raw.is_instance_of::<PyDict>() {
@@ -276,14 +307,7 @@ fn model_rows<'py>(
                 placeholders.push((key.str()?.extract()?, value.str()?.extract()?));
             }
         }
-        let mut references: Vec<(String, String)> = Vec::new();
-        for row in native_field(model_input, "reference_rows")?.try_iter()? {
-            let row: Bound<'py, PyAny> = row?;
-            references.push((
-                row.get_item(0)?.str()?.extract()?,
-                row.get_item(1)?.extract()?,
-            ));
-        }
+        let references: Vec<(String, String)> = analysed_references(model_input)?;
         let schema: Option<AttachedSchema<'py>> = attached_schema(model_input)?;
         let recovers: bool = get("contract")?.eq(&enforced)?
             || schema
@@ -301,18 +325,36 @@ fn model_rows<'py>(
             Some(schema) => family_rows(&schema.dynamic_columns)?,
             None => Vec::new(),
         };
-        let row: Vec<Bound<'py, PyAny>> = vec![
-            input_model_name(model_input)?.into_bound_py_any(py)?,
+        rows.push((
+            input_model_name(model_input)?,
             query_sql,
-            placeholders.into_bound_py_any(py)?,
-            references.into_bound_py_any(py)?,
-            recovers.into_bound_py_any(py)?,
-            snapshot_columns.into_bound_py_any(py)?,
-            families.into_bound_py_any(py)?,
-        ];
-        rows.push(PyTuple::new(py, row)?.into_any());
+            placeholders,
+            references,
+            recovers,
+            snapshot_columns,
+            families,
+        ));
     }
-    Ok(PyList::new(py, rows)?.into_any())
+    Ok(rows)
+}
+
+/// Each reference's `(kind, name)`; a native input answers from its record.
+fn analysed_references(model_input: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)>> {
+    if model_input.is_instance_of::<NativeModelInput>() {
+        return Ok(input_reference_rows(model_input)?
+            .into_iter()
+            .map(|(kind, name, _, _)| (kind, name))
+            .collect());
+    }
+    let mut references: Vec<(String, String)> = Vec::new();
+    for row in native_field(model_input, "reference_rows")?.try_iter()? {
+        let row: Bound<'_, PyAny> = row?;
+        references.push((
+            row.get_item(0)?.str()?.extract()?,
+            row.get_item(1)?.extract()?,
+        ));
+    }
+    Ok(references)
 }
 
 /// `str(value or default)`.

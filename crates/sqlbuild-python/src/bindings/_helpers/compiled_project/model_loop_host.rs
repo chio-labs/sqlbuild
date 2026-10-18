@@ -24,7 +24,7 @@ use crate::bindings::_helpers::compiled_project::project::{
     DeclarationPy, config_values, declarations,
 };
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::{field as native_field, replaced_keywords};
 use crate::bindings::_helpers::render::declaration_expansion::{
     ExpandedDeclarations, ScannedReference, span_rows,
 };
@@ -103,8 +103,6 @@ pub(crate) struct FinishedModel<'py> {
 #[derive(FromPyObject)]
 #[pyo3(from_item_all)]
 pub(crate) struct RecordClasses<'py> {
-    /// `dataclasses.replace`.
-    replace: Bound<'py, PyAny>,
     /// `declaration_rows`, the facts rows of the model's local enums and constants.
     declaration_rows: Bound<'py, PyAny>,
 }
@@ -159,10 +157,7 @@ pub(crate) fn finished_record<'py>(
         .extract()?;
     let replaced: Bound<'py, PyDict> = PyDict::new(py);
     replaced.set_item(VALUES_ARGUMENT, &stripped)?;
-    let config: Bound<'py, PyAny> = inputs
-        .classes
-        .replace
-        .call((&finished.config,), Some(&replaced))?;
+    let config: Bound<'py, PyAny> = replaced_keywords(&finished.config, &replaced)?;
     let mut declaration_usages: Vec<Bound<'py, PyAny>> = unique(py, usages)?;
     declaration_usages.extend(finished.named_usages);
     let (macro_sql, macro_spans, macro_deps, macro_usages) = match finished.macros {
