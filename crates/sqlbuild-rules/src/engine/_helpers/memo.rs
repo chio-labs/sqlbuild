@@ -48,12 +48,22 @@ pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, Ro
         memo,
         retain,
     } = rows;
-    let models: Vec<Model> = std::mem::take(&mut request.models)
+    let digested_rows: Vec<(Model, Option<Vec<u8>>)> = std::mem::take(&mut request.models)
         .into_iter()
-        .map(digested)
+        .map(|model| digested(model, retain))
         .collect::<Result<_, _>>()?;
+    let mut row_json: Vec<Vec<u8>> = Vec::new();
+    let mut models: Vec<Model> = Vec::with_capacity(digested_rows.len());
+    for (model, json) in digested_rows {
+        models.push(model);
+        row_json.extend(json);
+    }
+    let mut request_json: Option<Vec<u8>> = None;
     let memo: Option<(String, PathBuf)> = match memo {
-        Some((code_identity, path)) => Some((identity(&request, &models, &code_identity)?, path)),
+        Some((code_identity, path)) => {
+            let kept: Option<&mut Option<Vec<u8>>> = retain.then_some(&mut request_json);
+            Some((identity(&request, &models, &code_identity, kept)?, path))
+        }
         None => None,
     };
     let key: Option<String> = if keyed {
@@ -61,9 +71,8 @@ pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, Ro
     } else {
         None
     };
-    let mut models: Vec<Model> = models;
     let retained: Option<RetainedRows> = if retain {
-        retained_rows(&mut request, &mut models)
+        retained_rows(&request, &models, (request_json, row_json))
     } else {
         None
     };
@@ -76,38 +85,88 @@ pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, Ro
     })
 }
 
-/// `request` with `models` as JSON, each model's SQL text and digest dropped, and each model's
-/// payload digest; the models are put back as they were. `None` when it cannot be encoded.
-fn retained_rows(request: &mut EvaluateRequest, models: &mut Vec<Model>) -> Option<RetainedRows> {
-    let digests: Vec<String> = models
-        .iter()
-        .map(|model| model.payload_digest.clone().unwrap_or_default())
-        .collect();
-    let kept: Vec<(String, String, Option<String>, bool)> = models
-        .iter_mut()
-        .map(|model| {
-            (
-                std::mem::take(&mut model.query_sql),
-                std::mem::take(&mut model.authored_sql),
-                model.payload_digest.take(),
-                std::mem::replace(&mut model.stripped, true),
-            )
-        })
-        .collect();
-    request.models = std::mem::take(models);
-    let json: Option<Vec<u8>> = serde_json::to_vec(&*request).ok();
-    *models = std::mem::take(&mut request.models);
-    for (model, (query_sql, authored_sql, payload_digest, stripped)) in models.iter_mut().zip(kept)
-    {
-        model.query_sql = query_sql;
-        model.authored_sql = authored_sql;
-        model.payload_digest = payload_digest;
-        model.stripped = stripped;
+const NO_SQL_KEYS: &str = "a retained model row has no SQL keys";
+/// Where the model-free request's JSON holds its empty model list, which the rows fill.
+const EMPTY_MODELS: &[u8] = b",\"models\":[],\"sql_tests\":";
+const MODELS_KEY: &[u8] = b",\"models\":[";
+
+/// `request` as JSON with each model's row as `prepare` serialized it for its digest, the SQL
+/// text dropped; and each model's payload digest. `None` when it cannot be assembled.
+fn retained_rows(
+    request: &EvaluateRequest,
+    models: &[Model],
+    (request_json, row_json): (Option<Vec<u8>>, Vec<Vec<u8>>),
+) -> Option<RetainedRows> {
+    if row_json.len() != models.len() {
+        return None;
     }
+    let request_json: Vec<u8> = match request_json {
+        Some(json) => json,
+        None => serde_json::to_vec(request).ok()?,
+    };
+    let mut found = request_json
+        .windows(EMPTY_MODELS.len())
+        .enumerate()
+        .filter(|(_, window)| *window == EMPTY_MODELS)
+        .map(|(index, _)| index);
+    let (Some(at), None) = (found.next(), found.next()) else {
+        return None;
+    };
+    let rows: usize = row_json.iter().map(Vec::len).sum::<usize>() + row_json.len();
+    let mut json: Vec<u8> = Vec::with_capacity(request_json.len() + rows);
+    json.extend_from_slice(&request_json[..at]);
+    json.extend_from_slice(MODELS_KEY);
+    for (index, row) in row_json.iter().enumerate() {
+        if index > 0 {
+            json.push(b',');
+        }
+        json.extend_from_slice(row);
+    }
+    json.push(b']');
+    json.extend_from_slice(&request_json[at + MODELS_KEY.len() + 1..]);
     Some(RetainedRows {
-        request_json: without_derived_fields(json?),
-        digests,
+        request_json: without_derived_fields(json),
+        digests: models
+            .iter()
+            .map(|model| model.payload_digest.clone().unwrap_or_default())
+            .collect(),
     })
+}
+
+/// A model row's JSON with its `query_sql` and `authored_sql` text emptied.
+///
+/// They are the first string-valued keys after `name` and `relative_path`, and compact JSON
+/// escapes every quote inside strings, so the first match of each key is that key.
+fn without_sql(json: &[u8]) -> Option<Vec<u8>> {
+    let mut kept: Vec<u8> = Vec::with_capacity(json.len());
+    let mut copied: usize = 0;
+    for key in [&b"\"query_sql\":\""[..], &b"\"authored_sql\":\""[..]] {
+        let start: usize = copied + find(&json[copied..], key)? + key.len();
+        let end: usize = start + string_end(&json[start..])?;
+        kept.extend_from_slice(&json[copied..start]);
+        copied = end;
+    }
+    kept.extend_from_slice(&json[copied..]);
+    Some(kept)
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+/// The offset of the quote closing the JSON string whose text `bytes` starts with.
+fn string_end(bytes: &[u8]) -> Option<usize> {
+    let mut index: usize = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' => index += 2,
+            b'"' => return Some(index),
+            _ => index += 1,
+        }
+    }
+    None
 }
 
 /// The prefix the keys of fields a request serializes but never reads back share; evaluation
@@ -246,35 +305,59 @@ fn speculation_key(
         }
         None => {
             hasher.update(b"unmemoized\0");
-            hasher.update(identity(request, models, "")?.as_bytes());
+            hasher.update(identity(request, models, "", None)?.as_bytes());
         }
     }
     Ok(hasher.finalize().to_hex().to_string())
 }
 
-/// `model` with the BLAKE3 digest of its exact facts, which keys its cached findings.
-fn digested(mut model: Model) -> Result<Model, RowsError> {
+/// `model` with the BLAKE3 digest of its exact facts, which keys its cached findings; with
+/// `retain`, also its row as JSON without its SQL text.
+fn digested(mut model: Model, retain: bool) -> Result<(Model, Option<Vec<u8>>), RowsError> {
     if model.payload_digest.is_some() {
-        return Ok(model);
+        let json: Option<Vec<u8>> = if retain {
+            let json: Vec<u8> = serde_json::to_vec(&model).map_err(rules_error)?;
+            Some(without_sql(&json).ok_or_else(|| RowsError::Rules(NO_SQL_KEYS.to_owned()))?)
+        } else {
+            None
+        };
+        return Ok((model, json));
     }
-    let mut hasher: blake3::Hasher = blake3::Hasher::new();
-    serde_json::to_writer(&mut hasher, &model).map_err(rules_error)?;
-    model.payload_digest = Some(hasher.finalize().to_hex().to_string());
-    Ok(model)
+    if !retain {
+        let mut hasher: blake3::Hasher = blake3::Hasher::new();
+        serde_json::to_writer(&mut hasher, &model).map_err(rules_error)?;
+        model.payload_digest = Some(hasher.finalize().to_hex().to_string());
+        return Ok((model, None));
+    }
+    let json: Vec<u8> = serde_json::to_vec(&model).map_err(rules_error)?;
+    model.payload_digest = Some(blake3::hash(&json).to_hex().to_string());
+    let stripped: Vec<u8> =
+        without_sql(&json).ok_or_else(|| RowsError::Rules(NO_SQL_KEYS.to_owned()))?;
+    Ok((model, Some(stripped)))
 }
 
 /// The memo version, build, model-free request and every model's digest, in order.
+///
+/// With `kept`, the model-free request's JSON is kept there as well.
 fn identity(
     request: &EvaluateRequest,
     models: &[Model],
     code_identity: &str,
+    kept: Option<&mut Option<Vec<u8>>>,
 ) -> Result<String, RowsError> {
     let mut hasher: blake3::Hasher = blake3::Hasher::new();
     for part in [NATIVE_ROWS_MEMO_VERSION, code_identity] {
         hasher.update(part.as_bytes());
         hasher.update(b"\0");
     }
-    serde_json::to_writer(&mut hasher, request).map_err(rules_error)?;
+    match kept {
+        Some(kept) => {
+            let json: Vec<u8> = serde_json::to_vec(request).map_err(rules_error)?;
+            hasher.update(&json);
+            *kept = Some(json);
+        }
+        None => serde_json::to_writer(&mut hasher, request).map_err(rules_error)?,
+    }
     hasher.update(b"\0");
     hasher.update(&(models.len() as u64).to_le_bytes());
     for model in models {

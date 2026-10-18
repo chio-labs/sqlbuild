@@ -2,7 +2,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::{Deserialize, Serialize};
 use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
 use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
 use sqlbuild_cache::project_reuse::models::ImageSections;
@@ -12,9 +11,10 @@ use crate::bindings::_helpers::compile_delta::context::{
     CapturedDiagnostic, CapturedModel, CapturedTest, ImageCapture, ModelShape,
 };
 use crate::bindings::_helpers::compile_delta::header_keys::HeaderKeys;
+use crate::bindings::_helpers::compile_delta::image_codec::{Decoder, Encoder};
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
-const IMAGE_FORMAT: &str = "sqlbuild-project-image-v3";
+const IMAGE_FORMAT: &str = "sqlbuild-project-image-v4";
 const GATE_SECTION: &str = "gate";
 const FACTS_SECTION: &str = "facts";
 const RULES_SECTION: &str = "rules";
@@ -68,7 +68,7 @@ pub(crate) enum ImageRules {
 }
 
 /// The analysis session's final relation facts, as stored.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ImageRelations {
     pub(crate) types: Shapes,
     pub(crate) nullability: Shapes,
@@ -145,7 +145,7 @@ fn restored(rows: Vec<(String, Option<Vec<(String, String)>>)>, types: &Shapes) 
 type StoredShapes = Vec<(String, Option<Vec<(String, String)>>)>;
 
 /// What a delta compile reads first to decide, cheaply, whether it can patch the image.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct ImageGate {
     pub(crate) format: String,
     pub(crate) json_output: bool,
@@ -160,7 +160,6 @@ pub(crate) struct ImageGate {
 }
 
 /// The rest of the image's facts as stored; shapes equal to a relation's types are stored once.
-#[derive(Serialize, Deserialize)]
 struct StoredFacts {
     usages: BTreeMap<String, String>,
     types: Shapes,
@@ -186,16 +185,233 @@ fn section<'a>(sections: &'a ImageSections, name: &str) -> Option<&'a [u8]> {
         .map(|(_, bytes)| bytes.as_slice())
 }
 
-fn json<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
-    serde_json::to_vec(value).map_err(|error| error.to_string())
+/// The diagnostics and report lines an image keeps as JSON, being small and varied.
+type StoredMisc = (
+    Vec<CapturedDiagnostic>,
+    Option<Vec<(String, bool, i64)>>,
+    Vec<String>,
+);
+
+fn put_shapes<'a>(encoder: &mut Encoder<'a>, shapes: &'a Shapes) {
+    encoder.count(shapes.len());
+    for (name, shape) in shapes {
+        encoder.string(name);
+        encoder.pairs(shape);
+    }
+}
+
+fn put_stored_shapes<'a>(encoder: &mut Encoder<'a>, shapes: &'a StoredShapes) {
+    encoder.count(shapes.len());
+    for (name, shape) in shapes {
+        encoder.string(name);
+        encoder.flag(shape.is_some());
+        if let Some(shape) = shape {
+            encoder.pairs(shape);
+        }
+    }
+}
+
+fn shapes(decoder: &mut Decoder<'_>) -> Option<Shapes> {
+    decoder.list(|decoder| Some((decoder.string()?, decoder.pairs()?)))
+}
+
+fn stored_shapes(decoder: &mut Decoder<'_>) -> Option<StoredShapes> {
+    decoder.list(|decoder| {
+        let name: String = decoder.string()?;
+        let shape: Option<Vec<(String, String)>> = if decoder.flag()? {
+            Some(decoder.pairs()?)
+        } else {
+            None
+        };
+        Some((name, shape))
+    })
 }
 
 impl ImageGate {
+    fn encode(&self) -> Vec<u8> {
+        let mut encoder: Encoder<'_> = Encoder::default();
+        encoder.string(&self.format);
+        encoder.flag(self.json_output);
+        encoder.flag(self.has_errors);
+        encoder.flag(self.has_model_subjects);
+        encoder.count(self.models.len());
+        for model in &self.models {
+            encoder.string(&model.name);
+            encoder.string(&model.relative_path);
+            encoder.pairs(&model.upstream);
+        }
+        encoder.count(self.tests.len());
+        for test in &self.tests {
+            encoder.string(&test.key);
+            encoder.string(&test.relative_path);
+            encoder.strings(test.chain.iter().map(String::as_str));
+        }
+        encoder.count(self.fact_digests.len());
+        for (key, digest) in &self.fact_digests {
+            encoder.strings(key.iter().map(String::as_str));
+            encoder.string(digest);
+        }
+        encoder.count(self.header_keys.len());
+        for (path, keys) in &self.header_keys {
+            encoder.string(path);
+            encoder.pairs(keys);
+        }
+        encoder.finish()
+    }
+
     /// The gate stored in `sections`, or `None` when it is unreadable or of another format.
     pub(crate) fn decode(sections: &ImageSections) -> Option<Self> {
-        let gate: Self = serde_json::from_slice(section(sections, GATE_SECTION)?).ok()?;
-        (gate.format == IMAGE_FORMAT).then_some(gate)
+        let mut decoder: Decoder<'_> = Decoder::new(section(sections, GATE_SECTION)?)?;
+        let format: String = decoder.string()?;
+        if format != IMAGE_FORMAT {
+            return None;
+        }
+        let gate: Self = Self {
+            format,
+            json_output: decoder.flag()?,
+            has_errors: decoder.flag()?,
+            has_model_subjects: decoder.flag()?,
+            models: decoder.list(|decoder| {
+                Some(CapturedModel {
+                    name: decoder.string()?,
+                    relative_path: decoder.string()?,
+                    upstream: decoder.pairs()?,
+                })
+            })?,
+            tests: decoder.list(|decoder| {
+                Some(CapturedTest {
+                    key: decoder.string()?,
+                    relative_path: decoder.string()?,
+                    chain: decoder.strings()?,
+                })
+            })?,
+            fact_digests: decoder.list(|decoder| Some((decoder.strings()?, decoder.string()?)))?,
+            header_keys: decoder
+                .list(|decoder| Some((decoder.string()?, decoder.pairs()?)))?
+                .into_iter()
+                .collect(),
+        };
+        decoder.finish()?;
+        Some(gate)
     }
+}
+
+impl StoredFacts {
+    fn encode(&self) -> Result<Vec<u8>, String> {
+        let misc: Vec<u8> = serde_json::to_vec(&(
+            &self.diagnostics,
+            &self.text_models,
+            &self.environment_names,
+        ))
+        .map_err(|error| error.to_string())?;
+        let mut encoder: Encoder<'_> = Encoder::default();
+        encoder.count(self.usages.len());
+        for (path, digest) in &self.usages {
+            encoder.string(path);
+            encoder.string(digest);
+        }
+        put_shapes(&mut encoder, &self.types);
+        put_shapes(&mut encoder, &self.nullability);
+        put_stored_shapes(&mut encoder, &self.complete);
+        put_stored_shapes(&mut encoder, &self.schemas);
+        put_stored_shapes(&mut encoder, &self.model_shapes);
+        encoder.flag(self.dependency_ordered);
+        encoder.flag(self.cyclic);
+        encoder.strings(self.legacy_models.iter().map(String::as_str));
+        encoder.flag(self.model_subjects.is_some());
+        if let Some(subjects) = &self.model_subjects {
+            encoder.count(subjects.len());
+            for (path, name, materialized) in subjects {
+                encoder.string(path);
+                encoder.string(name);
+                encoder.optional_string(materialized.as_deref());
+            }
+        }
+        encoder.flag(self.lint_model_keys.is_some());
+        if let Some(keys) = &self.lint_model_keys {
+            encoder.pairs(keys);
+        }
+        encoder.flag(self.lint_file_keys.is_some());
+        if let Some(keys) = &self.lint_file_keys {
+            encoder.count(keys.len());
+            for (path, key) in keys {
+                encoder.string(path);
+                encoder.optional_string(key.as_deref());
+            }
+        }
+        encoder.bytes(&misc);
+        Ok(encoder.finish())
+    }
+
+    fn decode(section: &[u8]) -> Option<Self> {
+        let mut decoder: Decoder<'_> = Decoder::new(section)?;
+        let usages: BTreeMap<String, String> = decoder
+            .list(|decoder| Some((decoder.string()?, decoder.string()?)))?
+            .into_iter()
+            .collect();
+        let types: Shapes = shapes(&mut decoder)?;
+        let nullability: Shapes = shapes(&mut decoder)?;
+        let complete: StoredShapes = stored_shapes(&mut decoder)?;
+        let schemas: StoredShapes = stored_shapes(&mut decoder)?;
+        let model_shapes: StoredShapes = stored_shapes(&mut decoder)?;
+        let dependency_ordered: bool = decoder.flag()?;
+        let cyclic: bool = decoder.flag()?;
+        let legacy_models: Vec<String> = decoder.strings()?;
+        let model_subjects = if decoder.flag()? {
+            Some(decoder.list(|decoder| {
+                Some((
+                    decoder.string()?,
+                    decoder.string()?,
+                    decoder.optional_string()?,
+                ))
+            })?)
+        } else {
+            None
+        };
+        let lint_model_keys = if decoder.flag()? {
+            Some(decoder.pairs()?)
+        } else {
+            None
+        };
+        let lint_file_keys = if decoder.flag()? {
+            Some(decoder.list(|decoder| Some((decoder.string()?, decoder.optional_string()?)))?)
+        } else {
+            None
+        };
+        let (diagnostics, text_models, environment_names): StoredMisc =
+            serde_json::from_slice(decoder.bytes()?).ok()?;
+        decoder.finish()?;
+        Some(Self {
+            usages,
+            types,
+            nullability,
+            complete,
+            schemas,
+            dependency_ordered,
+            cyclic,
+            legacy_models,
+            model_subjects,
+            diagnostics,
+            text_models,
+            environment_names,
+            model_shapes,
+            lint_model_keys,
+            lint_file_keys,
+        })
+    }
+}
+
+fn encoded_strings(values: &[String]) -> Vec<u8> {
+    let mut encoder: Encoder<'_> = Encoder::default();
+    encoder.strings(values.iter().map(String::as_str));
+    encoder.finish()
+}
+
+fn decoded_strings(section: &[u8]) -> Option<Vec<String>> {
+    let mut decoder: Decoder<'_> = Decoder::new(section)?;
+    let values: Vec<String> = decoder.strings()?;
+    decoder.finish()?;
+    Some(values)
 }
 
 impl ProjectImage {
@@ -276,17 +492,13 @@ impl ProjectImage {
             Some(ImageRules::Retained(rules)) => Some(rules),
             Some(ImageRules::Decoded(_)) | None => None,
         };
-        let (gate, facts) = rayon::join(|| json(&gate), || json(&facts));
-        let rules = rules
-            .map(|rules| -> Result<(Vec<u8>, Vec<u8>), String> {
-                Ok((rules.request_json, json(&rules.digests)?))
-            })
-            .transpose();
+        let (gate, facts) = rayon::join(|| gate.encode(), || facts.encode());
+        let rules = rules.map(|rules| (rules.request_json, encoded_strings(&rules.digests)));
         let mut sections: ImageSections = vec![
-            (GATE_SECTION.to_owned(), gate?),
+            (GATE_SECTION.to_owned(), gate),
             (FACTS_SECTION.to_owned(), facts?),
         ];
-        if let Some((request, digests)) = rules? {
+        if let Some((request, digests)) = rules {
             sections.push((RULES_SECTION.to_owned(), request));
             sections.push((RULE_DIGESTS_SECTION.to_owned(), digests));
         }
@@ -296,14 +508,14 @@ impl ProjectImage {
     /// The image stored in `sections` behind `gate`, or `None` when it is unreadable.
     pub(crate) fn decode(sections: &ImageSections, gate: ImageGate) -> Option<Self> {
         let (facts, rules) = rayon::join(
-            || serde_json::from_slice::<StoredFacts>(section(sections, FACTS_SECTION)?).ok(),
+            || StoredFacts::decode(section(sections, FACTS_SECTION)?),
             || -> Option<Option<ImageRules>> {
                 let Some(bytes) = section(sections, RULES_SECTION) else {
                     return Some(None);
                 };
                 let request: EvaluateRequest = serde_json::from_slice(bytes).ok()?;
                 let digests: Vec<String> =
-                    serde_json::from_slice(section(sections, RULE_DIGESTS_SECTION)?).ok()?;
+                    decoded_strings(section(sections, RULE_DIGESTS_SECTION)?)?;
                 (digests.len() == request.models.len())
                     .then_some(Some(ImageRules::Decoded(BaseRules { request, digests })))
             },
