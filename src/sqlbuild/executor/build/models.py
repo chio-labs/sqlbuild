@@ -230,6 +230,7 @@ class BuildExecutionResult:
     end_audit_results: tuple[AuditExecutionResult, ...] = field(default_factory=tuple)
     success_count: int = 0
     failure_count: int = 0
+    timeout_count: int = 0
     skipped_count: int = 0
     warning_count: int = 0
     insufficient_count: int = 0

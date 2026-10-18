@@ -417,3 +417,12 @@ class ScenarioTimeoutE2ETestCase:
     header_timeout: str
     command: tuple[str, ...]
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ModelTimeoutJsonE2ETestCase:
+    """One slow model's build reported as JSON."""
+
+    description: str
+    expected_status: str
+    expected_summary_counts: dict[str, int]

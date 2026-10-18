@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.test._test_types import (
     ModelTimeoutE2ETestCase,
+    ModelTimeoutJsonE2ETestCase,
     RealModelLimitE2ETestCase,
     ScenarioTimeoutE2ETestCase,
     SingleReadComparisonE2ETestCase,
@@ -19,6 +22,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     COST_GUARD_RAW_ORDERS_SOURCE,
     SLOW_SCALAR_SQL,
     build_order_chain_files,
+    slow_model_files,
     stored_test_outputs,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -246,6 +250,7 @@ def test_given_slow_unit_test_when_limit_expires_then_test_times_out_and_run_con
                 "Limit set by:  max_duration in MODEL() header",
                 "Cancellation:  confirmed; the running statement stopped",
                 "Skipped (1): order_scan_summary",
+                "FAIL=0  TIMEOUT=1  INSUFFICIENT=0  SKIP=1  TOTAL=3",
             ),
             expected_tables=(
                 ("order_scans", False),
@@ -262,22 +267,7 @@ def test_given_model_max_duration_when_building_then_slow_model_times_out_and_de
     project_dir: Path = prepare_inline_project(
         tmp_path=tmp_path,
         project_name="shop",
-        repo_files={
-            "sqlbuild_project.toml": COST_GUARD_PROJECT_TOML,
-            "models/order_scans.sql": (
-                "MODEL (description 'Order scans.', materialized table, "
-                f'max_duration "{test_case.max_duration}");\n\n'
-                f"SELECT 1 AS order_id, {SLOW_SCALAR_SQL} AS scanned\n"
-            ),
-            "models/order_scan_summary.sql": (
-                "MODEL (description 'Order scan summary.', materialized table);\n\n"
-                'SELECT COUNT(*) AS orders FROM __ref("order_scans")\n'
-            ),
-            "models/customers.sql": (
-                "MODEL (description 'Customers.', materialized table);\n\n"
-                "SELECT 100 AS customer_id\n"
-            ),
-        },
+        repo_files=slow_model_files(max_duration=test_case.max_duration),
     )
 
     result: subprocess.CompletedProcess[str] = run_sqb(
@@ -293,6 +283,40 @@ def test_given_model_max_duration_when_building_then_slow_model_times_out_and_de
             table_exists(db_path=project_dir / "warehouse.duckdb", table_name=table_name)
             == expected_exists
         ), table_name
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModelTimeoutJsonE2ETestCase(
+            description="build JSON counts the timeout apart from failures",
+            expected_status="failed",
+            expected_summary_counts={
+                "success_count": 1,
+                "failure_count": 0,
+                "timeout_count": 1,
+                "skipped_count": 1,
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_max_duration_when_building_as_json_then_summary_counts_timeout(
+    tmp_path: Path, test_case: ModelTimeoutJsonE2ETestCase
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path, project_name="shop", repo_files=slow_model_files(max_duration="1s")
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--json"), project_dir=project_dir
+    )
+    payload: dict[str, Any] = json.loads(result.stdout)
+
+    assert result.returncode == 1, result.stderr
+    assert payload["status"] == test_case.expected_status
+    for key, expected_count in test_case.expected_summary_counts.items():
+        assert payload["summary"][key] == expected_count, payload["summary"]
 
 
 @pytest.mark.parametrize(

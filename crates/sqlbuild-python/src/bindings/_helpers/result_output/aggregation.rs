@@ -76,6 +76,7 @@ pub(crate) fn aggregated_build_result<'py>(
     keywords.extend([
         ("success_count", counts.success.into_bound_py_any(py)?),
         ("failure_count", counts.failure.into_bound_py_any(py)?),
+        ("timeout_count", counts.timeout.into_bound_py_any(py)?),
         ("skipped_count", counts.skipped.into_bound_py_any(py)?),
         ("warning_count", counts.warning.into_bound_py_any(py)?),
         (

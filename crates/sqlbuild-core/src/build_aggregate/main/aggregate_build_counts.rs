@@ -1,18 +1,19 @@
 //! Aggregate counts and overall status of one build.
 
 use crate::build_aggregate::constants::{
-    AUDIT_ERROR, AUDIT_INSUFFICIENT, AUDIT_WARN, FAILED, SKIPPED, SOURCE_FRESHNESS_BLOCKED_CODE,
-    SUCCESS, TEST_PASS,
+    AUDIT_ERROR, AUDIT_INSUFFICIENT, AUDIT_WARN, FAILED, ITEM_TIMEOUT_CODE, SKIPPED,
+    SOURCE_FRESHNESS_BLOCKED_CODE, SUCCESS, TEST_PASS, TEST_TIMEOUT,
 };
 use crate::build_aggregate::models::{BuildCounts, BuildResultFacts};
 
-/// Success, failure, skipped, warning and insufficient counts, and whether the build failed.
+/// Success, failure, timeout, skipped, warning and insufficient counts, and whether it failed.
 #[must_use]
 pub fn aggregate_build_counts(facts: &BuildResultFacts) -> BuildCounts {
     let mut counts: BuildCounts = BuildCounts::default();
     for model in &facts.models {
         match model.status.as_str() {
             SUCCESS => counts.success += 1,
+            FAILED if model.error_code.as_deref() == Some(ITEM_TIMEOUT_CODE) => counts.timeout += 1,
             FAILED => counts.failure += 1,
             SKIPPED => {
                 counts.skipped += 1;
@@ -42,6 +43,8 @@ pub fn aggregate_build_counts(facts: &BuildResultFacts) -> BuildCounts {
     for outcome in &facts.test_outcomes {
         if outcome == TEST_PASS {
             counts.success += 1;
+        } else if outcome == TEST_TIMEOUT {
+            counts.timeout += 1;
         } else {
             counts.failure += 1;
         }
@@ -58,6 +61,7 @@ pub fn aggregate_build_counts(facts: &BuildResultFacts) -> BuildCounts {
     counts.warning += matching(&facts.source_audit_outcomes, AUDIT_WARN)
         + matching(&facts.end_audit_outcomes, AUDIT_WARN);
     counts.failed = counts.failure > 0
+        || counts.timeout > 0
         || facts
             .end_audit_outcomes
             .iter()

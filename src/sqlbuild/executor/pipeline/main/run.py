@@ -137,7 +137,7 @@ def run_build_pipeline(
                                 "run_kind": "build",
                                 "duration_ms": int((time.monotonic() - started) * 1000),
                                 "succeeded_count": result.success_count,
-                                "failed_count": result.failure_count,
+                                "failed_count": result.failure_count + result.timeout_count,
                                 "skipped_count": result.skipped_count,
                             },
                         )

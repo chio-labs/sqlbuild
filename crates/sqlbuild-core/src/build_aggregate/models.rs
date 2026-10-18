@@ -27,6 +27,7 @@ pub struct BuildResultFacts {
 pub struct BuildCounts {
     pub success: usize,
     pub failure: usize,
+    pub timeout: usize,
     pub skipped: usize,
     pub warning: usize,
     pub insufficient: usize,

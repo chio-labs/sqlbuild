@@ -45,8 +45,9 @@ are strings in JSON so their scale is preserved. Each test check in JSON output 
 
 Each test row shows how many real (unmocked) models the test executes, such as `3 real models`. A
 test that runs past its [time limit](/docs/concepts/testing#time-limits) is reported as `TIMEOUT`,
-counted separately in the summary (`PASS=4  FAIL=0  TIMEOUT=1  TOTAL=5`), and the run continues
-with the remaining tests.
+counted separately in the summary (`PASS=4  FAIL=0  TIMEOUT=1  TOTAL=5`) and in the `--json`
+summary's `timeout_count`, and the run continues with the remaining tests. A timeout still fails the
+run: `sqb test` exits non-zero.
 
 ## Examples
 

@@ -1988,3 +1988,23 @@ def stored_test_outputs(*, database_path: Path) -> list[str]:
             "WHERE table_name LIKE '__sqb_test_output%'"
         ).fetchall()
     return [row[0] for row in rows]
+
+
+def slow_model_files(*, max_duration: str) -> dict[str, str]:
+    """A slow model with `max_duration`, a model reading it and an independent model."""
+
+    return {
+        "sqlbuild_project.toml": COST_GUARD_PROJECT_TOML,
+        "models/order_scans.sql": (
+            "MODEL (description 'Order scans.', materialized table, "
+            f'max_duration "{max_duration}");\n\n'
+            f"SELECT 1 AS order_id, {SLOW_SCALAR_SQL} AS scanned\n"
+        ),
+        "models/order_scan_summary.sql": (
+            "MODEL (description 'Order scan summary.', materialized table);\n\n"
+            'SELECT COUNT(*) AS orders FROM __ref("order_scans")\n'
+        ),
+        "models/customers.sql": (
+            "MODEL (description 'Customers.', materialized table);\n\nSELECT 100 AS customer_id\n"
+        ),
+    }

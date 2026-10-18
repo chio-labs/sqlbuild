@@ -572,6 +572,7 @@ def test_given_task_selector_with_json_output_when_running_run_then_json_include
     assert payload["summary"] == {
         "success_count": 1,
         "failure_count": 0,
+        "timeout_count": 0,
         "skipped_count": 0,
         "warning_count": 0,
         "python_check_pass_count": 0,
@@ -641,6 +642,7 @@ def test_given_failing_task_selector_when_running_run_then_command_fails(
     assert payload["summary"] == {
         "success_count": 0,
         "failure_count": 1,
+        "timeout_count": 0,
         "skipped_count": 0,
         "warning_count": 0,
         "python_check_pass_count": 0,
@@ -1095,6 +1097,7 @@ def test_given_skip_and_asset_selection_with_json_when_running_run_then_json_rec
     assert payload["summary"] == {
         "success_count": 1,
         "failure_count": 0,
+        "timeout_count": 0,
         "skipped_count": 1,
         "warning_count": 0,
         "python_check_pass_count": 0,
