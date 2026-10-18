@@ -10,6 +10,9 @@ SQLBuild is a free, open-source framework for SQL and Python data pipelines. It 
 checks, end-to-end tests and safe renames to your warehouse, so you can change it as often as you
 change your code.
 
+SQLBuild compiles, checks and plans your project in Rust. Warehouse execution stays in Python, as do
+your macros, Python hooks, loaders and custom rules.
+
 Valid SQL isn't the same as correct SQL. A query can compile, run and return rows, and still produce
 a wrong number that people already trust. SQLBuild is built to catch that before it reaches
 production.

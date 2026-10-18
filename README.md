@@ -18,6 +18,8 @@ and safe renames to your SQL, so change stops being risky. It is a free, open-so
 SQL and Python data pipelines, and it keeps its state in append-only tables in your own warehouse:
 no external state database, no manifest files and no paid tier.
 
+Its compiler and planner run in Rust. Warehouse execution and extensions use Python.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/chio-labs/sqlbuild/main/.github/demos/rename.gif" alt="Moving and renaming an incremental model with sqb mv: sqb plan migrates the existing table instead of rebuilding it" width="100%">
 </p>
