@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.158.1](https://github.com/chio-labs/sqlbuild/compare/v0.158.0...v0.158.1) (2026-10-18)
+
+
+### Performance Improvements
+
+* cut edit-loop compile overhead in the reuse store, hashing and walks ([#1144](https://github.com/chio-labs/sqlbuild/issues/1144)) ([5f52299](https://github.com/chio-labs/sqlbuild/commit/5f522999845b86a3b9af91a98493d8c1e7de3c3c))
+
 ## [0.158.0](https://github.com/chio-labs/sqlbuild/compare/v0.157.4...v0.158.0) (2026-10-18)
 
 
