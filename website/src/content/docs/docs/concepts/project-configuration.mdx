@@ -345,9 +345,9 @@ Both policies default to `false`. `sqb clone --from prod --to dev` requires `all
 
 ### Execution limits
 
-Named targets can set optional limits for `sqb build`. Limits are useful for development targets
-where an unexpectedly broad selector or long-running command should stop instead of consuming an
-unbounded amount of warehouse compute.
+Named targets can set optional limits for `sqb build`, and per-item time limits for unit tests and
+scenarios. Limits are useful for development targets where an unexpectedly broad selector or
+long-running command should stop instead of consuming an unbounded amount of warehouse compute.
 
 ```toml
 [targets.dev]
@@ -358,6 +358,8 @@ schema = "dev_alice"
 [targets.dev.execution_limits]
 max_models = 125
 max_duration = "45m"
+test_timeout = "60s"
+scenario_timeout = "10m"
 remediation = """
 Review the expanded plan and confirm that the selected scope is intentional.
 Automated tools must request approval before changing this policy.
@@ -380,16 +382,37 @@ key, and confirms that no warehouse changes were made.
 
 `max_duration` is a positive fixed duration such as `30m`, `2h`, or `90s`. It covers planning and
 warehouse-mutating build phases after target resolution. SQLBuild stops dispatching work at the
-deadline and passes the remaining duration to each warehouse statement so in-flight work is
-cancelled by the adapter.
+deadline, bounds each warehouse statement by the remaining time where the warehouse supports a
+statement limit, and cancels statements still running at the deadline.
 
-Safe in-flight cancellation is currently supported by the Snowflake adapter, whose maximum accepted
-duration is seven days. SQLBuild rejects an unsupported duration or an adapter that cannot guarantee
-active statement cancellation rather than presenting a limit that may leave warehouse work running.
+Every built-in adapter enforces the limit:
+
+| Adapter | Warehouse statement limit | Cancellation at the deadline | Longest accepted duration |
+|---------|---------------------------|------------------------------|---------------------------|
+| Snowflake | `STATEMENT_TIMEOUT_IN_SECONDS` per statement | Driver cancel request for the running query | 7 days |
+| DuckDB, MotherDuck | none | Connection interrupt | about 24 days |
+| PostgreSQL | `statement_timeout` set for each statement | Driver cancel (`cancel_safe`) | about 24 days |
+| BigQuery | Job timeout (`job_timeout_ms`) on each query job | `jobs.cancel` (asynchronous) | about 24 days |
+| Databricks | `STATEMENT_TIMEOUT` session setting, capped at 48 hours | Cursor cancel (asynchronous) | about 24 days |
+| SQL Server | none | Driver cancel | about 24 days |
+
+BigQuery and Databricks stop cancelled work asynchronously, so SQLBuild reports their cancellation
+as requested but unconfirmed. SQL Server has no per-statement limit; the driver's query timeout is
+process-wide, so SQLBuild relies on cancelling the running statement instead. A project adapter that
+cannot cancel a running statement is rejected for `max_duration` rather than presenting a limit that
+may leave warehouse work running. Under a per-item timeout, such an adapter's items stop before their
+next statement and report the cancellation as not supported.
 
 A duration failure may occur after earlier models have completed. Its error therefore distinguishes
 the timeout from a pre-execution model-limit failure and states that warehouse changes may already
 have occurred.
+
+#### Unit test and scenario timeouts
+
+`test_timeout` and `scenario_timeout` set the per-test and per-scenario time limit on this target,
+replacing `[settings] test_timeout` and `[settings] scenario_timeout`. They follow the
+[timeout precedence](#unit-test-and-scenario-limits) described under Settings and accept a positive
+fixed duration or `"disabled"`.
 
 #### Custom remediation
 
@@ -467,6 +490,7 @@ instead.
 - Microbatch: `microbatch_strategy`, `batch_size`, `batch_concurrency`, `max_microbatches`
 - Row diff: `row_diff_exclude_columns`, `row_diff_tolerances`, `row_diff_sample_rows`,
   `row_diff_sample_seed`
+- Execution: `max_duration` (see [Execution time limit](/docs/concepts/models/configuration#execution-time-limit))
 
 ## Constants
 
@@ -571,6 +595,9 @@ auto_load_sources = true
 table_promotion_mode = "staged"
 default_audit_severity = "error"
 default_audit_run_scope = "delta_and_final"
+unit_test_max_real_models = 10
+test_timeout = "30s"
+scenario_timeout = "15m"
 ```
 
 | Field | Default | Description |
@@ -585,6 +612,33 @@ default_audit_run_scope = "delta_and_final"
 | `table_promotion_mode` | adapter default | `staged` (CTAS to staging, audit, then promote) or `immediate` (CTAS directly to target, then audit) |
 | `default_audit_severity` | `error` | Default severity for audits: `warn` or `error` |
 | `default_audit_run_scope` | `delta_and_final` | Default run scope for audits: `final` or `delta_and_final` |
+| `unit_test_max_real_models` | `10` | Most real (unmocked) models one SQL unit test may execute; a larger test fails compilation. See [Unit test and scenario limits](#unit-test-and-scenario-limits). |
+| `test_timeout` | `30s` | Time limit for each SQL unit test, or `"disabled"` |
+| `scenario_timeout` | none | Time limit for each scenario, or `"disabled"` |
+
+### Unit test and scenario limits
+
+A SQL unit test runs the real SQL of every unmocked model between its mocks and the model under
+test as one warehouse statement. `unit_test_max_real_models` stops that statement from silently
+growing into a whole-chain integration query: a test that executes more real models fails
+compilation and names every real model, the dependency path that pulls it in, and the inputs to
+mock. See [Testing](/docs/concepts/testing#cost-guards) for an example.
+
+`test_timeout` bounds each test's warehouse work, measured from the test's first statement. The
+limit that applies to a test is, from highest precedence:
+
+1. `--test-timeout` on `sqb test` or `sqb build`
+2. `TEST(timeout "...")` in the test file
+3. `[targets.<target>.execution_limits] test_timeout`
+4. `[settings] test_timeout`, then the 30-second default
+
+`scenario_timeout` works the same way with `--scenario-timeout`, `SCENARIO(timeout "...")`,
+`[targets.<target>.execution_limits] scenario_timeout` and `[settings] scenario_timeout`; it has
+no default. At the limit, SQLBuild cancels the item's running statement, reports the item as
+`TIMEOUT` with the elapsed time, the limit, where the limit was set, the cancellation outcome and
+the query IDs it saw, and continues with independent items. Every value accepts a positive fixed
+duration such as `"45s"` or `"10m"`, or `"disabled"`. `sqlbuild_local.toml` accepts all three
+settings.
 
 ### Table promotion mode
 
