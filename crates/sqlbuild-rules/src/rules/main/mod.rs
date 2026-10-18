@@ -1,6 +1,7 @@
 pub mod assemble_catalogue;
 pub mod builtin_options;
 pub mod catalogue;
+pub mod compact_sql;
 pub mod evaluate;
 pub mod evaluate_project;
 pub mod fingerprint;

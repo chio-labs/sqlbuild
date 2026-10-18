@@ -2,10 +2,17 @@ use crate::configuration::main::setting_help::setting_help;
 use crate::configuration::main::toml_string_array::toml_string_array;
 use crate::constants::MIN_CUSTOM_RULE_TEST_CASES_KEY;
 use crate::constants::{
-    DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT, NEGATION_OPERATOR, REFERENCE_KIND,
-    SOURCE_REFERENCE_KIND, VIEW_MATERIALIZATION,
+    DECLARATION_DOMAIN_COMPONENTS, ENFORCED_CONTRACT, REFERENCE_KIND, SOURCE_REFERENCE_KIND,
+    VIEW_MATERIALIZATION,
 };
 use crate::models::{Declaration, EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
+use crate::query_facts::main::dependency_texts::dependency_texts;
+use crate::query_facts::main::model_shape::model_shape;
+use crate::query_facts::main::query_facts::query_facts;
+use crate::query_facts::models::{
+    CallKind, ColumnFact, ComparisonFacts, ItemFacts, ModelCall, ModelSource, QueryFacts,
+    RelationFacts, SelectFacts,
+};
 use crate::rules::_helpers::domain_layout::folder_layer_details;
 use crate::rules::_helpers::{
     contract_name_types, dynamic_contracts, explicit_output_types, model_layers, numeric_decisions,
@@ -16,23 +23,11 @@ use crate::rules::models::{
 };
 use globset::{Glob, GlobSetBuilder};
 use sqlbuild_core::identifier_text::main::is_lowercase_identifier::is_lowercase_identifier;
-use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
-use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
 use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy as rules_quote_policy;
-use sqlbuild_sqltext::sql_scan::main::rules_dialect::rules_dialect;
 use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
-use sqlparser::ast::{
-    BinaryOperator, Expr, GroupByExpr, JoinConstraint, JoinOperator, Query, Select, SelectItem,
-    SetExpr, Spanned, Statement, TableFactor, Value, Visit, Visitor,
-};
-use sqlparser::dialect::{Dialect, GenericDialect};
-use sqlparser::parser::{Parser, ParserError, ParserOptions};
-use sqlparser::tokenizer::{Token, Tokenizer};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::ops::ControlFlow;
 
 const MIXED_STAR_REMEDIATION: &str = "SELECT *, a, b mixes a passthrough star with derived columns. The * exemption permits a lone SELECT * only. Move a and b into an earlier CTE so they are computed upstream, leaving the final select a pure SELECT *. If you need those columns in the output, drop the * exemption and enumerate every column explicitly.";
-const RULES_PARSER_RECURSION_LIMIT: usize = 128;
 const NUMERIC_VALUE_LIST_REMEDIATION: &str = "Declare the values as a list or set CONSTANT and compare through [NOT] IN @const(\"<name>\"); only -1, 0, and 1 are self-explanatory.";
 
 #[derive(Clone)]
@@ -41,45 +36,28 @@ struct Position {
     column: u64,
 }
 
-#[derive(Default)]
-struct ComparisonFact {
-    position: Option<Position>,
-    sql: String,
-    equality: bool,
-    value_list: bool,
-    binary: bool,
-    output_name: Option<String>,
-    columns: BTreeSet<String>,
-    string_literals: Vec<String>,
-    numeric_literals: Vec<String>,
-    modified_columns: BTreeSet<ColumnFact>,
-    modified_string_literal: bool,
-    source_context: SourceContext,
-}
-
-#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
-struct ColumnFact {
-    name: String,
-    qualifier: Option<String>,
-}
-
 #[derive(Clone, Default)]
 struct SourceContext {
     relations: BTreeSet<String>,
     sole_relation: bool,
 }
 
-#[derive(Default)]
-struct SelectFacts {
-    comparisons: Vec<ComparisonFact>,
-}
-
-struct ParsedModel<'a> {
-    query: Query,
-    model: &'a Model,
+pub(crate) struct ParsedModel<'a> {
+    pub(crate) facts: &'a QueryFacts,
+    pub(crate) source: ModelSource<'a>,
+    pub(crate) model: &'a Model,
     classification: ModelClassification,
     authored_compact_sql: String,
     quote_policy: QuotePolicy,
+}
+
+impl ParsedModel<'_> {
+    fn position(&self, offset: Option<usize>) -> Option<Position> {
+        offset.map(|offset| {
+            let (line, column) = self.source.line_column(offset);
+            Position { line, column }
+        })
+    }
 }
 
 struct ModelClassification {
@@ -98,7 +76,6 @@ struct TestRuleEvaluation<'a> {
 
 struct CteClassification {
     name: String,
-    position: Position,
     dependency_import: bool,
     kind: CteKind,
 }
@@ -144,6 +121,7 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         selected,
         request,
         threshold_overrides,
+        shapes,
     } = request;
     let metadata = |code: &str| selected.get(code).copied();
     let faults = FaultCollector::default();
@@ -154,36 +132,21 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     if !requires_parsed_model(selected) {
         return Ok(faults.into_inner());
     }
-    let parser_sql = normalize_rules_sql(&request.dialect, &model.query_sql);
-    let mut dependencies = None;
-    let mut statements = parse_rule_statements_with_dependencies(
-        &parser_sql,
-        &request.dialect,
-        (parser_sql == model.query_sql).then_some(&mut dependencies),
-    )
-    .map_err(|error| format!("could not parse {} for rules: {error}", model.relative_path))?;
-    if statements.len() != 1 {
-        return Err(format!(
-            "could not parse {} for rules: expected one statement",
-            model.relative_path
-        ));
-    }
-    let statement = statements.remove(0);
-    let sqlparser::ast::Statement::Query(query) = statement else {
-        return Err(format!(
-            "could not parse {} for rules: expected a query",
-            model.relative_path
-        ));
-    };
-    let query = *query;
+    let unparsed =
+        |error: &str| format!("could not parse {} for rules: {error}", model.relative_path);
+    let shape =
+        model_shape(&model.query_sql, &request.dialect).map_err(|error| unparsed(&error))?;
+    let cell = shapes.entry(&request.dialect, &shape.sql);
+    let facts = cell
+        .get_or_init(|| query_facts(&shape.sql, &request.dialect))
+        .as_ref()
+        .map_err(|error| unparsed(error))?;
     let quote_policy = rules_quote_policy(&request.dialect);
-    let dependencies = match dependencies {
-        Some(dependencies) => dependencies,
-        None => dependency_calls(&model.query_sql, &request.dialect)?,
-    };
-    let classification = classify_model(&query, model, dependencies);
+    let source = ModelSource::new(&model.query_sql, &shape.offsets);
+    let classification = classify_model(facts, model, &shape.calls);
     let parsed = ParsedModel {
-        query,
+        facts,
+        source,
         model,
         classification,
         authored_compact_sql: numeric_decisions::compact_sql(&model.authored_sql, quote_policy),
@@ -229,7 +192,7 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
         typed_contract_columns::evaluate(parsed.model, rule, &faults);
     }
     if let Some(rule) = metadata("SQBRCONTRACT105") {
-        explicit_output_types::evaluate(&parsed.query, parsed.model, rule, &faults);
+        explicit_output_types::evaluate(&parsed, rule, &faults);
     }
     evaluate_naming_rules(&parsed, config, selected, &faults);
     evaluate_literal_rules(&parsed, selected, &faults);
@@ -242,316 +205,6 @@ fn evaluate_model_inner(request: ModelEvaluationRequest<'_>) -> Result<Vec<Fault
     });
 
     Ok(faults.into_inner())
-}
-
-pub(crate) fn evaluate_project_rules(request: &ProjectEvaluationRequest<'_>) -> Vec<Fault> {
-    let faults = FaultCollector::default();
-    if let Some(rule) = request.selected.get("SQBRGRAPH101") {
-        model_layers::internal_forward_refs(request, rule, &faults);
-    }
-    if let Some(rule) = request.selected.get("SQBRDECLARATION201") {
-        duplicate_enums(request.request, rule, &faults);
-    }
-    if let Some(rule) = request.selected.get("SQBRDECLARATION301") {
-        declaration_domain_placement(request.request, &request.request.config, rule, &faults);
-    }
-    if let Some(rule) = request.selected.get("SQBRTEST301") {
-        custom_rule_test_coverage(
-            request.request,
-            &request.request.config,
-            (request.selected, rule),
-            &faults,
-        );
-    }
-    faults.into_inner()
-}
-
-fn requires_parsed_model(selected: &BTreeMap<String, &RuleMetadata>) -> bool {
-    selected.values().any(|rule| requires_model_query(rule))
-}
-
-fn requires_model_query(rule: &RuleMetadata) -> bool {
-    !rule.custom
-        && (rule.code.starts_with("SQBRMODEL")
-            || rule.code.starts_with("SQBRCONTRACT")
-            || matches!(
-                rule.code.as_str(),
-                "SQBRGRAPH102"
-                    | "SQBRPROJECT101"
-                    | "SQBRPROJECT102"
-                    | "SQBRPROJECT103"
-                    | "SQBRPROJECT104"
-                    | "SQBRPROJECT105"
-                    | "SQBRPROJECT106"
-                    | "SQBRDECLARATION101"
-                    | "SQBRDECLARATION102"
-                    | "SQBRTEST201"
-                    | "SQBRTEST202"
-            ))
-}
-
-pub(super) fn parse_rule_statements(
-    sql: &str,
-    dialect_name: &str,
-) -> Result<Vec<Statement>, ParserError> {
-    parse_rule_statements_with_dependencies(sql, dialect_name, None)
-}
-
-fn parse_rule_statements_with_dependencies(
-    sql: &str,
-    dialect_name: &str,
-    dependencies: Option<&mut Option<Vec<String>>>,
-) -> Result<Vec<Statement>, ParserError> {
-    let dialect = rules_dialect(dialect_name);
-    match parse_with_dialect(sql, dialect.as_ref(), dependencies) {
-        Ok(statements) => Ok(statements),
-        Err(primary) if !dialect_name.eq_ignore_ascii_case("generic") => {
-            let fallback_sql = normalize_generic_fallback(sql);
-            parse_with_dialect(&fallback_sql, &GenericDialect {}, None).map_err(|fallback| {
-                ParserError::ParserError(format!(
-                    "{primary}; generic fallback also failed: {fallback}"
-                ))
-            })
-        }
-        Err(error) => Err(error),
-    }
-}
-
-fn normalize_generic_fallback(sql: &str) -> String {
-    let policy = rules_quote_policy("generic");
-    let mut bytes = sql.as_bytes().to_vec();
-    let mut index = 0;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        let next = bytes.get(index + 1).copied();
-        match non_code_end(&bytes, index, policy) {
-            Ok(Some(end)) => {
-                index = end;
-                continue;
-            }
-            Ok(None) => {}
-            Err(_) => break,
-        }
-        if byte == b'-' && next == Some(b'>') {
-            bytes[index] = b',';
-            bytes[index + 1] = b' ';
-            index += 2;
-            continue;
-        } else if byte == b':'
-            && bytes.get(index.wrapping_sub(1)) != Some(&b':')
-            && next != Some(b':')
-        {
-            bytes[index] = b'.';
-        }
-        index += 1;
-    }
-    String::from_utf8(bytes).unwrap_or_else(|_| sql.to_owned())
-}
-
-fn parse_with_dialect(
-    sql: &str,
-    dialect: &dyn Dialect,
-    dependencies: Option<&mut Option<Vec<String>>>,
-) -> Result<Vec<Statement>, ParserError> {
-    let tokens = Tokenizer::new(dialect, sql).tokenize_with_location()?;
-    if let Some(dependencies) = dependencies {
-        *dependencies = Some(dependency_calls_from_tokens(
-            tokens.iter().map(|token| &token.token),
-        ));
-    }
-    let mut parser = Parser::new(dialect)
-        .with_options(ParserOptions::new().with_trailing_commas(true))
-        .with_recursion_limit(RULES_PARSER_RECURSION_LIMIT)
-        .with_tokens_with_locations(tokens);
-    parser.parse_statements()
-}
-
-pub(crate) fn normalize_rules_sql(dialect: &str, sql: &str) -> String {
-    let policy = rules_quote_policy(dialect);
-    let sql = normalize_table_function_calls(sql, policy);
-    if !dialect.eq_ignore_ascii_case("snowflake") {
-        return sql;
-    }
-    let mut bytes = sql.as_bytes().to_vec();
-    let mut index = 0;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        match non_code_end(&bytes, index, policy) {
-            Ok(Some(end)) => {
-                index = end;
-                continue;
-            }
-            Ok(None) => {}
-            Err(_) => break,
-        }
-        if byte == b',' && clause_follows(&bytes, index + 1) {
-            bytes[index] = b' ';
-            index += 1;
-            continue;
-        }
-        if byte.is_ascii_alphabetic() {
-            let start = index;
-            while index < bytes.len()
-                && (bytes[index].is_ascii_alphanumeric() || bytes[index] == b'_')
-            {
-                index += 1;
-            }
-            let word = &sql.as_bytes()[start..index];
-            let mut following = index;
-            while bytes.get(following).is_some_and(u8::is_ascii_whitespace) {
-                following += 1;
-            }
-            if word.eq_ignore_ascii_case(b"EXCLUDE")
-                && is_star_modifier_before(sql.as_bytes(), start)
-                && bytes.get(following) == Some(&b'(')
-                && let Ok(close) = matching_paren(&bytes, following, policy)
-            {
-                blank_preserving_newlines(&mut bytes[start..=close]);
-                index = close + 1;
-                continue;
-            }
-            if word.eq_ignore_ascii_case(b"ARRAY")
-                && is_cast_type_before(sql.as_bytes(), start)
-                && bytes.get(following) == Some(&b'(')
-                && let Ok(close) = matching_paren(&bytes, following, policy)
-            {
-                bytes[start..index].copy_from_slice(b"TEXT ");
-                blank_preserving_newlines(&mut bytes[following..=close]);
-                index = close + 1;
-                continue;
-            }
-            let typed_lambda = bytes.get(following) == Some(&b'-')
-                && bytes.get(following + 1) == Some(&b'>')
-                && is_lambda_parameter_before(sql.as_bytes(), start)
-                && is_lambda_parameter_type(word);
-            if typed_lambda {
-                bytes[start..index].fill(b' ');
-            }
-            continue;
-        }
-        index += 1;
-    }
-    String::from_utf8(bytes).unwrap_or(sql)
-}
-
-fn normalize_table_function_calls(sql: &str, policy: QuotePolicy) -> String {
-    const TABLE_FUNCTION: &[u8] = b"__table_fn(";
-    let mut bytes = sql.as_bytes().to_vec();
-    let mut cursor = 0;
-    while cursor + TABLE_FUNCTION.len() <= bytes.len() {
-        let Some(token_start) = find_token_outside_syntax(&bytes, TABLE_FUNCTION, cursor, policy)
-        else {
-            break;
-        };
-        let open = token_start + TABLE_FUNCTION.len() - 1;
-        let Ok(close) = matching_paren(&bytes, open, policy) else {
-            break;
-        };
-        let mut next = close + 1;
-        while bytes.get(next).is_some_and(u8::is_ascii_whitespace) {
-            next += 1;
-        }
-        if bytes.get(next) == Some(&b'(') {
-            bytes[close] = b',';
-            bytes[next] = b' ';
-        }
-        cursor = next.saturating_add(1);
-    }
-    String::from_utf8(bytes).unwrap_or_else(|_| sql.to_owned())
-}
-
-fn blank_preserving_newlines(sql: &mut [u8]) {
-    for byte in sql {
-        if !matches!(*byte, b'\n' | b'\r') {
-            *byte = b' ';
-        }
-    }
-}
-
-fn find_token_outside_syntax(
-    sql: &[u8],
-    token: &[u8],
-    start: usize,
-    policy: QuotePolicy,
-) -> Option<usize> {
-    let mut index = start;
-    while index + token.len() <= sql.len() {
-        match non_code_end(sql, index, policy) {
-            Ok(Some(end)) => {
-                index = end;
-                continue;
-            }
-            Ok(None) => {}
-            Err(_) => return None,
-        }
-        if sql[index..index + token.len()].eq_ignore_ascii_case(token) {
-            return Some(index);
-        }
-        index += 1;
-    }
-    None
-}
-
-fn clause_follows(sql: &[u8], start: usize) -> bool {
-    let mut cursor = start;
-    while sql.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-        cursor += 1;
-    }
-    [
-        "FROM", "WHERE", "GROUP", "HAVING", "QUALIFY", "ORDER", "LIMIT",
-    ]
-    .iter()
-    .any(|keyword| {
-        let bytes = keyword.as_bytes();
-        sql.get(cursor..cursor + bytes.len())
-            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(bytes))
-            && sql
-                .get(cursor + bytes.len())
-                .is_none_or(|next| !next.is_ascii_alphanumeric() && *next != b'_')
-    })
-}
-
-fn is_star_modifier_before(sql: &[u8], modifier_start: usize) -> bool {
-    let mut cursor = modifier_start;
-    while cursor > 0 && sql[cursor - 1].is_ascii_whitespace() {
-        cursor -= 1;
-    }
-    cursor > 0 && sql[cursor - 1] == b'*'
-}
-
-fn is_cast_type_before(sql: &[u8], type_start: usize) -> bool {
-    const AS_KEYWORD_LENGTH: usize = 2;
-    const BYTE_BEFORE_AS_OFFSET: usize = 3;
-    let mut cursor = type_start;
-    while cursor > 0 && sql[cursor - 1].is_ascii_whitespace() {
-        cursor -= 1;
-    }
-    cursor >= AS_KEYWORD_LENGTH
-        && sql[cursor - AS_KEYWORD_LENGTH..cursor].eq_ignore_ascii_case(b"AS")
-        && (cursor == AS_KEYWORD_LENGTH
-            || !sql[cursor - BYTE_BEFORE_AS_OFFSET].is_ascii_alphanumeric())
-}
-
-fn is_lambda_parameter_before(sql: &[u8], type_start: usize) -> bool {
-    let mut cursor = type_start;
-    while cursor > 0 && sql[cursor - 1].is_ascii_whitespace() {
-        cursor -= 1;
-    }
-    cursor > 0 && (sql[cursor - 1].is_ascii_alphanumeric() || sql[cursor - 1] == b'_')
-}
-
-fn is_lambda_parameter_type(word: &[u8]) -> bool {
-    [
-        b"INT".as_slice(),
-        b"INTEGER".as_slice(),
-        b"STRING".as_slice(),
-        b"VARCHAR".as_slice(),
-        b"BOOLEAN".as_slice(),
-        b"FLOAT".as_slice(),
-        b"DOUBLE".as_slice(),
-    ]
-    .iter()
-    .any(|candidate| word.eq_ignore_ascii_case(candidate))
 }
 
 fn fault(model: &Model, rule: &RuleMetadata, position: Option<&Position>) -> Fault {
@@ -604,128 +257,117 @@ pub(super) fn path_fault(
     }
 }
 
-fn position<T: Spanned>(node: &T) -> Position {
-    let start = node.span().start;
-    Position {
-        line: start.line,
-        column: start.column,
+pub(crate) fn evaluate_project_rules(request: &ProjectEvaluationRequest<'_>) -> Vec<Fault> {
+    let faults = FaultCollector::default();
+    if let Some(rule) = request.selected.get("SQBRGRAPH101") {
+        model_layers::internal_forward_refs(request, rule, &faults);
     }
-}
-
-fn location_position(location: sqlparser::tokenizer::Location) -> Position {
-    Position {
-        line: location.line,
-        column: location.column,
+    if let Some(rule) = request.selected.get("SQBRDECLARATION201") {
+        duplicate_enums(request.request, rule, &faults);
     }
-}
-
-pub(super) fn root_select(query: &Query) -> Option<&Select> {
-    query.body.as_select()
-}
-
-pub(super) fn top_ctes(query: &Query) -> &[sqlparser::ast::Cte] {
-    query
-        .with
-        .as_ref()
-        .map_or(&[], |with| with.cte_tables.as_slice())
-}
-
-pub(super) fn group_by_empty(group: &GroupByExpr) -> bool {
-    matches!(group, GroupByExpr::Expressions(values, _) if values.is_empty())
-}
-
-fn direct_projection(item: &SelectItem, allow_star: bool) -> bool {
-    match item {
-        SelectItem::UnnamedExpr(Expr::Identifier(_) | Expr::CompoundIdentifier(_)) => true,
-        SelectItem::ExprWithAlias { expr, .. } => {
-            matches!(expr, Expr::Identifier(_) | Expr::CompoundIdentifier(_))
-        }
-        SelectItem::Wildcard(_) | SelectItem::QualifiedWildcard(_, _) => allow_star,
-        _ => false,
+    if let Some(rule) = request.selected.get("SQBRDECLARATION301") {
+        declaration_domain_placement(request.request, &request.request.config, rule, &faults);
     }
+    if let Some(rule) = request.selected.get("SQBRTEST301") {
+        custom_rule_test_coverage(
+            request.request,
+            &request.request.config,
+            (request.selected, rule),
+            &faults,
+        );
+    }
+    faults.into_inner()
 }
 
-fn plain_projection(query: &Query, allow_star: bool) -> bool {
-    if query.with.is_some() || query.order_by.is_some() || query.limit_clause.is_some() {
+fn requires_parsed_model(selected: &BTreeMap<String, &RuleMetadata>) -> bool {
+    selected.values().any(|rule| requires_model_query(rule))
+}
+
+fn requires_model_query(rule: &RuleMetadata) -> bool {
+    !rule.custom
+        && (rule.code.starts_with("SQBRMODEL")
+            || rule.code.starts_with("SQBRCONTRACT")
+            || matches!(
+                rule.code.as_str(),
+                "SQBRGRAPH102"
+                    | "SQBRPROJECT101"
+                    | "SQBRPROJECT102"
+                    | "SQBRPROJECT103"
+                    | "SQBRPROJECT104"
+                    | "SQBRPROJECT105"
+                    | "SQBRPROJECT106"
+                    | "SQBRDECLARATION101"
+                    | "SQBRDECLARATION102"
+                    | "SQBRTEST201"
+                    | "SQBRTEST202"
+            ))
+}
+
+pub(super) fn plain_select(select: &SelectFacts, allow_star: bool) -> bool {
+    if select.items.is_empty() || select.filtered || !select.joins.is_empty() {
         return false;
     }
-    let Some(select) = root_select(query) else {
-        return false;
-    };
-    plain_select(select, allow_star)
-}
-
-pub(super) fn plain_select(select: &Select, allow_star: bool) -> bool {
-    if select.projection.is_empty()
-        || select.selection.is_some()
-        || select.having.is_some()
-        || select.qualify.is_some()
-        || !group_by_empty(&select.group_by)
-        || select.from.iter().any(|source| !source.joins.is_empty())
-    {
-        return false;
-    }
-    if select.projection.len() == 1
-        && matches!(
-            select.projection[0],
-            SelectItem::Wildcard(_) | SelectItem::QualifiedWildcard(_, _)
-        )
-    {
+    if select.items.len() == 1 && matches!(select.items[0], ItemFacts::Star { .. }) {
         return allow_star;
     }
-    select
-        .projection
-        .iter()
-        .all(|item| direct_projection(item, false))
+    select.items.iter().all(
+        |item| matches!(item, ItemFacts::Expression(expression) if expression.direct_projection),
+    )
 }
 
-pub(super) fn dependency_name(factor: &TableFactor) -> Option<String> {
-    let TableFactor::Table {
-        name,
-        args: Some(_),
-        ..
-    } = factor
-    else {
-        return None;
-    };
-    let value = name.to_string().to_ascii_lowercase();
-    matches!(value.as_str(), "__ref" | "__source").then_some(value)
-}
-
-fn dependency_import(query: &Query) -> bool {
-    let Some(select) = root_select(query) else {
+fn plain_projection(query: &QueryFacts, allow_star: bool) -> bool {
+    if !query.ctes.is_empty() || query.has_order_by || query.has_limit {
         return false;
-    };
-    select.from.len() == 1
-        && select.from[0].joins.is_empty()
-        && dependency_name(&select.from[0].relation).is_some()
-        && plain_projection(query, true)
+    }
+    query
+        .root_select()
+        .is_some_and(|select| plain_select(select, allow_star))
 }
 
-pub(super) fn sole_table_name(query: &Query) -> Option<String> {
-    let select = root_select(query)?;
-    if select.from.len() != 1 || !select.from[0].joins.is_empty() {
+fn dependency_kind(relation: &RelationFacts) -> Option<CallKind> {
+    match relation {
+        RelationFacts::Call { kind, .. } if *kind != CallKind::Other => Some(*kind),
+        _ => None,
+    }
+}
+
+pub(super) fn reads_dependency(select: &SelectFacts) -> bool {
+    select.from.len() == 1 && select.joins.is_empty() && dependency_kind(&select.from[0]).is_some()
+}
+
+fn dependency_import(query: &QueryFacts) -> bool {
+    query.root_select().is_some_and(reads_dependency) && plain_projection(query, true)
+}
+
+pub(super) fn sole_table_name(query: &QueryFacts) -> Option<&str> {
+    let select = query.root_select()?;
+    if select.from.len() != 1 || !select.joins.is_empty() {
         return None;
     }
-    let TableFactor::Table {
-        name, args: None, ..
-    } = &select.from[0].relation
-    else {
-        return None;
-    };
-    Some(name.to_string())
+    match &select.from[0] {
+        RelationFacts::Table { display, .. } => Some(display),
+        _ => None,
+    }
 }
 
-fn classify_model(
-    query: &Query,
-    model: &Model,
-    authored_dependencies: Vec<String>,
-) -> ModelClassification {
+fn call_texts(calls: &[ModelCall], indexes: &[usize]) -> Vec<String> {
+    let mut texts: Vec<String> = Vec::with_capacity(indexes.len());
+    for index in indexes {
+        if let Some(call) = calls.get(*index) {
+            texts.push(call.text.clone());
+        }
+    }
+    texts
+}
+
+fn classify_model(query: &QueryFacts, model: &Model, calls: &[ModelCall]) -> ModelClassification {
+    let authored_dependencies = dependency_texts(calls);
     let mut logical_seen = false;
-    let ctes = top_ctes(query)
+    let ctes = query
+        .ctes
         .iter()
         .map(|cte| {
-            let dependencies = query_dependency_calls(&cte.query);
+            let dependencies: Vec<String> = call_texts(calls, &cte.dependency_calls);
             let dependency_import = dependency_import(&cte.query);
             let kind = if dependencies.is_empty() {
                 logical_seen = true;
@@ -747,8 +389,7 @@ fn classify_model(
                 }
             };
             CteClassification {
-                name: cte.alias.name.value.clone(),
-                position: location_position(cte.alias.name.span.start),
+                name: cte.name.clone(),
                 dependency_import,
                 kind,
             }
@@ -760,8 +401,10 @@ fn classify_model(
         && ctes.len() == 1
         && ctes.first().is_some_and(|cte| {
             cte.dependency_import
-                && sole_table_name(query).as_deref() == Some(cte.name.as_str())
-                && root_select(query).is_some_and(|select| plain_select(select, true))
+                && sole_table_name(query) == Some(cte.name.as_str())
+                && query
+                    .root_select()
+                    .is_some_and(|select| plain_select(select, true))
         });
 
     ModelClassification {
@@ -771,103 +414,9 @@ fn classify_model(
     }
 }
 
-fn dependency_calls(source: &str, dialect_name: &str) -> Result<Vec<String>, String> {
-    let dialect = rules_dialect(dialect_name);
-    let tokens = Tokenizer::new(dialect.as_ref(), source)
-        .tokenize()
-        .map_err(|error| format!("could not tokenize model dependencies: {error}"))?;
-    Ok(dependency_calls_from_tokens(tokens.iter()))
-}
-
-fn dependency_calls_from_tokens<'a>(tokens: impl Iterator<Item = &'a Token>) -> Vec<String> {
-    let tokens = tokens
-        .filter(|token| !matches!(token, Token::Whitespace(_)))
-        .collect::<Vec<_>>();
-    let mut calls: Vec<String> = Vec::new();
-    let mut index = 0_usize;
-    while index < tokens.len() {
-        let Token::Word(word) = tokens[index] else {
-            index += 1;
-            continue;
-        };
-        if word.quote_style.is_some()
-            || !matches!(
-                word.value.to_ascii_lowercase().as_str(),
-                "__ref" | "__source"
-            )
-            || !matches!(tokens.get(index + 1), Some(Token::LParen))
-        {
-            index += 1;
-            continue;
-        }
-
-        let mut call = word.value.to_ascii_lowercase();
-        let mut depth = 0_usize;
-        let mut cursor = index + 1;
-        while cursor < tokens.len() {
-            let token = tokens[cursor];
-            call.push_str(&token.to_string().to_ascii_lowercase());
-            match token {
-                Token::LParen => depth += 1,
-                Token::RParen => {
-                    depth -= 1;
-                    if depth == 0 {
-                        calls.push(call);
-                        cursor += 1;
-                        break;
-                    }
-                }
-                _ => {}
-            }
-            cursor += 1;
-        }
-        index = cursor;
-    }
-    calls
-}
-
-fn query_dependency_calls(query: &Query) -> Vec<String> {
-    #[derive(Default)]
-    struct Dependencies {
-        calls: Vec<String>,
-    }
-
-    impl Visitor for Dependencies {
-        type Break = ();
-
-        fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<Self::Break> {
-            let TableFactor::Table {
-                name,
-                args: Some(arguments),
-                ..
-            } = factor
-            else {
-                return ControlFlow::Continue(());
-            };
-            let dependency = name.to_string().to_ascii_lowercase();
-            if !matches!(dependency.as_str(), "__ref" | "__source") {
-                return ControlFlow::Continue(());
-            }
-            let arguments = arguments
-                .args
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-                .to_ascii_lowercase();
-            self.calls.push(format!("{dependency}({arguments})"));
-            ControlFlow::Continue(())
-        }
-    }
-
-    let mut dependencies = Dependencies::default();
-    let _ = query.visit(&mut dependencies);
-    dependencies.calls
-}
-
 fn import_ctes(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
     let mut imported: Vec<String> = Vec::new();
-    for cte in &parsed.classification.ctes {
+    for (cte, facts) in parsed.classification.ctes.iter().zip(&parsed.facts.ctes) {
         let CteKind::Import {
             dependencies,
             rejections,
@@ -878,6 +427,7 @@ fn import_ctes(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultColl
         if dependencies.len() == 1 {
             imported.extend(dependencies.iter().cloned());
         }
+        let position = parsed.position(facts.name_start);
         for rejection in rejections {
             let message = match rejection {
                 ImportRejection::MultipleDependencies => {
@@ -893,7 +443,7 @@ fn import_ctes(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultColl
             faults.push(custom_fault!(
                 parsed.model,
                 rule,
-                Some(&cte.position),
+                position.as_ref(),
                 message,
                 None,
             ));
@@ -937,32 +487,29 @@ fn select_star(
         .build()
         .map_err(|error| error.to_string())?
         .is_match(&parsed.model.relative_path);
-    let mut import_positions: HashSet<(u64, u64)> = HashSet::new();
-    for (cte, classified) in top_ctes(&parsed.query)
-        .iter()
-        .zip(&parsed.classification.ctes)
-    {
+    let mut import_queries: Vec<&QueryFacts> = Vec::new();
+    for (cte, classified) in parsed.facts.ctes.iter().zip(&parsed.classification.ctes) {
         if classified.dependency_import {
-            for value in stars_in_query(&cte.query) {
-                import_positions.insert((value.line, value.column));
-            }
+            import_queries.extend(cte.query.all_queries());
         }
     }
-    for query in all_queries(&parsed.query) {
-        let Some(select) = root_select(query) else {
+    for query in parsed.facts.all_queries() {
+        let Some(select) = query.root_select() else {
             continue;
         };
+        if import_queries
+            .iter()
+            .any(|imported| std::ptr::eq(*imported, query))
+        {
+            continue;
+        }
         let dynamic_output_star =
-            dynamic_contracts::allows_output_star(query, &parsed.query, parsed.model);
-        let stars = stars_in_select(select);
-        for at in stars {
-            if import_positions.contains(&(at.line, at.column)) {
-                continue;
-            }
+            dynamic_contracts::allows_output_star(query, parsed.facts, parsed.model);
+        for star in stars_in_select(select) {
             if dynamic_output_star {
                 continue;
             }
-            let lone = select.projection.len() == 1;
+            let lone = select.items.len() == 1;
             if allowed && lone {
                 continue;
             }
@@ -970,7 +517,7 @@ fn select_star(
             faults.push(custom_fault!(
                 parsed.model,
                 rule,
-                Some(&at),
+                parsed.position(star).as_ref(),
                 rule.message.clone(),
                 remediation,
             ));
@@ -1036,42 +583,28 @@ fn view_marker(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultColl
 }
 
 fn raw_qualified_tables(parsed: &ParsedModel<'_>, rule: &RuleMetadata, faults: &FaultCollector) {
-    for query in all_queries(&parsed.query) {
-        let Some(select) = root_select(query) else {
+    for query in parsed.facts.all_queries() {
+        let Some(select) = query.root_select() else {
             continue;
         };
-        for source in &select.from {
-            qualified_table_factor(parsed.model, &source.relation, rule, faults);
-            for join in &source.joins {
-                qualified_table_factor(parsed.model, &join.relation, rule, faults);
+        for relation in select.from.iter().chain(&select.joins) {
+            if let RelationFacts::Table {
+                display,
+                parts,
+                start,
+                ..
+            } = relation
+                && *parts > 1
+            {
+                faults.push(custom_fault!(
+                    parsed.model,
+                    rule,
+                    parsed.position(*start).as_ref(),
+                    format!("raw qualified table {display:?} bypasses the SQLBuild graph"),
+                    None,
+                ));
             }
         }
-    }
-}
-
-fn qualified_table_factor(
-    model: &Model,
-    factor: &TableFactor,
-    rule: &RuleMetadata,
-    faults: &FaultCollector,
-) {
-    let TableFactor::Table {
-        name, args: None, ..
-    } = factor
-    else {
-        return;
-    };
-    if name.0.len() > 1 {
-        faults.push(custom_fault!(
-            model,
-            rule,
-            Some(&position(name)),
-            format!(
-                "raw qualified table {:?} bypasses the SQLBuild graph",
-                name.to_string()
-            ),
-            None,
-        ));
     }
 }
 
@@ -1295,54 +828,87 @@ fn evaluate_literal_rules(
     selected: &BTreeMap<String, &RuleMetadata>,
     faults: &FaultCollector,
 ) {
-    let facts = select_facts(&parsed.query);
-    for comparison in facts.into_iter().flat_map(|select| select.comparisons) {
-        if comparison.binary
-            && let Some(rule) = selected.get("SQBRDECLARATION101")
-        {
-            let enum_column = comparison
-                .columns
-                .iter()
-                .any(|name| parsed.model.enum_columns.contains(name));
-            let bare_string = comparison
-                .string_literals
-                .iter()
-                .any(|literal| parsed.model.authored_sql.contains(literal));
-            let modified_controlled_column = comparison.modified_columns.iter().any(|column| {
-                parsed.model.enum_columns.contains(&column.name)
-                    && !column.qualifier.as_ref().is_some_and(|qualifier| {
-                        comparison.source_context.relations.contains(qualifier)
-                    })
-                    && !(column.qualifier.is_none() && comparison.source_context.sole_relation)
-            });
-            if enum_column
-                && (bare_string || modified_controlled_column || comparison.modified_string_literal)
-            {
-                faults.push(fault(parsed.model, rule, comparison.position.as_ref()));
-            }
+    let source_imports = source_import_names(parsed.facts);
+    for query in parsed.facts.all_queries() {
+        let Some(select) = query.root_select() else {
+            continue;
+        };
+        let source_context = select_source_context(select, &source_imports);
+        for comparison in &select.comparisons {
+            evaluate_comparison(parsed, selected, (comparison, &source_context), faults);
         }
-        if let Some(rule) = selected.get("SQBRDECLARATION102") {
-            let magic = comparison.numeric_literals.iter().any(|literal| {
-                numeric_decisions::is_authored_decision(numeric_decisions::AuthoredDecision {
-                    authored_compact_sql: &parsed.authored_compact_sql,
-                    comparison_sql: &comparison.sql,
-                    equality: comparison.equality,
-                    output_name: comparison.output_name.as_deref(),
-                    literal,
-                    quote_policy: parsed.quote_policy,
-                })
-            });
-            if magic {
-                faults.push(custom_fault!(
-                    parsed.model,
-                    rule,
-                    comparison.position.as_ref(),
-                    format!("non-canonical numeric comparison: {}", comparison.sql),
-                    comparison
-                        .value_list
-                        .then(|| NUMERIC_VALUE_LIST_REMEDIATION.to_owned()),
-                ));
-            }
+    }
+}
+
+fn evaluate_comparison(
+    parsed: &ParsedModel<'_>,
+    selected: &BTreeMap<String, &RuleMetadata>,
+    (comparison, source_context): (&ComparisonFacts, &SourceContext),
+    faults: &FaultCollector,
+) {
+    let position = parsed.position(comparison.span.and_then(|span| span.position));
+    let sql = comparison
+        .span
+        .map_or(comparison.generated_sql.as_str(), |span| {
+            parsed.source.text(span.start, span.end)
+        });
+    if comparison.binary
+        && let Some(rule) = selected.get("SQBRDECLARATION101")
+    {
+        let enum_column = comparison
+            .columns
+            .iter()
+            .any(|name| parsed.model.enum_columns.contains(name));
+        let bare_string = comparison.string_literals.iter().any(|literal| {
+            let text = literal
+                .range
+                .map_or(literal.generated.as_str(), |(start, end)| {
+                    parsed.source.text(start, end)
+                });
+            parsed.model.authored_sql.contains(text)
+        });
+        let modified_controlled_column =
+            comparison
+                .modified_columns
+                .iter()
+                .any(|column: &ColumnFact| {
+                    parsed.model.enum_columns.contains(&column.name)
+                        && !column
+                            .qualifier
+                            .as_ref()
+                            .is_some_and(|qualifier| source_context.relations.contains(qualifier))
+                        && !(column.qualifier.is_none() && source_context.sole_relation)
+                });
+        if enum_column
+            && (bare_string || modified_controlled_column || comparison.modified_string_literal)
+        {
+            faults.push(fault(parsed.model, rule, position.as_ref()));
+        }
+    }
+    if let Some(rule) = selected.get("SQBRDECLARATION102") {
+        let magic = comparison.numeric_literals.iter().any(|literal| {
+            numeric_decisions::is_authored_decision(numeric_decisions::AuthoredDecision {
+                authored_compact_sql: &parsed.authored_compact_sql,
+                comparison_sql: sql,
+                equality: comparison.equality,
+                output_name: comparison.output_name.as_deref(),
+                literal,
+                quote_policy: parsed.quote_policy,
+            })
+        });
+        if magic {
+            faults.push(custom_fault!(
+                parsed.model,
+                rule,
+                position.as_ref(),
+                format!(
+                    "non-canonical numeric comparison: {}",
+                    numeric_decisions::single_spaced(sql, parsed.quote_policy)
+                ),
+                comparison
+                    .value_list
+                    .then(|| NUMERIC_VALUE_LIST_REMEDIATION.to_owned()),
+            ));
         }
     }
 }
@@ -1544,427 +1110,67 @@ fn custom_rule_test_coverage(
     }
 }
 
-fn all_queries(root: &Query) -> Vec<&Query> {
-    fn collect_query<'a>(query: &'a Query, values: &mut Vec<&'a Query>) {
-        values.push(query);
-        if let Some(with) = &query.with {
-            for cte in &with.cte_tables {
-                collect_query(&cte.query, values);
-            }
-        }
-        collect_set_expr(&query.body, values);
-    }
-    fn collect_set_expr<'a>(body: &'a SetExpr, values: &mut Vec<&'a Query>) {
-        match body {
-            SetExpr::Query(query) => collect_query(query, values),
-            SetExpr::SetOperation { left, right, .. } => {
-                collect_set_expr(left, values);
-                collect_set_expr(right, values);
-            }
-            _ => {}
-        }
-    }
-    let mut values: Vec<&Query> = Vec::new();
-    collect_query(root, &mut values);
-    values
-}
-
-fn stars_in_query(query: &Query) -> Vec<Position> {
-    all_queries(query)
-        .into_iter()
-        .filter_map(root_select)
-        .flat_map(stars_in_select)
-        .collect()
-}
-
-fn stars_in_select(select: &Select) -> Vec<Position> {
+fn stars_in_select(select: &SelectFacts) -> Vec<Option<usize>> {
     select
-        .projection
+        .items
         .iter()
         .filter_map(|item| match item {
-            SelectItem::Wildcard(options) | SelectItem::QualifiedWildcard(_, options) => {
-                Some(location_position(options.wildcard_token.0.span.start))
-            }
-            _ => None,
+            ItemFacts::Star { star_start, .. } => Some(*star_start),
+            ItemFacts::Expression(_) => None,
         })
         .collect()
 }
 
-fn select_facts(query: &Query) -> Vec<SelectFacts> {
-    let source_imports = source_import_names(query);
-    all_queries(query)
-        .into_iter()
-        .filter_map(root_select)
-        .map(|select| {
-            let source_context = select_source_context(select, &source_imports);
-            let mut result = SelectFacts::default();
-            for source in &select.from {
-                for join in &source.joins {
-                    if let Some(JoinConstraint::On(expr)) = join_constraint(&join.join_operator) {
-                        comparison_facts(expr, &source_context, &mut result.comparisons);
-                    }
-                }
-            }
-            for item in &select.projection {
-                match item {
-                    SelectItem::UnnamedExpr(expression) => {
-                        case_comparison_facts(
-                            expression,
-                            None,
-                            &source_context,
-                            &mut result.comparisons,
-                        );
-                    }
-                    SelectItem::ExprWithAlias {
-                        expr: expression,
-                        alias,
-                    } => {
-                        case_comparison_facts(
-                            expression,
-                            Some(&alias.value),
-                            &source_context,
-                            &mut result.comparisons,
-                        );
-                    }
-                    SelectItem::QualifiedWildcard(_, _) | SelectItem::Wildcard(_) => {}
-                }
-            }
-            for expression in [
-                select.selection.as_ref(),
-                select.having.as_ref(),
-                select.qualify.as_ref(),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                comparison_facts(expression, &source_context, &mut result.comparisons);
-            }
-            result
-        })
-        .collect()
-}
-
-fn source_import_names(query: &Query) -> BTreeSet<String> {
-    top_ctes(query)
+fn source_import_names(query: &QueryFacts) -> BTreeSet<String> {
+    query
+        .ctes
         .iter()
         .filter(|cte| {
             dependency_import(&cte.query)
-                && root_select(&cte.query).is_some_and(|select| {
-                    select.from.len() == 1
-                        && select.from[0].joins.is_empty()
-                        && dependency_name(&select.from[0].relation).as_deref() == Some("__source")
+                && cte.query.root_select().is_some_and(|select| {
+                    reads_dependency(select)
+                        && dependency_kind(&select.from[0]) == Some(CallKind::Source)
                 })
         })
-        .map(|cte| cte.alias.name.value.to_ascii_lowercase())
+        .map(|cte| cte.name.to_ascii_lowercase())
         .collect()
 }
 
-fn select_source_context(select: &Select, source_imports: &BTreeSet<String>) -> SourceContext {
-    let mut relations: BTreeSet<String> = BTreeSet::new();
-    for source in &select.from {
-        if let Some(name) = source_relation_name(&source.relation, source_imports) {
-            relations.insert(name);
-        }
-        for join in &source.joins {
-            if let Some(name) = source_relation_name(&join.relation, source_imports) {
-                relations.insert(name);
-            }
-        }
-    }
+fn select_source_context(select: &SelectFacts, source_imports: &BTreeSet<String>) -> SourceContext {
+    let relations: BTreeSet<String> = select
+        .from
+        .iter()
+        .chain(&select.joins)
+        .filter_map(|relation| source_relation_name(relation, source_imports))
+        .collect();
     let sole_relation = select.from.len() == 1
-        && select.from[0].joins.is_empty()
-        && source_relation_name(&select.from[0].relation, source_imports).is_some();
+        && select.joins.is_empty()
+        && source_relation_name(&select.from[0], source_imports).is_some();
     SourceContext {
         relations,
         sole_relation,
     }
 }
 
-fn source_relation_name(factor: &TableFactor, source_imports: &BTreeSet<String>) -> Option<String> {
-    let TableFactor::Table {
-        name, args, alias, ..
-    } = factor
-    else {
-        return None;
-    };
-    let relation_name = name.0.last()?.as_ident()?.value.to_ascii_lowercase();
-    if args.is_none() && !source_imports.contains(&relation_name) {
-        return None;
-    }
-    if args.is_some() && dependency_name(factor).as_deref() != Some("__source") {
-        return None;
-    }
-    Some(
-        alias
-            .as_ref()
-            .map_or(relation_name, |value| value.name.value.to_ascii_lowercase()),
-    )
-}
-
-fn join_constraint(operator: &JoinOperator) -> Option<&JoinConstraint> {
-    match operator {
-        JoinOperator::Join(value)
-        | JoinOperator::Inner(value)
-        | JoinOperator::Left(value)
-        | JoinOperator::LeftOuter(value)
-        | JoinOperator::Right(value)
-        | JoinOperator::RightOuter(value)
-        | JoinOperator::FullOuter(value)
-        | JoinOperator::Semi(value)
-        | JoinOperator::LeftSemi(value)
-        | JoinOperator::RightSemi(value)
-        | JoinOperator::Anti(value)
-        | JoinOperator::LeftAnti(value)
-        | JoinOperator::RightAnti(value)
-        | JoinOperator::StraightJoin(value)
-        | JoinOperator::AsOf {
-            constraint: value, ..
-        } => Some(value),
+fn source_relation_name(
+    relation: &RelationFacts,
+    source_imports: &BTreeSet<String>,
+) -> Option<String> {
+    match relation {
+        RelationFacts::Table { last, alias, .. } if source_imports.contains(last) => Some(
+            alias
+                .as_ref()
+                .map_or_else(|| last.clone(), |value| value.to_ascii_lowercase()),
+        ),
+        RelationFacts::Call {
+            kind: CallKind::Source,
+            alias,
+            ..
+        } => Some(
+            alias
+                .as_ref()
+                .map_or_else(|| "__source".to_owned(), |value| value.to_ascii_lowercase()),
+        ),
         _ => None,
     }
-}
-
-fn numeric_value(expression: &Expr) -> Option<String> {
-    match unwrap_nested(expression) {
-        Expr::Value(value) => match &value.value {
-            Value::Number(value, _) => Some(value.to_string()),
-            _ => None,
-        },
-        Expr::UnaryOp { op, expr } if op.to_string() == NEGATION_OPERATOR => {
-            numeric_value(expr).map(|value| format!("-{value}"))
-        }
-        _ => None,
-    }
-}
-
-fn comparison_facts(root: &Expr, source_context: &SourceContext, output: &mut Vec<ComparisonFact>) {
-    struct Comparisons<'a> {
-        source_context: &'a SourceContext,
-        output: &'a mut Vec<ComparisonFact>,
-    }
-    impl Visitor for Comparisons<'_> {
-        type Break = ();
-        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
-            let is_comparison = match expression {
-                Expr::BinaryOp { op, .. } => matches!(
-                    op,
-                    BinaryOperator::Eq
-                        | BinaryOperator::NotEq
-                        | BinaryOperator::Gt
-                        | BinaryOperator::GtEq
-                        | BinaryOperator::Lt
-                        | BinaryOperator::LtEq
-                ),
-                Expr::Between { .. } | Expr::InList { .. } => true,
-                _ => false,
-            };
-            if is_comparison {
-                self.output
-                    .push(comparison_fact(expression, self.source_context));
-            }
-            ControlFlow::Continue(())
-        }
-    }
-    let mut visitor = Comparisons {
-        source_context,
-        output,
-    };
-    let _ = root.visit(&mut visitor);
-}
-
-fn case_comparison_facts(
-    root: &Expr,
-    output_name: Option<&str>,
-    source_context: &SourceContext,
-    output: &mut Vec<ComparisonFact>,
-) {
-    struct CaseComparisons<'a> {
-        source_context: &'a SourceContext,
-        output: &'a mut Vec<ComparisonFact>,
-    }
-    impl Visitor for CaseComparisons<'_> {
-        type Break = ();
-
-        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
-            if let Expr::Case {
-                operand,
-                conditions,
-                ..
-            } = expression
-            {
-                if let Some(value) = operand {
-                    comparison_facts(value, self.source_context, self.output);
-                }
-                for condition in conditions {
-                    comparison_facts(&condition.condition, self.source_context, self.output);
-                }
-            }
-            ControlFlow::Continue(())
-        }
-    }
-    let mut visitor = CaseComparisons {
-        source_context,
-        output,
-    };
-    let start = visitor.output.len();
-    let _ = root.visit(&mut visitor);
-    for fact in &mut visitor.output[start..] {
-        fact.output_name = output_name.map(str::to_owned);
-    }
-}
-
-fn comparison_fact(root: &Expr, source_context: &SourceContext) -> ComparisonFact {
-    struct Values {
-        fact: ComparisonFact,
-    }
-    impl Visitor for Values {
-        type Break = ();
-        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
-            match expression {
-                Expr::Identifier(value) => {
-                    self.fact.columns.insert(value.value.clone());
-                }
-                Expr::CompoundIdentifier(values) => {
-                    if let Some(value) = values.last() {
-                        self.fact.columns.insert(value.value.clone());
-                    }
-                }
-                Expr::Value(value) => match &value.value {
-                    Value::SingleQuotedString(_)
-                    | Value::DoubleQuotedString(_)
-                    | Value::TripleSingleQuotedString(_)
-                    | Value::TripleDoubleQuotedString(_)
-                    | Value::EscapedStringLiteral(_)
-                    | Value::UnicodeStringLiteral(_)
-                    | Value::NationalStringLiteral(_) => {
-                        self.fact.string_literals.push(expression.to_string());
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-            ControlFlow::Continue(())
-        }
-    }
-    let mut visitor = Values {
-        fact: ComparisonFact {
-            position: Some(position(root)),
-            sql: root.to_string(),
-            equality: matches!(
-                root,
-                Expr::BinaryOp {
-                    op: BinaryOperator::Eq,
-                    ..
-                } | Expr::InList { negated: false, .. }
-            ),
-            value_list: matches!(root, Expr::InList { .. }),
-            binary: matches!(root, Expr::BinaryOp { .. }),
-            source_context: source_context.clone(),
-            ..ComparisonFact::default()
-        },
-    };
-    let _ = root.visit(&mut visitor);
-    for operand in comparison_operands(root) {
-        if let Some(number) = numeric_value(operand) {
-            visitor.fact.numeric_literals.push(number);
-        }
-        if direct_column(operand).is_none() {
-            visitor.fact.modified_columns.extend(column_facts(operand));
-        }
-        if direct_string_literal(operand).is_none() && contains_string_literal(operand) {
-            visitor.fact.modified_string_literal = true;
-        }
-    }
-    visitor.fact
-}
-
-fn comparison_operands(root: &Expr) -> Vec<&Expr> {
-    match root {
-        Expr::BinaryOp { left, right, .. } => vec![left.as_ref(), right.as_ref()],
-        Expr::Between {
-            expr, low, high, ..
-        } => vec![expr.as_ref(), low.as_ref(), high.as_ref()],
-        Expr::InList { expr, list, .. } => std::iter::once(expr.as_ref()).chain(list).collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn direct_column(expression: &Expr) -> Option<ColumnFact> {
-    match unwrap_nested(expression) {
-        Expr::Identifier(value) => Some(ColumnFact {
-            name: value.value.clone(),
-            qualifier: None,
-        }),
-        Expr::CompoundIdentifier(values) => {
-            let name = values.last()?.value.clone();
-            let qualifier = values
-                .get(values.len().checked_sub(2)?)
-                .map(|value| value.value.to_ascii_lowercase());
-            Some(ColumnFact { name, qualifier })
-        }
-        _ => None,
-    }
-}
-
-fn direct_string_literal(expression: &Expr) -> Option<String> {
-    let Expr::Value(value) = unwrap_nested(expression) else {
-        return None;
-    };
-    matches!(
-        value.value,
-        Value::SingleQuotedString(_)
-            | Value::DoubleQuotedString(_)
-            | Value::TripleSingleQuotedString(_)
-            | Value::TripleDoubleQuotedString(_)
-            | Value::EscapedStringLiteral(_)
-            | Value::UnicodeStringLiteral(_)
-            | Value::NationalStringLiteral(_)
-    )
-    .then(|| expression.to_string())
-}
-
-pub(super) fn unwrap_nested(mut expression: &Expr) -> &Expr {
-    while let Expr::Nested(value) = expression {
-        expression = value;
-    }
-    expression
-}
-
-fn column_facts(root: &Expr) -> BTreeSet<ColumnFact> {
-    struct Columns {
-        values: BTreeSet<ColumnFact>,
-    }
-    impl Visitor for Columns {
-        type Break = ();
-        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
-            if let Some(column) = direct_column(expression) {
-                self.values.insert(column);
-            }
-            ControlFlow::Continue(())
-        }
-    }
-    let mut visitor = Columns {
-        values: BTreeSet::new(),
-    };
-    let _ = root.visit(&mut visitor);
-    visitor.values
-}
-
-fn contains_string_literal(root: &Expr) -> bool {
-    struct Strings {
-        found: bool,
-    }
-    impl Visitor for Strings {
-        type Break = ();
-        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
-            if direct_string_literal(expression).is_some() {
-                self.found = true;
-                return ControlFlow::Break(());
-            }
-            ControlFlow::Continue(())
-        }
-    }
-    let mut visitor = Strings { found: false };
-    let _ = root.visit(&mut visitor);
-    visitor.found
 }

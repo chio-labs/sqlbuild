@@ -45,6 +45,34 @@ fn given_sql_test_shapes_when_evaluating_empty_input_rule_then_flags_only_filler
             expected_messages: &[FLAGGED_MESSAGE],
         },
         test_types::EmptyInputTestRuleTestCase {
+            description: "a cast to a parameterized type under a false predicate is an empty mock",
+            test: helpers::empty_input_test_fact(
+                "orders__empty_inputs_produce_no_rows",
+                &[(
+                    "__source__raw_orders",
+                    "SELECT CAST(NULL AS DECIMAL(18, 2)) AS amount WHERE 1 = 0",
+                )],
+                &[],
+                &[NO_ROWS_ASSERTION],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[FLAGGED_MESSAGE],
+        },
+        test_types::EmptyInputTestRuleTestCase {
+            description: "a cast to a parameterized type keeps a bare existence check",
+            test: helpers::empty_input_test_fact(
+                "orders__empty_inputs_produce_no_rows",
+                &[EMPTY_ORDERS],
+                &[],
+                &[(
+                    "__assert__empty_inputs_produce_no_rows",
+                    "SELECT CAST(order_id AS VARCHAR(10)) AS unexpected_row FROM __ref(\"orders\")",
+                )],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[FLAGGED_MESSAGE],
+        },
+        test_types::EmptyInputTestRuleTestCase {
             description: "input rows with expected output pass",
             test: helpers::empty_input_test_fact(
                 "orders__doubles_amounts",
@@ -202,7 +230,7 @@ fn given_sql_test_shapes_when_evaluating_empty_input_rule_then_flags_only_filler
             ),
             allowed_tests: json!([]),
             expected_messages: &[
-                "SQBRTEST203 tests/unit/test_orders__empty_inputs_produce_no_rows.sql: Rule SQBRTEST203 could not be evaluated for test block 1: could not parse SQL-test fixture: sql parser error: sql parser error: Expected: an expression, found: EOF; generic fallback also failed: sql parser error: Expected: an expression, found: EOF",
+                "SQBRTEST203 tests/unit/test_orders__empty_inputs_produce_no_rows.sql: Rule SQBRTEST203 could not be evaluated for test block 1: could not parse SQL-test fixture: Parse error at line 1, column 42: Unexpected token: Limit",
             ],
         },
         test_types::EmptyInputTestRuleTestCase {
@@ -380,6 +408,91 @@ fn given_cached_minimum_tests_when_filler_becomes_real_test_then_model_cache_is_
             test_case.tests,
             test_case.allowed_tests,
             true,
+        )?;
+        assert_eq!(
+            messages, test_case.expected_messages,
+            "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_sql_server_conversions_when_evaluating_empty_input_rule_then_type_arguments_are_not_calls()
+-> Result<(), String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let empty_orders = (
+        "__source__raw_orders",
+        "SELECT NULL AS order_id WHERE 1 = 0",
+    );
+    let test_cases = [
+        test_types::EmptyInputTestRuleTestCase {
+            description: "a CONVERT to a parameterized type under a false predicate is an empty mock",
+            test: helpers::empty_input_test_fact(
+                "orders__empty_inputs_produce_no_rows",
+                &[(
+                    "__source__raw_orders",
+                    "SELECT CONVERT(DECIMAL(18, 2), NULL) AS amount WHERE 1 = 0",
+                )],
+                &[],
+                &[NO_ROWS_ASSERTION],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[FLAGGED_MESSAGE],
+        },
+        test_types::EmptyInputTestRuleTestCase {
+            description: "a CONVERT with a style argument is an empty mock",
+            test: helpers::empty_input_test_fact(
+                "orders__empty_inputs_produce_no_rows",
+                &[(
+                    "__source__raw_orders",
+                    "SELECT CONVERT(NUMERIC(10, 2), NULL, 1) AS amount WHERE 1 = 0",
+                )],
+                &[],
+                &[NO_ROWS_ASSERTION],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[FLAGGED_MESSAGE],
+        },
+        test_types::EmptyInputTestRuleTestCase {
+            description: "a TRY_CONVERT to a parameterized type keeps a bare existence check",
+            test: helpers::empty_input_test_fact(
+                "orders__empty_inputs_produce_no_rows",
+                &[empty_orders],
+                &[],
+                &[(
+                    "__assert__empty_inputs_produce_no_rows",
+                    "SELECT TRY_CONVERT(VARCHAR(10), order_id) AS unexpected_row FROM __ref(\"orders\")",
+                )],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[FLAGGED_MESSAGE],
+        },
+        test_types::EmptyInputTestRuleTestCase {
+            description: "a function call in a CONVERT value argument still counts",
+            test: helpers::empty_input_test_fact(
+                "orders__empty_inputs_produce_no_rows",
+                &[(
+                    "__source__raw_orders",
+                    "SELECT CONVERT(VARCHAR(10), COUNT(*)) AS amount WHERE 1 = 0",
+                )],
+                &[],
+                &[NO_ROWS_ASSERTION],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[],
+        },
+    ];
+
+    for test_case in test_cases {
+        let messages = helpers::dialect_empty_input_rule_evaluation(
+            "mssql",
+            &project_dir,
+            json!(["SQBRTEST203"]),
+            json!([test_case.test]),
+            test_case.allowed_tests,
+            false,
         )?;
         assert_eq!(
             messages, test_case.expected_messages,

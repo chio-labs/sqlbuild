@@ -1,8 +1,28 @@
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::models::{EvaluateRequest, Fault, Model, RuleMetadata, RulesConfig};
+use crate::rules::types::ShapeFacts;
 use globset::GlobSet;
+
+/// The query shapes one rules evaluation has parsed, keyed by dialect and byte-identical SQL.
+#[derive(Debug, Default)]
+pub(crate) struct QueryShapes {
+    entries: Mutex<HashMap<(String, String), ShapeFacts>>,
+}
+
+impl QueryShapes {
+    pub(crate) fn entry(&self, dialect: &str, sql: &str) -> ShapeFacts {
+        let mut entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(entry) = entries.get(&(dialect.to_owned(), sql.to_owned())) {
+            return Arc::clone(entry);
+        }
+        let entry: ShapeFacts = Arc::default();
+        entries.insert((dialect.to_owned(), sql.to_owned()), Arc::clone(&entry));
+        entry
+    }
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct FaultCollector {
@@ -16,6 +36,7 @@ pub(crate) struct ModelEvaluationRequest<'a> {
     pub(crate) selected: &'a BTreeMap<String, &'a RuleMetadata>,
     pub(crate) request: &'a EvaluateRequest,
     pub(crate) threshold_overrides: &'a [ResolvedThresholdOverride],
+    pub(crate) shapes: &'a QueryShapes,
 }
 
 #[derive(Debug)]

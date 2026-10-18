@@ -15,6 +15,7 @@ use crate::models::{
 use crate::engine::_helpers::evaluation::evaluate_json;
 use crate::engine::_helpers::evaluation::evaluate_request as evaluate_parsed;
 use crate::engine::_helpers::evaluation::parse_parts;
+use crate::engine::tests::test_types;
 
 pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
     json!({
@@ -328,10 +329,28 @@ pub(crate) fn empty_input_rule_evaluation(
     allowed_tests: Value,
     cache_enabled: bool,
 ) -> Result<Vec<String>, String> {
+    dialect_empty_input_rule_evaluation(
+        "duckdb",
+        project_dir,
+        select,
+        tests,
+        allowed_tests,
+        cache_enabled,
+    )
+}
+
+pub(crate) fn dialect_empty_input_rule_evaluation(
+    dialect: &str,
+    project_dir: &TempDir,
+    select: Value,
+    tests: Value,
+    allowed_tests: Value,
+    cache_enabled: bool,
+) -> Result<Vec<String>, String> {
     let request = json!({
         "version": 1,
         "project_dir": project_dir.path(),
-        "dialect": "duckdb",
+        "dialect": dialect,
         "config": {
             "select": select,
             "thresholds": {"min_tests_per_model": 1},
@@ -587,4 +606,34 @@ pub(crate) fn drop_at_once(
 ) -> Result<bool, String> {
     drop(speculative);
     Ok(false)
+}
+pub(crate) fn query_facts_faults(
+    test_case: &test_types::QueryFactsTestCase,
+) -> Result<Vec<(String, u64, u64, String)>, String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    let config = json!({"select": test_case.select, "cache": {"enabled": false}});
+    let mut request: Value =
+        serde_json::from_str(&request(&project_dir, &config)).map_err(|error| error.to_string())?;
+    request["dialect"] = json!(test_case.dialect);
+    request["models"][0]["query_sql"] = json!(test_case.query_sql);
+    request["models"][0]["authored_sql"] = json!(test_case.query_sql);
+    request["models"][0]["enum_columns"] = json!(test_case.enum_columns);
+    request["models"][0]["config"] = json!({"contract": "enforced"});
+    request["models"][0]["columns"] = test_case.columns.clone();
+    let result: Value = serde_json::from_str(&evaluate_json(&request.to_string())?)
+        .map_err(|error| error.to_string())?;
+    let faults = result["faults"]
+        .as_array()
+        .ok_or("faults must be an array")?;
+    Ok(faults
+        .iter()
+        .map(|fault| {
+            (
+                fault["code"].as_str().unwrap_or_default().to_owned(),
+                fault["line"].as_u64().unwrap_or_default(),
+                fault["column"].as_u64().unwrap_or_default(),
+                fault["message"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect())
 }

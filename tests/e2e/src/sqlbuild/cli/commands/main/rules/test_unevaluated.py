@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.rules._test_types import (
+    EvaluatedModelRulesCase,
     EvaluatedPredicateCase,
     GroupedRulesCase,
     UnevaluatedResourceCase,
@@ -42,11 +43,9 @@ from tests.e2e.src.sqlbuild.cli.commands.main.rules.helpers import (
             ),
         ),
         UnevaluatedResourceCase(
-            "model the compiler accepts but the Rules parser rejects",
+            "built-in model rule beyond the parser budget",
             "models/staging/orders.sql",
-            "MODEL (description 'Test model orders.');\nWITH items AS (SELECT [1, 2] AS quantities)\n"
-            "SELECT 1 AS order_id, list_transform(i.quantities, lambda q: q + 1) AS shipped\n"
-            "FROM items AS i",
+            "MODEL (description 'Test model orders.');\nSELECT {expression} AS order_id",
             expected_evaluated_models=0,
             expected_reason="could not parse models/staging/orders.sql for rules",
             rule="SQBRMODEL101",
@@ -102,6 +101,55 @@ def test_given_guarded_resource_when_running_rules_then_reports_failure_and_cove
         item["code"] == "rules-unevaluated" and item["path"] == test_case.path
         for item in diagnostics
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        EvaluatedModelRulesCase(
+            "lambda model the compiler accepts gets built-in model findings",
+            "WITH items AS (SELECT [1, 2] AS quantities)\n"
+            "SELECT *, list_transform(i.quantities, lambda q: q + 1) AS shipped\n"
+            "FROM items AS i WHERE i.quantities[1] > 7",
+            ("SQBRMODEL101", "SQBRMODEL102", "SQBRDECLARATION102"),
+            "SQBRMODEL102",
+            (("SQBRMODEL102", 2, 8),),
+            (("SQBRMODEL102", 2, 8), ("SQBRDECLARATION102", 3, 23)),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_only_polyglot_parses_when_running_rules_then_reports_model_findings(
+    test_case: EvaluatedModelRulesCase,
+    tmp_path: Path,
+) -> None:
+    write_unevaluated_rules_project(
+        project_dir=tmp_path,
+        resource_path="models/staging/orders.sql",
+        resource_template="MODEL (description 'Test model orders.');\n" + test_case.sql,
+        selected_rules=test_case.rules,
+    )
+    for _ in range(2):
+        result: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(
+            tmp_path, "rules", "--json", "run", test_case.selector
+        )
+        assert result.returncode == 1, result.stdout + result.stderr
+        payload: dict[str, Any] = json.loads(result.stdout)
+        assert payload["unevaluated_resources"] == 0
+        assert payload["evaluated_models"] == 1
+        findings: list[tuple[str, int, int]] = [
+            (finding["code"], finding["line"], finding["column"]) for finding in payload["findings"]
+        ]
+        assert findings == list(test_case.expected_rule_findings)
+    compiled: subprocess.CompletedProcess[str] = run_unevaluated_rules_cli(
+        tmp_path, "compile", "--no-cache", "--json"
+    )
+    assert compiled.returncode == 1, compiled.stdout + compiled.stderr
+    diagnostics: list[tuple[str, int, int]] = [
+        (item["code"], item["line"], item["column"])
+        for item in json.loads(compiled.stdout)["diagnostics"]
+    ]
+    assert diagnostics == list(test_case.expected_compile_findings)
 
 
 @pytest.mark.parametrize(

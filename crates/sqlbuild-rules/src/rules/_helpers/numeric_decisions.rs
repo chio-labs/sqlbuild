@@ -46,6 +46,32 @@ pub(crate) fn compact_sql(sql: &str, policy: QuotePolicy) -> String {
     String::from_utf8(compact).unwrap_or_default()
 }
 
+/// `sql` with each whitespace run outside quoted text collapsed to one space.
+pub(crate) fn single_spaced(sql: &str, policy: QuotePolicy) -> String {
+    let bytes = sql.as_bytes();
+    let mut spaced = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if policy.is_quote(byte) {
+            let end = quote_end(bytes, index, policy).unwrap_or(bytes.len());
+            spaced.extend_from_slice(&bytes[index..end]);
+            index = end;
+        } else if byte.is_ascii_whitespace() {
+            while bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
+                index += 1;
+            }
+            spaced.push(b' ');
+        } else {
+            spaced.push(byte);
+            index += 1;
+        }
+    }
+    String::from_utf8(spaced)
+        .map(|value| value.trim().to_owned())
+        .unwrap_or_else(|_| sql.to_owned())
+}
+
 pub(crate) fn is_authored_decision(decision: AuthoredDecision<'_>) -> bool {
     !CANONICAL_NUMERIC_DECISIONS.contains(&decision.literal)
         && decision

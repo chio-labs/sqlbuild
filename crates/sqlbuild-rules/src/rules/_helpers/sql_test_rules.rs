@@ -2,18 +2,16 @@ use crate::models::{
     DeclarationKind, EvaluateRequest, Fault, Model, ResourceKind, RuleMetadata, RulesConfig,
     ScopeResource, SqlScenarioFact, SqlTestCteFact, SqlTestFact, SqlTestMode,
 };
-use crate::rules::_helpers::evaluation::{
-    dependency_name, group_by_empty, normalize_rules_sql, parse_rule_statements, path_fault,
-    unwrap_nested,
-};
+use crate::query_facts::main::model_shape::model_shape;
+use crate::query_facts::main::parse_fixture::parse_fixture;
+use crate::query_facts::main::stub_call::stub_call;
+use crate::query_facts::models::{CallKind, ParsedFixture};
+use crate::rules::_helpers::evaluation::path_fault;
 use crate::rules::models::ProjectEvaluationRequest;
+use polyglot_sql::Expression;
+use polyglot_sql::expressions::{Literal, Select};
 use sqlbuild_analysis::compiler::main::sql_test_fixture_facts::fixture_facts;
-use sqlparser::ast::{
-    BinaryOperator, Expr, FunctionArg, FunctionArgExpr, LimitClause, Query, Select, SetExpr,
-    Statement, TableFactor, Value, Visit, Visitor,
-};
 use std::collections::{BTreeMap, HashMap};
-use std::ops::ControlFlow;
 use std::path::Path;
 
 const UNIT_ROOT: &str = "tests/unit";
@@ -692,64 +690,62 @@ fn empty_relation(cte: &SqlTestCteFact, dialect: &str) -> bool {
     if fixture_facts(&cte.name, &cte.sql).empty_fixture_marker {
         return true;
     }
-    let Ok(query) = fixture_query(&cte.sql, dialect) else {
+    let Ok(fixture) = fixture_query(&cte.sql, dialect) else {
         return false;
     };
-    let SetExpr::Select(select) = query.body.as_ref() else {
+    let Expression::Select(select) = &fixture.statement else {
         return false;
     };
-    query.with.is_none()
-        && (limited_to_zero_rows(&query)
-            || (filtered_to_zero_rows(select) && !contains_function(&query.order_by)))
+    select.with.is_none()
+        && (limited_to_zero_rows(select)
+            || (filtered_to_zero_rows(select, &fixture) && !fixture.order_by_calls_function()))
 }
 
-fn fixture_query(sql: &str, dialect: &str) -> Result<Query, String> {
-    let mut statements = parse_rule_statements(&normalize_rules_sql(dialect, sql), dialect)
-        .map_err(|error| format!("could not parse SQL-test fixture: {error}"))?;
-    match (statements.pop(), statements.is_empty()) {
-        (Some(Statement::Query(query)), true) => Ok(*query),
-        _ => Err("SQL-test fixture must contain exactly one query".to_owned()),
-    }
+fn fixture_query(sql: &str, dialect: &str) -> Result<ParsedFixture, String> {
+    model_shape(sql, dialect)
+        .and_then(|shape| parse_fixture(shape, dialect))
+        .map_err(|error| format!("could not parse SQL-test fixture: {error}"))
 }
 
-fn limited_to_zero_rows(query: &Query) -> bool {
-    let limit = match &query.limit_clause {
-        Some(LimitClause::LimitOffset {
-            limit: Some(limit), ..
-        }) => limit,
-        Some(LimitClause::OffsetCommaLimit { limit, .. }) => limit,
-        _ => return false,
-    };
-    numeric_literal(limit) == Some(0.0)
+fn limited_to_zero_rows(select: &Select) -> bool {
+    select
+        .limit
+        .as_ref()
+        .is_some_and(|limit| numeric_literal(&limit.this) == Some(0.0))
 }
 
-fn filtered_to_zero_rows(select: &Select) -> bool {
-    let global_aggregate_possible = contains_function(select);
+fn filtered_to_zero_rows(select: &Select, fixture: &ParsedFixture) -> bool {
     select.having.is_none()
-        && group_by_empty(&select.group_by)
-        && !global_aggregate_possible
-        && select.selection.as_ref().is_some_and(constant_false)
+        && select.group_by.is_none()
+        && !fixture.select_calls_function()
+        && select
+            .where_clause
+            .as_ref()
+            .is_some_and(|clause| constant_false(&clause.this))
 }
 
-fn constant_false(predicate: &Expr) -> bool {
-    match unwrap_nested(predicate) {
-        Expr::Value(value) => matches!(value.value, Value::Boolean(false)),
-        Expr::BinaryOp {
-            left,
-            op: BinaryOperator::Eq,
-            right,
-        } => numeric_literal(left)
-            .zip(numeric_literal(right))
+fn unwrap_paren(mut expression: &Expression) -> &Expression {
+    while let Expression::Paren(paren) = expression {
+        expression = &paren.this;
+    }
+    expression
+}
+
+fn constant_false(predicate: &Expression) -> bool {
+    match unwrap_paren(predicate) {
+        Expression::Boolean(value) => !value.value,
+        Expression::Eq(comparison) => numeric_literal(&comparison.left)
+            .zip(numeric_literal(&comparison.right))
             .is_some_and(|(left, right)| left != right),
         _ => false,
     }
 }
 
-fn numeric_literal(expression: &Expr) -> Option<f64> {
-    let Expr::Value(value) = unwrap_nested(expression) else {
+fn numeric_literal(expression: &Expression) -> Option<f64> {
+    let Expression::Literal(literal) = unwrap_paren(expression) else {
         return None;
     };
-    let Value::Number(number, _) = &value.value else {
+    let Literal::Number(number) = literal.as_ref() else {
         return None;
     };
     let Ok(parsed) = number.parse::<f64>() else {
@@ -759,91 +755,47 @@ fn numeric_literal(expression: &Expr) -> Option<f64> {
 }
 
 fn bare_row_existence(sql: &str, targets: &[String], dialect: &str) -> bool {
-    let Ok(query) = fixture_query(sql, dialect) else {
+    let Ok(fixture) = fixture_query(sql, dialect) else {
         return false;
     };
-    let SetExpr::Select(select) = query.body.as_ref() else {
+    let Expression::Select(select) = &fixture.statement else {
         return false;
     };
-    let [source] = select.from.as_slice() else {
+    let [source] = select
+        .from
+        .as_ref()
+        .map_or(&[][..], |from| from.expressions.as_slice())
+    else {
         return false;
     };
-    let unfiltered = select.selection.is_none()
+    let unfiltered = select.where_clause.is_none()
         && select.prewhere.is_none()
         && select.having.is_none()
         && select.qualify.is_none()
-        && select.connect_by.is_none()
+        && select.connect.is_none()
         && select.lateral_views.is_empty()
-        && group_by_empty(&select.group_by);
-    query.with.is_none()
+        && select.group_by.is_none();
+    select.with.is_none()
         && unfiltered
-        && source.joins.is_empty()
-        && reference_target(&source.relation).is_some_and(|target| targets.contains(&target))
-        && !contains_function(&select.projection)
-        && !contains_function(&query.order_by)
-        && query.limit_clause.is_none()
-        && query.fetch.is_none()
-        && query_count(&query) == 1
+        && select.joins.is_empty()
+        && reference_target(source, &fixture).is_some_and(|target| targets.contains(&target))
+        && !fixture.projection_calls_function()
+        && !fixture.order_by_calls_function()
+        && select.limit.is_none()
+        && select.offset.is_none()
+        && select.fetch.is_none()
+        && fixture.query_count() == 1
 }
 
-fn reference_target(factor: &TableFactor) -> Option<String> {
-    if dependency_name(factor).as_deref() != Some("__ref") {
-        return None;
-    }
-    let TableFactor::Table {
-        args: Some(arguments),
-        ..
-    } = factor
-    else {
+fn reference_target(source: &Expression, fixture: &ParsedFixture) -> Option<String> {
+    let Expression::Table(table) = source else {
         return None;
     };
-    let [FunctionArg::Unnamed(FunctionArgExpr::Expr(argument))] = arguments.args.as_slice() else {
+    if table.schema.is_some() || table.catalog.is_some() {
+        return None;
+    }
+    let (CallKind::Ref, index) = stub_call(&table.name.name)? else {
         return None;
     };
-    match unwrap_nested(argument) {
-        Expr::Identifier(identifier) => Some(identifier.value.clone()),
-        Expr::Value(value) => match &value.value {
-            Value::SingleQuotedString(name) | Value::DoubleQuotedString(name) => Some(name.clone()),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-fn contains_function<T: Visit>(node: &T) -> bool {
-    struct Functions;
-
-    impl Visitor for Functions {
-        type Break = ();
-
-        fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<Self::Break> {
-            if matches!(expression, Expr::Function(_)) {
-                ControlFlow::Break(())
-            } else {
-                ControlFlow::Continue(())
-            }
-        }
-    }
-
-    node.visit(&mut Functions).is_break()
-}
-
-fn query_count(query: &Query) -> usize {
-    #[derive(Default)]
-    struct Queries {
-        count: usize,
-    }
-
-    impl Visitor for Queries {
-        type Break = ();
-
-        fn pre_visit_query(&mut self, _query: &Query) -> ControlFlow<Self::Break> {
-            self.count += 1;
-            ControlFlow::Continue(())
-        }
-    }
-
-    let mut queries = Queries::default();
-    let _ = query.visit(&mut queries);
-    queries.count
+    fixture.calls.get(index)?.target.clone()
 }

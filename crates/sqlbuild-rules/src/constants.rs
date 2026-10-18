@@ -24,7 +24,6 @@ pub(crate) const ENFORCED_CONTRACT: &str = "enforced";
 pub(crate) const SELECT_STAR_MODEL_RULE_CODE: &str = "SQBRMODEL102";
 pub(crate) const BOOLEAN_TYPE: &str = "BOOLEAN";
 pub(crate) const DATE_TYPE: &str = "DATE";
-pub(crate) const NEGATION_OPERATOR: &str = "-";
 pub(crate) const DECLARATION_DOMAIN_COMPONENTS: usize = 3;
 pub(crate) const RULE_CODE_NUMBER_LENGTH: usize = 3;
 pub(crate) const EMPTY_FIXTURE_QUERY_TOKEN_COUNT: usize = 6;

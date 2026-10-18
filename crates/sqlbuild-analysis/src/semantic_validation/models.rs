@@ -28,6 +28,13 @@ pub struct NormalizationInput {
     pub placeholders: HashMap<String, String>,
 }
 
+/// Normalized analysis SQL with, per normalized character, the input character it came from.
+#[derive(Debug)]
+pub struct MappedNormalization {
+    pub sql: String,
+    pub offsets: Vec<usize>,
+}
+
 #[derive(Debug)]
 pub struct PositionInput {
     pub authored: String,

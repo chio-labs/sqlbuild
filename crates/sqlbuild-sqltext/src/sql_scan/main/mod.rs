@@ -8,6 +8,5 @@ pub mod non_code_end;
 pub mod quote_end;
 pub mod quote_policy;
 pub mod reads_differently_from_generic;
-pub mod rules_dialect;
 pub mod skip_whitespace;
 pub mod unsupported_line_comment_prefixes;

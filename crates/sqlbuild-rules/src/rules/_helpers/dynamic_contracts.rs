@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 
 use crate::constants::{ENFORCED_CONTRACT, SELECT_STAR_MODEL_RULE_CODE};
 use crate::models::{Fault, Model, RuleMetadata, RulesConfig};
+use crate::query_facts::models::{QueryFacts, RelationFacts};
+use crate::rules::_helpers::evaluation::sole_table_name;
 use crate::rules::_helpers::{contract_name_types, explicit_output_types, typed_contract_columns};
 use crate::rules::models::FaultCollector;
-use sqlparser::ast::{PivotValueSource, Query, Select, SetExpr, TableFactor};
 
 pub(crate) fn evaluate_without_query(
     model: &Model,
@@ -48,52 +49,20 @@ pub(crate) fn evaluate_without_query(
     Some(faults.into_inner())
 }
 
-pub(crate) fn allows_output_star(query: &Query, root: &Query, model: &Model) -> bool {
-    let Some(select) = root_select(query) else {
+pub(crate) fn allows_output_star(query: &QueryFacts, root: &QueryFacts, model: &Model) -> bool {
+    let Some(select) = query.root_select() else {
         return false;
     };
-    let dynamic_pivot_star = select.projection.len() == 1
+    let dynamic_pivot_star = select.items.len() == 1
         && select.from.len() == 1
-        && select.from[0].joins.is_empty()
-        && matches!(
-            &select.from[0].relation,
-            TableFactor::Pivot {
-                value_source: PivotValueSource::Any(_),
-                ..
-            }
-        );
+        && select.joins.is_empty()
+        && matches!(select.from[0], RelationFacts::DynamicPivot);
     dynamic_pivot_star
         || (model.dynamic_columns_proven
             && std::ptr::eq(query, root)
-            && root
-                .with
-                .as_ref()
-                .and_then(|with| with.cte_tables.last())
-                .is_some_and(|cte| {
-                    sole_table_name(query)
-                        .is_some_and(|name| name.eq_ignore_ascii_case(&cte.alias.name.value))
-                }))
-}
-
-fn root_select(query: &Query) -> Option<&Select> {
-    let SetExpr::Select(select) = query.body.as_ref() else {
-        return None;
-    };
-    Some(select)
-}
-
-fn sole_table_name(query: &Query) -> Option<String> {
-    let select = root_select(query)?;
-    if select.from.len() != 1 || !select.from[0].joins.is_empty() {
-        return None;
-    }
-    let TableFactor::Table {
-        name, args: None, ..
-    } = &select.from[0].relation
-    else {
-        return None;
-    };
-    Some(name.to_string())
+            && root.ctes.last().is_some_and(|cte| {
+                sole_table_name(query).is_some_and(|name| name.eq_ignore_ascii_case(&cte.name))
+            }))
 }
 
 fn rules_need_no_query(model: &Model, selected: &BTreeMap<String, &RuleMetadata>) -> bool {

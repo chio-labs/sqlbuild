@@ -69,15 +69,12 @@ pub(crate) struct TypedContractColumnTestCase {
     pub(crate) expected_messages: &'static [&'static str],
 }
 
-pub(crate) struct NormalizationTestCase {
+pub(crate) struct ShapeTestCase {
     pub(crate) description: &'static str,
     pub(crate) dialect: &'static str,
     pub(crate) sql: &'static str,
-    pub(crate) expected_typed_lambda: &'static str,
-    pub(crate) expected_quoted_call: &'static str,
-    pub(crate) expected_comment: &'static str,
-    pub(crate) expected_table_function: &'static str,
-    pub(crate) expected_other_dialect_lambda: &'static str,
+    pub(crate) expected_calls: &'static [&'static str],
+    pub(crate) expected_fragment: &'static str,
 }
 
 pub(crate) struct DeepExpressionTestCase {
@@ -200,10 +197,7 @@ pub(crate) struct SqlScannerTestCase {
     pub(crate) description: &'static str,
     pub(crate) fragment: &'static str,
     pub(crate) expected_compiler_paren: Result<usize, Unclosed>,
-    pub(crate) expected_table_function: &'static str,
-    pub(crate) expected_table_function_token: &'static str,
-    pub(crate) expected_snowflake_exclude: &'static str,
-    pub(crate) expected_snowflake_comma: &'static str,
+    pub(crate) expected_dependency_calls: &'static [&'static str],
     pub(crate) expected_compact: &'static str,
     pub(crate) expected_snowflake_compact: &'static str,
     /// `None` when SQL lint declines non-ASCII input; `Some("")` when no macro site closes.
@@ -277,4 +271,14 @@ pub(crate) struct SpeculativeOutcomeTestCase {
     pub(crate) description: &'static str,
     pub(crate) outcome: fn() -> crate::engine::_helpers::memo::SpeculativeOutcome,
     pub(crate) expected_clean: bool,
+}
+
+pub(crate) struct QueryFactsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) query_sql: &'static str,
+    pub(crate) select: &'static [&'static str],
+    pub(crate) enum_columns: &'static [&'static str],
+    pub(crate) columns: Value,
+    pub(crate) expected_faults: &'static [(&'static str, u64, u64, &'static str)],
 }
