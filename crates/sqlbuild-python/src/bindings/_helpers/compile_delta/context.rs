@@ -10,6 +10,8 @@ use sqlbuild_analysis::assembly::analysis_session::models::{RelationTables, Sess
 use sqlbuild_cache::project_reuse::models::ImageSections;
 use sqlbuild_rules::models::RetainedRows;
 
+use crate::bindings::_helpers::compile_delta::image::BaseRules;
+
 /// The facts a full compile leaves for its project image beyond its analysis record.
 #[derive(Debug, Default)]
 pub(crate) struct ImageCapture {
@@ -101,8 +103,8 @@ pub(crate) struct DeltaInjection {
     pub(crate) model_names: Vec<String>,
     /// The whole project's relation facts, injected for relations the delta does not analyse.
     pub(crate) relations: RelationTables,
-    /// The whole project's built-in rules request.
-    pub(crate) rules: Option<RetainedRows>,
+    /// The whole project's built-in rules request, taken by the round that evaluates it.
+    pub(crate) rules: Mutex<Option<BaseRules>>,
     /// The whole project's custom-rule fact digests.
     pub(crate) fact_digests: BTreeMap<Vec<String>, String>,
     /// Each project model's `(path, name, materialized)`, the custom-rule subjects.

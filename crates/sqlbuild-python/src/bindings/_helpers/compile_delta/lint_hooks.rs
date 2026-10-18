@@ -1,6 +1,6 @@
 //! The SQL lint keys a full compile leaves for its image, and a delta compile's use of them.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use pyo3::PyResult;
@@ -8,7 +8,9 @@ use pyo3::PyResult;
 use crate::bindings::_helpers::compile_delta::context::{
     capture, capturing, delta_unsupported, injection,
 };
-use crate::bindings::_helpers::rules::lint_pipeline::{LintFile, lint_sources};
+use sqlbuild_core::format_command::constants::LINT_DIRECTORY_NAMES;
+
+use crate::bindings::_helpers::rules::lint_pipeline::LintFile;
 
 /// Each model file's lint cache key: recorded for the image, and in a delta compile the whole
 /// project's keys with the recompiled models' keys fresh.
@@ -42,20 +44,26 @@ pub(crate) fn model_identities(fresh: Vec<(String, String)>) -> PyResult<Vec<(St
     Ok(whole)
 }
 
-/// The changed files a delta compile lints, read from the project.
+/// The changed files a delta compile lints, read from the project as a full lint walk reads
+/// them.
 pub(crate) fn changed_files(project_dir: &Path) -> PyResult<Vec<LintFile>> {
     let Some(injection) = injection() else {
         return Ok(Vec::new());
     };
-    let selected: BTreeSet<PathBuf> = injection
-        .changed_paths
-        .iter()
-        .map(|path| {
-            let path: PathBuf = project_dir.join(path);
-            std::fs::canonicalize(&path).unwrap_or(path)
-        })
-        .collect();
-    lint_sources(project_dir, Some(&selected), None)
+    let mut files: Vec<LintFile> = Vec::new();
+    for path in &injection.changed_paths {
+        let linted: bool = path
+            .split_once('/')
+            .is_some_and(|(root, _)| LINT_DIRECTORY_NAMES.contains(&root));
+        if !linted {
+            continue;
+        }
+        let path: PathBuf = project_dir.join(path);
+        let contents: String = std::fs::read_to_string(&path)
+            .map_err(|error| pyo3::exceptions::PyOSError::new_err(error.to_string()))?;
+        files.push(LintFile { path, contents });
+    }
+    Ok(files)
 }
 
 /// Each non-model file's lint cache key, in walk order: recorded for the image, and in a delta

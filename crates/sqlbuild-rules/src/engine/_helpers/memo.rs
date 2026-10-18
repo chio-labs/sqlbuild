@@ -61,7 +61,12 @@ pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, Ro
     } else {
         None
     };
-    let retained: Option<RetainedRows> = retain.then(|| retained_rows(&request, &models));
+    let mut models: Vec<Model> = models;
+    let retained: Option<RetainedRows> = if retain {
+        retained_rows(&mut request, &mut models)
+    } else {
+        None
+    };
     request.models = models;
     Ok(PreparedRows {
         request,
@@ -71,30 +76,72 @@ pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, Ro
     })
 }
 
-/// `request` with `models` whose SQL text is dropped, and each model's payload digest.
-fn retained_rows(request: &EvaluateRequest, models: &[Model]) -> RetainedRows {
-    let mut kept: EvaluateRequest = EvaluateRequest {
-        models: Vec::new(),
-        ..request.clone()
-    };
-    let mut digests: Vec<String> = Vec::with_capacity(models.len());
-    kept.models = models
+/// `request` with `models` as JSON, each model's SQL text and digest dropped, and each model's
+/// payload digest; the models are put back as they were. `None` when it cannot be encoded.
+fn retained_rows(request: &mut EvaluateRequest, models: &mut Vec<Model>) -> Option<RetainedRows> {
+    let digests: Vec<String> = models
         .iter()
+        .map(|model| model.payload_digest.clone().unwrap_or_default())
+        .collect();
+    let kept: Vec<(String, String, Option<String>, bool)> = models
+        .iter_mut()
         .map(|model| {
-            digests.push(model.payload_digest.clone().unwrap_or_default());
-            Model {
-                query_sql: String::new(),
-                authored_sql: String::new(),
-                payload_digest: None,
-                stripped: true,
-                ..model.clone()
-            }
+            (
+                std::mem::take(&mut model.query_sql),
+                std::mem::take(&mut model.authored_sql),
+                model.payload_digest.take(),
+                std::mem::replace(&mut model.stripped, true),
+            )
         })
         .collect();
-    RetainedRows {
-        request: kept,
-        digests,
+    request.models = std::mem::take(models);
+    let json: Option<Vec<u8>> = serde_json::to_vec(&*request).ok();
+    *models = std::mem::take(&mut request.models);
+    for (model, (query_sql, authored_sql, payload_digest, stripped)) in models.iter_mut().zip(kept)
+    {
+        model.query_sql = query_sql;
+        model.authored_sql = authored_sql;
+        model.payload_digest = payload_digest;
+        model.stripped = stripped;
     }
+    Some(RetainedRows {
+        request_json: without_derived_fields(json?),
+        digests,
+    })
+}
+
+/// The prefix the keys of fields a request serializes but never reads back share; evaluation
+/// derives them again.
+const DERIVED_FIELD_PREFIX: &str = ",\"empty_input_only";
+const DERIVED_FIELDS: [&str; 2] = ["_test_count\":", "\":"];
+
+/// `json` without the derived fields, each a bare number or boolean after its key.
+///
+/// Compact JSON escapes every quote inside strings, so these keys only match as keys.
+fn without_derived_fields(json: Vec<u8>) -> Vec<u8> {
+    let Ok(text) = std::str::from_utf8(&json) else {
+        return json;
+    };
+    let mut kept: Vec<u8> = Vec::with_capacity(json.len());
+    let mut copied: usize = 0;
+    for (start, _) in text.match_indices(DERIVED_FIELD_PREFIX) {
+        if start < copied {
+            continue;
+        }
+        let rest: &str = &text[start + DERIVED_FIELD_PREFIX.len()..];
+        let Some(field) = DERIVED_FIELDS
+            .iter()
+            .find(|field| rest.starts_with(**field))
+        else {
+            continue;
+        };
+        let value: &str = &rest[field.len()..];
+        let length: usize = value.find([',', '}']).unwrap_or(value.len());
+        kept.extend_from_slice(&json[copied..start]);
+        copied = start + DERIVED_FIELD_PREFIX.len() + field.len() + length;
+    }
+    kept.extend_from_slice(&json[copied..]);
+    kept
 }
 
 /// Answer a prepared request from the memo or evaluate it, writing the cache and memo at once.

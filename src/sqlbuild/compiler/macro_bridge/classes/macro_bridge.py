@@ -43,7 +43,7 @@ class MacroBridge:
     def attach_store(self, *, cache_dir: Path, project_dir: Path, model_paths: list[str]) -> None:
         """Reuse call results stored by earlier compiles of the same code and project files."""
 
-        if self._store_path is not None:
+        if self._store_path is not None or not self.memo.store_allowed():
             return
         path: Path = cache_dir / MACRO_CALL_STORE_FILE_NAME
         metadata: bytes

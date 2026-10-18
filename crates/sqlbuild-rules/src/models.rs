@@ -933,10 +933,11 @@ pub struct RowsRequest {
     pub retain: bool,
 }
 
-/// A request kept for the project image: its models' SQL text dropped, each model's digest kept.
-#[derive(Clone, Debug, Default)]
+/// A request kept for the project image, as the JSON an `EvaluateRequest` reads back: its
+/// models' SQL text and digests dropped and each model marked stripped.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RetainedRows {
-    pub request: EvaluateRequest,
+    pub request_json: Vec<u8>,
     /// Each model's payload digest, which keys its cached findings, in model order.
     pub digests: Vec<String>,
 }

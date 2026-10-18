@@ -38,7 +38,33 @@ pub(crate) struct ProjectImage {
     pub(crate) lint_model_keys: Option<Vec<(String, String)>>,
     pub(crate) lint_file_keys: Option<Vec<(String, Option<String>)>>,
     pub(crate) header_keys: BTreeMap<String, HeaderKeys>,
-    pub(crate) rules: Option<RetainedRows>,
+    pub(crate) rules: Option<ImageRules>,
+}
+
+/// A stored compile's built-in rules request, as decoded for a delta compile.
+#[derive(Clone, Debug)]
+pub(crate) struct BaseRules {
+    pub(crate) request: EvaluateRequest,
+    /// Each model's payload digest, which keys its cached findings, in model order.
+    pub(crate) digests: Vec<String>,
+}
+
+impl BaseRules {
+    /// The rows a compile retained, decoded.
+    pub(crate) fn decoded(retained: &RetainedRows) -> Option<Self> {
+        let request: EvaluateRequest = serde_json::from_slice(&retained.request_json).ok()?;
+        (request.models.len() == retained.digests.len()).then(|| Self {
+            request,
+            digests: retained.digests.clone(),
+        })
+    }
+}
+
+/// An image's rules request: decoded from a stored image, or as a compile just retained it.
+#[derive(Clone, Debug)]
+pub(crate) enum ImageRules {
+    Decoded(BaseRules),
+    Retained(RetainedRows),
 }
 
 /// The analysis session's final relation facts, as stored.
@@ -79,40 +105,6 @@ impl From<ImageRelations> for RelationTables {
             legacy_models: relations.legacy_models,
         }
     }
-}
-
-/// The prefix the keys of fields a rules request serializes but never reads back share;
-/// evaluation derives them again.
-const DERIVED_FIELD_PREFIX: &str = ",\"empty_input_only";
-const DERIVED_FIELDS: [&str; 2] = ["_test_count\":", "\":"];
-
-/// `json` without the derived fields, each a bare number or boolean after its key.
-///
-/// Compact JSON escapes every quote inside strings, so these keys only match as keys.
-fn without_derived_fields(json: Vec<u8>) -> Vec<u8> {
-    let Ok(text) = std::str::from_utf8(&json) else {
-        return json;
-    };
-    let mut kept: Vec<u8> = Vec::with_capacity(json.len());
-    let mut copied: usize = 0;
-    for (start, _) in text.match_indices(DERIVED_FIELD_PREFIX) {
-        if start < copied {
-            continue;
-        }
-        let rest: &str = &text[start + DERIVED_FIELD_PREFIX.len()..];
-        let Some(field) = DERIVED_FIELDS
-            .iter()
-            .find(|field| rest.starts_with(**field))
-        else {
-            continue;
-        };
-        let value: &str = &rest[field.len()..];
-        let length: usize = value.find([',', '}']).unwrap_or(value.len());
-        kept.extend_from_slice(&json[copied..start]);
-        copied = start + DERIVED_FIELD_PREFIX.len() + field.len() + length;
-    }
-    kept.extend_from_slice(&json[copied..]);
-    kept
 }
 
 /// Rows of `table` that differ from the same relation's `types` row; `None` where equal.
@@ -243,7 +235,9 @@ impl ProjectImage {
             lint_model_keys: capture.lint_model_keys,
             lint_file_keys: capture.lint_file_keys,
             header_keys: capture.header_keys,
-            rules: capture.rules.map(|rules| rules.retained),
+            rules: capture
+                .rules
+                .map(|rules| ImageRules::Retained(rules.retained)),
         })
     }
 
@@ -278,20 +272,16 @@ impl ProjectImage {
             lint_model_keys: self.lint_model_keys,
             lint_file_keys: self.lint_file_keys,
         };
-        let rules: Option<RetainedRows> = self.rules;
-        let ((gate, facts), rules) = rayon::join(
-            || (json(&gate), json(&facts)),
-            || {
-                rules
-                    .map(|rules| -> Result<(Vec<u8>, Vec<u8>), String> {
-                        Ok((
-                            without_derived_fields(json(&rules.request)?),
-                            json(&rules.digests)?,
-                        ))
-                    })
-                    .transpose()
-            },
-        );
+        let rules: Option<RetainedRows> = match self.rules {
+            Some(ImageRules::Retained(rules)) => Some(rules),
+            Some(ImageRules::Decoded(_)) | None => None,
+        };
+        let (gate, facts) = rayon::join(|| json(&gate), || json(&facts));
+        let rules = rules
+            .map(|rules| -> Result<(Vec<u8>, Vec<u8>), String> {
+                Ok((rules.request_json, json(&rules.digests)?))
+            })
+            .transpose();
         let mut sections: ImageSections = vec![
             (GATE_SECTION.to_owned(), gate?),
             (FACTS_SECTION.to_owned(), facts?),
@@ -307,7 +297,7 @@ impl ProjectImage {
     pub(crate) fn decode(sections: &ImageSections, gate: ImageGate) -> Option<Self> {
         let (facts, rules) = rayon::join(
             || serde_json::from_slice::<StoredFacts>(section(sections, FACTS_SECTION)?).ok(),
-            || -> Option<Option<RetainedRows>> {
+            || -> Option<Option<ImageRules>> {
                 let Some(bytes) = section(sections, RULES_SECTION) else {
                     return Some(None);
                 };
@@ -315,7 +305,7 @@ impl ProjectImage {
                 let digests: Vec<String> =
                     serde_json::from_slice(section(sections, RULE_DIGESTS_SECTION)?).ok()?;
                 (digests.len() == request.models.len())
-                    .then_some(Some(RetainedRows { request, digests }))
+                    .then_some(Some(ImageRules::Decoded(BaseRules { request, digests })))
             },
         );
         let facts: StoredFacts = facts?;

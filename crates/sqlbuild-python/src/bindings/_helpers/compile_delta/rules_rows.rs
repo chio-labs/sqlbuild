@@ -3,9 +3,10 @@
 use std::collections::HashMap;
 
 use pyo3::PyResult;
-use sqlbuild_rules::models::{EvaluateRequest, Model, RetainedRows, SqlTestFact};
+use sqlbuild_rules::models::{EvaluateRequest, Model, SqlTestFact};
 
 use crate::bindings::_helpers::compile_delta::context::{delta_unsupported, injection};
+use crate::bindings::_helpers::compile_delta::image::BaseRules;
 
 /// `request` unchanged outside a delta compile; inside one, the whole project's request with
 /// the rerun models' rows and the rerun SQL tests' facts taken from `request`.
@@ -13,7 +14,12 @@ pub(crate) fn whole_project_request(request: EvaluateRequest) -> PyResult<Evalua
     let Some(injection) = injection() else {
         return Ok(request);
     };
-    let Some(base) = injection.rules.as_ref() else {
+    let taken: Option<BaseRules> = injection
+        .rules
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
+    let Some(base) = taken else {
         return Err(delta_unsupported(
             "the previous compile did not run the built-in rules",
         ));
@@ -44,10 +50,10 @@ pub(crate) fn whole_project_request(request: EvaluateRequest) -> PyResult<Evalua
 }
 
 /// The retained request with each row's payload digest restored.
-fn restored(base: &RetainedRows) -> EvaluateRequest {
-    let mut request: EvaluateRequest = base.request.clone();
-    for (model, digest) in request.models.iter_mut().zip(&base.digests) {
-        model.payload_digest = Some(digest.clone());
+fn restored(base: BaseRules) -> EvaluateRequest {
+    let mut request: EvaluateRequest = base.request;
+    for (model, digest) in request.models.iter_mut().zip(base.digests) {
+        model.payload_digest = Some(digest);
         model.stripped = true;
     }
     request

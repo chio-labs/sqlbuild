@@ -81,6 +81,11 @@ impl MacroCallMemo {
         Ok(())
     }
 
+    /// Whether this compile may use the call store; a delta compile leaves it to full compiles.
+    fn store_allowed(&self) -> bool {
+        crate::bindings::_helpers::compile_delta::context::injection().is_none()
+    }
+
     /// Whether this compile recorded calls the attached store does not hold yet.
     fn store_needs_save(&self) -> PyResult<bool> {
         Ok(self

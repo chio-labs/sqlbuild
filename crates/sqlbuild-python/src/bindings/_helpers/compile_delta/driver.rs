@@ -20,7 +20,9 @@ use crate::bindings::_helpers::compile_delta::context::{
 use crate::bindings::_helpers::compile_delta::header_keys::{
     HeaderChange, custom_rule_reads, header_change,
 };
-use crate::bindings::_helpers::compile_delta::image::{ImageGate, ImageRelations, ProjectImage};
+use crate::bindings::_helpers::compile_delta::image::{
+    BaseRules, ImageGate, ImageRelations, ImageRules, ProjectImage,
+};
 use crate::bindings::_helpers::compile_delta::splice::{SpliceScope, spliced_report};
 use crate::bindings::_helpers::compile_driver::command::{PhasesOutcome, unrecorded_compile};
 use crate::bindings::_helpers::compile_outputs::reuse::NativeReuseAttempt;
@@ -223,7 +225,10 @@ fn lent_injection(image: &mut ProjectImage, project_dir: PathBuf) -> DeltaInject
             .map(|model| model.name.clone())
             .collect(),
         relations: std::mem::take(&mut image.relations).into(),
-        rules: image.rules.take(),
+        rules: std::sync::Mutex::new(match image.rules.take() {
+            Some(ImageRules::Decoded(rules)) => Some(rules),
+            Some(ImageRules::Retained(_)) | None => None,
+        }),
         fact_digests: std::mem::take(&mut image.fact_digests)
             .into_iter()
             .collect(),
@@ -239,7 +244,6 @@ fn lent_injection(image: &mut ProjectImage, project_dir: PathBuf) -> DeltaInject
 /// Return the facts `lent_injection` moved out of `image`.
 fn returned(image: &mut ProjectImage, injection: DeltaInjection) {
     image.relations = injection.relations.into();
-    image.rules = injection.rules;
     image.fact_digests = injection.fact_digests.into_iter().collect();
     image.model_subjects = injection.model_subjects;
     image.model_shapes = injection.model_shapes;
@@ -479,10 +483,19 @@ pub(crate) fn run<'py>(
             .into_iter()
             .filter(|name| !rerun.models.contains(name))
             .collect();
-        last = Some(ran);
         if added.is_empty() {
+            last = Some(ran);
             break;
         }
+        let rules: Option<BaseRules> = ran
+            .capture
+            .rules
+            .as_ref()
+            .and_then(|rules| BaseRules::decoded(&rules.retained));
+        let Some(rules) = rules else {
+            return fallback("the delta compile retained no rules request");
+        };
+        injection.rules = std::sync::Mutex::new(Some(rules));
         for name in added {
             if let Some(model) = stored_models.get(name.as_str()) {
                 rerun.model_paths.insert(model.relative_path.clone());
@@ -624,29 +637,13 @@ fn finished<'py>(
         return fallback("the delta compile recorded no report");
     }
     let delta_stdout: String = recorded.extract()?;
-    let Some(stored_output) = read_delta_output(&base.store_path, &base.stored) else {
-        return fallback("the stored report changed");
-    };
     if env_enabled(DELTA_VERIFY_ENV_VAR) {
         let project_dir: PathBuf = native_field(&ran.request, "project_dir")?.extract()?;
         let directory: PathBuf = project_dir.join(VERIFY_REPORT_DIRECTORY);
         let _ = std::fs::create_dir_all(&directory);
         let _ = std::fs::write(directory.join(VERIFY_REPORT_FILE), &delta_stdout);
     }
-    let stdout: String = if base.image.json_output {
-        let scope: SpliceScope<'_> = SpliceScope {
-            models: &rerun.models,
-            tests: &rerun.tests,
-        };
-        match spliced_report(&stored_output.stdout, &delta_stdout, &scope) {
-            Ok(stdout) => stdout,
-            Err(reason) => return fallback(reason),
-        }
-    } else {
-        delta_stdout
-    };
     let stderr_lines: Vec<Py<PyString>> = ran.output.getattr("stderr_lines")?.extract()?;
-    let environment_names: Vec<String> = base.image.environment_names.clone();
     let merge: RecordMerge = RecordMerge {
         kept: base
             .stored
@@ -655,9 +652,33 @@ fn finished<'py>(
             .iter()
             .map(|stamp| (stamp.relative_path.clone(), stamp.size, stamp.mtime_ns))
             .collect(),
-        environment_names,
+        environment_names: base.image.environment_names.clone(),
     };
-    let image: Option<ImageSections> = patched_image(base.image, rerun, ran.capture).encode().ok();
+    let json_output: bool = base.image.json_output;
+    let (store_path, stored, image) = (base.store_path, base.stored, base.image);
+    let capture: ImageCapture = ran.capture;
+    let (image, stdout): (Option<ImageSections>, Result<String, String>) = py.detach(|| {
+        rayon::join(
+            || patched_image(image, rerun, capture).encode().ok(),
+            || {
+                if !json_output {
+                    return Ok(delta_stdout);
+                }
+                let Some(stored_output) = read_delta_output(&store_path, &stored) else {
+                    return Err("the stored report changed".to_owned());
+                };
+                let scope: SpliceScope<'_> = SpliceScope {
+                    models: &rerun.models,
+                    tests: &rerun.tests,
+                };
+                spliced_report(&stored_output.stdout, &delta_stdout, &scope)
+            },
+        )
+    });
+    let stdout: String = match stdout {
+        Ok(stdout) => stdout,
+        Err(reason) => return fallback(reason),
+    };
     let _ = py;
     Ok(DeltaOutcome::Finished(Box::new(Finished {
         request: ran.request,
@@ -717,7 +738,9 @@ fn patched_image(base: ProjectImage, rerun: &Rerun, capture: ImageCapture) -> Pr
     if capture.text_models.is_some() {
         image.text_models = capture.text_models;
     }
-    image.rules = capture.rules.map(|rules| rules.retained);
+    image.rules = capture
+        .rules
+        .map(|rules| ImageRules::Retained(rules.retained));
     if let Some(shapes) = capture.model_shapes {
         image.model_shapes = shapes;
     }
