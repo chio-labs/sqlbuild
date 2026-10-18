@@ -388,6 +388,35 @@ pub(crate) fn run<'py>(
         Ok(found) => found,
         Err(reason) => return fallback(reason),
     };
+    request
+        .py()
+        .import("logging")?
+        .getattr("getLogger")?
+        .call1(("sqlbuild.compile.delta",))?
+        .call_method1(
+            "debug",
+            (
+                "Delta compile candidates: changed %s, added %s, removed %s",
+                changes
+                    .changed
+                    .iter()
+                    .take(5)
+                    .cloned()
+                    .collect::<Vec<String>>(),
+                changes
+                    .added
+                    .iter()
+                    .take(5)
+                    .cloned()
+                    .collect::<Vec<String>>(),
+                changes
+                    .removed
+                    .iter()
+                    .take(5)
+                    .cloned()
+                    .collect::<Vec<String>>(),
+            ),
+        )?;
     if !changes.added.is_empty() || !changes.removed.is_empty() {
         return fallback("files were added or removed");
     }
