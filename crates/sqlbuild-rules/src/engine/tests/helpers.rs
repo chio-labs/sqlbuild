@@ -329,10 +329,28 @@ pub(crate) fn empty_input_rule_evaluation(
     allowed_tests: Value,
     cache_enabled: bool,
 ) -> Result<Vec<String>, String> {
+    dialect_empty_input_rule_evaluation(
+        "duckdb",
+        project_dir,
+        select,
+        tests,
+        allowed_tests,
+        cache_enabled,
+    )
+}
+
+pub(crate) fn dialect_empty_input_rule_evaluation(
+    dialect: &str,
+    project_dir: &TempDir,
+    select: Value,
+    tests: Value,
+    allowed_tests: Value,
+    cache_enabled: bool,
+) -> Result<Vec<String>, String> {
     let request = json!({
         "version": 1,
         "project_dir": project_dir.path(),
-        "dialect": "duckdb",
+        "dialect": dialect,
         "config": {
             "select": select,
             "thresholds": {"min_tests_per_model": 1},

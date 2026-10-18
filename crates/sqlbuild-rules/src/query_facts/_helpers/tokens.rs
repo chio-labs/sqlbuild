@@ -58,7 +58,7 @@ const RIGHT_BOUNDARIES: [&str; 31] = [
     "NULLS",
     "OFFSET",
 ];
-const NON_FUNCTION_CALLS: [&str; 41] = [
+const NON_FUNCTION_CALLS: [&str; 42] = [
     "IN",
     "CAST",
     "TRY_CAST",
@@ -91,6 +91,7 @@ const NON_FUNCTION_CALLS: [&str; 41] = [
     "FLOOR",
     "OVERLAY",
     "CONVERT",
+    "TRY_CONVERT",
     "ARRAY",
     "STRUCT",
     "WHEN",
@@ -354,11 +355,18 @@ impl<'a> QueryTokens<'a> {
         false
     }
 
-    /// Whether `index` is a cast's `AS` or `::` before a parameterized type such as `DECIMAL(18, 2)`.
+    /// Whether a parameterized type such as `DECIMAL(18, 2)` follows a cast `AS`, `::` or `CONVERT(`.
     fn type_follows(&self, index: usize) -> bool {
-        (self.is_word(index, &["AS"]) || self.kind(index) == Some(TokenType::DColon))
-            && self.word(index + 1).is_some()
-            && self.kind(index + 2) == Some(TokenType::LParen)
+        let parameterized =
+            self.word(index + 1).is_some() && self.kind(index + 2) == Some(TokenType::LParen);
+        let cast = self.is_word(index, &["AS"]) || self.kind(index) == Some(TokenType::DColon);
+        let conversion = index > 0
+            && self.is_word(index - 1, &["CONVERT", "TRY_CONVERT"])
+            && self.kind(index) == Some(TokenType::LParen)
+            && self
+                .matching_close(index + 2)
+                .is_some_and(|close| self.kind(close + 1) == Some(TokenType::Comma));
+        parameterized && (cast || conversion)
     }
 
     /// The string-literal tokens within a normalized range, as character range and parsed text.
