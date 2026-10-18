@@ -54,6 +54,7 @@ def reused_final_audit_results_by_binding_key(
             reused=True,
             audit_definition_name=audit.definition_name,
             audit_description=audit.description,
+            audit_meta=audit.meta,
             evaluation_mode=audit.evaluation_mode,
             sample_unit=audit.sample_unit,
             minimum_samples=audit.minimum_samples,

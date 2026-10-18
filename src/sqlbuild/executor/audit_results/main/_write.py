@@ -7,9 +7,10 @@ from typing import Any
 
 from sqlbuild.adapter.contract.types import AdapterExecute, FrameworkType
 from sqlbuild.executor.audit_results._helpers.ddl_lock import run_with_audit_result_ddl_lock
+from sqlbuild.executor.audit_results._helpers.meta_column import ensure_meta_column
 from sqlbuild.executor.audit_results._helpers.sql import build_create_table_sql, build_insert_sql
 from sqlbuild.executor.audit_results.exceptions import AuditResultStorageError
-from sqlbuild.executor.audit_results.models import AuditResultRecord
+from sqlbuild.executor.audit_results.models import AuditResultColumnEvolution, AuditResultRecord
 
 
 def write_audit_result_records(
@@ -23,8 +24,9 @@ def write_audit_result_records(
     render_framework_type: Callable[[FrameworkType], str],
     render_create_table_sql: Callable[..., str] | None = None,
     render_create_index_sqls: Callable[..., tuple[str, ...]] | None = None,
+    column_evolution: AuditResultColumnEvolution | None = None,
 ) -> None:
-    """Create storage if needed and append all records in one insert."""
+    """Create storage if needed, add the meta column when records carry meta, and append."""
 
     if not records:
         return
@@ -39,19 +41,32 @@ def write_audit_result_records(
                 render_framework_type=render_framework_type,
             )
         )
+        needs_meta: bool = any(record.audit_meta_json is not None for record in records)
 
-        def initialize_audit_result_table() -> None:
+        def initialize_audit_result_table() -> bool:
             _ = execute(connection=connection, sql=create_sql)
             if render_create_index_sqls is not None:
                 for index_sql in render_create_index_sqls(database=database, schema=schema):
                     _ = execute(connection=connection, sql=index_sql)
+            if not needs_meta or column_evolution is None:
+                return True
+            return ensure_meta_column(
+                connection=connection,
+                execute=execute,
+                database=database,
+                schema=schema,
+                evolution=column_evolution,
+                render_qualified_name=render_qualified_name,
+                render_framework_type=render_framework_type,
+            )
 
-        _ = run_with_audit_result_ddl_lock(initialize_audit_result_table)
+        meta_available: bool = run_with_audit_result_ddl_lock(initialize_audit_result_table)
         insert_sql: str = build_insert_sql(
             database=database,
             schema=schema,
             records=records,
             render_qualified_name=render_qualified_name,
+            include_meta=meta_available,
         )
         _ = execute(connection=connection, sql=insert_sql)
     except AuditResultStorageError:

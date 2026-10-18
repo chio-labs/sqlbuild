@@ -37,7 +37,7 @@ const LOCATION_FIELD: &str = "location";
 const ACCEPTED_VALUES_AUDIT: &str = "accepted_values";
 const CONTRACT_KEY: &str = "contract";
 /// `AuditCase` fields copied onto each generated `SchemaAuditInstance` under the same name.
-const COPIED_CASE_FIELDS: [&str; 8] = [
+const COPIED_CASE_FIELDS: [&str; 9] = [
     "name",
     "severity",
     "run_scope",
@@ -46,6 +46,7 @@ const COPIED_CASE_FIELDS: [&str; 8] = [
     "thresholds",
     "minimum_samples",
     "evidence_limit",
+    "meta",
 ];
 const PIVOT_COLUMN_FIELD: &str = "pivot_column";
 const VALUE_COLUMN_FIELD: &str = "value_column";

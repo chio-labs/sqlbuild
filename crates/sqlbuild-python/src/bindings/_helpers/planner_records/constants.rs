@@ -772,6 +772,7 @@ const R_AUDIT_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("always_run", FieldDefault::False),
         FieldSpec::new("description", FieldDefault::None),
         FieldSpec::new("reads_outside_target_lineage", FieldDefault::False),
+        FieldSpec::new("meta", FieldDefault::None),
     ],
 };
 const R_CHAIN_STEP: RecordSpec = RecordSpec {

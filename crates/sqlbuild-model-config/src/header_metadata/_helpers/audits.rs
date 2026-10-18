@@ -7,6 +7,7 @@ use crate::header_metadata::_helpers::text::{
 };
 use crate::header_metadata::_helpers::thresholds::thresholds;
 use crate::header_metadata::constants::{AUDIT_OPTION_KEYS, AUDIT_SEVERITIES};
+use crate::header_metadata::main::json_meta_problem::json_meta_problem;
 use crate::header_metadata::models::ParsedAudit;
 use crate::types::{AuthoredNode, NodeKind};
 
@@ -96,6 +97,7 @@ fn configured_audit<N: AuthoredNode>(
         option_site,
         (definition, "evidence_limit"),
     )?;
+    let meta = optional_meta(entry(options, "meta"), option_site)?;
     let arguments: Vec<(N, N)> = options
         .iter()
         .filter(|(key, _)| !is_option_key(key))
@@ -112,7 +114,22 @@ fn configured_audit<N: AuthoredNode>(
         thresholds,
         minimum_samples,
         evidence_limit,
+        meta,
     })
+}
+
+fn optional_meta<N: AuthoredNode>(
+    node: Option<&N>,
+    site: Site<'_>,
+) -> Result<Option<N>, ConfigError> {
+    match node {
+        None => Ok(None),
+        Some(value) if value.kind() == NodeKind::Null => Ok(None),
+        Some(value) => match json_meta_problem(value) {
+            None => Ok(Some(value.clone())),
+            Some(problem) => Err(site.error(&format!("'meta' {problem}"))),
+        },
+    }
 }
 
 fn bare_audit<N: AuthoredNode>(definition_name: N) -> ParsedAudit<N> {
@@ -127,6 +144,7 @@ fn bare_audit<N: AuthoredNode>(definition_name: N) -> ParsedAudit<N> {
         thresholds: None,
         minimum_samples: None,
         evidence_limit: None,
+        meta: None,
     }
 }
 

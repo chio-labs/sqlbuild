@@ -161,7 +161,7 @@ pub(crate) const NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: [&str; 25] = [
 ];
 pub(crate) const FINITE_NUMBER_PAYLOAD_FIELDS: [&str; 1] = ["measured_value"];
 pub(crate) const BOOLEAN_PAYLOAD_FIELDS: [&str; 2] = ["evidence_truncated", "reused"];
-pub(crate) const JSON_PAYLOAD_FIELDS: [&str; 2] = ["evidence", "thresholds"];
+pub(crate) const JSON_PAYLOAD_FIELDS: [&str; 3] = ["audit_meta", "evidence", "thresholds"];
 pub const RESOURCE_SKIP_CODES: [&str; 4] = ["dependency", "explicit", "fan_in", "scheduler"];
 pub const RESOURCE_SKIP_MODES: [&str; 2] = ["hard", "soft"];
 pub const HOOK_PHASES: [&str; 2] = ["post_hooks", "pre_hooks"];
@@ -497,6 +497,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "attachment_kind",
             "audit_definition_name",
             "audit_description",
+            "audit_meta",
             "audit_name",
             "binding_key",
             "definition_fingerprint",
@@ -851,6 +852,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "attachment_kind",
             "audit_definition_name",
             "audit_description",
+            "audit_meta",
             "audit_name",
             "binding_key",
             "definition_fingerprint",

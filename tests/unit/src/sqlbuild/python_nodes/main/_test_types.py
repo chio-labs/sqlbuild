@@ -29,6 +29,20 @@ class InvalidAuditCaseNameTestCase:
 
 
 @dataclass(frozen=True)
+class AuditCaseMetaTestCase:
+    description: str
+    meta: dict[str, object] | None
+    expected_meta_json: str | None
+
+
+@dataclass(frozen=True)
+class InvalidAuditCaseMetaTestCase:
+    description: str
+    meta: object
+    expected_error_fragment: str
+
+
+@dataclass(frozen=True)
 class RetryDelayTestCase:
     description: str
     policy: RetryPolicy

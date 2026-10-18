@@ -14,6 +14,8 @@ use crate::bindings::_helpers::compiled_project::model_input_view::{
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::scopes::scope_report_objects::json_to_python;
+use sqlbuild_core::json::models::JsonValue;
 
 const AUDIT_RESOURCE: &str = "audit";
 const AUDIT_CLASSES: &str = "audits";
@@ -63,6 +65,8 @@ pub(crate) struct AttachedAudit {
     pub(crate) usages: Py<PyTuple>,
     pub(crate) name: Option<String>,
     pub(crate) description: Option<String>,
+    /// The authored mapping of JSON values reported with results, or `None`.
+    pub(crate) meta: Option<JsonValue>,
 }
 
 impl AttachedAudit {
@@ -276,6 +280,16 @@ macro_rules! audit_getters {
                     Ok(audit.attached.description.clone())
                 })
             }
+
+            #[getter]
+            pub(crate) fn meta(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+                read_audit(&self.owner, self.index, py, |audit, py| {
+                    match &audit.attached.meta {
+                        Some(meta) => json_to_python(py, meta.clone(), false),
+                        None => Ok(py.None()),
+                    }
+                })
+            }
         }
     };
 }
@@ -438,6 +452,7 @@ impl NativeCompiledAudit {
                 .to_owned()
                 .into_any(),
             self.description(py)?.into_bound_py_any(py)?,
+            self.meta(py)?.into_bound(py),
         ])
     }
 }

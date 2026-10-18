@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+from datetime import date
+from typing import cast
+
 import pytest
 
 from sqlbuild.audits import (
@@ -17,8 +21,10 @@ from sqlbuild.audits import (
 from sqlbuild.errors.contracts.exceptions import SharedInputError
 from sqlbuild.python_nodes.models import AuditFactoryDefinition
 from tests.unit.src.sqlbuild.python_nodes.main._test_types import (
+    AuditCaseMetaTestCase,
     AuditDecoratorTestCase,
     AuditThresholdHelperTestCase,
+    InvalidAuditCaseMetaTestCase,
     InvalidAuditCaseNameTestCase,
 )
 
@@ -79,6 +85,74 @@ def test_given_invalid_name_when_constructing_audit_case_then_input_error_is_rai
 ) -> None:
     with pytest.raises(SharedInputError, match=test_case.expected_error_fragment):
         AuditCase(name=test_case.name, definition="expression_is_true")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        AuditCaseMetaTestCase("absent", None, "null"),
+        AuditCaseMetaTestCase("empty", {}, "{}"),
+        AuditCaseMetaTestCase(
+            "nested JSON values",
+            {
+                "region": "emea",
+                "priority": 2,
+                "weight": 0.5,
+                "active": True,
+                "owner": None,
+                "channels": ["web", ("store", 3)],
+                "exclusion": {"reason": "before launch", "since": "2020-01-01"},
+            },
+            '{"region": "emea", "priority": 2, "weight": 0.5, "active": true, "owner": null, '
+            '"channels": ["web", ["store", 3]], '
+            '"exclusion": {"reason": "before launch", "since": "2020-01-01"}}',
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_json_meta_when_constructing_audit_case_then_meta_is_kept_unchanged(
+    test_case: AuditCaseMetaTestCase,
+) -> None:
+    case: AuditCase = AuditCase(
+        name="valid_orders", definition="expression_is_true", meta=test_case.meta
+    )
+
+    assert case.meta is test_case.meta
+    assert json.dumps(case.meta) == test_case.expected_meta_json
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        InvalidAuditCaseMetaTestCase(
+            "not a mapping", ["emea"], "meta must be a mapping of JSON values"
+        ),
+        InvalidAuditCaseMetaTestCase(
+            "non-string key", {1: "emea"}, "key 1 in meta is not a string"
+        ),
+        InvalidAuditCaseMetaTestCase(
+            "nested date", {"window": {"since": date(2020, 1, 1)}}, r"meta\['window'\]\['since'\]"
+        ),
+        InvalidAuditCaseMetaTestCase(
+            "non-finite number", {"weight": float("nan")}, "is not JSON-serialisable: nan"
+        ),
+        InvalidAuditCaseMetaTestCase(
+            "set in list", {"regions": [{"emea"}]}, r"meta\['regions'\]\[0\]"
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_non_json_meta_when_constructing_audit_case_then_input_error_names_the_value(
+    test_case: InvalidAuditCaseMetaTestCase,
+) -> None:
+    with pytest.raises(SharedInputError, match=test_case.expected_error_fragment) as error:
+        AuditCase(
+            name="valid_orders",
+            definition="expression_is_true",
+            meta=cast("dict[str, object]", test_case.meta),
+        )
+
+    assert "AuditCase 'valid_orders'" in str(error.value)
 
 
 if __name__ == "__main__":

@@ -1727,6 +1727,8 @@ class NativeAuditInput:
     @property
     def description(self) -> str | None: ...
     @property
+    def meta(self) -> dict[str, object] | None: ...
+    @property
     def declaration_usages(self) -> tuple[UsageRecord, ...]: ...
     @property
     def name(self) -> str | None: ...
@@ -1780,6 +1782,8 @@ class NativeCompiledAudit:
     def always_run(self) -> bool: ...
     @property
     def description(self) -> str | None: ...
+    @property
+    def meta(self) -> dict[str, object] | None: ...
 
 class NativeProjectView:
     @property
@@ -5462,7 +5466,12 @@ def retry_policy_exceptions(
 ) -> tuple[type[BaseException], ...]: ...
 def retry_delay_seconds(*, retry_policy: RetryPolicy, retry_index: int) -> float: ...
 def validate_audit_case(
-    *, name: str, definition: str, minimum_samples: int | None, evidence_limit: int | None
+    *,
+    name: str,
+    definition: str,
+    minimum_samples: int | None,
+    evidence_limit: int | None,
+    meta: object = ...,
 ) -> None: ...
 def normalize_hook_reads(
     value: SqlResourceRef | tuple[SqlResourceRef, ...] | list[SqlResourceRef],
@@ -14205,6 +14214,7 @@ class SchemaAuditInstance(NativeRecord):
     thresholds: MeasurementThresholds | None
     minimum_samples: int | None
     evidence_limit: int | None
+    meta: dict[str, object] | None
     location: SourceLocation | None
     def __init__(
         self,
@@ -14218,6 +14228,7 @@ class SchemaAuditInstance(NativeRecord):
         thresholds: MeasurementThresholds | None = ...,
         minimum_samples: int | None = ...,
         evidence_limit: int | None = ...,
+        meta: dict[str, object] | None = ...,
         location: SourceLocation | None = ...,
     ) -> None: ...
 
@@ -15935,6 +15946,7 @@ class AuditPlanEntry(NativeRecord):
     always_run: bool
     description: str | None
     reads_outside_target_lineage: bool
+    meta: dict[str, object] | None
     def __init__(
         self,
         key: CompiledObjectKey,
@@ -15962,6 +15974,7 @@ class AuditPlanEntry(NativeRecord):
         always_run: bool = ...,
         description: str | None = ...,
         reads_outside_target_lineage: bool = ...,
+        meta: dict[str, object] | None = ...,
     ) -> None: ...
 
 class ChainStep(NativeRecord):
@@ -17357,6 +17370,7 @@ class CompiledAudit(NativeRecord):
     run_scope: str | None
     always_run: bool
     description: str | None
+    meta: dict[str, object] | None
     def __init__(
         self,
         key: CompiledObjectKey,
@@ -17381,6 +17395,7 @@ class CompiledAudit(NativeRecord):
         run_scope: str | None = ...,
         always_run: bool = ...,
         description: str | None = ...,
+        meta: dict[str, object] | None = ...,
     ) -> None: ...
 
 class CompiledSqlScenario(NativeRecord):

@@ -35,7 +35,7 @@ const SCHEMA_COLUMN_FIELDS: [&str; 8] = [
     "migrate_from",
 ];
 /// `SchemaAuditInstance` fields in declaration order.
-const AUDIT_INSTANCE_FIELDS: [&str; 11] = [
+const AUDIT_INSTANCE_FIELDS: [&str; 12] = [
     "definition_name",
     "arguments",
     "name",
@@ -46,6 +46,7 @@ const AUDIT_INSTANCE_FIELDS: [&str; 11] = [
     "thresholds",
     "minimum_samples",
     "evidence_limit",
+    "meta",
     "location",
 ];
 /// `MeasurementThresholds` fields in declaration order.
@@ -324,6 +325,7 @@ fn native_audit_instance<'py>(
             thresholds(py, classes, audit.thresholds.as_ref())?,
             count(audit.minimum_samples.as_ref())?,
             count(audit.evidence_limit.as_ref())?,
+            count(audit.meta.as_ref())?,
             location.clone(),
         ],
     )
@@ -565,6 +567,7 @@ fn audit_instance<'py>(
             thresholds(py, classes, audit.thresholds.as_ref())?,
             optional(py, audit.minimum_samples.as_ref()),
             optional(py, audit.evidence_limit.as_ref()),
+            optional(py, audit.meta.as_ref()),
             location.clone(),
         ],
     )

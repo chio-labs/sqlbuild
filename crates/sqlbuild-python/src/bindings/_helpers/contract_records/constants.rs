@@ -569,6 +569,7 @@ const R_SCHEMA_AUDIT_INSTANCE: RecordSpec = RecordSpec {
         FieldSpec::new("thresholds", FieldDefault::None),
         FieldSpec::new("minimum_samples", FieldDefault::None),
         FieldSpec::new("evidence_limit", FieldDefault::None),
+        FieldSpec::new("meta", FieldDefault::None),
         FieldSpec {
             name: "location",
             default: FieldDefault::None,

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -51,3 +53,34 @@ class InvalidDrainTimeoutE2ETestCase:
     description: str
     shutdown_timeout_toml: str
     expected_error: str
+
+
+@dataclass(frozen=True)
+class AuditMetaRoundTripE2ETestCase:
+    """Declared audit meta and where each audit's meta must reappear unchanged."""
+
+    description: str
+    prepare_results_table: Callable[[Path], None]
+    expected_meta: dict[str, object]
+
+
+@dataclass(frozen=True)
+class AuditMetaChangeE2ETestCase:
+    """One header edit whose rebuild is compared with an equivalent description-only edit."""
+
+    description: str
+    original_header_fragment: str
+    meta_only_fragment: str
+    description_only_fragment: str
+    expected_meta_after_change: dict[str, object]
+    expected_plan_reasons: dict[str, str]
+
+
+@dataclass(frozen=True)
+class InvalidAuditMetaE2ETestCase:
+    """One project file whose audit meta must fail compilation with a clear message."""
+
+    description: str
+    relative_path: str
+    contents: str
+    expected_fragments: tuple[str, ...]

@@ -39,6 +39,8 @@ use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::model_config::header_metadata::thresholds;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::result_output::integration_values::json_value;
+use sqlbuild_core::json::models::JsonValue;
 use sqlbuild_model_config::errors::ConfigError;
 use sqlbuild_model_config::header_metadata::main::parse_measurement_policy::parse_measurement_policy;
 
@@ -341,7 +343,23 @@ impl<'py> AuditScope<'_, 'py> {
             usages: PyTuple::new(py, usages)?.unbind(),
             name: None,
             description: None,
+            meta: None,
         })
+    }
+
+    /// The instance's `meta` as JSON, or `None`; a value JSON cannot carry fails the compile.
+    fn meta(&self, instance: &Bound<'py, PyAny>, label: &str) -> PyResult<Option<JsonValue>> {
+        let meta: Bound<'py, PyAny> = native_field(instance, "meta")?;
+        if meta.is_none() {
+            return Ok(None);
+        }
+        match json_value(&meta)? {
+            Some(value) => Ok(Some(value)),
+            None => {
+                let message: String = format!("{label}: 'meta' must be a mapping of JSON values");
+                Err(compile_error(self.context.classes, &message, None))
+            }
+        }
     }
 
     /// One attached generic audit instance, as `build_attached_audit_input` builds it.
@@ -477,6 +495,7 @@ impl<'py> AuditScope<'_, 'py> {
             usages: PyTuple::new(py, usages)?.unbind(),
             name: native_field(instance, "name")?.extract()?,
             description: native_field(instance, "description")?.extract()?,
+            meta: self.meta(instance, &label)?,
         })
     }
 

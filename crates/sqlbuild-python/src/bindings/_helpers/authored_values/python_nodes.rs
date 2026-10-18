@@ -10,9 +10,11 @@ use pyo3::types::{
 use pyo3::types::{PyTupleMethods, PyTypeMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::identifier_text::main::is_lowercase_identifier::is_lowercase_identifier;
+use sqlbuild_model_config::header_metadata::main::json_meta_problem::json_meta_problem;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
@@ -143,16 +145,17 @@ fn valid_count(value: &Bound<'_, PyAny>) -> PyResult<bool> {
     Ok(!below(value, 0)?)
 }
 
-/// Reject an audit case without a lowercase name, a definition, or valid optional counts.
+/// Reject an audit case without a lowercase name, a definition, valid counts, or JSON meta.
 #[pyfunction]
-#[pyo3(signature = (*, name, definition, minimum_samples, evidence_limit))]
-fn validate_audit_case(
-    name: &Bound<'_, PyAny>,
-    definition: &Bound<'_, PyAny>,
-    minimum_samples: &Bound<'_, PyAny>,
-    evidence_limit: &Bound<'_, PyAny>,
-) -> Result<(), PyErr> {
-    let py: Python<'_> = name.py();
+#[pyo3(signature = (**request))]
+fn validate_audit_case(request: Option<&Bound<'_, PyDict>>) -> Result<(), PyErr> {
+    let request = Request::new("validate_audit_case", request)?;
+    let py: Python<'_> = request.py();
+    let name: &Bound<'_, PyAny> = &request.get("name")?;
+    let definition: &Bound<'_, PyAny> = &request.get("definition")?;
+    let minimum_samples: &Bound<'_, PyAny> = &request.get("minimum_samples")?;
+    let evidence_limit: &Bound<'_, PyAny> = &request.get("evidence_limit")?;
+    let meta: Option<Bound<'_, PyAny>> = request.optional("meta")?;
     let Ok(text) = name.downcast::<PyString>() else {
         return Err(name_type_error(name)?);
     };
@@ -167,6 +170,12 @@ fn validate_audit_case(
     }
     if !valid_count(evidence_limit)? {
         return Err(shared_input_error(py, AUDIT_CASE_EVIDENCE_LIMIT));
+    }
+    if let Some(meta) = meta.as_ref().filter(|meta| !meta.is_none())
+        && let Some(problem) = json_meta_problem(&PyNode(meta.clone()))
+    {
+        let message: String = format!("AuditCase '{text}' meta {problem}");
+        return Err(shared_input_error(py, &message));
     }
     Ok(())
 }

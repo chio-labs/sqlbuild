@@ -8,8 +8,8 @@ from threading import Lock
 _audit_result_ddl_lock: Lock = Lock()
 
 
-def run_with_audit_result_ddl_lock(callback: Callable[[], None]) -> None:
-    """Run audit-result DDL under a process-local lock."""
+def run_with_audit_result_ddl_lock[T](callback: Callable[[], T]) -> T:
+    """Run audit-result DDL under a process-local lock and return its result."""
 
     with _audit_result_ddl_lock:
-        callback()
+        return callback()
