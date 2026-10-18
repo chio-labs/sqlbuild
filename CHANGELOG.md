@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.158.0](https://github.com/chio-labs/sqlbuild/compare/v0.157.4...v0.158.0) (2026-10-18)
+
+
+### Features
+
+* bound SQL unit test and model execution cost and attach audit metadata ([#1141](https://github.com/chio-labs/sqlbuild/issues/1141)) ([dfdadd8](https://github.com/chio-labs/sqlbuild/commit/dfdadd80df071bde50235150b30eb2bb4124afbe))
+
 ## [0.157.4](https://github.com/chio-labs/sqlbuild/compare/v0.157.3...v0.157.4) (2026-10-18)
 
 
