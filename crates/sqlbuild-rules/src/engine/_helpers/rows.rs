@@ -93,6 +93,7 @@ fn build_model(row: ModelRow, inputs: &ModelInputs<'_, '_>) -> Result<Model, Str
         targeting_test_count,
         empty_input_only_test_count: 0,
         payload_digest: None,
+        stripped: false,
     })
 }
 

@@ -123,6 +123,8 @@ pub(crate) fn orders_request(models: Vec<ModelRequest>) -> SessionRequest {
         nullability_rules: Some(Vec::new()),
         nullability_callback: None,
         rich_type_inference: true,
+        forced_order: None,
+        retain_relations: false,
         column_types: raw_orders.clone(),
         column_nullability: shapes(&[(
             "raw_orders",
@@ -384,6 +386,7 @@ pub(crate) fn finished_session(tables: PivotTables) -> FinishedSession {
         pool: catalog("duckdb", &Vec::new()).analysis_pool(),
         models: HashMap::new(),
         dynamic_proofs: HashMap::new(),
+        relations: None,
     }
 }
 

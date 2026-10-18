@@ -115,6 +115,17 @@ impl SessionCatalog {
         self.schemas.get(name)
     }
 
+    /// Every closed shape the catalog holds, sorted by name.
+    pub(crate) fn schema_rows(&self) -> Shapes {
+        let mut rows: Shapes = self
+            .schemas
+            .iter()
+            .map(|(name, shape)| (name.clone(), shape.clone()))
+            .collect();
+        rows.sort_by(|left, right| left.0.cmp(&right.0));
+        rows
+    }
+
     /// `(shared members, shared members re-analysed alone)` so far.
     pub(crate) fn sharing(&self) -> (usize, usize) {
         (self.shared_members, self.reanalysed_members)

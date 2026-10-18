@@ -12,6 +12,8 @@ pub struct ModelFileOptions {
     pub removed_keys: Vec<String>,
     pub extract_implicit_alias_columns: bool,
     pub extract_output_column_locations: bool,
+    /// Discover only these project-relative paths, when given.
+    pub path_filter: Option<std::sync::Arc<std::collections::BTreeSet<String>>>,
 }
 
 /// One parsed model file; values mirror the fields of Python's `DiscoveredSqlModelFile`.

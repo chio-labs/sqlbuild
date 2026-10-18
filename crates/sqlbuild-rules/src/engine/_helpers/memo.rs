@@ -10,7 +10,7 @@ use crate::constants::{API_VERSION, NATIVE_ROWS_MEMO_VERSION};
 use crate::engine::_helpers::cache::PendingBucketWrite;
 use crate::engine::_helpers::evaluation::{EvaluationControl, evaluate_request_with};
 use crate::errors::RowsError;
-use crate::models::{EvaluateRequest, Model, RowsEvaluation, RowsRequest};
+use crate::models::{EvaluateRequest, Model, RetainedRows, RowsEvaluation, RowsRequest};
 
 /// A rows request whose models are digested, ready to evaluate once.
 #[derive(Debug)]
@@ -20,6 +20,8 @@ pub(crate) struct PreparedRows {
     memo: Option<(String, PathBuf)>,
     /// The digest of every evaluation input the request carries, when it was asked for.
     pub(crate) key: Option<String>,
+    /// The request kept for the project image, when it was asked for.
+    pub(crate) retained: Option<RetainedRows>,
 }
 
 /// What a speculative evaluation found, with every write it would have made still pending.
@@ -41,7 +43,11 @@ pub(crate) fn evaluate_rows(rows: RowsRequest) -> Result<RowsEvaluation, RowsErr
 
 /// Digest `rows`' models and derive its memo identity and, when asked, its speculation key.
 pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, RowsError> {
-    let RowsRequest { mut request, memo } = rows;
+    let RowsRequest {
+        mut request,
+        memo,
+        retain,
+    } = rows;
     let models: Vec<Model> = std::mem::take(&mut request.models)
         .into_iter()
         .map(digested)
@@ -55,13 +61,50 @@ pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, Ro
     } else {
         None
     };
+    let retained: Option<RetainedRows> = retain.then(|| retained_rows(&request, &models));
     request.models = models;
-    Ok(PreparedRows { request, memo, key })
+    Ok(PreparedRows {
+        request,
+        memo,
+        key,
+        retained,
+    })
+}
+
+/// `request` with `models` whose SQL text is dropped, and each model's payload digest.
+fn retained_rows(request: &EvaluateRequest, models: &[Model]) -> RetainedRows {
+    let mut kept: EvaluateRequest = EvaluateRequest {
+        models: Vec::new(),
+        ..request.clone()
+    };
+    let mut digests: Vec<String> = Vec::with_capacity(models.len());
+    kept.models = models
+        .iter()
+        .map(|model| {
+            digests.push(model.payload_digest.clone().unwrap_or_default());
+            Model {
+                query_sql: String::new(),
+                authored_sql: String::new(),
+                payload_digest: None,
+                stripped: true,
+                ..model.clone()
+            }
+        })
+        .collect();
+    RetainedRows {
+        request: kept,
+        digests,
+    }
 }
 
 /// Answer a prepared request from the memo or evaluate it, writing the cache and memo at once.
 pub(crate) fn evaluate_prepared(prepared: PreparedRows) -> Result<RowsEvaluation, RowsError> {
-    let PreparedRows { request, memo, .. } = prepared;
+    let PreparedRows {
+        request,
+        memo,
+        retained,
+        ..
+    } = prepared;
     let reused: Option<String> = memo
         .as_ref()
         .and_then(|(identity, path)| read_response(path, identity));
@@ -76,7 +119,9 @@ pub(crate) fn evaluate_prepared(prepared: PreparedRows) -> Result<RowsEvaluation
             (response, false)
         }
     };
-    decode(&response, was_reused)
+    let mut evaluation: RowsEvaluation = decode(&response, was_reused)?;
+    evaluation.retained = retained;
+    Ok(evaluation)
 }
 
 /// Evaluate a prepared request as `evaluate_prepared` does, holding every write it would make.
@@ -162,6 +207,9 @@ fn speculation_key(
 
 /// `model` with the BLAKE3 digest of its exact facts, which keys its cached findings.
 fn digested(mut model: Model) -> Result<Model, RowsError> {
+    if model.payload_digest.is_some() {
+        return Ok(model);
+    }
     let mut hasher: blake3::Hasher = blake3::Hasher::new();
     serde_json::to_writer(&mut hasher, &model).map_err(rules_error)?;
     model.payload_digest = Some(hasher.finalize().to_hex().to_string());

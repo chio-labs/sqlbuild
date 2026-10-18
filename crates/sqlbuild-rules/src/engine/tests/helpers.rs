@@ -531,6 +531,7 @@ pub(crate) fn speculative_rows_request(
                 project_dir.join(SPECULATIVE_MEMO_FILE),
             )
         }),
+        retain: false,
     })
 }
 

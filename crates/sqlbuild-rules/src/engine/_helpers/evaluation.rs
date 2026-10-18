@@ -60,6 +60,10 @@ struct PendingModelRule<'a> {
     identity: Option<String>,
 }
 
+/// The error a delta compile's rules request raises when a row without SQL needs evaluating.
+pub(crate) const STRIPPED_ROW_MISSED: &str =
+    "delta compile unsupported: a model's rule findings are no longer cached";
+
 struct CompletedModelRule {
     index: usize,
     identity: Option<String>,
@@ -151,6 +155,9 @@ fn evaluate_native_models(
             model,
             identity,
         });
+    }
+    if pending_models.iter().any(|pending| pending.model.stripped) {
+        return Err(STRIPPED_ROW_MISSED.to_owned());
     }
     let project_dir = Path::new(&context.request.project_dir);
     let completed = evaluate_pending_models(pending_models, context)?;

@@ -571,6 +571,9 @@ pub struct Model {
     pub empty_input_only_test_count: u32,
     #[serde(skip)]
     pub payload_digest: Option<String>,
+    /// Whether this row's SQL text was dropped, so only a cached result may stand for it.
+    #[serde(skip)]
+    pub stripped: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -926,6 +929,16 @@ pub struct RowsRequest {
     pub request: EvaluateRequest,
     /// The compiled-code identity and memo path, when the rules cache is enabled.
     pub memo: Option<(String, std::path::PathBuf)>,
+    /// Keep the request, its models without SQL text, for the project image.
+    pub retain: bool,
+}
+
+/// A request kept for the project image: its models' SQL text dropped, each model's digest kept.
+#[derive(Clone, Debug, Default)]
+pub struct RetainedRows {
+    pub request: EvaluateRequest,
+    /// Each model's payload digest, which keys its cached findings, in model order.
+    pub digests: Vec<String>,
 }
 
 /// A built-in rules evaluation running speculatively on its own thread; dropping it cancels it.
@@ -963,4 +976,6 @@ pub struct RowsEvaluation {
     pub built_in_ms: u64,
     #[serde(skip)]
     pub reused: bool,
+    #[serde(skip)]
+    pub retained: Option<RetainedRows>,
 }

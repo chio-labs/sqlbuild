@@ -14,6 +14,7 @@ const FILE_PATH: &str = "/project/models/orders.sql";
 
 fn options() -> ModelFileOptions {
     ModelFileOptions {
+        path_filter: None,
         supported_keys: [
             "audits",
             "columns",
