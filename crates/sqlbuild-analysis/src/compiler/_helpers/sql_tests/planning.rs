@@ -102,7 +102,7 @@ struct ProjectContext {
     reserved_ctes: Arc<Mutex<HashMap<String, Option<String>>>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct SqlTestPatterns {
     pub(crate) reference: Regex,
     pub(crate) source: Regex,
@@ -116,7 +116,7 @@ pub(crate) struct SqlTestPatterns {
 }
 
 impl SqlTestPatterns {
-    fn new(lexical: LexicalSyntax) -> Result<Self, String> {
+    pub(crate) fn new(lexical: LexicalSyntax) -> Result<Self, String> {
         Ok(Self {
             reference: compile_pattern(r#"(?i)__ref\(\"([^\"]+)\"\)"#)?,
             source: compile_pattern(r#"(?i)__source\(\"([^\"]+)\"\)"#)?,

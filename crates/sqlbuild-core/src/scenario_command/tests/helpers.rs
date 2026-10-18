@@ -93,14 +93,14 @@ pub(super) fn failing_result_row() -> ScenarioResultRow {
             AssertionRow {
                 name: "no_negative".to_owned(),
                 failed: true,
-                failing_row_count: 1,
+                failing_row_count: Some(1),
                 first_sample: Some("(1, 'a', None)".to_owned()),
                 error: None,
             },
             AssertionRow {
                 name: "few".to_owned(),
                 failed: true,
-                failing_row_count: 3,
+                failing_row_count: Some(3),
                 first_sample: None,
                 error: coded(None, "plain error", None),
             },

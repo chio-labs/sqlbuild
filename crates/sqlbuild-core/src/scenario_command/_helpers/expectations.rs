@@ -52,25 +52,15 @@ pub(crate) fn expectation_rows(row: &ScenarioResultRow, style: CliStyle) -> Stri
         text.push_str(&expectation_error(expected.error.as_ref(), style));
     }
     for assertion in &row.assertions {
-        let detail: String = if assertion.failed {
-            format!(
-                "  {} {}",
-                assertion.failing_row_count,
-                rows_label(assertion.failing_row_count)
-            )
-        } else {
-            String::new()
+        let (status, detail): (&str, String) = match (assertion.failed, assertion.failing_row_count)
+        {
+            (false, _) => (PASS_STATUS, String::new()),
+            (true, Some(count)) => (FAIL_STATUS, format!("  {count} {}", rows_label(count))),
+            (true, None) => (ERROR_STATUS, String::new()),
         };
         text.push_str(&expectation_line(
             &format!("assertion {}", assertion.name),
-            (
-                if assertion.failed {
-                    FAIL_STATUS
-                } else {
-                    PASS_STATUS
-                },
-                detail,
-            ),
+            (status, detail),
             style,
         ));
         text.push_str(&expectation_error(assertion.error.as_ref(), style));
@@ -97,9 +87,12 @@ pub(crate) fn expectation_failures(row: &ScenarioResultRow) -> String {
         ));
     }
     for assertion in row.assertions.iter().filter(|assertion| assertion.failed) {
+        let Some(failing) = assertion.failing_row_count else {
+            continue;
+        };
         text.push_str(&format!(
-            "    assertion {}: failing_rows={}\n",
-            assertion.name, assertion.failing_row_count
+            "    assertion {}: failing_rows={failing}\n",
+            assertion.name
         ));
         if let Some(sample) = &assertion.first_sample {
             text.push_str(&format!("    sample: {sample}\n"));

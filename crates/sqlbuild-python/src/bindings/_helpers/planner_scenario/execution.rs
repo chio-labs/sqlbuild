@@ -17,6 +17,7 @@ use crate::bindings::_helpers::planner_resolution::locations::build_function_loc
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_EXPECTED_COLUMNS_HELP, SCENARIO_PLAN_EXPECTED_COLUMNS, SCENARIO_PLAN_INVALID_FIXTURE,
 };
+use crate::bindings::_helpers::planner_scenario::helper_scope::scenario_helper_scope;
 use crate::bindings::_helpers::planner_scenario::{
     entries::{function_entry, seed_entries},
     fixtures::{extract_fixtures, fixture_plans},
@@ -35,6 +36,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
 use sqlbuild_analysis::compiler::main::scenario_expected_column_message::scenario_expected_column_message;
 use sqlbuild_analysis::compiler::main::scenario_expected_columns::scenario_expected_columns;
+use sqlbuild_analysis::compiler::main::scenario_reader_sql::scenario_reader_sql;
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -332,6 +334,7 @@ fn expectations<'py>(
     models: &Bound<'py, PyDict>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = scenario.py();
+    let scope = scenario_helper_scope(scenario, context)?;
     let mut expected: Vec<Bound<'py, PyAny>> = Vec::new();
     for cte in native_field(scenario, "expected_ctes")?.try_iter()? {
         let cte = cte?;
@@ -341,7 +344,11 @@ fn expectations<'py>(
         let authored: String = native_field(&cte, "sql_body")?.extract()?;
         let compared =
             compared_columns(scenario, context, (models.get_item(name)?, name), &authored)?;
-        let sql = resolve_sql(context, &authored, false)?;
+        let sql = resolve_sql(
+            context,
+            &scenario_reader_sql(&scope, &authored, true),
+            false,
+        )?;
         expected.push(new_record_with(
             py,
             RecordId::ScenarioExpectedExpectationPlan,
@@ -363,9 +370,10 @@ fn expectations<'py>(
     for cte in native_field(scenario, "assertion_ctes")?.try_iter()? {
         let cte = cte?;
         let name: String = native_field(&cte, "name")?.extract()?;
+        let authored: String = native_field(&cte, "sql_body")?.extract()?;
         let sql = resolve_sql(
             context,
-            &native_field(&cte, "sql_body")?.extract::<String>()?,
+            &scenario_reader_sql(&scope, &authored, true),
             false,
         )?;
         assertions.push(new_record_with(

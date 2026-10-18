@@ -429,16 +429,28 @@ pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<
     }
     let mut assertions: Vec<Bound<'py, PyDict>> = Vec::new();
     for item in items(&native_field(result, "assertion_results")?)? {
-        let entries: Vec<(&'static str, Bound<'py, PyAny>)> = vec![
-            ("name", native_field(&item, "name")?),
-            ("status", value(&item, "status")?),
-            (
-                "failing_row_count",
-                native_field(&item, "failing_row_count")?,
-            ),
-            ("sample_rows", native_field(&item, "sample_rows")?),
-        ];
-        assertions.push(with_errors(&item, entries)?);
+        let failing: Bound<'py, PyAny> = native_field(&item, "failing_row_count")?;
+        let ran: &str = if failing.is_none() {
+            COMPARISON_NOT_RUN
+        } else {
+            COMPARISON_COMPLETED
+        };
+        let result: Bound<'py, PyDict> = dict(
+            py,
+            vec![
+                ("name", native_field(&item, "name")?),
+                ("status", value(&item, "status")?),
+                ("query_status", any(py, ran)?),
+                ("failing_row_count", failing),
+                ("sample_rows", native_field(&item, "sample_rows")?),
+            ],
+        )?;
+        for (name, error) in fields(&item, &ERROR_FIELDS)? {
+            if !error.is_none() {
+                result.set_item(name, error)?;
+            }
+        }
+        assertions.push(result);
     }
     with_errors(
         result,

@@ -213,3 +213,10 @@ pub(crate) struct ScenarioExpectedColumnsTestCase {
     pub(crate) all_columns: bool,
     pub(crate) expected_message: Option<&'static str>,
 }
+
+pub(crate) struct ScenarioHelperScopeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) reader_sql: &'static str,
+    pub(crate) fixtures: bool,
+    pub(crate) expected_sql: &'static str,
+}

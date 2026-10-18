@@ -925,3 +925,15 @@ def selected_fields(result: dict[str, Any], expected: dict[str, object]) -> dict
     """Return the fields of `result` that `expected` names."""
 
     return {key: result.get(key) for key in expected}
+
+
+def build_helper_scenario_project_files(*, helper_ctes: str, check_ctes: str) -> dict[str, str]:
+    """Build an order-flags project whose scenario declares helpers ahead of its checks."""
+
+    return {
+        **_EXPECTED_COLUMNS_PROJECT_FILES,
+        _EXPECTED_COLUMNS_SCENARIO_PATH: (
+            f"SCENARIO ({_EXPECTED_COLUMNS_DESCRIPTION});\n\n"
+            f"{_EXPECTED_COLUMNS_FIXTURE}{helper_ctes},\n\n{check_ctes}\n\nSELECT 1\n"
+        ),
+    }

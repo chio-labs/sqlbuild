@@ -59,7 +59,8 @@ pub struct ExpectedRow {
 pub struct AssertionRow {
     pub name: String,
     pub failed: bool,
-    pub failing_row_count: i64,
+    /// `None` when the assertion query did not run.
+    pub failing_row_count: Option<i64>,
     /// `str()` of the first failing sample row, when there is one.
     pub first_sample: Option<String>,
     pub error: Option<CodedText>,

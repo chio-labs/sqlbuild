@@ -108,8 +108,15 @@ the model does not output fails planning with `S512` before the scenario runs. S
 `expected_columns "all"` in the `SCENARIO()` header to also require every model output column to be
 listed; a missing column then fails with `S512`, naming it.
 
-A comparison that fails to run reports its error with an `ERROR` status and no row counts; in
-`--json` output its `comparison_status` is `not_run` and its row counts are `null`.
+Any other CTE is a helper. As in unit tests, fixtures, expected CTEs and assertions can read
+helpers, and helpers can read other helpers, `__ref(...)` and the other relation calls, and fixtures
+by CTE name, such as `__ref__orders`. SQLBuild places each helper a query reads, directly or through
+other helpers, ahead of it in dependency order; a fixture read by name reads the fixture's
+materialised table. A model an assertion reads through a helper is built like one it reads directly.
+
+A comparison or assertion that fails to run reports its error with an `ERROR` status and no row
+counts. In `--json` output an expected result's `comparison_status`, or an assertion result's
+`query_status`, is `not_run`, and its row counts are `null`.
 
 For sources with two-part identity, use double underscores: `__source__raw__orders`.
 

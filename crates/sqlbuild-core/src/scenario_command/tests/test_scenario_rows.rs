@@ -7,7 +7,7 @@ use crate::scenario_command::main::render_capture_result::render_capture_result;
 use crate::scenario_command::main::render_scenario_result::render_scenario_result;
 use crate::scenario_command::main::render_snapshot_sync_result::render_snapshot_sync_result;
 use crate::scenario_command::models::{
-    CaptureRow, ExpectedRow, FixtureStatements, FunctionStatements, LoadedRelation,
+    AssertionRow, CaptureRow, ExpectedRow, FixtureStatements, FunctionStatements, LoadedRelation,
     LocalRuntimeInputs, ModelArtifactEntry, NamedStatements, RetainedInputs, ScenarioResultRow,
     WarehouseRuntimeInputs,
 };
@@ -24,7 +24,7 @@ const RA1: &str = "orders_paid                                                  
 const RB0: &str = "orders_local                                                     ERROR\n    snapshot missing\n    Retained local DuckDB: /work/target/run/scenarios/orders_local/local.duckdb\n";
 const RC0: &str = "orders_warehouse                                                 FAIL\n    boom\n    Rerun with --retain to inspect scenario-owned artifacts.\n";
 const RD1: &str = "orders_ok                                                        \u{1b}[32mPASS\u{1b}[0m  0.01s\n    expect    expected m                                         \u{1b}[32mPASS\u{1b}[0m\n";
-const RE0: &str = "orders_errored                                                   FAIL\n    expect    expected fact_orders                               ERROR\n              error[X504]: comparison failed to run\n";
+const RE0: &str = "orders_errored                                                   FAIL\n    expect    expected fact_orders                               ERROR\n              error[X504]: comparison failed to run\n    expect    assertion no_negative                              ERROR\n              error[X507]: assertion failed to run\n";
 const CE0: &str = "orders_paid                                                      PASS  2 relations, 3 rows\n    source   raw_orders                                          PASS  2 rows, 41 B\n    seed     countries                                           PASS  1 row, 1.5 KB\n    snapshot tests/_scenario_snapshots/orders_paid/scenario.json\n";
 const SE0R: &str = "orders_paid                                                      REFRESHED  2 relations, 3 rows\n    source   raw_orders                                          PASS  2 rows, 41 B\n    seed     countries                                           PASS  1 row, 1.5 KB\n    snapshot tests/_scenario_snapshots/orders_paid/scenario.json\n";
 const CF1: &str = "orders_big                                                       \u{1b}[38;5;167mFAIL\u{1b}[0m  0 relations, 0 rows\n    \u{1b}[38;5;167m\u{1b}[1merror[X512]:\u{1b}[0m too many rows\n      \u{1b}[2m= help:\u{1b}[0m narrow it\n    Rerun with --retain to inspect scenario-owned artifacts.\n    source   raw_orders                                          \u{1b}[38;5;167mFAIL\u{1b}[0m  0 rows, 0 B\n    snapshot /elsewhere/scenario.json\n";
@@ -86,6 +86,12 @@ fn given_scenario_result_when_rendering_then_matches_result_row_layout() {
                     failed: true,
                     error: coded(Some("X504"), "comparison failed to run", None),
                     ..ExpectedRow::default()
+                }],
+                assertions: vec![AssertionRow {
+                    name: "no_negative".to_owned(),
+                    failed: true,
+                    error: coded(Some("X507"), "assertion failed to run", None),
+                    ..AssertionRow::default()
                 }],
                 ..ScenarioResultRow::default()
             },

@@ -326,12 +326,12 @@ class ScenarioExpectedExpectationExecutionResult:
 
 @dataclass(frozen=True)
 class ScenarioAssertionExpectationExecutionResult:
-    """Outcome of executing one zero-row scenario assertion."""
+    """Outcome of executing one zero-row scenario assertion; no count if it did not run."""
 
     scenario_name: str
     name: str
     status: ExecutionStatus
-    failing_row_count: int = 0
+    failing_row_count: int | None = None
     sample_rows: tuple[tuple[object, ...], ...] = field(default_factory=tuple)
     error_code: str | None = None
     error_help: str | None = None

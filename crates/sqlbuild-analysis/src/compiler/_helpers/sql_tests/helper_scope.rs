@@ -33,6 +33,7 @@ pub(crate) struct HelperScope {
 }
 
 /// One mock CTE other test CTEs can read by its generated name.
+#[derive(Debug)]
 pub(crate) struct ScopeMock {
     pub(crate) generated_name: String,
     pub(crate) mock_name: String,
@@ -41,6 +42,7 @@ pub(crate) struct ScopeMock {
 }
 
 /// One test-defined helper: its authored name and body, and its top-level CTE name and body.
+#[derive(Debug)]
 struct ScopeHelper {
     name: String,
     original: String,
@@ -51,6 +53,7 @@ struct ScopeHelper {
 }
 
 /// A helper whose relation references were resolved like an assertion's, after the model chain.
+#[derive(Debug)]
 pub(crate) struct ResolvedHelper {
     /// The helper body with every reference replaced by the CTE that stands in for it.
     pub(crate) sql: String,
@@ -67,7 +70,7 @@ pub(crate) struct ScopeDependency<'a> {
 }
 
 /// Where helper CTEs live in the rendered test query.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum HelperPlacement {
     /// Each top-level test CTE carries the helpers it reads in its own WITH.
     #[default]
@@ -95,7 +98,7 @@ enum ScopeNode {
 }
 
 /// Name references between one test's helper and mock CTEs, tokenized once per test.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) struct ScopeGraph {
     placement: HelperPlacement,
     helpers: Vec<ScopeHelper>,
@@ -384,6 +387,17 @@ impl ScopeGraph {
     /// Top-level CTEs a test-authored query placed inline in model SQL reads.
     pub(crate) fn reader_scope(&self, sql: &str, patterns: &SqlTestPatterns) -> HelperScope {
         self.collect_scope(self.closure(&identifier_tokens(sql, patterns), true))
+    }
+
+    /// Top-level CTEs `sql` reads, transitively and dependencies first; mocks only when asked.
+    pub(crate) fn reader_ctes(
+        &self,
+        sql: &str,
+        patterns: &SqlTestPatterns,
+        through_mocks: bool,
+    ) -> Vec<(String, String)> {
+        self.collect_scope(self.closure(&identifier_tokens(sql, patterns), through_mocks))
+            .ctes
     }
 
     fn collect_scope(&self, nodes: Vec<ScopeNode>) -> HelperScope {

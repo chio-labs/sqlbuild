@@ -272,3 +272,17 @@ class ScenarioExpectedColumnsHeaderE2ETestCase:
     header_options: str
     expected_exit_code: int
     expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioHelperCteE2ETestCase:
+    """Test case for scenario checks that read helper CTEs declared in the same file."""
+
+    description: str
+    helper_ctes: str
+    check_ctes: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_json_expected_results: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    expected_json_assertion_results: tuple[dict[str, object], ...] = field(default_factory=tuple)
