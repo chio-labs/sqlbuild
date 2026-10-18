@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.157.2](https://github.com/chio-labs/sqlbuild/compare/v0.157.1...v0.157.2) (2026-10-18)
+
+
+### Performance Improvements
+
+* write the custom-rule host payload natively and decode facts lazily ([#1135](https://github.com/chio-labs/sqlbuild/issues/1135)) ([c7817ab](https://github.com/chio-labs/sqlbuild/commit/c7817ab82a151a6d9e177059feae218e99b7b14a))
+
 ## [0.157.1](https://github.com/chio-labs/sqlbuild/compare/v0.157.0...v0.157.1) (2026-10-17)
 
 
