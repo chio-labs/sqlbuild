@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.157.3](https://github.com/chio-labs/sqlbuild/compare/v0.157.2...v0.157.3) (2026-10-18)
+
+
+### Performance Improvements
+
+* remove redundant graph-phase scans and parallelise source and resource SQL preparation ([#1137](https://github.com/chio-labs/sqlbuild/issues/1137)) ([4505bbb](https://github.com/chio-labs/sqlbuild/commit/4505bbbba50d5984d8208b3fc2a14bd99f0a52f7))
+
 ## [0.157.2](https://github.com/chio-labs/sqlbuild/compare/v0.157.1...v0.157.2) (2026-10-18)
 
 
