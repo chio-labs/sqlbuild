@@ -175,6 +175,17 @@ pub(crate) fn normalize_analysis_sql(
     normalize(sql, dialect, &stubs, &placeholders).map(|mapped| mapped.sql)
 }
 
+pub(crate) fn normalize_dialect_sql_mapped(
+    sql: &str,
+    dialect: &str,
+) -> Result<(String, Vec<usize>), String> {
+    let input = MappedSql::new(sql);
+    if !dialect.eq_ignore_ascii_case("snowflake") {
+        return Ok((input.sql, input.offsets));
+    }
+    normalize_variant(input).map(|mapped| (mapped.sql, mapped.offsets))
+}
+
 pub(crate) fn normalize_dialect_sql(sql: &str, dialect: &str) -> Result<String, String> {
     if !dialect.eq_ignore_ascii_case("snowflake") {
         return Ok(sql.to_owned());
