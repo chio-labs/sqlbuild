@@ -21,6 +21,11 @@ fn given_written_relations_when_matching_project_relations_then_matches_python()
             expected_match: Some(("source", "raw_orders", None)),
         },
         MatchTestCase {
+            description: "names match by casefold where lowercase differs",
+            written: ("STRASSE", Some("LANDING"), None),
+            expected_match: Some(("source", "street_addresses", None)),
+        },
+        MatchTestCase {
             description: "an expression source is no relation",
             written: ("computed", None, None),
             expected_match: None,

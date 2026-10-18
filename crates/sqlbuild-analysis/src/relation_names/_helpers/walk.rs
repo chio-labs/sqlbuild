@@ -2,6 +2,7 @@
 
 use polyglot_sql::{ComplexityGuardOptions, Dialect, Expression, ParseOptions};
 use serde_json::{Map, Value, json};
+use sqlbuild_core::text::main::python_casefold::python_casefold;
 
 use crate::relation_names::constants::{
     CATALOG_KEY, CREATE_TABLE_KEY, CTE_ALIAS_KEY, CTE_LIST_KEY, GENERIC_DIALECT,
@@ -130,5 +131,5 @@ fn temporary_name(node: &Map<String, Value>) -> Option<String> {
         return None;
     }
     let table: &Map<String, Value> = create.get(NAME_KEY)?.as_object()?;
-    identifier(table.get(NAME_KEY)).map(str::to_lowercase)
+    identifier(table.get(NAME_KEY)).map(python_casefold)
 }

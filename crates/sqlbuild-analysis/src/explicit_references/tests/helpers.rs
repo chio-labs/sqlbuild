@@ -42,6 +42,13 @@ pub(crate) fn request() -> ReferenceRequest {
                 expression: false,
             },
             SourceRelation {
+                name: "street_addresses".to_owned(),
+                table: Some("straße".to_owned()),
+                schema: Some("landing".to_owned()),
+                database: None,
+                expression: false,
+            },
+            SourceRelation {
                 name: "computed".to_owned(),
                 table: None,
                 schema: None,
