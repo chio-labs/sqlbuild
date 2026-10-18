@@ -174,8 +174,8 @@ fn expects_disabled(test: &SqlTestSqlInput, disabled: &HashSet<&str>) -> bool {
 fn sql_test_resources(
     request: &ResourceSqlRequest,
     disabled: &HashSet<&str>,
-    pool: &ThreadPool,
-) -> Vec<ResourceSql> {
+    pool: &dyn Fn() -> Result<Arc<ThreadPool>, String>,
+) -> Result<Vec<ResourceSql>, String> {
     let checked: Vec<&SqlTestSqlInput> = request
         .sql_tests
         .iter()
@@ -187,17 +187,20 @@ fn sql_test_resources(
         .map(|test| test.sql_body.as_str())
         .filter(|body| seen.insert(body))
         .collect();
-    let prepared: Vec<(String, Vec<String>)> = pool.install(|| {
+    if bodies.is_empty() {
+        return Ok(Vec::new());
+    }
+    let prepared: Vec<(String, Vec<String>)> = pool()?.install(|| {
         bodies
             .par_iter()
             .map(|body| prepared_test_sql(body))
             .collect()
     });
     let prepared: HashMap<&str, (String, Vec<String>)> = bodies.into_iter().zip(prepared).collect();
-    checked
+    Ok(checked
         .into_iter()
         .map(|test| test_resource(test, &prepared[test.sql_body.as_str()]))
-        .collect()
+        .collect())
 }
 
 fn hook_resources_of(model: &HookModelInput, request: &ResourceSqlRequest) -> Vec<ResourceSql> {
@@ -237,10 +240,13 @@ fn hook_resources_of(model: &HookModelInput, request: &ResourceSqlRequest) -> Ve
 }
 
 /// Every checked resource body, deduplicated in first-seen order and filtered by the opt-out policy.
-pub(crate) fn resources(request: &ResourceSqlRequest, pool: &ThreadPool) -> Vec<ResourceSql> {
+pub(crate) fn resources(
+    request: &ResourceSqlRequest,
+    pool: &dyn Fn() -> Result<Arc<ThreadPool>, String>,
+) -> Result<Vec<ResourceSql>, String> {
     let disabled = disabled_models(request);
     let mut all = audit_resources(request, &disabled);
-    all.extend(sql_test_resources(request, &disabled, pool));
+    all.extend(sql_test_resources(request, &disabled, pool)?);
     for model in request
         .models
         .iter()
@@ -251,11 +257,12 @@ pub(crate) fn resources(request: &ResourceSqlRequest, pool: &ThreadPool) -> Vec<
     let mut seen: HashSet<&ResourceSql> = HashSet::with_capacity(all.len());
     let first_seen: Vec<bool> = all.iter().map(|resource| seen.insert(resource)).collect();
     drop(seen);
-    all.into_iter()
+    Ok(all
+        .into_iter()
         .zip(first_seen)
         .filter(|(resource, first)| {
             *first && (resource.opt_out.is_none() || request.require_sql_analysis)
         })
         .map(|(resource, _)| resource)
-        .collect()
+        .collect())
 }

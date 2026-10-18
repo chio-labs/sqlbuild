@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sqlbuild_attachments::cursor_intrinsics::main::replace_intrinsics::replace_intrinsics;
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 
 use crate::semantic_checks::_helpers::explanation::opt_outs::unneeded_opt_out;
 use crate::semantic_checks::_helpers::resource_sql::help::{HelpContext, resource_sql_help};
@@ -205,10 +206,8 @@ pub(crate) fn resource_sql_findings(
     request: &ResourceSqlRequest,
     catalog: &ProjectCatalog,
 ) -> Result<Vec<ResourceSqlDiagnostic>, ResourceSqlFailure> {
-    let pool = catalog
-        .analysis_pool()
-        .map_err(ResourceSqlFailure::Internal)?;
-    let checked = resources(request, &pool);
+    let pool = || catalog.analysis_pool();
+    let checked = resources(request, &pool).map_err(ResourceSqlFailure::Internal)?;
     if checked.is_empty() {
         return Ok(Vec::new());
     }
@@ -219,12 +218,16 @@ pub(crate) fn resource_sql_findings(
         .map(|resource| resource.sql.as_str())
         .filter(|sql| seen.insert(sql))
         .collect();
-    let cleaned: Vec<Result<String, ResourceSqlFailure>> = pool.install(|| {
-        unique
-            .par_iter()
-            .map(|sql| cleaned_sql(sql, dialect))
-            .collect()
-    });
+    let cleaned: Vec<Result<String, ResourceSqlFailure>> =
+        pool().map_err(ResourceSqlFailure::Internal)?.install(|| {
+            unique
+                .par_iter()
+                .map(|sql| {
+                    catch_compiler_panic(|| Ok(cleaned_sql(sql, dialect)))
+                        .unwrap_or_else(|panic| Err(ResourceSqlFailure::Internal(panic)))
+                })
+                .collect()
+        });
     let mut normalized: HashMap<&str, String> = HashMap::with_capacity(unique.len());
     for (sql, cleaned) in unique.into_iter().zip(cleaned) {
         normalized.insert(sql, cleaned?);
