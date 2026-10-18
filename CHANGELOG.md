@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.157.4](https://github.com/chio-labs/sqlbuild/compare/v0.157.3...v0.157.4) (2026-10-18)
+
+
+### Performance Improvements
+
+* read native records directly and shorten the compile tail ([#1139](https://github.com/chio-labs/sqlbuild/issues/1139)) ([98a2133](https://github.com/chio-labs/sqlbuild/commit/98a213385340d0021e1a0dd6c738b3cd765fbc1a))
+
 ## [0.157.3](https://github.com/chio-labs/sqlbuild/compare/v0.157.2...v0.157.3) (2026-10-18)
 
 
