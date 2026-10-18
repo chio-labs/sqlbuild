@@ -571,6 +571,49 @@ def test_given_node_result_table_when_rendering_create_then_sqlserver_guards_mis
     "test_case",
     [
         SqlServerLatestReadSqlTestCase(
+            description="renders guarded source freshness table with indexable keys",
+            database="shop",
+            schema="analytics",
+            expected_fragments=(
+                "IF NOT EXISTS (SELECT 1 FROM information_schema.tables ",
+                "WHERE table_schema = 'analytics' AND table_name = '_sqlbuild_source_freshness' "
+                "AND table_catalog = 'shop')",
+                "CREATE TABLE shop.analytics._sqlbuild_source_freshness (",
+                "source_name NVARCHAR(450)",
+                "target_database NVARCHAR(450)",
+                "target_schema NVARCHAR(450)",
+                "target_name NVARCHAR(450)",
+                "run_id NVARCHAR(450)",
+            ),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_source_freshness_table_when_rendering_create_then_sqlserver_guards_missing_table(
+    test_case: SqlServerLatestReadSqlTestCase,
+) -> None:
+    adapter: SqlServerAdapter = SqlServerAdapter()
+
+    statement: str = adapter.render_create_source_freshness_table_sql(
+        database=test_case.database,
+        schema=test_case.schema,
+    )
+
+    for expected_fragment in test_case.expected_fragments:
+        assert expected_fragment in statement, statement
+    assert "CREATE TABLE IF NOT EXISTS" not in statement
+    index_sql: str = adapter.render_create_source_freshness_index_sqls(
+        database=test_case.database, schema=test_case.schema
+    )[0]
+    for key_column in ("source_name", "target_database", "target_schema", "target_name"):
+        assert key_column in index_sql
+        assert f"{key_column} NVARCHAR(MAX)" not in statement
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqlServerLatestReadSqlTestCase(
             description="renders bounded fingerprint key columns",
             database=None,
             schema="analytics",
