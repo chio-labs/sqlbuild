@@ -487,22 +487,25 @@ fn select_star(
         .build()
         .map_err(|error| error.to_string())?
         .is_match(&parsed.model.relative_path);
-    let mut import_stars: HashSet<usize> = HashSet::new();
+    let mut import_queries: Vec<&QueryFacts> = Vec::new();
     for (cte, classified) in parsed.facts.ctes.iter().zip(&parsed.classification.ctes) {
         if classified.dependency_import {
-            import_stars.extend(stars_in_query(&cte.query).into_iter().flatten());
+            import_queries.extend(cte.query.all_queries());
         }
     }
     for query in parsed.facts.all_queries() {
         let Some(select) = query.root_select() else {
             continue;
         };
+        if import_queries
+            .iter()
+            .any(|imported| std::ptr::eq(*imported, query))
+        {
+            continue;
+        }
         let dynamic_output_star =
             dynamic_contracts::allows_output_star(query, parsed.facts, parsed.model);
         for star in stars_in_select(select) {
-            if star.is_some_and(|offset| import_stars.contains(&offset)) {
-                continue;
-            }
             if dynamic_output_star {
                 continue;
             }
@@ -856,10 +859,14 @@ fn evaluate_comparison(
             .columns
             .iter()
             .any(|name| parsed.model.enum_columns.contains(name));
-        let bare_string = comparison
-            .string_literals
-            .iter()
-            .any(|literal| parsed.model.authored_sql.contains(literal));
+        let bare_string = comparison.string_literals.iter().any(|literal| {
+            let text = literal
+                .range
+                .map_or(literal.generated.as_str(), |(start, end)| {
+                    parsed.source.text(start, end)
+                });
+            parsed.model.authored_sql.contains(text)
+        });
         let modified_controlled_column =
             comparison
                 .modified_columns
@@ -1101,15 +1108,6 @@ fn custom_rule_test_coverage(
             });
         }
     }
-}
-
-fn stars_in_query(query: &QueryFacts) -> Vec<Option<usize>> {
-    query
-        .all_queries()
-        .into_iter()
-        .filter_map(QueryFacts::root_select)
-        .flat_map(stars_in_select)
-        .collect()
 }
 
 fn stars_in_select(select: &SelectFacts) -> Vec<Option<usize>> {

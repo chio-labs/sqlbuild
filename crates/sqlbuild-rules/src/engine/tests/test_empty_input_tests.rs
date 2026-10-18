@@ -45,6 +45,34 @@ fn given_sql_test_shapes_when_evaluating_empty_input_rule_then_flags_only_filler
             expected_messages: &[FLAGGED_MESSAGE],
         },
         test_types::EmptyInputTestRuleTestCase {
+            description: "a cast to a parameterized type under a false predicate is an empty mock",
+            test: helpers::empty_input_test_fact(
+                "orders__empty_inputs_produce_no_rows",
+                &[(
+                    "__source__raw_orders",
+                    "SELECT CAST(NULL AS DECIMAL(18, 2)) AS amount WHERE 1 = 0",
+                )],
+                &[],
+                &[NO_ROWS_ASSERTION],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[FLAGGED_MESSAGE],
+        },
+        test_types::EmptyInputTestRuleTestCase {
+            description: "a cast to a parameterized type keeps a bare existence check",
+            test: helpers::empty_input_test_fact(
+                "orders__empty_inputs_produce_no_rows",
+                &[EMPTY_ORDERS],
+                &[],
+                &[(
+                    "__assert__empty_inputs_produce_no_rows",
+                    "SELECT CAST(order_id AS VARCHAR(10)) AS unexpected_row FROM __ref(\"orders\")",
+                )],
+            ),
+            allowed_tests: json!([]),
+            expected_messages: &[FLAGGED_MESSAGE],
+        },
+        test_types::EmptyInputTestRuleTestCase {
             description: "input rows with expected output pass",
             test: helpers::empty_input_test_fact(
                 "orders__doubles_amounts",

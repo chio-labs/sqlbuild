@@ -262,14 +262,44 @@ impl<'a> QueryTokens<'a> {
 
     /// Whether a function call starts in `range`.
     pub(crate) fn calls_function(&self, range: Range<usize>) -> bool {
-        range.into_iter().any(|index| {
-            self.opens(index + 1)
+        let mut index = range.start;
+        while index < range.end {
+            if self.type_follows(index) {
+                index = self
+                    .matching_close(index + 2)
+                    .map_or(index + 1, |close| close + 1);
+                continue;
+            }
+            if self.opens(index + 1)
                 && self.kind(index + 1) == Some(TokenType::LParen)
                 && self.word(index).is_some_and(|word| {
                     word.starts_with(|first: char| first.is_ascii_alphabetic() || first == '_')
                         && !NON_FUNCTION_CALLS.contains(&word.as_str())
                 })
-        })
+            {
+                return true;
+            }
+            index += 1;
+        }
+        false
+    }
+
+    /// Whether `index` is a cast's `AS` or `::` before a parameterized type such as `DECIMAL(18, 2)`.
+    fn type_follows(&self, index: usize) -> bool {
+        (self.is_word(index, &["AS"]) || self.kind(index) == Some(TokenType::DColon))
+            && self.word(index + 1).is_some()
+            && self.kind(index + 2) == Some(TokenType::LParen)
+    }
+
+    /// The string-literal tokens within a normalized range, as character range and parsed text.
+    pub(crate) fn string_tokens(&self, start: usize, end: usize) -> Vec<(usize, usize, &str)> {
+        self.tokens
+            .iter()
+            .filter(|token| {
+                token.span.start >= start && token.span.end <= end && string_token(token.token_type)
+            })
+            .map(|token| (token.span.start, token.span.end, token.text.as_str()))
+            .collect()
     }
 
     /// Every SELECT keyword's region and projection items, in source order.
@@ -313,7 +343,17 @@ impl<'a> QueryTokens<'a> {
                     cursor = close + 1;
                 }
             } else if self.is_word(cursor, &["TOP"]) {
-                cursor += 2;
+                cursor += 1;
+                cursor = match self.opens(cursor).then(|| self.matching_close(cursor)) {
+                    Some(Some(close)) => close + 1,
+                    _ => cursor + 1,
+                };
+                if self.is_word(cursor, &["PERCENT"]) {
+                    cursor += 1;
+                }
+                if self.is_word(cursor, &["WITH"]) && self.is_word(cursor + 1, &["TIES"]) {
+                    cursor += 2;
+                }
             } else {
                 break;
             }
@@ -572,6 +612,18 @@ fn compact(text: &str) -> String {
         .filter(|character| !character.is_whitespace())
         .flat_map(char::to_lowercase)
         .collect()
+}
+
+fn string_token(token_type: TokenType) -> bool {
+    matches!(
+        token_type,
+        TokenType::String
+            | TokenType::TripleSingleQuotedString
+            | TokenType::TripleDoubleQuotedString
+            | TokenType::EscapeString
+            | TokenType::UnicodeString
+            | TokenType::NationalString
+    )
 }
 
 fn literal(token_type: TokenType) -> bool {

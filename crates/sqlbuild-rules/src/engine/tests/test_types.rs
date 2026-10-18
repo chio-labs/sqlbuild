@@ -272,3 +272,13 @@ pub(crate) struct SpeculativeOutcomeTestCase {
     pub(crate) outcome: fn() -> crate::engine::_helpers::memo::SpeculativeOutcome,
     pub(crate) expected_clean: bool,
 }
+
+pub(crate) struct QueryFactsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: &'static str,
+    pub(crate) query_sql: &'static str,
+    pub(crate) select: &'static [&'static str],
+    pub(crate) enum_columns: &'static [&'static str],
+    pub(crate) columns: Value,
+    pub(crate) expected_faults: &'static [(&'static str, u64, u64, &'static str)],
+}

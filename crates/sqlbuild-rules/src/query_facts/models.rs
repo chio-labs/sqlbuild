@@ -115,6 +115,13 @@ pub(crate) struct ColumnFact {
     pub(crate) qualifier: Option<String>,
 }
 
+/// Text read from a model's own SQL when its normalized range is known, else Polyglot's spelling.
+#[derive(Debug)]
+pub(crate) struct SourceText {
+    pub(crate) range: Option<(usize, usize)>,
+    pub(crate) generated: String,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct ComparisonFacts {
     pub(crate) span: Option<ComparisonSpan>,
@@ -124,7 +131,7 @@ pub(crate) struct ComparisonFacts {
     pub(crate) binary: bool,
     pub(crate) output_name: Option<String>,
     pub(crate) columns: BTreeSet<String>,
-    pub(crate) string_literals: Vec<String>,
+    pub(crate) string_literals: Vec<SourceText>,
     pub(crate) numeric_literals: Vec<String>,
     pub(crate) modified_columns: BTreeSet<ColumnFact>,
     pub(crate) modified_string_literal: bool,

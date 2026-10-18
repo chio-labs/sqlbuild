@@ -1,9 +1,11 @@
 use crate::query_facts::_helpers::shape::stub_call;
 use crate::query_facts::_helpers::tokens::{ComparisonOperator, QueryTokens, SelectTokens};
-use crate::query_facts::constants::{MAX_FUNCTION_CALL_DEPTH, TABLE_FUNCTION_STUB};
+use crate::query_facts::constants::{
+    MAX_FUNCTION_CALL_DEPTH, TABLE_FUNCTION_STUB, TRIPLE_QUOTE_LENGTH,
+};
 use crate::query_facts::models::{
     CallKind, ColumnFact, ComparisonFacts, ComparisonSpan, CteFacts, ExpressionItem, ItemFacts,
-    ModelShape, ParsedFixture, QueryFacts, RelationFacts, SelectFacts, SetFacts,
+    ModelShape, ParsedFixture, QueryFacts, RelationFacts, SelectFacts, SetFacts, SourceText,
 };
 use polyglot_sql::dialects::Dialect;
 use polyglot_sql::expressions::{Identifier, Literal, Select, TableRef, With};
@@ -378,6 +380,9 @@ impl Builder<'_> {
             ),
             ..ComparisonFacts::default()
         };
+        let mut string_tokens: Vec<(usize, usize, &str)> = span.map_or_else(Vec::new, |span| {
+            self.tokens.string_tokens(span.start, span.end)
+        });
         for value in node.dfs() {
             match value {
                 Expression::Column(column) => {
@@ -387,8 +392,15 @@ impl Builder<'_> {
                     fact.columns.insert(identifier.name.clone());
                 }
                 Expression::Literal(literal) => {
-                    if let Some(text) = string_literal(literal) {
-                        fact.string_literals.push(text);
+                    if let Some(generated) = string_literal(literal) {
+                        let position = string_tokens
+                            .iter()
+                            .position(|(_, _, text)| *text == literal.value_str());
+                        let range = position.map(|index| {
+                            let (start, end, _) = string_tokens.remove(index);
+                            (start, end)
+                        });
+                        fact.string_literals.push(SourceText { range, generated });
                     }
                 }
                 _ => {}
@@ -687,6 +699,15 @@ fn string_literal(literal: &Literal) -> Option<String> {
     match literal {
         Literal::String(value) => Some(format!("'{}'", value.replace('\'', "''"))),
         Literal::NationalString(value) => Some(format!("N'{}'", value.replace('\'', "''"))),
+        Literal::TripleQuotedString(value, quote) => {
+            let delimiter = quote.to_string().repeat(TRIPLE_QUOTE_LENGTH);
+            Some(format!("{delimiter}{value}{delimiter}"))
+        }
+        Literal::EscapeString(value) => Some(if value.starts_with(['E', 'e']) {
+            value.clone()
+        } else {
+            format!("E'{value}'")
+        }),
         _ => None,
     }
 }
@@ -694,6 +715,7 @@ fn string_literal(literal: &Literal) -> Option<String> {
 fn direct_string_literal(expression: &Expression) -> Option<String> {
     match unwrap_paren(expression) {
         Expression::Literal(literal) => string_literal(literal),
+        Expression::UnicodeString(unicode) => direct_string_literal(&unicode.this),
         _ => None,
     }
 }

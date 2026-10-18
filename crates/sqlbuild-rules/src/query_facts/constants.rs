@@ -9,3 +9,4 @@ pub(crate) const MAX_FUNCTION_CALL_DEPTH: usize = 128;
 pub(crate) const UDF_CALL: &str = "__udf";
 pub(crate) const TABLE_FUNCTION_CALL: &str = "__table_fn";
 pub(crate) const MIN_CAST_TOKENS: usize = 2;
+pub(crate) const TRIPLE_QUOTE_LENGTH: usize = 3;
