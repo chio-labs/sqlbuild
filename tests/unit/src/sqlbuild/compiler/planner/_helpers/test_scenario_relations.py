@@ -161,7 +161,7 @@ def test_given_quoting_renderer_when_building_relation_plan_then_renders_through
     "test_case",
     [
         ScenarioFixturePlanTestCase(
-            description="wraps fixture SQL with shared scenario helper CTEs",
+            description="wraps each fixture with only the scenario helper CTEs it reads",
             graph_plan=ScenarioGraphPlan(
                 key=build_scenario_relation_test_project().models[0].key,
                 name=SCENARIO_NAME,
@@ -178,18 +178,9 @@ def test_given_quoting_renderer_when_building_relation_plan_then_renders_through
                     "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
                     "SELECT * FROM helper_orders"
                 ),
-                "ref:stg_customers": (
-                    "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
-                    "SELECT 10 AS customer_id"
-                ),
-                "dbt_ref:stripe__payments": (
-                    "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
-                    "SELECT 1 AS payment_id, 10 AS customer_id"
-                ),
-                "seed:country_codes": (
-                    "WITH helper_orders AS (SELECT 1 AS order_id, 10 AS customer_id) "
-                    "SELECT 'US' AS country_code"
-                ),
+                "ref:stg_customers": "SELECT 10 AS customer_id",
+                "dbt_ref:stripe__payments": "SELECT 1 AS payment_id, 10 AS customer_id",
+                "seed:country_codes": "SELECT 'US' AS country_code",
             },
             expected_fixture_targets={
                 "source:raw__orders": "scenario_schema.__sqb_51b385aebe20__source__raw__orders",
