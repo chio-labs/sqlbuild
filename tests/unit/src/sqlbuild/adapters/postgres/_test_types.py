@@ -152,3 +152,12 @@ class FailedSqlTestOutputTestCase:
     description: str
     expected_statements: tuple[str, ...]
     expected_in_transaction: bool
+
+
+@dataclass(frozen=True)
+class RefusedBeginTestCase:
+    """A unit test whose BEGIN the deadline refuses, followed by work in a caller transaction."""
+
+    description: str
+    expected_statements: tuple[str, ...]
+    expected_in_transaction: bool

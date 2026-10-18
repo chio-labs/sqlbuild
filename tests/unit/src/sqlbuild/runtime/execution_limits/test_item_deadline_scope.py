@@ -31,6 +31,7 @@ from tests.unit.src.sqlbuild.runtime.execution_limits._test_types import (
     IdleExpiryTestCase,
     NestedDeadlineTestCase,
     NoPolicyTestCase,
+    SharedQueuedClockTestCase,
     SuspendedCleanupTestCase,
 )
 from tests.unit.src.sqlbuild.runtime.execution_limits.helpers import (
@@ -309,6 +310,53 @@ def test_given_no_policy_when_entering_scope_then_no_deadline_applies(
 
     assert deadline is test_case.expected_deadline
     assert current is test_case.expected_deadline
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SharedQueuedClockTestCase(
+            description="one queued worker does not pause a model whose other worker runs",
+            running_statements=2,
+            queued_statements=1,
+            waited_seconds=0.3,
+            expected_minimum_running_seconds=0.25,
+            expected_maximum_running_seconds=10.0,
+        ),
+        SharedQueuedClockTestCase(
+            description="every running statement queued pauses the model",
+            running_statements=2,
+            queued_statements=2,
+            waited_seconds=0.3,
+            expected_minimum_running_seconds=0.0,
+            expected_maximum_running_seconds=0.2,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_workers_sharing_a_model_deadline_when_some_are_queued_then_clock_follows_running(
+    test_case: SharedQueuedClockTestCase,
+) -> None:
+    adapter: FakeCancellingAdapter = FakeCancellingAdapter(result=True, asynchronous=False)
+
+    with item_deadline_scope(
+        kind=ItemKind.MODEL, name="orders", policy=_ONE_SECOND, adapter=adapter, connection=None
+    ) as deadline:
+        assert deadline is not None
+        for _ in range(test_case.running_statements):
+            deadline.statement_started()
+        for _ in range(test_case.queued_statements):
+            deadline.statement_queued()
+        before: float = deadline.running_seconds()
+        time.sleep(test_case.waited_seconds)
+        counted: float = deadline.running_seconds() - before
+        for _ in range(test_case.queued_statements):
+            deadline.statement_dequeued()
+        for _ in range(test_case.running_statements):
+            deadline.statement_finished(query_id=None)
+
+    assert counted >= test_case.expected_minimum_running_seconds
+    assert counted < test_case.expected_maximum_running_seconds
 
 
 if __name__ == "__main__":

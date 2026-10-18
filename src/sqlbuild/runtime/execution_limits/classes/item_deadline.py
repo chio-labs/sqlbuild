@@ -46,6 +46,7 @@ class ItemDeadline:
         self._running_since: float | None = None
         self._clock_started: bool = False
         self._holds: int = 0
+        self._queued_statements: int = 0
         self._closed: bool = False
         self._active_statements: int = 0
         self._awaiting_confirmation: bool = False
@@ -102,6 +103,7 @@ class ItemDeadline:
                 deadline._active_statements = max(0, deadline._active_statements - 1)
                 if query_id:
                     deadline._query_ids.append(query_id)
+                deadline._update_clock()
 
     def statement_submitted(self, *, query_id: str | None) -> None:
         if not query_id:
@@ -111,18 +113,32 @@ class ItemDeadline:
                 deadline._query_ids.append(query_id)
 
     def hold(self) -> None:
-        """Stop the clock, for warehouse queueing or cleanup that must not count."""
+        """Stop the clock for cleanup while no statement runs under this deadline."""
 
         for deadline in self.chain():
             with deadline._lock:
                 deadline._holds += 1
-                deadline._pause_clock()
+                deadline._update_clock()
 
     def release(self) -> None:
         for deadline in self.chain():
             with deadline._lock:
                 deadline._holds = max(0, deadline._holds - 1)
-                deadline._resume_clock()
+                deadline._update_clock()
+
+    def statement_queued(self) -> None:
+        """Mark a running statement as waiting in a warehouse queue; only queued work pauses."""
+
+        for deadline in self.chain():
+            with deadline._lock:
+                deadline._queued_statements += 1
+                deadline._update_clock()
+
+    def statement_dequeued(self) -> None:
+        for deadline in self.chain():
+            with deadline._lock:
+                deadline._queued_statements = max(0, deadline._queued_statements - 1)
+                deadline._update_clock()
 
     def close(self) -> None:
         """Stop the clock and the watchdog when the item's scope ends."""
@@ -198,6 +214,7 @@ class ItemDeadline:
         with self._lock:
             self._active_statements += 1
             if self._clock_started or self._closed:
+                self._update_clock()
                 return
             self._clock_started = True
             self._resume_clock()
@@ -212,8 +229,20 @@ class ItemDeadline:
             self._running_since = None
 
     def _resume_clock(self) -> None:
-        if self._clock_started and not self._closed and not self._holds:
+        if self._clock_started and not self._closed and not self._paused():
             self._running_since = self._running_since or time.monotonic()
+
+    def _paused(self) -> bool:
+        """Paused while held or queued, unless another statement is running meanwhile."""
+
+        held: bool = bool(self._holds or self._queued_statements)
+        return held and self._active_statements <= self._queued_statements
+
+    def _update_clock(self) -> None:
+        if self._paused():
+            self._pause_clock()
+        else:
+            self._resume_clock()
 
     def _watch(self) -> None:
         while True:

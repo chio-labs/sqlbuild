@@ -16,4 +16,8 @@ class RecoveringConnectionPool(queue.Queue[Any]):
         self._recovery: ConnectionRecovery = recovery
 
     def put(self, item: Any, block: bool = True, timeout: float | None = None) -> None:
-        super().put(self._recovery.usable(item), block=block, timeout=timeout)
+        returned: Any = item
+        try:
+            returned = self._recovery.usable(item)
+        finally:
+            super().put(returned, block=block, timeout=timeout)

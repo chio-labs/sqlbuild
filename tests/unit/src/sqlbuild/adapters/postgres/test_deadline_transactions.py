@@ -20,6 +20,7 @@ from tests.unit.src.sqlbuild.adapters.helpers import (
 from tests.unit.src.sqlbuild.adapters.postgres._test_types import (
     DeadlineTransactionTestCase,
     FailedSqlTestOutputTestCase,
+    RefusedBeginTestCase,
     SqlTestOutputTransactionTestCase,
 )
 
@@ -151,6 +152,40 @@ def test_given_failing_output_query_when_storing_then_transaction_is_rolled_back
         test_case.expected_statements[1] + failing_query,
     )
     assert statements[-1] == "ROLLBACK"
+    assert connection.in_transaction() is test_case.expected_in_transaction
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RefusedBeginTestCase(
+            description="a refused BEGIN leaves no ownership that could end a caller transaction",
+            expected_statements=("BEGIN", f"DROP TABLE IF EXISTS {_OUTPUT}"),
+            expected_in_transaction=True,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_refused_begin_when_storing_output_then_later_release_keeps_caller_transaction(
+    test_case: RefusedBeginTestCase,
+) -> None:
+    adapter: PostgresAdapter = PostgresAdapter()
+    raw: CancellableRawConnection = CancellableRawConnection()
+    connection: _PostgresConnection = _PostgresConnection(raw)
+
+    with item_deadline_scope(
+        kind=ItemKind.TEST, name="orders", policy=_POLICY, adapter=adapter, connection=connection
+    ) as deadline:
+        assert deadline is not None
+        deadline.expire()
+        with pytest.raises(ItemTimeoutError):
+            _ = adapter.create_sql_test_output(
+                connection=connection, sql="SELECT 1 AS order_id", name=_OUTPUT
+            )
+    _ = adapter.execute(connection=connection, sql="BEGIN")
+    adapter.drop_sql_test_output(connection=connection, relation=_OUTPUT)
+
+    assert without_limits(raw.executed) == test_case.expected_statements
     assert connection.in_transaction() is test_case.expected_in_transaction
 
 

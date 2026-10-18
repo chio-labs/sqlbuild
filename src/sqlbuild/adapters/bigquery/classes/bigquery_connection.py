@@ -99,13 +99,13 @@ def _wait_while_pending(*, job: Any, deadline: ItemDeadline | None) -> None:
 
     if deadline is None or getattr(job, "state", None) != PENDING_JOB_STATE:
         return
-    deadline.hold()
+    deadline.statement_queued()
     try:
         while getattr(job, "state", None) == PENDING_JOB_STATE:
             time.sleep(PENDING_JOB_POLL_SECONDS)
             job.reload()
     finally:
-        deadline.release()
+        deadline.statement_dequeued()
 
 
 def _job_id(*, job: Any) -> str | None:

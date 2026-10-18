@@ -148,8 +148,9 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
         """Store a unit test's output in a temporary table of one transaction, for poolers."""
 
-        if connection.claim_sql_test_transaction():
+        if connection.needs_sql_test_transaction():
             _ = self.execute(connection=connection, sql="BEGIN")
+            connection.claim_sql_test_transaction()
         try:
             _ = self.execute(
                 connection=connection,

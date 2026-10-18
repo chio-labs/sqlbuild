@@ -56,13 +56,15 @@ class _PostgresConnection:
         self._local_timeout_set = True
         self._local_timeout_deadline = id(deadline)
 
-    def claim_sql_test_transaction(self) -> bool:
-        """Whether a unit test must open its own transaction, which it then owns."""
+    def needs_sql_test_transaction(self) -> bool:
+        """Whether a unit test must open its own transaction before storing outputs."""
 
-        if self._sql_test_transaction or self.in_transaction():
-            return False
+        return not self._sql_test_transaction and not self.in_transaction()
+
+    def claim_sql_test_transaction(self) -> None:
+        """Record that the transaction a unit test just opened is its own to end."""
+
         self._sql_test_transaction = True
-        return True
 
     def release_sql_test_transaction(self) -> bool:
         """Whether a unit test owned the open transaction, which it must now end."""

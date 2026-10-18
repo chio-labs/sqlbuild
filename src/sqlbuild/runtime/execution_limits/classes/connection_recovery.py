@@ -23,24 +23,41 @@ class ConnectionRecovery:
         self._adapter: Any = adapter
         self._connect: Callable[[], Any] = connect
         self._replacements: list[Any] = []
+        self._broken: set[int] = set()
         self._lock: threading.Lock = threading.Lock()
 
     def usable(self, connection: Any) -> Any:
-        """`connection` when it is healthy, otherwise a newly opened replacement."""
+        """`connection` if healthy, else a replacement, else the original kept marked broken."""
 
-        if not interrupted_connections.take(connection):
+        interrupted: bool = interrupted_connections.take(connection)
+        with self._lock:
+            broken: bool = id(connection) in self._broken
+        if not interrupted and not broken:
             return connection
         with execution_deadlines_suspended():
             if self._responds(connection):
+                self._forget_broken(connection)
                 return connection
             try:
                 self._adapter.rollback(connection)
             except Exception as error:
                 _LOGGER.debug("rollback after an interrupted statement failed: %s", error)
             if self._responds(connection):
+                self._forget_broken(connection)
                 return connection
+        try:
+            replacement: Any = self._connect()
+        except Exception as error:
+            with self._lock:
+                self._broken.add(id(connection))
+            _LOGGER.warning(
+                "A connection left unusable by a timed-out statement could not be replaced (%s); "
+                "work that uses it will fail",
+                error,
+            )
+            return connection
         _LOGGER.warning("A connection left unusable by a timed-out statement was replaced")
-        replacement: Any = self._connect()
+        self._forget_broken(connection)
         with self._lock:
             self._replacements.append(replacement)
         return replacement
@@ -56,6 +73,10 @@ class ConnectionRecovery:
                 self._adapter.close(replacement)
             except Exception as error:
                 _LOGGER.debug("closing a replacement connection failed: %s", error)
+
+    def _forget_broken(self, connection: Any) -> None:
+        with self._lock:
+            self._broken.discard(id(connection))
 
     def _responds(self, connection: Any) -> bool:
         try:

@@ -680,8 +680,10 @@ class BuildScheduler:
         try:
             return execute(batch, connection)
         finally:
-            self._connection_pool.put(connection)
-            self._release_microbatch_subworker()
+            try:
+                self._connection_pool.put(connection)
+            finally:
+                self._release_microbatch_subworker()
 
     def _reserve_microbatch_subworker(self) -> bool:
         with self._microbatch_coordinator_lock:

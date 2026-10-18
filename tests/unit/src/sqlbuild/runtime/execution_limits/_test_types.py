@@ -69,3 +69,13 @@ class HeldClockTestCase:
     description: str
     held_seconds: float
     expected_maximum_running_seconds: float
+
+
+@dataclass(frozen=True)
+class SharedQueuedClockTestCase:
+    description: str
+    running_statements: int
+    queued_statements: int
+    waited_seconds: float
+    expected_minimum_running_seconds: float
+    expected_maximum_running_seconds: float
