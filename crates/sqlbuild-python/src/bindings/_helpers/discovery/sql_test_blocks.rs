@@ -1,7 +1,12 @@
 //! SQL `TEST(...)` blocks validated natively and built as discovery records.
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use pyo3::IntoPyObjectExt;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_model_config::sql_tests::main::sql_test_block::sql_test_block;
 use sqlbuild_model_config::sql_tests::main::sql_test_names_failure::sql_test_names_failure;
@@ -53,6 +58,22 @@ fn case_record<'py>(
     )
 }
 
+/// `SqlTestMode(mode)`, the member each mode resolves to looked up once per process.
+fn test_mode<'py>(py: Python<'py>, mode: &'static str) -> PyResult<Bound<'py, PyAny>> {
+    static MODES: PyOnceLock<Mutex<HashMap<&'static str, Py<PyAny>>>> = PyOnceLock::new();
+    let modes: &Mutex<HashMap<&'static str, Py<PyAny>>> =
+        MODES.get_or_init(py, || Mutex::new(HashMap::new()));
+    let mut known = modes
+        .lock()
+        .map_err(|_| PyRuntimeError::new_err("SQL test mode cache is poisoned"))?;
+    if let Some(member) = known.get(mode) {
+        return Ok(member.bind(py).clone());
+    }
+    let member: Bound<'py, PyAny> = host::entry(py, FacadeHost::SqlTestMode)?.call1((mode,))?;
+    let _ = known.insert(mode, member.clone().unbind());
+    Ok(member)
+}
+
 fn block_record<'py>(
     py: Python<'py>,
     (index, native): (usize, &NativeBlock<'py>),
@@ -86,10 +107,7 @@ fn block_record<'py>(
     keywords.set_item("header_values", &native.0)?;
     keywords.set_item("sql_body", native.1.as_str())?;
     keywords.set_item("name", block.name)?;
-    keywords.set_item(
-        "mode",
-        host::entry(py, FacadeHost::SqlTestMode)?.call1((block.mode,))?,
-    )?;
+    keywords.set_item("mode", test_mode(py, block.mode)?)?;
     keywords.set_item("parameters", PyTuple::new(py, parameters)?)?;
     keywords.set_item("cases", PyTuple::new(py, cases)?)?;
     keywords.set_item("cursor_start", block.cursor_start)?;

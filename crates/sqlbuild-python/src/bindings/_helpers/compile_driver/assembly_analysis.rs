@@ -1,14 +1,17 @@
 //! Project assembly's inference profile, binding catalog, source shapes and model analysis.
 
+use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple, PyTupleMethods};
 
 use sqlbuild_analysis::assembly::analysis_session::main::native_dialect::native_dialect;
+use sqlbuild_analysis::assembly::analysis_session::types::Pairs;
 
 use crate::bindings::_helpers::analysis::binding_catalog::{BindingCatalog, ignores_quoted_case};
 use crate::bindings::_helpers::analysis_session::model_analyses::{
     ModelAnalyses, ModelAnalysisRequest, analyze_models,
 };
+use crate::bindings::_helpers::analysis_session::profile_inputs::text_pairs;
 use crate::bindings::_helpers::analysis_session::stage_functions::expression_source_shapes;
 use crate::bindings::_helpers::compile_driver::analysis_cache::analysis_cache_context;
 use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
@@ -20,10 +23,11 @@ use crate::bindings::_helpers::compile_driver::stage_work::{
     EXPRESSION_SHAPES, MODEL_ANALYSIS, count_stage,
 };
 use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
+use crate::bindings::_helpers::compiled_project::source_views::read_source_view;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::project_assembly::declared_relations::{
-    DeclaredRelations, declared_relations,
+    DeclaredRelations, DeclaredShapes, declared_relations,
 };
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -47,6 +51,8 @@ pub(crate) struct AnalysisContext<'py> {
     pub(crate) dynamic_families: Bound<'py, PyAny>,
     /// The model analyses, or `None` when SQL analysis does not run.
     pub(crate) analyses: Option<ModelAnalyses<'py>>,
+    /// The native rows of `column_types`, `nullability` and `complete_schemas`.
+    pub(crate) declared: DeclaredShapes,
 }
 
 /// Whether `model_input` is selected for analysis by `names` (`None` selects every model).
@@ -87,7 +93,7 @@ pub(crate) fn analysis_context<'py>(
         &native_field(inputs, "effective_settings")?.getattr("sql_analysis")?,
         request.skip_column_inference.bind(py),
     )?;
-    let (column_types, nullability, complete_schemas): DeclaredRelations<'py> =
+    let (column_types, nullability, complete_schemas, declared): DeclaredRelations<'py> =
         declared_relations(inputs.clone())?;
     let (column_types, nullability, complete_schemas): (
         Bound<'py, PyAny>,
@@ -109,9 +115,11 @@ pub(crate) fn analysis_context<'py>(
         complete_schemas,
         dynamic_families,
         analyses: None,
+        declared,
     };
     if context.sql_analysis_enabled.is_truthy()? {
-        record_expression_shapes(request, &context)?;
+        let declared: DeclaredShapes = std::mem::take(&mut context.declared);
+        context.declared = record_expression_shapes(request, &context, declared)?;
     }
     let catalog: Bound<'py, PyAny> = native_field(&context.profile, "binding_catalog")?;
     native_field(&catalog, "native")?
@@ -252,15 +260,15 @@ fn function_return_types<'py>(
 fn record_expression_shapes<'py>(
     request: &AssemblyRequest,
     context: &AnalysisContext<'py>,
-) -> PyResult<()> {
+    mut declared: DeclaredShapes,
+) -> PyResult<DeclaredShapes> {
     let py: Python<'py> = context.profile.py();
     let inputs: &Bound<'py, PyAny> = request.inputs.bind(py);
     let mut sources: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut expressions: Vec<Bound<'py, PyAny>> = Vec::new();
     for source_input in native_field(inputs, "source_inputs")?.try_iter()? {
         let source_input: Bound<'py, PyAny> = source_input?;
-        let expression: Bound<'py, PyAny> =
-            native_field(&source_input, "source_entry")?.getattr("expression")?;
+        let expression: Bound<'py, PyAny> = source_expression(&source_input)?;
         if expression.is_truthy()? {
             sources.push(source_input);
             expressions.push(expression);
@@ -295,8 +303,7 @@ fn record_expression_shapes<'py>(
         if shape.is_none() {
             continue;
         }
-        let name: Bound<'py, PyAny> =
-            native_field(source_input, "source_entry")?.getattr("name")?;
+        let name: Bound<'py, PyAny> = source_name(source_input)?;
         let declared_types: Bound<'py, PyAny> =
             mapping_get_or(&context.column_types, &name, PyDict::new(py))?;
         let declared_shape: Bound<'py, PyDict> = PyDict::new(py);
@@ -316,9 +323,40 @@ fn record_expression_shapes<'py>(
                 mapping_get_or(&context.nullability, &name, PyDict::new(py))?;
             nullability.set_item(&column, mapping_get_or(&known, &column, &unknown)?)?;
         }
-        context.nullability.set_item(&name, nullability)?;
+        context.nullability.set_item(&name, &nullability)?;
+        let key: String = name.extract()?;
+        let shape_pairs: Pairs = text_pairs(declared_shape.as_any())?;
+        declared.complete.set(key.clone(), shape_pairs.clone());
+        declared.types.set(key.clone(), shape_pairs);
+        declared
+            .nullability
+            .set(key, text_pairs(nullability.as_any())?);
     }
-    Ok(())
+    Ok(declared)
+}
+
+/// `source_input.source_entry.expression`; a native source answers from its attached record.
+fn source_expression<'py>(source_input: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    match read_source_view(source_input, |source, py| {
+        source
+            .attached()
+            .expression
+            .as_deref()
+            .into_bound_py_any(py)
+    }) {
+        Some(expression) => expression,
+        None => native_field(source_input, "source_entry")?.getattr("expression"),
+    }
+}
+
+/// `source_input.source_entry.name`; a native source answers from its attached record.
+fn source_name<'py>(source_input: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    match read_source_view(source_input, |source, py| {
+        Ok(PyString::new(py, &source.attached().name).into_any())
+    }) {
+        Some(name) => name,
+        None => native_field(source_input, "source_entry")?.getattr("name"),
+    }
 }
 
 /// Each selected model's native analysis, timed as `model_analysis_ms`, when SQL analysis runs.
@@ -366,6 +404,7 @@ fn model_analyses<'py>(
                 dynamic_families: context.dynamic_families.clone(),
                 rich_type_inference: rich,
                 cache,
+                declared: Some(&context.declared),
             })
             .map(Some)
         })

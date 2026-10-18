@@ -165,6 +165,8 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
     CONTRACT_RECORDS,
 ];
 
+/// `str(PurePath("."))`, the path whose name and stem are empty.
+pub(crate) const CURRENT_DIRECTORY_PATH: &str = ".";
 /// Records whose bound values are normalized or validated before the record is created.
 pub(crate) const RECORD_FINISHERS: &[&[(&str, RecordFinish)]] = &[
     &[("SourceFreshnessObservation", normalize_observation)],

@@ -1,5 +1,7 @@
 //! Project column lineage in FAST or RICH mode, and direct semantic uses, from a project view.
 
+use std::collections::HashMap;
+
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyRef, PyResult, Python,
 };
@@ -18,7 +20,10 @@ use sqlbuild_analysis::semantic_validation::models as validation;
 
 use crate::bindings::_helpers::analysis::model_reads::star_flags;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::lineage::column_lineage_graph::ProjectColumnLineage;
+use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::lineage::column_lineage_graph::{
+    CompactColumns, CompactModel, ProjectColumnLineage,
+};
 use crate::bindings::_helpers::lineage::lineage_objects::{LineageClasses, log_lineage_event};
 use crate::bindings::_helpers::lineage::project_schema::{
     fast_schema, inferred_names, rich_schema,
@@ -139,9 +144,16 @@ fn selected_models<'py>(
 /// One model's FAST lineage work: its compact facts and whether its root star expands.
 struct FastModel<'py> {
     name: String,
-    facts: Option<Bound<'py, PyAny>>,
+    facts: FastFacts<'py>,
     has_star: bool,
     expands_star: bool,
+}
+
+/// A model's lineage facts: none, Python facts, or a compiled model's native facts and edge count.
+enum FastFacts<'py> {
+    Missing,
+    Python(Bound<'py, PyAny>),
+    Native(Bound<'py, PyAny>, usize),
 }
 
 fn fast_lineage<'py>(
@@ -154,9 +166,22 @@ fn fast_lineage<'py>(
     let mut work: Vec<FastModel<'py>> = Vec::with_capacity(models.len());
     let mut requests: Vec<FastLineageModel> = Vec::new();
     for model in models {
-        let facts: Bound<'py, PyAny> = native_field(model, "fast_lineage_columns")?;
         let (has_star, star_resolved): (bool, bool) = star_flags(model)?;
         let expands_star: bool = has_star && !star_resolved;
+        let native_edges: Option<usize> = match model.downcast::<NativeCompiledModel>() {
+            Ok(view) if !expands_star => view.get().lineage_edge_count(py)?,
+            _ => None,
+        };
+        if let Some(edges) = native_edges {
+            work.push(FastModel {
+                name: native_field(model, "name")?.extract()?,
+                facts: FastFacts::Native(model.clone(), edges),
+                has_star,
+                expands_star,
+            });
+            continue;
+        }
+        let facts: Bound<'py, PyAny> = native_field(model, "fast_lineage_columns")?;
         if facts.is_none() {
             requests.push(FastLineageModel::Parse {
                 query_sql: native_field(model, "query_sql")?.extract()?,
@@ -170,7 +195,11 @@ fn fast_lineage<'py>(
         }
         work.push(FastModel {
             name: native_field(model, "name")?.extract()?,
-            facts: (!facts.is_none()).then_some(facts),
+            facts: if facts.is_none() {
+                FastFacts::Missing
+            } else {
+                FastFacts::Python(facts)
+            },
             has_star,
             expands_star,
         });
@@ -196,56 +225,70 @@ fn fast_lineage<'py>(
     };
     let mut outcomes = outcomes.into_iter();
     let built: Bound<'py, PyDict> = PyDict::new(py);
-    let compact: Bound<'py, PyDict> = PyDict::new(py);
+    let mut compact: HashMap<String, CompactModel> = HashMap::new();
     let mut model_order: Vec<String> = Vec::new();
     for model in work {
-        if let Some(mut columns) = model.facts {
-            if model.expands_star {
-                let star_columns: Vec<LineageColumn> = outcomes
-                    .next()
-                    .map(|outcome| outcome.into_parts().1)
-                    .unwrap_or_default();
-                let mut expanded: Vec<Bound<'py, PyAny>> =
-                    columns.try_iter()?.collect::<PyResult<_>>()?;
-                for column in &star_columns {
-                    expanded.push(classes.column_fact(column)?);
+        let columns: CompactColumns = match model.facts {
+            FastFacts::Native(view, edges) => CompactColumns::Model {
+                model: view.unbind(),
+                edges,
+            },
+            FastFacts::Python(mut columns) => {
+                if model.expands_star {
+                    let star_columns: Vec<LineageColumn> = outcomes
+                        .next()
+                        .map(|outcome| outcome.into_parts().1)
+                        .unwrap_or_default();
+                    let mut expanded: Vec<Bound<'py, PyAny>> =
+                        columns.try_iter()?.collect::<PyResult<_>>()?;
+                    for column in &star_columns {
+                        expanded.push(classes.column_fact(column)?);
+                    }
+                    columns = PyTuple::new(py, expanded)?.into_any();
                 }
-                columns = PyTuple::new(py, expanded)?.into_any();
+                CompactColumns::Facts(columns.unbind())
             }
-            compact.set_item(&model.name, (columns, model.has_star))?;
-            model_order.push(model.name);
-            continue;
-        }
-        match outcomes.next() {
-            Some(FastLineageOutcome::Built { columns, has_star }) => {
-                let lineage_columns: Vec<Bound<'py, PyAny>> = columns
-                    .iter()
-                    .map(|column| classes.column(column, &classes.unknown_nullability))
-                    .collect::<PyResult<_>>()?;
-                built.set_item(
-                    &model.name,
-                    classes.model(&model.name, lineage_columns, has_star)?,
-                )?;
-                model_order.push(model.name);
+            FastFacts::Missing => {
+                match outcomes.next() {
+                    Some(FastLineageOutcome::Built { columns, has_star }) => {
+                        let lineage_columns: Vec<Bound<'py, PyAny>> = columns
+                            .iter()
+                            .map(|column| classes.column(column, &classes.unknown_nullability))
+                            .collect::<PyResult<_>>()?;
+                        built.set_item(
+                            &model.name,
+                            classes.model(&model.name, lineage_columns, has_star)?,
+                        )?;
+                        model_order.push(model.name);
+                    }
+                    Some(FastLineageOutcome::Unparsed(detail)) => log_lineage_event(
+                        py,
+                        "fast column lineage parse failed; falling back",
+                        &model.name,
+                        Some(&detail),
+                    )?,
+                    Some(FastLineageOutcome::UnknownDialect(detail)) => {
+                        return Err(unknown_dialect_error(py, &detail));
+                    }
+                    _ => {}
+                }
+                continue;
             }
-            Some(FastLineageOutcome::Unparsed(detail)) => log_lineage_event(
-                py,
-                "fast column lineage parse failed; falling back",
-                &model.name,
-                Some(&detail),
-            )?,
-            Some(FastLineageOutcome::UnknownDialect(detail)) => {
-                return Err(unknown_dialect_error(py, &detail));
-            }
-            _ => {}
-        }
+        };
+        let _ = compact.insert(
+            model.name.clone(),
+            CompactModel {
+                columns,
+                has_star: model.has_star,
+            },
+        );
+        model_order.push(model.name);
     }
-    let fields: Bound<'py, PyDict> = PyDict::new(py);
-    fields.set_item("models", built)?;
-    fields.set_item("compact_models", compact)?;
-    fields.set_item("model_order", PyTuple::new(py, model_order)?)?;
-    py.get_type::<ProjectColumnLineage>()
-        .call_method("from_fast_facts", (), Some(&fields))
+    Bound::new(
+        py,
+        ProjectColumnLineage::compacted(classes, built.as_any(), compact, model_order)?,
+    )
+    .map(Bound::into_any)
 }
 
 /// The output column names of compact facts or plain column facts.

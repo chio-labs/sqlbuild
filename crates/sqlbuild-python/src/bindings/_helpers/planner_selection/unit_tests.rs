@@ -10,9 +10,10 @@ use sqlbuild_analysis::planner_selection::models::{
     SelectorGroups, UnitTestSelectorNames, UnitTestSelectorSplit,
 };
 
+use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::planner_selection::carrier::{Carrier, py_strings};
 use crate::bindings::_helpers::records::construct::new_record_with;
-use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::{field as native_field, path_stem};
 use crate::bindings::_helpers::records::ids::RecordId;
 
 const RESOURCE_ENTRY_FILES: [(&str, &str); 3] = [
@@ -34,7 +35,7 @@ const RESOURCE_NODES: [&str; 4] = [
 ];
 
 fn stem(path: &Bound<'_, PyAny>) -> PyResult<String> {
-    native_field(path, "stem")?.extract()
+    path_stem(path)
 }
 
 fn unit_test_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
@@ -57,7 +58,11 @@ fn resource_names(discovered: &Bound<'_, PyAny>) -> PyResult<BTreeSet<String>> {
     let mut names: BTreeSet<String> = BTreeSet::new();
     for field in RESOURCE_PATH_FILES {
         for file in native_field(discovered, field)?.try_iter()? {
-            names.insert(stem(&native_field(&file?, "file_path")?)?);
+            let file: Bound<'_, PyAny> = file?;
+            names.insert(match file.cast::<NativeModelFile>() {
+                Ok(native) => native.get().path_texts(file.py())?.name,
+                Err(_) => stem(&native_field(&file, "file_path")?)?,
+            });
         }
     }
     for (field, entries) in RESOURCE_ENTRY_FILES {

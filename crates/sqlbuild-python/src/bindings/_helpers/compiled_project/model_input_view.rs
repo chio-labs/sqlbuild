@@ -535,6 +535,16 @@ pub(crate) fn input_model_name(model_input: &Bound<'_, PyAny>) -> PyResult<Strin
         .extract()
 }
 
+/// The compiled query of `model_input`; a native input answers from its record.
+pub(crate) fn input_query_sql(model_input: &Bound<'_, PyAny>) -> PyResult<String> {
+    if let Ok(native) = model_input.cast::<NativeModelInput>() {
+        return native.get().read(model_input.py(), |record, _| {
+            Ok(record.query_sql.to_string())
+        });
+    }
+    native_field(model_input, "query_sql")?.extract()
+}
+
 /// Each reference of `model_input` as `(kind, name, package, call argument count)`.
 pub(crate) fn input_reference_rows(model_input: &Bound<'_, PyAny>) -> PyResult<Vec<ReferenceRow>> {
     let py: Python<'_> = model_input.py();

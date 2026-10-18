@@ -20,9 +20,10 @@ use sqlbuild_scopes::scope_index::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::records::construct::error_class;
-use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_values;
+use crate::bindings::_helpers::records::fields::{field as native_field, path_stem};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::scopes::relationship_scan::{
     RelationshipScanSettings, ScenarioRow, TestFileRow, scanned_relationships,
@@ -94,7 +95,7 @@ fn optional_text(item: &Bound<'_, PyAny>, name: &str) -> PyResult<Option<String>
 }
 
 fn stem(path: &Bound<'_, PyAny>) -> PyResult<String> {
-    native_field(path, "stem")?.extract()
+    path_stem(path)
 }
 
 /// `value or fallback` with Python truthiness.
@@ -107,6 +108,14 @@ fn or_else<'py>(
     } else {
         fallback()
     }
+}
+
+/// `value` when it is a non-empty string.
+fn header_text(value: &Bound<'_, PyAny>) -> Option<String> {
+    value
+        .extract::<String>()
+        .into_iter()
+        .find(|name| !name.is_empty())
 }
 
 /// `value if isinstance(value, str) and value else path.stem`.
@@ -146,6 +155,16 @@ impl<'py> Walk<'py> {
         location: (&Bound<'py, PyAny>, ResourceRoot),
     ) -> PyResult<()> {
         let (path, root) = location;
+        self.add_resource_at(kind, name, (text(path)?, root))
+    }
+
+    fn add_resource_at(
+        &mut self,
+        kind: ResourceKind,
+        name: String,
+        location: (String, ResourceRoot),
+    ) -> PyResult<()> {
+        let (path, root) = location;
         self.resource_identities
             .push(self.classes.model(RecordId::ResourceIdentity)?.call1((
                 self.classes.member(RecordId::ResourceKind, kind.as_str())?,
@@ -154,7 +173,7 @@ impl<'py> Walk<'py> {
         self.resource_roots.push((kind, root));
         self.inputs.resources.push(ResourceInput {
             identity: ResourceIdentity { kind, name },
-            path: text(path)?,
+            path,
             root,
         });
         Ok(())
@@ -289,13 +308,37 @@ impl<'py> Walk<'py> {
 
     fn add_models(&mut self, inputs: &Bound<'py, PyAny>) -> PyResult<()> {
         for model_file in items(inputs, "model_files")? {
-            let path: Bound<'py, PyAny> = native_field(&model_file, "relative_path")?;
-            let model_name: String = name_or_stem(&header_name(&model_file)?, &path)?;
-            self.add_resource(
+            let header: Bound<'py, PyAny> = header_name(&model_file)?;
+            let (model_name, path, folder): (String, String, String) =
+                match model_file.cast::<NativeModelFile>() {
+                    Ok(native) => {
+                        let native: &NativeModelFile = native.get();
+                        let texts: ModelFileTexts = native.path_texts(model_file.py())?;
+                        let name: String = match header_text(&header) {
+                            Some(name) => name,
+                            None => texts.name,
+                        };
+                        (name, texts.relative_path, native.folder(model_file.py())?)
+                    }
+                    Err(_) => {
+                        let path: Bound<'py, PyAny> = native_field(&model_file, "relative_path")?;
+                        (
+                            name_or_stem(&header, &path)?,
+                            text(&path)?,
+                            text(&native_field(&path, "parent")?)?,
+                        )
+                    }
+                };
+            self.add_resource_at(
                 ResourceKind::Model,
                 model_name.clone(),
-                (&path, ResourceRoot::Kind),
+                (path.clone(), ResourceRoot::Kind),
             )?;
+            let enums: Vec<Bound<'py, PyAny>> = items(&model_file, "enum_declarations")?;
+            let constants: Vec<Bound<'py, PyAny>> = items(&model_file, "constant_declarations")?;
+            if enums.is_empty() && constants.is_empty() {
+                continue;
+            }
             let owner: Bound<'py, PyAny> =
                 self.classes.model(RecordId::ResourceIdentity)?.call1((
                     self.classes
@@ -305,7 +348,7 @@ impl<'py> Walk<'py> {
             let private: Bound<'py, PyAny> = self
                 .classes
                 .member(RecordId::ScopeKind, ScopeKind::Private.as_str())?;
-            for declaration in items(&model_file, "enum_declarations")? {
+            for declaration in enums {
                 let identity: Bound<'py, PyAny> = self.declaration_identity(
                     DeclarationKind::Enum,
                     &native_field(&declaration, "name")?,
@@ -313,9 +356,9 @@ impl<'py> Walk<'py> {
                 )?;
                 let metadata = [None, Some(self.enum_metadata(&declaration)?), None];
                 let values = self.values(identity, private.clone(), metadata);
-                self.add_private(values, &path)?;
+                self.add_private(values, (&path, &folder))?;
             }
-            for declaration in items(&model_file, "constant_declarations")? {
+            for declaration in constants {
                 let identity: Bound<'py, PyAny> = self.declaration_identity(
                     DeclarationKind::Constant,
                     &native_field(&declaration, "name")?,
@@ -323,7 +366,7 @@ impl<'py> Walk<'py> {
                 )?;
                 let metadata = [None, None, Some(self.constant_metadata(&declaration)?)];
                 let values = self.values(identity, private.clone(), metadata);
-                self.add_private(values, &path)?;
+                self.add_private(values, (&path, &folder))?;
             }
         }
         Ok(())
@@ -332,15 +375,15 @@ impl<'py> Walk<'py> {
     fn add_private(
         &mut self,
         values: DeclarationValues<'py>,
-        path: &Bound<'py, PyAny>,
+        (path, folder): (&str, &str),
     ) -> PyResult<()> {
         self.add_declaration(
             values,
             Placement {
-                path: text(path)?,
+                path: path.to_owned(),
                 ownership_root: Some(PRIVATE_ROOT.to_owned()),
                 root_fallback: PRIVATE_ROOT.to_owned(),
-                owning_path: Some(text(&native_field(path, "parent")?)?),
+                owning_path: Some(folder.to_owned()),
             },
         )
     }

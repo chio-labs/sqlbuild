@@ -13,8 +13,10 @@ use crate::bindings::_helpers::records::constants::{
 use crate::bindings::_helpers::records::error_classes::{
     BoundErrorInitializer, ErrorInitializer, class_value,
 };
-use crate::bindings::_helpers::records::fields::all_specs;
+use std::collections::HashMap;
+
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::{all_specs, register_specs};
 use crate::bindings::_helpers::records::models::{
     BoundNativeMethod, EnumSpec, ErrorSpec, NativeMethod, NativeProperty, NativeRecord,
     RecordAttribute, RecordSpec,
@@ -47,14 +49,17 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add(spec.name, error_class(&parent, (index, spec))?)?;
     }
     let dataclasses: Bound<'_, PyModule> = py.import(DATACLASSES_MODULE)?;
+    let mut registered: HashMap<usize, &'static RecordSpec> = HashMap::new();
     for (index, spec) in all_specs().enumerate() {
         let class: Bound<'_, PyAny> = record_class(&metaclass, &base, (index, spec))?;
+        let _ = registered.insert(class.as_ptr() as usize, spec);
         class.setattr(
             DATACLASS_FIELDS_ATTRIBUTE,
             dataclass_fields(&dataclasses, spec)?,
         )?;
         module.add(spec.name, class)?;
     }
+    register_specs(py, registered)?;
     for (class, name, property) in CLASS_PROPERTIES.iter().flat_map(|group| group.iter()) {
         let descriptor: Py<NativeProperty> = Py::new(
             py,

@@ -735,6 +735,11 @@ impl NativeCompiledModel {
         })
     }
 
+    /// The upstream source count of the model's lineage facts, `None` without them.
+    pub(crate) fn lineage_edge_count(&self, py: Python<'_>) -> PyResult<Option<usize>> {
+        self.compiled(py, |compiled, _| Ok(compiled.analysis.lineage_edge_count()))
+    }
+
     #[getter]
     pub(crate) fn fast_lineage_columns(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let classes: InputViewClasses<'_> = view_classes(&self.owner, py)?;

@@ -5,15 +5,18 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
+use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 
 use crate::bindings::_helpers::compiled_project::compiled_model_view::object_key;
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     InputViewClasses, view_classes,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
 use crate::bindings::_helpers::graph::project_graph::ResourceRow;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
+use crate::bindings::_helpers::rules::relation_keys::audit_key_rows;
 
 const SOURCE_RESOURCE: &str = "source";
 
@@ -43,9 +46,16 @@ pub(crate) struct AttachedSource {
     pub(crate) usages: Py<PyTuple>,
 }
 
+/// What a source declares about its keys: its column facts and `(audit, column argument)` rows.
+pub(crate) struct SourceKeyFacts {
+    pub(crate) columns: Vec<SchemaColumnFact>,
+    pub(crate) audits: Vec<(String, Option<String>)>,
+}
+
 /// One attached source held by the compiled project.
 pub(crate) struct SourceRecord {
     attached: AttachedSource,
+    key_facts: PyOnceLock<SourceKeyFacts>,
     /// The namespace native project assembly resolved, once it ran.
     namespace: Option<SourceNamespace>,
     attached_entry: PyOnceLock<Py<PyAny>>,
@@ -57,6 +67,7 @@ impl SourceRecord {
     pub(crate) fn new(attached: AttachedSource) -> Self {
         Self {
             attached,
+            key_facts: PyOnceLock::new(),
             namespace: None,
             attached_entry: PyOnceLock::new(),
             assembled_entry: PyOnceLock::new(),
@@ -67,6 +78,16 @@ impl SourceRecord {
     /// The attached source.
     pub(crate) fn attached(&self) -> &AttachedSource {
         &self.attached
+    }
+
+    /// The source's declared column facts and audit key rows, read once from its expanded specs.
+    pub(crate) fn key_facts(&self, py: Python<'_>) -> PyResult<&SourceKeyFacts> {
+        self.key_facts.get_or_try_init(py, || {
+            Ok(SourceKeyFacts {
+                columns: python_column_facts(self.attached.columns.bind(py).as_any(), None)?,
+                audits: audit_key_rows(self.attached.audits.bind(py).as_any())?,
+            })
+        })
     }
 
     /// Keep the namespace native project assembly resolved for the source.
@@ -118,6 +139,23 @@ pub(crate) fn replaced(
     changes: &Bound<'_, PyDict>,
 ) -> PyResult<Py<PyAny>> {
     Ok(replaced_keywords(value, changes)?.unbind())
+}
+
+/// Read the source record behind a native source view, or `None` for any other object.
+pub(crate) fn read_source_view<'py, T>(
+    view: &Bound<'py, PyAny>,
+    read: impl FnOnce(&SourceRecord, Python<'py>) -> PyResult<T>,
+) -> Option<PyResult<T>> {
+    let py: Python<'py> = view.py();
+    if let Ok(input) = view.cast::<NativeSourceInput>() {
+        let input: &NativeSourceInput = input.get();
+        return Some(read_source(&input.owner, input.index, py, read));
+    }
+    let Ok(compiled) = view.cast::<NativeCompiledSource>() else {
+        return None;
+    };
+    let compiled: &NativeCompiledSource = compiled.get();
+    Some(read_source(&compiled.owner, compiled.index, py, read))
 }
 
 fn read_source<'py, T>(

@@ -13,20 +13,22 @@ use pyo3::types::{
     PyType, PyTypeMethods,
 };
 
+use sqlbuild_discovery::model_files::main::model_file_stem::model_file_stem;
 use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{
-    CACHED_PROPERTIES, CLASS_PROPERTIES, ENUMS, FROZEN_INSTANCE_ERROR, NATIVE_MODULE,
-    ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE, RECORDS,
+    CACHED_PROPERTIES, CLASS_METHODS, CLASS_PROPERTIES, CURRENT_DIRECTORY_PATH, ENUMS,
+    FROZEN_INSTANCE_ERROR, NATIVE_MODULE, ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE,
+    RECORDS,
 };
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::getters::getter_field;
 use crate::bindings::_helpers::records::models::{
     EnumSpec, FieldDefault, NativeRecord, RecordSpec,
 };
-use crate::bindings::_helpers::records::types::ClassProperty;
+use crate::bindings::_helpers::records::types::{ClassProperty, RecordFinish};
 
 /// How a test run treats `field` falling back to `getattr` on a native class: unset outside tests.
 pub(crate) const NATIVE_FIELD_STRICT_ENV_VAR: &str = "SQLBUILD_NATIVE_FIELD_STRICT";
@@ -38,13 +40,31 @@ const ENUM_NAME_ATTRIBUTE: &str = "name";
 /// Native string enums by class object, for `.value` and `.name` reads answered from their members.
 static ENUM_CLASSES: PyOnceLock<HashMap<usize, &'static EnumSpec>> = PyOnceLock::new();
 
+/// Each registered record class's spec, by class object.
+static REGISTERED_SPECS: PyOnceLock<HashMap<usize, &'static RecordSpec>> = PyOnceLock::new();
+
 /// Every registered record spec, in registration order.
 pub(crate) fn all_specs() -> impl Iterator<Item = &'static RecordSpec> {
     RECORDS.iter().flat_map(|group| group.iter())
 }
 
+/// Keep each registered record class's spec, so records of that exact class find it natively.
+pub(crate) fn register_specs(
+    py: Python<'_>,
+    classes: HashMap<usize, &'static RecordSpec>,
+) -> PyResult<()> {
+    REGISTERED_SPECS.get_or_init(py, || classes);
+    Ok(())
+}
+
 /// The spec registered for `cls`, read from its class attribute.
 pub(crate) fn record_spec(cls: &Bound<'_, PyType>) -> PyResult<&'static RecordSpec> {
+    if let Some(spec) = REGISTERED_SPECS
+        .get(cls.py())
+        .and_then(|specs| specs.get(&(cls.as_ptr() as usize)))
+    {
+        return Ok(spec);
+    }
     let Ok(index) = cls.getattr(RECORD_SPEC_ATTRIBUTE) else {
         return Err(PyTypeError::new_err(format!(
             "{} cannot be instantiated directly",
@@ -82,6 +102,43 @@ pub(crate) fn field<'py>(value: &Bound<'py, PyAny>, name: &str) -> PyResult<Boun
     }
     strict_fallback(value, name)?;
     value.getattr(name)
+}
+
+/// `getattr(value, name, None)` of a native record, `None` when `value` is not one.
+pub(crate) fn record_attribute_opt<'py>(
+    value: &Bound<'py, PyAny>,
+    name: &str,
+) -> Option<PyResult<Option<Bound<'py, PyAny>>>> {
+    let Ok(cell) = value.cast::<NativeRecord>() else {
+        return None;
+    };
+    if name.starts_with('_') {
+        return None;
+    }
+    let record: &NativeRecord = cell.get();
+    if let Some(found) = record
+        .spec
+        .fields
+        .iter()
+        .position(|field| field.name == name)
+        .and_then(|index| record.values.get(index))
+    {
+        return Some(Ok(Some(found.bind(value.py()).clone())));
+    }
+    match record_properties().get(&(record.spec.name, name)) {
+        Some(&(property, cached_name)) => Some(
+            property_value(cell, property, cached_name)
+                .map(|found| Some(found.into_bound(value.py()))),
+        ),
+        None if CLASS_METHODS
+            .iter()
+            .flat_map(|group| group.iter())
+            .any(|(class, method, _)| *class == record.spec.name && *method == name) =>
+        {
+            None
+        }
+        None => Some(Ok(None)),
+    }
 }
 
 /// A strict-mode setting: record fallbacks to a file, or fail on any fallback missing from an allowlist.
@@ -373,14 +430,22 @@ pub(crate) fn build_values(
         };
         values.push(value.unbind());
     }
-    match RECORD_FINISHERS
-        .iter()
-        .flat_map(|group| group.iter())
-        .find(|(record, _)| *record == name)
-    {
-        Some((_, finish)) => finish(py, values),
+    match record_finishers().get(name) {
+        Some(finish) => finish(py, values),
         None => Ok(values),
     }
+}
+
+/// Each finished record's finisher, by class name.
+fn record_finishers() -> &'static HashMap<&'static str, RecordFinish> {
+    static FINISHERS: OnceLock<HashMap<&'static str, RecordFinish>> = OnceLock::new();
+    FINISHERS.get_or_init(|| {
+        RECORD_FINISHERS
+            .iter()
+            .flat_map(|group| group.iter())
+            .map(|&(record, finish)| (record, finish))
+            .collect()
+    })
 }
 
 fn default_value<'py>(
@@ -417,7 +482,7 @@ pub(crate) fn compared_values<'py>(
     record: &Bound<'py, NativeRecord>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = record.py();
-    let spec: &RecordSpec = record_spec(&record.get_type())?;
+    let spec: &RecordSpec = record.get().spec;
     let values = spec
         .fields
         .iter()
@@ -432,7 +497,7 @@ pub(crate) fn compared_values<'py>(
 pub(crate) fn repr_text(record: &Bound<'_, NativeRecord>) -> PyResult<String> {
     let py: Python<'_> = record.py();
     let cls: Bound<'_, PyType> = record.get_type();
-    let spec: &RecordSpec = record_spec(&cls)?;
+    let spec: &RecordSpec = record.get().spec;
     let mut parts: Vec<String> = Vec::with_capacity(spec.fields.len());
     for (field, value) in spec.fields.iter().zip(record.get().values.iter()) {
         if field.shown {
@@ -460,7 +525,7 @@ pub(crate) fn ordered_comparison(
     op: CompareOp,
 ) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = slf.py();
-    let name: &str = record_spec(&slf.get_type())?.name;
+    let name: &str = slf.get().spec.name;
     let ordered: bool = ORDERED_RECORDS.iter().any(|group| group.contains(&name));
     if !ordered || !other.get_type().is(slf.get_type()) {
         return Ok(py.NotImplemented());
@@ -511,4 +576,31 @@ pub(crate) fn store_cached(
 pub(crate) fn path_posix(path: &Bound<'_, PyAny>) -> PyResult<String> {
     let text: String = path.str()?.to_string_lossy().into_owned();
     Ok(String::from_utf8_lossy(&pure_path_posix(std::path::Path::new(&text))).into_owned())
+}
+
+/// The value of the native string enum `enum_name`'s member `member`.
+pub(crate) fn enum_member_value(enum_name: &str, member: &str) -> Option<&'static str> {
+    ENUMS
+        .iter()
+        .flat_map(|group| group.iter())
+        .find(|spec| spec.name == enum_name)?
+        .members
+        .iter()
+        .find(|(name, _)| *name == member)
+        .map(|(_, value)| *value)
+}
+
+/// `path.stem` of a `pathlib` path, spelled natively from its text.
+pub(crate) fn path_stem(path: &Bound<'_, PyAny>) -> PyResult<String> {
+    let posix: String = path_posix_text(path)?;
+    if posix == CURRENT_DIRECTORY_PATH {
+        return Ok(String::new());
+    }
+    Ok(model_file_stem(&posix).to_owned())
+}
+
+/// `path.as_posix()` of a `pathlib` path, its text with the platform separator spelled `/`.
+pub(crate) fn path_posix_text(path: &Bound<'_, PyAny>) -> PyResult<String> {
+    let text: Bound<'_, PyString> = path.str()?;
+    Ok(text.to_str()?.replace(std::path::MAIN_SEPARATOR, "/"))
 }

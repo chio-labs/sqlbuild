@@ -13,7 +13,10 @@ use crate::bindings::_helpers::analysis::model_reads::{
 use crate::bindings::_helpers::analysis::normalization::normalize_analysis_sql;
 use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_expression_source_shapes;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compiled_project::compiled_model_view::{DeclaredRow, InferredRow};
+use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+    DeclaredRow, InferredRow, NativeCompiledModel,
+};
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
@@ -34,11 +37,21 @@ const TABLE_FUNCTION_KIND: &str = "table_fn";
 
 /// The relation names `(kind, name, package, count)` reference rows bind, UDFs excluded.
 pub(crate) fn relation_row_names<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Vec<String>> {
-    let mut names: Vec<String> = Vec::new();
+    let mut pairs: Vec<(String, String)> = Vec::new();
     for row in rows.try_iter()? {
         let row: Bound<'py, PyAny> = row?;
-        let kind: String = row.get_item(0)?.str()?.extract()?;
-        let name: String = row.get_item(1)?.extract()?;
+        pairs.push((
+            row.get_item(0)?.str()?.extract()?,
+            row.get_item(1)?.extract()?,
+        ));
+    }
+    Ok(relation_names(pairs))
+}
+
+/// The relations `(kind, name)` reference rows bind, each once, table functions by binding name.
+fn relation_names(rows: Vec<(String, String)>) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for (kind, name) in rows {
         if kind == UDF_KIND {
             continue;
         }
@@ -51,7 +64,23 @@ pub(crate) fn relation_row_names<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Vec<
             names.push(name);
         }
     }
-    Ok(names)
+    names
+}
+
+/// The relations a model's reference rows bind; a native model answers from its record.
+fn model_relation_names(model: &Bound<'_, PyAny>) -> PyResult<(Vec<String>, bool)> {
+    if let Ok(view) = model.downcast::<NativeCompiledModel>() {
+        let rows: Vec<ReferenceRow> = view.get().reference_rows(model.py())?;
+        let referenced: bool = !rows.is_empty();
+        let names: Vec<String> = relation_names(
+            rows.into_iter()
+                .map(|(kind, name, _, _)| (kind, name))
+                .collect(),
+        );
+        return Ok((names, referenced));
+    }
+    let rows: Bound<'_, PyAny> = native_field(model, "reference_rows")?;
+    Ok((relation_row_names(&rows)?, rows.is_truthy()?))
 }
 
 /// `{name: shapes.get(name, {})}` for each relation a model's reference rows bind.
@@ -61,7 +90,7 @@ pub(crate) fn model_inputs<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = model.py();
     let inputs: Bound<'py, PyDict> = PyDict::new(py);
-    for name in relation_row_names(&native_field(model, "reference_rows")?)? {
+    for name in model_relation_names(model)?.0 {
         let shape: Bound<'py, PyAny> = match shapes.get_item(&name)? {
             Some(shape) => shape,
             None => PyDict::new(py).into_any(),
@@ -293,8 +322,7 @@ fn model_shapes<'py>(
         for model in &pending {
             let declared: Option<Vec<DeclaredRow>> = declared_rows(model)?;
             let inferred: Option<Vec<InferredRow>> = inferred_rows(model)?;
-            let rows: Bound<'py, PyAny> = native_field(model, "reference_rows")?;
-            let relations: Vec<String> = relation_row_names(&rows)?;
+            let (relations, referenced): (Vec<String>, bool) = model_relation_names(model)?;
             let contract: Bound<'py, PyAny> =
                 native_field(&native_field(model, "config")?, "values")?
                     .call_method1("get", ("contract",))?;
@@ -317,8 +345,7 @@ fn model_shapes<'py>(
             }
             let (has_star, star_resolved): (bool, bool) = star_flags(model)?;
             let closes: bool = inferred.as_ref().is_some_and(|rows| !rows.is_empty())
-                && (!has_star
-                    || (star_resolved && rows.is_truthy()? && all_known(&relations, shapes)?));
+                && (!has_star || (star_resolved && referenced && all_known(&relations, shapes)?));
             if let (true, Some(inferred)) = (closes, &inferred) {
                 let inputs: Bound<'py, PyDict> = model_inputs(model, shapes)?;
                 let columns: Bound<'py, PyDict> = typed_columns(py, inferred)?;

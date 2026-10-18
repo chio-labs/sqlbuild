@@ -195,6 +195,16 @@ impl AnalysisRecord {
             .map(|lineage| lineage.clone_ref(py))
     }
 
+    /// The number of upstream sources across the model's lineage rows, or `None` without lineage.
+    pub(crate) fn lineage_edge_count(&self) -> Option<usize> {
+        match &self.lineage {
+            None => None,
+            Some(LineageFacts::Native(rows) | LineageFacts::NativeFacts(rows)) => {
+                Some(rows.iter().map(|row| row.sources.len()).sum())
+            }
+        }
+    }
+
     /// The model's `CompilerDiagnostic` tuple, built once.
     pub(crate) fn binding_tuple(
         &self,

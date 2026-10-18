@@ -10,6 +10,7 @@ use sqlbuild_rules::sql_quality::main::declared_relation_keys::declared_relation
 use sqlbuild_rules::sql_quality::models::{DeclaredKeyColumn, DeclaredRelation};
 
 use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
+use crate::bindings::_helpers::compiled_project::source_views::{SourceKeyFacts, read_source_view};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::lint_inputs::model_key_row;
 
@@ -52,19 +53,7 @@ pub(crate) fn relation_key_row(
                 column.nullable == Some(false),
             ));
         }
-        for audit in declared_audits.try_iter()? {
-            let audit: Bound<'_, PyAny> = audit?;
-            let argument: Option<Bound<'_, PyAny>> = native_field(&audit, "arguments")?
-                .downcast::<PyDict>()?
-                .get_item(UNIQUE_AUDIT_COLUMN_ARGUMENT)?;
-            audits.push((
-                native_field(&audit, "definition_name")?.extract()?,
-                argument
-                    .filter(pyo3::types::PyAnyMethods::is_instance_of::<PyString>)
-                    .map(|value| value.extract())
-                    .transpose()?,
-            ));
-        }
+        audits = audit_key_rows(declared_audits)?;
     }
     Ok((
         kind.to_owned(),
@@ -79,6 +68,61 @@ pub(crate) fn relation_key_row(
         columns,
         audits,
     ))
+}
+
+/// Each audit spec's `(definition name, column argument when it is text)`.
+pub(crate) fn audit_key_rows(audits: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Option<String>)>> {
+    let mut rows: Vec<(String, Option<String>)> = Vec::new();
+    for audit in audits.try_iter()? {
+        let audit: Bound<'_, PyAny> = audit?;
+        let argument: Option<Bound<'_, PyAny>> = native_field(&audit, "arguments")?
+            .downcast::<PyDict>()?
+            .get_item(UNIQUE_AUDIT_COLUMN_ARGUMENT)?;
+        rows.push((
+            native_field(&audit, "definition_name")?.extract()?,
+            argument
+                .filter(pyo3::types::PyAnyMethods::is_instance_of::<PyString>)
+                .map(|value| value.extract())
+                .transpose()?,
+        ));
+    }
+    Ok(rows)
+}
+
+/// A source's key row from its native view's declared facts, or `None` for any other object.
+pub(crate) fn source_view_key_row(view: &Bound<'_, PyAny>) -> Option<PyResult<RelationKeyRow>> {
+    read_source_view(view, |source, py| {
+        let facts: &SourceKeyFacts = source.key_facts(py)?;
+        Ok((
+            RELATION_KIND_SOURCE.to_owned(),
+            source.attached().name.clone(),
+            String::new(),
+            String::new(),
+            String::new(),
+            false,
+            None,
+            facts
+                .columns
+                .iter()
+                .map(|column| {
+                    (
+                        column.name.clone(),
+                        column.audit_definitions.clone(),
+                        column.nullable == Some(false),
+                    )
+                })
+                .collect(),
+            facts.audits.clone(),
+        ))
+    })
+}
+
+/// What `relation_keys` reads for a source: its native view itself, or its `source_entry`.
+pub(crate) fn source_key_input<'py>(source: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if read_source_view(source, |_, _| Ok(())).is_some() {
+        return Ok(source.clone());
+    }
+    native_field(source, "source_entry")
 }
 
 /// `str(values.get(key, ""))`.
@@ -149,6 +193,10 @@ pub(crate) fn relation_keys<'py>(
     for (kind, entries) in [(RELATION_KIND_SEED, seeds), (RELATION_KIND_SOURCE, sources)] {
         for entry in entries.try_iter()? {
             let entry: Bound<'py, PyAny> = entry?;
+            if let Some(row) = source_view_key_row(&entry) {
+                rows.push(row?);
+                continue;
+            }
             let name: String = native_field(&entry, "name")?.extract()?;
             rows.push(entry_relation_key_row(
                 kind,
@@ -201,7 +249,7 @@ pub(crate) fn project_relation_keys(project: &Bound<'_, PyAny>) -> PyResult<Rela
     }
     let mut sources: Vec<Bound<'_, PyAny>> = Vec::new();
     for source in native_field(project, "sources")?.try_iter()? {
-        sources.push(native_field(&source?, "source_entry")?);
+        sources.push(source_key_input(&source?)?);
     }
     relation_keys(
         py,
