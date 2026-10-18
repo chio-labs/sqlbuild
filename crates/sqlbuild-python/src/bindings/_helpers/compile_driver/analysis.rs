@@ -210,6 +210,7 @@ fn analyzed<'py>(
         driver.graph((&discovered, &adapter), &lint_dialect)?;
     let project: Bound<'py, PyAny> = native_field(&graph, "project")?;
     let graph_failed: bool = any_error(&native_field(&project, "diagnostics")?)?;
+    crate::bindings::_helpers::compile_delta::context::stop_on_errors(graph_failed)?;
     let mut early_lint_wait_ms: Bound<'py, PyAny> = 0_i64.into_pyobject(py)?.into_any();
     if graph_failed {
         if let Some(early_rules) = early_rules {
@@ -219,6 +220,10 @@ fn analyzed<'py>(
     }
     let (lineage, lineage_ms): (Bound<'py, PyAny>, u64) = driver.lineage(&graph, &dialect)?;
     let contracts: ContractPhase<'py> = driver.contracts(&project, &dialect)?;
+    crate::bindings::_helpers::compile_delta::context::stop_on_errors(any_error(&native_field(
+        &contracts.result,
+        "diagnostics",
+    )?)?)?;
     let selected_keys: Bound<'py, PyAny> =
         select_project_graph(&graph, &driver.select, &driver.exclude)?.into_any();
     let core_diagnostics: Bound<'py, PyTuple> = PyTuple::new(

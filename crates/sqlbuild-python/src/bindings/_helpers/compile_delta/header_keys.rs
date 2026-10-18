@@ -4,7 +4,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use sqlbuild_cache::digest::main::bytes_digest::bytes_digest;
-use sqlbuild_cache::digest::main::hex_digest::hex_digest;
 use sqlbuild_discovery::model_files::main::parse_model_text::parse_model_text;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 
@@ -27,12 +26,68 @@ const PATCHED_KEYS: [&str; 6] = [
 const PATCHED_MATERIALIZATIONS: [&str; 2] = ["view", "table"];
 const MATERIALIZED_KEY: &str = "materialized";
 
+/// Bytes of a digest kept per header value; a collision would need 2^64 work to find.
+const KEPT_DIGEST_BYTES: usize = 16;
+const HEX: &[u8; 16] = b"0123456789abcdef";
+
+/// Append an unambiguous encoding of `value`: a tag byte, then length-prefixed parts.
+fn encode_value(value: &AuthoredValue, out: &mut Vec<u8>) {
+    let text = |tag: u8, text: &str, out: &mut Vec<u8>| {
+        out.push(tag);
+        out.extend_from_slice(&(text.len() as u64).to_le_bytes());
+        out.extend_from_slice(text.as_bytes());
+    };
+    let list = |tag: u8, items: &[AuthoredValue], out: &mut Vec<u8>| {
+        out.push(tag);
+        out.extend_from_slice(&(items.len() as u64).to_le_bytes());
+        for item in items {
+            encode_value(item, out);
+        }
+    };
+    let pairs = |tag: u8, items: &[(String, AuthoredValue)], out: &mut Vec<u8>| {
+        out.push(tag);
+        out.extend_from_slice(&(items.len() as u64).to_le_bytes());
+        for (key, item) in items {
+            text(b'k', key, out);
+            encode_value(item, out);
+        }
+    };
+    match value {
+        AuthoredValue::Null => out.push(b'n'),
+        AuthoredValue::Boolean(flag) => out.extend_from_slice(&[b'b', u8::from(*flag)]),
+        AuthoredValue::BareWord(word) => text(b'w', word, out),
+        AuthoredValue::String(string) => text(b's', string, out),
+        AuthoredValue::List(items) => list(b'l', items, out),
+        AuthoredValue::Map(items) => pairs(b'm', items, out),
+        AuthoredValue::Set(items) => list(b'e', items, out),
+        AuthoredValue::Tuple(items) => list(b't', items, out),
+        AuthoredValue::TypedConstant(items) => pairs(b'c', items, out),
+        AuthoredValue::InlineSqlHook(sql) => text(b'i', sql, out),
+        AuthoredValue::NamedSqlHook(name, items) => {
+            text(b'h', name, out);
+            pairs(b'a', items, out);
+        }
+        AuthoredValue::PythonHook(name, items) => {
+            text(b'p', name, out);
+            pairs(b'a', items, out);
+        }
+    }
+}
+
 fn header_keys(values: &[(String, AuthoredValue)]) -> HeaderKeys {
+    let mut buffer: Vec<u8> = Vec::new();
     let mut keys: HeaderKeys = values
         .iter()
         .map(|(key, value)| {
-            let text: String = format!("{value:?}");
-            (key.clone(), hex_digest(&bytes_digest(text.as_bytes())))
+            buffer.clear();
+            encode_value(value, &mut buffer);
+            let digest = bytes_digest(&buffer);
+            let mut hex: String = String::with_capacity(KEPT_DIGEST_BYTES * 2);
+            for byte in &digest[..KEPT_DIGEST_BYTES] {
+                hex.push(char::from(HEX[usize::from(byte >> 4)]));
+                hex.push(char::from(HEX[usize::from(byte & 0x0f)]));
+            }
+            (key.clone(), hex)
         })
         .collect();
     keys.sort();

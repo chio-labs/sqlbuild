@@ -142,6 +142,7 @@ pub(crate) fn captured_diagnostic(diagnostic: &Bound<'_, PyAny>) -> PyResult<Cap
             .into_iter()
             .map(|path| path.replace('\\', "/"))
             .collect(),
+        error: value.get("severity").and_then(serde_json::Value::as_str) == Some("error"),
     })
 }
 

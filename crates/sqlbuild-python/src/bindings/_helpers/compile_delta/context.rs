@@ -71,6 +71,9 @@ pub(crate) struct CapturedDiagnostic {
     pub(crate) json: String,
     pub(crate) resource_name: Option<String>,
     pub(crate) paths: Vec<String>,
+    /// Whether the diagnostic is an error.
+    #[serde(default)]
+    pub(crate) error: bool,
 }
 
 /// One SQL test's file and the models its compiled artifact is keyed by.
@@ -154,11 +157,19 @@ pub(crate) fn capture_unsupported(reason: &str) {
 }
 
 /// Run `body` with `injection` visible to the stages a delta compile reruns.
-pub(crate) fn with_injection<T>(injection: DeltaInjection, body: impl FnOnce() -> T) -> T {
+///
+/// Returns the injection back with the body's result, or `None` if something still holds it.
+pub(crate) fn with_injection<T>(
+    injection: DeltaInjection,
+    body: impl FnOnce() -> T,
+) -> (T, Option<DeltaInjection>) {
     *locked(&INJECTION) = Some(Arc::new(injection));
     let result: T = body();
-    *locked(&INJECTION) = None;
-    result
+    let injection: Option<Arc<DeltaInjection>> = locked(&INJECTION).take();
+    (
+        result,
+        injection.and_then(|injection| Arc::try_unwrap(injection).ok()),
+    )
 }
 
 /// The running delta compile's injection, if any.
@@ -176,6 +187,16 @@ pub(crate) fn delta_unsupported(reason: &str) -> pyo3::PyErr {
         *slot = Some(reason.to_owned());
     }
     pyo3::exceptions::PyRuntimeError::new_err(format!("delta compile unsupported: {reason}"))
+}
+
+/// In a delta compile that leaves errors to full compiles, stop once `failed` reports one.
+pub(crate) fn stop_on_errors(failed: bool) -> pyo3::PyResult<()> {
+    let errors_on_delta_path: bool =
+        crate::bindings::_helpers::compile_delta::driver::ERRORS_ON_DELTA_PATH;
+    if failed && !errors_on_delta_path && injection().is_some() {
+        return Err(delta_unsupported("the edit reports errors"));
+    }
+    Ok(())
 }
 
 /// Take the reason the delta compile was ruled out, if any.
