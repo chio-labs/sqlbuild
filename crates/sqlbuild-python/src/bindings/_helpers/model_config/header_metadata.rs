@@ -176,14 +176,47 @@ impl HeaderColumn {
     }
 }
 
+impl HeaderColumn {
+    /// The natively parsed column, or `None` when Python built its values or record.
+    pub(crate) fn native_spec(&self) -> Option<&NativeColumnSpec> {
+        match &self.fields {
+            ColumnFields::Native(spec) => Some(spec),
+            ColumnFields::Python(_) | ColumnFields::Projected => None,
+        }
+    }
+}
+
+/// The `SchemaColumn` a native column projects to when its location names `location`'s path.
+pub(crate) fn native_column_record<'py>(
+    py: Python<'py>,
+    column: &NativeColumn,
+    location: Option<(Bound<'py, PyAny>, LineColumnSpan)>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let location: Bound<'py, PyAny> = match location {
+        Some((path, span)) => location_record(py, path, span)?,
+        None => py.None().into_bound(py),
+    };
+    contract_object(
+        &record_class(py, RecordId::SchemaColumn)?,
+        column_values(py, column, location)?,
+    )
+}
+
 /// A native column's record fields, in declaration order.
 fn native_values<'py>(
     py: Python<'py>,
     spec: &NativeColumnSpec,
 ) -> PyResult<[Bound<'py, PyAny>; 8]> {
-    let location: Bound<'py, PyAny> = native_location(py, spec)?;
-    let audits: Bound<'py, PyAny> = native_audits(py, spec, &location)?;
-    let column: &NativeColumn = &spec.column;
+    column_values(py, &spec.column, native_location(py, spec)?)
+}
+
+/// A native column's record fields at `location`, in declaration order.
+fn column_values<'py>(
+    py: Python<'py>,
+    column: &NativeColumn,
+    location: Bound<'py, PyAny>,
+) -> PyResult<[Bound<'py, PyAny>; 8]> {
+    let audits: Bound<'py, PyAny> = native_audits(py, column, &location)?;
     Ok([
         column.name.as_str().into_bound_py_any(py)?,
         column.column_type.as_deref().into_bound_py_any(py)?,
@@ -209,7 +242,7 @@ fn native_value<'py>(
         "nullable" => column.nullable.into_bound_py_any(py),
         "description" => column.description.as_deref().into_bound_py_any(py),
         "meta" => Ok(PyDict::new(py).into_any()),
-        "audits" => native_audits(py, spec, &native_location(py, spec)?),
+        "audits" => native_audits(py, column, &native_location(py, spec)?),
         "location" => native_location(py, spec),
         _ => column.migrate_from.as_deref().into_bound_py_any(py),
     }
@@ -218,31 +251,35 @@ fn native_value<'py>(
 /// The column's `SourceLocation`, or `None`.
 fn native_location<'py>(py: Python<'py>, spec: &NativeColumnSpec) -> PyResult<Bound<'py, PyAny>> {
     match &spec.location {
-        Some((model_file, span)) => new_record(
-            py,
-            RecordId::SourceLocation,
-            (
-                model_file.get().path_objects(py)?.1,
-                span.line,
-                span.column,
-                span.end_line,
-                span.end_column,
-            ),
-            None,
-        ),
+        Some((model_file, span)) => {
+            location_record(py, model_file.get().path_objects(py)?.1, *span)
+        }
         None => Ok(py.None().into_bound(py)),
     }
+}
+
+/// `SourceLocation(path, line, column, end_line, end_column)`.
+fn location_record<'py>(
+    py: Python<'py>,
+    path: Bound<'py, PyAny>,
+    span: LineColumnSpan,
+) -> PyResult<Bound<'py, PyAny>> {
+    new_record(
+        py,
+        RecordId::SourceLocation,
+        (path, span.line, span.column, span.end_line, span.end_column),
+        None,
+    )
 }
 
 /// The column's audits as a tuple of `SchemaAuditInstance`s at `location`.
 fn native_audits<'py>(
     py: Python<'py>,
-    spec: &NativeColumnSpec,
+    column: &NativeColumn,
     location: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let classes: ContractClasses<'py> = contract_classes(py)?.extract()?;
-    let audits: Vec<Bound<'py, PyAny>> = spec
-        .column
+    let audits: Vec<Bound<'py, PyAny>> = column
         .audits
         .iter()
         .map(|audit| native_audit_instance(py, &classes, audit, location))

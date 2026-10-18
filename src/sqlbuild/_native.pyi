@@ -225,6 +225,7 @@ MAX_READ_BYTES: int
 CURRENT_COMMAND_OUTPUT_SCHEMA_VERSION: int
 MIGRATION_WRITE_ATTEMPTS: int
 CUSTOM_HOST_PROTOCOL_VERSION: int
+CUSTOM_HOST_PAYLOAD_MAGIC: bytes
 
 def plan_sql_tests(
     *,
@@ -6737,7 +6738,8 @@ def evaluate_custom_rules(
     verify_determinism: bool = False,
     implementation_fingerprints: dict[str, str] | None = None,
 ) -> CustomRulesOutcome: ...
-def custom_host_payload(project: CompiledProjectView) -> CompiledProject: ...
+def custom_host_payload(project: CompiledProjectView, config: object) -> bytes: ...
+def custom_host_declared_columns(data: bytes) -> tuple[SchemaColumn, ...]: ...
 def custom_rule_fact_digest(
     *, project: CompiledProjectView, project_dir: Path, key: tuple[str, ...]
 ) -> str | None: ...

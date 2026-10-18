@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
@@ -16,7 +17,7 @@ from sqlbuild._native import (
     project_tree_read_text,
     project_tree_relative_parts,
 )
-from sqlbuild.compiler.compile.types import CompiledProjectView
+from sqlbuild.rule_engine.types import RuleFactModel, RuleFactProject
 
 
 class ProjectTree:
@@ -26,7 +27,7 @@ class ProjectTree:
         self,
         *,
         project_dir: Path,
-        project: CompiledProjectView,
+        project: RuleFactProject,
         models: tuple[Model, ...] | None = None,
     ) -> None:
         self._root: Path = project_dir.resolve()
@@ -74,11 +75,20 @@ class ProjectTree:
 def public_model(model: object) -> Model:
     from sqlbuild._native import CompiledModel
 
-    if not isinstance(model, (CompiledModel, _native.NativeCompiledModel)):
-        raise RuleUsageError("model is not a compiled SQL model")
-    value: object = model.config.values.get("materialized")
-    return Model(
-        name=model.name,
-        path=model.relative_path,
-        materialization=value if isinstance(value, str) else None,
-    )
+    if isinstance(model, (CompiledModel, _native.NativeCompiledModel)):
+        value: object = model.config.values.get("materialized")
+        return Model(
+            name=model.name,
+            path=model.relative_path,
+            materialization=value if isinstance(value, str) else None,
+        )
+    facts: RuleFactModel = cast(RuleFactModel, model)
+    try:
+        value = facts.config_value("materialized")
+        return Model(
+            name=facts.name,
+            path=facts.relative_path,
+            materialization=value if isinstance(value, str) else None,
+        )
+    except AttributeError as error:
+        raise RuleUsageError("model is not a compiled SQL model") from error

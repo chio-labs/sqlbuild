@@ -25,8 +25,10 @@ from sqlbuild._native import run_cli as main
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     CustomHostFailureIntegrationTestCase,
     CustomHostInterruptIntegrationTestCase,
+    CustomHostOutcomeTestCase,
     CustomHostSplitIntegrationTestCase,
     CustomRuleCacheSequenceTestCase,
+    CustomRuleSurfaceTestCase,
     DynamicPivotRulesIntegrationTestCase,
     EarlyLintInputsTestCase,
     EmptyRuleSelectionTestCase,
@@ -73,6 +75,112 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
 _CUSTOM_CACHE_EDITED_RULE: str = _CUSTOM_CACHE_RULE.replace('"final" in', '"staging" in')
 _CUSTOM_CACHE_MODEL_SQL: str = 'MODEL (description "Orders");\nSELECT 1 AS order_id\n'
 _CUSTOM_CACHE_EDITED_SQL: str = _CUSTOM_CACHE_MODEL_SQL.replace("SELECT 1", "SELECT 2")
+
+_SURFACE_RULES: str = """from sqlbuild.rules import Finding, Model, Project, RuleContext, rule
+
+
+def _names(models: tuple[Model, ...]) -> str:
+    return ",".join(model.name for model in models)
+
+
+@rule(code="XSQBRSURF001", message="model facts", remediation="Read every model fact.")
+def model_facts(*, model: Model, ctx: RuleContext) -> list[Finding]:
+    sql = ctx.sql.for_model(model)
+    declared = ";".join(
+        f"{column.name}:{column.type}:{column.nullable}:{column.description}:"
+        + "/".join(
+            f"{audit.definition_name}:{sorted(audit.arguments.items())}:{audit.severity}"
+            for audit in column.audits
+        )
+        + f":{column.location.path.as_posix()}:{column.location.line}"
+        for column in ctx.columns.declared(model)
+    )
+    inferred = ctx.columns.inferred(model) or ()
+    parts = (
+        model.name,
+        model.path.as_posix(),
+        str(model.materialization),
+        str(len(sql.authored.source)),
+        str(len(sql.expanded.source)),
+        _names(ctx.graph.dependencies(model)),
+        _names(ctx.graph.dependents(model)),
+        declared,
+        ";".join(f"{c.name}:{c.type}:{c.nullability.value}" for c in inferred),
+        ",".join(ctx.columns.names(model) or ()),
+        str(ctx.contracts.enforced(model)),
+        ",".join(ctx.contracts.grain(model)),
+        ",".join(test.name for test in ctx.tests.for_model(model)),
+        ",".join(audit.name for audit in ctx.audits.for_model(model)),
+    )
+    return [ctx.finding(subject=model, message="|".join(parts))]
+
+
+@rule(code="XSQBRSURF002", message="project facts", remediation="Read every project fact.")
+def project_facts(*, project: Project, ctx: RuleContext) -> list[Finding]:
+    facts = ctx.project
+    parts = (
+        str(project.model_count),
+        str(project.target_name),
+        _names(facts.models),
+        ",".join(source.name for source in facts.sources),
+        ",".join(seed.name for seed in facts.seeds),
+        ",".join(function.name for function in facts.functions),
+        ",".join(test.name for test in facts.tests),
+        ",".join(audit.name for audit in facts.audits),
+        str(len(ctx.tests.all())),
+        str(len(ctx.audits.all())),
+        ",".join(item.name for item in ctx.declarations.public_enums),
+        ",".join(item.name for item in ctx.declarations.public_constants),
+        str(len(ctx.declarations.enums)),
+        str(len(ctx.declarations.constants)),
+        _names(facts.tree.resources_under("models/marts")),
+    )
+    return [ctx.finding(subject=facts.models[0], message="|".join(parts))]
+"""
+_SURFACE_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["XSQBRSURF"]\n\n'
+        "[rules.thresholds]\nmin_custom_rule_test_cases = 0\n"
+    ),
+    "rules/surface.py": _SURFACE_RULES,
+    "sources/raw.yml": (
+        "sources:\n  - name: raw_orders\n    description: Raw orders.\n"
+        '    expression: "(SELECT 1 AS id, CAST(10.5 AS DOUBLE) AS amount)"\n'
+    ),
+    "seeds/regions.csv": "region_id,name\n1,north\n",
+    "seeds/regions.yml": (
+        "seeds:\n  - name: regions\n    description: Regions.\n    columns:\n"
+        "      - name: region_id\n        type: INTEGER\n      - name: name\n        type: VARCHAR\n"
+    ),
+    "models/staging/_sqlbuild/_constants/policy.sql": (
+        "CONSTANT (name minimum_amount, value 7);\n"
+    ),
+    "models/staging/_sqlbuild/_enums/order_status.sql": (
+        "ENUM (name order_status, members [PAID, OPEN]);\n"
+    ),
+    "models/staging/stg_orders.sql": (
+        "MODEL (description 'Staged orders.', contract enforced, columns (\n"
+        "  order_id (type INTEGER, nullable false, description 'Order key',\n"
+        "    audits [not_null, accepted_values (values [1, 2], severity warn)]),\n"
+        "  amount (type DOUBLE),\n  status (type order_status),\n));\n\n"
+        'SELECT CAST(id AS INTEGER) AS order_id, amount, @enum("order_status").PAID AS status\n'
+        'FROM __source("raw_orders") WHERE amount > @const("minimum_amount")\n'
+    ),
+    "models/marts/order_totals.sql": (
+        'MODEL (description "Order totals", materialized table);\n\n'
+        'SELECT o.order_id, o.amount * 2 AS doubled_amount FROM __ref("stg_orders") AS o\n'
+    ),
+    "tests/unit/test_order_totals.sql": (
+        "TEST ();\n\nWITH\n__ref__stg_orders AS (SELECT 1 AS order_id, 10.0 AS amount),\n"
+        "__expected__order_totals AS (SELECT 1 AS order_id, 20.0 AS doubled_amount)\n"
+        "SELECT 1\n"
+    ),
+}
+_SURFACE_STAGING_EDIT: dict[str, str] = {
+    "models/staging/stg_orders.sql": _SURFACE_FILES["models/staging/stg_orders.sql"].replace(
+        "AS order_id, amount,", "AS order_id,\n  amount,"
+    )
+}
 
 _EARLY_LINT_SLOW_HOOKS: int = 8
 _EARLY_LINT_SLOW_EXPANSION_S: float = 0.5
@@ -1294,7 +1402,7 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
     assert warm["compile_timings"]["rule_cache_hits"] >= 1
     assert not (tmp_path / "target" / "compiled").exists()
     host_inputs: Path = tmp_path / "target" / "rules-cache" / "host-inputs"
-    assert not tuple(host_inputs.glob("*.pickle"))
+    assert not tuple(host_inputs.glob("*.payload"))
 
 
 @pytest.mark.parametrize(
@@ -3006,3 +3114,123 @@ def test_given_custom_rule_cache_when_inputs_change_then_only_unchanged_runs_hit
         observed.append((timings["rule_cache_hits"], timings["rule_cache_misses"]))
 
     assert tuple(observed) == test_case.expected_hits_and_misses
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CustomRuleSurfaceTestCase(
+            description=(
+                "rules reading every public fact see the compiled values cold, reuse them warm, "
+                "and rerun only the edited model's invocation"
+            ),
+            project_files=_SURFACE_FILES,
+            edits=({}, {}, _SURFACE_STAGING_EDIT),
+            expected_messages=(
+                "2|None|order_totals,stg_orders|raw_orders|regions||test_order_totals|"
+                "not_null,accepted_values,accepted_values|1|3|order_status|minimum_amount|1|1|"
+                "order_totals",
+                "order_totals|models/marts/order_totals.sql|table|137|79|stg_orders|||"
+                "order_id:INT:non_null;doubled_amount:DOUBLE:unknown|order_id,doubled_amount|"
+                "False||test_order_totals|",
+                "stg_orders|models/staging/stg_orders.sql|None|417|109||order_totals|"
+                "order_id:INTEGER:False:Order key:not_null:[]:None/accepted_values:"
+                "[('values', [1, 2])]:warn:models/staging/stg_orders.sql:2;"
+                "amount:DOUBLE:None:None::models/staging/stg_orders.sql:4;"
+                "status:VARCHAR:None:None:accepted_values:[('values', ('PAID', 'OPEN'))]:None:"
+                "models/staging/stg_orders.sql:5|"
+                "order_id:INT:unknown;amount:DOUBLE:unknown;status:TEXT:non_null|"
+                "order_id,amount,status|True|||not_null,accepted_values,accepted_values",
+            ),
+            expected_hits_and_misses=((0, 4), (4, 0), (3, 1)),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rules_reading_every_fact_when_compiling_then_values_and_cache_reuse_hold(
+    test_case: CustomRuleSurfaceTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_project_files(project_dir=tmp_path, files=test_case.project_files)
+    observed: list[tuple[int, int]] = []
+    messages: list[tuple[str, ...]] = []
+    for edit in test_case.edits:
+        write_project_files(project_dir=tmp_path, files=edit)
+        _ = main(["--project-dir", str(tmp_path), "compile", "--json"])
+        output: dict[str, Any] = json.loads(capsys.readouterr().out)
+        timings: dict[str, int] = output["compile_timings"]
+        observed.append((timings["rule_cache_hits"], timings["rule_cache_misses"]))
+        messages.append(tuple(sorted(item["message"] for item in output["diagnostics"])))
+    config_path: Path = tmp_path / "sqlbuild_project.toml"
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8") + "\n[rules.cache]\nenabled = false\n",
+        encoding="utf-8",
+    )
+    _ = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    uncached: dict[str, Any] = json.loads(capsys.readouterr().out)
+
+    assert tuple(observed) == test_case.expected_hits_and_misses
+    assert messages[0] == messages[1] == test_case.expected_messages
+    assert messages[2] == tuple(sorted(item["message"] for item in uncached["diagnostics"]))
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CustomHostOutcomeTestCase(
+            description="a rule failing after lazy fact reads reports its model",
+            rule_body=(
+                "columns = ctx.columns.inferred(model)\n"
+                'if model.name == "orders_001":\n'
+                '    raise ValueError(f"cannot inspect {columns[0].name}")\n'
+                "return []"
+            ),
+            expected_exit_code=1,
+            expected_messages=(
+                "invalid rules lifecycle: custom host failed: rule XSQBRHOST001 failed for "
+                "models/orders_001.sql: cannot inspect order_id",
+            ),
+        ),
+        CustomHostOutcomeTestCase(
+            description="a rule exiting its host reports the host failure",
+            rule_body=(
+                "sql = ctx.sql.for_model(model).expanded.source\n"
+                'if model.name == "orders_002":\n'
+                "    raise SystemExit(3)\n"
+                "return []"
+            ),
+            expected_exit_code=1,
+            expected_messages=(
+                "invalid rules lifecycle: custom host failed: process exited with exit status: 3",
+            ),
+        ),
+        CustomHostOutcomeTestCase(
+            description="a slow rule reading lazy facts reports every finding",
+            rule_body=(
+                "_ = sum(range(2_000_000))\n"
+                "return [ctx.finding(subject=model, message=ctx.sql.for_model(model).expanded.source)]"
+            ),
+            expected_exit_code=1,
+            expected_messages=(
+                "SELECT 0 AS order_id",
+                "SELECT 1 AS order_id",
+                "SELECT 2 AS order_id",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_custom_rule_outcome_when_compiling_then_result_and_cleanup_are_reported(
+    test_case: CustomHostOutcomeTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_custom_host_project(project_dir=tmp_path, model_count=3, rule_body=test_case.rule_body)
+
+    exit_code: int = main(["--project-dir", str(tmp_path), "compile", "--json", "--no-cache"])
+    output: dict[str, Any] = json.loads(capsys.readouterr().out)
+
+    assert exit_code == test_case.expected_exit_code
+    assert tuple(item["message"] for item in output["diagnostics"]) == test_case.expected_messages
+    assert not tuple((tmp_path / "target" / "rules-cache" / "host-inputs").iterdir())

@@ -1177,3 +1177,24 @@ class TemplatedHeaderDiagnosticsTestCase:
     amount_type: str
     amount_description: str
     expected_location: dict[str, object]
+
+
+@dataclass(frozen=True)
+class CustomRuleSurfaceTestCase:
+    """Compiles after each `{path: contents}` edit with rules reading every public fact."""
+
+    description: str
+    project_files: dict[str, str]
+    edits: tuple[dict[str, str], ...]
+    expected_messages: tuple[str, ...]
+    expected_hits_and_misses: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class CustomHostOutcomeTestCase:
+    """A compile whose custom rule reads facts, then fails, exits its host, or finishes slowly."""
+
+    description: str
+    rule_body: str
+    expected_exit_code: int
+    expected_messages: tuple[str, ...]

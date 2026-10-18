@@ -411,7 +411,7 @@ def test_given_waiting_host_when_parent_exits_or_run_is_abandoned_then_wait_stop
 
     with pytest.raises(test_case.expected_error):
         custom_host.await_inputs(
-            path=tmp_path / "project.pickle",
+            path=tmp_path / "project.payload",
             cancel_markers=(tmp_path / "project.abandoned",),
             parent_pid=4242,
         )
@@ -425,7 +425,7 @@ def test_given_waiting_host_when_parent_exits_or_run_is_abandoned_then_wait_stop
         AwaitPublishedInputsTestCase(
             description="payload published while the parent runs",
             reported_parent_pid=4242,
-            existing_files=("project.pickle",),
+            existing_files=("project.payload",),
             expected_max_seconds=1.0,
         ),
     ),
@@ -439,7 +439,7 @@ def test_given_published_payload_when_parent_still_runs_then_wait_returns(
     started: float = time.monotonic()
 
     custom_host.await_inputs(
-        path=tmp_path / "project.pickle",
+        path=tmp_path / "project.payload",
         cancel_markers=(tmp_path / "project.abandoned",),
         parent_pid=4242,
     )

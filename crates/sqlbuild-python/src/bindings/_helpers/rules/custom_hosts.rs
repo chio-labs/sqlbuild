@@ -1,6 +1,8 @@
 //! Run planned custom-rule invocations across isolated host processes and merge their results.
 
 use std::collections::BTreeSet;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
@@ -9,7 +11,7 @@ use std::time::Duration;
 
 use pyo3::exceptions::PyKeyboardInterrupt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::PyBytes;
 use serde_json::{Map, Value, json};
 use sqlbuild_rules::custom_host_pool::constants::{
     CGROUP_ROOT, HOST_TIMEOUT_MILLIS, MIN_INVOCATIONS_PER_HOST, PROC_CGROUP,
@@ -26,43 +28,18 @@ use sqlbuild_rules::custom_host_pool::types::{HostInvocation, HostPlan};
 use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::compiled_project::records::compiled_project_record;
 use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
 use crate::bindings::_helpers::records::construct::error_class;
-use crate::bindings::_helpers::records::construct::new_record;
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::replaced_keywords;
-use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_ABANDONED_SUFFIX, CUSTOM_HOST_CANCELLED_MARKER, CUSTOM_HOST_RUNTIME_VERSION,
 };
 use crate::bindings::_helpers::rules::custom_host_observation::{
     LaunchLog, ObservedHosts, before_publish, observed_hosts, record_launch,
 };
+use crate::bindings::_helpers::rules::custom_host_payload::write_payload;
 
 const HOST_INPUTS: [&str; 3] = ["target", "rules-cache", "host-inputs"];
-/// The model fields hosts decode; every other model field is dropped from their payload.
-const PAYLOAD_MODEL_FIELDS: [&str; 18] = [
-    "key",
-    "deps",
-    "name",
-    "relative_path",
-    "query_sql",
-    "config",
-    "destination",
-    "schema_entry",
-    "inferred_columns",
-    "fast_lineage_has_star",
-    "fast_lineage_star_resolved",
-    "authored_sql",
-    "extract_implicit_alias_columns",
-    "enum_declarations",
-    "constant_declarations",
-    "binding_validated",
-    "dynamic_column_contract",
-    "rejected_sql_analysis_opt_out",
-];
-
 /// How often a waiting run checks for interrupts and cancellation.
 const SIGNAL_POLL: Duration = Duration::from_millis(100);
 const INTERRUPTED_MESSAGE: &str = "custom rule hosts were interrupted";
@@ -123,10 +100,10 @@ pub(crate) fn run_custom_hosts(
     std::fs::create_dir_all(&input_dir)?;
     let input_dir: PathBuf = input_dir.canonicalize()?;
     let stem: String = format!("project-{}", uuid_hex(py)?);
-    let input_path: PathBuf = input_dir.join(format!("{stem}.pickle"));
+    let input_path: PathBuf = input_dir.join(format!("{stem}.payload"));
     let abandoned: PathBuf = input_dir.join(format!("{stem}{}", CUSTOM_HOST_ABANDONED_SUFFIX));
     let mut payload: Map<String, Value> = Map::new();
-    payload.insert("project_pickle_path".to_owned(), json!(text(&input_path)));
+    payload.insert("project_payload_path".to_owned(), json!(text(&input_path)));
     payload.insert("abandoned_marker".to_owned(), json!(text(&abandoned)));
     payload.insert("parent_pid".to_owned(), json!(std::process::id()));
     payload.insert(
@@ -142,7 +119,7 @@ pub(crate) fn run_custom_hosts(
     let launch: Launch = Launch::new(py, payload, observed.launches)?;
     let publish = || {
         before_publish(py, observed.publish_inputs.as_ref(), &input_path)?;
-        write_inputs(py, &input_path, request)
+        write_inputs(&input_path, request)
     };
     let responses: PyResult<Vec<HostSlice>> = run_partitions(
         py,
@@ -376,19 +353,15 @@ fn host_outcome(spec: &str) -> HostOutcome {
     decode_host_response(&value)
 }
 
-/// Publish the pickled project and config atomically; hosts started earlier wait for it.
-fn write_inputs(py: Python<'_>, path: &Path, request: &HostRequest<'_, '_>) -> PyResult<()> {
-    let payload: Bound<'_, PyAny> = host_payload_project(request.project)?;
+/// Publish the project and config payload atomically; hosts started earlier wait for it.
+fn write_inputs(path: &Path, request: &HostRequest<'_, '_>) -> PyResult<()> {
     let parent: &Path = path.parent().unwrap_or(path);
     let partial: PathBuf = parent.join(format!(
-        "writing-{}-{}.pickle",
+        "writing-{}-{}.payload",
         std::process::id(),
         INPUT_COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
-    let written: PyResult<()> = pickle_into(
-        &partial,
-        &PyTuple::new(py, [payload, request.config.clone()])?,
-    );
+    let written: PyResult<()> = write_payload_file(&partial, request);
     if let Err(error) = written {
         remove_file(&partial);
         return Err(error);
@@ -397,37 +370,19 @@ fn write_inputs(py: Python<'_>, path: &Path, request: &HostRequest<'_, '_>) -> P
     Ok(())
 }
 
-/// Pickle `value` straight into a new file at `path`, never holding the whole pickle in memory.
-fn pickle_into(path: &Path, value: &Bound<'_, PyTuple>) -> PyResult<()> {
-    let py: Python<'_> = value.py();
-    let handle: Bound<'_, PyAny> = imported(py, "builtins", "open")?.call1((text(path), "wb"))?;
-    let dumped: PyResult<Bound<'_, PyAny>> =
-        imported(py, "pickle", "dump")?.call1((value, &handle));
-    let closed: PyResult<Bound<'_, PyAny>> = handle.call_method0("close");
-    dumped?;
-    closed?;
+/// Stream the payload into a new file at `path`, never holding it whole in memory.
+fn write_payload_file(path: &Path, request: &HostRequest<'_, '_>) -> PyResult<()> {
+    let file: BufWriter<File> = BufWriter::new(File::create(path)?);
+    let mut file: BufWriter<File> = write_payload(file, request.project, request.config)?;
+    file.flush()?;
     Ok(())
 }
 
-/// The project hosts decode, without model state no rule fact reads.
-pub(crate) fn host_payload_project<'py>(
-    project: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = project.py();
-    let mut models: Vec<Bound<'py, PyAny>> = Vec::new();
-    for model in native_field(project, "models")?.try_iter()? {
-        let model: Bound<'py, PyAny> = model?;
-        let fields: Bound<'py, PyDict> = PyDict::new(py);
-        for name in PAYLOAD_MODEL_FIELDS {
-            fields.set_item(name, native_field(&model, name)?)?;
-        }
-        models.push(new_record(py, RecordId::CompiledModel, (), Some(&fields))?);
-    }
-    let record: Bound<'py, PyAny> = compiled_project_record(project, true)?;
-    let options: Bound<'py, PyDict> = PyDict::new(py);
-    options.set_item("models", PyTuple::new(py, models)?)?;
-    options.set_item("native_project", py.None())?;
-    replaced_keywords(&record, &options)
+/// `pickle.dumps(value)`, for payload values only Python holds.
+pub(crate) fn pickled<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyBytes>> {
+    Ok(imported(value.py(), "pickle", "dumps")?
+        .call1((value,))?
+        .downcast_into()?)
 }
 
 /// Usable CPUs: the process CPU count capped by any cgroup CPU quota.
@@ -489,7 +444,7 @@ fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn rules_error(py: Python<'_>, message: String) -> PyErr {
+pub(crate) fn rules_error(py: Python<'_>, message: String) -> PyErr {
     match error_class(py, ErrorId::Rules).and_then(|class| class.call1((message,))) {
         Ok(instance) => PyErr::from_value(instance),
         Err(error) => error,
