@@ -1,5 +1,7 @@
 //! Adapter-aware target namespace validation of a compile.
 
+use std::collections::HashMap;
+
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
@@ -403,6 +405,7 @@ pub(crate) fn project_targets(
     let adapter_label: String = adapter_name.str()?.to_cow()?.into_owned();
     for (resource_kind, attribute) in [("model", "models"), ("seed", "seeds")] {
         let mut targets: Vec<(String, Bound<'_, PyAny>)> = Vec::new();
+        let mut positions: HashMap<String, usize> = HashMap::new();
         for resource in native_field(project, attribute)?.try_iter()? {
             let resource: Bound<'_, PyAny> = resource?;
             let resource_name: String = native_field(&resource, "name")?
@@ -410,12 +413,12 @@ pub(crate) fn project_targets(
                 .to_cow()?
                 .into_owned();
             let destination: Bound<'_, PyAny> = native_field(&resource, "destination")?;
-            match targets
-                .iter_mut()
-                .find(|(existing, _)| *existing == resource_name)
-            {
-                Some(entry) => entry.1 = destination,
-                None => targets.push((resource_name, destination)),
+            match positions.get(&resource_name) {
+                Some(position) => targets[*position].1 = destination,
+                None => {
+                    positions.insert(resource_name.clone(), targets.len());
+                    targets.push((resource_name, destination));
+                }
             }
         }
         for (resource_name, target) in targets {

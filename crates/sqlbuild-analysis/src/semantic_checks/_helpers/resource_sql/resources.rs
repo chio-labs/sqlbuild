@@ -3,6 +3,9 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
+use rayon::ThreadPool;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 use crate::semantic_checks::_helpers::resource_sql::columns::resolve_binding_column;
 use crate::semantic_checks::_helpers::resource_sql::fixtures::{
     prepared_test_sql, reference_names,
@@ -68,23 +71,29 @@ fn audit_label(audit: &AuditSqlInput) -> String {
     label
 }
 
-fn shape<'a>(request: &'a ResourceSqlRequest, name: &str) -> &'a [(String, String)] {
-    request
-        .shapes
-        .iter()
-        .find(|(shape_name, _)| shape_name == name)
-        .map_or(&[], |(_, columns)| columns.as_slice())
+/// Each closed shape's columns by relation name, the first shape of a name winning.
+fn shapes_by_name(request: &ResourceSqlRequest) -> HashMap<&str, &[(String, String)]> {
+    let mut shapes: HashMap<&str, &[(String, String)]> =
+        HashMap::with_capacity(request.shapes.len());
+    for (name, columns) in &request.shapes {
+        shapes.entry(name.as_str()).or_insert(columns.as_slice());
+    }
+    shapes
 }
 
 /// Python's `_binds_cleanly`: a built-in single-column audit on a column its closed shape has.
-fn binds_cleanly(audit: &AuditSqlInput, request: &ResourceSqlRequest) -> bool {
+fn binds_cleanly(
+    audit: &AuditSqlInput,
+    request: &ResourceSqlRequest,
+    shapes: &HashMap<&str, &[(String, String)]>,
+) -> bool {
     let (Some((_, target)), Some(column)) = (&audit.attached_target, &audit.attached_column) else {
         return false;
     };
     if !COLUMN_ONLY_BUILT_IN_AUDITS.contains(&audit.definition_name.as_str()) || !audit.built_in {
         return false;
     }
-    let columns = shape(request, target);
+    let columns: &[(String, String)] = shapes.get(target.as_str()).copied().unwrap_or(&[]);
     !columns.is_empty()
         && resolve_binding_column(
             column,
@@ -105,13 +114,14 @@ fn disabled_models(request: &ResourceSqlRequest) -> HashSet<&str> {
 }
 
 fn audit_resources(request: &ResourceSqlRequest, disabled: &HashSet<&str>) -> Vec<ResourceSql> {
+    let shapes: HashMap<&str, &[(String, String)]> = shapes_by_name(request);
     let mut resources: Vec<ResourceSql> = Vec::new();
     for audit in &request.audits {
         let target_disabled = audit
             .attached_target
             .as_ref()
             .is_some_and(|(_, target)| disabled.contains(&target.as_str()));
-        if target_disabled || binds_cleanly(audit, request) {
+        if target_disabled || binds_cleanly(audit, request, &shapes) {
             continue;
         }
         for (sql, authored) in &audit.bodies {
@@ -154,23 +164,43 @@ fn test_resource(test: &SqlTestSqlInput, prepared: &(String, Vec<String>)) -> Re
     }
 }
 
-fn sql_test_resources(request: &ResourceSqlRequest, disabled: &HashSet<&str>) -> Vec<ResourceSql> {
-    let mut prepared: HashMap<&str, (String, Vec<String>)> = HashMap::new();
-    let mut resources: Vec<ResourceSql> = Vec::new();
-    for test in &request.sql_tests {
-        let expects_disabled = test
-            .expected_model_names
-            .iter()
-            .any(|name| disabled.contains(&name.as_str()));
-        if is_blank(&test.sql_body) || expects_disabled {
-            continue;
-        }
-        let sql = prepared
-            .entry(&test.sql_body)
-            .or_insert_with(|| prepared_test_sql(&test.sql_body));
-        resources.push(test_resource(test, sql));
+/// Whether the test expects a model whose SQL analysis is disabled.
+fn expects_disabled(test: &SqlTestSqlInput, disabled: &HashSet<&str>) -> bool {
+    test.expected_model_names
+        .iter()
+        .any(|name| disabled.contains(&name.as_str()))
+}
+
+fn sql_test_resources(
+    request: &ResourceSqlRequest,
+    disabled: &HashSet<&str>,
+    pool: &dyn Fn() -> Result<Arc<ThreadPool>, String>,
+) -> Result<Vec<ResourceSql>, String> {
+    let checked: Vec<&SqlTestSqlInput> = request
+        .sql_tests
+        .iter()
+        .filter(|test| !is_blank(&test.sql_body) && !expects_disabled(test, disabled))
+        .collect();
+    let mut seen: HashSet<&str> = HashSet::with_capacity(checked.len());
+    let bodies: Vec<&str> = checked
+        .iter()
+        .map(|test| test.sql_body.as_str())
+        .filter(|body| seen.insert(body))
+        .collect();
+    if bodies.is_empty() {
+        return Ok(Vec::new());
     }
-    resources
+    let prepared: Vec<(String, Vec<String>)> = pool()?.install(|| {
+        bodies
+            .par_iter()
+            .map(|body| prepared_test_sql(body))
+            .collect()
+    });
+    let prepared: HashMap<&str, (String, Vec<String>)> = bodies.into_iter().zip(prepared).collect();
+    Ok(checked
+        .into_iter()
+        .map(|test| test_resource(test, &prepared[test.sql_body.as_str()]))
+        .collect())
 }
 
 fn hook_resources_of(model: &HookModelInput, request: &ResourceSqlRequest) -> Vec<ResourceSql> {
@@ -210,10 +240,13 @@ fn hook_resources_of(model: &HookModelInput, request: &ResourceSqlRequest) -> Ve
 }
 
 /// Every checked resource body, deduplicated in first-seen order and filtered by the opt-out policy.
-pub(crate) fn resources(request: &ResourceSqlRequest) -> Vec<ResourceSql> {
+pub(crate) fn resources(
+    request: &ResourceSqlRequest,
+    pool: &dyn Fn() -> Result<Arc<ThreadPool>, String>,
+) -> Result<Vec<ResourceSql>, String> {
     let disabled = disabled_models(request);
     let mut all = audit_resources(request, &disabled);
-    all.extend(sql_test_resources(request, &disabled));
+    all.extend(sql_test_resources(request, &disabled, pool)?);
     for model in request
         .models
         .iter()
@@ -221,13 +254,15 @@ pub(crate) fn resources(request: &ResourceSqlRequest) -> Vec<ResourceSql> {
     {
         all.extend(hook_resources_of(model, request));
     }
-    let mut seen: HashSet<ResourceSql> = HashSet::with_capacity(all.len());
-    let mut unique: Vec<ResourceSql> = Vec::with_capacity(all.len());
-    for resource in all {
-        if seen.insert(resource.clone()) {
-            unique.push(resource);
-        }
-    }
-    unique.retain(|resource| resource.opt_out.is_none() || request.require_sql_analysis);
-    unique
+    let mut seen: HashSet<&ResourceSql> = HashSet::with_capacity(all.len());
+    let first_seen: Vec<bool> = all.iter().map(|resource| seen.insert(resource)).collect();
+    drop(seen);
+    Ok(all
+        .into_iter()
+        .zip(first_seen)
+        .filter(|(resource, first)| {
+            *first && (resource.opt_out.is_none() || request.require_sql_analysis)
+        })
+        .map(|(resource, _)| resource)
+        .collect())
 }

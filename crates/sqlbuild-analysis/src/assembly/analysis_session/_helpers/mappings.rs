@@ -1,6 +1,7 @@
 //! Python dict semantics over ordered pairs, and the topological analysis waves.
 
 use std::collections::{BTreeSet, HashMap};
+use std::sync::OnceLock;
 
 use sha2::{Digest, Sha256};
 
@@ -80,7 +81,7 @@ pub(crate) struct ShapeTable {
     /// Each name at its first insertion, Python's dict iteration order.
     order: Vec<String>,
     /// Digest chained over every insertion in order, so equal chains mean equal tables.
-    chain: [u8; 32],
+    chain: OnceLock<[u8; 32]>,
 }
 
 impl ShapeTable {
@@ -92,13 +93,12 @@ impl ShapeTable {
                 None => table.insert(name, shape.clone()),
             }
         }
-        table.chain = shapes_chain(&table.ordered());
         table
     }
 
     /// The digest of every shape in order, which changes whenever the table does.
     pub(crate) fn chain(&self) -> [u8; 32] {
-        self.chain
+        *self.chain.get_or_init(|| shapes_chain(&self.ordered()))
     }
 
     fn insert(&mut self, name: &str, shape: Pairs) {
@@ -126,7 +126,9 @@ impl ShapeTable {
     /// Python's `setdefault`.
     pub(crate) fn set_default(&mut self, name: &str, shape: Pairs) {
         if !self.shapes.contains_key(name) {
-            self.chain = chained(&self.chain, name, &shape);
+            if let Some(chain) = self.chain.get() {
+                self.chain = OnceLock::from(chained(chain, name, &shape));
+            }
             self.insert(name, shape);
         }
     }

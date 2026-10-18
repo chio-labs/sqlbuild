@@ -20,7 +20,9 @@ use crate::bindings::_helpers::model_config::config_errors::raised_config_except
 use crate::bindings::_helpers::model_config::config_templates::{
     PythonHost, Stop, TemplateSources, expanded, template_error,
 };
-use crate::bindings::_helpers::project_assembly::resources::syntax_error_message;
+use crate::bindings::_helpers::project_assembly::resources::{
+    syntax_error_message, syntax_error_messages,
+};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::{
     DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
@@ -34,6 +36,9 @@ const MACRO_TOKEN: char = '@';
 const NATIVE_CONTEXTS_ATTRIBUTE: &str = "native_contexts";
 const GENERIC_DIALECT: &str = "generic";
 const EXPRESSION_STATEMENTS: [&str; 3] = ["select", "with", "values"];
+
+/// The SQL parsed for an authored source expression and its syntax error message.
+type ParsedExpression = (String, PyResult<Option<String>>);
 
 /// One discovered source: its file's path, the discovered file and the entry.
 pub(crate) type SourceRow = (String, Py<PyAny>, Py<PyAny>);
@@ -51,8 +56,13 @@ pub(crate) fn attached_sources<'py>(
     let (default_contract, validate, source_kind) = settings;
     let py: Python<'py> = context.host.py();
     let source_kind: Bound<'py, PyAny> = source_kind.into_bound(py);
+    let mut parsed: Vec<Option<ParsedExpression>> = if validate {
+        parsed_expressions(py, &rows)
+    } else {
+        Vec::new()
+    };
     let mut attached: Vec<AttachedSource> = Vec::with_capacity(rows.len());
-    for (file_path, source_file, entry) in rows {
+    for (index, (file_path, source_file, entry)) in rows.into_iter().enumerate() {
         let entry: Bound<'py, PyAny> = entry.into_bound(py);
         let name: String = native_field(&entry, "name")?.extract()?;
         let consumer: Bound<'py, PyAny> = context
@@ -101,7 +111,8 @@ pub(crate) fn attached_sources<'py>(
                 return Err(compile_error(context.classes, &message, None));
             }
             if validate {
-                checked_expression(context, (&name, &file_path, sql))?;
+                let parsed: Option<ParsedExpression> = parsed.get_mut(index).and_then(Option::take);
+                checked_expression(context, (&name, &file_path, sql), parsed)?;
             }
         }
         let contract: Option<String> = native_field(&entry, "contract")?
@@ -409,13 +420,59 @@ fn replaced_spec(value: &Bound<'_, PyAny>, changes: &Bound<'_, PyDict>) -> PyRes
 }
 
 /// `validate_source_expression_syntax`: the expression parses as a FROM target.
-fn checked_expression(context: &LoopContext<'_, '_>, source: (&str, &str, &str)) -> PyResult<()> {
+fn checked_expression(
+    context: &LoopContext<'_, '_>,
+    source: (&str, &str, &str),
+    parsed: Option<ParsedExpression>,
+) -> PyResult<()> {
     let (name, file_path, expression) = source;
-    parse_checked(
-        context,
-        &format!("SELECT * FROM {}", expression_relation(expression)),
-        &format!("SQL syntax error in source expression '{name}' ({file_path})"),
-    )
+    let sql: String = expression_sql(expression);
+    let error_prefix: String =
+        format!("SQL syntax error in source expression '{name}' ({file_path})");
+    match parsed {
+        Some((parsed_sql, message)) if parsed_sql == sql => match message? {
+            Some(message) => Err(syntax_error(context, &error_prefix, &message)),
+            None => Ok(()),
+        },
+        _ => parse_checked(context, &sql, &error_prefix),
+    }
+}
+
+/// The SQL `validate_source_expression_syntax` parses for `expression`.
+fn expression_sql(expression: &str) -> String {
+    format!("SELECT * FROM {}", expression_relation(expression))
+}
+
+/// Each authored source expression's parse, run together ahead of the ordered loop.
+fn parsed_expressions(py: Python<'_>, rows: &[SourceRow]) -> Vec<Option<ParsedExpression>> {
+    let mut positions: Vec<Option<usize>> = Vec::with_capacity(rows.len());
+    let mut checks: Vec<SyntaxCheck> = Vec::new();
+    for (_, _, entry) in rows {
+        let mut position: Option<usize> = None;
+        if let Ok(Some(expression)) = native_field(entry.bind(py), "expression")
+            .and_then(|value| value.extract::<Option<String>>())
+        {
+            position = Some(checks.len());
+            checks.push(SyntaxCheck {
+                sql: expression_sql(&expression),
+                placeholders: Vec::new(),
+            });
+        }
+        positions.push(position);
+    }
+    let mut messages: Vec<Option<PyResult<Option<String>>>> =
+        syntax_error_messages(py, &checks, GENERIC_DIALECT, SyntaxMode::Parse)
+            .into_iter()
+            .map(Some)
+            .collect();
+    positions
+        .into_iter()
+        .map(|position| {
+            let index: usize = position?;
+            let message: PyResult<Option<String>> = messages[index].take()?;
+            Some((std::mem::take(&mut checks[index].sql), message))
+        })
+        .collect()
 }
 
 /// `_validate_sql_syntax_with_message` for SQL a non-model resource owns.
@@ -433,13 +490,25 @@ pub(crate) fn parse_checked(
     else {
         return Ok(());
     };
+    Err(syntax_error(context, error_prefix, &message))
+}
+
+/// The compile error raised for a non-model resource's SQL that does not parse.
+fn syntax_error(context: &LoopContext<'_, '_>, error_prefix: &str, message: &str) -> PyErr {
+    let py: Python<'_> = context.host.py();
     let keywords: Bound<'_, PyDict> = PyDict::new(py);
-    keywords.set_item("help", &context.classes.source_syntax_help)?;
-    let error: Bound<'_, PyAny> = context
-        .classes
-        .compile_error
-        .call((format!("{error_prefix}: {message}"),), Some(&keywords))?;
-    Err(PyErr::from_value(error))
+    let error: PyResult<Bound<'_, PyAny>> = keywords
+        .set_item("help", &context.classes.source_syntax_help)
+        .and_then(|()| {
+            context
+                .classes
+                .compile_error
+                .call((format!("{error_prefix}: {message}"),), Some(&keywords))
+        });
+    match error {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
 }
 
 /// `_render_source_expression_relation`: the expression as a table factor.
