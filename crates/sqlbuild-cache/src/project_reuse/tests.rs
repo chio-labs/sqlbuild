@@ -2,6 +2,8 @@
 mod file_changes;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_project_image.rs"]
+mod project_image;
 #[path = "tests/test_project_reuse.rs"]
 mod project_reuse;
 #[path = "tests/test_types.rs"]

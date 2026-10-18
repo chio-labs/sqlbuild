@@ -69,6 +69,26 @@ pub struct StoredInputs {
     pub settings_digest: String,
 }
 
+/// Named sections of one project image, in stored order.
+pub type ImageSections = Vec<(String, Vec<u8>)>;
+
+/// The project paths that differ from the stored compile's, each list sorted.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProjectFileChanges {
+    pub changed: Vec<String>,
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+}
+
+/// Whether a missed check may be compiled as a delta of the stored compile, and from what.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DeltaCandidate {
+    /// Only project file contents differ from the stored compile.
+    Files(ProjectFileChanges),
+    /// Why the stored compile cannot be the base of a delta compile.
+    Unavailable(&'static str),
+}
+
 /// The command output of one stored compile.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StoredOutput {
@@ -105,6 +125,8 @@ pub struct ReuseAttempt {
     pub replay_failed: bool,
     /// Project files the check read to compare or complete content digests.
     pub digested_files: usize,
+    /// Whether a miss may be compiled as a delta of the stored compile.
+    pub delta: DeltaCandidate,
 }
 
 /// What the host asks of one reuse check.
@@ -137,6 +159,8 @@ pub struct CompileRecord {
     pub artifacts_written: bool,
     pub dag_path: Option<String>,
     pub json_output: bool,
+    /// The project image to keep beside the stored compile, when one was built.
+    pub image: Option<ImageSections>,
 }
 
 /// What one compile left at one artifact path.

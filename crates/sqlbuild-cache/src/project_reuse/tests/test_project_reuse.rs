@@ -69,7 +69,7 @@ fn given_stored_compile_when_reading_then_only_an_intact_slot_round_trips() {
     for test_case in test_cases {
         let folder = tempfile::tempdir().expect("store folder");
         let path = folder.path().join("reuse/slot.store");
-        write_entry(&path, &stored_inputs(), &stored_output(), 8).expect("stored compile");
+        write_entry(&path, (&stored_inputs(), &stored_output(), None), 8).expect("stored compile");
         (test_case.edit)(&path);
 
         let read = read_entry(&path);
@@ -269,7 +269,7 @@ fn given_stored_compile_when_refreshing_inputs_then_only_the_slot_file_is_rewrit
     for test_case in test_cases {
         let folder = tempfile::tempdir().expect("store folder");
         let path = folder.path().join("reuse/slot.store");
-        write_entry(&path, &stored_inputs(), &stored_output(), 8).expect("stored compile");
+        write_entry(&path, (&stored_inputs(), &stored_output(), None), 8).expect("stored compile");
         let (name, bytes) = test_case.extra_section;
         add_slot_section(&path, name, bytes);
         let output_before = std::fs::read(output_file(&path)).expect("output bytes");

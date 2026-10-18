@@ -64,7 +64,12 @@ pub(crate) fn stored_output() -> StoredOutput {
 pub(crate) fn store_aged_slots(directory: &Path, slots: u64, max_entries: usize) {
     for slot in 0..slots {
         let path = directory.join(format!("slot{slot}.store"));
-        write_entry(&path, &stored_inputs(), &stored_output(), max_entries).expect("stored");
+        write_entry(
+            &path,
+            (&stored_inputs(), &stored_output(), None),
+            max_entries,
+        )
+        .expect("stored");
         let stamp = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(slot + 1);
         std::fs::File::options()
             .write(true)
@@ -123,7 +128,7 @@ pub(crate) fn replace_output(path: &Path) {
         stdout: "{\"command\": \"build\"}\n".to_owned(),
         ..stored_output()
     };
-    write_entry(&other, &stored_inputs(), &output, usize::MAX).expect("other compile");
+    write_entry(&other, (&stored_inputs(), &output, None), usize::MAX).expect("other compile");
     std::fs::rename(output_file(&other), output_file(path)).expect("swapped output");
 }
 

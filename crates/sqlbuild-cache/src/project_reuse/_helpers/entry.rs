@@ -4,11 +4,16 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use crate::digest::types::ContentDigest;
+use crate::project_reuse::_helpers::image::{image_path, prune_images, read_image, write_image};
 use crate::project_reuse::_helpers::sections::{
     SectionFile, decode_sections, encode_sections, write_atomically,
 };
-use crate::project_reuse::constants::{REUSE_OUTPUT_SUFFIX, REUSE_STORE_SUFFIX};
-use crate::project_reuse::models::{SettingsInputs, StoredInputs, StoredOutput, StoredProjectFile};
+use crate::project_reuse::constants::{
+    REUSE_MAX_STORED_IMAGES, REUSE_OUTPUT_SUFFIX, REUSE_STORE_SUFFIX,
+};
+use crate::project_reuse::models::{
+    ImageSections, SettingsInputs, StoredInputs, StoredOutput, StoredProjectFile,
+};
 use crate::project_snapshot::models::PathStamp;
 use crate::store::errors::StoreDecodeError;
 use crate::store::models::{RecordReader, RecordWriter};
@@ -20,6 +25,7 @@ const INPUTS_SECTION: &str = "inputs";
 const OUTPUT_IDENTITY_SECTION: &str = "output";
 const OUTPUT_META_SECTION: &str = "meta";
 const STDOUT_SECTION: &str = "stdout";
+const IMAGE_IDENTITY_SECTION: &str = "image";
 /// How long an output with no slot is kept, so a compile still writing its slot keeps it.
 const ORPHANED_OUTPUT_GRACE: Duration = Duration::from_secs(600);
 
@@ -28,6 +34,7 @@ const ORPHANED_OUTPUT_GRACE: Duration = Duration::from_secs(600);
 pub(crate) struct StoredSlot {
     pub(crate) inputs: StoredInputs,
     output_identity: ContentDigest,
+    image_identity: Option<ContentDigest>,
     sections: Vec<(String, Vec<u8>)>,
 }
 
@@ -54,9 +61,14 @@ fn decoded_slot(bytes: &[u8]) -> Result<StoredSlot, StoreDecodeError> {
     let output_identity: ContentDigest = required(&file, OUTPUT_IDENTITY_SECTION)?
         .try_into()
         .map_err(|_| StoreDecodeError)?;
+    let image_identity: Option<ContentDigest> = match file.section(IMAGE_IDENTITY_SECTION) {
+        Some(bytes) => Some(bytes.try_into().map_err(|_| StoreDecodeError)?),
+        None => None,
+    };
     Ok(StoredSlot {
         inputs,
         output_identity,
+        image_identity,
         sections: file
             .sections
             .into_iter()
@@ -103,11 +115,23 @@ pub(crate) fn read_entry(path: &Path) -> Option<(StoredInputs, StoredOutput)> {
     Some((slot.inputs, output))
 }
 
-/// Replace the slot with one stored compile, then keep at most `max_entries` slots.
+/// The stored inputs, output and image of the slot, or `None` when any cannot be read.
+pub(crate) fn read_delta_base(path: &Path) -> Option<(StoredInputs, StoredOutput, ImageSections)> {
+    let slot: StoredSlot = read_slot(path)?;
+    let image: ImageSections = read_slot_image(path, &slot)?;
+    let output: StoredOutput = read_output(path, &slot)?;
+    Some((slot.inputs, output, image))
+}
+
+/// The image the slot names, or `None` when it has none or it cannot be read.
+pub(crate) fn read_slot_image(path: &Path, slot: &StoredSlot) -> Option<ImageSections> {
+    read_image(path, slot.image_identity.as_ref()?)
+}
+
+/// Replace the slot with one stored compile and its image, then keep at most `max_entries` slots.
 pub(crate) fn write_entry(
     path: &Path,
-    inputs: &StoredInputs,
-    output: &StoredOutput,
+    (inputs, output, image): (&StoredInputs, &StoredOutput, Option<&ImageSections>),
     max_entries: usize,
 ) -> std::io::Result<()> {
     let meta: Vec<u8> = encode_output(output);
@@ -120,14 +144,26 @@ pub(crate) fn write_entry(
     );
     write_atomically(&output_path(path), &encoded)?;
     drop(encoded);
-    write_slot(
-        path,
-        &[
-            (INPUTS_SECTION, &encode_inputs(inputs)),
-            (OUTPUT_IDENTITY_SECTION, &identity),
-        ],
-    )?;
+    let image_identity: Option<ContentDigest> = match image {
+        Some(sections) => Some(write_image(path, sections)?),
+        None => {
+            let _ = std::fs::remove_file(image_path(path));
+            None
+        }
+    };
+    let encoded_inputs: Vec<u8> = encode_inputs(inputs);
+    let mut sections: Vec<(&str, &[u8])> = vec![
+        (INPUTS_SECTION, &encoded_inputs),
+        (OUTPUT_IDENTITY_SECTION, &identity),
+    ];
+    if let Some(image_identity) = &image_identity {
+        sections.push((IMAGE_IDENTITY_SECTION, image_identity));
+    }
+    write_slot(path, &sections)?;
     prune_entries(path, max_entries);
+    if let Some(directory) = path.parent() {
+        prune_images(directory, path, REUSE_MAX_STORED_IMAGES);
+    }
     Ok(())
 }
 
@@ -153,10 +189,11 @@ fn write_slot(path: &Path, sections: &[(&str, &[u8])]) -> std::io::Result<()> {
     write_atomically(path, &encoded)
 }
 
-/// Remove the slot and its output.
+/// Remove the slot, its output and its image.
 pub(crate) fn remove_entry(path: &Path) {
     let _ = std::fs::remove_file(path);
     let _ = std::fs::remove_file(output_path(path));
+    let _ = std::fs::remove_file(image_path(path));
 }
 
 /// Keep at most `max_entries` slots, newest first, and remove outputs no slot names any more.
