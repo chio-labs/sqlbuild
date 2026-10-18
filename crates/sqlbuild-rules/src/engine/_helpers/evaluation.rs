@@ -10,7 +10,7 @@ use crate::rules::main::{
     resolve_threshold_overrides, select, sql_test_coverage,
 };
 use crate::rules::models::{
-    ModelEvaluationRequest, ProjectEvaluationRequest, ResolvedThresholdOverride,
+    ModelEvaluationRequest, ProjectEvaluationRequest, QueryShapes, ResolvedThresholdOverride,
 };
 use fensu_policy::apply_suppressions;
 use fensu_policy::lifecycle::errors::LifecycleError;
@@ -188,6 +188,7 @@ fn evaluate_pending_models(
     pending_models: Vec<PendingModelRule<'_>>,
     context: ModelRuleBatchContext<'_>,
 ) -> Result<Vec<CompletedModelRule>, String> {
+    let shapes = QueryShapes::default();
     let evaluate_pending = |pending: PendingModelRule<'_>| CompletedModelRule {
         index: pending.index,
         identity: pending.identity,
@@ -203,6 +204,7 @@ fn evaluate_pending_models(
                 selected: context.selected,
                 request: context.request,
                 threshold_overrides: context.threshold_overrides,
+                shapes: &shapes,
             })
             .and_then(|faults| scoped_faults(context.selected, faults, RuleScope::evaluates_models))
         },

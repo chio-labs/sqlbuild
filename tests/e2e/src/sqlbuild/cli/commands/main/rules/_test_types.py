@@ -13,6 +13,16 @@ class EvaluatedPredicateCase:
 
 
 @dataclass(frozen=True)
+class EvaluatedModelRulesCase:
+    description: str
+    sql: str
+    rules: tuple[str, ...]
+    selector: str
+    expected_rule_findings: tuple[tuple[str, int, int], ...]
+    expected_compile_findings: tuple[tuple[str, int, int], ...]
+
+
+@dataclass(frozen=True)
 class GroupedRulesCase:
     description: str
     arguments: tuple[str, ...]

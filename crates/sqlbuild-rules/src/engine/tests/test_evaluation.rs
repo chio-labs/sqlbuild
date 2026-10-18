@@ -5,7 +5,8 @@ use crate::constants::NATIVE_BUILD_IDENTITY;
 use crate::engine::_helpers::evaluation::evaluate_json;
 use crate::engine::tests::helpers;
 use crate::engine::tests::test_types;
-use crate::rules::_helpers::evaluation::normalize_rules_sql;
+use crate::query_facts::main::model_shape::model_shape;
+use crate::query_facts::models::ModelSource;
 
 #[test]
 fn given_dependency_tokens_when_classifying_imports_then_preserves_dialect_and_original_sql()
@@ -13,12 +14,10 @@ fn given_dependency_tokens_when_classifying_imports_then_preserves_dialect_and_o
     let test_cases = [
         test_types::DependencyTokenTestCase {
             description: "comments and escaped literals retain canonical arguments",
-            expected_columns: &[1],
+            expected_columns: &[],
             dialect: "duckdb",
             query_sql: "WITH imported AS (SELECT * FROM __ReF /* __ref('ignored') */ ('Order''s')) SELECT '__source(''ignored'')' AS label FROM imported",
-            expected_messages: &[
-                "each __ref/__source must appear once in its own top-level import CTE",
-            ],
+            expected_messages: &[],
         },
         test_types::DependencyTokenTestCase {
             description: "quoted function names are not dependency calls",
@@ -53,6 +52,15 @@ fn given_dependency_tokens_when_classifying_imports_then_preserves_dialect_and_o
             expected_columns: &[1],
             dialect: "snowflake",
             query_sql: "SELECT * EXCLUDE (__ref('orders')) FROM orders",
+            expected_messages: &[
+                "each __ref/__source must appear once in its own top-level import CTE",
+            ],
+        },
+        test_types::DependencyTokenTestCase {
+            description: "a dependency passed to a table function is not an import CTE",
+            expected_columns: &[1],
+            dialect: "duckdb",
+            query_sql: "WITH imported AS (SELECT * FROM __table_fn(\"unnested\")(__ref('orders'))) SELECT order_id FROM imported",
             expected_messages: &[
                 "each __ref/__source must appear once in its own top-level import CTE",
             ],
@@ -1188,65 +1196,56 @@ fn given_numeric_comparisons_when_evaluating_named_decisions_then_only_authored_
 }
 
 #[test]
-fn given_snowflake_parser_extensions_when_normalizing_then_preserves_source_positions() {
-    let test_cases = [test_types::NormalizationTestCase {
-        description: "normalization changes syntax only outside strings and comments",
+fn given_model_sql_when_stubbing_shape_then_offsets_map_back_to_source_positions()
+-> Result<(), String> {
+    let test_cases = [test_types::ShapeTestCase {
+        description: "calls in code are stubbed by occurrence; quoted and commented calls stay",
         dialect: "snowflake",
         sql: concat!(
-            "SELECT * EXCLUDE (\n  ignored,\n  obsolete\n), ",
-            "TRANSFORM(values, leg INT -> leg + 1),\n",
-            "'__table_fn(\"quoted\")(7)', /* leg INT -> unchanged */ payload:key::STRING,\n",
-            "CAST(amounts AS ARRAY(\n  NUMBER(38, 10)\n)) AS amounts\n",
-            "FROM __table_fn(\"orders)archive\")(42)"
+            "SELECT '__ref(\"quoted\")' AS q, /* __ref(\"comment\") */ o.payload:key::STRING AS k\n",
+            "FROM __ref( \"orders\" ) AS o JOIN __source(\"raw\", \"items\") AS i ON i.id = o.id"
         ),
-        expected_typed_lambda: "leg     -> leg + 1",
-        expected_quoted_call: "'__table_fn(\"quoted\")(7)'",
-        expected_comment: "/* leg INT -> unchanged */",
-        expected_table_function: "__table_fn(\"orders)archive\", 42)",
-        expected_other_dialect_lambda: "leg INT -> leg + 1",
+        expected_calls: &["__ref(\"orders\")", "__source(\"raw\",\"items\")"],
+        expected_fragment: "i.id = o.id",
     }];
 
     for test_case in test_cases {
-        let normalized = normalize_rules_sql(test_case.dialect, test_case.sql);
+        let shape = model_shape(test_case.sql, test_case.dialect)?;
+        let calls: Vec<&str> = shape.calls.iter().map(|call| call.text.as_str()).collect();
+        assert_eq!(calls, test_case.expected_calls, "{}", test_case.description);
+        assert!(
+            shape.sql.contains("'__ref(\"quoted\")'"),
+            "{}",
+            test_case.description
+        );
+        let normalized_start = shape
+            .sql
+            .find(test_case.expected_fragment)
+            .ok_or("fragment missing from the normalized SQL")?;
+        let normalized_start = shape.sql[..normalized_start].chars().count();
+        let original_start = test_case
+            .sql
+            .find(test_case.expected_fragment)
+            .ok_or("fragment missing from the model SQL")?;
+        let source = ModelSource::new(test_case.sql, &shape.offsets);
+        let end = normalized_start + test_case.expected_fragment.chars().count();
         assert_eq!(
-            normalized.len(),
-            test_case.sql.len(),
+            source.text(normalized_start, end),
+            test_case.expected_fragment,
             "{}",
             test_case.description
         );
+        let line_start = test_case.sql[..original_start]
+            .rfind('\n')
+            .map_or(0, |index| index + 1);
         assert_eq!(
-            normalized.lines().count(),
-            test_case.sql.lines().count(),
-            "{}",
-            test_case.description
-        );
-        assert!(
-            normalized.contains(test_case.expected_typed_lambda),
-            "{}",
-            test_case.description
-        );
-        assert!(
-            normalized.contains(test_case.expected_quoted_call),
-            "{}",
-            test_case.description
-        );
-        assert!(
-            normalized.contains(test_case.expected_comment),
-            "{}",
-            test_case.description
-        );
-        assert!(
-            normalized.contains(test_case.expected_table_function),
-            "{}",
-            test_case.description
-        );
-        let other = normalize_rules_sql("duckdb", test_case.sql);
-        assert!(
-            other.contains(test_case.expected_other_dialect_lambda),
+            source.line_column(normalized_start),
+            (2, (original_start - line_start + 1) as u64),
             "{}",
             test_case.description
         );
     }
+    Ok(())
 }
 
 #[test]

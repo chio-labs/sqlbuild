@@ -13,6 +13,7 @@ pub mod fix_verification;
 pub mod lint_text;
 pub mod models;
 pub mod project_tree;
+pub mod query_facts;
 pub mod rule_cache;
 pub mod rule_catalogue;
 pub mod rule_results;
