@@ -128,6 +128,11 @@ pub(crate) const SEMANTIC_HELP: &[(&str, &str)] = &[
         "pass the number of arguments required by this function's signature",
     ),
     (
+        "B103",
+        "rewrite the truth-value test null-safely, for example COALESCE(x, FALSE) for x IS TRUE, \
+         and NOT COALESCE(x, FALSE) or x IS DISTINCT FROM TRUE for x IS NOT TRUE",
+    ),
+    (
         "B210",
         "use an expression whose inferred type satisfies this SQL construct",
     ),
@@ -202,6 +207,11 @@ pub(crate) const FINDING_KINDS: &[(&str, &str, &str)] = &[
     ("^B00[45]$", "reference error", "reference errors"),
     ("^B101$", "unknown function", "unknown functions"),
     ("^B102$", "function arity error", "function arity errors"),
+    (
+        "^B103$",
+        "unsupported truth-value test",
+        "unsupported truth-value tests",
+    ),
     ("^B216$", "column count mismatch", "column count mismatches"),
     ("^B21\\d$", "type mismatch", "type mismatches"),
     (

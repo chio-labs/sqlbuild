@@ -30,6 +30,7 @@ from tests.unit.scripts.compiler_differential._helpers.corpus._test_types import
                     *(f"B00{number}" for number in (0, 2, 3, 4, 5)),
                     "B101",
                     "B102",
+                    "B103",
                     *(f"B2{number}" for number in range(10, 20)),
                     *(f"B23{number}" for number in range(5)),
                     "B300",

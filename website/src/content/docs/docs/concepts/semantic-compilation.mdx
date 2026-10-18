@@ -81,6 +81,14 @@ UDFs called through `__udf`, schema-qualified and method calls, quoted names, an
 functions are not affected. There is no per-model suppression: use the suggested spelling, or
 schema-qualify a call to an external UDF that shares an alias name. Other dialects are not checked.
 
+Truth-value tests (`IS [NOT] TRUE` and `IS [NOT] FALSE`) are rejected for Snowflake and SQL
+Server, whose warehouses do not accept them although the SQL parser does. SQLBuild reports a
+blocking B103 error at the `IS` keyword with a null-safe rewrite, for example
+`'IS NOT TRUE' is not supported for dialect Snowflake; write NOT COALESCE(<expr>, FALSE) or <expr>
+IS DISTINCT FROM TRUE`. SQL Server suggestions compare a BIT value, such as
+`COALESCE(<expr>, 0) = 1`. DuckDB (including MotherDuck), PostgreSQL, BigQuery and Databricks
+accept truth-value tests.
+
 Derived-table column aliases, UNPIVOT, and Snowflake GROUPING SETS are checked. DuckDB and Snowflake
 reject excess relation aliases; fewer aliases than output columns remain valid. Missing UNPIVOT
 input columns are errors.
@@ -188,6 +196,7 @@ the notice never reduces them to a count alone.
 | B004–B005 | E222–E223 | Reference/scope errors |
 | B101 | E202 or SQLBuild | Unknown function, or a built-in spelling the dialect does not accept |
 | B102 | E203 or project declaration | Invalid function arity |
+| B103 | SQLBuild | Truth-value test the dialect does not accept |
 | B210–B219 | E210–E219 | Proven native type/shape errors on enabled dialects |
 | B211–B218 | W210–W216 | Implicit conversions; blocking, fixed by an explicit `CAST` or comparison |
 | B216 | E216 | Set-operation, subquery, or row arity |

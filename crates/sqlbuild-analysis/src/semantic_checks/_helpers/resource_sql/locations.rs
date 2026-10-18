@@ -5,6 +5,7 @@ use sqlbuild_core::text::main::ignorecase_key::ignorecase_key;
 use crate::semantic_checks::_helpers::resource_sql::resources::{ResourceSql, find_code_points};
 use crate::semantic_checks::_helpers::resource_sql::scanning::word_at;
 use crate::semantic_checks::models::ResourceSqlFailure;
+use crate::semantic_validation::main::truth_test_spans::truth_test_spans;
 use crate::semantic_validation::models::{BindingPositions, PositionInput};
 
 /// A binding finding: code, message, line, column, start, end and severity.
@@ -17,6 +18,8 @@ pub(crate) type Finding = (
     Option<usize>,
     String,
 );
+
+const UNSUPPORTED_TRUTH_TEST_CODE: &str = "B103";
 
 /// `(line, column, end line, end column)`.
 pub(crate) type Span = (i64, i64, Option<i64>, Option<i64>);
@@ -115,6 +118,25 @@ fn mapped_span(
     )))
 }
 
+/// The authored span of the truth-value test a B103 finding starts at, matched by its order.
+fn truth_test_span(resource: &ResourceSql, cleaned_sql: &str, start: usize) -> Option<Span> {
+    let cleaned: Vec<(usize, usize)> = truth_test_spans(cleaned_sql);
+    let order: usize = cleaned
+        .iter()
+        .position(|(test_start, _)| cleaned_sql[..*test_start].chars().count() == start)?;
+    let authored: Vec<(usize, usize)> = truth_test_spans(&resource.authored_body);
+    if authored.len() != cleaned.len() {
+        return None;
+    }
+    let (test_start, test_end) = *authored.get(order)?;
+    let body_offset: usize = find_code_points(&resource.contents, &resource.authored_body)?;
+    let offset: usize = body_offset + resource.authored_body[..test_start].chars().count();
+    let length: usize = resource.authored_body[test_start..test_end].chars().count();
+    let (line, column) = offset_location(&resource.contents, offset);
+    let (end_line, end_column) = offset_location(&resource.contents, offset + length);
+    Some((line, column, Some(end_line), Some(end_column)))
+}
+
 /// Python's `_location`: the offending authored text, falling back to the body start.
 pub(crate) fn location(
     resource: &ResourceSql,
@@ -128,6 +150,13 @@ pub(crate) fn location(
             let (line, column) = offset_location(&resource.contents, offset);
             return Ok((line, column, None, None));
         }
+    }
+    if finding.0 == UNSUPPORTED_TRUTH_TEST_CODE
+        && let Some(span) = finding
+            .4
+            .and_then(|start| truth_test_span(resource, cleaned_sql, start))
+    {
+        return Ok(span);
     }
     if let Some(span) = mapped_span(resource, cleaned_sql, finding)? {
         return Ok(span);

@@ -421,6 +421,23 @@ class FunctionNameCompileTestCase:
 
 
 @dataclass(frozen=True)
+class TruthValueTestBuildTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_exit_code: int
+    expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class TruthValueTestCompileTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_exit_code: int
+    expected_diagnostics: tuple[tuple[str, str, str, int, int], ...]
+    expected_help: str | None = None
+
+
+@dataclass(frozen=True)
 class ModelHeaderKeyCompileCase:
     description: str
     repo_files: dict[str, str]
