@@ -426,6 +426,63 @@ pub(crate) fn output_edits(
     result
 }
 
+/// Where one SQL expression authored inside a header string sits in its analysis query and file.
+pub(crate) struct ExpressionSite<'a> {
+    pub(crate) path: &'a str,
+    pub(crate) contents: &'a [char],
+    /// The length of the analysis query text before the expression.
+    pub(crate) prefix: usize,
+    /// The file offset of the expression's first character.
+    pub(crate) offset: usize,
+}
+
+/// Rename every reference to the column in one analysed header-string expression.
+pub(crate) fn expression_edits(
+    facts: &ColumnFacts,
+    site: &ExpressionSite<'_>,
+    names: (&str, &str),
+) -> BodyEdits {
+    let (old, new) = names;
+    let locate = |start: usize| {
+        start
+            .checked_sub(site.prefix)
+            .map(|start| site.offset + start)
+    };
+    if !facts.parsed {
+        return BodyEdits::manual(manual_at(
+            site.path,
+            site.contents,
+            Some(site.offset),
+            format!(
+                "this audit argument mentions {old} but is not a SQL expression SQLBuild can parse; update it by hand"
+            ),
+        ));
+    }
+    let mut result = BodyEdits::default();
+    for reference in &facts.references {
+        let (Some(start), Some(end)) = (locate(reference.name_start), locate(reference.name_end))
+        else {
+            continue;
+        };
+        let authored = slice(site.contents, start, end);
+        result.edits.push(text_edit(
+            site.contents,
+            (start, end),
+            respell(&authored, new),
+            EditKind::Header,
+        ));
+    }
+    for unresolved in &facts.unresolved {
+        result.manual.push(manual_at(
+            site.path,
+            site.contents,
+            unresolved.start.and_then(locate).or(Some(site.offset)),
+            format!("cannot tell whether {old} in this audit argument is the renamed column; update it by hand"),
+        ));
+    }
+    result
+}
+
 fn scope_role(scope: &str) -> String {
     if scope == ROOT_SCOPE {
         scope.to_owned()

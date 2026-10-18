@@ -1,6 +1,7 @@
 //! Token-exact MODEL and SCHEMA header edits, as `header_edits.py` and `schema_edits.py` make.
 
 use sqlbuild_core::text::main::is_word_char::is_word_char;
+use sqlbuild_model_config::header_metadata::constants::AUDIT_OPTION_KEYS;
 use sqlbuild_sqltext::compiler::main::model_header_matching::match_batch;
 use sqlbuild_sqltext::compiler::main::model_header_tokenizing::tokenize_one;
 use sqlbuild_sqltext::compiler::main::statement_header_matching::match_statement_header;
@@ -9,10 +10,11 @@ use crate::refactoring::_helpers::edits::text_edits::{text_edit, whole_word_offs
 use crate::refactoring::_helpers::scanning::chars::{find, rfind, slice, starts_with};
 use crate::refactoring::_helpers::scanning::sql_sites::embedded_ref_spans;
 use crate::refactoring::constants::{
-    COLUMN_VALUED_CONFIG_KEYS, COLUMNS_KEY, CURSOR_INPUTS_KEY, HEADER_CLOSERS,
+    AUDITS_KEY, COLUMN_VALUED_CONFIG_KEYS, COLUMNS_KEY, CURSOR_INPUTS_KEY, HEADER_CLOSERS,
     HEADER_DESCRIPTION_KEY, HEADER_INDENT, HEADER_KEY_AND_VALUE_TOKENS, HEADER_OPEN_PAREN,
-    HEADER_OPENERS, HEADER_SEPARATOR, MIGRATE_FROM_KEY, PARENTHESIZED_EMPTY_TOKENS, REF_FUNCTION,
-    RELATIONSHIPS_AUDIT, RELATIONSHIPS_FIELD_KEY, RELATIONSHIPS_TO_KEY, SCHEMA_KEYWORD,
+    HEADER_OPENERS, HEADER_SEPARATOR, LIST_OPENER, MIGRATE_FROM_KEY, PARENTHESIZED_EMPTY_TOKENS,
+    REF_FUNCTION, RELATIONSHIPS_AUDIT, RELATIONSHIPS_FIELD_KEY, RELATIONSHIPS_TO_KEY,
+    SCHEMA_KEYWORD,
 };
 use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{EditKind, TextEdit};
@@ -147,6 +149,40 @@ fn nested_entries<'a>(tokens: &[&'a HeaderToken], depth: i64) -> Vec<NestedEntry
         if token.depth == depth && is_separator(token) {
             groups.push(Vec::new());
             continue;
+        }
+        if let Some(group) = groups.last_mut() {
+            group.push(token);
+        }
+    }
+    groups
+        .into_iter()
+        .filter(|group| group.first().is_some_and(|first| is_value_kind(first.kind)))
+        .map(|group| (group[0], group[1..].to_vec()))
+        .collect()
+}
+
+/// The entries of a `columns (...)` value, which a comma or a closed metadata block ends.
+fn column_entries<'a>(tokens: &[&'a HeaderToken]) -> Vec<NestedEntry<'a>> {
+    let mut groups: Vec<Vec<&'a HeaderToken>> = vec![Vec::new()];
+    let mut previous: Option<&HeaderToken> = None;
+    for token in tokens {
+        if token.depth < 1 {
+            continue;
+        }
+        let closed_entry = token.depth == 1
+            && is_value_kind(token.kind)
+            && previous.is_some_and(|item| {
+                item.depth == 1
+                    && item.kind == HeaderTokenKind::Symbol
+                    && HEADER_CLOSERS.contains(&item.value.as_str())
+            });
+        previous = Some(token);
+        if token.depth == 1 && is_separator(token) {
+            groups.push(Vec::new());
+            continue;
+        }
+        if closed_entry {
+            groups.push(Vec::new());
         }
         if let Some(group) = groups.last_mut() {
             group.push(token);
@@ -298,7 +334,7 @@ pub(crate) fn column_entry_edits(
         if key != COLUMNS_KEY {
             continue;
         }
-        for (name_token, values) in nested_entries(&entry[1..], 1) {
+        for (name_token, values) in column_entries(&entry[1..]) {
             if !is_value(name_token, old) {
                 continue;
             }
@@ -381,6 +417,67 @@ pub(crate) fn insert_header_entry_edit(
         text_edit(text, (start, start), replacement, EditKind::Migration)
             .with_display(Some(String::new()), Some(display.to_owned())),
     )
+}
+
+/// One keyed string argument of an attached audit instance.
+pub(crate) struct AuditArgument<'a> {
+    pub(crate) token: &'a HeaderToken,
+    /// The generic audit the instance attaches, such as `accepted_values`.
+    pub(crate) audit: String,
+    pub(crate) key: String,
+}
+
+/// Keyed string arguments of `audits [...]` instances, with their audit and argument names.
+pub(crate) fn audit_argument_strings(tokens: &[HeaderToken]) -> Vec<AuditArgument<'_>> {
+    let mut found: Vec<AuditArgument<'_>> = Vec::new();
+    let mut audit_depths: Vec<i64> = Vec::new();
+    let mut instance: String = String::new();
+    for (index, token) in tokens.iter().enumerate() {
+        let list_opener = index > 0 && tokens[index - 1].value == AUDITS_KEY;
+        while !list_opener
+            && audit_depths
+                .last()
+                .is_some_and(|depth| token.depth < *depth)
+        {
+            audit_depths.pop();
+        }
+        let opens_audits = token.kind == HeaderTokenKind::Word
+            && token.value == AUDITS_KEY
+            && tokens.get(index + 1).is_some_and(|next| {
+                next.kind == HeaderTokenKind::Symbol && next.value == LIST_OPENER
+            });
+        if opens_audits {
+            audit_depths.push(token.depth + 1);
+            continue;
+        }
+        if token.kind == HeaderTokenKind::Word && audit_depths.last() == Some(&token.depth) {
+            instance.clone_from(&token.value);
+        }
+        let preceding = index
+            .checked_sub(HEADER_KEY_AND_VALUE_TOKENS)
+            .map(|before| (&tokens[before], &tokens[before + 1]));
+        let Some((before_key, key)) = preceding else {
+            continue;
+        };
+        if audit_depths.is_empty() || token.kind != HeaderTokenKind::String {
+            continue;
+        }
+        let keyed = key.kind == HeaderTokenKind::Word
+            && key.depth == token.depth
+            && before_key.kind == HeaderTokenKind::Symbol
+            && (before_key.value == HEADER_OPEN_PAREN || before_key.value == HEADER_SEPARATOR);
+        let option = AUDIT_OPTION_KEYS.contains(&key.value.as_str())
+            || key.value == RELATIONSHIPS_TO_KEY
+            || key.value == RELATIONSHIPS_FIELD_KEY;
+        if keyed && !option {
+            found.push(AuditArgument {
+                token,
+                audit: instance.clone(),
+                key: key.value.clone(),
+            });
+        }
+    }
+    found
 }
 
 /// Header offsets that still mention a word outside descriptions.
