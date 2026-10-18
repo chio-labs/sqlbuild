@@ -2,20 +2,34 @@ from __future__ import annotations
 
 import inspect
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
+from sqlbuild._native import (
+    ChainStep,
+    CompiledObjectKey,
+    CompiledResourceType,
+    PlanOutput,
+    SqlTestPlanEntry,
+)
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.executor.pipeline._helpers.testing import run_test_pipeline
+from sqlbuild.executor.testing.models import SqlTestExecutionResult
+from sqlbuild.observability import EventDispatcher, LifecycleEvent, dispatcher_scope
 from tests.unit.src.sqlbuild.adapter.contract.classes.strict_adapter._test_types import (
     FirstClassAdapterImplementationContractTestCase,
+    OptionalStrictMethodTestCase,
     StrictAdapterContractTestCase,
+    StrictAdapterInlineSqlTestTestCase,
     TableFreshnessMetadataUnsupportedTestCase,
 )
 from tests.unit.src.sqlbuild.adapter.contract.classes.strict_adapter.helpers import (
+    delegating_strict_adapter_class,
     first_class_adapter_contract_violations,
 )
 
@@ -63,6 +77,79 @@ def test_given_first_class_adapters_when_checking_contract_then_no_method_comes_
     violations: tuple[str, ...] = first_class_adapter_contract_violations()
 
     assert violations == test_case.expected_violations
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        OptionalStrictMethodTestCase(
+            description="unit-test output storage is optional and defaults to inline",
+            expected_optional_methods=frozenset({"create_sql_test_output", "drop_sql_test_output"}),
+            expected_output_relation=None,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_strict_adapter_when_reading_optional_methods_then_defaults_keep_inline_comparison(
+    test_case: OptionalStrictMethodTestCase,
+) -> None:
+    adapter: StrictAdapter = delegating_strict_adapter_class()()
+    abstract_methods: frozenset[str] = cast(Any, StrictAdapter).__abstractmethods__
+
+    relation: str | None = adapter.create_sql_test_output(
+        connection=None, sql="SELECT 1", name="orders_output"
+    )
+    adapter.drop_sql_test_output(connection=None, relation="orders_output")
+
+    assert test_case.expected_optional_methods.isdisjoint(abstract_methods)
+    assert test_case.expected_optional_methods <= frozenset(StrictAdapter.__dict__)
+    assert relation is test_case.expected_output_relation
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StrictAdapterInlineSqlTestTestCase(
+            description="project strict adapter without output storage compares inline",
+            expected_total=1,
+            expected_outcome="pass",
+            expected_statement_count=1,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_strict_adapter_without_optional_methods_when_running_unit_test_then_inline_passes(
+    tmp_path: Path, test_case: StrictAdapterInlineSqlTestTestCase
+) -> None:
+    adapter: StrictAdapter = delegating_strict_adapter_class()()
+    test_entry: SqlTestPlanEntry = SqlTestPlanEntry(
+        key=CompiledObjectKey(resource_type=CompiledResourceType.SQL_TEST, name="order_totals"),
+        name="order_totals",
+        chain=(
+            ChainStep(
+                model_name="orders",
+                resolved_sql="SELECT 1 AS order_id, 10 AS total",
+                expected_cte_sql="SELECT 1 AS order_id, 10 AS total",
+            ),
+        ),
+    )
+    events: list[LifecycleEvent] = []
+    dispatcher: EventDispatcher = EventDispatcher()
+    dispatcher.subscribe_lifecycle(subscriber=events.append, accepts_opaque=False)
+
+    with dispatcher_scope(dispatcher):
+        results: tuple[SqlTestExecutionResult, ...] = run_test_pipeline(
+            plan=PlanOutput(test_entries=(test_entry,)),
+            connection_config={"database": str(tmp_path / "orders.duckdb")},
+            adapter=cast(Any, adapter),
+            run_id="strict-run",
+        )
+
+    assert len(results) == test_case.expected_total
+    assert results[0].outcome == test_case.expected_outcome, results[0].error_message
+    assert [event.event_type for event in events].count(
+        "statement_started"
+    ) == test_case.expected_statement_count
 
 
 @pytest.mark.parametrize(

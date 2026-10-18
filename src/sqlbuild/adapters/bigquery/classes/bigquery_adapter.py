@@ -1508,17 +1508,6 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def supports_transactions(self) -> bool:
         return False
 
-    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
-        """Keep unit-test comparisons inline; this adapter stores no test outputs."""
-
-        del connection, sql, name
-        return None
-
-    def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:
-        """Nothing to drop: no test outputs are stored."""
-
-        del connection, relation
-
     def interrupt_connection(self, connection: Any) -> bool:
         """Request cancellation of the connection's jobs; BigQuery stops them asynchronously."""
 
