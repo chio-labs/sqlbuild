@@ -24,3 +24,27 @@ pub(crate) struct RepeatedPathTestCase {
     pub(crate) repeated: usize,
     pub(crate) expected_contents: &'static [u8],
 }
+
+/// A change between two stale-file passes over a stamped compiled tree.
+#[cfg(unix)]
+pub(crate) struct StampedTreeTestCase {
+    pub(crate) description: &'static str,
+    /// Changes the target folder holding `compiled/` and `cache/` after the first pass.
+    pub(crate) change: fn(&std::path::Path),
+    /// The files the second pass manages, relative to the compiled folder.
+    pub(crate) managed_after: &'static [&'static str],
+    pub(crate) racy_window_ns: i64,
+    /// Creates the `compiled/` folder under the target folder.
+    pub(crate) layout: fn(&std::path::Path),
+    pub(crate) expected_stamped: bool,
+    pub(crate) expected_removed: usize,
+    pub(crate) expected_files: &'static [&'static str],
+}
+
+/// A change made to the compiled tree after its stale-file walk started.
+#[cfg(unix)]
+pub(crate) struct WalkRaceTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) change_during_walk: fn(&std::path::Path),
+    pub(crate) expected_stamped: bool,
+}

@@ -16,6 +16,7 @@ Online: https://sqlbuild.com/docs/concepts/models/configuration/
 - Snapshot fields
 - Custom materialization fields
 - Diff fields
+- Execution time limit
 
 Every `MODEL()` key must be one of the fields on this page. Any other key fails compilation with
 `D002`, naming the key and its file and line and suggesting the nearest supported key. SQL comments
@@ -52,6 +53,7 @@ which accepts any keys.
 | `sql_analysis` | Per-model SQL-analysis override |
 | `dynamic_columns` | Named pivot column families with `pivot_column`, `value_column`, `aggregate`, `type`, and `name_pattern` |
 | `audit_factories` | Audit factories that generate audit cases for this model; see [Audits](../audits.md) |
+| `max_duration` | Time limit for one build attempt of this model, or `"disabled"`; see [Execution time limit](#execution-time-limit) |
 
 ## Descriptions
 
@@ -224,3 +226,42 @@ See [Snapshots](../snapshots.md) for strategy combinations, defaults, and safety
 | `row_diff_tolerances` | Numeric comparison tolerances |
 | `row_diff_sample_rows` | Deterministic unique-key sample size; `0` disables inherited sampling |
 | `row_diff_sample_seed` | Integer seed used for deterministic key hashing |
+
+## Execution time limit
+
+`max_duration` bounds how long one build attempt of a model may run. It has no default: a model
+without it, or with `max_duration "disabled"`, runs until it finishes. Set it in the usual layers,
+with the `MODEL()` header taking precedence over the nearest path default, and the path default over
+`[defaults]`:
+
+```toml
+[defaults]
+max_duration = "30m"
+
+[path_defaults."marts/order_history"]
+max_duration = "2h"
+```
+
+```sql
+MODEL (
+  description 'Daily customer order counts.',
+  materialized table,
+  max_duration "10m"
+);
+```
+
+The limit is a positive fixed duration such as `"90s"`, `"15m"` or `"1h30m"`. One deadline covers the
+whole attempt, starting when the model begins executing: its hooks, statements, attached audits and
+every microbatch. Time spent waiting for upstream models or for a free worker does not count.
+
+At the deadline SQLBuild cancels the model's running statements through the adapter (see the
+[adapter table](../project-configuration.md#duration-limit)), runs no further statements
+for the attempt, and reports the model as timed out with the elapsed time, the limit, where it was
+set, the cancellation outcome and the query IDs it saw. Statements that already completed are not
+undone, but the attempt stops before any later promotion or swap, so a staged table is not
+published. Models that depend on it are skipped as for any failure, and independent models continue.
+A model that finishes successfully just after its limit keeps its successful result.
+
+The per-model limit is separate from the target's whole-build
+[`max_duration`](../project-configuration.md#duration-limit). When both apply, each
+statement is bounded by whichever deadline comes first.

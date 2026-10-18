@@ -1,50 +1,106 @@
-//! One stored compile per selected target, kept as one shared native store file.
+//! One stored compile per selected target: a small inputs file and the output file it names.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
-use crate::digest::main::content_digest::content_digest;
 use crate::digest::types::ContentDigest;
-use crate::project_reuse::constants::{
-    REUSE_STORE_ENVIRONMENT, REUSE_STORE_KIND, REUSE_STORE_SUFFIX,
+use crate::project_reuse::_helpers::sections::{
+    SectionFile, decode_sections, encode_sections, write_atomically,
 };
+use crate::project_reuse::constants::{REUSE_OUTPUT_SUFFIX, REUSE_STORE_SUFFIX};
 use crate::project_reuse::models::{SettingsInputs, StoredInputs, StoredOutput, StoredProjectFile};
 use crate::project_snapshot::models::PathStamp;
 use crate::store::errors::StoreDecodeError;
-use crate::store::main::open_native_store::open_native_store;
-use crate::store::models::{NativeStore, RecordReader, RecordWriter};
+use crate::store::models::{RecordReader, RecordWriter};
 
 const KINDS: [&str; 7] = ["f", "fl", "d", "dl", "bl", "s", "p"];
+const SLOT_ROLE: &str = "project-reuse-slot";
+const OUTPUT_ROLE: &str = "project-reuse-output";
+const INPUTS_SECTION: &str = "inputs";
+const OUTPUT_IDENTITY_SECTION: &str = "output";
+const OUTPUT_META_SECTION: &str = "meta";
+const STDOUT_SECTION: &str = "stdout";
+/// How long an output with no slot is kept, so a compile still writing its slot keeps it.
+const ORPHANED_OUTPUT_GRACE: Duration = Duration::from_secs(600);
 
-fn inputs_key() -> ContentDigest {
-    content_digest(&["inputs"])
+/// A slot's verified inputs, the output file it names, and every section it carries.
+#[derive(Debug)]
+pub(crate) struct StoredSlot {
+    pub(crate) inputs: StoredInputs,
+    output_identity: ContentDigest,
+    sections: Vec<(String, Vec<u8>)>,
 }
 
-fn output_key() -> ContentDigest {
-    content_digest(&["output"])
+/// The output file paired with the slot file at `path`.
+fn output_path(path: &Path) -> PathBuf {
+    path.with_extension(REUSE_OUTPUT_SUFFIX)
 }
 
-fn stdout_key(stdout: &str) -> ContentDigest {
-    content_digest(&["stdout", stdout])
+/// The slot's inputs and output identity, or `None` when it is empty, damaged or foreign.
+pub(crate) fn read_slot(path: &Path) -> Option<StoredSlot> {
+    let bytes: Vec<u8> = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_unreadable) => return None,
+    };
+    let Ok(slot) = decoded_slot(&bytes) else {
+        return None;
+    };
+    Some(slot)
 }
 
-/// The stored inputs and output, or `None` when the slot is empty, damaged or foreign.
+fn decoded_slot(bytes: &[u8]) -> Result<StoredSlot, StoreDecodeError> {
+    let file: SectionFile<'_> = decode_sections(bytes, SLOT_ROLE)?;
+    let inputs: StoredInputs = decode_inputs(required(&file, INPUTS_SECTION)?)?;
+    let output_identity: ContentDigest = required(&file, OUTPUT_IDENTITY_SECTION)?
+        .try_into()
+        .map_err(|_| StoreDecodeError)?;
+    Ok(StoredSlot {
+        inputs,
+        output_identity,
+        sections: file
+            .sections
+            .into_iter()
+            .map(|(name, bytes)| (name, bytes.to_vec()))
+            .collect(),
+    })
+}
+
+fn required<'a>(file: &SectionFile<'a>, name: &str) -> Result<&'a [u8], StoreDecodeError> {
+    file.section(name).ok_or(StoreDecodeError)
+}
+
+/// The output `slot` names, or `None` when it is missing, damaged or another compile's.
+pub(crate) fn read_output(path: &Path, slot: &StoredSlot) -> Option<StoredOutput> {
+    let bytes: Vec<u8> = match std::fs::read(output_path(path)) {
+        Ok(bytes) => bytes,
+        Err(_unreadable) => return None,
+    };
+    let Ok(output) = decoded_output(&bytes, &slot.output_identity) else {
+        return None;
+    };
+    Some(output)
+}
+
+fn decoded_output(
+    bytes: &[u8],
+    identity: &ContentDigest,
+) -> Result<StoredOutput, StoreDecodeError> {
+    let file: SectionFile<'_> = decode_sections(bytes, OUTPUT_ROLE)?;
+    if file.identity != *identity {
+        return Err(StoreDecodeError);
+    }
+    let mut output: StoredOutput = decode_output(required(&file, OUTPUT_META_SECTION)?)?;
+    output.stdout = String::from_utf8(required(&file, STDOUT_SECTION)?.to_vec())
+        .map_err(|_| StoreDecodeError)?;
+    Ok(output)
+}
+
+/// The stored inputs and output, or `None` when either cannot be read.
+#[cfg(test)]
 pub(crate) fn read_entry(path: &Path) -> Option<(StoredInputs, StoredOutput)> {
-    let mut store: NativeStore =
-        match open_native_store(path, REUSE_STORE_KIND, REUSE_STORE_ENVIRONMENT) {
-            Ok(store) => store,
-            Err(_) => return None,
-        };
-    let Ok(inputs) = decode_inputs(store.get(&inputs_key())?) else {
-        return None;
-    };
-    let Ok((mut output, digest)) = decode_output(store.get(&output_key())?) else {
-        return None;
-    };
-    let Ok(stdout) = String::from_utf8(store.get(&digest)?.to_vec()) else {
-        return None;
-    };
-    output.stdout = stdout;
-    Some((inputs, output))
+    let slot: StoredSlot = read_slot(path)?;
+    let output: StoredOutput = read_output(path, &slot)?;
+    Some((slot.inputs, output))
 }
 
 /// Replace the slot with one stored compile, then keep at most `max_entries` slots.
@@ -54,31 +110,56 @@ pub(crate) fn write_entry(
     output: &StoredOutput,
     max_entries: usize,
 ) -> std::io::Result<()> {
-    let mut store: NativeStore = NativeStore {
-        kind: REUSE_STORE_KIND.to_owned(),
-        environment: REUSE_STORE_ENVIRONMENT.to_owned(),
-        ..NativeStore::default()
-    };
-    let digest: ContentDigest = stdout_key(&output.stdout);
-    store.put(inputs_key(), encode_inputs(inputs));
-    store.put(output_key(), encode_output(output, &digest));
-    store.put(digest, output.stdout.as_bytes().to_vec());
-    let _ = store.save(path, &[])?;
+    let meta: Vec<u8> = encode_output(output);
+    let (encoded, identity) = encode_sections(
+        OUTPUT_ROLE,
+        &[
+            (OUTPUT_META_SECTION, &meta),
+            (STDOUT_SECTION, output.stdout.as_bytes()),
+        ],
+    );
+    write_atomically(&output_path(path), &encoded)?;
+    drop(encoded);
+    write_slot(
+        path,
+        &[
+            (INPUTS_SECTION, &encode_inputs(inputs)),
+            (OUTPUT_IDENTITY_SECTION, &identity),
+        ],
+    )?;
     prune_entries(path, max_entries);
     Ok(())
 }
 
-/// Replace only the stored inputs, keeping the stored output.
-pub(crate) fn rewrite_inputs(path: &Path, inputs: &StoredInputs) {
-    if let Some((_, output)) = read_entry(path) {
-        let _ = write_entry(path, inputs, &output, usize::MAX);
-    }
+/// Replace only the stored inputs, keeping the output and every other section of `slot`.
+pub(crate) fn rewrite_inputs(path: &Path, slot: &StoredSlot, inputs: &StoredInputs) {
+    let encoded: Vec<u8> = encode_inputs(inputs);
+    let sections: Vec<(&str, &[u8])> = slot
+        .sections
+        .iter()
+        .map(|(name, bytes)| {
+            if name == INPUTS_SECTION {
+                (name.as_str(), encoded.as_slice())
+            } else {
+                (name.as_str(), bytes.as_slice())
+            }
+        })
+        .collect();
+    let _ = write_slot(path, &sections);
 }
 
+fn write_slot(path: &Path, sections: &[(&str, &[u8])]) -> std::io::Result<()> {
+    let (encoded, _) = encode_sections(SLOT_ROLE, sections);
+    write_atomically(path, &encoded)
+}
+
+/// Remove the slot and its output.
 pub(crate) fn remove_entry(path: &Path) {
     let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_file(output_path(path));
 }
 
+/// Keep at most `max_entries` slots, newest first, and remove outputs no slot names any more.
 fn prune_entries(keep: &Path, max_entries: usize) {
     let Some(directory) = keep.parent() else {
         return;
@@ -86,22 +167,35 @@ fn prune_entries(keep: &Path, max_entries: usize) {
     let Ok(entries) = std::fs::read_dir(directory) else {
         return;
     };
-    let mut stored: Vec<(std::time::SystemTime, PathBuf)> = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path != keep)
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|suffix| suffix == REUSE_STORE_SUFFIX)
-        })
-        .filter_map(|path| {
-            let modified = std::fs::metadata(&path).and_then(|metadata| metadata.modified());
-            match modified {
-                Ok(modified) => Some((modified, path)),
-                Err(_) => None,
+    let mut stored: Vec<(SystemTime, PathBuf)> = Vec::new();
+    let mut outputs: Vec<(SystemTime, PathBuf)> = Vec::new();
+    for path in entries.flatten().map(|entry| entry.path()) {
+        let Ok(modified) = std::fs::metadata(&path).and_then(|metadata| metadata.modified()) else {
+            continue;
+        };
+        if path
+            .extension()
+            .is_some_and(|suffix| suffix == REUSE_STORE_SUFFIX)
+        {
+            if path != keep {
+                stored.push((modified, path));
             }
-        })
-        .collect();
+        } else if path
+            .extension()
+            .is_some_and(|suffix| suffix == REUSE_OUTPUT_SUFFIX)
+        {
+            outputs.push((modified, path));
+        }
+    }
+    let cutoff: SystemTime = SystemTime::now()
+        .checked_sub(ORPHANED_OUTPUT_GRACE)
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+    for (modified, output) in outputs {
+        let orphaned: bool = !output.with_extension(REUSE_STORE_SUFFIX).exists();
+        if orphaned && modified < cutoff {
+            let _ = std::fs::remove_file(output);
+        }
+    }
     stored.sort_by(|left, right| right.cmp(left));
     for (_, stale) in stored.into_iter().skip(max_entries.saturating_sub(1)) {
         remove_entry(&stale);
@@ -303,7 +397,7 @@ fn decode_inputs(bytes: &[u8]) -> Result<StoredInputs, StoreDecodeError> {
     })
 }
 
-fn encode_output(output: &StoredOutput, stdout: &ContentDigest) -> Vec<u8> {
+fn encode_output(output: &StoredOutput) -> Vec<u8> {
     let mut writer: RecordWriter = RecordWriter::default();
     writer.put_strings(&output.stderr_lines);
     writer.put_i64(output.exit_code);
@@ -315,11 +409,10 @@ fn encode_output(output: &StoredOutput, stdout: &ContentDigest) -> Vec<u8> {
         }
         None => writer.put_u64(0),
     }
-    writer.put_bytes(stdout);
     writer.into_bytes()
 }
 
-fn decode_output(bytes: &[u8]) -> Result<(StoredOutput, ContentDigest), StoreDecodeError> {
+fn decode_output(bytes: &[u8]) -> Result<StoredOutput, StoreDecodeError> {
     let mut reader: RecordReader<'_> = RecordReader::new(bytes);
     let stderr_lines: Vec<String> = reader.strings()?;
     let exit_code: i64 = reader.read_i64()?;
@@ -330,15 +423,11 @@ fn decode_output(bytes: &[u8]) -> Result<(StoredOutput, ContentDigest), StoreDec
     } else {
         None
     };
-    let digest: ContentDigest = reader.bytes()?.try_into().map_err(|_| StoreDecodeError)?;
     reader.finish()?;
-    Ok((
-        StoredOutput {
-            stderr_lines,
-            exit_code,
-            timings_span,
-            stdout: String::new(),
-        },
-        digest,
-    ))
+    Ok(StoredOutput {
+        stderr_lines,
+        exit_code,
+        timings_span,
+        stdout: String::new(),
+    })
 }

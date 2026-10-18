@@ -68,8 +68,9 @@ RETIRED_REFERENCE_CACHE_DIRECTORY_NAME: str = "references-v3"
 COMPILER_CACHE_DIRECTORY_NAME: str = "compiler"
 RETIRED_CACHE_NAMESPACE_SUFFIXES: tuple[str, ...] = ("", "-native-v1", "-native-preview-v1")
 
-NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v2"
+NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v3"
 NATIVE_REUSE_SUFFIX: str = ".store"
+NATIVE_REUSE_OUTPUT_SUFFIX: str = ".output"
 RETIRED_REUSE_DIRECTORY_NAME: str = "project-reuse-v1"
 REUSE_LOGGER_NAME: str = "sqlbuild.compile.reuse"
 _DBT_SHAPED_SQL_SIZE_PROFILE: tuple[tuple[float, int], ...] = (
@@ -3254,6 +3255,35 @@ def add_stale_compiled_file(project_dir: Path) -> None:
     write_project_file(project_dir, "target/compiled/models/stale_model.sql", "SELECT 1\n")
 
 
+COMPILED_TREE_STAMP_FILE_NAME: str = "compiled-tree.bin"
+
+
+def compiled_tree_stamp_path(*, project_dir: Path) -> Path:
+    """Return the compile cache file stamping the compiled tree the last stale-file walk left."""
+
+    return compiler_cache_directory(project_dir) / COMPILED_TREE_STAMP_FILE_NAME
+
+
+def add_stale_compiled_file_beside_models(project_dir: Path) -> None:
+    """Add an unmanaged compiled file to a folder that already holds compiled models."""
+
+    write_project_file(project_dir, "target/compiled/models/marts/stale_mart.sql", "SELECT 1\n")
+
+
+def link_compiled_root(project_dir: Path) -> None:
+    """Make `target/compiled` a link to another folder under `target/`."""
+
+    linked: Path = project_dir / "target/compiled-linked"
+    linked.mkdir(parents=True, exist_ok=True)
+    (project_dir / "target/compiled").symlink_to(linked, target_is_directory=True)
+
+
+def add_stale_file_in_compiled_root(project_dir: Path) -> None:
+    """Add an unmanaged file directly in the compiled folder."""
+
+    write_project_file(project_dir, "target/compiled/stray.sql", "SELECT 1\n")
+
+
 def truncate_file(path: Path) -> None:
     """Drop the last bytes of a stored entry."""
 
@@ -3271,6 +3301,42 @@ def flip_header_byte(path: Path) -> None:
 
     contents: bytes = path.read_bytes()
     path.write_bytes(contents[:40] + b"!" + contents[41:])
+
+
+def stored_output_path(entry: Path) -> Path:
+    """Return the output file stored beside one reuse slot file."""
+
+    return entry.with_suffix(NATIVE_REUSE_OUTPUT_SUFFIX)
+
+
+def truncate_stored_output(entry: Path) -> None:
+    """Drop the last bytes of the slot's stored output."""
+
+    truncate_file(stored_output_path(entry))
+
+
+def flip_stored_stdout_bytes(entry: Path) -> None:
+    """Corrupt the stored report inside the slot's output without changing its length."""
+
+    flip_trailing_bytes(stored_output_path(entry))
+
+
+def remove_stored_output(entry: Path) -> None:
+    """Delete the slot's stored output, leaving its inputs."""
+
+    stored_output_path(entry).unlink()
+
+
+def garbage_stored_output(entry: Path) -> None:
+    """Replace the slot's stored output with unrelated bytes."""
+
+    garbage_file(stored_output_path(entry))
+
+
+def previous_format_slot(entry: Path) -> None:
+    """Leave a slot as the previous single-file store format wrote it."""
+
+    entry.write_bytes(b"SQBSTORE" + (1).to_bytes(4, "little") + bytes(32) + b"project-reuse")
 
 
 def empty_file(path: Path) -> None:
@@ -3383,6 +3449,13 @@ def write_before_reuse_store(
             pending.clear()
 
     monkeypatch.setattr(native_module, "PreparedCompileArtifacts", WrittenThenChanged)
+
+
+def edit_project_model_during_compile(project_dir: Path) -> None:
+    """Change one model's bytes after the compile read it and before it stores."""
+
+    path: Path = project_dir / "models/staging/stg_orders.sql"
+    path.write_bytes(path.read_bytes() + b"\n")
 
 
 def rewrite_compiled_model_unchanged(project_dir: Path) -> None:
@@ -4203,13 +4276,24 @@ def _stored_scan_values_replaced(
         rewritten: bytes = b"".join(
             (*map(_framed, fields), generation, _framed(metadata), count.to_bytes(8, "little"))
         ) + b"".join(entries)
-        checksum: bytes = hashlib.sha256(_framed(rewritten)).digest()
+        _ = path.write_bytes(rewritten)
+        checksum: bytes = bytes.fromhex(_native_file_digest(path))
         _ = path.write_bytes(header + checksum + rewritten)
 
     return change
 
 
 _STORE_PREFIX_LENGTH: int = 12
+
+
+def _native_file_digest(path: Path) -> str:
+    """The BLAKE3 digest native stores checksum their bodies with, of the file at `path`."""
+
+    digest: str | None = native_module.digest_files([str(path)])[0]
+    assert digest is not None
+    return digest
+
+
 _STORE_CHECKSUM_LENGTH: int = 32
 
 

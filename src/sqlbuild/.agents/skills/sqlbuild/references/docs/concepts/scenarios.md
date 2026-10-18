@@ -30,6 +30,13 @@ Scenarios materialize physical relations in the warehouse and build the actual m
 
 Use unit tests for transformation logic. Use scenarios for coherent end-to-end validation.
 
+Cost is a second reason to move a check into a scenario. A unit test inlines every real model in its
+chain into one SQL statement, so the warehouse compiles and optimises the whole chain at once, and
+that cost can grow much faster than the query's size. A scenario materialises each model step by
+step, so each statement is compiled separately, as in a real build. SQLBuild limits how many real
+models one unit test may execute (see [Cost guards](testing.md#cost-guards)); when a test
+reaches that limit because it checks behaviour across several models, it may belong here.
+
 ## Authoring scenarios
 
 Scenario files live under `tests/scenarios/` and use one file per scenario:
@@ -128,12 +135,17 @@ available only to the model are not included. See
 
 ### SCENARIO() header
 
-The header is metadata only:
+The header holds metadata and an optional time limit:
 
 | Field | Description |
 |-------|-------------|
 | `description` | Required description of the behaviour the scenario proves ([Descriptions](models/configuration.md#descriptions)) |
 | `tags` | Optional list of string tags |
+| `timeout` | Optional time limit for the scenario's warehouse run, such as `"10m"`, or `"disabled"`; overrides `[settings] scenario_timeout` and the target's `scenario_timeout` |
+
+At the limit SQLBuild cancels the scenario's running statement, still drops the relations the
+scenario created unless `--retain` is set, and reports the scenario as failed with `C417`, the
+elapsed time, the limit and where it was set.
 
 ## How scenarios execute
 

@@ -48,3 +48,6 @@ pub(crate) const METADATA_DIRECTORY_SUFFIXES: [&str; 2] = [".dist-info", ".egg-i
 pub(crate) const METADATA_FILES: [&str; 2] = ["METADATA", "PKG-INFO"];
 /// The installer's record of where a distribution was installed from.
 pub(crate) const DIRECT_URL_FILE: &str = "direct_url.json";
+
+/// Inputs at least this large are hashed across the rayon pool; the digest is the same either way.
+pub(crate) const PARALLEL_HASH_BYTES: usize = 1 << 20;

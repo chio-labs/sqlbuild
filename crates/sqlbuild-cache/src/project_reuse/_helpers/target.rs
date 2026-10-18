@@ -75,19 +75,23 @@ fn compiled_prefix(project_dir: &Path, rules: &ReuseRules) -> String {
     )
 }
 
+/// Whether `stamp` shows what this compile left there, and whether that read its content.
 fn matches_recorded(
     stamp: &PathStamp,
     artifact: &RecordedArtifact,
     since_ns: i64,
     rules: &ReuseRules,
-) -> bool {
+) -> (bool, bool) {
     match artifact {
         RecordedArtifact::Kept { size, mtime_ns } => {
-            stamp.size == *size && stamp.mtime_ns == *mtime_ns
+            (stamp.size == *size && stamp.mtime_ns == *mtime_ns, false)
         }
         RecordedArtifact::Written { digest } => {
-            stamp.mtime_ns.max(stamp.ctime_ns) < since_ns - rules.racy_window_ns
-                || file_digest(Path::new(&stamp.relative_path)).as_deref() == Some(digest)
+            if stamp.mtime_ns.max(stamp.ctime_ns) < since_ns - rules.racy_window_ns {
+                return (true, false);
+            }
+            let read: Option<String> = file_digest(Path::new(&stamp.relative_path));
+            (read.as_deref() == Some(digest), true)
         }
     }
 }
@@ -114,15 +118,24 @@ pub(crate) fn verified_target_files(
         && stamps
             .keys()
             .all(|path| expected.contains_key(path.as_str()));
-    if !keys_match
-        || !stamps
-            .iter()
-            .all(|(path, stamp)| matches_recorded(stamp, expected[path.as_str()], since_ns, rules))
-    {
+    if !keys_match {
         return None;
     }
-    if target_stamps(project_dir, &paths, written, rules) != stamps {
-        return None;
+    let mut read_paths: Vec<&str> = Vec::new();
+    for (path, stamp) in &stamps {
+        let (matched, read) = matches_recorded(stamp, expected[path.as_str()], since_ns, rules);
+        if !matched {
+            return None;
+        }
+        if read {
+            read_paths.push(path.as_str());
+        }
+    }
+    for path in read_paths {
+        let restamped: Option<PathStamp> = path_stamp(path);
+        if restamped.as_ref() != stamps.get(path) {
+            return None;
+        }
     }
     Some(stamps.into_values().collect())
 }

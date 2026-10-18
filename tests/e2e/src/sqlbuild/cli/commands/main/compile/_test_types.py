@@ -619,6 +619,30 @@ class CompileReuseBypassTestCase:
     expected_stored_entries: int = 0
 
 
+def keep_compiled_root(_project_dir: Path) -> None:
+    """Leave the compiled folder as compile creates it."""
+
+
+@dataclass(frozen=True)
+class CompiledTreeStampTestCase:
+    """An unmanaged file added under a compiled tree the previous compile stamped."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_removed_path: str
+    prepare: Callable[[Path], None] = keep_compiled_root
+    expected_stamped: bool = True
+
+
+@dataclass(frozen=True)
+class CompileReuseRacyRefreshTestCase:
+    """A stored compile whose inputs were racy when stored, refreshed by the next hit."""
+
+    description: str
+    expected_reused: tuple[bool, bool, bool]
+    expected_output_rewritten: bool
+
+
 @dataclass(frozen=True)
 class CompileReuseCorruptEntryTestCase:
     """One way a stored compile can be damaged on disk."""

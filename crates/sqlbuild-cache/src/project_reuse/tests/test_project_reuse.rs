@@ -1,12 +1,15 @@
-use crate::project_reuse::_helpers::entry::{read_entry, write_entry};
+use crate::project_reuse::_helpers::entry::{read_entry, read_slot, rewrite_inputs, write_entry};
 use crate::project_reuse::_helpers::identity::search_path_stamps;
 use crate::project_reuse::_helpers::timings::{compile_timings_span, replace_compile_timings};
-use crate::project_reuse::models::ReuseRules;
+use crate::project_reuse::models::{ReuseRules, StoredInputs};
 use crate::project_reuse::tests::helpers::{
-    damage, slot_names, store_aged_slots, stored_inputs, stored_output,
+    add_slot_section, damage, leave_orphaned_outputs, output_file, previous_format_slot,
+    replace_output, slot_names, slot_section, store_aged_slots, stored_inputs, stored_output,
+    truncate,
 };
 use crate::project_reuse::tests::test_types::{
-    EntryReadTestCase, NonUnicodeNameTestCase, SlotPruneTestCase, TimingsSpanTestCase,
+    EntryReadTestCase, NonUnicodeNameTestCase, SlotPruneTestCase, SlotRefreshTestCase,
+    TimingsSpanTestCase,
 };
 use crate::project_snapshot::main::path_text::path_text;
 use crate::project_snapshot::main::snapshot_project_files::snapshot_project_files;
@@ -28,12 +31,37 @@ fn given_stored_compile_when_reading_then_only_an_intact_slot_round_trips() {
         },
         EntryReadTestCase {
             description: "truncated slot",
-            edit: |path| std::fs::write(path, b"SQBSTORE").expect("truncated"),
+            edit: |path| truncate(path, 40),
             expected_read: false,
         },
         EntryReadTestCase {
             description: "missing slot",
             edit: |path| std::fs::remove_file(path).expect("removed"),
+            expected_read: false,
+        },
+        EntryReadTestCase {
+            description: "damaged output",
+            edit: |path| damage(&output_file(path)),
+            expected_read: false,
+        },
+        EntryReadTestCase {
+            description: "truncated output",
+            edit: |path| truncate(&output_file(path), 60),
+            expected_read: false,
+        },
+        EntryReadTestCase {
+            description: "missing output",
+            edit: |path| std::fs::remove_file(output_file(path)).expect("removed"),
+            expected_read: false,
+        },
+        EntryReadTestCase {
+            description: "output of another compile",
+            edit: replace_output,
+            expected_read: false,
+        },
+        EntryReadTestCase {
+            description: "slot of the previous single-file format",
+            edit: |path| std::fs::write(path, previous_format_slot()).expect("old slot"),
             expected_read: false,
         },
     ];
@@ -64,19 +92,35 @@ fn given_more_slots_than_retained_when_storing_then_the_oldest_are_pruned() {
             description: "within the limit",
             slots: 2,
             max_entries: 8,
-            expected_kept: &["slot0.store", "slot1.store"],
+            orphaned_outputs: &[],
+            expected_kept: &["slot0.output", "slot0.store", "slot1.output", "slot1.store"],
         },
         SlotPruneTestCase {
             description: "over the limit",
             slots: 4,
             max_entries: 2,
-            expected_kept: &["slot2.store", "slot3.store"],
+            orphaned_outputs: &[],
+            expected_kept: &["slot2.output", "slot2.store", "slot3.output", "slot3.store"],
+        },
+        SlotPruneTestCase {
+            description: "outputs left without a slot",
+            slots: 2,
+            max_entries: 8,
+            orphaned_outputs: &[("crashed.output", 3_600), ("in_flight.output", 0)],
+            expected_kept: &[
+                "in_flight.output",
+                "slot0.output",
+                "slot0.store",
+                "slot1.output",
+                "slot1.store",
+            ],
         },
     ];
 
     for test_case in test_cases {
         let folder = tempfile::tempdir().expect("store folder");
         let directory = folder.path().join("reuse");
+        leave_orphaned_outputs(&directory, test_case.orphaned_outputs);
 
         store_aged_slots(&directory, test_case.slots, test_case.max_entries);
 
@@ -211,5 +255,49 @@ fn given_search_path_entry_that_is_not_utf8_when_stamping_then_its_real_folder_i
             test_case.description
         );
         assert!(stamps[0].1 > 0, "{}", test_case.description);
+    }
+}
+
+#[test]
+fn given_stored_compile_when_refreshing_inputs_then_only_the_slot_file_is_rewritten() {
+    let test_cases = [SlotRefreshTestCase {
+        description: "slot carrying a section this release does not read",
+        extra_section: ("project-image", b"orders index"),
+        expected_output_rewritten: false,
+    }];
+
+    for test_case in test_cases {
+        let folder = tempfile::tempdir().expect("store folder");
+        let path = folder.path().join("reuse/slot.store");
+        write_entry(&path, &stored_inputs(), &stored_output(), 8).expect("stored compile");
+        let (name, bytes) = test_case.extra_section;
+        add_slot_section(&path, name, bytes);
+        let output_before = std::fs::read(output_file(&path)).expect("output bytes");
+        let slot = read_slot(&path).expect("slot");
+        let refreshed = StoredInputs {
+            invocation_digest: "b3:refreshed".to_owned(),
+            ..stored_inputs()
+        };
+
+        rewrite_inputs(&path, &slot, &refreshed);
+
+        assert_eq!(
+            read_entry(&path),
+            Some((refreshed, stored_output())),
+            "{}: refreshed inputs read back with the kept output",
+            test_case.description
+        );
+        assert_eq!(
+            std::fs::read(output_file(&path)).expect("output bytes") != output_before,
+            test_case.expected_output_rewritten,
+            "{}: output file",
+            test_case.description
+        );
+        assert_eq!(
+            slot_section(&path, name),
+            Some(bytes.to_vec()),
+            "{}: unread sections are carried forward",
+            test_case.description
+        );
     }
 }

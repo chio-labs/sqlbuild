@@ -5,9 +5,10 @@ use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 use crate::bindings::_helpers::frontier::stage_capture::CAPTURE_DIR_ENV_VAR;
 
 /// The directory under the compiler cache directory holding the native reuse store.
-pub(crate) const NATIVE_REUSE_DIRECTORY_NAME: &str = "project-reuse-v2";
-/// The reuse directory an older release kept stored compiles in.
-pub(crate) const RETIRED_REUSE_DIRECTORY_NAME: &str = "project-reuse-v1";
+pub(crate) const NATIVE_REUSE_DIRECTORY_NAME: &str = "project-reuse-v3";
+/// The reuse directories older releases kept stored compiles in.
+pub(crate) const RETIRED_REUSE_DIRECTORY_NAMES: [&str; 2] =
+    ["project-reuse-v1", "project-reuse-v2"];
 pub(crate) const REUSE_MAX_ENTRY_BYTES: i64 = 512 * 1024 * 1024;
 pub(crate) const REUSE_MAX_STORED_ENTRIES: i64 = 8;
 pub(crate) const REUSE_DISABLE_ENV_VAR: &str = "SQLBUILD_DISABLE_COMPILE_REUSE";

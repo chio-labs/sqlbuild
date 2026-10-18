@@ -33,6 +33,7 @@ sqb scenario test [flags]
 | `--local` | Run locally against DuckDB using captured JSONL snapshots |
 | `--strict` | Treat missing/stale local snapshots as errors instead of skips |
 | `--concurrency N` | Run up to `N` scenarios at once (default: the project `concurrency` setting) |
+| `--scenario-timeout <duration>` | Time limit for each scenario in this warehouse run, such as `10m`, or `disabled`; overrides `SCENARIO(timeout ...)`, the target and `[settings] scenario_timeout`. Not applied with `--local` |
 | `--sync-snapshots` | Capture missing/stale snapshots before local run (requires `--local`) |
 | `--refresh` | Recapture all selected snapshots before local run (requires `--local`) |
 | `--force` | Bypass snapshot capture safety limits |

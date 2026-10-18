@@ -44,3 +44,11 @@ pub(crate) struct EscapesTestCase {
     pub(crate) path: &'static str,
     pub(crate) expected_escapes: bool,
 }
+
+/// One project path resolved in a batch and the project path it resolves to.
+#[cfg(unix)]
+pub(crate) struct RealPathsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) path: &'static str,
+    pub(crate) expected_resolved: &'static str,
+}

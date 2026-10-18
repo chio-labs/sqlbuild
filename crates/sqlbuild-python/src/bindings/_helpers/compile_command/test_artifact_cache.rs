@@ -6,17 +6,21 @@ use std::path::PathBuf;
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyInt, PyList, PyListMethods, PyString, PyTuple};
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use sqlbuild_cache::artifacts::main::stored_sql_test_record::stored_sql_test_record;
 use sqlbuild_cache::artifacts::models::{SqlTestArtifactRecord, StoredSqlTestRecord};
-use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
+use sqlbuild_cache::digest::main::bytes_digest::bytes_digest;
+use sqlbuild_cache::digest::main::hex_digest::hex_digest;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_outputs::json_report::{compact_sorted_json, orjson_sorted};
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::ids::RecordId;
 
-const CACHE_VERSION: i64 = 4;
-const ALGORITHM_FINGERPRINT: &str = "sql-test-artifact-v4-orjson-identity";
+const CACHE_VERSION: i64 = 5;
+const ALGORITHM_FINGERPRINT: &str = "sql-test-artifact-v5-orjson-blake3-identity";
+/// Items a loop holding the interpreter handles before letting other threads run.
+const INTERPRETER_YIELD_INTERVAL: usize = 64;
 const CACHE_FILE_NAME: &str = "sql-test-artifacts.json";
 const MAX_CACHE_BYTES: u64 = 10_000_000;
 const MAX_CACHE_RECORDS: usize = 100_000;
@@ -28,10 +32,26 @@ pub(crate) struct IdentityContext<'py> {
     model_identities: Bound<'py, PyDict>,
 }
 
-/// `hashlib.sha256(orjson.dumps(payload, option=OPT_SORT_KEYS)).hexdigest()`.
-fn payload_digest(payload: &Bound<'_, PyAny>) -> PyResult<String> {
-    let encoded: String = orjson_sorted(payload)?;
-    Ok(sha256_hex(encoded.as_bytes()))
+/// `orjson.dumps(payload, option=OPT_SORT_KEYS)`, the text an identity digest is taken of.
+fn payload_text(payload: &Bound<'_, PyAny>) -> PyResult<String> {
+    orjson_sorted(payload)
+}
+
+/// The hexadecimal BLAKE3 digest of each payload text, hashed without holding the interpreter.
+pub(crate) fn payload_digests(py: Python<'_>, payloads: &[String]) -> Vec<String> {
+    py.detach(|| {
+        payloads
+            .par_iter()
+            .map(|payload| hex_digest(&bytes_digest(payload.as_bytes())))
+            .collect()
+    })
+}
+
+/// Let other threads take the interpreter every few items of a long loop that holds it.
+pub(crate) fn yield_interpreter(py: Python<'_>, index: usize) {
+    if index % INTERPRETER_YIELD_INTERVAL == INTERPRETER_YIELD_INTERVAL - 1 {
+        py.detach(|| ());
+    }
 }
 
 fn dict<'py>(
@@ -77,10 +97,10 @@ fn sorted_deps<'py>(deps: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     sorted(pairs)
 }
 
-fn model_identity(model: &Bound<'_, PyAny>) -> PyResult<String> {
+fn model_identity_payload(model: &Bound<'_, PyAny>) -> PyResult<String> {
     let py: Python<'_> = model.py();
     let values: Bound<'_, PyAny> = model.getattr("config")?.getattr("values")?;
-    payload_digest(
+    payload_text(
         dict(
             py,
             vec![
@@ -170,13 +190,23 @@ pub(crate) fn identity_context<'py>(
             ("function_locations", sorted(functions)?),
         ],
     )?;
-    let model_identities: Bound<'py, PyDict> = PyDict::new(py);
-    for model in project.getattr("models")?.try_iter()? {
+    let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
+    let mut payloads: Vec<String> = Vec::new();
+    for (index, model) in project.getattr("models")?.try_iter()?.enumerate() {
         let model: Bound<'py, PyAny> = model?;
-        model_identities.set_item(model.getattr("name")?, model_identity(&model)?)?;
+        names.push(model.getattr("name")?);
+        payloads.push(model_identity_payload(&model)?);
+        yield_interpreter(py, index);
+    }
+    payloads.push(payload_text(common.as_any())?);
+    let mut digests: Vec<String> = payload_digests(py, &payloads);
+    let common_identity: String = digests.pop().unwrap_or_default();
+    let model_identities: Bound<'py, PyDict> = PyDict::new(py);
+    for (name, digest) in names.into_iter().zip(digests) {
+        model_identities.set_item(name, digest)?;
     }
     Ok(IdentityContext {
-        common_identity: payload_digest(common.as_any())?,
+        common_identity,
         model_identities,
     })
 }
@@ -287,8 +317,8 @@ fn test_payload<'py>(test: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     Ok(payload)
 }
 
-/// The complete identity of one rendered comparison artifact.
-pub(crate) fn artifact_identity(
+/// The text whose digest is the complete identity of one rendered comparison artifact.
+pub(crate) fn artifact_identity_payload(
     test: &Bound<'_, PyAny>,
     model_chain_names: &Bound<'_, PyAny>,
     context: &IdentityContext<'_>,
@@ -300,7 +330,7 @@ pub(crate) fn artifact_identity(
         let identity: Option<Bound<'_, PyAny>> = context.model_identities.get_item(&name)?;
         chain.append((name, identity))?;
     }
-    payload_digest(
+    payload_text(
         dict(
             py,
             vec![
@@ -316,11 +346,11 @@ pub(crate) fn artifact_identity(
     )
 }
 
-/// The stable cache slot of one source test case.
-pub(crate) fn artifact_record_key(test: &Bound<'_, PyAny>) -> PyResult<String> {
+/// The text whose digest is the stable cache slot of one source test case.
+pub(crate) fn artifact_record_key_payload(test: &Bound<'_, PyAny>) -> PyResult<String> {
     let py: Python<'_> = test.py();
     let source_path: Bound<'_, PyAny> = test.getattr("source_path")?;
-    payload_digest(
+    payload_text(
         dict(
             py,
             vec![

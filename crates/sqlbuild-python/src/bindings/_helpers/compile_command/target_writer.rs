@@ -15,12 +15,13 @@ use sqlbuild_cache::artifacts::models::SqlTestArtifactRecord;
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
 use crate::bindings::_helpers::compile_command::artifact_batch::ArtifactBatch;
+use crate::bindings::_helpers::compile_command::constants::RACY_WINDOW_NS;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     ArtifactRecorder, CompileArtifactWrites, artifact_kept, artifact_moved, artifact_tree_moved,
 };
 use crate::bindings::_helpers::compile_command::test_artifact_cache::{
-    IdentityContext, artifact_identity, artifact_record_key, identity_context, read_cache,
-    write_cache,
+    IdentityContext, artifact_identity_payload, artifact_record_key_payload, identity_context,
+    payload_digests, read_cache, write_cache, yield_interpreter,
 };
 use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_driver::python_calls::{
@@ -54,6 +55,8 @@ const GENERIC_DIR: &str = "generic";
 const SINGULAR_DIR: &str = "singular";
 const TESTS_DIR: &str = "tests";
 const MANIFEST_FILE: &str = "manifest.json";
+/// The compile cache file stamping the compiled tree the last stale-file walk left.
+const COMPILED_TREE_STAMP_FILE: &str = "compiled-tree.bin";
 const SQL_FILE_SUFFIX: &str = ".sql";
 /// `functions/<language>` path components that already lead a function's path.
 const LANGUAGE_DIR_DEPTH: usize = 2;
@@ -173,12 +176,18 @@ fn function_sql(adapter: &Bound<'_, PyAny>, function: &Bound<'_, PyAny>) -> PyRe
     Ok(statements.join(";\n\n"))
 }
 
-/// Delete compiled files no write group manages.
-fn remove_stale(target_dir: &Bound<'_, PyAny>, managed: Vec<PathBuf>) -> PyResult<()> {
+/// Delete compiled files no write group manages, skipping the walk while the tree is unchanged.
+fn remove_stale(
+    target_dir: &Bound<'_, PyAny>,
+    managed: Vec<PathBuf>,
+    cache_dir: Option<PathBuf>,
+) -> PyResult<()> {
     let py: Python<'_> = target_dir.py();
     let compiled: PathBuf = joined(target_dir, &[COMPILED_DIR])?.extract()?;
+    let stamp: Option<(PathBuf, i64)> =
+        cache_dir.map(|directory| (directory.join(COMPILED_TREE_STAMP_FILE), RACY_WINDOW_NS));
     record_compile_timing("stale_traversal_ms", || {
-        remove_stale_artifacts(py, compiled, managed).map(|_| ())
+        remove_stale_artifacts(py, compiled, managed, stamp).map(|_| ())
     })
 }
 
@@ -307,7 +316,7 @@ fn write_planned_target<'py>(
     }
     batch.flush(py)?;
     if remove_stale_files {
-        remove_stale(target_dir, extracted(&managed)?)?;
+        remove_stale(target_dir, extracted(&managed)?, None)?;
     }
     write_manifest(target_dir, manifest, None)?;
     written_target(
@@ -413,6 +422,32 @@ fn planned_artifacts<'py>(
     })
 }
 
+/// Each test's cache slot and artifact identity, hashed together without holding the interpreter.
+fn test_identities<'py>(
+    tests: &[Bound<'py, PyAny>],
+    context: &IdentityContext<'py>,
+    chains: &Bound<'py, PyAny>,
+) -> PyResult<Vec<(String, String)>> {
+    let Some(first) = tests.first() else {
+        return Ok(Vec::new());
+    };
+    let py: Python<'py> = first.py();
+    let empty: Bound<'py, PyTuple> = PyTuple::empty(py);
+    let mut payloads: Vec<String> = Vec::with_capacity(tests.len() * 2);
+    for (index, test) in tests.iter().enumerate() {
+        let chain: Bound<'py, PyAny> = mapping_get_or(chains, native_field(test, "key")?, &empty)?;
+        payloads.push(artifact_record_key_payload(test)?);
+        payloads.push(artifact_identity_payload(test, &chain, context)?);
+        yield_interpreter(py, index);
+    }
+    let mut digests = payload_digests(py, &payloads).into_iter();
+    let mut identities: Vec<(String, String)> = Vec::with_capacity(tests.len());
+    while let (Some(record_key), Some(identity)) = (digests.next(), digests.next()) {
+        identities.push((record_key, identity));
+    }
+    Ok(identities)
+}
+
 /// Plan every SQL test whose cached artifact under `target_dir` cannot be reused.
 fn plan_tests<'py>(
     target_dir: &Bound<'py, PyAny>,
@@ -434,19 +469,22 @@ fn plan_tests<'py>(
             sql_test_model_chain_names_by_key(project, &tests)?.into_any();
         Some((context, chains))
     };
+    let tests: Vec<Bound<'py, PyAny>> = tests.try_iter()?.collect::<PyResult<_>>()?;
+    let identities: Vec<Option<(String, String)>> = match &caching {
+        None => vec![None; tests.len()],
+        Some((context, chains)) => test_identities(&tests, context, chains)?
+            .into_iter()
+            .map(Some)
+            .collect(),
+    };
     let mut pending: Vec<PendingTest> = Vec::new();
     let mut cached_paths: Vec<Py<PyAny>> = Vec::new();
     let mut cached_records: Vec<(String, SqlTestArtifactRecord)> = Vec::new();
-    let empty: Bound<'py, PyTuple> = PyTuple::empty(py);
-    for test in tests.try_iter()? {
-        let test: Bound<'py, PyAny> = test?;
-        let Some((context, chains)) = &caching else {
+    for (index, (test, identity)) in tests.into_iter().zip(identities).enumerate() {
+        let Some((record_key, identity)) = identity else {
             pending.push((test.unbind(), None, None));
             continue;
         };
-        let record_key: String = artifact_record_key(&test)?;
-        let chain: Bound<'py, PyAny> = mapping_get_or(chains, native_field(&test, "key")?, &empty)?;
-        let identity: String = artifact_identity(&test, &chain, context)?;
         let reusable: Option<SqlTestArtifactRecord> = cached
             .get(&record_key)
             .and_then(|record| reusable_sql_test_record(&tests_root_path, record, &identity));
@@ -455,9 +493,10 @@ fn plan_tests<'py>(
             artifact_kept(recorder, &path, (record.size, record.mtime_ns))?;
             cached_paths.push(path.unbind());
             cached_records.push((record_key, record));
-            continue;
+        } else {
+            pending.push((test.unbind(), Some(record_key), Some(identity)));
         }
-        pending.push((test.unbind(), Some(record_key), Some(identity)));
+        yield_interpreter(py, index);
     }
     let pending_tests: Vec<Bound<'py, PyAny>> = pending
         .iter()
@@ -648,7 +687,13 @@ pub(crate) fn write_static_target<'py>(
     if remove_stale_files {
         let mut paths: Vec<PathBuf> = managed_models;
         paths.extend(extracted(&managed)?);
-        remove_stale(target_dir, paths)?;
+        let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
+        let cache_dir: Option<PathBuf> = if cache_dir.is_none() {
+            None
+        } else {
+            Some(cache_dir.extract()?)
+        };
+        remove_stale(target_dir, paths, cache_dir)?;
     }
     write_manifest(target_dir, manifest, prepared.recorder)?;
     written_target(
@@ -720,7 +765,7 @@ pub(crate) fn publish_staged_target<'py>(
             managed.push(path_class(py)?.call1((path,))?);
         }
         if existed {
-            remove_stale(target_dir, extracted(&managed)?)?;
+            remove_stale(target_dir, extracted(&managed)?, None)?;
         }
     }
     write_manifest(target_dir, manifest, recorder)?;
