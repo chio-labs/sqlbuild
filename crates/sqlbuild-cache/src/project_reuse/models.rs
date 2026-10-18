@@ -170,6 +170,9 @@ pub struct CompileRecord {
     pub json_output: bool,
     /// The project image to keep beside the stored compile, when one was built.
     pub image: Option<ImageSections>,
+    /// Stamps the caller verified for artifacts it kept; with them the compiled tree is not
+    /// walked again and only written artifacts are stamped.
+    pub vouched_target_stamps: Option<Vec<PathStamp>>,
 }
 
 /// What one compile left at one artifact path.

@@ -296,9 +296,11 @@ fn built_request(
         request.models = built_models(&rows, &request, model_rows)?;
         let request: EvaluateRequest =
             crate::bindings::_helpers::compile_delta::rules_rows::whole_project_request(request)?;
+        let delta: bool = crate::bindings::_helpers::compile_delta::context::injection().is_some();
         let memo: Option<(String, PathBuf)> = rows
             .memo
             .take()
+            .filter(|_| !delta)
             .map(|(identity, path)| (identity, PathBuf::from(path)));
         Ok(RowsRequest {
             request,

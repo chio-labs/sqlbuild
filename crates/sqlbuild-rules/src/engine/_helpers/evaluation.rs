@@ -22,7 +22,7 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
@@ -332,6 +332,23 @@ pub(crate) fn evaluate_request(request: EvaluateRequest) -> Result<String, Strin
 
 /// Evaluate `request`, publishing its cache bucket and stopping early as `control` says.
 pub(crate) fn evaluate_request_with(
+    request: EvaluateRequest,
+    control: &EvaluationControl<'_>,
+) -> Result<String, String> {
+    let store: Option<PathBuf> = request.config.cache.enabled.then(|| {
+        crate::engine::_helpers::cache::fixture_summaries_path(
+            Path::new(&request.project_dir),
+            &request.rules_cache_path,
+        )
+    });
+    crate::rules::_helpers::sql_test_rules::with_fixture_memo(store.as_deref(), || {
+        let evaluated: Result<String, String> = evaluated_request(request, control);
+        let keep: bool = evaluated.is_ok() && !control.cancelled();
+        (evaluated, keep)
+    })
+}
+
+fn evaluated_request(
     request: EvaluateRequest,
     control: &EvaluationControl<'_>,
 ) -> Result<String, String> {

@@ -166,9 +166,14 @@ fn load_files<'py>(
             let failure_kind: FailureKind = kind.failure_kind();
             py.detach(|| load_yaml(&root, inner, &named, failure_kind))
         };
-        let mut outcomes = outcomes
-            .map_err(|failure| stage_error(&tree.get().inner, project_dir, failure))?
-            .into_iter();
+        let mut outcomes: Vec<YamlFileOutcome> =
+            outcomes.map_err(|failure| stage_error(&tree.get().inner, project_dir, failure))?;
+        if matches!(kind, YamlKind::Source) {
+            crate::bindings::_helpers::compile_delta::report_hooks::retain_read_sources(
+                &mut outcomes,
+            );
+        }
+        let mut outcomes = outcomes.into_iter();
         for path in batch {
             let relative: Bound<'py, PyAny> =
                 path_object(py, &tree.get().inner, path.clone())?.into_bound(py);

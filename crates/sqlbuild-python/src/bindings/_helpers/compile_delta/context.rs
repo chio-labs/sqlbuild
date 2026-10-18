@@ -262,8 +262,8 @@ pub(crate) fn inject_relations(request: &mut SessionRequest) -> pyo3::PyResult<(
 /// What a delta compile's reuse record keeps of the stored compile it patched.
 #[derive(Debug, Default)]
 pub(crate) struct RecordMerge {
-    /// Each stored artifact's `(path, size, mtime_ns)`, kept unless the delta wrote it.
-    pub(crate) kept: Vec<(String, u64, i64)>,
+    /// Each stored artifact's stamp, verified by the reuse check, kept unless the delta wrote it.
+    pub(crate) kept: Vec<sqlbuild_cache::project_snapshot::models::PathStamp>,
     /// The template environment names the stored compile read.
     pub(crate) environment_names: Vec<String>,
 }

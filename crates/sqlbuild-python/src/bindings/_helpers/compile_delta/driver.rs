@@ -706,13 +706,7 @@ fn finished<'py>(
     }
     let stderr_lines: Vec<Py<PyString>> = ran.output.getattr("stderr_lines")?.extract()?;
     let merge: RecordMerge = RecordMerge {
-        kept: base
-            .stored
-            .inputs
-            .target_files
-            .iter()
-            .map(|stamp| (stamp.relative_path.clone(), stamp.size, stamp.mtime_ns))
-            .collect(),
+        kept: base.stored.inputs.target_files.clone(),
         environment_names: base.image.environment_names.clone(),
     };
     let json_output: bool = base.image.json_output;

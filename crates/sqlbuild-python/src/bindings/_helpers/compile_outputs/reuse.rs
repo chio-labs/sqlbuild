@@ -216,16 +216,21 @@ impl NativeReuseAttempt {
                 dag_path: record.dag_path,
                 json_output: record.json_output,
                 image: crate::bindings::_helpers::compile_delta::context::take_pending_image(),
+                vouched_target_stamps: None,
             };
             if let Some(merge) =
                 crate::bindings::_helpers::compile_delta::context::take_record_merge()
             {
-                for (path, size, mtime_ns) in merge.kept {
+                for stamp in &merge.kept {
                     compile
                         .artifacts
-                        .entry(path)
-                        .or_insert(RecordedArtifact::Kept { size, mtime_ns });
+                        .entry(stamp.relative_path.clone())
+                        .or_insert(RecordedArtifact::Kept {
+                            size: stamp.size,
+                            mtime_ns: stamp.mtime_ns,
+                        });
                 }
+                compile.vouched_target_stamps = Some(merge.kept);
                 compile
                     .template_environment_names
                     .extend(merge.environment_names);

@@ -277,3 +277,53 @@ pub(crate) fn complete_source_texts(
     }
     Ok(())
 }
+
+/// In a delta compile that reads only some sources, drop every other source entry from loaded
+/// source YAML documents before they are built.
+pub(crate) fn retain_read_sources(
+    outcomes: &mut [sqlbuild_discovery::yaml_files::models::YamlFileOutcome],
+) {
+    use sqlbuild_config::models::ConfigValue;
+    use sqlbuild_discovery::yaml_files::models::YamlFileOutcome;
+    let Some(injection) = injection() else {
+        return;
+    };
+    let Some(read) = injection.source_names.as_ref() else {
+        return;
+    };
+    fn text(value: &ConfigValue) -> Option<&str> {
+        match value {
+            ConfigValue::String(text) => Some(text.as_str()),
+            _ => None,
+        }
+    }
+    for outcome in outcomes {
+        let YamlFileOutcome::Loaded {
+            value: ConfigValue::Map(entries),
+            ..
+        } = outcome
+        else {
+            continue;
+        };
+        for (key, value) in entries {
+            if text(key) != Some(SOURCES_KEY) {
+                continue;
+            }
+            let ConfigValue::List(sources) = value else {
+                continue;
+            };
+            sources.retain(|source| {
+                let name: Option<&str> = source.as_map().and_then(|entries| {
+                    entries
+                        .iter()
+                        .find(|(key, _)| text(key) == Some(NAME_KEY))
+                        .and_then(|(_, name)| text(name))
+                });
+                name.is_none_or(|name| read.contains(name))
+            });
+        }
+    }
+}
+
+const SOURCES_KEY: &str = "sources";
+const NAME_KEY: &str = "name";

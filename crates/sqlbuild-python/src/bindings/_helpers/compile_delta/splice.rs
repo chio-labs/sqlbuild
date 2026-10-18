@@ -7,6 +7,35 @@ use serde_json::Value;
 /// One JSON value's byte span in its document.
 type Span = (usize, usize);
 
+/// Bytes per word `string_stop` checks at once.
+const WORD: usize = 8;
+const LOW_BITS: u64 = 0x0101_0101_0101_0101;
+const HIGH_BITS: u64 = 0x8080_8080_8080_8080;
+
+/// Whether any byte of `word` equals `byte`.
+fn has_byte(word: u64, byte: u8) -> bool {
+    let matched: u64 = word ^ (LOW_BITS * u64::from(byte));
+    matched.wrapping_sub(LOW_BITS) & !matched & HIGH_BITS != 0
+}
+
+/// The first quote or backslash at or after `index`, or the text's end; words without either
+/// are skipped whole.
+fn string_stop(text: &[u8], mut index: usize) -> usize {
+    while index + WORD <= text.len() {
+        let mut word: [u8; WORD] = [0; WORD];
+        word.copy_from_slice(&text[index..index + WORD]);
+        let word: u64 = u64::from_le_bytes(word);
+        if has_byte(word, b'"') || has_byte(word, b'\\') {
+            break;
+        }
+        index += WORD;
+    }
+    while index < text.len() && !matches!(text[index], b'"' | b'\\') {
+        index += 1;
+    }
+    index
+}
+
 /// The end of the JSON value starting at `start`, skipping strings and nested containers.
 fn value_end(text: &[u8], start: usize) -> Option<usize> {
     let mut depth: usize = 0;
@@ -15,6 +44,10 @@ fn value_end(text: &[u8], start: usize) -> Option<usize> {
     while index < text.len() {
         let byte: u8 = text[index];
         if in_string {
+            index = string_stop(text, index);
+            let Some(&byte) = text.get(index) else {
+                break;
+            };
             match byte {
                 b'\\' => index += 1,
                 b'"' => {
@@ -278,22 +311,23 @@ fn spliced_items(
     let base_items: Vec<Span> = elements(base, base_span)?;
     let delta_items: Vec<Span> = elements(delta, delta_span)?;
     let mut fresh: HashMap<String, std::collections::VecDeque<Span>> = HashMap::new();
-    let mut unowned_delta: BTreeSet<&str> = BTreeSet::new();
+    let mut unmatched_delta: std::collections::HashSet<&str> = std::collections::HashSet::new();
     for item in &delta_items {
         match owned(delta, *item) {
             Some(owner) => fresh.entry(owner).or_default().push_back(*item),
             None => {
-                unowned_delta.insert(&delta[item.0..item.1]);
+                unmatched_delta.insert(&delta[item.0..item.1]);
             }
         }
     }
     let mut output: String = String::new();
     let mut cursor: usize = base_span.0;
     let mut replaced: bool = false;
-    let mut unowned_base: BTreeSet<&str> = BTreeSet::new();
     for item in &base_items {
         let Some(owner) = owned(base, *item) else {
-            unowned_base.insert(&base[item.0..item.1]);
+            if !unmatched_delta.is_empty() {
+                unmatched_delta.remove(&base[item.0..item.1]);
+            }
             continue;
         };
         let replacement: Span = fresh.get_mut(&owner)?.pop_front()?;
@@ -305,7 +339,7 @@ fn spliced_items(
     if fresh.values().any(|items| !items.is_empty()) {
         return None;
     }
-    if !unowned_delta.is_subset(&unowned_base) {
+    if !unmatched_delta.is_empty() {
         return None;
     }
     if !replaced {
