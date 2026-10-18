@@ -199,13 +199,16 @@ impl Builder<'_> {
     }
 
     fn select(&self, select: &Select) -> SelectFacts {
+        let from_first: Option<usize> = select_anchor(select, &self.tokens)
+            .and_then(|anchor| self.tokens.leading_from_keyword(anchor));
         let tokens: Option<&SelectTokens> = self
             .select_tokens(select)
-            .filter(|tokens| tokens.items.len() == select.expressions.len());
+            .filter(|tokens| tokens.items.len() == select.expressions.len())
+            .filter(|tokens| from_first.is_none_or(|from| tokens.start > from));
         let mut items: Vec<ItemFacts> = Vec::with_capacity(select.expressions.len());
         for (index, expression) in select.expressions.iter().enumerate() {
             let item: Option<&Range<usize>> = tokens.map(|tokens| &tokens.items[index]);
-            items.push(self.item(expression, item));
+            items.push(self.item(expression, item, from_first));
         }
         let mut comparisons: Vec<ComparisonFacts> = Vec::new();
         for join in &select.joins {
@@ -252,20 +255,28 @@ impl Builder<'_> {
     }
 
     fn select_tokens(&self, select: &Select) -> Option<&SelectTokens> {
-        let anchor = select_anchor(select)?;
+        let anchor = select_anchor(select, &self.tokens)?;
         self.selects
             .iter()
             .filter(|tokens| tokens.start < anchor && anchor < tokens.end)
             .max_by_key(|tokens| tokens.start)
     }
 
-    fn item(&self, expression: &Expression, item: Option<&Range<usize>>) -> ItemFacts {
+    fn item(
+        &self,
+        expression: &Expression,
+        item: Option<&Range<usize>>,
+        from_first: Option<usize>,
+    ) -> ItemFacts {
         if let Expression::Star(_) = expression {
             return ItemFacts::Star {
                 item_start: item
                     .filter(|item| !item.is_empty())
-                    .map(|item| self.tokens.start(item.start)),
-                star_start: item.and_then(|item| self.tokens.star_start(item)),
+                    .map(|item| self.tokens.start(item.start))
+                    .or(from_first),
+                star_start: item
+                    .and_then(|item| self.tokens.star_start(item))
+                    .or(from_first),
             };
         }
         let (alias, value) = match expression {
@@ -580,8 +591,8 @@ fn quoted_parts(parts: &[&Identifier], tokens: &QueryTokens<'_>) -> String {
         .join(".")
 }
 
-fn select_anchor(select: &Select) -> Option<usize> {
-    let parts = select
+fn select_anchor(select: &Select, tokens: &QueryTokens<'_>) -> Option<usize> {
+    let parts: Vec<&Expression> = select
         .expressions
         .iter()
         .chain(select.from.iter().flat_map(|from| from.expressions.iter()))
@@ -599,10 +610,16 @@ fn select_anchor(select: &Select) -> Option<usize> {
                 .flat_map(|group| group.expressions.iter()),
         )
         .chain(select.having.iter().map(|clause| &clause.this))
-        .chain(select.qualify.iter().map(|clause| &clause.this));
-    for part in parts {
+        .chain(select.qualify.iter().map(|clause| &clause.this))
+        .collect();
+    for part in &parts {
         if let Some(start) = own_span(part) {
             return Some(start);
+        }
+    }
+    for part in &parts {
+        if let Some(open) = span_bounds(part).and_then(|(start, _)| tokens.enclosing_open(start)) {
+            return Some(open);
         }
     }
     None

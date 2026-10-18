@@ -226,6 +226,76 @@ impl<'a> QueryTokens<'a> {
         )
     }
 
+    fn matching_open(&self, close: usize) -> Option<usize> {
+        let mut depth = 0_usize;
+        for index in (0..=close).rev() {
+            if self.closes(index) {
+                depth += 1;
+            } else if self.opens(index) {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+        }
+        None
+    }
+
+    /// Where the innermost bracket still open before character `position` starts.
+    pub(crate) fn enclosing_open(&self, position: usize) -> Option<usize> {
+        let mut depth = 0_usize;
+        for index in (0..self.tokens.len()).rev() {
+            if self.start(index) >= position {
+                continue;
+            }
+            if self.closes(index) {
+                depth += 1;
+            } else if self.opens(index) {
+                if depth == 0 {
+                    return Some(self.start(index));
+                }
+                depth -= 1;
+            }
+        }
+        None
+    }
+
+    /// The `FROM` keyword starting a FROM-first query whose first relation starts at `anchor`.
+    pub(crate) fn leading_from_keyword(&self, anchor: usize) -> Option<usize> {
+        let mut index = (0..self.tokens.len()).find(|index| self.start(*index) >= anchor)?;
+        let mut depth = 0_usize;
+        while index > 0 {
+            index -= 1;
+            if self.closes(index) {
+                depth += 1;
+            } else if self.opens(index) {
+                depth = depth.checked_sub(1)?;
+            } else if depth == 0 && self.kind(index) == Some(TokenType::Select) {
+                return None;
+            } else if depth == 0 && self.is_word(index, &["FROM"]) {
+                return self.starts_query(index).then(|| self.start(index));
+            }
+        }
+        None
+    }
+
+    fn starts_query(&self, keyword: usize) -> bool {
+        let Some(previous) = keyword.checked_sub(1) else {
+            return true;
+        };
+        if self.opens(previous)
+            || self.kind(previous) == Some(TokenType::Semicolon)
+            || self.is_word(previous, &["UNION", "INTERSECT", "EXCEPT", "MINUS", "ALL"])
+        {
+            return true;
+        }
+        self.closes(previous)
+            && self
+                .matching_open(previous)
+                .and_then(|open| open.checked_sub(1))
+                .is_some_and(|before| self.is_word(before, &["AS"]))
+    }
+
     fn matching_close(&self, open: usize) -> Option<usize> {
         let mut depth = 0_usize;
         for index in open..self.tokens.len() {
