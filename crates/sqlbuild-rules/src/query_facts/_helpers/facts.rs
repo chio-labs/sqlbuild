@@ -11,8 +11,8 @@ use polyglot_sql::dialects::Dialect;
 use polyglot_sql::expressions::{Identifier, Literal, Select, TableRef, With};
 use polyglot_sql::{ComplexityGuardOptions, Expression, ExpressionWalk, ParseOptions};
 use sqlbuild_analysis::lineage::main::parser_dialect::parser_dialect;
-use std::cell::RefCell;
-use std::collections::HashMap;
+use std::cell::{Cell, RefCell};
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 fn parse_query(sql: &str, dialect_name: &str) -> Result<(Expression, Dialect), String> {
@@ -82,6 +82,8 @@ pub(crate) fn query_facts(sql: &str, dialect_name: &str) -> Result<QueryFacts, S
         tokens,
         dialect,
         spans: RefCell::default(),
+        cursor: Cell::default(),
+        claimed: RefCell::default(),
     };
     Ok(builder.query(&statement))
 }
@@ -104,6 +106,8 @@ struct Builder<'a> {
     selects: Vec<SelectTokens>,
     dialect: Dialect,
     spans: RefCell<HashMap<*const Expression, Option<ComparisonSpan>>>,
+    cursor: Cell<usize>,
+    claimed: RefCell<HashSet<usize>>,
 }
 
 struct ComparisonParts<'a> {
@@ -254,12 +258,25 @@ impl Builder<'_> {
         }
     }
 
+    /// The SELECT region around the select's first located part, else the next unclaimed one.
     fn select_tokens(&self, select: &Select) -> Option<&SelectTokens> {
-        let anchor = select_anchor(select, &self.tokens)?;
-        self.selects
-            .iter()
-            .filter(|tokens| tokens.start < anchor && anchor < tokens.end)
-            .max_by_key(|tokens| tokens.start)
+        let found = match select_anchor(select, &self.tokens) {
+            Some(anchor) => self
+                .selects
+                .iter()
+                .filter(|tokens| tokens.start < anchor && anchor < tokens.end)
+                .max_by_key(|tokens| tokens.start),
+            None => {
+                let after = self.cursor.get();
+                let claimed = self.claimed.borrow();
+                self.selects
+                    .iter()
+                    .find(|tokens| tokens.start >= after && !claimed.contains(&tokens.start))
+            }
+        }?;
+        self.claimed.borrow_mut().insert(found.start);
+        self.cursor.set(self.cursor.get().max(found.end));
+        Some(found)
     }
 
     fn item(
