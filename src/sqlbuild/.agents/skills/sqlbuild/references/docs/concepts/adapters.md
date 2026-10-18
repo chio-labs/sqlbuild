@@ -101,6 +101,8 @@ Set `sql_analysis_dialect_name` to the SQL dialect name that matches your engine
 
 For full control with no inherited defaults, subclass `StrictAdapter` instead. Every method is abstract and must be implemented explicitly. SQLBuild raises a clear error listing any unimplemented methods.
 
+A few `StrictAdapter` methods are optional and have a documented default. `create_sql_test_output` and `drop_sql_test_output` let an adapter store a unit test's actual output once so every comparison reads it (see [Single-read comparison](testing.md#single-read-comparison)). By default `create_sql_test_output` returns `None`, and SQLBuild runs the test's inline comparison query instead, so adapters that do not implement them keep working unchanged.
+
 ### Discovery rules
 
 - SQLBuild discovers all `.py` files under `adapters/` recursively (excluding `__init__.py` and files starting with `_`)

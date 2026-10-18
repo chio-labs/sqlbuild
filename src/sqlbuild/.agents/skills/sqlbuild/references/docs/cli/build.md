@@ -59,6 +59,7 @@ own option. `--version` works only directly after `sqb`, as in `sqb --version`:
 | `--defer-sources-to` | Read managed source data from another target |
 | `--fail-fast` | Stop on first failure and skip remaining nodes |
 | `--concurrency` | Number of worker connections (default: 1) |
+| `--test-timeout <duration>` | Time limit for each unit test the build runs, such as `30s`, or `disabled`; see [Time limits](../concepts/testing.md#time-limits) |
 | `--verbose`, `-v` | Show lifecycle SQL inline after each model |
 | `--start-cursor` | Override the start cursor, typed from the selected incremental models' cursor type; fails with `S303` if the selection mixes timestamp and integer cursors. With no cursor model selected, an integer value is read as an integer cursor and anything else as an ISO timestamp |
 | `--end-cursor` | Override the end cursor, typed the same way as `--start-cursor` |
@@ -154,6 +155,16 @@ When a model fails:
 - Downstream models are automatically blocked and skipped
 - Staging/delta tables are retained for inspection
 - Failure details show the model name, failed phase, and error message
+
+A model that exceeds its [`max_duration`](../concepts/models/configuration.md#execution-time-limit)
+fails with `C417`. The failure states the elapsed time, the limit and where it was set, whether
+cancelling its running statement was confirmed, and the query IDs SQLBuild saw; downstream models are
+skipped as for any other failure. Its row shows `TIMEOUT`. In the summary line, timed-out models and unit tests are counted under
+`TIMEOUT=` and excluded from `FAIL=`
+(`PASS=1  WARN=0  FAIL=0  TIMEOUT=1  INSUFFICIENT=0  SKIP=1  TOTAL=3`). In `--json` output,
+`summary.failure_count` still includes them, and `summary.timeout_count` reports how many of those
+failures were timeouts. A timeout is a failure for the exit code: the build exits non-zero and its
+JSON `status` is `failed`.
 
 ## Fingerprints
 
