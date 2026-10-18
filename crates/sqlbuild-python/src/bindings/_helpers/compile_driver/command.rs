@@ -8,7 +8,7 @@ use std::rc::Rc;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::report::{
-    format_compile_json, format_compile_text, json_semantic_notice,
+    format_compile_json_with_notice, format_compile_text,
 };
 use crate::bindings::_helpers::compile_command::reuse_recording::write_reusable_compile;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
@@ -435,16 +435,15 @@ fn record_output<'py>(
     ];
     let mut arguments: Vec<(&str, Bound<'py, PyAny>)> = shared.to_vec();
     let rendered: Bound<'py, PyString> = if native_field(request, "json_output")?.is_truthy()? {
-        let notice: Option<Bound<'py, PyString>> =
-            json_semantic_notice(&graph, &selected_keys, validation_enabled.is_truthy()?)?;
-        if let Some(notice) = notice {
-            output.call_method1("print_stderr_line", (notice,))?;
-        }
         arguments.push(("timings_ms", timings.clone().into_any()));
         arguments.push(("sql_validation_enabled", validation_enabled));
+        let print_notice = |notice: Bound<'py, PyString>| -> PyResult<()> {
+            output.call_method1("print_stderr_line", (notice,))?;
+            Ok(())
+        };
         PyString::new(
             py,
-            &format_compile_json(py, Some(keywords(py, &arguments)?))?,
+            &format_compile_json_with_notice(py, Some(keywords(py, &arguments)?), print_notice)?,
         )
     } else {
         let use_color: bool =
