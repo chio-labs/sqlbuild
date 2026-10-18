@@ -25,3 +25,5 @@ class NativeVersionTestCase:
     release_version: str
     cli_version: str
     expected_errors: tuple[str, ...]
+    lock_versions: dict[str, str] = field(default_factory=dict)
+    python_lock_version: str | None = None
