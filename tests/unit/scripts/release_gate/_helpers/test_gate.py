@@ -19,7 +19,7 @@ from tests.unit.scripts.release_gate._helpers.helpers import (
 RELEASE_AWARE_NAME: str = (
     "${{ (github.event_name == 'pull_request'"
     " && github.event.pull_request.head.repo.full_name == github.repository"
-    " && startsWith(github.event.pull_request.head.ref, 'release-please--'))"
+    " && startsWith(github.event.pull_request.head.ref, 'release-please--branches--'))"
     " && 'Release pull request suites' || 'Verify' }}"
 )
 

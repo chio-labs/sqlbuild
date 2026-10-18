@@ -871,7 +871,7 @@ jobs:
     name: >-
       ${{ (github.event_name == 'pull_request'
       && github.event.pull_request.head.repo.full_name == github.repository
-      && startsWith(github.event.pull_request.head.ref, 'release-please--'))
+      && startsWith(github.event.pull_request.head.ref, 'release-please--branches--'))
       && 'Release pull request suites' || 'Verify' }}
     if: always()
     needs:
