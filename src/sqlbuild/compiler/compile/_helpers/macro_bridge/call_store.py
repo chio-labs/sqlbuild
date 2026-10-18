@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from sqlbuild._native import (
@@ -48,10 +49,17 @@ def target_context_with_macro_call_store(
 
 
 def _model_paths(*, discovered_inputs: DiscoveredProjectInputs, project_dir: Path) -> list[str]:
+    root: str = str(project_dir)
+    prefix: str = root if root.endswith(os.sep) else root + os.sep
     paths: list[str] = []
     for model_file in discovered_inputs.model_files:
+        file_path: Path = model_file.file_path
+        text: str = str(file_path)
+        if text.startswith(prefix):
+            paths.append(text[len(prefix) :].replace(os.sep, "/"))
+            continue
         try:
-            paths.append(model_file.file_path.relative_to(project_dir).as_posix())
+            paths.append(file_path.relative_to(project_dir).as_posix())
         except ValueError:
             continue
     return paths

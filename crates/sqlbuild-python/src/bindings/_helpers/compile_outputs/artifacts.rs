@@ -15,6 +15,7 @@ use pyo3::types::PyBytes;
 use sqlbuild_cache::artifacts::errors::ArtifactError;
 use sqlbuild_cache::artifacts::main::publish_staged::publish_staged;
 use sqlbuild_cache::artifacts::main::remove_stale::remove_stale;
+use sqlbuild_cache::artifacts::main::remove_stale_unless_unchanged::remove_stale_unless_unchanged;
 use sqlbuild_cache::artifacts::main::staged_files::staged_files;
 use sqlbuild_cache::artifacts::main::write_artifacts::write_artifacts;
 use sqlbuild_cache::artifacts::models::{Publication, WrittenArtifacts};
@@ -187,11 +188,17 @@ pub(crate) fn remove_stale_artifacts(
     py: Python<'_>,
     compiled_dir: PathBuf,
     managed: Vec<PathBuf>,
+    stamp: Option<(PathBuf, i64)>,
 ) -> PyResult<usize> {
     compiler_guard(|| {
         let managed: HashSet<PathBuf> = managed.into_iter().collect();
-        py.detach(|| remove_stale(&compiled_dir, &managed))
-            .map_err(|error| artifact_error(py, error))
+        py.detach(|| match &stamp {
+            Some((stamp_path, racy_window_ns)) => {
+                remove_stale_unless_unchanged(&compiled_dir, &managed, stamp_path, *racy_window_ns)
+            }
+            None => remove_stale(&compiled_dir, &managed),
+        })
+        .map_err(|error| artifact_error(py, error))
     })
 }
 

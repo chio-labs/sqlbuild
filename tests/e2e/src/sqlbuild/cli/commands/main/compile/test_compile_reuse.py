@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import cast
 
 import pytest
 
+from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    CompiledTreeStampTestCase,
     CompileReuseBypassTestCase,
     CompileReuseConcurrentWriterTestCase,
     CompileReuseCorruptEntryTestCase,
@@ -32,6 +35,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     ORDERS_API_TOKEN_ENV_VAR,
     CompileReuseRun,
     add_stale_compiled_file,
+    add_stale_compiled_file_beside_models,
     compile_in_process,
     compile_in_process_output,
     compile_in_process_reused,
@@ -39,6 +43,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     compile_reuse_entry_paths,
     compile_reuse_hit_count,
     compiled_artifacts,
+    compiled_tree_stamp_path,
     delete_compiled_model,
     edit_compiled_model,
     edit_project_model_during_compile,
@@ -78,6 +83,8 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     write_retired_compiler_cache_files,
 )
 
+# Longer than the racy window, so folders the first compile created are trusted when stamped.
+_SETTLED_TREE_SECONDS: float = 2.2
 _CONTRACT_ERROR_MODEL: str = (
     "MODEL (description 'Order contract.', columns (missing_col (type INTEGER)));\n\n"
     'SELECT order_id FROM __ref("stg_orders")\n'
@@ -900,3 +907,42 @@ def test_given_cache_files_of_older_releases_when_compiling_then_cached_compile_
 
 if __name__ == "__main__":
     pytest.main([__file__, "-vv"])
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompiledTreeStampTestCase(
+            description="stale_file_beside_compiled_models",
+            edit=add_stale_compiled_file_beside_models,
+            expected_removed_path="target/compiled/models/marts/stale_mart.sql",
+        ),
+        CompiledTreeStampTestCase(
+            description="stale_file_in_compiled_models_root",
+            edit=add_stale_compiled_file,
+            expected_removed_path="target/compiled/models/stale_model.sql",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stamped_compiled_tree_when_a_stale_file_appears_then_the_next_compile_removes_it(
+    compile_reuse_project: Path, test_case: CompiledTreeStampTestCase
+) -> None:
+    project_dir: Path = compile_reuse_project
+    uncached: dict[str, str] = {COMPILE_REUSE_DISABLE_ENV_VAR: "1"}
+    cold: CompileReuseRun = run_reuse_compile(project_dir=project_dir, env=uncached)
+    time.sleep(_SETTLED_TREE_SECONDS)
+    stamped: CompileReuseRun = run_reuse_compile(project_dir=project_dir, env=uncached)
+    assert compiled_tree_stamp_path(project_dir=project_dir).is_file()
+    unchanged: CompileReuseRun = run_reuse_compile(project_dir=project_dir, env=uncached)
+    test_case.edit(project_dir)
+
+    cleaned: CompileReuseRun = run_reuse_compile(project_dir=project_dir, env=uncached)
+
+    assert not (project_dir / test_case.expected_removed_path).exists()
+    for run in (stamped, unchanged, cleaned):
+        assert (run.returncode, run.report, run.compiled) == (
+            cold.returncode,
+            cold.report,
+            cold.compiled,
+        )

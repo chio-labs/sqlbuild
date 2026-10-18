@@ -31,6 +31,7 @@ use sqlbuild_rules::lint_text::models::{
     RetainedViolation, SuppressibleViolation, SuppressionFinding,
 };
 use sqlbuild_rules::project_tree::main::project_real_path::project_real_path;
+use sqlbuild_rules::project_tree::main::project_real_paths::project_real_paths;
 use sqlbuild_rules::sql_lint::main::preparation::prepare;
 use sqlbuild_rules::sql_lint::types::PreparedSql;
 
@@ -461,9 +462,18 @@ pub(crate) fn lint_sources(
     given: Option<Vec<LintFile>>,
 ) -> PyResult<Vec<LintFile>> {
     if let Some(given) = given {
+        let Some(paths) = selected else {
+            return Ok(given);
+        };
+        let files: Vec<&Path> = given.iter().map(|file| file.path.as_path()).collect();
+        let keep: Vec<bool> = project_real_paths(&files)
+            .iter()
+            .map(|path| paths.contains(path))
+            .collect();
         return Ok(given
             .into_iter()
-            .filter(|file| selected.is_none_or(|paths| paths.contains(&resolved(&file.path))))
+            .zip(keep)
+            .filter_map(|(file, kept)| kept.then_some(file))
             .collect());
     }
     let collected: Vec<(PathBuf, String)> =

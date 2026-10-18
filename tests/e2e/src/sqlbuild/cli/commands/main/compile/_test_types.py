@@ -620,6 +620,15 @@ class CompileReuseBypassTestCase:
 
 
 @dataclass(frozen=True)
+class CompiledTreeStampTestCase:
+    """An unmanaged file added under a compiled tree the previous compile stamped."""
+
+    description: str
+    edit: Callable[[Path], None]
+    expected_removed_path: str
+
+
+@dataclass(frozen=True)
 class CompileReuseRacyRefreshTestCase:
     """A stored compile whose inputs were racy when stored, refreshed by the next hit."""
 

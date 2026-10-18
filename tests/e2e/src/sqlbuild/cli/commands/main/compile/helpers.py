@@ -3255,6 +3255,21 @@ def add_stale_compiled_file(project_dir: Path) -> None:
     write_project_file(project_dir, "target/compiled/models/stale_model.sql", "SELECT 1\n")
 
 
+COMPILED_TREE_STAMP_FILE_NAME: str = "compiled-tree.bin"
+
+
+def compiled_tree_stamp_path(*, project_dir: Path) -> Path:
+    """Return the compile cache file stamping the compiled tree the last stale-file walk left."""
+
+    return compiler_cache_directory(project_dir) / COMPILED_TREE_STAMP_FILE_NAME
+
+
+def add_stale_compiled_file_beside_models(project_dir: Path) -> None:
+    """Add an unmanaged compiled file to a folder that already holds compiled models."""
+
+    write_project_file(project_dir, "target/compiled/models/marts/stale_mart.sql", "SELECT 1\n")
+
+
 def truncate_file(path: Path) -> None:
     """Drop the last bytes of a stored entry."""
 

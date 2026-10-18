@@ -141,23 +141,46 @@ pub(crate) fn remove_stale(
     compiled_dir: &Path,
     managed: &HashSet<PathBuf>,
 ) -> Result<usize, ArtifactError> {
-    if !compiled_dir.is_dir() {
-        return Ok(0);
-    }
-    let (_, removed) = remove_stale_under(compiled_dir, managed)?;
-    let _ = std::fs::remove_dir(compiled_dir);
-    Ok(removed)
+    remove_stale_listing(compiled_dir, managed).map(|(removed, _)| removed)
 }
 
-/// Clean one directory bottom-up as `os.walk(topdown=False)`; returns (gone, files removed).
+/// `remove_stale`, with every directory the walk entered, kept or removed.
+pub(crate) fn remove_stale_listing(
+    compiled_dir: &Path,
+    managed: &HashSet<PathBuf>,
+) -> Result<(usize, Vec<PathBuf>), ArtifactError> {
+    if !compiled_dir.is_dir() {
+        return Ok((0, Vec::new()));
+    }
+    let cleaned: Cleaned = remove_stale_under(compiled_dir, managed)?;
+    let _ = std::fs::remove_dir(compiled_dir);
+    Ok((cleaned.removed, cleaned.directories))
+}
+
+/// What cleaning one directory did: whether it is gone, files removed and directories entered.
+#[derive(Debug)]
+struct Cleaned {
+    gone: bool,
+    removed: usize,
+    directories: Vec<PathBuf>,
+}
+
+/// Clean one directory bottom-up as `os.walk(topdown=False)`.
 fn remove_stale_under(
     directory: &Path,
     managed: &HashSet<PathBuf>,
-) -> Result<(bool, usize), ArtifactError> {
+) -> Result<Cleaned, ArtifactError> {
     let entries = match std::fs::read_dir(directory) {
         Ok(entries) => entries,
-        Err(_) => return Ok((false, 0)),
+        Err(_) => {
+            return Ok(Cleaned {
+                gone: false,
+                removed: 0,
+                directories: Vec::new(),
+            });
+        }
     };
+    let mut directories: Vec<PathBuf> = vec![directory.to_path_buf()];
     let mut removed: usize = 0;
     let mut kept_file: bool = false;
     let mut subdirectories_removed: bool = true;
@@ -176,9 +199,10 @@ fn remove_stale_under(
             subdirectories_removed = false;
             continue;
         }
-        let (gone, below) = remove_stale_under(&subdirectory, managed)?;
-        removed += below;
-        subdirectories_removed &= gone;
+        let below: Cleaned = remove_stale_under(&subdirectory, managed)?;
+        removed += below.removed;
+        subdirectories_removed &= below.gone;
+        directories.extend(below.directories);
     }
     for file in files {
         if managed.contains(&file) {
@@ -189,7 +213,11 @@ fn remove_stale_under(
         }
     }
     let gone: bool = !kept_file && subdirectories_removed && removed_directory(directory);
-    Ok((gone, removed))
+    Ok(Cleaned {
+        gone,
+        removed,
+        directories,
+    })
 }
 
 fn removed_directory(directory: &Path) -> bool {

@@ -10,6 +10,9 @@ mod path_queries;
 #[path = "tests/test_project_tree.rs"]
 mod project_tree;
 #[cfg(unix)]
+#[path = "tests/test_real_paths.rs"]
+mod real_paths;
+#[cfg(unix)]
 #[path = "tests/test_relative_parts.rs"]
 mod relative_parts;
 #[path = "tests/test_types.rs"]

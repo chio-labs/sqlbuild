@@ -87,6 +87,8 @@ class MacroBridge:
         if not observed or digest_module_files(self._module_digests) != self._module_digests:
             logging.getLogger(__name__).debug("Macro call store not saved: code or files changed")
             return
+        if not self.memo.store_needs_save():
+            return
         metadata: bytes = module_digests_metadata(self._module_digests)
         try:
             if project_fingerprint(project_dir=project_dir, model_paths=model_paths) != fingerprint:

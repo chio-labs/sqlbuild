@@ -76,6 +76,16 @@ impl MacroCallMemo {
         Ok(())
     }
 
+    /// Whether this compile recorded calls the attached store does not hold yet.
+    fn store_needs_save(&self) -> PyResult<bool> {
+        Ok(self
+            .inner
+            .lock()
+            .map_err(poisoned)?
+            .store_mut()
+            .is_some_and(|store| store.needs_save()))
+    }
+
     /// Calls found in the store and calls recorded into it.
     fn store_stats(&self) -> PyResult<(usize, usize)> {
         Ok(self.inner.lock().map_err(poisoned)?.store_stats())
