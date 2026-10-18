@@ -5,22 +5,17 @@ use crate::query_facts::constants::{
 use crate::query_facts::models::{CallKind, ModelCall, ModelShape};
 use crate::rules::main::compact_sql::compact_sql;
 use sqlbuild_analysis::semantic_validation::main::normalize_mapped::normalize_mapped;
-use sqlbuild_sqltext::sql_scan::main::comment_end::comment_end;
-use sqlbuild_sqltext::sql_scan::main::matching_paren::matching_paren;
-use sqlbuild_sqltext::sql_scan::main::non_code_end::non_code_end;
+use sqlbuild_sqltext::sql_scan::main::dialect_matching_paren::dialect_matching_paren;
+use sqlbuild_sqltext::sql_scan::main::dialect_non_code_end::dialect_non_code_end;
 use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy;
-use sqlbuild_sqltext::sql_scan::models::QuotePolicy;
+use sqlbuild_sqltext::sql_scan::models::{LexicalSyntax, QuotePolicy};
 
 pub(crate) fn model_shape(sql: &str, dialect: &str) -> Result<ModelShape, String> {
     let policy = QuotePolicy {
         dollar_quotes: true,
         ..quote_policy(dialect)
     };
-    let nested = matches!(
-        dialect.to_ascii_lowercase().as_str(),
-        "generic" | "postgres" | "postgresql" | "mssql" | "sqlserver" | "tsql"
-    );
-    let (stubbed, stub_offsets, calls) = stub_calls(sql, policy, nested);
+    let (stubbed, stub_offsets, calls) = stub_calls(sql, policy, &lexical_syntax(dialect));
     let normalized = normalize_mapped(&stubbed, dialect)?;
     let end = stub_offsets.last().copied().unwrap_or_default();
     let offsets: Vec<usize> = normalized
@@ -82,39 +77,69 @@ fn is_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
 }
 
-fn nested_comment_end(bytes: &[u8], index: usize) -> Option<usize> {
-    if !bytes[index..].starts_with(b"/*") {
-        return None;
+/// The comment and quoted-text syntax the rules parser tokenized for `dialect`.
+fn lexical_syntax(dialect: &str) -> LexicalSyntax {
+    let strings = |quotes: &[&str]| quotes.iter().map(|quote| (*quote).to_owned()).collect();
+    let lines = |prefixes: &[&str]| prefixes.iter().map(|prefix| (*prefix).to_owned()).collect();
+    match dialect.to_ascii_lowercase().as_str() {
+        "bigquery" => LexicalSyntax {
+            backslash_escape_quotes: strings(&["'", "\""]),
+            raw_string_prefix: true,
+            triple_quoted_strings: true,
+            line_comment_prefixes: lines(&["--", "#"]),
+            ..LexicalSyntax::default()
+        },
+        "snowflake" => LexicalSyntax {
+            backslash_escape_quotes: strings(&["'"]),
+            line_comment_prefixes: lines(&["--", "//", "#"]),
+            ..LexicalSyntax::default()
+        },
+        "clickhouse" => LexicalSyntax {
+            backslash_escape_quotes: strings(&["'"]),
+            line_comment_prefixes: lines(&["--"]),
+            ..LexicalSyntax::default()
+        },
+        "databricks" | "duckdb" => LexicalSyntax {
+            line_comment_prefixes: lines(&["--"]),
+            ..LexicalSyntax::default()
+        },
+        "mssql" | "sqlserver" | "tsql" => LexicalSyntax {
+            nested_block_comments: true,
+            line_comment_prefixes: lines(&["--"]),
+            ..LexicalSyntax::default()
+        },
+        _ => LexicalSyntax {
+            escape_string_prefix: true,
+            nested_block_comments: true,
+            line_comment_prefixes: lines(&["--"]),
+            ..LexicalSyntax::default()
+        },
     }
-    let mut depth = 0_usize;
-    let mut cursor = index;
-    while cursor < bytes.len() {
-        if bytes[cursor..].starts_with(b"/*") {
-            depth += 1;
-            cursor += 2;
-        } else if bytes[cursor..].starts_with(b"*/") {
-            depth -= 1;
-            cursor += 2;
-            if depth == 0 {
-                return Some(cursor);
-            }
-        } else {
-            cursor += 1;
-        }
-    }
-    Some(bytes.len())
 }
 
-fn skip_space(bytes: &[u8], mut index: usize) -> usize {
+fn is_quote_start(byte: u8) -> bool {
+    matches!(byte, b'\'' | b'"' | b'`' | b'$')
+}
+
+fn skip_space(bytes: &[u8], mut index: usize, syntax: &LexicalSyntax) -> usize {
     loop {
         while bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
             index += 1;
         }
-        match comment_end(bytes, index) {
+        if bytes.get(index).is_none_or(|byte| is_quote_start(*byte)) {
+            return index;
+        }
+        match dialect_non_code_end(bytes, index, syntax) {
             Ok(Some(end)) => index = end,
             _ => return index,
         }
     }
+}
+
+fn blank(text: &str) -> String {
+    text.chars()
+        .map(|value| if value == '\n' { '\n' } else { ' ' })
+        .collect()
 }
 
 fn quoted_name(sql: &str, open: usize) -> Option<(String, usize)> {
@@ -135,19 +160,18 @@ fn quoted_name(sql: &str, open: usize) -> Option<(String, usize)> {
 fn stub_calls(
     sql: &str,
     policy: QuotePolicy,
-    nested_comments: bool,
+    syntax: &LexicalSyntax,
 ) -> (String, Vec<usize>, Vec<ModelCall>) {
     let bytes = sql.as_bytes();
     let mut edits: Vec<(usize, usize, String)> = Vec::new();
     let mut calls: Vec<ModelCall> = Vec::new();
     let mut index = 0;
     while index < bytes.len() {
-        if nested_comments && let Some(end) = nested_comment_end(bytes, index) {
-            index = end;
-            continue;
-        }
-        match non_code_end(bytes, index, policy) {
+        match dialect_non_code_end(bytes, index, syntax) {
             Ok(Some(end)) => {
+                if !is_quote_start(bytes[index]) {
+                    edits.push((index, end, blank(&sql[index..end])));
+                }
                 index = end;
                 continue;
             }
@@ -200,11 +224,11 @@ fn stub_calls(
         let Some(kind) = call_kind(&word) else {
             continue;
         };
-        let open = skip_space(bytes, index);
+        let open = skip_space(bytes, index, syntax);
         if bytes.get(open) != Some(&b'(') {
             continue;
         }
-        let Ok(close) = matching_paren(bytes, open, policy) else {
+        let Ok(close) = dialect_matching_paren(bytes, open, syntax) else {
             continue;
         };
         let number = calls.len();
@@ -216,6 +240,12 @@ fn stub_calls(
         edits.push((start, close + 1, format!("{}{number}", stub_prefix(kind))));
         index = close + 1;
     }
+    let (stubbed, offsets) = apply_edits(sql, edits);
+    (stubbed, offsets, calls)
+}
+
+/// `sql` with each edit applied, and per output character the input character it came from.
+fn apply_edits(sql: &str, edits: Vec<(usize, usize, String)>) -> (String, Vec<usize>) {
     let mut stubbed = String::with_capacity(sql.len());
     let mut offsets: Vec<usize> = Vec::with_capacity(sql.len() + 1);
     let mut character = 0;
@@ -227,8 +257,14 @@ fn stub_calls(
             character += 1;
         }
         stubbed.push_str(&replacement);
-        offsets.extend(std::iter::repeat_n(character, replacement.chars().count()));
-        character += sql[start..end].chars().count();
+        let replaced = sql[start..end].chars().count();
+        let length = replacement.chars().count();
+        if length == replaced {
+            offsets.extend(character..character + length);
+        } else {
+            offsets.extend(std::iter::repeat_n(character, length));
+        }
+        character += replaced;
         cursor = end;
     }
     for value in sql[cursor..].chars() {
@@ -237,7 +273,7 @@ fn stub_calls(
         character += 1;
     }
     offsets.push(character);
-    (stubbed, offsets, calls)
+    (stubbed, offsets)
 }
 
 fn call_target(arguments: &str) -> Option<String> {
