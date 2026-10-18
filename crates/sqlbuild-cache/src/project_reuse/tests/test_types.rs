@@ -15,6 +15,13 @@ pub(crate) struct SlotPruneTestCase {
     pub(crate) expected_kept: &'static [&'static str],
 }
 
+/// A stored compile whose slot carries an extra section when its inputs are refreshed.
+pub(crate) struct SlotRefreshTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) extra_section: (&'static str, &'static [u8]),
+    pub(crate) expected_output_rewritten: bool,
+}
+
 /// One report and the compile_timings span expected inside it.
 pub(crate) struct TimingsSpanTestCase {
     pub(crate) description: &'static str,

@@ -1,7 +1,8 @@
 use crate::store::errors::StoreDecodeError;
 use crate::store::main::open_native_store::open_native_store;
 use crate::store::tests::helpers::{
-    ENVIRONMENT, KIND, METADATA, VALUE, damage, key, open, read_record, record, saved_store,
+    ENVIRONMENT, KIND, METADATA, VALUE, damage, key, open, read_record, record,
+    rewrite_as_previous_format, saved_store,
 };
 use crate::store::tests::test_types::{
     NativeStoreDiscardTestCase, NativeStoreOpenTestCase, NativeStoreRetentionTestCase,
@@ -48,6 +49,14 @@ fn given_saved_store_when_opening_then_only_the_same_kind_and_environment_load()
             kind: KIND,
             environment: ENVIRONMENT,
             edit: |path| std::fs::write(path, b"SQBSTORE").expect("truncated"),
+            expected_value: None,
+            expected_metadata: b"",
+        },
+        NativeStoreOpenTestCase {
+            description: "file of the previous format version",
+            kind: KIND,
+            environment: ENVIRONMENT,
+            edit: rewrite_as_previous_format,
             expected_value: None,
             expected_metadata: b"",
         },

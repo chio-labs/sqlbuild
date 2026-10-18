@@ -18,6 +18,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileReuseInvalidationTestCase,
     CompileReuseLargeFileTestCase,
     CompileReuseProviderSettingsTestCase,
+    CompileReuseRacyRefreshTestCase,
     CompileReuseRedirectTestCase,
     CompileReuseReplayTestCase,
     CompileReuseStoreFailureTestCase,
@@ -40,16 +41,21 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     compiled_artifacts,
     delete_compiled_model,
     edit_compiled_model,
+    edit_project_model_during_compile,
     empty_file,
     enable_compile_reuse,
     fail_reuse_store,
     flip_header_byte,
+    flip_stored_stdout_bytes,
     flip_trailing_bytes,
     garbage_file,
+    garbage_stored_output,
     in_process_compile_reads,
+    previous_format_slot,
     progress_only,
     record_digested_files,
     recorded_events,
+    remove_stored_output,
     replace_project_text,
     rewrite_compiled_model_unchanged,
     rewrite_macro_without_change,
@@ -57,9 +63,11 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     run_reuse_compile_into_file,
     run_reuse_text_compile,
     settle_racy_window,
+    stored_output_path,
     touch_back,
     touch_model_without_change,
     truncate_file,
+    truncate_stored_output,
     write_before_reuse_store,
     write_custom_source_provider,
     write_large_file,
@@ -427,6 +435,21 @@ def test_given_reuse_bypass_when_compiling_twice_then_both_compiles_run_in_full(
         CompileReuseCorruptEntryTestCase(description="header_bytes", corrupt=flip_header_byte),
         CompileReuseCorruptEntryTestCase(description="empty", corrupt=empty_file),
         CompileReuseCorruptEntryTestCase(description="garbage", corrupt=garbage_file),
+        CompileReuseCorruptEntryTestCase(
+            description="previous_store_format", corrupt=previous_format_slot
+        ),
+        CompileReuseCorruptEntryTestCase(
+            description="output_truncated", corrupt=truncate_stored_output
+        ),
+        CompileReuseCorruptEntryTestCase(
+            description="output_report_bytes", corrupt=flip_stored_stdout_bytes
+        ),
+        CompileReuseCorruptEntryTestCase(
+            description="output_missing", corrupt=remove_stored_output
+        ),
+        CompileReuseCorruptEntryTestCase(
+            description="output_garbage", corrupt=garbage_stored_output
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -454,6 +477,43 @@ def test_given_corrupt_stored_compile_when_compiling_then_it_falls_back_and_rest
         cold.report,
         cold.compiled,
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CompileReuseRacyRefreshTestCase(
+            description="project_written_just_before_the_first_compile",
+            expected_reused=(False, True, True),
+            expected_output_rewritten=False,
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_racy_stored_inputs_when_reusing_then_only_the_slot_file_is_refreshed(
+    compile_reuse_project: Path, test_case: CompileReuseRacyRefreshTestCase
+) -> None:
+    project_dir: Path = compile_reuse_project
+    cold: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
+    (entry,) = compile_reuse_entry_paths(project_dir=project_dir)
+    output: Path = stored_output_path(entry)
+    stored_output: tuple[bytes, int] = (output.read_bytes(), output.stat().st_mtime_ns)
+    slot_mtime_ns: int = entry.stat().st_mtime_ns
+
+    refreshed: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
+    rerun: CompileReuseRun = run_reuse_compile(project_dir=project_dir)
+
+    assert (cold.reused, refreshed.reused, rerun.reused) == test_case.expected_reused
+    assert entry.stat().st_mtime_ns != slot_mtime_ns, "the hit refreshed the racy stamps"
+    assert (
+        (output.read_bytes(), output.stat().st_mtime_ns) != stored_output
+    ) is test_case.expected_output_rewritten
+    for run in (refreshed, rerun):
+        assert (run.returncode, run.report, run.compiled) == (
+            cold.returncode,
+            cold.report,
+            cold.compiled,
+        )
 
 
 @pytest.mark.parametrize(
@@ -661,6 +721,12 @@ def test_given_provider_settings_when_their_inputs_change_then_reuse_misses_like
         CompileReuseConcurrentWriterTestCase(
             description="other_compile_adds_artifact",
             other_write=add_stale_compiled_file,
+            expected_stored_entries=0,
+            expected_rerun_reused=False,
+        ),
+        CompileReuseConcurrentWriterTestCase(
+            description="project_model_edited_during_compile",
+            other_write=edit_project_model_during_compile,
             expected_stored_entries=0,
             expected_rerun_reused=False,
         ),

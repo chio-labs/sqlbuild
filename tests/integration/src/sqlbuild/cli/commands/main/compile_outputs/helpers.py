@@ -21,7 +21,7 @@ from sqlbuild._native import run_cli as main
 from sqlbuild.cli.compile_reuse._helpers import provider_settings as provider_settings_module
 
 STAGING_PREFIX: str = ".sqlbuild-staging-"
-NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v2"
+NATIVE_REUSE_DIRECTORY_NAME: str = "project-reuse-v3"
 NATIVE_REUSE_SUFFIX: str = ".store"
 
 

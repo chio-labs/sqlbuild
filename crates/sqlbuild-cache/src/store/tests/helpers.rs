@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::digest::main::content_digest::content_digest;
 use crate::digest::types::ContentDigest;
+use crate::store::constants::STORE_FORMAT_VERSION;
 use crate::store::errors::StoreDecodeError;
 use crate::store::main::open_native_store::open_native_store;
 use crate::store::models::{NativeStore, RecordReader, RecordWriter};
@@ -32,6 +33,16 @@ pub(crate) fn damage(path: &Path) {
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
     std::fs::write(path, bytes).expect("damaged store");
+}
+
+/// Relabel the file as the previous format version, whose body digest was SHA-256.
+pub(crate) fn rewrite_as_previous_format(path: &Path) {
+    let mut bytes = std::fs::read(path).expect("store bytes");
+    let previous: u32 = STORE_FORMAT_VERSION - 1;
+    bytes[8..12].copy_from_slice(&previous.to_le_bytes());
+    let digest = content_digest(&[&bytes[44..]]);
+    bytes[12..44].copy_from_slice(&digest);
+    std::fs::write(path, bytes).expect("previous format store");
 }
 
 /// A record holding a string and a number.

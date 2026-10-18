@@ -5,7 +5,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::project_reuse::_helpers::entry::{
-    read_entry, remove_entry, rewrite_inputs, write_entry,
+    read_output, read_slot, remove_entry, rewrite_inputs, write_entry,
 };
 use crate::project_reuse::_helpers::files::{
     carried_forward_digests, compare_project_files, needs_refresh, restamped_paths,
@@ -74,11 +74,14 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
     attempt.search_path =
         search_path_stamps(&check.identity.search_path, &check.project_dir, rules);
     attempt.snapshot = snapshot(&check.project_dir, rules);
-    if let Some((inputs, output)) = read_entry(&check.store_path) {
-        let comparison: Comparison = checked(&attempt, &inputs, rules);
+    if let Some(slot) = read_slot(&check.store_path) {
+        let inputs: &StoredInputs = &slot.inputs;
+        let comparison: Comparison = checked(&attempt, inputs, rules);
         attempt.digested_files += comparison.digested_files;
         attempt.digests = comparison.digests;
-        if comparison.unchanged {
+        if comparison.unchanged
+            && let Some(output) = read_output(&check.store_path, &slot)
+        {
             if check.json_output && output.timings_span.is_none() {
                 attempt.replay_failed = true;
                 return attempt;
@@ -92,9 +95,9 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
                         attempt.snapshot_ns,
                         rules.racy_window_ns,
                     ),
-                    ..inputs
+                    ..inputs.clone()
                 };
-                rewrite_inputs(&check.store_path, &refreshed);
+                rewrite_inputs(&check.store_path, &slot, &refreshed);
             }
             attempt.replay = Some(output);
             return attempt;

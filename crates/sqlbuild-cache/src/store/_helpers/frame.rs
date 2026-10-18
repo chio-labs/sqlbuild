@@ -1,6 +1,6 @@
 //! Encode and verify whole store files.
 
-use crate::digest::main::content_digest::content_digest;
+use crate::digest::main::bytes_digest::bytes_digest;
 use crate::digest::types::ContentDigest;
 use crate::store::constants::{STORE_FORMAT_VERSION, STORE_MAGIC};
 use crate::store::errors::StoreDecodeError;
@@ -15,7 +15,7 @@ pub(crate) struct StoreFile {
     pub(crate) entries: Vec<(ContentDigest, u64, Vec<u8>)>,
 }
 
-/// Magic, format version, a digest of the body, then the body.
+/// Magic, format version, the BLAKE3 digest of the body, then the body.
 pub(crate) fn encode_store(file: &StoreFile) -> Vec<u8> {
     let mut body: RecordWriter = RecordWriter::default();
     body.put_str(&file.kind);
@@ -32,7 +32,7 @@ pub(crate) fn encode_store(file: &StoreFile) -> Vec<u8> {
     let mut bytes: Vec<u8> = Vec::with_capacity(body.len() + 44);
     bytes.extend_from_slice(STORE_MAGIC);
     bytes.extend_from_slice(&STORE_FORMAT_VERSION.to_le_bytes());
-    bytes.extend_from_slice(&content_digest(&[&body]));
+    bytes.extend_from_slice(&bytes_digest(&body));
     bytes.extend_from_slice(&body);
     bytes
 }
@@ -47,7 +47,7 @@ pub(crate) fn decode_store(bytes: &[u8]) -> Result<StoreFile, StoreDecodeError> 
         return Err(StoreDecodeError);
     }
     let (checksum, body) = rest.split_first_chunk::<32>().ok_or(StoreDecodeError)?;
-    if content_digest(&[body]) != *checksum {
+    if bytes_digest(body) != *checksum {
         return Err(StoreDecodeError);
     }
     let mut reader: RecordReader<'_> = RecordReader::new(body);

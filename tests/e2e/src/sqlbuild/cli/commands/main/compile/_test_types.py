@@ -620,6 +620,15 @@ class CompileReuseBypassTestCase:
 
 
 @dataclass(frozen=True)
+class CompileReuseRacyRefreshTestCase:
+    """A stored compile whose inputs were racy when stored, refreshed by the next hit."""
+
+    description: str
+    expected_reused: tuple[bool, bool, bool]
+    expected_output_rewritten: bool
+
+
+@dataclass(frozen=True)
 class CompileReuseCorruptEntryTestCase:
     """One way a stored compile can be damaged on disk."""
 
