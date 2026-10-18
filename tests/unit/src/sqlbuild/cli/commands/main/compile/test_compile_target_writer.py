@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -35,6 +36,9 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile._test_types import (
     TargetWriterTestCase,
 )
 from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
+    BlockedModelStaging,
+    FunctionRenderFailingAdapter,
+    FunctionRenderInterruptedAdapter,
     build_cached_target_writer_project,
     build_missing_mock_target_writer_project,
     build_static_target_writer_project,
@@ -44,6 +48,7 @@ from tests.unit.src.sqlbuild.cli.commands.main.compile.helpers import (
 from tests.unit.src.sqlbuild.compiler.manifest.helpers import build_test_project
 
 SQL_TEST_ARTIFACT_PLANS: str = "plan_compiled_sql_test_artifacts"
+INTERRUPT_RETURN_SECONDS: float = 10.0
 SQL_TEST_MODEL_CHAINS: str = "sql_test_model_chain_names_by_key"
 
 
@@ -364,6 +369,93 @@ def test_given_unwritable_model_artifact_when_writing_static_target_then_later_g
     assert not (target_dir / "compiled" / "functions").exists()
     assert not (target_dir / "compiled" / "audits").exists()
     assert not (target_dir / "compiled" / "tests").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="the model write error wins over a later rendering error",
+            expected_message="staging",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_model_write_failure_and_later_error_when_writing_static_target_then_os_error_wins(
+    tmp_path: Path,
+    test_case: ExpectedMessageTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    blocker: Path = target_dir / "compiled" / "models" / "staging"
+    blocker.parent.mkdir(parents=True)
+    blocker.write_text("not a directory\n", encoding="utf-8")
+
+    with pytest.raises(OSError, match=test_case.expected_message):
+        write_static_compile_target(
+            target_dir=target_dir,
+            adapter=FunctionRenderFailingAdapter(),
+            project=build_static_target_writer_project(),
+        )
+
+    assert not (target_dir / "compiled" / "functions").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="interrupt after the model group", expected_message="compiled/functions"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_interrupt_after_model_group_when_writing_static_target_then_later_groups_are_not_written(
+    tmp_path: Path,
+    test_case: ExpectedMessageTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+    started: float = time.monotonic()
+
+    with pytest.raises(KeyboardInterrupt):
+        write_static_compile_target(
+            target_dir=target_dir,
+            adapter=FunctionRenderInterruptedAdapter(),
+            project=build_static_target_writer_project(),
+        )
+
+    assert time.monotonic() - started < INTERRUPT_RETURN_SECONDS
+    assert not (target_dir / test_case.expected_message).exists()
+    assert not (target_dir / "compiled" / "audits").exists()
+    assert not (target_dir / "compiled" / "tests").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="staged model write failure falls back despite a later error",
+            expected_message="compiled/models/staging/orders.sql",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_staged_model_write_failure_and_later_error_when_publishing_then_staging_falls_back(
+    tmp_path: Path,
+    test_case: ExpectedMessageTestCase,
+) -> None:
+    target_dir: Path = tmp_path / "target"
+
+    with BlockedModelStaging(enabled=True) as artifacts:
+        artifacts.start(
+            project=build_static_target_writer_project(),
+            adapter=FunctionRenderFailingAdapter(),
+            target_dir=target_dir,
+            stage_artifacts=True,
+        )
+        written: WrittenTarget | None = artifacts.publish(target_dir=target_dir, manifest=None)
+
+    assert written is None
+    assert not (target_dir / test_case.expected_message).exists()
 
 
 @pytest.mark.parametrize(

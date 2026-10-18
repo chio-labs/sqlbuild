@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::exceptions::PyException;
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     ArtifactRecorder, artifact_written, artifact_written_at,
@@ -112,6 +113,23 @@ impl<'a> ArtifactBatch<'a> {
         Ok(())
     }
 
+    /// `result`, except that a background group's earlier write error wins and interrupts stop it.
+    pub(crate) fn settle<T>(&mut self, py: Python<'_>, result: PyResult<T>) -> PyResult<T> {
+        let error: PyErr = match result {
+            Ok(value) => return Ok(value),
+            Err(error) => error,
+        };
+        let Some(writer) = self.writer.take() else {
+            return Err(error);
+        };
+        if !error.is_instance_of::<PyException>(py) {
+            writer.stop(py);
+            return Err(error);
+        }
+        writer.finish(py)?;
+        Err(error)
+    }
+
     /// Wait for the background groups, raising the first write error.
     fn finish_pending(&mut self, py: Python<'_>) -> PyResult<()> {
         let Some(writer) = self.writer.take() else {
@@ -129,7 +147,7 @@ impl<'a> ArtifactBatch<'a> {
 impl Drop for ArtifactBatch<'_> {
     fn drop(&mut self) {
         if let Some(writer) = self.writer.take() {
-            writer.wait();
+            Python::attach(|py| writer.stop(py));
         }
     }
 }
