@@ -32,6 +32,8 @@ use crate::bindings::_helpers::scenario_command::setup::{
     require_sql_analysis, resolve_adapter, selected_scenarios, style, text, write, write_headers,
 };
 use crate::bindings::_helpers::scenario_command::snapshot_sync::{LocalSync, sync_local_snapshots};
+use crate::bindings::_helpers::sql_test_command::test_command::timeout_record;
+use crate::bindings::_helpers::sql_test_command::timeouts::{TimeoutKind, resolve_run_timeout};
 
 const LOCAL_ADAPTER: &str = "duckdb";
 const LOCAL_STATUSES: [&str; 4] = ["PASS", "FAIL", "ERROR", "SKIP"];
@@ -254,8 +256,27 @@ fn run_scenarios(
     } else {
         arguments.extend([
             ("connection_config", run.connection_config.clone()),
-            ("retain", request.getattr("retain")?),
-            ("concurrency", int(py, run.concurrency)),
+            (
+                "settings",
+                call_with(
+                    &host::entry(py, ExecutorHost::ScenarioTestSettings)?,
+                    &[
+                        ("retain", request.getattr("retain")?),
+                        ("concurrency", int(py, run.concurrency)),
+                        (
+                            "timeouts",
+                            timeout_record(
+                                py,
+                                &resolve_run_timeout(
+                                    (&native_field(pipeline, "project")?, &run.project.discovered),
+                                    request.getattr("scenario_timeout")?.extract()?,
+                                    TimeoutKind::Scenario,
+                                )?,
+                            )?,
+                        ),
+                    ],
+                )?,
+            ),
             (
                 "connection_hooks",
                 connection_hooks(&run.stream, (&run.adapter_name, run.style))?,

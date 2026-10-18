@@ -41,6 +41,7 @@ from sqlbuild.adapter.contract.classes.snapshot_sql import SnapshotSql
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
+    CANCELLABLE_DURATION_LIMIT_SECONDS,
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
     QUALIFIED_NAME_SEPARATOR,
@@ -109,6 +110,9 @@ from sqlbuild.adapters.postgres.constants import (
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
 from sqlbuild.diagnostics.main.log_sql import log_sql
+from sqlbuild.runtime.execution_limits.main.execution_deadlines_suspended import (
+    execution_deadlines_suspended,
+)
 from sqlbuild.spec.contracts.constants import DEFAULT_SEED_CSV_SETTINGS
 
 
@@ -126,6 +130,7 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
 
     adapter_name: ClassVar[str] = BuiltinAdapter.POSTGRES.value
+    execution_duration_limit_seconds: ClassVar[int | None] = CANCELLABLE_DURATION_LIMIT_SECONDS
     sql_analysis_dialect_name: ClassVar[str | None] = "postgres"
     sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax(
         escape_string_prefix=True, nested_block_comments=True
@@ -139,6 +144,32 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         historical_close=HistoricalSnapshotCloseStyle.CORRELATED,
         historical_insert=HistoricalSnapshotInsertStyle.WITH_INSERT,
     )
+
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        """Store a unit test's output in a temporary table of one transaction, for poolers."""
+
+        if connection.needs_sql_test_transaction():
+            _ = self.execute(connection=connection, sql="BEGIN")
+            connection.claim_sql_test_transaction()
+        try:
+            _ = self.execute(
+                connection=connection,
+                sql=f"CREATE TEMPORARY TABLE {name} ON COMMIT DROP AS {sql}",
+            )
+        except BaseException:
+            with execution_deadlines_suspended():
+                self.drop_sql_test_output(connection=connection, relation=name)
+            raise
+        return name
+
+    def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:
+        """End the test's transaction, which drops its outputs, or drop one inside a caller's."""
+
+        if connection.release_sql_test_transaction():
+            _ = self.execute(connection=connection, sql="ROLLBACK")
+            return
+        if connection.in_transaction():
+            _ = self.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {relation}")
 
     def interrupt_connection(self, connection: Any) -> bool:
         """Cancel a connection's running statement from another thread; False if unsupported."""
@@ -768,7 +799,8 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 ]
             )
         finally:
-            connection.execute("ROLLBACK")
+            with execution_deadlines_suspended():
+                connection.execute("ROLLBACK")
         return same_view_definition(definition=definition, sql=probe)
 
     def render_relation_revokes(

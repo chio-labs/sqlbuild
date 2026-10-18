@@ -27,6 +27,7 @@ from sqlbuild.observability import (
     dispatcher_scope,
     invocation_scope,
 )
+from sqlbuild.runtime.execution_limits.models import RunItemTimeouts
 from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     SqlTestConcurrencyTestCase,
     SqlTestFunctionPreflightTestCase,
@@ -180,8 +181,7 @@ def test_given_parameterized_chain_when_running_then_one_operation_owns_statemen
     assert event_types == (
         "resource_attempt_started",
         "operation_started",
-        "statement_started",
-        "statement_completed",
+        *("statement_started", "statement_completed") * 3,
         "operation_completed",
         "resource_attempt_completed",
     )
@@ -239,9 +239,13 @@ def test_given_concurrent_workers_when_running_tests_then_execution_overlaps_on_
     connection_ids_lock: threading.Lock = threading.Lock()
 
     def execute_with_overlap(
-        *, test_entry: SqlTestPlanEntry, adapter: DuckDbAdapter, connection: object
+        *,
+        test_entry: SqlTestPlanEntry,
+        adapter: DuckDbAdapter,
+        connection: object,
+        timeouts: RunItemTimeouts | None,
     ) -> SqlTestExecutionResult:
-        del adapter
+        del adapter, timeouts
         with connection_ids_lock:
             connection_ids.append(id(connection))
         overlap_barrier.wait(timeout=2)

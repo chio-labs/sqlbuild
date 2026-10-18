@@ -1,5 +1,7 @@
 //! Contract, materialization, storage, migration and placeholder rules with Python's errors.
 
+use crate::execution_limits::constants::MODEL_MAX_DURATION_KEY;
+use crate::execution_limits::main::parse_execution_limit::parse_execution_limit;
 use std::collections::{BTreeSet, HashMap};
 
 use sqlbuild_core::text::main::is_word_char::is_word_char;
@@ -72,6 +74,20 @@ pub(crate) fn check_contract<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Che
     Err(config.error(format!(
         "unknown contract '{contract}'; valid values: {}",
         sorted_values(&CONTRACT_POLICIES)
+    )))
+}
+
+/// Check that `max_duration` is a positive fixed duration or `disabled`.
+pub(crate) fn check_execution_limit<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
+    let Some(text) = config.string(MODEL_MAX_DURATION_KEY)? else {
+        return Ok(());
+    };
+    if parse_execution_limit(&text).is_some() {
+        return Ok(());
+    }
+    Err(config.error(format!(
+        "{MODEL_MAX_DURATION_KEY} must be a positive fixed duration such as '15m' or '1h', or \
+         'disabled', got '{text}'"
     )))
 }
 

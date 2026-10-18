@@ -14,6 +14,7 @@ use sqlbuild_discovery::sql_tests::models::{
     DiscoveredScenarioFile, DiscoveredSqlTestFile, SqlTestBlock, SqlTestFileOptions,
 };
 use sqlbuild_discovery::tree::models::ProjectTree;
+use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
 
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::discovery::constants;
@@ -39,6 +40,7 @@ const PATHLIB_MODULE: &str = "pathlib";
 const SCENARIO_KIND: &str = "sql_scenario";
 const DESCRIPTION_KEY: &str = "description";
 const TAGS_KEY: &str = "tags";
+const TIMEOUT_KEY: &str = "timeout";
 
 /// A native discoverer of one kind of SQL test file.
 type Discoverer<T> = fn(
@@ -174,6 +176,18 @@ fn scenario_file<'py>(
         if !tags_are_strings {
             return failure(format!(
                 "SCENARIO() tags in '{shown}' must be a list of strings"
+            ));
+        }
+    }
+    if let Some(timeout) = header_values.get_item(TIMEOUT_KEY)? {
+        let valid: bool = match timeout.extract::<String>() {
+            Ok(text) => parse_execution_limit(&text).is_some(),
+            Err(_) => false,
+        };
+        if !valid {
+            return failure(format!(
+                "SCENARIO() timeout in '{shown}' must be a positive fixed duration such as \
+                 \"10m\", or \"disabled\""
             ));
         }
     }

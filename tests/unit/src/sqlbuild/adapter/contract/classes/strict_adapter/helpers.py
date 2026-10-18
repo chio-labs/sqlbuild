@@ -9,6 +9,7 @@ from typing import Any, cast
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.discovery.main.builtins import builtin_adapter_classes
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 
 
 def first_class_adapter_contract_violations() -> tuple[str, ...]:
@@ -86,3 +87,24 @@ _INHERITED_METHOD_COLLECTORS: MappingProxyType[bool, Callable[..., None]] = Mapp
 _METHOD_OWNER_COLLECTORS: MappingProxyType[bool, Callable[..., None]] = MappingProxyType(
     {False: _skip_method_owner, True: _collect_method_owner}
 )
+
+
+def delegating_strict_adapter_class() -> type[StrictAdapter]:
+    """A project-style `StrictAdapter` that implements only the required methods, via DuckDB."""
+
+    inner: DuckDbAdapter = DuckDbAdapter()
+    required: frozenset[str] = cast(Any, StrictAdapter).__abstractmethods__
+    namespace: dict[str, object] = {
+        name: _delegate(inner=inner, name=name) for name in sorted(required)
+    }
+    namespace["adapter_name"] = "project_duckdb"
+    namespace["sql_analysis_dialect_name"] = "duckdb"
+    return cast(type[StrictAdapter], type("ProjectDuckDbAdapter", (StrictAdapter,), namespace))
+
+
+def _delegate(*, inner: DuckDbAdapter, name: str) -> Callable[..., object]:
+    def method(self: StrictAdapter, *args: object, **kwargs: object) -> object:
+        del self
+        return getattr(inner, name)(*args, **kwargs)
+
+    return method

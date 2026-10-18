@@ -26,7 +26,11 @@ from sqlbuild.compiler.auditing.types import AuditEvaluationMode, ThresholdOpera
 from sqlbuild.executor.audit_results.constants import AUDIT_RESULT_SCHEMA_VERSION
 from sqlbuild.executor.audit_results.exceptions import AuditResultStorageError
 from sqlbuild.executor.audit_results.main._write import write_audit_result_records
-from sqlbuild.executor.audit_results.models import AuditResultRecord, build_audit_result_id
+from sqlbuild.executor.audit_results.models import (
+    AuditResultColumnEvolution,
+    AuditResultRecord,
+    build_audit_result_id,
+)
 from sqlbuild.executor.auditing.models import AuditExecutionResult, AuditResultProjection
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.main.current_execution_identity import (
@@ -258,6 +262,9 @@ def project_audit_result_batch_impl(
             render_framework_type=adapter.render_framework_type,
             render_create_table_sql=adapter.render_create_audit_result_table_sql,
             render_create_index_sqls=adapter.render_create_audit_result_index_sqls,
+            column_evolution=AuditResultColumnEvolution(
+                read_columns=adapter.get_columns, render_add_columns=adapter.render_add_columns
+            ),
         )
     except AuditResultStorageError as error:
         _LOGGER.warning(
@@ -316,6 +323,7 @@ def _build_record(  # noqa: PLR0913
         audit_name=result.audit_name,
         audit_definition_name=result.audit_definition_name,
         audit_description=result.audit_description,
+        audit_meta_json=_json_or_none(result.audit_meta),
         binding_key=audit_id.binding_key,
         definition_fingerprint=audit_id.definition_fingerprint,
         execution_fingerprint=audit_id.execution_fingerprint,
@@ -407,6 +415,7 @@ def _publish_audit_completed(record: AuditResultRecord) -> None:
         "evidence_sql": record.evidence_sql,
         "execution_error": record.execution_error,
         "audit_description": record.audit_description,
+        "audit_meta": json.loads(record.audit_meta_json) if record.audit_meta_json else None,
     }
     payload.update({key: value for key, value in optional.items() if value is not None})
     OperationLifecycle.publish_audit_completed(payload=payload)

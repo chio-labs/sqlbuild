@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from typing import Any
+
+import pytest
 
 
 class FetchedRows:
@@ -139,3 +143,198 @@ def execute_through_cursor(*, connection: MetadataConnection, sql: str) -> Metad
     """Adapter execute stub that runs SQL on a fresh fake cursor."""
 
     return connection.cursor().execute(sql)
+
+
+BLOCKING_SQL: str = "SELECT * FROM orders"
+
+
+@dataclass
+class TransactionStatus:
+    """A psycopg-style transaction status, named like `psycopg.pq.TransactionStatus`."""
+
+    name: str = "IDLE"
+
+
+class TransactionInfo:
+    """Tracks whether the fake connection has an open transaction, as psycopg reports it."""
+
+    def __init__(self) -> None:
+        self.transaction_status: TransactionStatus = TransactionStatus()
+
+    def track(self, sql: str) -> None:
+        self.transaction_status = _TRANSACTION_STATUS_AFTER.get(
+            sql.strip().upper(), self.transaction_status
+        )
+
+
+_TRANSACTION_STATUS_AFTER: dict[str, TransactionStatus] = {
+    "BEGIN": TransactionStatus(name="INTRANS"),
+    "COMMIT": TransactionStatus(),
+    "ROLLBACK": TransactionStatus(),
+}
+
+
+class BlockingCursor:
+    """A DB-API cursor whose query blocks until another thread cancels it."""
+
+    def __init__(
+        self, *, executed: list[str], started: threading.Event, info: TransactionInfo
+    ) -> None:
+        self.executed: list[str] = executed
+        self.info: TransactionInfo = info
+        self.started: threading.Event = started
+        self.cancelled: threading.Event = threading.Event()
+        self.connection: object | None = None
+        self.description: object | None = None
+        self.rowcount: int = -1
+        self._request_id: str = "11111111-1111-4111-8111-111111111111"
+        self.sfqid: str | None = None
+        self.statement_params: dict[str, str] | None = None
+
+    def execute(self, sql: str, *args: Any, **kwargs: Any) -> BlockingCursor:
+        del args
+        self.executed.append(sql)
+        self.info.track(sql)
+        self.statement_params = kwargs.get("_statement_params")
+        responses: dict[bool, Callable[[], BlockingCursor]] = {
+            True: self._block_until_cancelled,
+            False: lambda: self,
+        }
+        return responses[sql.endswith(BLOCKING_SQL)]()
+
+    def _block_until_cancelled(self) -> BlockingCursor:
+        self.started.set()
+        assert self.cancelled.wait(timeout=5), "statement was not cancelled"
+        raise RuntimeError("statement cancelled")
+
+    def cancel(self) -> None:
+        self.cancelled.set()
+
+    def close(self) -> None:
+        return None
+
+
+class CancellableRawConnection:
+    """A raw driver connection exposing each driver's cancel entry point."""
+
+    def __init__(self) -> None:
+        self.info: TransactionInfo = TransactionInfo()
+        self.executed: list[str] = []
+        self.cursors: list[BlockingCursor] = []
+        self.cancel_requests: list[tuple[str, str]] = []
+        self.started: threading.Event = threading.Event()
+        self._conn: CancellableRawConnection = self
+
+    def cursor(self) -> BlockingCursor:
+        cursor: BlockingCursor = BlockingCursor(
+            executed=self.executed, started=self.started, info=self.info
+        )
+        cursor.connection = self
+        self.cursors.append(cursor)
+        return cursor
+
+    def execute(self, sql: str) -> None:
+        self.executed.append(sql)
+        self.info.track(sql)
+
+    def cancel_safe(self) -> None:
+        self._cancel_running()
+
+    def cancel(self) -> None:
+        self._cancel_running()
+
+    def _cancel_query(self, sql: str, request_id: str) -> dict[str, bool]:
+        self.cancel_requests.append((sql, request_id))
+        self._cancel_running()
+        return {"success": True}
+
+    def _cancel_running(self) -> None:
+        for cursor in self.cursors:
+            cursor.cancel()
+
+
+def cancel_from_watchdog(*, adapter: Any, connection: Any, raw: CancellableRawConnection) -> None:
+    """Run a blocking query while another thread asks the adapter to cancel it."""
+
+    def watchdog() -> None:
+        assert raw.started.wait(timeout=5)
+        assert adapter.interrupt_connection(connection) is True
+
+    thread: threading.Thread = threading.Thread(target=watchdog)
+    thread.start()
+    with pytest.raises(RuntimeError, match="statement cancelled"):
+        connection.execute(BLOCKING_SQL)
+    thread.join(timeout=5)
+
+
+class CancellableJob:
+    """A BigQuery job whose result blocks until it is cancelled."""
+
+    def __init__(self) -> None:
+        self.job_id: str = "job-1"
+        self.cancelled: threading.Event = threading.Event()
+        self.waiting: threading.Event = threading.Event()
+
+    def result(self) -> list[object]:
+        self.waiting.set()
+        assert self.cancelled.wait(timeout=5), "job was not cancelled"
+        raise RuntimeError("statement cancelled")
+
+    def cancel(self) -> bool:
+        self.cancelled.set()
+        return True
+
+
+class QueuedJob:
+    """A BigQuery job that waits in a queue for a few polls before it runs and completes."""
+
+    def __init__(self, *, pending_polls: int, poll_seconds: float) -> None:
+        self.job_id: str = "job-queued"
+        self.state: str = "PENDING"
+        self.statement_type: str | None = None
+        self.num_dml_affected_rows: int | None = None
+        self._pending_polls: int = pending_polls
+        self._poll_seconds: float = poll_seconds
+
+    def reload(self) -> None:
+        time.sleep(self._poll_seconds)
+        self._pending_polls -= 1
+        self.state = ("RUNNING", "PENDING")[self._pending_polls > 0]
+
+    def result(self) -> list[object]:
+        self.state = "DONE"
+        return []
+
+    def cancel(self) -> bool:
+        return True
+
+
+class CancellableJobClient:
+    """A BigQuery client returning one cancellable job and recording each job config."""
+
+    def __init__(self) -> None:
+        self.job: CancellableJob | QueuedJob = CancellableJob()
+        self.job_configs: list[Any] = []
+
+    def query(self, sql: str, **kwargs: Any) -> CancellableJob | QueuedJob:
+        del sql
+        self.job_configs.append(kwargs.get("job_config"))
+        return self.job
+
+
+def without_limits(statements: list[str]) -> tuple[str, ...]:
+    """The statements a fake connection ran, without per-transaction statement limits."""
+
+    return tuple(filter(lambda sql: not sql.startswith("SET LOCAL statement_timeout"), statements))
+
+
+def expire_after_start(*, deadline: Any, raw: CancellableRawConnection) -> threading.Thread:
+    """Expire `deadline` from another thread once the fake connection's blocking query starts."""
+
+    def watchdog() -> None:
+        assert raw.started.wait(timeout=5)
+        deadline.expire()
+
+    thread: threading.Thread = threading.Thread(target=watchdog)
+    thread.start()
+    return thread

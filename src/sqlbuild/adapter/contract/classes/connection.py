@@ -9,9 +9,18 @@ from typing import Any, ClassVar
 
 from sqlbuild.adapter.contract.main._attribute_failed_sql import attribute_failed_sql
 from sqlbuild.adapter.contract.models import QueryResult
-from sqlbuild.runtime.execution_limits.exceptions import ExecutionDurationLimitError
+from sqlbuild.runtime.execution_limits.exceptions import (
+    ExecutionDurationLimitError,
+    ItemTimeoutError,
+)
 from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
     enforce_execution_deadline,
+)
+from sqlbuild.runtime.execution_limits.main.execution_deadlines_suspended import (
+    execution_deadlines_suspended,
+)
+from sqlbuild.runtime.execution_limits.main.tracked_statement_connection import (
+    tracked_statement_connection,
 )
 from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
 
@@ -32,11 +41,12 @@ class ConnectionMixin(ABC):
         with StatementLifecycle(adapter=self.adapter_name, sql=sql, intent="execute") as lifecycle:
             try:
                 enforce_execution_deadline()
-                result: Any = self._execute(connection=connection, sql=sql)
+                with tracked_statement_connection(adapter=self, connection=connection):
+                    result: Any = self._execute(connection=connection, sql=sql)
             except Exception as error:
                 try:
-                    enforce_execution_deadline()
-                except ExecutionDurationLimitError as deadline_error:
+                    enforce_execution_deadline(after_failure=True)
+                except (ExecutionDurationLimitError, ItemTimeoutError) as deadline_error:
                     raise deadline_error from error
                 attributed_error: Exception = attribute_failed_sql(error=error, sql=sql)
                 if attributed_error is error:
@@ -95,7 +105,8 @@ class ConnectionMixin(ABC):
             self.commit(connection)
         except BaseException:
             open_transactions.discard(id(connection))
-            self.rollback(connection)
+            with execution_deadlines_suspended():
+                self.rollback(connection)
             raise
 
     def supports_transactions(self) -> bool:

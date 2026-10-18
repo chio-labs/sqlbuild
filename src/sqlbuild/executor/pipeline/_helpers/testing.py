@@ -31,11 +31,14 @@ from sqlbuild.executor.pipeline._helpers.connections import (
     open_worker_connections,
 )
 from sqlbuild.executor.pipeline.models import TestPipelineCallbacks
+from sqlbuild.executor.scheduling.classes.recovering_connection_pool import RecoveringConnectionPool
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
 from sqlbuild.executor.testing.main._execute import execute_sql_test
 from sqlbuild.executor.testing.models import SqlTestExecutionResult, StepResult
 from sqlbuild.executor.testing.types import SqlTestOutcome
+from sqlbuild.runtime.execution_limits.classes.connection_recovery import ConnectionRecovery
+from sqlbuild.runtime.execution_limits.models import RunItemTimeouts
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
@@ -63,6 +66,7 @@ def run_test_pipeline(
     callbacks: TestPipelineCallbacks | None = None,
     run_id: str | None = None,
     max_concurrency: int = 1,
+    timeouts: RunItemTimeouts | None = None,
 ) -> tuple[SqlTestExecutionResult, ...]:
     """Execute all SQL unit tests from a compiled plan."""
 
@@ -92,6 +96,9 @@ def run_test_pipeline(
             worker_count, elapsed_seconds=time.monotonic() - start
         )
     active_error: BaseException | None = None
+    recovery: ConnectionRecovery = ConnectionRecovery(
+        adapter=adapter, connect=lambda: adapter.connect(dict(connection_config))
+    )
     try:
         preflight_start: float = time.monotonic()
         if resolved_callbacks.on_progress is not None:
@@ -122,12 +129,15 @@ def run_test_pipeline(
             on_test_start=resolved_callbacks.on_test_start,
             on_test_complete=resolved_callbacks.on_test_complete,
             run_id=canonical_run_id,
+            timeouts=timeouts or RunItemTimeouts(),
+            recovery=recovery,
         )
         return results
     except BaseException as error:
         active_error = error
         raise
     finally:
+        recovery.close_replacements()
         close_connections(adapter=adapter, connections=connections, active_error=active_error)
 
 
@@ -141,25 +151,30 @@ def _run_tests(
     on_test_start: Callable[[SqlTestPlanEntry], None] | None,
     on_test_complete: Callable[[SqlTestExecutionResult], None] | None,
     run_id: str,
+    timeouts: RunItemTimeouts,
+    recovery: ConnectionRecovery,
 ) -> tuple[SqlTestExecutionResult, ...]:
     if worker_count == 1:
         serial_results: list[SqlTestExecutionResult] = []
+        serial_connection: Any = connections[0]
         for entry in entries:
             result: SqlTestExecutionResult = _execute_test_entry(
                 entry=entry,
                 adapter=adapter,
-                connection=connections[0],
+                connection=serial_connection,
                 missing_functions=missing_functions_by_test.get(entry.key, ()),
                 on_test_start=on_test_start,
                 before_test_start=None,
                 run_id=run_id,
+                timeouts=timeouts,
             )
             serial_results.append(result)
+            serial_connection = recovery.usable(serial_connection)
             if on_test_complete is not None:
                 on_test_complete(result)
         return tuple(serial_results)
 
-    connection_pool: queue.Queue[Any] = queue.Queue()
+    connection_pool: queue.Queue[Any] = RecoveringConnectionPool(recovery=recovery)
     for connection in connections:
         connection_pool.put(connection)
     start_coordinator: _AuthoredStartCoordinator = _AuthoredStartCoordinator()
@@ -180,6 +195,7 @@ def _run_tests(
                         on_test_start=on_test_start,
                         before_test_start=lambda index=index: start_coordinator.wait(index=index),
                         run_id=run_id,
+                        timeouts=timeouts,
                     ),
                 )
             )
@@ -201,6 +217,7 @@ def _execute_test_entry_with_pooled_connection(
     on_test_start: Callable[[SqlTestPlanEntry], None] | None,
     before_test_start: Callable[[], None] | None,
     run_id: str,
+    timeouts: RunItemTimeouts,
 ) -> SqlTestExecutionResult:
     connection: Any = connection_pool.get()
     try:
@@ -212,6 +229,7 @@ def _execute_test_entry_with_pooled_connection(
             on_test_start=on_test_start,
             before_test_start=before_test_start,
             run_id=run_id,
+            timeouts=timeouts,
         )
     finally:
         connection_pool.put(connection)
@@ -226,6 +244,7 @@ def _execute_test_entry(
     on_test_start: Callable[[SqlTestPlanEntry], None] | None,
     before_test_start: Callable[[], None] | None,
     run_id: str,
+    timeouts: RunItemTimeouts,
 ) -> SqlTestExecutionResult:
     with ResourceAttemptLifecycle(
         resource_id=sql_test_resource_id(
@@ -248,7 +267,12 @@ def _execute_test_entry(
                 missing_functions=missing_functions,
             )
             if missing_functions
-            else execute_sql_test(test_entry=entry, adapter=adapter, connection=connection)
+            else execute_sql_test(
+                test_entry=entry,
+                adapter=adapter,
+                connection=connection,
+                timeouts=timeouts,
+            )
         )
         if result.outcome != SqlTestOutcome.PASS:
             lifecycle.failed(error_code=result.error_code)

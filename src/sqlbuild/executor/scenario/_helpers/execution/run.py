@@ -36,6 +36,9 @@ from sqlbuild.executor.scenario.models import (
     ScenarioStepResults,
 )
 from sqlbuild.executor.scheduling.types import ExecutionStatus
+from sqlbuild.runtime.execution_limits.main.execution_deadlines_suspended import (
+    execution_deadlines_suspended,
+)
 from sqlbuild.runtime.observability.classes.operation_lifecycle import OperationLifecycle
 
 _STEP_FAILED_MESSAGE: str = "scenario step failed"
@@ -66,12 +69,13 @@ def execute_scenario_run_steps(
             if isinstance(error, (KeyboardInterrupt, ScenarioStopRequested)):
                 options.interrupts.announce_stop()
             if not retain:
-                cleanup_interrupted_scenarios(
-                    scenario_plans=(scenario_plan,),
-                    adapter=adapter,
-                    connection=connection,
-                    interrupts=options.interrupts,
-                )
+                with execution_deadlines_suspended():
+                    cleanup_interrupted_scenarios(
+                        scenario_plans=(scenario_plan,),
+                        adapter=adapter,
+                        connection=connection,
+                        interrupts=options.interrupts,
+                    )
             raise
 
 
@@ -243,11 +247,12 @@ def _finish_scenario(
     if interrupts.stop_requested.is_set():
         interrupts.announce_stop()
     if not retain and not interrupts.abandoned.is_set():
-        cleanup_result = execute_scenario_cleanup(
-            scenario_plan=scenario_plan,
-            adapter=adapter,
-            connection=connection,
-        )
+        with execution_deadlines_suspended():
+            cleanup_result = execute_scenario_cleanup(
+                scenario_plan=scenario_plan,
+                adapter=adapter,
+                connection=connection,
+            )
         if cleanup_result.status == ExecutionStatus.FAILED:
             status = ExecutionStatus.FAILED
             if error_code is None:

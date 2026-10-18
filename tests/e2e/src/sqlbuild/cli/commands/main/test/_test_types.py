@@ -366,3 +366,74 @@ class DirectLogicExtractionE2ETestCase:
     overrides: dict[str, str]
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RealModelLimitE2ETestCase:
+    """One chain length and limit setting run through `sqb test`."""
+
+    description: str
+    local_files: dict[str, str]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SingleReadComparisonE2ETestCase:
+    """One unit test whose comparison reads its stored actual output."""
+
+    description: str
+    test_sql: str
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class UnitTestTimeoutE2ETestCase:
+    """One slow unit test run under a time limit."""
+
+    description: str
+    test_sql: str
+    command: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...]
+    expected_absent_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ModelTimeoutE2ETestCase:
+    """One slow model with a max_duration built next to an independent model."""
+
+    description: str
+    max_duration: str
+    expected_output_fragments: tuple[str, ...]
+    expected_tables: tuple[tuple[str, bool], ...]
+
+
+@dataclass(frozen=True)
+class ScenarioTimeoutE2ETestCase:
+    """One slow scenario run under a time limit."""
+
+    description: str
+    header_timeout: str
+    command: tuple[str, ...]
+    expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ModelTimeoutJsonE2ETestCase:
+    """One slow model's build reported as JSON."""
+
+    description: str
+    expected_status: str
+    expected_summary_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class TransactionTimeoutE2ETestCase:
+    """A model whose limit expires inside its promotion transaction."""
+
+    description: str
+    max_duration: str
+    expected_output_fragments: tuple[str, ...]
+    expected_published_rows: tuple[tuple[int, int], ...]
+    expected_later_model_rows: tuple[tuple[int], ...]

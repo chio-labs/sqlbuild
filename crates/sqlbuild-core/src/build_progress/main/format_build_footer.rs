@@ -27,19 +27,22 @@ pub fn format_build_footer(
 ) -> String {
     let counts: FooterCounts = count_results(result, python);
     let insufficient: i64 = result.insufficient_count;
-    let total: i64 = counts.pass + counts.warn + counts.fail + counts.skip;
-    let summary: String = format_summary_footer(
-        style,
-        &[
-            count("PASS", counts.pass),
-            count("WARN", counts.warn),
-            count("FAIL", counts.fail),
-            count("INSUFFICIENT", insufficient),
-            count("SKIP", counts.skip),
-            count("TOTAL", total + insufficient),
-        ],
-        Some(&format!("{elapsed:.2}s")),
-    );
+    let total: i64 = counts.pass + counts.warn + counts.fail + counts.timeout + counts.skip;
+    let mut summary_counts: Vec<SummaryCount> = vec![
+        count("PASS", counts.pass),
+        count("WARN", counts.warn),
+        count("FAIL", counts.fail),
+    ];
+    if counts.timeout > 0 {
+        summary_counts.push(count("TIMEOUT", counts.timeout));
+    }
+    summary_counts.extend([
+        count("INSUFFICIENT", insufficient),
+        count("SKIP", counts.skip),
+        count("TOTAL", total + insufficient),
+    ]);
+    let summary: String =
+        format_summary_footer(style, &summary_counts, Some(&format!("{elapsed:.2}s")));
     let python_failed: bool = python.iter().any(|node| node.status == FAILED);
     let (state, label) = if result.failed || python_failed {
         (CompletionState::Fail, "Completed with errors")

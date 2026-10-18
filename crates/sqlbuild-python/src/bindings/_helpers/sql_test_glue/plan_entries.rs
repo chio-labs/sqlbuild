@@ -2,6 +2,9 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyTuple};
+use sqlbuild_model_config::execution_limits::constants::TIMEOUT_KEY as TIMEOUT_HEADER_KEY;
+use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
+use sqlbuild_model_config::execution_limits::models::ExecutionLimit;
 
 use crate::bindings::_helpers::planner_strategy::constants::MODEL_REFERENCE_KIND;
 use crate::bindings::_helpers::planner_strategy::models::RelationFixturePlanningContext;
@@ -126,7 +129,25 @@ pub(super) fn entry<'py>(
         "function_deps",
         function_deps(test, plan, inputs.0, (&mocks, inputs.1))?,
     )?;
-    fields.set_item("chain", native_field(plan, "chain")?)?;
+    let chain = native_field(plan, "chain")?;
+    let direct: bool = native_field(test, "payload")?.hasattr("actual_cte")?;
+    fields.set_item(
+        "real_model_count",
+        if direct { None } else { Some(chain.len()?) },
+    )?;
+    let header: Bound<'py, PyDict> =
+        native_field(&native_field(test, "test_block")?, "header_values")?.cast_into::<PyDict>()?;
+    let timeout: Option<String> = match header.get_item(TIMEOUT_HEADER_KEY)? {
+        Some(value) => value.extract()?,
+        None => None,
+    };
+    let timeout_seconds: Option<u64> = match timeout.as_deref().and_then(parse_execution_limit) {
+        Some(ExecutionLimit::Seconds(seconds)) => Some(seconds),
+        Some(ExecutionLimit::Disabled) | None => None,
+    };
+    fields.set_item("timeout", timeout)?;
+    fields.set_item("timeout_seconds", timeout_seconds)?;
+    fields.set_item("chain", chain)?;
     fields.set_item("assertions", native_field(plan, "assertions")?)?;
     fields.set_item("sql_analysis_enabled", analysis)?;
     new_record(py, RecordId::SqlTestPlanEntry, (), Some(&fields))

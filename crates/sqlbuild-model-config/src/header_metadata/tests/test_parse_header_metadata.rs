@@ -199,6 +199,47 @@ fn given_header_metadata_when_parsing_then_python_parses_and_errors_result() {
             ),
         },
         HeaderMetadataTestCase {
+            description: "JSON meta is an option, not an argument",
+            columns: Value::Null,
+            audits: Value::List(vec![map(&[(
+                "row_count",
+                map(&[
+                    ("minimum", Value::Int(1)),
+                    (
+                        "meta",
+                        map(&[
+                            ("region", Value::Str("emea")),
+                            ("weight", Value::Float),
+                            ("tiers", Value::List(vec![Value::Str("gold"), Value::Null])),
+                        ]),
+                    ),
+                ]),
+            )])]),
+            expected_summary: Ok(&["row_count:minimum"]),
+        },
+        HeaderMetadataTestCase {
+            description: "a meta date fails with its path",
+            columns: Value::Null,
+            audits: Value::List(vec![map(&[(
+                "a",
+                map(&[(
+                    "meta",
+                    map(&[("window", map(&[("since", Value::Date("2020, 1, 1"))]))]),
+                )]),
+            )])]),
+            expected_summary: Err(
+                "/project/models/orders.sql model audit 'a' 'meta' must map string keys to JSON values; meta['window']['since'] is not JSON-serialisable: datetime.date(2020, 1, 1)",
+            ),
+        },
+        HeaderMetadataTestCase {
+            description: "a non-mapping meta fails",
+            columns: Value::Null,
+            audits: Value::List(vec![map(&[("a", map(&[("meta", Value::Str("emea"))]))])]),
+            expected_summary: Err(
+                "/project/models/orders.sql model audit 'a' 'meta' must be a mapping of JSON values, got 'emea'",
+            ),
+        },
+        HeaderMetadataTestCase {
             description: "a boolean count fails",
             columns: Value::Null,
             audits: Value::List(vec![map(&[(

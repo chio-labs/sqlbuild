@@ -105,6 +105,17 @@ class StrictAdapter(
         """Cancel a connection's running statement from another thread; False if unsupported."""
         ...
 
+    def create_sql_test_output(self, *, connection: Any, sql: str, name: str) -> str | None:
+        """Optional: a relation holding a unit test's output, or `None` to compare inline."""
+
+        del connection, sql, name
+        return None
+
+    def drop_sql_test_output(self, *, connection: Any, relation: str) -> None:
+        """Optional: remove a relation `create_sql_test_output` returned."""
+
+        del connection, relation
+
     @abstractmethod
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
         """Return whether ``list_relations`` reports every relation in this scope."""

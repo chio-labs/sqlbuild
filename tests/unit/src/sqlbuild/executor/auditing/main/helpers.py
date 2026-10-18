@@ -74,6 +74,8 @@ def writer_adapter() -> Any:
             render_framework_type=lambda *args, **kwargs: "",
             render_create_audit_result_table_sql=lambda *args, **kwargs: "",
             render_create_audit_result_index_sqls=lambda *args, **kwargs: (),
+            get_columns=lambda *args, **kwargs: (),
+            render_add_columns=lambda *args, **kwargs: (),
         ),
     )
 

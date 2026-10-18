@@ -1227,6 +1227,8 @@ def build_deep_shared_missing_mock_project_files(*, layers: int) -> dict[str, st
             'adapter = "duckdb"\n\n'
             "[connection]\n"
             'database = "deep_demo.duckdb"\n\n'
+            "[settings]\n"
+            f"unit_test_max_real_models = {2 * layers + 2}\n\n"
             "[defaults]\n"
             'materialized = "table"\n'
         ),
@@ -1930,3 +1932,115 @@ def build_helper_reference_project_files(
             f'TEST (name "{test_name}");\n\nWITH\n{_HELPER_REFERENCE_TESTS[test_name]}\nSELECT 1\n'
         )
     return files
+
+
+COST_GUARD_PROJECT_TOML: str = """
+name = "shop"
+adapter = "duckdb"
+default_target = "dev"
+
+[connection]
+database = "warehouse.duckdb"
+
+[targets.dev]
+schema = "main"
+""".strip()
+COST_GUARD_RAW_ORDERS_SOURCE: str = (
+    "sources:\n"
+    "  - name: raw_orders\n    description: Raw orders.\n"
+    "    schema: main\n"
+    "    table: raw_orders\n"
+    "    columns:\n"
+    "      - name: order_id\n        type: INTEGER\n"
+    "      - name: amount\n        type: INTEGER\n"
+)
+SLOW_SCALAR_SQL: str = "(SELECT COUNT(*) FROM range(100000000000))"
+
+
+def build_order_chain_files(*, chain_length: int) -> dict[str, str]:
+    """A source-fed chain of `chain_length` order models and one unit test of the last one."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": COST_GUARD_PROJECT_TOML,
+        "sources/raw_orders.yml": COST_GUARD_RAW_ORDERS_SOURCE,
+        "models/order_step_1.sql": (
+            "MODEL (description 'Order step 1.', materialized table);\n\n"
+            'SELECT order_id, amount FROM __source("raw_orders")\n'
+        ),
+    }
+    for step in range(2, chain_length + 1):
+        files[f"models/order_step_{step}.sql"] = (
+            f"MODEL (description 'Order step {step}.', materialized table);\n\n"
+            f'SELECT order_id, amount + 1 AS amount FROM __ref("order_step_{step - 1}")\n'
+        )
+    files["tests/unit/order_chain_totals.sql"] = (
+        "TEST();\n\nWITH\n__source__raw_orders AS (\n  SELECT 1 AS order_id, 5 AS amount\n),\n"
+        f"__expected__order_step_{chain_length} AS (\n"
+        f"  SELECT 1 AS order_id, {4 + chain_length} AS amount\n)\n"
+    )
+    return files
+
+
+def stored_test_outputs(*, database_path: Path) -> list[str]:
+    """Persistent relations named like a stored unit-test output."""
+
+    with duckdb.connect(str(database_path), read_only=True) as connection:
+        rows: list[tuple[str]] = connection.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_name LIKE '__sqb_test_output%'"
+        ).fetchall()
+    return [row[0] for row in rows]
+
+
+def slow_model_files(*, max_duration: str) -> dict[str, str]:
+    """A slow model with `max_duration`, a model reading it and an independent model."""
+
+    return {
+        "sqlbuild_project.toml": COST_GUARD_PROJECT_TOML,
+        "models/order_scans.sql": (
+            "MODEL (description 'Order scans.', materialized table, "
+            f'max_duration "{max_duration}");\n\n'
+            f"SELECT 1 AS order_id, {SLOW_SCALAR_SQL} AS scanned\n"
+        ),
+        "models/order_scan_summary.sql": (
+            "MODEL (description 'Order scan summary.', materialized table);\n\n"
+            'SELECT COUNT(*) AS orders FROM __ref("order_scans")\n'
+        ),
+        "models/customers.sql": (
+            "MODEL (description 'Customers.', materialized table);\n\nSELECT 100 AS customer_id\n"
+        ),
+    }
+
+
+SLOW_SWAP_ADAPTER: str = (
+    "from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter\n\n\n"
+    "class DuckDbSlowSwapAdapter(DuckDbAdapter):\n"
+    "    adapter_name = 'duckdb_slow_swap'\n\n"
+    "    def render_swap(self, *, left, right):\n"
+    "        first, *rest = super().render_swap(left=left, right=right)\n"
+    "        if 'order_totals' not in left:\n"
+    "            return (first, *rest)\n"
+    "        return (first, 'SELECT COUNT(*) FROM range(100000000000)', *rest)\n"
+)
+
+
+def slow_promotion_files(
+    *, database: Path, max_duration: str, order_total: int, customer_id: int
+) -> dict[str, str]:
+    """A model whose promotion swap is slow on a rebuild, and an independent model after it."""
+
+    return {
+        "sqlbuild_project.toml": COST_GUARD_PROJECT_TOML.replace(
+            'adapter = "duckdb"', 'adapter = "duckdb_slow_swap"'
+        ).replace('database = "warehouse.duckdb"', f'database = "{database}"'),
+        "adapters/duckdb_slow_swap.py": SLOW_SWAP_ADAPTER,
+        "models/order_totals.sql": (
+            "MODEL (description 'Order totals.', materialized table, "
+            f'max_duration "{max_duration}");\n\n'
+            f"SELECT 1 AS order_id, {order_total} AS total\n"
+        ),
+        "models/z_customers.sql": (
+            "MODEL (description 'Customers.', materialized table);\n\n"
+            f"SELECT {customer_id} AS customer_id\n"
+        ),
+    }

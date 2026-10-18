@@ -1,3 +1,4 @@
+pub mod fixed_duration_seconds;
 pub mod retention_override;
 pub mod table_type_override;
 pub mod validate_column_migrations;

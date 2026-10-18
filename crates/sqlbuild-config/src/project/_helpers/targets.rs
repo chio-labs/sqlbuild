@@ -12,7 +12,7 @@ use crate::project::_helpers::fields::{
 use crate::project::_helpers::keys::{
     Place, reject_removed_virtual_keys, reject_unknown_mapping_keys, validate_allowed_keys,
 };
-use crate::project::_helpers::sections::fixed_duration_seconds;
+use crate::project::_helpers::sections::{fixed_duration_seconds, item_timeout};
 use crate::project::_helpers::values::{int_below, is_int};
 use crate::project::constants::{
     CLONE_KEYS, CONFIRMATION_POLICIES, EXECUTION_LIMIT_KEYS, MAX_FULL_ROWS_KEY,
@@ -100,15 +100,21 @@ fn execution_limits(payload: Option<&ConfigValue>, label: &str, file: ConfigFile
             }
         },
     };
-    Ok(object(
-        "ExecutionLimitsConfig",
-        vec![
-            ("max_models", value_or_none(max_models)),
-            ("max_duration", text_or_none(max_duration)),
-            ("max_duration_seconds", seconds),
-            ("remediation", optional_text_field(mapping, "remediation")?),
-        ],
-    ))
+    let mut fields: Fields = vec![
+        ("max_models", value_or_none(max_models)),
+        ("max_duration", text_or_none(max_duration)),
+        ("max_duration_seconds", seconds),
+        ("remediation", optional_text_field(mapping, "remediation")?),
+    ];
+    for (key, seconds_key) in [
+        ("test_timeout", "test_timeout_seconds"),
+        ("scenario_timeout", "scenario_timeout_seconds"),
+    ] {
+        let (text, seconds) = item_timeout(mapping, key, (label, file), None)?;
+        fields.push((key, text));
+        fields.push((seconds_key, seconds));
+    }
+    Ok(object("ExecutionLimitsConfig", fields))
 }
 
 /// Whole seconds as a Python integer.

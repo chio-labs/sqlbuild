@@ -1,5 +1,7 @@
 """Runtime execution-limit exceptions."""
 
+from __future__ import annotations
+
 
 class ExecutionDurationLimitError(Exception):
     """Raised when a build exceeds its configured maximum duration."""
@@ -25,3 +27,12 @@ class ExecutionDurationLimitError(Exception):
         )
         self.help = remediation
         super().__init__(self.message)
+
+
+class ItemTimeoutError(Exception):
+    """Raised inside one test, scenario or model attempt once its own time limit has passed."""
+
+    code: str = "C417"
+
+    def __init__(self, *, kind: str, name: str, limit: str) -> None:
+        super().__init__(f"{kind} '{name}' exceeded its {limit} time limit")

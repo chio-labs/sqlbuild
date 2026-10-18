@@ -135,7 +135,7 @@ pub(crate) const PLAN_ROUTE: Route = routed(
     REQUEST_KEYWORD_SHAPE,
 );
 
-const BUILD_FIELDS: [Field; 34] = [
+const BUILD_FIELDS: [Field; 35] = [
     PROJECT_DIR,
     NO_SQL_VALIDATION,
     same("no_cache"),
@@ -170,6 +170,7 @@ const BUILD_FIELDS: [Field; 34] = [
     attr("event_output_path", "event_output"),
     same("max_microbatches"),
     same("selection_diagnostics"),
+    same("test_timeout"),
 ];
 const BUILD_ARGUMENTS: [Field; 1] = [request(class("BuildCommandRequest"), &BUILD_FIELDS)];
 pub(crate) const BUILD_ROUTE: Route = routed(
@@ -202,7 +203,7 @@ pub(crate) const FRESHNESS_ROUTE: Route = routed(
     REQUEST_KEYWORD_SHAPE,
 );
 
-const TEST_FIELDS: [Field; 12] = [
+const TEST_FIELDS: [Field; 13] = [
     PROJECT_DIR,
     NO_SQL_VALIDATION,
     NO_COLOR,
@@ -215,6 +216,7 @@ const TEST_FIELDS: [Field; 12] = [
     same("concurrency"),
     attr("case_name", "case"),
     same("inspect"),
+    same("test_timeout"),
 ];
 const TEST_ARGUMENTS: [Field; 1] = [request(class("TestCommandRequest"), &TEST_FIELDS)];
 pub(crate) const TEST_ROUTE: Route = routed(
@@ -682,7 +684,7 @@ const SCENARIO_COMMON: [Field; 7] = [
     EXCLUDE,
     attr("retain", "scenario_retain"),
 ];
-const SCENARIO_TEST_FIELDS: [Field; 15] = [
+const SCENARIO_TEST_FIELDS: [Field; 16] = [
     SCENARIO_COMMON[0],
     SCENARIO_COMMON[1],
     SCENARIO_COMMON[2],
@@ -698,6 +700,7 @@ const SCENARIO_TEST_FIELDS: [Field; 15] = [
     SNAPSHOT_LIMITS,
     JSON_OUTPUT,
     JSON_OUTPUT_PATH,
+    same("scenario_timeout"),
 ];
 const SCENARIO_TEST_ARGUMENTS: [Field; 1] = [request(
     class("ScenarioTestCommandRequest"),

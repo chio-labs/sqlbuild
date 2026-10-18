@@ -26,7 +26,10 @@ pub struct BuildResultFacts {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BuildCounts {
     pub success: usize,
+    /// Failed items, timed-out items included.
     pub failure: usize,
+    /// Timed-out models and tests, also counted in `failure`.
+    pub timeout: usize,
     pub skipped: usize,
     pub warning: usize,
     pub insufficient: usize,

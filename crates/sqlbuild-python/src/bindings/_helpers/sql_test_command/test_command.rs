@@ -49,6 +49,9 @@ use crate::bindings::_helpers::result_output::documents::write_execution_json_ou
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
 use crate::bindings::_helpers::result_output::resource_ids::sql_test_identity;
+use crate::bindings::_helpers::sql_test_command::timeouts::{
+    RunTimeout, TimeoutKind, resolve_run_timeout,
+};
 
 const DECIMAL_KIND: &str = "decimal";
 const PASS_OUTCOME: &str = "pass";
@@ -185,6 +188,16 @@ fn expectation_rows<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTu
     PyTuple::new(py, rows)
 }
 
+/// `N real models` for a model test, else empty.
+fn real_model_detail(result: &Bound<'_, PyAny>) -> PyResult<String> {
+    let count: Option<usize> = native_field(result, "real_model_count")?.extract()?;
+    Ok(match count {
+        Some(1) => "  1 real model".to_owned(),
+        Some(count) => format!("  {count} real models"),
+        None => String::new(),
+    })
+}
+
 /// The model a planned test's progress rows are grouped under.
 fn entry_group(entry: &Bound<'_, PyAny>) -> PyResult<String> {
     let mut chain: Vec<(String, bool)> = Vec::new();
@@ -240,6 +253,7 @@ impl TestCallbackRelay {
                     text(py, outcome_status(&result.getattr("outcome")?)?),
                 ),
                 ("child_rows", expectation_rows(result)?.into_any()),
+                ("detail", text(py, &real_model_detail(result)?)),
                 ("error_code", result.getattr("error_code")?),
                 ("error_help", result.getattr("error_help")?),
                 ("error_message", result.getattr("error_message")?),
@@ -465,7 +479,7 @@ fn inspect(stream: &Bound<'_, PyAny>, plan_output: &Bound<'_, PyAny>) -> PyResul
 fn run_tests<'py>(
     invocation: &Bound<'py, PyAny>,
     pipeline: &Bound<'py, PyAny>,
-    concurrency: i64,
+    (concurrency, timeout): (i64, &RunTimeout),
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = invocation.py();
     let stream: Bound<'py, PyAny> = invocation.getattr("progress_stream")?;
@@ -578,6 +592,7 @@ fn run_tests<'py>(
                 ("max_concurrency", PyInt::new(py, concurrency).into_any()),
                 ("callbacks", callbacks),
                 ("run_id", pipeline.getattr("project")?.getattr("run_id")?),
+                ("timeouts", timeout_record(py, timeout)?),
             ],
         )?
         .try_iter()?
@@ -587,6 +602,14 @@ fn run_tests<'py>(
     let results: Vec<Bound<'py, PyAny>> = executed?;
     closed?;
     Ok(results)
+}
+
+/// The executor's `RunItemTimeouts` for a resolved run limit.
+pub(crate) fn timeout_record<'py>(
+    py: Python<'py>,
+    timeout: &RunTimeout,
+) -> PyResult<Bound<'py, PyAny>> {
+    host::entry(py, ExecutorHost::RunItemTimeouts)?.call((), Some(&timeout.keywords(py)?))
 }
 
 /// Write the summary, failures and JSON output; returns the exit code.
@@ -669,7 +692,16 @@ pub(crate) fn run_test_command(py: Python<'_>, request: &Bound<'_, PyAny>) -> Py
     header.set_item("concurrency", concurrency)?;
     header.set_item("use_color", invocation.getattr("use_color")?)?;
     write_execution_header(py, Some(header))?;
-    let results: Vec<Bound<'_, PyAny>> = run_tests(&invocation, &pipeline, concurrency)?;
+    let timeout: RunTimeout = resolve_run_timeout(
+        (
+            &native_field(&pipeline, "project")?,
+            &invocation.getattr("discovered_inputs")?,
+        ),
+        request.getattr("test_timeout")?.extract()?,
+        TimeoutKind::Test,
+    )?;
+    let results: Vec<Bound<'_, PyAny>> =
+        run_tests(&invocation, &pipeline, (concurrency, &timeout))?;
     write_test_runtime_target(
         (
             &native_field(&invocation, "effective_project_dir")?

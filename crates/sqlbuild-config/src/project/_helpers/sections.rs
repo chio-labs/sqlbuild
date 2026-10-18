@@ -8,6 +8,7 @@ use crate::project::_helpers::fields::{
     optional_text_field, string_mapping, string_sequence, text_or_none, value_or_none,
 };
 use crate::project::_helpers::keys::{Place, reject_removed_virtual_keys, validate_allowed_keys};
+use crate::project::_helpers::targets::seconds_value;
 use crate::project::_helpers::values::{int_below, python_equal};
 use crate::project::constants::{
     AUDIT_SEVERITIES, COLLECTION_RENDERINGS, COLUMN_CONTRACT_MODES, CONCURRENCY_KEY,
@@ -18,6 +19,10 @@ use crate::project::constants::{
     SETTINGS_KEYS, SNAPSHOT_FULL_REFRESH_POLICIES, SNAPSHOT_KEYS, SNAPSHOT_LIMIT_KEYS,
     SNAPSHOT_SCHEMA_CHANGE_POLICIES, SQL_ANALYSIS_KEY, UNACCOUNTED_PARTITION_POLICIES,
     USD_PER_CREDIT_KEY, ZERO_FIXED_DURATION, ZERO_FLOAT,
+};
+use crate::project::constants::{
+    DEFAULT_TEST_TIMEOUT, DEFAULT_UNIT_TEST_MAX_REAL_MODELS, DISABLED_VALUE, SCENARIO_TIMEOUT_KEY,
+    TEST_TIMEOUT_KEY, UNIT_TEST_MAX_REAL_MODELS_KEY,
 };
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
@@ -36,6 +41,54 @@ pub(crate) fn fixed_duration_seconds(value: &str, allow_zero: bool) -> Loaded<Op
     Ok(parse_duration(value)?
         .filter(|duration| !duration.has_calendar_component())
         .map(|duration| duration.fixed_seconds().decimal()))
+}
+
+/// A per-item execution timeout: its text and whole seconds, `None` seconds when disabled.
+pub(crate) fn item_timeout(
+    mapping: &Entries,
+    key: &str,
+    (label, file): (&str, ConfigFile),
+    default: Option<&str>,
+) -> Loaded<(Built, Built)> {
+    let Some(text) = optional_str(mapping, key)?.or_else(|| default.map(str::to_owned)) else {
+        return Ok((
+            Built::Value(ConfigValue::Null),
+            Built::Value(ConfigValue::Null),
+        ));
+    };
+    if text == DISABLED_VALUE {
+        return Ok((
+            Built::Value(ConfigValue::String(text)),
+            Built::Value(ConfigValue::Null),
+        ));
+    }
+    match fixed_duration_seconds(&text, false)? {
+        Some(seconds) => Ok((
+            Built::Value(ConfigValue::String(text)),
+            Built::Value(seconds_value(&seconds)),
+        )),
+        None => Err(ConfigFailure::at(
+            file,
+            format!(
+                "{label}.{key} must be a positive fixed duration such as '30s' or '10m', or \
+                 'disabled'"
+            ),
+        )),
+    }
+}
+
+fn real_model_limit(mapping: &Entries) -> Loaded<ConfigValue> {
+    let value = optional_int(
+        mapping,
+        UNIT_TEST_MAX_REAL_MODELS_KEY,
+        DEFAULT_UNIT_TEST_MAX_REAL_MODELS,
+    )?;
+    if int_below(&value, 1) {
+        return Err(ConfigFailure::plain(format!(
+            "settings.{UNIT_TEST_MAX_REAL_MODELS_KEY} must be >= 1"
+        )));
+    }
+    Ok(value)
 }
 
 fn settings_mapping(payload: Option<&ConfigValue>, file: ConfigFile) -> Loaded<&Entries> {
@@ -185,7 +238,24 @@ pub(crate) fn load_settings(payload: Option<&ConfigValue>, file: ConfigFile) -> 
             "default_audit_run_scope",
             text_or_none(optional_str(mapping, "default_audit_run_scope")?),
         ),
+        (
+            UNIT_TEST_MAX_REAL_MODELS_KEY,
+            Built::Value(real_model_limit(mapping)?),
+        ),
     ];
+    let mut fields = fields;
+    for (key, seconds_key, default) in [
+        (
+            TEST_TIMEOUT_KEY,
+            "test_timeout_seconds",
+            Some(DEFAULT_TEST_TIMEOUT),
+        ),
+        (SCENARIO_TIMEOUT_KEY, "scenario_timeout_seconds", None),
+    ] {
+        let (text, seconds) = item_timeout(mapping, key, ("settings", file), default)?;
+        fields.push((key, text));
+        fields.push((seconds_key, seconds));
+    }
     Ok(object("SettingsConfig", fields))
 }
 

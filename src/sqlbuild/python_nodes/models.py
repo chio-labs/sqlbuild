@@ -176,6 +176,7 @@ class AuditCase:
     thresholds: MeasurementThresholds | None = None
     minimum_samples: int | None = None
     evidence_limit: int | None = None
+    meta: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         validate_audit_case(
@@ -183,4 +184,5 @@ class AuditCase:
             definition=self.definition,
             minimum_samples=self.minimum_samples,
             evidence_limit=self.evidence_limit,
+            meta=self.meta,
         )

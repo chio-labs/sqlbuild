@@ -3,9 +3,9 @@
 use pyo3::IntoPyObject;
 use pyo3::call::PyCallArgs;
 use pyo3::exceptions::PyRuntimeError;
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyResult, Python};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyDictMethods};
 
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
@@ -39,6 +39,19 @@ pub(crate) fn error_class(py: Python<'_>, id: ErrorId) -> PyResult<Bound<'_, PyA
         .get(py)
         .ok_or_else(|| PyRuntimeError::new_err("native error classes are not registered"))?;
     Ok(classes[id as usize].bind(py).clone())
+}
+
+/// A raisable native `id` error carrying `message` and the diagnostic `code`.
+pub(crate) fn new_error(py: Python<'_>, id: ErrorId, message: String, code: &str) -> PyErr {
+    let raised = (|| {
+        let options: Bound<'_, PyDict> = PyDict::new(py);
+        options.set_item("code", code)?;
+        error_class(py, id)?.call((message,), Some(&options))
+    })();
+    match raised {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
 }
 
 /// The native record class or string enum `id` as registered, ignoring later attribute replacement.

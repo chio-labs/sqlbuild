@@ -85,6 +85,10 @@ const R_EXECUTION_LIMITS_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("max_duration", FieldDefault::None),
         FieldSpec::new("max_duration_seconds", FieldDefault::None),
         FieldSpec::new("remediation", FieldDefault::None),
+        FieldSpec::new("test_timeout", FieldDefault::None),
+        FieldSpec::new("test_timeout_seconds", FieldDefault::None),
+        FieldSpec::new("scenario_timeout", FieldDefault::None),
+        FieldSpec::new("scenario_timeout_seconds", FieldDefault::None),
     ],
 };
 const R_TARGET_DIFF_CONFIG: RecordSpec = RecordSpec {
@@ -203,6 +207,11 @@ const R_SETTINGS_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("table_promotion_mode", FieldDefault::None),
         FieldSpec::new("default_audit_severity", FieldDefault::None),
         FieldSpec::new("default_audit_run_scope", FieldDefault::None),
+        FieldSpec::new("unit_test_max_real_models", FieldDefault::Int(10)),
+        FieldSpec::new("test_timeout", FieldDefault::Text("30s")),
+        FieldSpec::new("test_timeout_seconds", FieldDefault::Int(30)),
+        FieldSpec::new("scenario_timeout", FieldDefault::None),
+        FieldSpec::new("scenario_timeout_seconds", FieldDefault::None),
     ],
 };
 const R_SCOPES_CONFIG: RecordSpec = RecordSpec {
@@ -317,6 +326,7 @@ const R_DEFAULTS_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("batch_size", FieldDefault::None),
         FieldSpec::new("batch_concurrency", FieldDefault::None),
         FieldSpec::new("max_microbatches", FieldDefault::None),
+        FieldSpec::new("max_duration", FieldDefault::None),
         FieldSpec::new("unaccounted_partition_policy", FieldDefault::None),
         FieldSpec::new("replay_on_change", FieldDefault::None),
         FieldSpec::new("row_diff_exclude_columns", FieldDefault::EmptyTuple),
@@ -559,6 +569,7 @@ const R_SCHEMA_AUDIT_INSTANCE: RecordSpec = RecordSpec {
         FieldSpec::new("thresholds", FieldDefault::None),
         FieldSpec::new("minimum_samples", FieldDefault::None),
         FieldSpec::new("evidence_limit", FieldDefault::None),
+        FieldSpec::new("meta", FieldDefault::None),
         FieldSpec {
             name: "location",
             default: FieldDefault::None,

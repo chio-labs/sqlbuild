@@ -1294,6 +1294,7 @@ def test_given_python_asset_with_json_output_when_building_then_json_includes_py
     assert payload["summary"] == {
         "success_count": 1,
         "failure_count": 0,
+        "timeout_count": 0,
         "skipped_count": 0,
         "warning_count": 0,
         "python_check_pass_count": 0,

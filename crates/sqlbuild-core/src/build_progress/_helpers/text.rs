@@ -2,7 +2,8 @@
 
 use crate::build_progress::constants::{
     ERROR, FAILED, INSUFFICIENT, PASS, ROW_COUNT_ABBREVIATION_THRESHOLD, ROW_COUNT_BILLION,
-    ROW_COUNT_MILLION, ROW_COUNT_THOUSAND, SECONDS_PER_MINUTE, SKIPPED, SUCCESS, WARN,
+    ROW_COUNT_MILLION, ROW_COUNT_THOUSAND, SECONDS_PER_MINUTE, SKIPPED, SUCCESS, TIMEOUT_CODE,
+    TIMEOUT_OUTCOME, WARN,
 };
 use crate::build_progress::models::SkipText;
 use crate::text::main::python_isspace::python_isspace;
@@ -98,8 +99,17 @@ pub(crate) fn test_outcome_display(outcome: &str) -> &'static str {
     match outcome {
         PASS => "PASS",
         ERROR => "ERROR",
+        TIMEOUT_OUTCOME => "TIMEOUT",
         _ => "FAIL",
     }
+}
+
+/// `TIMEOUT` for a model attempt stopped by its time limit, else its execution status word.
+pub(crate) fn model_status_display(status: &str, error_code: Option<&str>) -> String {
+    if status == FAILED && error_code == Some(TIMEOUT_CODE) {
+        return "TIMEOUT".to_owned();
+    }
+    execution_status_display(status)
 }
 
 /// `  <mode> skip: <reason>` for a skipped row.

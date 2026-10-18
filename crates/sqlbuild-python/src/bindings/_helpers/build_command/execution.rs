@@ -36,6 +36,8 @@ use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::sql_test_command::test_command::timeout_record;
+use crate::bindings::_helpers::sql_test_command::timeouts::{TimeoutKind, resolve_run_timeout};
 
 const EXECUTION_COMMAND: &str = "sqb build";
 const SUCCESS_STATUS: &str = "success";
@@ -331,6 +333,17 @@ pub(crate) fn execute_build_plan<'py>(
             ("end_cursor_int", end_int.clone()),
             ("use_color", boolean(py, context.use_color)),
             ("providers", providers.clone()),
+            (
+                "test_timeouts",
+                timeout_record(
+                    py,
+                    &resolve_run_timeout(
+                        (&project, &context.get("discovered_inputs")?),
+                        request("test_timeout")?.extract()?,
+                        TimeoutKind::Test,
+                    )?,
+                )?,
+            ),
             (
                 "project_relations",
                 build_project_relation_targets(

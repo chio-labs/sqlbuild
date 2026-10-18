@@ -17,6 +17,8 @@ pub struct ParsedAudit<N> {
     pub thresholds: Option<ParsedThresholds>,
     pub minimum_samples: Option<N>,
     pub evidence_limit: Option<N>,
+    /// The authored mapping of JSON values, reported with results and never evaluated.
+    pub meta: Option<N>,
 }
 
 /// One measurement threshold bound with its limits as Python floats.

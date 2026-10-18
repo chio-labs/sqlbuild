@@ -144,6 +144,7 @@ fn plan_audit<'py>(
         "attached_column_name",
         "always_run",
         "description",
+        "meta",
     ] {
         values.set_item(field, native_field(&audit, field)?)?;
     }

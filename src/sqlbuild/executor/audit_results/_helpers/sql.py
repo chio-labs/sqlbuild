@@ -17,6 +17,7 @@ from sqlbuild.executor.audit_results.constants import (
     COLUMN_ATTACHMENT_KIND,
     COLUMN_AUDIT_DEFINITION_NAME,
     COLUMN_AUDIT_DESCRIPTION,
+    COLUMN_AUDIT_META_JSON,
     COLUMN_AUDIT_NAME,
     COLUMN_BINDING_KEY,
     COLUMN_DEFINITION_FINGERPRINT,
@@ -110,47 +111,29 @@ def build_insert_sql(
     schema: str,
     records: Sequence[AuditResultRecord],
     render_qualified_name: Callable[..., str | None],
+    include_meta: bool = True,
 ) -> str:
     if not records:
         raise ExecutorInputError("audit result insert requires at least one record")
     qualified_name: str = build_qualified_table_name(
         database=database, schema=schema, render_qualified_name=render_qualified_name
     )
-    rows: str = ", ".join(_record_values(record) for record in records)
-    return f"INSERT INTO {qualified_name} ({', '.join(AUDIT_RESULT_COLUMNS)}) VALUES {rows}"
+    columns: tuple[str, ...] = insert_columns(records=records, include_meta=include_meta)
+    rows: str = ", ".join(_record_values(record=record, columns=columns) for record in records)
+    return f"INSERT INTO {qualified_name} ({', '.join(columns)}) VALUES {rows}"
 
 
-def build_read_latest_sql(
-    *,
-    database: str | None,
-    schema: str,
-    audit_name: str,
-    binding_key: str,
-    execution_fingerprint: str,
-    run_scope_phase: str,
-    limit: int,
-    render_qualified_name: Callable[..., str | None],
-) -> str:
-    qualified_name: str = build_qualified_table_name(
-        database=database, schema=schema, render_qualified_name=render_qualified_name
-    )
-    predicates: tuple[tuple[str, str], ...] = (
-        (COLUMN_AUDIT_NAME, audit_name),
-        (COLUMN_BINDING_KEY, binding_key),
-        (COLUMN_EXECUTION_FINGERPRINT, execution_fingerprint),
-        (COLUMN_RUN_SCOPE_PHASE, run_scope_phase),
-    )
-    where_sql: str = " AND ".join(
-        f"{column} = {_column_literal(column=column, value=value)}" for column, value in predicates
-    )
-    return (
-        f"SELECT {', '.join(AUDIT_RESULT_COLUMNS)} FROM {qualified_name} "
-        f"WHERE {where_sql} ORDER BY {COLUMN_OCCURRED_AT} DESC, {COLUMN_RESULT_ID} DESC "
-        f"LIMIT {limit}"
-    )
+def insert_columns(
+    *, records: Sequence[AuditResultRecord], include_meta: bool = True
+) -> tuple[str, ...]:
+    """Return inserted columns; the additive meta column is named only when a record has meta."""
+
+    if include_meta and any(record.audit_meta_json is not None for record in records):
+        return AUDIT_RESULT_COLUMNS
+    return tuple(column for column in AUDIT_RESULT_COLUMNS if column != COLUMN_AUDIT_META_JSON)
 
 
-def _record_values(record: AuditResultRecord) -> str:
+def _record_values(*, record: AuditResultRecord, columns: tuple[str, ...]) -> str:
     values: dict[str, object | None] = {
         COLUMN_RESULT_ID: record.result_id,
         COLUMN_SCHEMA_VERSION: record.schema_version,
@@ -191,12 +174,11 @@ def _record_values(record: AuditResultRecord) -> str:
         COLUMN_SQL_DIGEST: record.sql_digest,
         COLUMN_METADATA_JSON: record.metadata_json,
         COLUMN_REUSED: _text_boolean(record.reused),
+        COLUMN_AUDIT_META_JSON: record.audit_meta_json,
     }
     return (
         "("
-        + ", ".join(
-            _column_literal(column=column, value=values[column]) for column in AUDIT_RESULT_COLUMNS
-        )
+        + ", ".join(_column_literal(column=column, value=values[column]) for column in columns)
         + ")"
     )
 

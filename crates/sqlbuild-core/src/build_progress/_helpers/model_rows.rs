@@ -4,7 +4,7 @@ use crate::build_progress::_helpers::audits::{AuditDisplayEntry, aggregate_audit
 use crate::build_progress::_helpers::rows::{TopLevelRow, log_block, sql_block, top_level_line};
 use crate::build_progress::_helpers::text::{
     abbreviated_rows, audit_outcome_display, counter_text, execution_status_display,
-    format_duration, pad, skip_detail, test_outcome_display, truncate_name,
+    format_duration, model_status_display, pad, skip_detail, test_outcome_display, truncate_name,
 };
 use crate::build_progress::constants::{
     BATCH_INDENT, FAILED, HOOK_MAX_LABEL_WIDTH, HOOK_MIN_LABEL_WIDTH, HOOK_PHASE_WIDTH,
@@ -178,7 +178,7 @@ pub(crate) fn model_line(
             counter: &counter_text(counter, layout.total),
             resource_type: &facts.display_type,
             name: &truncate_name(&name, layout.name_width),
-            status: &execution_status_display(&model.status),
+            status: &model_status_display(&model.status, model.error.code.as_deref()),
             duration: &duration,
             detail: &detail,
         },

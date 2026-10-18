@@ -70,14 +70,14 @@ def test_given_failed_debug_build_when_unwinding_then_reports_resources_and_part
     "test_case",
     [
         BuildDurationLimitTestCase(
-            description="DuckDB target cannot guarantee statement cancellation",
+            description="DuckDB target rejects duration beyond its cancellable range",
             project_toml=(
                 'name = "shop"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
-                '[targets.dev.execution_limits]\nmax_duration = "30m"\n'
+                '[targets.dev.execution_limits]\nmax_duration = "30d"\n'
             ),
-            remediation="Use an adapter with safe statement cancellation.",
-            expected_code="C415",
-            expected_error_fragment="cannot cancel active statements safely",
+            remediation="Choose a duration supported by the configured warehouse.",
+            expected_code="C416",
+            expected_error_fragment="max_duration exceeds the largest duration supported",
         ),
         BuildDurationLimitTestCase(
             description="Snowflake target rejects duration beyond statement timeout range",

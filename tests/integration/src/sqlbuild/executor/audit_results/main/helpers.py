@@ -1,8 +1,36 @@
 """Helpers for native audit result integration tests."""
 
 from datetime import UTC, datetime
+from typing import Any
 
+from sqlbuild.adapter.contract.models import ColumnInfo
+from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.executor.audit_results.constants import AUDIT_RESULT_COLUMNS, COLUMN_AUDIT_META_JSON
 from sqlbuild.executor.audit_results.models import AuditResultRecord
+
+LEGACY_AUDIT_RESULT_COLUMNS: tuple[str, ...] = tuple(
+    filter(lambda column: column != COLUMN_AUDIT_META_JSON, AUDIT_RESULT_COLUMNS)
+)
+
+
+def legacy_results_table_sql(adapter: DuckDbAdapter) -> str:
+    """Return results-table DDL as it was before the meta column was added."""
+
+    return adapter.render_create_audit_result_table_sql(database=None, schema="main").replace(
+        f", {COLUMN_AUDIT_META_JSON} VARCHAR", ""
+    )
+
+
+def create_legacy_results_table(adapter: DuckDbAdapter, connection: Any) -> None:
+    """Create the results table without the meta column."""
+
+    connection.execute(legacy_results_table_sql(adapter))
+
+
+def leave_results_table_absent(adapter: DuckDbAdapter, connection: Any) -> None:
+    """Leave the results table for the writer to create."""
+
+    del adapter, connection
 
 
 def build_record() -> AuditResultRecord:
@@ -47,3 +75,10 @@ def build_record() -> AuditResultRecord:
         metadata_json='{"owner":"data"}',
         reused=False,
     )
+
+
+def failing_column_read(**kwargs: object) -> tuple[ColumnInfo, ...]:
+    """A column read that fails, as a warehouse metadata outage would."""
+
+    del kwargs
+    raise RuntimeError("metadata service unavailable")

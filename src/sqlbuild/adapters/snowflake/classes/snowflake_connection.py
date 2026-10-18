@@ -3,6 +3,9 @@
 from typing import Any
 
 from sqlbuild.adapters.snowflake._helpers.session_context import may_switch_session_database
+from sqlbuild.adapters.snowflake.classes.snowflake_active_statements import (
+    SnowflakeActiveStatements,
+)
 from sqlbuild.adapters.snowflake.classes.snowflake_cursor import _SnowflakeCursor
 from sqlbuild.adapters.snowflake.constants import CURRENT_DATABASE_ATTRIBUTE
 
@@ -12,6 +15,7 @@ class _SnowflakeConnection:
 
     def __init__(self, raw_connection: Any) -> None:
         self.raw_connection: Any = raw_connection
+        self.active_statements: SnowflakeActiveStatements = SnowflakeActiveStatements()
 
     def execute(self, sql: str, *, statement_params: dict[str, str] | None = None) -> Any:
         kwargs: dict[str, object] = {}
@@ -24,7 +28,9 @@ class _SnowflakeConnection:
 
     def cursor(self) -> _SnowflakeCursor:
         return _SnowflakeCursor(
-            self.raw_connection.cursor(), on_executed=self._forget_changed_session_context
+            self.raw_connection.cursor(),
+            on_executed=self._forget_changed_session_context,
+            statements=self.active_statements,
         )
 
     def _forget_changed_session_context(self, *, sql: str) -> None:

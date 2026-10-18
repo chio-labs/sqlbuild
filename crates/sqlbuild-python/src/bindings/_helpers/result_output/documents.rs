@@ -26,6 +26,7 @@ const SUCCESS: &str = "success";
 const SKIPPED: &str = "skipped";
 const ERROR_OUTCOME: &str = "error";
 const PASS_OUTCOME: &str = "pass";
+const TIMEOUT_OUTCOME: &str = "timeout";
 const WARN_OUTCOME: &str = "warn";
 const BUILD_OPTIONS: (&[&str], &[&str]) = (
     &["result", "plan"],
@@ -347,6 +348,7 @@ fn build_json<'py>(
                 "failure_count",
                 count(&counted, "failure_count")? + python_fail + check_fail,
             ),
+            ("timeout_count", count(&counted, "timeout_count")?),
             (
                 "skipped_count",
                 count(&counted, "skipped_count")? + python_skipped,
@@ -494,6 +496,7 @@ pub(crate) fn format_test_execution_json<'py>(
     let projection: Projection<'py> = Projection::installed(py)?;
     let results: Vec<Bound<'py, PyAny>> = projection.terminal_results(&results)?;
     let pass_count: usize = count_status(&results, "outcome", PASS_OUTCOME)?;
+    let timeout_count: usize = count_status(&results, "outcome", TIMEOUT_OUTCOME)?;
     let fail_count: usize = results.len() - pass_count;
     emitted(
         &projection,
@@ -505,6 +508,7 @@ pub(crate) fn format_test_execution_json<'py>(
                 &[
                     ("pass_count", pass_count),
                     ("fail_count", fail_count),
+                    ("timeout_count", timeout_count),
                     ("total_count", results.len()),
                 ],
             )?,

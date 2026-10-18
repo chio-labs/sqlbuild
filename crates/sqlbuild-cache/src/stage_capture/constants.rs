@@ -80,6 +80,7 @@ pub const PROJECTED_ATTRIBUTES: [(&str, &[&str]); 15] = [
             "run_scope",
             "always_run",
             "description",
+            "meta",
             "declaration_usages",
             "name",
         ],
@@ -109,6 +110,7 @@ pub const PROJECTED_ATTRIBUTES: [(&str, &[&str]); 15] = [
             "run_scope",
             "always_run",
             "description",
+            "meta",
         ],
     ),
     (

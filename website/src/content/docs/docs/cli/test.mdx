@@ -25,6 +25,7 @@ Positional `SELECTOR` arguments work like `--select`, and both forms can be comb
 | `--select`, `-s` | Select tests by name (`order_status_rules` or `test:order_status_rules`), or the tests targeting specific models |
 | `--exclude` | Exclude tests by name, or the tests targeting specific models |
 | `--warehouse <name>` | Snowflake warehouse for this invocation; overrides the target's `query` [warehouse group](/docs/concepts/project-configuration#command-group-warehouses) and the connection warehouse |
+| `--test-timeout <duration>` | Time limit for each test in this run, such as `30s` or `2m`, or `disabled`; overrides `TEST(timeout ...)`, the target and `[settings] test_timeout` |
 
 Test names are globally unique, so a bare test name selects exactly that test. `test:<name>` is the
 explicit form and accepts the same glob patterns as names, such as `test:orders_*`. A bare pattern
@@ -42,6 +43,13 @@ declared parameter types and nullability, typed values, and a content fingerprin
 are strings in JSON so their scale is preserved. Each test check in JSON output reports its
 `duration_ms`.
 
+Each test row shows how many real (unmocked) models the test executes, such as `3 real models`. A
+test that runs past its [time limit](/docs/concepts/testing#time-limits) is reported as `TIMEOUT`,
+counted under `TIMEOUT=` and excluded from `FAIL=` in the summary line
+(`PASS=4  FAIL=0  TIMEOUT=1  TOTAL=5`), and the run continues with the remaining tests. In `--json`
+output, `summary.fail_count` still includes timed-out tests, and `summary.timeout_count` reports how
+many of them timed out. A timeout still fails the run: `sqb test` exits non-zero.
+
 ## Examples
 
 ```bash
@@ -56,4 +64,7 @@ sqb test order_status_rules
 
 # Run one case of a parameterized test
 sqb test test:order_status_rules --case open_case
+
+# Allow each test two minutes in this run
+sqb test --test-timeout 2m
 ```

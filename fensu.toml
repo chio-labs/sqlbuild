@@ -1323,3 +1323,9 @@ pending_budgets = [
     "crates/sqlbuild-python/src/bindings/_helpers/state_rows/models.rs=3",
     "crates/sqlbuild-python/src/bindings/models.rs=4",
 ]
+
+[[targets.python.rule_exceptions]]
+rule = "FFS120"
+path = "src/sqlbuild/executor/scheduling/classes/recovering_connection_pool.py"
+symbols = ["RecoveringConnectionPool.put"]
+reason = "The override keeps queue.Queue.put's positional protocol, which every pool consumer calls."

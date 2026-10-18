@@ -41,6 +41,7 @@ from sqlbuild.adapter.contract.classes.snapshot_sql import SnapshotSql
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.classes.unkeyed_diff import UnkeyedDiffMixin
 from sqlbuild.adapter.contract.constants import (
+    CANCELLABLE_DURATION_LIMIT_SECONDS,
     DIFF_LEFT_SIDE,
     DIFF_RIGHT_SIDE,
 )
@@ -158,6 +159,8 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             adapter=self, connection=connection, relations=relations
         )
 
+    execution_duration_limit_seconds: ClassVar[int | None] = CANCELLABLE_DURATION_LIMIT_SECONDS
+    statement_cancellation_is_asynchronous: ClassVar[bool] = True
     adapter_name: ClassVar[str] = BuiltinAdapter.BIGQUERY.value
     sql_analysis_dialect_name: ClassVar[str | None] = "bigquery"
     sql_lexical_syntax: ClassVar[SqlLexicalSyntax] = SqlLexicalSyntax(
@@ -1506,10 +1509,10 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return False
 
     def interrupt_connection(self, connection: Any) -> bool:
-        """Cancel a connection's running statement from another thread; False if unsupported."""
+        """Request cancellation of the connection's jobs; BigQuery stops them asynchronously."""
 
-        del connection
-        return False
+        connection.cancel_active_jobs()
+        return True
 
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
         """Return whether ``list_relations`` reports every relation in this scope."""

@@ -4,17 +4,18 @@ use crate::build_progress::_helpers::error_rows::failure_error_block;
 use crate::build_progress::_helpers::text::pad;
 use crate::build_progress::constants::{
     DELTA_SUFFIX, ERROR, FAILED, PASS, PYTHON_NODE_NAME_WIDTH, SKIPPED, SKIPPED_ROLLUP_CAP,
-    SUCCESS, WARN,
+    SUCCESS, TIMEOUT_CODE, TIMEOUT_OUTCOME, WARN,
 };
 use crate::build_progress::models::{AuditResultText, BuildResultText, ErrorText, PythonNodeText};
 use crate::cli_text::models::CliStyle;
 
-/// Pass, warn, fail and skip counts of the footer.
+/// Pass, warn, fail, timeout and skip counts of the footer.
 #[derive(Default)]
 pub(crate) struct FooterCounts {
     pub(crate) pass: i64,
     pub(crate) warn: i64,
     pub(crate) fail: i64,
+    pub(crate) timeout: i64,
     pub(crate) skip: i64,
 }
 
@@ -42,7 +43,11 @@ fn build_audits(result: &BuildResultText) -> impl Iterator<Item = &AuditResultTe
 pub(crate) fn count_results(result: &BuildResultText, python: &[PythonNodeText]) -> FooterCounts {
     let mut counts: FooterCounts = FooterCounts::default();
     for model in &result.models {
-        counts.status(&model.status, !model.warnings.is_empty());
+        if model.status == FAILED && model.error.code.as_deref() == Some(TIMEOUT_CODE) {
+            counts.timeout += 1;
+        } else {
+            counts.status(&model.status, !model.warnings.is_empty());
+        }
     }
     for audit in build_audits(result) {
         match audit.outcome.as_str() {
@@ -63,10 +68,10 @@ pub(crate) fn count_results(result: &BuildResultText, python: &[PythonNodeText])
         counts.status(&load.status, !load.warnings.is_empty());
     }
     for test in &result.tests {
-        if test.outcome == PASS {
-            counts.pass += 1;
-        } else {
-            counts.fail += 1;
+        match test.outcome.as_str() {
+            PASS => counts.pass += 1,
+            TIMEOUT_OUTCOME => counts.timeout += 1,
+            _ => counts.fail += 1,
         }
     }
     for node in python {

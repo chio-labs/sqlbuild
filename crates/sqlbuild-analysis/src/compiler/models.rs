@@ -32,6 +32,8 @@ pub struct SqlTestPlanBatch {
     #[serde(default = "crate::compiler::_helpers::sql_tests::glue::default_true")]
     pub include_plan: bool,
     pub lexical_syntax: LexicalSyntax,
+    #[serde(default)]
+    pub max_unit_test_real_models: Option<usize>,
 }
 
 /// The tests whose model chains to resolve; chain ordering reads only declared dependencies.

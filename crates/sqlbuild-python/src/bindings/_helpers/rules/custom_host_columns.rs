@@ -38,6 +38,7 @@ struct PayloadAudit {
     thresholds: Option<(Option<PayloadBound>, Option<PayloadBound>)>,
     minimum_samples: Option<PayloadValue>,
     evidence_limit: Option<PayloadValue>,
+    meta: Option<PayloadValue>,
 }
 
 /// A threshold bound with its limits as `f64` bits, so every value survives exactly.
@@ -127,6 +128,7 @@ impl PayloadAudit {
             }),
             minimum_samples: audit.minimum_samples.as_ref().map(PayloadValue::new),
             evidence_limit: audit.evidence_limit.as_ref().map(PayloadValue::new),
+            meta: audit.meta.as_ref().map(PayloadValue::new),
         }
     }
 
@@ -145,6 +147,7 @@ impl PayloadAudit {
             }),
             minimum_samples: self.minimum_samples.map(PayloadValue::authored),
             evidence_limit: self.evidence_limit.map(PayloadValue::authored),
+            meta: self.meta.map(PayloadValue::authored),
         }
     }
 }

@@ -258,6 +258,7 @@ def _base_result(
         audit_name=audit.name,
         audit_definition_name=audit.definition_name,
         audit_description=audit.description,
+        audit_meta=audit.meta,
         attachment_kind=audit.attachment_kind,
         severity=audit.severity,
         outcome=outcome,

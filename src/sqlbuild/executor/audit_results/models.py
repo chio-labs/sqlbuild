@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from sqlbuild.adapter.contract.models import ColumnInfo
 from sqlbuild.executor.audit_results._helpers.identity import (
     build_audit_result_id as build_audit_result_id,
 )
@@ -53,3 +55,12 @@ class AuditResultRecord:
     metadata_json: str | None
     reused: bool
     audit_description: str | None = None
+    audit_meta_json: str | None = None
+
+
+@dataclass(frozen=True)
+class AuditResultColumnEvolution:
+    """Adapter callbacks that add result columns missing from a table created earlier."""
+
+    read_columns: Callable[..., tuple[ColumnInfo, ...]]
+    render_add_columns: Callable[..., tuple[str, ...]]

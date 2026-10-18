@@ -50,5 +50,6 @@ fn native_audit(audit: &ParsedAudit<NativeNode<'_>>) -> NativeAudit {
         thresholds: audit.thresholds,
         minimum_samples: audit.minimum_samples.as_ref().map(NativeNode::authored),
         evidence_limit: audit.evidence_limit.as_ref().map(NativeNode::authored),
+        meta: audit.meta.as_ref().map(NativeNode::authored),
     }
 }

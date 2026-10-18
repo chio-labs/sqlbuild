@@ -292,7 +292,7 @@ pub(crate) fn audit_checks<'py>(
         entries.push(("name", native_field(&result, "audit_name")?));
         entries.extend(fields(
             &result,
-            &["audit_definition_name", "audit_description"],
+            &["audit_definition_name", "audit_description", "audit_meta"],
         )?);
         entries.push(("check_id", any(py, audit_check_id(&result)?)?));
         entries.push(("passed", any(py, audit_passed(&result)?)?));

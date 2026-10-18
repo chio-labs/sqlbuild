@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import Token
 
-from sqlbuild.runtime.execution_limits._helpers.context import current_deadline_context
+from sqlbuild.runtime.execution_limits._helpers.cancellation import cancel_connection
+from sqlbuild.runtime.execution_limits._helpers.context import (
+    current_deadline_context,
+    current_invocation_connections_context,
+)
+from sqlbuild.runtime.execution_limits.classes.active_connections import ActiveConnections
 from sqlbuild.runtime.execution_limits.exceptions import ExecutionDurationLimitError
 from sqlbuild.runtime.execution_limits.models import ExecutionDeadline
 
@@ -31,7 +37,16 @@ def execution_deadline_scope(
         max_duration=max_duration,
         remediation=remediation,
     )
+    active: ActiveConnections = ActiveConnections()
     token: Token[ExecutionDeadline | None] = current_deadline_context.set(deadline)
+    connections_token: Token[ActiveConnections | None] = current_invocation_connections_context.set(
+        active
+    )
+    timer: threading.Timer = threading.Timer(
+        max_duration_seconds, _cancel_running, kwargs={"active": active}
+    )
+    timer.daemon = True
+    timer.start()
     try:
         try:
             yield
@@ -44,4 +59,12 @@ def execution_deadline_scope(
         else:
             deadline.enforce()
     finally:
+        timer.cancel()
+        current_invocation_connections_context.reset(connections_token)
         current_deadline_context.reset(token)
+
+
+def _cancel_running(*, active: ActiveConnections) -> None:
+    _ = active.cancel_running(
+        cancel=lambda adapter, connection: cancel_connection(adapter=adapter, connection=connection)
+    )

@@ -80,4 +80,5 @@ pub struct NativeAudit {
     pub thresholds: Option<ParsedThresholds>,
     pub minimum_samples: Option<AuthoredValue>,
     pub evidence_limit: Option<AuthoredValue>,
+    pub meta: Option<AuthoredValue>,
 }

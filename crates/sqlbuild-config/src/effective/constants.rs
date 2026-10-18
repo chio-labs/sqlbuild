@@ -162,6 +162,34 @@ pub(crate) const TARGET_FIELDS: &[TargetField] = &[
         },
     },
     TargetField {
+        group: LIMITS,
+        name: "test_timeout",
+        rule: MergeRule::Overlay {
+            decided_by: &["test_timeout"],
+        },
+    },
+    TargetField {
+        group: LIMITS,
+        name: "test_timeout_seconds",
+        rule: MergeRule::Overlay {
+            decided_by: &["test_timeout"],
+        },
+    },
+    TargetField {
+        group: LIMITS,
+        name: "scenario_timeout",
+        rule: MergeRule::Overlay {
+            decided_by: &["scenario_timeout"],
+        },
+    },
+    TargetField {
+        group: LIMITS,
+        name: "scenario_timeout_seconds",
+        rule: MergeRule::Overlay {
+            decided_by: &["scenario_timeout"],
+        },
+    },
+    TargetField {
         group: Some("diff"),
         name: "max_full_rows",
         rule: MergeRule::Overlay {

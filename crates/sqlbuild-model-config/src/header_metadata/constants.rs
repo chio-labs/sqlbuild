@@ -6,7 +6,7 @@ pub const MODEL_COLUMN_KEYS: [&str; 5] =
 /// The column key a MODEL header may declare and a SCHEMA declaration may not.
 pub const MIGRATE_FROM_KEY: &str = "migrate_from";
 /// Audit options that are not passed to the audit as arguments.
-pub const AUDIT_OPTION_KEYS: [&str; 8] = [
+pub const AUDIT_OPTION_KEYS: [&str; 9] = [
     "name",
     "description",
     "severity",
@@ -15,6 +15,7 @@ pub const AUDIT_OPTION_KEYS: [&str; 8] = [
     "thresholds",
     "minimum_samples",
     "evidence_limit",
+    "meta",
 ];
 /// The `thresholds` keys of the warning and error bounds.
 pub const THRESHOLD_WARN_KEY: &str = "warn";

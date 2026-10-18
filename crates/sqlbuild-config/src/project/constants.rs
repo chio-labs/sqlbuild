@@ -37,7 +37,12 @@ pub(crate) const SETTING_SNIPPET_INDENT: &str = "            ";
 pub(crate) const ADDITIONAL_HELP_SEPARATOR: &str = "\n  = help: ";
 
 /// The `SettingsConfig` fields, which `[settings]` may set.
-pub(crate) const SETTINGS_KEYS: [&str; 11] = [
+pub(crate) const UNIT_TEST_MAX_REAL_MODELS_KEY: &str = "unit_test_max_real_models";
+pub(crate) const DEFAULT_UNIT_TEST_MAX_REAL_MODELS: i64 = 10;
+pub(crate) const TEST_TIMEOUT_KEY: &str = "test_timeout";
+pub(crate) const SCENARIO_TIMEOUT_KEY: &str = "scenario_timeout";
+pub(crate) const DEFAULT_TEST_TIMEOUT: &str = "30s";
+pub(crate) const SETTINGS_KEYS: [&str; 14] = [
     "sql_analysis",
     "require_sql_analysis",
     "query_change_tracking",
@@ -49,8 +54,11 @@ pub(crate) const SETTINGS_KEYS: [&str; 11] = [
     "table_promotion_mode",
     "default_audit_severity",
     "default_audit_run_scope",
+    "unit_test_max_real_models",
+    "test_timeout",
+    "scenario_timeout",
 ];
-pub(crate) const DEFAULTS_KEYS: [&str; 32] = [
+pub(crate) const DEFAULTS_KEYS: [&str; 33] = [
     "append_cursor_inclusive",
     "batch_concurrency",
     "batch_size",
@@ -70,6 +78,7 @@ pub(crate) const DEFAULTS_KEYS: [&str; 32] = [
     "incremental_strategy",
     "lookback",
     "materialized",
+    "max_duration",
     "max_microbatches",
     "merge_exclude_columns",
     "microbatch_strategy",
@@ -85,7 +94,7 @@ pub(crate) const DEFAULTS_KEYS: [&str; 32] = [
     "unaccounted_partition_policy",
 ];
 /// The MODEL header keys, which `[path_defaults]` entries may set.
-pub(crate) const MODEL_HEADER_KEYS: [&str; 67] = [
+pub(crate) const MODEL_HEADER_KEYS: [&str; 68] = [
     "alias",
     "append_cursor_inclusive",
     "audit_factories",
@@ -121,6 +130,7 @@ pub(crate) const MODEL_HEADER_KEYS: [&str; 67] = [
     "invalidate_hard_deletes",
     "lookback",
     "materialized",
+    "max_duration",
     "max_microbatches",
     "merge_exclude_columns",
     "microbatch_limit",
@@ -175,7 +185,13 @@ pub(crate) const TARGET_KEYS: [&str; 18] = [
     "warehouses",
 ];
 pub(crate) const CLONE_KEYS: [&str; 2] = ["allow_as_clone_origin", "allow_as_clone_destination"];
-pub(crate) const EXECUTION_LIMIT_KEYS: [&str; 3] = ["max_models", "max_duration", "remediation"];
+pub(crate) const EXECUTION_LIMIT_KEYS: [&str; 5] = [
+    "max_models",
+    "max_duration",
+    "remediation",
+    "test_timeout",
+    "scenario_timeout",
+];
 pub(crate) const SNAPSHOT_KEYS: [&str; 4] = [
     "current_state_full_refresh",
     "historical_full_refresh",

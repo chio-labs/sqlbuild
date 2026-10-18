@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -170,6 +171,67 @@ def test_given_invalid_measurement_policy_options_when_parsing_then_clear_errors
     with pytest.raises(ValueError, match="outside threshold requires two numeric values"):
         parse_audit_instance(
             raw_audit={"rate": {"thresholds": {"warn": {"outside": (90,)}}}},
+            file_path=Path("models/orders.sql"),
+            label="model orders",
+            error_class=ValueError,
+        )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseAuditInstanceTestCase(
+            description="meta is a reserved option kept unchanged",
+            raw_audit={
+                "expression_is_true": {
+                    "expression": "amount > 0",
+                    "meta": {"region": "emea", "tiers": ["gold", 2], "weight": 1.5},
+                }
+            },
+            expected_definition_name="expression_is_true",
+            expected_always_run=False,
+            expected_argument_keys=("expression",),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_audit_meta_when_parsing_then_meta_is_not_an_argument(
+    test_case: ParseAuditInstanceTestCase,
+) -> None:
+    result: SchemaAuditInstance = parse_audit_instance(
+        raw_audit=test_case.raw_audit,
+        file_path=Path("models/orders.sql"),
+        label="model orders",
+        error_class=ValueError,
+    )
+
+    assert result.definition_name == test_case.expected_definition_name
+    assert tuple(sorted(result.arguments)) == test_case.expected_argument_keys
+    assert result.meta == {"region": "emea", "tiers": ["gold", 2], "weight": 1.5}
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ParseAuditInstanceErrorTestCase(
+            description="meta must be a mapping",
+            raw_audit={"not_null": {"meta": "emea"}},
+            expected_error_fragment="audit 'not_null' 'meta' must be a mapping of JSON values",
+        ),
+        ParseAuditInstanceErrorTestCase(
+            description="meta values must be JSON",
+            raw_audit={"not_null": {"meta": {"since": date(2020, 1, 1)}}},
+            expected_error_fragment=r"'meta' must map string keys to JSON values; meta\['since'\]",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_invalid_audit_meta_when_parsing_then_compile_error_names_the_value(
+    test_case: ParseAuditInstanceErrorTestCase,
+) -> None:
+    with pytest.raises(ValueError, match=test_case.expected_error_fragment):
+        parse_audit_instance(
+            raw_audit=test_case.raw_audit,
             file_path=Path("models/orders.sql"),
             label="model orders",
             error_class=ValueError,

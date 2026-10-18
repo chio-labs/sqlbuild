@@ -14,6 +14,7 @@ use crate::compiler::tests::helpers::{
     tsql_model_cte_collisions_are_renamed_by_token_span,
     tsql_unprovable_cte_renames_are_refused_with_named_ctes,
 };
+use crate::compiler::tests::single_read_helpers::stored_actual_output_is_read_instead_of_the_chain;
 use crate::compiler::tests::test_types::SqlTestRenderingTestCase;
 
 #[test]
@@ -102,6 +103,11 @@ fn given_sql_rendering_cases_when_rendering_native_batches_then_expected_behavio
         SqlTestRenderingTestCase {
             description: "difference samples lift expected helper CTEs",
             run: difference_sample_lifts_expected_helper_ctes,
+            expected_success: true,
+        },
+        SqlTestRenderingTestCase {
+            description: "stored actual outputs are read instead of recomputing the chain",
+            run: stored_actual_output_is_read_instead_of_the_chain,
             expected_success: true,
         },
     ];

@@ -11,6 +11,7 @@ Online: https://sqlbuild.com/docs/concepts/audits/
 - How audits work
 - Measurement audits
 - Audit factories
+- Audit metadata
 - Result history
 - Built-in audits
 - Custom generic audits
@@ -106,12 +107,42 @@ def order_quality():
 Attach it with `MODEL (audit_factories [order_quality])`. Generated cases compile to the same audit
 contract as directly authored instances.
 
+## Audit metadata
+
+Use `meta` to attach structured context, such as the segment a case covers or why its condition
+excludes some rows, so dashboards can group and filter results without parsing descriptions:
+
+```python
+AuditCase(
+    name="valid_order_rate__emea",
+    definition="valid_order_rate",
+    arguments={"condition": "order_id IS NOT NULL AND region = 'emea'"},
+    thresholds=MeasurementThresholds(error=below(99)),
+    meta={
+        "region": "emea",
+        "exclusion": "orders before 2020",
+        "exclusion_reason": "imported without order IDs",
+    },
+)
+```
+
+SQL attachments accept the same option, for example
+`valid_order_rate (condition "order_id IS NOT NULL", meta (region "emea"), ...)`.
+
+`meta` must be a mapping with string keys and JSON values; anything else is a compile error that
+names the offending value. It is never passed to the audit SQL and never affects evaluation,
+thresholds, or audit fingerprints, so changing only `meta` reruns nothing that a `description`
+change would not. It is recorded with each result in the `audit_meta_json` column of
+`_sqlbuild_audit_results`, as `audit_meta` in the `audit_completed` lifecycle event, and as
+`audit_meta` on audit checks in JSON output.
+
 ## Result history
 
 Native warehouse adapters best-effort append confirmed audit outcomes to
 `_sqlbuild_audit_results`. Rows are immutable and use deterministic IDs, so retrying the same result
 is idempotent. Projection failure is reported separately and does not change the audit outcome or
-command exit code. Lifecycle sinks can also consume the corresponding `audit_completed` fact, which
+command exit code. A results table created before `audit_meta_json` existed gains that nullable
+column the first time a result with `meta` is recorded. Lifecycle sinks can also consume the corresponding `audit_completed` fact, which
 is published as each audit finishes.
 
 ## Built-in audits

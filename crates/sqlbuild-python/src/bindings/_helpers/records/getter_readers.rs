@@ -328,6 +328,7 @@ pub(crate) fn read_native_audit_input<'py>(
         "description" => this
             .description(py)
             .and_then(|value| value.into_bound_py_any(py)),
+        "meta" => this.meta(py).and_then(|value| value.into_bound_py_any(py)),
         "declaration_usages" => this
             .declaration_usages(py)
             .and_then(|value| value.into_bound_py_any(py)),
@@ -405,6 +406,7 @@ pub(crate) fn read_native_compiled_audit<'py>(
         "description" => this
             .description(py)
             .and_then(|value| value.into_bound_py_any(py)),
+        "meta" => this.meta(py).and_then(|value| value.into_bound_py_any(py)),
         "key" => this.key(py).and_then(|value| value.into_bound_py_any(py)),
         "scope_deps" => this
             .scope_deps(py)

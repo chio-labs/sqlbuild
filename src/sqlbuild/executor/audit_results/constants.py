@@ -44,6 +44,7 @@ COLUMN_EXECUTED_SQL: str = "executed_sql"
 COLUMN_SQL_DIGEST: str = "sql_digest"
 COLUMN_METADATA_JSON: str = "metadata_json"
 COLUMN_REUSED: str = "reused"
+COLUMN_AUDIT_META_JSON: str = "audit_meta_json"
 
 AUDIT_RESULT_COLUMNS: tuple[str, ...] = (
     COLUMN_RESULT_ID,
@@ -85,6 +86,7 @@ AUDIT_RESULT_COLUMNS: tuple[str, ...] = (
     COLUMN_SQL_DIGEST,
     COLUMN_METADATA_JSON,
     COLUMN_REUSED,
+    COLUMN_AUDIT_META_JSON,
 )
 
 AUDIT_RESULT_COLUMN_TYPES: dict[str, StateSqlValueType] = {

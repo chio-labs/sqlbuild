@@ -7,3 +7,4 @@ pub(crate) const UNKNOWN_GROUP: &str = "(unknown)";
 pub(crate) const NAME_MIN_WIDTH: usize = 50;
 pub(crate) const CHILD_NAME_INDENT: usize = 4;
 pub(crate) const ERROR_SEVERITY: &str = "error";
+pub(crate) const TIMEOUT_CODE: &str = "C417";

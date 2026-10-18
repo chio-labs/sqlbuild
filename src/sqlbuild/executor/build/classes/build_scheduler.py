@@ -50,6 +50,10 @@ from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build._helpers.blocking import downstream_blocked_keys
 from sqlbuild.executor.build._helpers.end_audits import run_end_audits
 from sqlbuild.executor.build._helpers.indexes import build_execution_indexes
+from sqlbuild.executor.build._helpers.model_timeouts import (
+    model_timeout_policy,
+    timed_out_model_result,
+)
 from sqlbuild.executor.build._helpers.retention import (
     apply_table_type_conversion,
     materialization_recreates_relation,
@@ -103,6 +107,7 @@ from sqlbuild.executor.run.models import (
     ModelMaterializationContext,
 )
 from sqlbuild.executor.run.types import MicrobatchBatchExecutor
+from sqlbuild.executor.scheduling.classes.recovering_connection_pool import RecoveringConnectionPool
 from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.constants import SEED_ENTRY_MISSING_CODE
@@ -119,9 +124,12 @@ from sqlbuild.microbatches.models import MicrobatchScope
 from sqlbuild.microbatches.types import MicrobatchEventStore
 from sqlbuild.provider.main.runtime import ProviderContainer
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind, NodeStartCallback
+from sqlbuild.runtime.execution_limits.classes.connection_recovery import ConnectionRecovery
 from sqlbuild.runtime.execution_limits.main.enforce_execution_deadline import (
     enforce_execution_deadline,
 )
+from sqlbuild.runtime.execution_limits.main.item_deadline_scope import item_deadline_scope
+from sqlbuild.runtime.execution_limits.types import ItemKind
 from sqlbuild.runtime.observability.classes.resource_attempt_lifecycle import (
     ResourceAttemptLifecycle,
 )
@@ -244,7 +252,12 @@ class BuildScheduler:
         self._failed_sources: set[str] = set()
 
         self._completion_queue: queue.Queue[NodeCompletion] = queue.Queue()
-        self._connection_pool: queue.Queue[Any] = queue.Queue()
+        self._connection_recovery: ConnectionRecovery = ConnectionRecovery(
+            adapter=adapter, connect=lambda: adapter.connect(dict(connection_config))
+        )
+        self._connection_pool: queue.Queue[Any] = RecoveringConnectionPool(
+            recovery=self._connection_recovery
+        )
 
         self._in_degree: dict[CompiledObjectKey, int] = {}
         self._selected_execution_keys: frozenset[CompiledObjectKey] = frozenset(
@@ -270,10 +283,13 @@ class BuildScheduler:
         self._compute_in_degrees()
         self._seed_ready_queue()
 
-        if self._max_concurrency == 1:
-            self._run_serial()
-        else:
-            self._run_concurrent()
+        try:
+            if self._max_concurrency == 1:
+                self._run_serial()
+            else:
+                self._run_concurrent()
+        finally:
+            self._close_replacement_connections()
 
         enforce_execution_deadline()
         self._skip_remaining()
@@ -327,6 +343,11 @@ class BuildScheduler:
                 database=database, schema=schema
             ):
                 self._adapter.execute(connection=self._scheduler_connection, sql=index_sql)
+
+    def _close_replacement_connections(self) -> None:
+        """Close connections opened to replace broken ones; the originals belong to the caller."""
+
+        self._connection_recovery.close_replacements()
 
     def _init_connection_pool(self) -> None:
         connection: Any
@@ -399,6 +420,7 @@ class BuildScheduler:
                     | SqlTestExecutionResult
                     | LoadExecutionResult
                 ) = self._execute_node(key=key, connection=connection)
+                connection = self._connection_recovery.usable(connection)
                 self._handle_completion(key=key, result=result)
         finally:
             self._connection_pool.put(connection)
@@ -658,8 +680,10 @@ class BuildScheduler:
         try:
             return execute(batch, connection)
         finally:
-            self._connection_pool.put(connection)
-            self._release_microbatch_subworker()
+            try:
+                self._connection_pool.put(connection)
+            finally:
+                self._release_microbatch_subworker()
 
     def _reserve_microbatch_subworker(self) -> bool:
         with self._microbatch_coordinator_lock:
@@ -921,6 +945,7 @@ class BuildScheduler:
                 adapter=self._adapter,
                 connection=connection,
                 quality_scope="model",
+                timeouts=self._runtime.test_timeouts,
             )
         duration: int = int((time.monotonic() - start) * 1000)
         log_debug_event(
@@ -1014,10 +1039,19 @@ class BuildScheduler:
             sqlbuild_event="start",
             sqlbuild_kind=model_entry.materialization_type,
         )
-        with diagnostics_context(
-            sqlbuild_subject="model",
-            sqlbuild_name=model_entry.name,
-            sqlbuild_kind=model_entry.materialization_type,
+        with (
+            diagnostics_context(
+                sqlbuild_subject="model",
+                sqlbuild_name=model_entry.name,
+                sqlbuild_kind=model_entry.materialization_type,
+            ),
+            item_deadline_scope(
+                kind=ItemKind.MODEL,
+                name=model_entry.name,
+                policy=model_timeout_policy(model_entry),
+                adapter=self._adapter,
+                connection=connection,
+            ) as deadline,
         ):
             try:
                 table_type_entry: TableTypePlanEntry | None = self._table_type_entries.get(
@@ -1111,6 +1145,8 @@ class BuildScheduler:
                     error_code=BUILD_WORKER_FAILED_CODE,
                     error_message=str(error),
                 )
+        if deadline is not None and deadline.expired and result.status != ExecutionStatus.SUCCESS:
+            result = timed_out_model_result(result=result, report=deadline.report())
         duration: int = int((time.monotonic() - start) * 1000)
         completed_result: ModelExecutionResult = dataclasses.replace(result, duration_ms=duration)
         log_debug_event(

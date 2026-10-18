@@ -1485,6 +1485,7 @@ const R_COMPILED_AUDIT: RecordSpec = RecordSpec {
         FieldSpec::new("run_scope", FieldDefault::None),
         FieldSpec::new("always_run", FieldDefault::False),
         FieldSpec::new("description", FieldDefault::None),
+        FieldSpec::new("meta", FieldDefault::None),
     ],
 };
 const R_COMPILED_SQL_SCENARIO: RecordSpec = RecordSpec {

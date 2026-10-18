@@ -111,6 +111,8 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     views_read_with_reader_access: ClassVar[bool] = False
     allows_implicit_managed_write_schema: ClassVar[bool] = False
     execution_duration_limit_seconds: ClassVar[int | None] = None
+    statement_cancellation_is_asynchronous: ClassVar[bool] = False
+    statement_limit_excludes_queueing: ClassVar[bool] = False
     metadata_inspection_concurrency: ClassVar[int] = 1
     supports_session_warehouse: ClassVar[bool] = False
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
