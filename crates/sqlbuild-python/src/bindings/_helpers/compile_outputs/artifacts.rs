@@ -1,7 +1,11 @@
 //! Write, clean and publish compiled artifacts natively, raising the errors Python raised.
 
 use std::collections::HashSet;
+use std::panic::resume_unwind;
 use std::path::PathBuf;
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use pyo3::exceptions::PyOSError;
 use pyo3::prelude::{PyAnyMethods, PyErr, PyResult, Python};
@@ -17,6 +21,11 @@ use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
 type PublishedRow = (String, Vec<(String, String)>);
 
+/// One write group's `(path, contents)` artifacts and whether unchanged files are kept.
+type ArtifactGroup = (Vec<(PathBuf, Vec<u8>)>, bool);
+
+const WRITER_THREAD: &str = "sqlbuild-artifact-writer";
+
 /// Write each `(path, contents)` artifact; returns how many were written and left unchanged.
 pub(crate) fn write_compiled_artifacts(
     py: Python<'_>,
@@ -29,6 +38,65 @@ pub(crate) fn write_compiled_artifacts(
         let written: WrittenArtifacts = outcome.map_err(|error| artifact_error(py, error))?;
         Ok((written.written, written.unchanged))
     })
+}
+
+/// Artifact groups written one after another on their own thread, stopping at the first error.
+pub(crate) struct BackgroundArtifactWriter {
+    groups: Sender<ArtifactGroup>,
+    handle: JoinHandle<(Result<(), ArtifactError>, Duration)>,
+}
+
+/// Write each group in order until one fails; returns that failure and the time spent writing.
+fn write_groups(groups: &Receiver<ArtifactGroup>) -> (Result<(), ArtifactError>, Duration) {
+    let mut elapsed: Duration = Duration::ZERO;
+    for (files, check_existing) in groups {
+        let started: Instant = Instant::now();
+        let written: Result<WrittenArtifacts, ArtifactError> =
+            write_artifacts(&files, check_existing);
+        elapsed += started.elapsed();
+        if let Err(error) = written {
+            return (Err(error), elapsed);
+        }
+    }
+    (Ok(()), elapsed)
+}
+
+impl BackgroundArtifactWriter {
+    /// Start the writer thread, or `None` when no thread could start.
+    pub(crate) fn start() -> Option<Self> {
+        let (groups, received) = channel();
+        let spawned = std::thread::Builder::new()
+            .name(WRITER_THREAD.to_owned())
+            .spawn(move || write_groups(&received));
+        match spawned {
+            Ok(handle) => Some(Self { groups, handle }),
+            Err(_) => None,
+        }
+    }
+
+    /// Queue one group behind the groups already sent; a writer that stopped drops it.
+    pub(crate) fn send(&self, files: Vec<(PathBuf, Vec<u8>)>, check_existing: bool) {
+        let _ = self.groups.send((files, check_existing));
+    }
+
+    /// Wait without the GIL for every sent group; returns the time spent writing.
+    pub(crate) fn finish(self, py: Python<'_>) -> PyResult<Duration> {
+        let Self { groups, handle } = self;
+        drop(groups);
+        compiler_guard(|| {
+            let joined = py.detach(|| handle.join());
+            let (outcome, elapsed) = joined.unwrap_or_else(|payload| resume_unwind(payload));
+            outcome.map_err(|error| artifact_error(py, error))?;
+            Ok(elapsed)
+        })
+    }
+
+    /// Wait for every sent group, discarding the outcome.
+    pub(crate) fn wait(self) {
+        let Self { groups, handle } = self;
+        drop(groups);
+        let _ = handle.join();
+    }
 }
 
 /// Delete unmanaged compiled files and empty directories; returns how many files were removed.

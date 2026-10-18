@@ -336,6 +336,38 @@ def test_given_invalid_utf8_artifact_when_writing_again_then_existing_decode_err
 
 @pytest.mark.parametrize(
     "test_case",
+    [
+        ExpectedMessageTestCase(
+            description="blocked model directory stops later groups", expected_message="staging"
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unwritable_model_artifact_when_writing_static_target_then_later_groups_are_not_written(
+    tmp_path: Path,
+    test_case: ExpectedMessageTestCase,
+) -> None:
+    project: CompiledProjectView = build_static_target_writer_project()
+    target_dir: Path = tmp_path / "target"
+    blocker: Path = target_dir / "compiled" / "models" / "staging"
+    blocker.parent.mkdir(parents=True)
+    blocker.write_text("not a directory\n", encoding="utf-8")
+
+    with pytest.raises(OSError, match=test_case.expected_message):
+        write_static_compile_target(
+            target_dir=target_dir,
+            adapter=DuckDbAdapter(),
+            project=project,
+        )
+
+    assert blocker.read_text(encoding="utf-8") == "not a directory\n"
+    assert not (target_dir / "compiled" / "functions").exists()
+    assert not (target_dir / "compiled" / "audits").exists()
+    assert not (target_dir / "compiled" / "tests").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
     (TargetWriterCacheTestCase(description="unchanged artifact reuse", expected_builder_calls=0),),
     ids=lambda case: case.description,
 )

@@ -611,7 +611,7 @@ pub(crate) fn write_static_target<'py>(
         )?;
         managed.push(path);
     }
-    batch.flush(py)?;
+    batch.flush_in_background(py)?;
     for function in native_field(project, "functions")?.try_iter()? {
         let function: Bound<'py, PyAny> = function?;
         if native_field(&function, "destination")?
@@ -628,7 +628,7 @@ pub(crate) fn write_static_target<'py>(
         batch.queue_sql(&path, &sql)?;
         managed.push(path);
     }
-    batch.flush(py)?;
+    batch.flush_in_background(py)?;
     for audit in native_field(project, "audits")?.try_iter()? {
         let audit: Bound<'py, PyAny> = audit?;
         let path: Bound<'py, PyAny> = compiled.div(AUDITS_DIR)?.div(audit_output_path(&audit)?)?;
@@ -638,7 +638,7 @@ pub(crate) fn write_static_target<'py>(
         )?;
         managed.push(path);
     }
-    batch.flush(py)?;
+    batch.flush_in_background(py)?;
     let (test_paths, diagnostics) =
         write_static_tests(target_dir, (adapter, project), prepared, &mut batch)?;
     managed.extend(test_paths);
