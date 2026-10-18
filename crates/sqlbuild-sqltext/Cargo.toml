@@ -11,7 +11,6 @@ rust-version.workspace = true
 rayon.workspace = true
 serde.workspace = true
 sqlbuild-core.workspace = true
-sqlparser.workspace = true
 
 [lints]
 workspace = true
