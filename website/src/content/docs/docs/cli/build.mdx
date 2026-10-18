@@ -145,11 +145,12 @@ When a model fails:
 A model that exceeds its [`max_duration`](/docs/concepts/models/configuration#execution-time-limit)
 fails with `C417`. The failure states the elapsed time, the limit and where it was set, whether
 cancelling its running statement was confirmed, and the query IDs SQLBuild saw; downstream models are
-skipped as for any other failure. Its row shows `TIMEOUT`, and timed-out models and unit tests are
-counted under a separate `TIMEOUT=` in the summary line
-(`PASS=1  WARN=0  FAIL=0  TIMEOUT=1  INSUFFICIENT=0  SKIP=1  TOTAL=3`) and under `timeout_count` in
-`--json` output, not in `FAIL=` or `failure_count`. A timeout is still a failure for the exit code:
-the build exits non-zero and its JSON `status` is `failed`.
+skipped as for any other failure. Its row shows `TIMEOUT`. In the summary line, timed-out models and unit tests are counted under
+`TIMEOUT=` and excluded from `FAIL=`
+(`PASS=1  WARN=0  FAIL=0  TIMEOUT=1  INSUFFICIENT=0  SKIP=1  TOTAL=3`). In `--json` output,
+`summary.failure_count` still includes them, and `summary.timeout_count` reports how many of those
+failures were timeouts. A timeout is a failure for the exit code: the build exits non-zero and its
+JSON `status` is `failed`.
 
 ## Fingerprints
 

@@ -289,11 +289,11 @@ def test_given_model_max_duration_when_building_then_slow_model_times_out_and_de
     "test_case",
     [
         ModelTimeoutJsonE2ETestCase(
-            description="build JSON counts the timeout apart from failures",
+            description="build JSON counts the timeout within failures",
             expected_status="failed",
             expected_summary_counts={
                 "success_count": 1,
-                "failure_count": 0,
+                "failure_count": 1,
                 "timeout_count": 1,
                 "skipped_count": 1,
             },
@@ -310,6 +310,49 @@ def test_given_model_max_duration_when_building_as_json_then_summary_counts_time
 
     result: subprocess.CompletedProcess[str] = run_sqb(
         command=("--no-color", "build", "--json"), project_dir=project_dir
+    )
+    payload: dict[str, Any] = json.loads(result.stdout)
+
+    assert result.returncode == 1, result.stderr
+    assert payload["status"] == test_case.expected_status
+    for key, expected_count in test_case.expected_summary_counts.items():
+        assert payload["summary"][key] == expected_count, payload["summary"]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ModelTimeoutJsonE2ETestCase(
+            description="test JSON counts the timeout within failures",
+            expected_status="failed",
+            expected_summary_counts={
+                "pass_count": 1,
+                "fail_count": 1,
+                "timeout_count": 1,
+                "total_count": 2,
+            },
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_slow_unit_test_when_testing_as_json_then_summary_counts_timeout(
+    tmp_path: Path, test_case: ModelTimeoutJsonE2ETestCase
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="shop",
+        repo_files={
+            **_SLOW_FILES,
+            "tests/unit/order_scans_slow.sql": (
+                'TEST(timeout "1s");\n\nWITH\n'
+                "__source__raw_orders AS (\n  SELECT 1 AS order_id, 5 AS amount\n),\n"
+                "__expected__order_scans AS (\n  SELECT 1 AS order_id\n)\n"
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "test", "--json"), project_dir=project_dir
     )
     payload: dict[str, Any] = json.loads(result.stdout)
 

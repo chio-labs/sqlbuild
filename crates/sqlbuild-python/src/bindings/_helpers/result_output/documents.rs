@@ -497,12 +497,12 @@ pub(crate) fn format_test_execution_json<'py>(
     let results: Vec<Bound<'py, PyAny>> = projection.terminal_results(&results)?;
     let pass_count: usize = count_status(&results, "outcome", PASS_OUTCOME)?;
     let timeout_count: usize = count_status(&results, "outcome", TIMEOUT_OUTCOME)?;
-    let fail_count: usize = results.len() - pass_count - timeout_count;
+    let fail_count: usize = results.len() - pass_count;
     emitted(
         &projection,
         Document {
             command: "test".to_owned(),
-            status: outcome_status(fail_count + timeout_count),
+            status: outcome_status(fail_count),
             summary: summary(
                 py,
                 &[
