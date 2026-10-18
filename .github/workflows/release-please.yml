@@ -144,12 +144,17 @@ jobs:
             exit 1
           }
 
-          # Verify is the required status, so it only succeeds after every trusted check passes,
-          # including building the distributions that Publish reuses once the release is tagged.
-          # Verify's test suites skip release pull requests, whose product code already passed
-          # them on main; release performance runs on main after each merge and does not gate.
-          # Each dispatched run carries this attempt's request id in its run name and is matched
-          # on it exactly.
+          # Verify is the required status. On Release Please branches this commit status is its
+          # only source, because the Verify workflow reports its job under another name there, so
+          # the pull request merges only after every trusted check passes on this head, which
+          # already includes any lockfile refresh. The checks include building the distributions
+          # that Publish reuses once the release is tagged. Verify's test suites skip release pull
+          # requests, whose product code already passed them on main; release performance runs on
+          # main after each merge and does not gate. Each dispatched run carries this attempt's
+          # request id in its run name and is matched on it exactly.
+          if ! python3 -m scripts.check_native_layering; then
+            fail_verify "Release versions or Cargo.lock workspace versions disagree"
+          fi
           workflows=(pull-request-metadata.yml version-guard.yml release-distributions.yml)
           contexts=("Pull Request Metadata" "Block automatic 1.0 releases" "Release distributions")
           for context in "${contexts[@]}"; do

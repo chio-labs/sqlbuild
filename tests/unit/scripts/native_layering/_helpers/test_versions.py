@@ -20,6 +20,7 @@ from tests.unit.scripts.native_layering._helpers.helpers import write_versions
             release_version="1.2.0",
             cli_version="1.2.0",
             expected_errors=(),
+            lock_versions={"example-core": "1.2.0", "example-cli": "1.2.0"},
         ),
     ],
     ids=lambda case: case.description,
@@ -59,6 +60,42 @@ def test_given_matching_versions_when_checking_then_returns_no_errors(
                 "pyproject.toml [project] version is 1.2.0, "
                 ".release-please-manifest.json version is 1.2.0, "
                 "pyproject.toml sqlbuild-cli dependency is 1.1.9.",
+            ),
+        ),
+        NativeVersionTestCase(
+            description="lockfile kept the previous workspace version after a release bump",
+            workspace_version="1.2.0",
+            pyproject_version="1.2.0",
+            release_version="1.2.0",
+            cli_version="1.2.0",
+            lock_versions={"example-core": "1.1.9", "example-cli": "1.1.9"},
+            expected_errors=(
+                "Cargo.lock workspace crate versions are stale: example-cli is 1.1.9, not 1.2.0; "
+                "example-core is 1.1.9, not 1.2.0. Run `cargo update --workspace`.",
+            ),
+        ),
+        NativeVersionTestCase(
+            description="uv lockfile kept the previous project version after a release bump",
+            workspace_version="1.2.0",
+            pyproject_version="1.2.0",
+            release_version="1.2.0",
+            cli_version="1.2.0",
+            lock_versions={"example-cli": "1.2.0"},
+            python_lock_version="1.1.9",
+            expected_errors=(
+                "uv.lock locks example at 1.1.9, not pyproject.toml 1.2.0. Run `uv lock`.",
+            ),
+        ),
+        NativeVersionTestCase(
+            description="one workspace crate lags in the lockfile",
+            workspace_version="1.2.0",
+            pyproject_version="1.2.0",
+            release_version="1.2.0",
+            cli_version="1.2.0",
+            lock_versions={"example-core": "1.2.0", "example-cli": "1.1.9"},
+            expected_errors=(
+                "Cargo.lock workspace crate versions are stale: example-cli is 1.1.9, not 1.2.0. "
+                "Run `cargo update --workspace`.",
             ),
         ),
     ],

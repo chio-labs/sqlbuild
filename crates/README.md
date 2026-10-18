@@ -52,7 +52,8 @@ in `[workspace.metadata.native-layers]` in the workspace `Cargo.toml`, and
 - a crate below `sqlbuild-analysis` reaches polyglot.
 
 The same check fails when the workspace version, the `pyproject.toml` version and
-`.release-please-manifest.json` disagree, because the version is part of the build identity.
+`.release-please-manifest.json` disagree, or when a workspace crate's `Cargo.lock` entry carries a
+version other than its manifest's, because the version is part of the build identity.
 
 `fensu check` applies the Rust structure rules inside each crate: other crates use items through
 `main/` entry points, `models.rs`, `types.rs` and `constants.rs`, not through `_helpers/`.

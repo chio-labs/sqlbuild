@@ -104,8 +104,9 @@ jobs:
 
           # Release Please pull requests change only release metadata on top of product code that
           # already passed every suite before it reached main, so the suites are skipped. Their
-          # required Verify status is posted by the trusted release checks in release-please.yml
-          # after the metadata, version and distribution checks pass.
+          # required Verify status is posted only by the trusted release checks in
+          # release-please.yml after the metadata, version and distribution checks pass; the
+          # verify job below reports under another name on Release Please branches.
           if [[ "${EVENT_NAME}" == "pull_request" \
                 && "${HEAD_REPOSITORY}" == "${GITHUB_REPOSITORY}" \
                 && "${HEAD_REF}" == release-please--branches--* ]] && release_metadata_only; then
@@ -861,7 +862,17 @@ jobs:
       sdist: false
 
   verify:
-    name: Verify
+    # The required Verify of a Release Please pull request is the commit status that the trusted
+    # release checks in release-please.yml post on the branch's current head, after the lockfile
+    # refresh and every dispatched check. This job reports under another name there, so its quick
+    # metadata-only pass can never satisfy Verify first; a skipped job would count as passing, so
+    # the job always runs and only its name changes. Until those checks post Verify on the head,
+    # the pull request waits for an expected check, and every new push to the branch waits again.
+    name: >-
+      ${{ (github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && startsWith(github.event.pull_request.head.ref, 'release-please--branches--'))
+      && 'Release pull request suites' || 'Verify' }}
     if: always()
     needs:
       [
