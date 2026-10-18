@@ -66,6 +66,19 @@
   affects analysis, validation, or caching must report all three.
 - Performance fixes must not reduce coverage. Show that diagnostics are unchanged or a strict,
   validated superset on the dense benchmark and a real-project run.
+- When load makes wall times unreliable, compare `perf stat -e instructions:u` (repeat runs agree
+  to about 0.05%). Instruction counts cannot show overlap, so judge parallelism and background-work
+  changes by paired wall time from quiet runs.
+- Before timing a candidate, prove its extension binary contains the change (for example, a new
+  symbol or string in the built `.so`); a stale build silently measures the base.
+- Read the timeline for main-thread/pool alternation: serial native loops on the main thread while
+  the pool idles cost more wall time than CPU-heavy phases that already use every core.
+- Work that runs concurrently with another phase saves wall time only while it is the longer of the
+  two; identify the critical path before optimising one side. Report the overlapped phase's own
+  timing too, because background work can slow the phase it overlaps by as much as it saves.
+- Speculative early work must verify or discard: compare a digest of the real request at the normal
+  call site, hold cache writes until adoption, never run user code early, and treat start, panic
+  or evaluation failures as misses that fall back to the normal path.
 - Do not raise performance budgets or tolerances to make a regression pass.
 - Temporary user-approved exception (2026-10-10), removable after post-conversion memory
   optimisation: only the 10,000-model case in `test_fresh_process_compile_cache_performance.py`
