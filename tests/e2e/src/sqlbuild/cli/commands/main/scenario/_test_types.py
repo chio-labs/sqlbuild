@@ -249,3 +249,15 @@ class PromotionConflictReuseE2ETestCase:
     settings_steps: tuple[str, ...]
     expected_exit_codes: tuple[int, ...]
     expected_reused: tuple[bool, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedColumnsE2ETestCase:
+    """Test case for comparing a scenario's expected CTE with its model's output columns."""
+
+    description: str
+    expected_sql: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_json_results: tuple[dict[str, object], ...] = field(default_factory=tuple)

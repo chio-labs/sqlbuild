@@ -395,3 +395,14 @@ pub struct SqlScenarioCtes {
     pub expected_models: Vec<String>,
     pub assertion_names: Vec<String>,
 }
+
+/// A scenario expected CTE's authored columns and how they differ from its model's output.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ScenarioExpectedColumns {
+    /// The columns the CTE lists as authored, or `None` when they are not explicit.
+    pub listed: Option<Vec<String>>,
+    /// Model output columns the CTE does not list.
+    pub unlisted: Vec<String>,
+    /// Listed columns the model does not output.
+    pub unknown: Vec<String>,
+}

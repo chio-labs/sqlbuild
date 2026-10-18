@@ -24,6 +24,7 @@ const RA1: &str = "orders_paid                                                  
 const RB0: &str = "orders_local                                                     ERROR\n    snapshot missing\n    Retained local DuckDB: /work/target/run/scenarios/orders_local/local.duckdb\n";
 const RC0: &str = "orders_warehouse                                                 FAIL\n    boom\n    Rerun with --retain to inspect scenario-owned artifacts.\n";
 const RD1: &str = "orders_ok                                                        \u{1b}[32mPASS\u{1b}[0m  0.01s\n    expect    expected m                                         \u{1b}[32mPASS\u{1b}[0m\n";
+const RE0: &str = "orders_errored                                                   FAIL\n    expect    expected fact_orders                               ERROR\n              error[X504]: comparison failed to run\n";
 const CE0: &str = "orders_paid                                                      PASS  2 relations, 3 rows\n    source   raw_orders                                          PASS  2 rows, 41 B\n    seed     countries                                           PASS  1 row, 1.5 KB\n    snapshot tests/_scenario_snapshots/orders_paid/scenario.json\n";
 const SE0R: &str = "orders_paid                                                      REFRESHED  2 relations, 3 rows\n    source   raw_orders                                          PASS  2 rows, 41 B\n    seed     countries                                           PASS  1 row, 1.5 KB\n    snapshot tests/_scenario_snapshots/orders_paid/scenario.json\n";
 const CF1: &str = "orders_big                                                       \u{1b}[38;5;167mFAIL\u{1b}[0m  0 relations, 0 rows\n    \u{1b}[38;5;167m\u{1b}[1merror[X512]:\u{1b}[0m too many rows\n      \u{1b}[2m= help:\u{1b}[0m narrow it\n    Rerun with --retain to inspect scenario-owned artifacts.\n    source   raw_orders                                          \u{1b}[38;5;167mFAIL\u{1b}[0m  0 rows, 0 B\n    snapshot /elsewhere/scenario.json\n";
@@ -74,6 +75,22 @@ fn given_scenario_result_when_rendering_then_matches_result_row_layout() {
             },
             use_color: false,
             expected_text: RC0,
+        },
+        ResultRowTestCase {
+            description: "comparison that did not run shows its error without counts",
+            row: ScenarioResultRow {
+                name: "orders_errored".to_owned(),
+                status: "FAIL".to_owned(),
+                expected: vec![ExpectedRow {
+                    model_name: "fact_orders".to_owned(),
+                    failed: true,
+                    error: coded(Some("X504"), "comparison failed to run", None),
+                    ..ExpectedRow::default()
+                }],
+                ..ScenarioResultRow::default()
+            },
+            use_color: false,
+            expected_text: RE0,
         },
         ResultRowTestCase {
             description: "passing run rounds its duration",

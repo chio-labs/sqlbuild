@@ -76,15 +76,15 @@ pub(super) fn failing_result_row() -> ScenarioResultRow {
             ExpectedRow {
                 model_name: "fact_orders".to_owned(),
                 failed: true,
-                actual_row_count: 3,
-                expected_row_count: 2,
-                mismatched_row_count: 2,
+                actual_row_count: Some(3),
+                expected_row_count: Some(2),
+                mismatched_row_count: Some(2),
                 error: coded(Some("X506"), "mismatch", Some("look")),
             },
             ExpectedRow {
                 model_name: "dim_customers".to_owned(),
-                actual_row_count: 1,
-                expected_row_count: 1,
+                actual_row_count: Some(1),
+                expected_row_count: Some(1),
                 ..ExpectedRow::default()
             },
         ],

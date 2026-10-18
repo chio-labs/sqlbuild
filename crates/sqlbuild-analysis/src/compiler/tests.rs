@@ -1,5 +1,7 @@
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_scenario_expected_columns.rs"]
+mod scenario_expected_columns;
 #[path = "tests/simple_template/helpers.rs"]
 mod simple_template_helpers;
 #[path = "tests/single_read/helpers.rs"]

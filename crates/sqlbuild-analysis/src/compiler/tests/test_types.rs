@@ -204,3 +204,12 @@ pub(crate) struct SimpleTemplateCorpusOutcome {
     pub recognized: usize,
     pub mismatches: Vec<String>,
 }
+
+#[derive(Debug)]
+pub(crate) struct ScenarioExpectedColumnsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_sql: &'static str,
+    pub(crate) model_columns: Option<&'static [&'static str]>,
+    pub(crate) all_columns: bool,
+    pub(crate) expected_message: Option<&'static str>,
+}

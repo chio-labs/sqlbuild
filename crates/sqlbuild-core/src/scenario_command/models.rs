@@ -42,14 +42,14 @@ pub struct CodedText {
     pub help: Option<String>,
 }
 
-/// One expected-relation comparison of a scenario result.
+/// One expected-relation comparison of a scenario result; counts are `None` if it did not run.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ExpectedRow {
     pub model_name: String,
     pub failed: bool,
-    pub actual_row_count: i64,
-    pub expected_row_count: i64,
-    pub mismatched_row_count: i64,
+    pub actual_row_count: Option<i64>,
+    pub expected_row_count: Option<i64>,
+    pub mismatched_row_count: Option<i64>,
     pub error: Option<CodedText>,
 }
 

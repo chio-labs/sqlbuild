@@ -11,7 +11,9 @@ use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream
 use crate::bindings::_helpers::planner_identity::graph::topologically_order_keys;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_resolution::locations::build_function_locations;
-use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_INVALID_FIXTURE;
+use crate::bindings::_helpers::planner_scenario::constants::{
+    SCENARIO_EXPECTED_COLUMNS_HELP, SCENARIO_PLAN_EXPECTED_COLUMNS, SCENARIO_PLAN_INVALID_FIXTURE,
+};
 use crate::bindings::_helpers::planner_scenario::{
     entries::{function_entry, seed_entries},
     fixtures::{extract_fixtures, fixture_plans},
@@ -27,6 +29,8 @@ use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
+use sqlbuild_analysis::compiler::main::scenario_expected_column_message::scenario_expected_column_message;
+use sqlbuild_analysis::compiler::main::scenario_expected_columns::scenario_expected_columns;
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -166,7 +170,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
             warnings.push(warning?);
         }
     }
-    let (expected, assertions) = expectations(&scenario, &context)?;
+    let (expected, assertions) = expectations(&scenario, &context, &models)?;
     let plan = new_record_with(
         py,
         RecordId::ScenarioExecutionPlan,
@@ -279,9 +283,40 @@ fn model_context<'py>(
     .into_any())
 }
 
+/// Reject an expected CTE whose listed columns cannot be compared with its model's output.
+fn check_expected_columns(
+    scenario: &Bound<'_, PyAny>,
+    context: &SqlContext<'_>,
+    (model, model_name): (Option<Bound<'_, PyAny>>, &str),
+    authored_sql: &str,
+) -> PyResult<()> {
+    let py = scenario.py();
+    let model_columns: Option<Vec<String>> = match model {
+        Some(model) => model_reads::inferred_names(&model)?,
+        None => None,
+    };
+    let dialect: Option<String> =
+        native_field(&context.adapter, "sql_analysis_dialect_name")?.extract()?;
+    let columns =
+        scenario_expected_columns(authored_sql, dialect.as_deref(), model_columns.as_deref());
+    let scenario_name: String = native_field(scenario, "name")?.extract()?;
+    let Some(message) =
+        scenario_expected_column_message(&scenario_name, model_name, &columns, true)
+    else {
+        return Ok(());
+    };
+    Err(error(
+        py,
+        &format!("{message} in {}", context.label),
+        SCENARIO_PLAN_EXPECTED_COLUMNS,
+        Some(SCENARIO_EXPECTED_COLUMNS_HELP),
+    )?)
+}
+
 fn expectations<'py>(
     scenario: &Bound<'py, PyAny>,
     context: &SqlContext<'py>,
+    models: &Bound<'py, PyDict>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = scenario.py();
     let mut expected: Vec<Bound<'py, PyAny>> = Vec::new();
@@ -290,11 +325,9 @@ fn expectations<'py>(
         let name: String = native_field(&cte, "name")?.extract()?;
         let name = name.strip_prefix("__expected__").unwrap_or(&name);
         let target = required_target(&context.relations, "model_locations", name, "model")?;
-        let sql = resolve_sql(
-            context,
-            &native_field(&cte, "sql_body")?.extract::<String>()?,
-            false,
-        )?;
+        let authored: String = native_field(&cte, "sql_body")?.extract()?;
+        check_expected_columns(scenario, context, (models.get_item(name)?, name), &authored)?;
+        let sql = resolve_sql(context, &authored, false)?;
         expected.push(new_record_with(
             py,
             RecordId::ScenarioExpectedExpectationPlan,

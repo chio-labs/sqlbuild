@@ -310,14 +310,14 @@ class ScenarioCleanupExecutionResult:
 
 @dataclass(frozen=True)
 class ScenarioExpectedExpectationExecutionResult:
-    """Outcome of comparing one scenario model relation to expected SQL."""
+    """Outcome of comparing one scenario model relation to expected SQL; no counts if not run."""
 
     scenario_name: str
     model_name: str
     status: ExecutionStatus
-    actual_row_count: int = 0
-    expected_row_count: int = 0
-    mismatched_row_count: int = 0
+    actual_row_count: int | None = None
+    expected_row_count: int | None = None
+    mismatched_row_count: int | None = None
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None

@@ -18,6 +18,13 @@ const DECIMAL_KIND: &str = "decimal";
 const SCALAR_KINDS: [&str; 5] = ["string", "integer", "boolean", "float", "null"];
 const COLLECTION_KINDS: [&str; 2] = ["list", "set"];
 const ERROR_FIELDS: [&str; 3] = ["error_code", "error_help", "error_message"];
+const EXPECTED_COUNT_FIELDS: [&str; 3] = [
+    "actual_row_count",
+    "expected_row_count",
+    "mismatched_row_count",
+];
+const COMPARISON_COMPLETED: &str = "completed";
+const COMPARISON_NOT_RUN: &str = "not_run";
 
 fn value<'py>(result: &Bound<'py, PyAny>, field: &str) -> PyResult<Bound<'py, PyAny>> {
     native_field(&native_field(result, field)?, "value")
@@ -393,19 +400,31 @@ pub(crate) fn scenario_check<'py>(result: &Bound<'py, PyAny>) -> PyResult<Bound<
     let status: Bound<'py, PyAny> = value(result, "status")?;
     let mut expected: Vec<Bound<'py, PyDict>> = Vec::new();
     for item in items(&native_field(result, "expected_results")?)? {
+        let counts: Vec<(&'static str, Bound<'py, PyAny>)> = fields(&item, &EXPECTED_COUNT_FIELDS)?;
+        let compared: bool = counts.iter().all(|(_, count)| !count.is_none());
         let mut entries: Vec<(&'static str, Bound<'py, PyAny>)> = vec![
             ("model_name", native_field(&item, "model_name")?),
             ("status", value(&item, "status")?),
+            (
+                "comparison_status",
+                any(
+                    py,
+                    if compared {
+                        COMPARISON_COMPLETED
+                    } else {
+                        COMPARISON_NOT_RUN
+                    },
+                )?,
+            ),
         ];
-        entries.extend(fields(
-            &item,
-            &[
-                "actual_row_count",
-                "expected_row_count",
-                "mismatched_row_count",
-            ],
-        )?);
-        expected.push(with_errors(&item, entries)?);
+        entries.extend(counts);
+        let result: Bound<'py, PyDict> = dict(py, entries)?;
+        for (name, error) in fields(&item, &ERROR_FIELDS)? {
+            if !error.is_none() {
+                result.set_item(name, error)?;
+            }
+        }
+        expected.push(result);
     }
     let mut assertions: Vec<Bound<'py, PyDict>> = Vec::new();
     for item in items(&native_field(result, "assertion_results")?)? {

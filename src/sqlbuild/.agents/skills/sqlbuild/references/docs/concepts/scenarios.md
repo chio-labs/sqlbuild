@@ -109,6 +109,12 @@ __assert__all_orders_have_payments AS (
 | `__expected__<model>` | Full expected output. Compared order-insensitively against the scenario-built model. |
 | `__assert__<name>` | Zero-row assertion. Passes if the query returns no rows; fails with the returned rows as diagnostics. |
 
+An `__expected__<model>` CTE must list every column the model outputs, and no others. When the
+CTE's columns and the model's output columns are both known statically, a mismatch fails planning
+with `S512`, naming the missing or extra columns, before the scenario runs. A comparison that fails
+to run reports its error with an `ERROR` status and no row counts; in `--json` output its
+`comparison_status` is `not_run` and its row counts are `null`.
+
 For sources with two-part identity, use double underscores: `__source__raw__orders`.
 
 To mock a contracted source, ref, or seed with no rows, use `SELECT * FROM __empty_fixture()` as
