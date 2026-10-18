@@ -800,6 +800,10 @@ Options:
        unit_test_max_real_models = 3
 ```
 
+Upgrade note: the limit is new, so after upgrading, a selection containing a unit test that executes
+more than 10 real models fails to compile (`sqb test`, and `sqb build` when it runs tests) until the
+test is mocked or the limit is raised.
+
 `sqb test` shows each test's real-model count on its row, such as `3 real models`, so a chain that
 is growing towards the limit is visible early. Direct macro, UDF and table function tests execute
 no models and are not counted.
@@ -807,6 +811,9 @@ no models and are not counted.
 ### Time limits
 
 Each unit test has a time limit, `30s` by default, measured from its first warehouse statement.
+Rendering, warehouse queueing where the warehouse reports it, and cleanup after the comparison do not
+count; see [per-item time limits](/docs/concepts/project-configuration#per-item-time-limits) for
+each adapter.
 Set it, from highest precedence, with `--test-timeout` on `sqb test` or `sqb build`, with
 `TEST(timeout "45s")` in the test file, with `[targets.<target>.execution_limits] test_timeout`, or
 with `[settings] test_timeout`. Each accepts a positive fixed duration or `"disabled"`.
@@ -846,10 +853,12 @@ A test compares its actual output with the expected rows several ways: both row 
 missing from each side, the expected-column check and, on failure, row samples. Where the warehouse
 supports it, SQLBuild evaluates each compared model's actual output once into a temporary relation
 and runs every comparison against it, so the chain is not recomputed for each read. Results,
-messages and samples are unchanged. DuckDB, MotherDuck and PostgreSQL use a session temporary
-table that SQLBuild drops after the test, including after a failure or timeout; Snowflake reads the
-first query's persisted result through `RESULT_SCAN`. Other adapters compare the inline query as
-before. `target/run/tests/` keeps the self-contained inline comparison query for each test.
+messages and samples are unchanged. DuckDB and MotherDuck use a session temporary table that
+SQLBuild drops after the test, including after a failure or timeout. PostgreSQL runs the test in
+one transaction with an `ON COMMIT DROP` temporary table that the transaction's end removes, so the
+reads stay on one server session behind a transaction-mode connection pooler. Snowflake reads the
+first query's persisted result through `RESULT_SCAN`. If a stored output can no longer be read,
+the test falls back to the inline comparison. Other adapters compare the inline query as before. `target/run/tests/` keeps the self-contained inline comparison query for each test.
 
 ## Skipping SQL analysis
 
