@@ -1,0 +1,12 @@
+Project discovery  START
+Project assembly  START
+Declaration parsing  START
+Declaration parsing  OK  (0.01s)
+Python discovery  START
+Python discovery  OK  (0.00s)
+Project assembly  OK  (0.09s)
+Project discovery  OK  (0.09s)
+Project compile  START
+Project compile  OK  (0.13s)
+SQL test planning  START
+SQL test planning  OK  (0.01s)

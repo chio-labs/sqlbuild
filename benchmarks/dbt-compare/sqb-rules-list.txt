@@ -1,0 +1,85 @@
+SQBRCONTRACT101  models must declare an enforced output contract
+SQBRCONTRACT102  boolean column names must have BOOLEAN types
+SQBRCONTRACT103  timestamp column names must have timestamp types
+SQBRCONTRACT104  date column names must have DATE types
+SQBRCONTRACT105  contract outputs must establish their declared types explicitly
+SQBRCONTRACT106  enforced contract columns must declare types
+SQBRDECLARATION101  enum comparisons must use declared members and normalized operands
+SQBRDECLARATION102  non-canonical numeric comparisons must use constants
+SQBRDECLARATION201  identical enum domains must be consolidated
+SQBRDECLARATION301  public enum and constant files must live under a configured domain folder
+SQBRDECLARATION302  declaration role containers must be flat or grouped
+SQBRDECLARATION303  declaration role buckets must stay within the configured depth
+SQBRDECLARATION304  declaration role containers and buckets must remain bounded
+SQBRDECLARATION305  declaration role buckets must name a specific concern
+SQBRDECLARATION306  declaration filenames must not hide an obvious navigation bucket
+SQBRGRAPH101  model dependencies must flow forward through the layer order
+SQBRGRAPH102  table dependencies must use __ref or __source
+SQBRMODEL101  dependencies must be isolated in import CTEs
+SQBRMODEL102  SELECT * is allowed only inside dependency import CTEs
+SQBRMODEL103  view materialization and model v marker must agree
+SQBRMODEL104  model schemas must come from central path defaults
+SQBRPROJECT101  model names must use the closed rule layer grammar
+SQBRPROJECT102  model layer segments must be contiguous in their folders
+SQBRPROJECT103  model source suffixes must use approved, current tokens
+SQBRPROJECT104  referenced model identifiers must follow rule naming grammar
+SQBRPROJECT105  model name layer must match its canonical folder
+SQBRPROJECT106  model name layer must match its effective logical schema
+SQBRPROJECT201  models must resolve to one configured domain root and level
+SQBRPROJECT202  model owners must be either leaves or branches
+SQBRPROJECT203  model ownership must stay within the configured subdomain depth
+SQBRPROJECT204  sibling owner names must not hide an implicit hierarchy
+SQBRSQL001  Comparison with NULL is never true
+SQBRSQL002  Comma-separated sources create an implicit cartesian join
+SQBRSQL003  Non-cross join has no meaningful condition
+SQBRSQL004  Row selection is nondeterministic
+SQBRSQL005  CTE is unreachable from the final query
+SQBRSQL006  DISTINCT is redundant with the grouped output
+SQBRSQL007  Positional set operation is vulnerable to column-order drift
+SQBRSQL008  Bare UNION leaves duplicate handling implicit
+SQBRSQL009  Table alias is duplicated in the same query scope
+SQBRSQL010  Output alias is duplicated in the same select list
+SQBRSQL011  Clause mixes positional and named references
+SQBRSQL012  ELSE NULL is redundant
+SQBRSQL013  DISTINCT is written as though it were a function
+SQBRSQL014  Predicate compares identical constant values
+SQBRSQL015  Empty statement follows another terminator
+SQBRSQL016  Expression is aliased to its existing name
+SQBRSQL017  Row count uses a constant expression
+SQBRSQL018  ROW_NUMBER has no deterministic ordering
+SQBRSQL019  NOT IN list contains NULL and can reject every row
+SQBRSQL020  Set-operation branches project different column counts
+SQBRSQL021  Query output has an uncontrolled column shape
+SQBRSQL022  Calculated projection has no stable output name
+SQBRSQL023  Table alias is never referenced
+SQBRSQL024  WHERE predicate rejects NULL rows from a LEFT JOIN
+SQBRSQL025  JOIN type is implicit
+SQBRSQL026  ORDER BY mixes explicit and implicit directions
+SQBRSQL027  Column reference is unqualified in a multi-relation query
+SQBRSQL028  Single-relation query mixes qualified and unqualified columns
+SQBRSQL029  Qualified reference uses a relation absent from this query scope
+SQBRSQL030  CASE expression only converts a condition to TRUE or FALSE
+SQBRSQL031  CASE expression is nested directly inside ELSE
+SQBRSQL032  Joined relation contributes no referenced values
+SQBRSQL033  Comment is not attached to the syntax node it explains
+SQBRSQL034  Query keeps transformation logic outside top-level CTEs
+SQBRSQL035  Terminal SELECT does not read plainly from the final top-level CTE
+SQBRSQL036  CTE is nested inside another query
+SQBRSQL037  Recursive CTE is not permitted
+SQBRSQL038  CROSS JOIN creates an explicit cartesian product
+SQBRSQL039  Inline query relation obscures data flow
+SQBRSQL040  JOIN ON contains a computed expression
+SQBRSQL041  Only the last top-level CTE may be named final, and it must use that name
+SQBRSQL042  CTE output column is never read later in the model
+SQBRSQL043  Ranking window sorts by more expressions than max_ranking_order_by
+SQBRSQL044  String literal is longer than max_literal_length
+SQBRSQL045  JSON payload is parsed more than once in one SELECT
+SQBRTEST101  SQL unit tests and scenarios must use their compiler-owned canonical roots
+SQBRTEST102  SQL test and scenario filenames must identify their subject and behavior
+SQBRTEST103  SQL unit tests must mirror compiler-resolved resource ownership
+SQBRTEST104  every SQL unit-test block must have a target-aware subject__expected_behavior name
+SQBRTEST201  non-passthrough models must declare the configured minimum audits
+SQBRTEST202  non-passthrough models must have the configured minimum unit tests
+SQBRTEST203  SQL unit tests must not only prove that empty inputs produce no rows
+SQBRTEST301  selected custom rules must have public-harness test cases
+XSQBRBENCH001  Order contracts must be present

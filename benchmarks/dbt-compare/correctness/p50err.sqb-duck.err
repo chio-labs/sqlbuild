@@ -1,0 +1,14 @@
+Project discovery  START
+Project assembly  START
+Declaration parsing  START
+Declaration parsing  OK  (0.01s)
+Python discovery  START
+Python discovery  OK  (0.00s)
+Project assembly  OK  (0.08s)
+Project discovery  OK  (0.08s)
+Project compile  START
+Project compile  OK  (0.13s)
+SQL test planning  START
+SQL test planning  OK  (0.01s)
+Semantic checks were partial for 45 models:
+  sales000__int_clean__orders_00003, sales000__int_clean__orders_00004, sales000__int_clean__orders_00005, sales000__int_clean__orders_00006, sales000__int_clean__orders_00007, sales000__int_clean__orders_00008, sales000__int_clean__orders_00009, sales000__int_clean__orders_00010, sales000__int_clean__orders_00011, sales000__int_clean__orders_00012, and 35 more: depends on invalid model sales000__int_clean__orders_00002; fix the upstream error, then run `sqb compile --no-cache`.
