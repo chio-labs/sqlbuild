@@ -66,6 +66,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.test.helpers import (
     build_unsatisfied_leaf_test_project_files,
     build_unspecified_nullability_fixture_project_files,
     build_untyped_null_fixture_project_files,
+    build_upper_case_star_import_partial_fixture_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     assert_fragments_in_order,
@@ -246,6 +247,14 @@ _UNKNOWN_COLUMN_MESSAGE: str = (
             ),
             unexpected_artifact_fragments=('"__sqlbuild_partial_fixture"."Status"',),
         ),
+        PartialFixtureE2ETestCase(
+            description="upper-case reads through a star import CTE fill each column once",
+            repo_files=build_upper_case_star_import_partial_fixture_project_files(),
+            expected_stdout_fragment="PASS=1",
+            expected_artifact_fragments=("__sqlbuild_partial_fixture",),
+            single_artifact_fragments=('CAST(NULL AS VARCHAR) AS "status"',),
+            artifact_filename="orders__keeps_status.sql",
+        ),
     ),
     ids=lambda case: case.description,
 )
@@ -275,6 +284,8 @@ def test_given_required_typed_column_omitted_when_testing_then_completes_fixture
         assert fragment in artifact_sql
     for fragment in test_case.unexpected_artifact_fragments:
         assert fragment not in artifact_sql
+    for fragment in test_case.single_artifact_fragments:
+        assert artifact_sql.count(fragment) == 1, artifact_sql
 
 
 @pytest.mark.parametrize(

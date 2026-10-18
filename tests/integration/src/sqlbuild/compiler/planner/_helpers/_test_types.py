@@ -19,6 +19,14 @@ class FixturePlanningIntegrationTestCase:
 
 
 @dataclass(frozen=True)
+class CaseFoldedFixtureFillTestCase:
+    description: str
+    adapter_name: str
+    project_toml: str
+    expected_single_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class GatherWatermarkTypeTestCase:
     description: str
     declared_type: str

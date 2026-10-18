@@ -821,6 +821,58 @@ def build_mixed_case_partial_fixture_project_files() -> dict[str, str]:
     return files
 
 
+def build_upper_case_star_import_partial_fixture_project_files() -> dict[str, str]:
+    """Build upper-case references to lower-case source columns through a star import CTE."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "partial_source_fixture"\n'
+            'adapter = "duckdb"\n\n'
+            "[connection]\n"
+            'database = "partial_source_fixture.duckdb"\n'
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw__orders\n    description: Raw order records\n"
+            "    schema: raw\n"
+            "    table: orders\n"
+            "    columns:\n"
+            "      - name: order_id\n        type: VARCHAR\n"
+            "      - name: customer_id\n        type: VARCHAR\n"
+            "      - name: status\n        type: VARCHAR\n"
+        ),
+        "models/orders.sql": (
+            'MODEL (description "Orders with their status", materialized table);\n\n'
+            "WITH raw__orders AS (\n"
+            "  SELECT *\n"
+            '  FROM __source("raw__orders")\n'
+            "),\n\n"
+            "orders AS (\n"
+            "  SELECT\n"
+            "    ORDER_ID,\n"
+            "    STATUS\n"
+            "  FROM raw__orders\n"
+            ")\n\n"
+            "SELECT\n"
+            "  ORDER_ID AS order_id,\n"
+            "  STATUS AS status\n"
+            "FROM orders\n"
+        ),
+        "tests/unit/test_orders.sql": (
+            'TEST (name "orders__keeps_status");\n\n'
+            "WITH __source__raw__orders AS (\n"
+            "  SELECT CAST(column1 AS VARCHAR) AS order_id\n"
+            "  FROM VALUES ('o1') AS t(column1)\n"
+            "),\n\n"
+            "__expected__orders AS (\n"
+            "  SELECT CAST(column1 AS VARCHAR) AS order_id\n"
+            "  FROM VALUES ('o1') AS t(column1)\n"
+            ")\n\n"
+            "SELECT 1\n"
+        ),
+    }
+
+
 def build_invalid_partial_fixture_project_files(
     *, status_column_attributes: str, supplied_column: str = "order_id"
 ) -> dict[str, str]:

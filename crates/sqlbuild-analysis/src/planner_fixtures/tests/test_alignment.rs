@@ -16,6 +16,15 @@ fn given_partial_fixtures_when_aligning_then_preserves_schema_and_diagnostic_ord
             expected_diagnostics: &[],
         },
         AlignmentTestCase {
+            description: "duplicate requirement completes once",
+            supplied: &["order_id"],
+            required: &["status", "status"],
+            star: false,
+            typed_nulls: false,
+            expected_completed: Some(vec![1]),
+            expected_diagnostics: &[],
+        },
+        AlignmentTestCase {
             description: "unknown and required diagnostics",
             supplied: &["details"],
             required: &["unknown", "order_id"],

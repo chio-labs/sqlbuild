@@ -80,16 +80,17 @@ fn add_required(
         result.columns.len() - 1
     });
     let columns = &mut result.columns[position].1;
-    if let Some(index) = result.column_indices[position].get(name) {
+    let folded_name = python_casefold(name);
+    if let Some(index) = result.column_indices[position].get(&folded_name) {
         let column = &mut columns[*index];
         if column.readers.last().is_none_or(|reader| reader != model) {
             column.readers.push(model.to_owned());
         }
     } else {
-        result.column_indices[position].insert(name.to_owned(), columns.len());
+        result.column_indices[position].insert(folded_name.clone(), columns.len());
         columns.push(RequiredColumn {
             name: name.to_owned(),
-            folded_name: python_casefold(name),
+            folded_name,
             readers: vec![model.to_owned()],
         });
     }
