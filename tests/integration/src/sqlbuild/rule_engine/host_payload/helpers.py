@@ -1,84 +1,19 @@
-import dataclasses
-from itertools import product
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from sqlbuild._native import (
     Model,
+    RuleFactViews,
     build_compiled_project,
-    custom_rule_fact_digest,
+    compiled_model_record,
+    compiled_project_record,
     discover_project_inputs,
 )
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
-from sqlbuild.compiler.compile.types import CompiledProjectView
-from sqlbuild.rule_engine.classes.project_tree import public_model
-from sqlbuild.rule_engine.constants import (
-    FACT_AUDITS_ALL,
-    FACT_AUDITS_FOR_MODEL,
-    FACT_COLUMNS_DECLARED,
-    FACT_COLUMNS_INFERRED,
-    FACT_COLUMNS_NAMES,
-    FACT_CONTRACTS_ENFORCED,
-    FACT_CONTRACTS_GRAIN,
-    FACT_DECLARATIONS_CONSTANTS,
-    FACT_DECLARATIONS_ENUMS,
-    FACT_DECLARATIONS_PUBLIC_CONSTANTS,
-    FACT_DECLARATIONS_PUBLIC_ENUMS,
-    FACT_GRAPH_DEPENDENCIES,
-    FACT_GRAPH_DEPENDENTS,
-    FACT_PROJECT_AUDITS,
-    FACT_PROJECT_FUNCTIONS,
-    FACT_PROJECT_MODELS,
-    FACT_PROJECT_SEEDS,
-    FACT_PROJECT_SOURCES,
-    FACT_PROJECT_TESTS,
-    FACT_SQL_FOR_MODEL,
-    FACT_TESTS_ALL,
-    FACT_TESTS_FOR_MODEL,
-    FACT_TREE_CHILDREN,
-    FACT_TREE_DESCENDANTS,
-    FACT_TREE_GLOB,
-    FACT_TREE_PATHS,
-    FACT_TREE_READ_TEXT,
-    FACT_TREE_RELATIVE_PARTS,
-    FACT_TREE_RESOURCES_UNDER,
-)
-from sqlbuild.rule_engine.types import FactKey
-
-_TREE_ARGUMENTS: tuple[str, ...] = ("models/marts/order_totals.sql", "models")
-_GLOBAL_FACTS: tuple[str, ...] = (
-    FACT_PROJECT_MODELS,
-    FACT_PROJECT_SOURCES,
-    FACT_PROJECT_SEEDS,
-    FACT_PROJECT_FUNCTIONS,
-    FACT_PROJECT_TESTS,
-    FACT_PROJECT_AUDITS,
-    FACT_TREE_PATHS,
-    FACT_TESTS_ALL,
-    FACT_AUDITS_ALL,
-    FACT_DECLARATIONS_PUBLIC_ENUMS,
-    FACT_DECLARATIONS_PUBLIC_CONSTANTS,
-    FACT_DECLARATIONS_ENUMS,
-    FACT_DECLARATIONS_CONSTANTS,
-)
-_MODEL_PATH_FACTS: tuple[str, ...] = (
-    FACT_SQL_FOR_MODEL,
-    FACT_GRAPH_DEPENDENCIES,
-    FACT_GRAPH_DEPENDENTS,
-    FACT_COLUMNS_DECLARED,
-    FACT_COLUMNS_INFERRED,
-    FACT_COLUMNS_NAMES,
-    FACT_CONTRACTS_ENFORCED,
-    FACT_CONTRACTS_GRAIN,
-)
-_MODEL_NAME_FACTS: tuple[str, ...] = (FACT_TESTS_FOR_MODEL, FACT_AUDITS_FOR_MODEL)
-_TEXT_FACTS: tuple[tuple[str, int], ...] = (
-    (FACT_TREE_CHILDREN, 1),
-    (FACT_TREE_DESCENDANTS, 1),
-    (FACT_TREE_GLOB, 1),
-    (FACT_TREE_RELATIVE_PARTS, 2),
-    (FACT_TREE_RESOURCES_UNDER, 1),
-    (FACT_TREE_READ_TEXT, 1),
-)
+from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
+from sqlbuild.rule_engine.classes.rule_context import build_rule_fact_views
+from sqlbuild.rule_engine.types import RuleFactProject
 
 
 class OrdersReferenceResolver:
@@ -113,6 +48,41 @@ class OrdersReferenceResolver:
         return None
 
 
+class ReferenceModel:
+    """A compiled model read the way rule facts read full `CompiledModel` records."""
+
+    def __init__(self, model: CompiledModelView) -> None:
+        self._model: CompiledModelView = model
+        self.name: str = model.name
+        self.relative_path: Path = model.relative_path
+        self.key: object = model.key
+        self.deps: tuple[object, ...] = model.deps
+        self.authored_sql: str = model.authored_sql
+        self.query_sql: str = model.query_sql
+        self.inferred_columns: object = model.inferred_columns
+        self.enum_declarations: tuple[object, ...] = model.enum_declarations
+        self.constant_declarations: tuple[object, ...] = model.constant_declarations
+        self.declared_columns: tuple[object, ...] = getattr(model.schema_entry, "columns", ())
+
+    def config_value(self, name: str) -> object:
+        return self._model.config.values.get(name)
+
+
+class ReferenceProject:
+    """A compiled project read the way rule facts read a full `CompiledProject` record."""
+
+    def __init__(self, project: CompiledProjectView) -> None:
+        self.models: tuple[ReferenceModel, ...] = tuple(map(ReferenceModel, project.models))
+        self.effective_target_name: str | None = project.effective_target_name
+        self.sources: tuple[object, ...] = project.sources
+        self.seeds: tuple[object, ...] = project.seeds
+        self.functions: tuple[object, ...] = project.functions
+        self.audits: tuple[object, ...] = project.audits
+        self.sql_tests: tuple[object, ...] = project.sql_tests
+        self.public_enums: dict[str, object] = dict(project.public_enums)
+        self.public_constants: dict[str, object] = dict(project.public_constants)
+
+
 def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProjectView:
     """Write and compile one DuckDB project with an external reference resolver."""
 
@@ -127,29 +97,55 @@ def compile_files(*, root: Path, files: dict[str, str]) -> CompiledProjectView:
     )
 
 
-def dropped_fields(*, before: object, after: object) -> frozenset[str]:
-    """Return the fields of `after`'s dataclass whose values differ between the two snapshots."""
+def fact_views(*, project: RuleFactProject, root: Path) -> RuleFactViews:
+    """Build the fact views one host evaluation reads through."""
 
-    names: tuple[str, ...] = tuple(field.name for field in dataclasses.fields(type(after)))
-    return frozenset(filter(lambda name: getattr(before, name) != getattr(after, name), names))
-
-
-def every_fact_key(project: CompiledProjectView) -> tuple[FactKey, ...]:
-    """Return a key for every fact Rules can read, over every model of the project."""
-
-    models: tuple[Model, ...] = tuple(public_model(model) for model in project.models)
-    return (
-        *((fact,) for fact in _GLOBAL_FACTS),
-        *((fact, model.path.as_posix()) for fact, model in product(_MODEL_PATH_FACTS, models)),
-        *((fact, model.name) for fact, model in product(_MODEL_NAME_FACTS, models)),
-        *((fact, *_TREE_ARGUMENTS[:arity]) for fact, arity in _TEXT_FACTS),
-    )
+    return build_rule_fact_views(project=project, project_dir=root, dialect="duckdb")
 
 
-def fact_digests(*, project: CompiledProjectView, root: Path) -> dict[FactKey, str | None]:
-    """Digest every fact the custom-rule cache can key a result on."""
+def native_project(project: CompiledProjectView) -> CompiledProjectView:
+    """The compiled project as the compiler built it."""
 
-    return {
-        key: custom_rule_fact_digest(project=project, project_dir=root, key=key)
-        for key in every_fact_key(project)
+    return project
+
+
+def record_project(project: CompiledProjectView) -> CompiledProjectView:
+    """The compiled project as a `CompiledProject` record holding `CompiledModel` records."""
+
+    record: Any = compiled_project_record(project)
+    return replace(record, models=tuple(map(compiled_model_record, record.models)))
+
+
+def every_fact_value(views: RuleFactViews) -> dict[str, object]:
+    """Read every public fact once, keyed by fact and subject."""
+
+    values: dict[str, object] = {
+        "project.models": views.project.models,
+        "project.sources": views.project.sources,
+        "project.seeds": views.project.seeds,
+        "project.functions": views.project.functions,
+        "project.tests": views.project.tests,
+        "project.audits": views.project.audits,
+        "tests.all": views.tests.all(),
+        "audits.all": views.audits.all(),
+        "declarations.public_enums": views.declarations.public_enums,
+        "declarations.public_constants": views.declarations.public_constants,
+        "declarations.enums": views.declarations.enums,
+        "declarations.constants": views.declarations.constants,
+        "tree.resources_under": views.project.tree.resources_under("models"),
     }
+    model: Model
+    for model in views.project.models:
+        subject: str = model.path.as_posix()
+        documents: Any = views.sql.for_model(model)
+        values[f"sql.for_model:{subject}"] = (documents.authored.source, documents.expanded.source)
+        values[f"graph.dependencies:{subject}"] = views.graph.dependencies(model)
+        values[f"graph.dependents:{subject}"] = views.graph.dependents(model)
+        values[f"columns.declared:{subject}"] = views.columns.declared(model)
+        values[f"columns.inferred:{subject}"] = views.columns.inferred(model)
+        values[f"columns.names:{subject}"] = views.columns.names(model)
+        values[f"contracts.enforced:{subject}"] = views.contracts.enforced(model)
+        values[f"contracts.grain:{subject}"] = views.contracts.grain(model)
+        values[f"tests.for_model:{subject}"] = views.tests.for_model(model)
+        values[f"audits.for_model:{subject}"] = views.audits.for_model(model)
+    return values

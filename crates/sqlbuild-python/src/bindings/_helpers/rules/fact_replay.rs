@@ -155,12 +155,12 @@ pub(crate) fn is_tree_fact(key: &FactKey) -> bool {
 pub(crate) struct ModelEntry<'py> {
     pub(crate) model: Bound<'py, PyAny>,
     pub(crate) name: String,
-    path: Bound<'py, PyAny>,
+    pub(crate) path: Bound<'py, PyAny>,
     path_text: String,
     pub(crate) posix: String,
     pub(crate) config_values: Option<Bound<'py, PyDict>>,
     pub(crate) key: (String, String),
-    deps: Vec<(String, String)>,
+    pub(crate) deps: Vec<(String, String)>,
 }
 
 /// The models in project order with the indexes the model facts look them up by.

@@ -1294,7 +1294,7 @@ def final_directory(*, model: Model, ctx: RuleContext) -> list[Finding]:
     assert warm["compile_timings"]["rule_cache_hits"] >= 1
     assert not (tmp_path / "target" / "compiled").exists()
     host_inputs: Path = tmp_path / "target" / "rules-cache" / "host-inputs"
-    assert not tuple(host_inputs.glob("*.pickle"))
+    assert not tuple(host_inputs.glob("*.payload"))
 
 
 @pytest.mark.parametrize(

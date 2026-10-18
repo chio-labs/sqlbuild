@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use pyo3::types::{PyBytes, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
 use sqlbuild_core::json::main::dumps::dumps;
@@ -18,17 +18,17 @@ use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compiled_project::records::compiled_project_record;
-use crate::bindings::_helpers::records::construct::{new_record, new_record_with};
+use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::constants::{
     CUSTOM_HOST_RUNTIME_VERSION, CUSTOM_RULES_CACHE_FILE,
 };
-use crate::bindings::_helpers::rules::custom_hosts::{
-    HostCancel, HostRequest, host_payload_project, run_custom_hosts,
+use crate::bindings::_helpers::rules::custom_host_columns::custom_host_declared_columns;
+use crate::bindings::_helpers::rules::custom_host_payload::{
+    CUSTOM_HOST_PAYLOAD_MAGIC, custom_host_payload,
 };
+use crate::bindings::_helpers::rules::custom_hosts::{HostCancel, HostRequest, run_custom_hosts};
 use crate::bindings::_helpers::rules::custom_rule_cache::CustomRuleCache;
 use crate::bindings::_helpers::rules::custom_rule_cache::custom_rule_identity;
 use crate::bindings::_helpers::rules::custom_rule_evidence::custom_rule_implementation_fingerprint;
@@ -39,29 +39,6 @@ use crate::bindings::_helpers::rules::rule_run::rules_bulk_cache_path;
 
 const PROJECT_SUBJECT: &str = "project";
 const MODEL_SUBJECT: &str = "model";
-/// Project fields no rule fact reads, cleared before digests and host payloads use the project.
-const HOST_PROJECT_CLEARED: [(&str, Cleared); 11] = [
-    ("binding_catalog", Cleared::None),
-    ("sql_expansions", Cleared::Dict),
-    ("loaded_macros", Cleared::Dict),
-    ("loader_functions", Cleared::Tuple),
-    ("hook_functions", Cleared::Tuple),
-    ("materialization_files", Cleared::Tuple),
-    ("external_sql_reference_resolver", Cleared::None),
-    ("sql_scenarios", Cleared::Tuple),
-    ("sql_hook_files", Cleared::Tuple),
-    ("diagnostics", Cleared::Tuple),
-    ("unmatched_literal_sql_relations", Cleared::Tuple),
-];
-
-/// The empty value one cleared project field takes.
-#[derive(Clone, Copy)]
-enum Cleared {
-    None,
-    Dict,
-    Tuple,
-}
-
 /// The run one custom-rule evaluation describes.
 pub(crate) struct CustomRun<'a, 'py> {
     pub(crate) project: &'a Bound<'py, PyAny>,
@@ -140,11 +117,10 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
             .iter()
             .map(|(code, rule)| Ok((code.clone(), host_subject(rule)?)))
             .collect::<PyResult<_>>()?;
-        let facts_project: Bound<'py, PyAny> = host_project(run.project)?;
         let host_run: HostRun = run_custom_hosts(
             py,
             &HostRequest {
-                project: &facts_project,
+                project: run.project,
                 config: run.config,
                 project_dir: &project_dir,
                 dialect: run.dialect,
@@ -301,25 +277,6 @@ fn orjson_key(key: &FactKey) -> String {
     dumps(&value, &JsonDialect::Orjson(OrjsonOptions::default())).unwrap_or_default()
 }
 
-/// The project without state no rule fact reads, before digests and host payloads use it.
-fn host_project<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    let py: Python<'py> = project.py();
-    let record: Bound<'py, PyAny> = compiled_project_record(project, false)?;
-    let changes: Bound<'py, PyDict> = PyDict::new(py);
-    for (name, cleared) in HOST_PROJECT_CLEARED {
-        match cleared {
-            Cleared::None => changes.set_item(name, py.None())?,
-            Cleared::Dict => changes.set_item(name, PyDict::new(py))?,
-            Cleared::Tuple => changes.set_item(name, PyTuple::empty(py))?,
-        }
-    }
-    changes.set_item(
-        "scope_index",
-        new_record(py, RecordId::ScopeIndex, (), None)?,
-    )?;
-    replaced_keywords(&record, &changes)
-}
-
 fn subject_value(rule: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     let subject: Bound<'_, PyAny> = native_field(rule, "subject")?;
     if subject.is_none() {
@@ -389,12 +346,6 @@ fn cpu_seconds(py: Python<'_>) -> PyResult<f64> {
     Ok(thread + user + system)
 }
 
-/// The project every custom-rule host decodes from its payload.
-#[pyfunction]
-fn custom_host_payload<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    host_payload_project(&host_project(project)?)
-}
-
 /// The digest the custom-rule cache keys one recorded fact on, or `None` when unreproducible.
 #[pyfunction]
 #[pyo3(signature = (*, project, project_dir, key))]
@@ -408,5 +359,10 @@ fn custom_rule_fact_digest(
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(custom_host_payload, module)?)?;
+    module.add_function(wrap_pyfunction!(custom_host_declared_columns, module)?)?;
+    module.add(
+        "CUSTOM_HOST_PAYLOAD_MAGIC",
+        PyBytes::new(module.py(), CUSTOM_HOST_PAYLOAD_MAGIC),
+    )?;
     module.add_function(wrap_pyfunction!(custom_rule_fact_digest, module)?)
 }

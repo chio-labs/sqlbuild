@@ -17,7 +17,6 @@ from sqlbuild._native import (
     SqlNode,
     finding_position,
 )
-from sqlbuild.compiler.compile.types import CompiledModelView, CompiledProjectView
 from sqlbuild.rule_engine.classes.audit_facts import AuditFacts
 from sqlbuild.rule_engine.classes.column_facts import ColumnFacts
 from sqlbuild.rule_engine.classes.contract_facts import ContractFacts
@@ -27,10 +26,11 @@ from sqlbuild.rule_engine.classes.graph_facts import GraphFacts
 from sqlbuild.rule_engine.classes.model_test_facts import TestFacts
 from sqlbuild.rule_engine.classes.project_facts import ProjectFacts
 from sqlbuild.rule_engine.classes.sql_facts import SqlFacts
+from sqlbuild.rule_engine.types import RuleFactModel, RuleFactProject
 
 
 def build_rule_fact_views(
-    *, project: CompiledProjectView, project_dir: Path, dialect: str
+    *, project: RuleFactProject, project_dir: Path, dialect: str
 ) -> RuleFactViews:
     """Build immutable views once for one compiled project snapshot."""
 
@@ -53,10 +53,10 @@ class EvaluationRuleContext:
     def __init__(
         self,
         *,
-        model: CompiledModelView | None,
+        model: RuleFactModel | None,
         rule: Rule,
         config: RulesConfig,
-        project: CompiledProjectView,
+        project: RuleFactProject,
         project_dir: Path,
         selected_rules: tuple[Rule, ...],
         dialect: str,
