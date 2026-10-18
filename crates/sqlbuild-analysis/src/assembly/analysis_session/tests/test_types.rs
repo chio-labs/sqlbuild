@@ -178,6 +178,18 @@ pub(crate) struct ReferenceFactsTestCase {
     pub(crate) expected_required: &'static [&'static str],
 }
 
+pub(crate) struct NamesSetOperationTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_set_operation: bool,
+}
+
+pub(crate) struct KeywordFoldingTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) keyword: &'static str,
+    pub(crate) expected_non_ascii_folds: Vec<char>,
+}
+
 pub(crate) struct NativeDialectTestCase {
     pub(crate) description: &'static str,
     pub(crate) dialect: Option<&'static str>,

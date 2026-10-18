@@ -12,6 +12,8 @@ mod helpers;
 mod mappings;
 #[path = "tests/test_model_columns.rs"]
 mod model_columns;
+#[path = "tests/test_names_set_operation.rs"]
+mod names_set_operation;
 #[path = "tests/test_native_dialect.rs"]
 mod native_dialect;
 #[path = "tests/test_reference_facts.rs"]
