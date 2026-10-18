@@ -37,7 +37,7 @@ const ENABLED_VALUE: &str = "1";
 const MAX_RERUN_MODELS: usize = 500;
 const MAX_RERUN_PERCENT: usize = 5;
 /// Whether edits that report or raise errors compile as deltas; until then they fall back.
-pub(crate) const ERRORS_ON_DELTA_PATH: bool = false;
+pub(crate) const ERRORS_ON_DELTA_PATH: bool = true;
 /// How many times a changed relation shape may pull its dependents into the delta.
 const MAX_ROUNDS: usize = 4;
 const MODELS_ROOT: &str = "models/";
