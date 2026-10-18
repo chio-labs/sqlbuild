@@ -3270,6 +3270,20 @@ def add_stale_compiled_file_beside_models(project_dir: Path) -> None:
     write_project_file(project_dir, "target/compiled/models/marts/stale_mart.sql", "SELECT 1\n")
 
 
+def link_compiled_root(project_dir: Path) -> None:
+    """Make `target/compiled` a link to another folder under `target/`."""
+
+    linked: Path = project_dir / "target/compiled-linked"
+    linked.mkdir(parents=True, exist_ok=True)
+    (project_dir / "target/compiled").symlink_to(linked, target_is_directory=True)
+
+
+def add_stale_file_in_compiled_root(project_dir: Path) -> None:
+    """Add an unmanaged file directly in the compiled folder."""
+
+    write_project_file(project_dir, "target/compiled/stray.sql", "SELECT 1\n")
+
+
 def truncate_file(path: Path) -> None:
     """Drop the last bytes of a stored entry."""
 

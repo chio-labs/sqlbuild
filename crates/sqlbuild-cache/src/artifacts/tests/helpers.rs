@@ -35,3 +35,15 @@ pub(crate) fn tree_files(root: &Path) -> Vec<String> {
     files.sort();
     files
 }
+
+/// A compiled folder that is a plain directory.
+pub(crate) fn plain_compiled_root(target: &Path) {
+    std::fs::create_dir_all(target.join("compiled")).expect("compiled folder");
+}
+
+/// A compiled folder that is a link to a directory elsewhere in the target folder.
+#[cfg(unix)]
+pub(crate) fn linked_compiled_root(target: &Path) {
+    std::fs::create_dir_all(target.join("elsewhere")).expect("linked folder");
+    std::os::unix::fs::symlink(target.join("elsewhere"), target.join("compiled")).expect("link");
+}

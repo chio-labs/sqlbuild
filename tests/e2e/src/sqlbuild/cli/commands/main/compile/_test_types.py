@@ -619,6 +619,10 @@ class CompileReuseBypassTestCase:
     expected_stored_entries: int = 0
 
 
+def keep_compiled_root(_project_dir: Path) -> None:
+    """Leave the compiled folder as compile creates it."""
+
+
 @dataclass(frozen=True)
 class CompiledTreeStampTestCase:
     """An unmanaged file added under a compiled tree the previous compile stamped."""
@@ -626,6 +630,8 @@ class CompiledTreeStampTestCase:
     description: str
     edit: Callable[[Path], None]
     expected_removed_path: str
+    prepare: Callable[[Path], None] = keep_compiled_root
+    expected_stamped: bool = True
 
 
 @dataclass(frozen=True)

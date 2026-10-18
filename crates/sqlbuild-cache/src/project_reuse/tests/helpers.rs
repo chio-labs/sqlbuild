@@ -74,6 +74,21 @@ pub(crate) fn store_aged_slots(directory: &Path, slots: u64, max_entries: usize)
     }
 }
 
+/// Leave output files with no slot in `directory`, each modified `age` seconds ago.
+pub(crate) fn leave_orphaned_outputs(directory: &Path, outputs: &[(&str, u64)]) {
+    std::fs::create_dir_all(directory).expect("store folder");
+    for (name, age) in outputs {
+        let path = directory.join(name);
+        std::fs::write(&path, b"output").expect("orphaned output");
+        let modified = std::time::SystemTime::now() - std::time::Duration::from_secs(*age);
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .and_then(|file| file.set_modified(modified))
+            .expect("aged output");
+    }
+}
+
 /// The slot file names left in `directory`, sorted.
 pub(crate) fn slot_names(directory: &Path) -> Vec<String> {
     let mut names: Vec<String> = std::fs::read_dir(directory)

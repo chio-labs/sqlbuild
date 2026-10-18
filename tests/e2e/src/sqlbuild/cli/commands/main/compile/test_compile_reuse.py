@@ -36,6 +36,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     CompileReuseRun,
     add_stale_compiled_file,
     add_stale_compiled_file_beside_models,
+    add_stale_file_in_compiled_root,
     compile_in_process,
     compile_in_process_output,
     compile_in_process_reused,
@@ -56,6 +57,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     garbage_file,
     garbage_stored_output,
     in_process_compile_reads,
+    link_compiled_root,
     previous_format_slot,
     progress_only,
     record_digested_files,
@@ -922,6 +924,13 @@ if __name__ == "__main__":
             edit=add_stale_compiled_file,
             expected_removed_path="target/compiled/models/stale_model.sql",
         ),
+        CompiledTreeStampTestCase(
+            description="stale_file_in_linked_compiled_root",
+            edit=add_stale_file_in_compiled_root,
+            expected_removed_path="target/compiled/stray.sql",
+            prepare=link_compiled_root,
+            expected_stamped=False,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -930,10 +939,11 @@ def test_given_stamped_compiled_tree_when_a_stale_file_appears_then_the_next_com
 ) -> None:
     project_dir: Path = compile_reuse_project
     uncached: dict[str, str] = {COMPILE_REUSE_DISABLE_ENV_VAR: "1"}
+    test_case.prepare(project_dir)
     cold: CompileReuseRun = run_reuse_compile(project_dir=project_dir, env=uncached)
     time.sleep(_SETTLED_TREE_SECONDS)
     stamped: CompileReuseRun = run_reuse_compile(project_dir=project_dir, env=uncached)
-    assert compiled_tree_stamp_path(project_dir=project_dir).is_file()
+    assert compiled_tree_stamp_path(project_dir=project_dir).is_file() is test_case.expected_stamped
     unchanged: CompileReuseRun = run_reuse_compile(project_dir=project_dir, env=uncached)
     test_case.edit(project_dir)
 

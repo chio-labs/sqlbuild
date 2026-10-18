@@ -120,8 +120,10 @@ and when a provider's settings use sources SQLBuild cannot list exactly, such as
 `settings_customise_sources` or command-line parsing. The reason is logged at debug level.
 
 SQLBuild keeps one stored result per project and target under
-`target/cache/compiler-native-v1/project-reuse-v2/`. It is replaced atomically; a damaged or unreadable entry is
-ignored and compile runs in full. Storing a result normally takes a fraction of a second after the
+`target/cache/compiler-native-v1/project-reuse-v3/`: a small `.store` file holding what the result
+depends on, and a `.output` file beside it holding the report. A check reads only the `.store` file;
+the report is read only when nothing changed. Each file is replaced atomically; a damaged, missing or
+unreadable file is ignored and compile runs in full. Storing a result normally takes a fraction of a second after the
 report is ready. When it has to hash a lot of data or the project has very many files, compile
 prints `Recording compile for reuse...` and a completion line to stderr before the report.
 

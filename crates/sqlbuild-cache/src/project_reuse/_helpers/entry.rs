@@ -1,6 +1,7 @@
 //! One stored compile per selected target: a small inputs file and the output file it names.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use crate::digest::types::ContentDigest;
 use crate::project_reuse::_helpers::sections::{
@@ -19,6 +20,8 @@ const INPUTS_SECTION: &str = "inputs";
 const OUTPUT_IDENTITY_SECTION: &str = "output";
 const OUTPUT_META_SECTION: &str = "meta";
 const STDOUT_SECTION: &str = "stdout";
+/// How long an output with no slot is kept, so a compile still writing its slot keeps it.
+const ORPHANED_OUTPUT_GRACE: Duration = Duration::from_secs(600);
 
 /// A slot's verified inputs, the output file it names, and every section it carries.
 #[derive(Debug)]
@@ -156,6 +159,7 @@ pub(crate) fn remove_entry(path: &Path) {
     let _ = std::fs::remove_file(output_path(path));
 }
 
+/// Keep at most `max_entries` slots, newest first, and remove outputs no slot names any more.
 fn prune_entries(keep: &Path, max_entries: usize) {
     let Some(directory) = keep.parent() else {
         return;
@@ -163,22 +167,35 @@ fn prune_entries(keep: &Path, max_entries: usize) {
     let Ok(entries) = std::fs::read_dir(directory) else {
         return;
     };
-    let mut stored: Vec<(std::time::SystemTime, PathBuf)> = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path != keep)
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|suffix| suffix == REUSE_STORE_SUFFIX)
-        })
-        .filter_map(|path| {
-            let modified = std::fs::metadata(&path).and_then(|metadata| metadata.modified());
-            match modified {
-                Ok(modified) => Some((modified, path)),
-                Err(_) => None,
+    let mut stored: Vec<(SystemTime, PathBuf)> = Vec::new();
+    let mut outputs: Vec<(SystemTime, PathBuf)> = Vec::new();
+    for path in entries.flatten().map(|entry| entry.path()) {
+        let Ok(modified) = std::fs::metadata(&path).and_then(|metadata| metadata.modified()) else {
+            continue;
+        };
+        if path
+            .extension()
+            .is_some_and(|suffix| suffix == REUSE_STORE_SUFFIX)
+        {
+            if path != keep {
+                stored.push((modified, path));
             }
-        })
-        .collect();
+        } else if path
+            .extension()
+            .is_some_and(|suffix| suffix == REUSE_OUTPUT_SUFFIX)
+        {
+            outputs.push((modified, path));
+        }
+    }
+    let cutoff: SystemTime = SystemTime::now()
+        .checked_sub(ORPHANED_OUTPUT_GRACE)
+        .unwrap_or(SystemTime::UNIX_EPOCH);
+    for (modified, output) in outputs {
+        let orphaned: bool = !output.with_extension(REUSE_STORE_SUFFIX).exists();
+        if orphaned && modified < cutoff {
+            let _ = std::fs::remove_file(output);
+        }
+    }
     stored.sort_by(|left, right| right.cmp(left));
     for (_, stale) in stored.into_iter().skip(max_entries.saturating_sub(1)) {
         remove_entry(&stale);

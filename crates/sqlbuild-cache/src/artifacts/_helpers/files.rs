@@ -144,25 +144,27 @@ pub(crate) fn remove_stale(
     remove_stale_listing(compiled_dir, managed).map(|(removed, _)| removed)
 }
 
-/// `remove_stale`, with every directory the walk entered, kept or removed.
+/// `remove_stale`, with every directory left after the walk, or `None` when one was not read.
 pub(crate) fn remove_stale_listing(
     compiled_dir: &Path,
     managed: &HashSet<PathBuf>,
-) -> Result<(usize, Vec<PathBuf>), ArtifactError> {
+) -> Result<(usize, Option<Vec<PathBuf>>), ArtifactError> {
     if !compiled_dir.is_dir() {
-        return Ok((0, Vec::new()));
+        return Ok((0, None));
     }
     let cleaned: Cleaned = remove_stale_under(compiled_dir, managed)?;
     let _ = std::fs::remove_dir(compiled_dir);
-    Ok((cleaned.removed, cleaned.directories))
+    let listed: Option<Vec<PathBuf>> = cleaned.complete.then_some(cleaned.directories);
+    Ok((cleaned.removed, listed))
 }
 
-/// What cleaning one directory did: whether it is gone, files removed and directories entered.
+/// What cleaning one directory did, and whether every directory below it could be read.
 #[derive(Debug)]
 struct Cleaned {
     gone: bool,
     removed: usize,
     directories: Vec<PathBuf>,
+    complete: bool,
 }
 
 /// Clean one directory bottom-up as `os.walk(topdown=False)`.
@@ -177,10 +179,12 @@ fn remove_stale_under(
                 gone: false,
                 removed: 0,
                 directories: Vec::new(),
+                complete: false,
             });
         }
     };
     let mut directories: Vec<PathBuf> = vec![directory.to_path_buf()];
+    let mut complete: bool = true;
     let mut removed: usize = 0;
     let mut kept_file: bool = false;
     let mut subdirectories_removed: bool = true;
@@ -202,6 +206,7 @@ fn remove_stale_under(
         let below: Cleaned = remove_stale_under(&subdirectory, managed)?;
         removed += below.removed;
         subdirectories_removed &= below.gone;
+        complete &= below.complete;
         directories.extend(below.directories);
     }
     for file in files {
@@ -213,10 +218,14 @@ fn remove_stale_under(
         }
     }
     let gone: bool = !kept_file && subdirectories_removed && removed_directory(directory);
+    if gone {
+        directories.clear();
+    }
     Ok(Cleaned {
         gone,
         removed,
         directories,
+        complete,
     })
 }
 

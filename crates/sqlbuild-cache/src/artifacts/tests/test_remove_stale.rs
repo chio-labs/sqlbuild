@@ -1,9 +1,12 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use crate::artifacts::_helpers::tree_stamp::{managed_digest, now_ns, record_tree};
 use crate::artifacts::main::remove_stale_unless_unchanged::remove_stale_unless_unchanged;
-use crate::artifacts::tests::helpers::{place, tree_files};
-use crate::artifacts::tests::test_types::StampedTreeTestCase;
+use crate::artifacts::tests::helpers::{
+    linked_compiled_root, place, plain_compiled_root, tree_files,
+};
+use crate::artifacts::tests::test_types::{StampedTreeTestCase, WalkRaceTestCase};
 
 const MANAGED: [&str; 3] = [
     "models/orders.sql",
@@ -19,6 +22,7 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
             change: |_| {},
             managed_after: &MANAGED,
             racy_window_ns: 0,
+            layout: plain_compiled_root,
             expected_stamped: true,
             expected_removed: 0,
             expected_files: &[
@@ -32,6 +36,7 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
             change: |root| place(&root.join("compiled/models/marts/old.sql"), b"select 0\n"),
             managed_after: &MANAGED,
             racy_window_ns: 0,
+            layout: plain_compiled_root,
             expected_stamped: true,
             expected_removed: 1,
             expected_files: &[
@@ -45,6 +50,7 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
             change: |root| place(&root.join("compiled/models/new/old.sql"), b"select 0\n"),
             managed_after: &MANAGED,
             racy_window_ns: 0,
+            layout: plain_compiled_root,
             expected_stamped: true,
             expected_removed: 1,
             expected_files: &[
@@ -58,6 +64,7 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
             change: |_| {},
             managed_after: &["models/orders.sql", "models/marts/customers.sql"],
             racy_window_ns: 0,
+            layout: plain_compiled_root,
             expected_stamped: true,
             expected_removed: 1,
             expected_files: &["models/marts/customers.sql", "models/orders.sql"],
@@ -70,6 +77,7 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
             },
             managed_after: &MANAGED,
             racy_window_ns: 0,
+            layout: plain_compiled_root,
             expected_stamped: true,
             expected_removed: 1,
             expected_files: &[
@@ -83,6 +91,21 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
             change: |root| place(&root.join("compiled/models/marts/old.sql"), b"select 0\n"),
             managed_after: &MANAGED,
             racy_window_ns: i64::MAX / 2,
+            layout: plain_compiled_root,
+            expected_stamped: false,
+            expected_removed: 1,
+            expected_files: &[
+                "models/marts/customers.sql",
+                "models/orders.sql",
+                "tests/t.sql",
+            ],
+        },
+        StampedTreeTestCase {
+            description: "a stale file directly in a linked compiled root",
+            change: |root| place(&root.join("compiled/stray.sql"), b"select 0\n"),
+            managed_after: &MANAGED,
+            racy_window_ns: 0,
+            layout: linked_compiled_root,
             expected_stamped: false,
             expected_removed: 1,
             expected_files: &[
@@ -95,6 +118,7 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
 
     for test_case in test_cases {
         let folder = tempfile::tempdir().expect("target folder");
+        (test_case.layout)(folder.path());
         let compiled: PathBuf = folder.path().join("compiled");
         let stamp: PathBuf = folder.path().join("cache/compiled-tree.bin");
         for path in MANAGED {
@@ -134,6 +158,49 @@ fn given_stamped_tree_when_cleaning_again_then_only_changed_trees_are_walked() {
                     .map(|path| (*path).to_owned())
                     .collect::<Vec<String>>()
             ),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_folder_changed_during_the_walk_when_recording_then_no_stamp_is_kept() {
+    let test_cases = [
+        WalkRaceTestCase {
+            description: "folder changed after the walk started",
+            change_during_walk: |compiled| place(&compiled.join("models/stray.sql"), b"select 0\n"),
+            expected_stamped: false,
+        },
+        WalkRaceTestCase {
+            description: "nothing changed during the walk",
+            change_during_walk: |_| {},
+            expected_stamped: true,
+        },
+    ];
+
+    for test_case in test_cases {
+        let folder = tempfile::tempdir().expect("target folder");
+        let compiled: PathBuf = folder.path().join("compiled");
+        let stamp: PathBuf = folder.path().join("cache/compiled-tree.bin");
+        place(&compiled.join("models/orders.sql"), b"select 1\n");
+        let managed: HashSet<PathBuf> = [compiled.join("models/orders.sql")].into_iter().collect();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        let since_ns: i64 = now_ns();
+        let folders: Vec<PathBuf> = vec![compiled.clone(), compiled.join("models")];
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        (test_case.change_during_walk)(&compiled);
+
+        record_tree(
+            &stamp,
+            &managed_digest(&compiled, &managed),
+            &folders,
+            since_ns,
+        );
+
+        assert_eq!(
+            stamp.is_file(),
+            test_case.expected_stamped,
             "{}",
             test_case.description
         );

@@ -12,6 +12,8 @@ pub(crate) struct SlotPruneTestCase {
     pub(crate) description: &'static str,
     pub(crate) slots: u64,
     pub(crate) max_entries: usize,
+    /// Output files left without a slot before storing, each with its age in seconds.
+    pub(crate) orphaned_outputs: &'static [(&'static str, u64)],
     pub(crate) expected_kept: &'static [&'static str],
 }
 

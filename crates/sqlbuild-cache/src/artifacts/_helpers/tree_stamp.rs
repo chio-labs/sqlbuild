@@ -87,26 +87,33 @@ pub(crate) fn forget_tree(stamp_path: &Path) {
     let _ = std::fs::remove_file(stamp_path);
 }
 
-/// Record `folders` as the whole tree holding the files `digest` names, unless any is racy.
+/// The current time in nanoseconds since the epoch, as file stamps record it.
+pub(crate) fn now_ns() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_nanos()).unwrap_or(i64::MAX)
+        })
+}
+
+/// Record `folders` as the tree `digest` names when each stamps and changed before `trusted_ns`.
 pub(crate) fn record_tree(
     stamp_path: &Path,
     digest: &ContentDigest,
     folders: &[PathBuf],
-    racy_window_ns: i64,
+    trusted_ns: i64,
 ) {
-    let stamps: Vec<FolderStamp> = folders
+    let Some(stamps) = folders
         .iter()
-        .filter_map(|path| folder_stamp(path))
-        .collect();
-    let now_ns: i64 = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| {
-            i64::try_from(elapsed.as_nanos()).unwrap_or(i64::MAX)
-        });
+        .map(|path| folder_stamp(path))
+        .collect::<Option<Vec<FolderStamp>>>()
+    else {
+        return;
+    };
     let settled: bool = !stamps.is_empty()
         && stamps
             .iter()
-            .all(|stamp| stamp.mtime_ns.max(stamp.ctime_ns) < now_ns - racy_window_ns);
+            .all(|stamp| stamp.mtime_ns.max(stamp.ctime_ns) < trusted_ns);
     if !settled {
         return;
     }
