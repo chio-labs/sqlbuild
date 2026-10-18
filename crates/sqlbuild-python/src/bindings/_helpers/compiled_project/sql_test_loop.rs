@@ -608,10 +608,14 @@ impl<'py> TestScope<'_, 'py> {
     fn classified(&self, tests: &[ExpandedTest<'_, 'py>]) -> PyResult<Vec<SqlTestClassification>> {
         let py: Python<'py> = self.py();
         let mut files: Vec<(&str, Vec<usize>)> = Vec::new();
+        let mut positions: HashMap<&str, usize> = HashMap::new();
         for (index, test) in tests.iter().enumerate() {
-            match files.iter_mut().find(|(label, _)| *label == test.file.1) {
-                Some((_, indexes)) => indexes.push(index),
-                None => files.push((&test.file.1, vec![index])),
+            match positions.get(test.file.1.as_str()) {
+                Some(position) => files[*position].1.push(index),
+                None => {
+                    positions.insert(&test.file.1, files.len());
+                    files.push((&test.file.1, vec![index]));
+                }
             }
         }
         let store: Option<Bound<'py, SqlTestScanStore>> = self

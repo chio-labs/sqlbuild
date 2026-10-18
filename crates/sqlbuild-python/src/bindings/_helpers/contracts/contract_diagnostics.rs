@@ -1,5 +1,7 @@
 //! Model contract and promotion-conflict diagnostics, built as compile's `CompilerDiagnostic`s.
 
+use std::collections::HashMap;
+
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef, PyResult, Python,
 };
@@ -179,11 +181,15 @@ pub(crate) fn evaluate_model_contracts<'py>(
         (dialect_name, mode == IMPLICIT_COLUMN_CONTRACTS),
         &native,
     )?;
+    let latest: HashMap<&str, &[DiagnosticRow]> = outcomes
+        .iter()
+        .map(|(owner, rows)| (owner.as_str(), rows.as_slice()))
+        .collect();
     let mut diagnostics: Vec<Bound<'py, PyAny>> = Vec::new();
     for model in native_field(project, "models")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
         let name: String = native_field(&model, "name")?.extract()?;
-        let Some((_, rows)) = outcomes.iter().rev().find(|(owner, _)| *owner == name) else {
+        let Some(rows) = latest.get(name.as_str()).copied() else {
             continue;
         };
         for row in rows {
