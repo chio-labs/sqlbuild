@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check check-native-layering check-python-boundary \
+.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check check-native-layering check-python-boundary check-release-gate \
 	check-e2e-shards test-e2e-duckdb test-e2e-duckdb-build-core \
 	test-e2e-duckdb-build-incremental \
 	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-inspection \
@@ -623,7 +623,7 @@ verify-quick:
 	exit $$status
 
 
-check-ci: check-e2e-shards check-native-layering check-python-boundary rust-lint
+check-ci: check-e2e-shards check-native-layering check-python-boundary check-release-gate rust-lint
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
@@ -637,6 +637,10 @@ check-native-layering:
 
 check-python-boundary:
 	uv run python -m scripts.check_python_boundary
+
+
+check-release-gate:
+	uv run python -m scripts.check_release_gate
 
 
 check-pr-metadata:
