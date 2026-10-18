@@ -68,6 +68,7 @@ class ScenarioExpectedComparisonSqlTestCase:
     description: str
     set_difference_operator: str
     expected_fragments: tuple[str, ...]
+    compared_columns: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)

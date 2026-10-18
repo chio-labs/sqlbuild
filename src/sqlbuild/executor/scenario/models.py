@@ -318,6 +318,7 @@ class ScenarioExpectedExpectationExecutionResult:
     actual_row_count: int | None = None
     expected_row_count: int | None = None
     mismatched_row_count: int | None = None
+    missing_row_count: int | None = None
     error_code: str | None = None
     error_help: str | None = None
     error_message: str | None = None

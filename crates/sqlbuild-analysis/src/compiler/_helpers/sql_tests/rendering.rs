@@ -696,9 +696,26 @@ fn pruned_statement(statement: &str, dialect: SliceDialect) -> String {
 
 /// Columns compared for an expected-output step: the listed expected columns, else every column.
 fn compared_projection(step: &SqlTestChainStep) -> String {
-    step.expected_columns
-        .as_ref()
-        .map_or_else(|| "*".to_string(), |columns| columns.join(", "))
+    compared_columns_projection(step.expected_columns.as_deref())
+}
+
+/// The projection comparing `columns` by name, or every column positionally without a list.
+pub(crate) fn compared_columns_projection(columns: Option<&[String]>) -> String {
+    columns.map_or_else(|| "*".to_string(), |columns| columns.join(", "))
+}
+
+/// Row counts of `actual` and `expected` and of the rows each has that the other lacks.
+pub(crate) fn comparison_counts_sql(
+    (actual, expected): (&str, &str),
+    projection: &str,
+    set_difference_operator: &str,
+) -> String {
+    format!(
+        "(SELECT COUNT(*) FROM {actual}) AS actual_count, \
+         (SELECT COUNT(*) FROM {expected}) AS expected_count, \
+         (SELECT COUNT(*) FROM (SELECT {projection} FROM {actual} {set_difference_operator} SELECT {projection} FROM {expected}) AS __sqlbuild_mismatch) AS unexpected_count, \
+         (SELECT COUNT(*) FROM (SELECT {projection} FROM {expected} {set_difference_operator} SELECT {projection} FROM {actual}) AS __sqlbuild_missing) AS missing_count"
+    )
 }
 
 /// Render one planned test's comparison query, lifting authored CTE text verbatim.
@@ -753,16 +770,14 @@ pub(crate) fn render_comparison_sql(request: &RenderRequest) -> Result<String, S
         };
         let expected_sql = cte_state.expected_step_sql(step, expected_input, enabled)?;
         comparison_ctes.push((expected_cte.clone(), expected_sql));
-        let projection = compared_projection(step);
         select_parts.push(format!(
-            "SELECT {step_index} AS step_index, '{}' AS model_name, \
-             (SELECT COUNT(*) FROM {actual_cte}) AS actual_count, \
-             (SELECT COUNT(*) FROM {expected_cte}) AS expected_count, \
-             (SELECT COUNT(*) FROM (SELECT {projection} FROM {actual_cte} {} SELECT {projection} FROM {expected_cte}) AS __sqlbuild_mismatch) AS unexpected_count, \
-             (SELECT COUNT(*) FROM (SELECT {projection} FROM {expected_cte} {} SELECT {projection} FROM {actual_cte}) AS __sqlbuild_missing) AS missing_count",
+            "SELECT {step_index} AS step_index, '{}' AS model_name, {}",
             escape_sql_string(&step.model_name),
-            request.set_difference_operator,
-            request.set_difference_operator,
+            comparison_counts_sql(
+                (&actual_cte, &expected_cte),
+                &compared_projection(step),
+                &request.set_difference_operator,
+            ),
         ));
     }
 

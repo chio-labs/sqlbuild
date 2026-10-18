@@ -79,6 +79,7 @@ pub(super) fn failing_result_row() -> ScenarioResultRow {
                 actual_row_count: Some(3),
                 expected_row_count: Some(2),
                 mismatched_row_count: Some(2),
+                missing_row_count: Some(1),
                 error: coded(Some("X506"), "mismatch", Some("look")),
             },
             ExpectedRow {

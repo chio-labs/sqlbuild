@@ -259,5 +259,16 @@ class ScenarioExpectedColumnsE2ETestCase:
     expected_sql: str
     expected_exit_code: int
     expected_stdout_fragments: tuple[str, ...]
+    header_options: str = ""
     unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
     expected_json_results: tuple[dict[str, object], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedColumnsHeaderE2ETestCase:
+    """Test case for validating the SCENARIO() expected_columns option."""
+
+    description: str
+    header_options: str
+    expected_exit_code: int
+    expected_stderr_fragment: str

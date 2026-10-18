@@ -35,7 +35,13 @@ pub(crate) fn expectation_rows(row: &ScenarioResultRow, style: CliStyle) -> Stri
         let (status, detail): (&str, String) =
             match (expected.failed, expected.mismatched_row_count) {
                 (false, _) => (PASS_STATUS, String::new()),
-                (true, Some(mismatched)) => (FAIL_STATUS, format!("  {mismatched} mismatched")),
+                (true, Some(mismatched)) => (
+                    FAIL_STATUS,
+                    format!(
+                        "  {mismatched} mismatched, {} missing",
+                        expected.missing_row_count.unwrap_or_default()
+                    ),
+                ),
                 (true, None) => (ERROR_STATUS, String::new()),
             };
         text.push_str(&expectation_line(
@@ -84,8 +90,10 @@ pub(crate) fn expectation_failures(row: &ScenarioResultRow) -> String {
             continue;
         };
         text.push_str(&format!(
-            "    expected {}: actual={actual} expected={expected_count} mismatched={mismatched}\n",
+            "    expected {}: actual={actual} expected={expected_count} mismatched={mismatched} \
+             missing={}\n",
             expected.model_name,
+            expected.missing_row_count.unwrap_or_default()
         ));
     }
     for assertion in row.assertions.iter().filter(|assertion| assertion.failed) {

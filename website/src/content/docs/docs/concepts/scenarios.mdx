@@ -94,14 +94,22 @@ __assert__all_orders_have_payments AS (
 | `__source__<name>` | Fixture source input. Materializes as a scenario table. |
 | `__ref__<model>` | Fixture model boundary. Prevents SQLBuild from building that model upstream. |
 | `__seed__<seed>` | Fixture seed data. |
-| `__expected__<model>` | Full expected output. Compared order-insensitively against the scenario-built model. |
+| `__expected__<model>` | Expected output. Compared order-insensitively against the scenario-built model on the listed columns. |
 | `__assert__<name>` | Zero-row assertion. Passes if the query returns no rows; fails with the returned rows as diagnostics. |
 
-An `__expected__<model>` CTE must list every column the model outputs, and no others. When the
-CTE's columns and the model's output columns are both known statically, a mismatch fails planning
-with `S512`, naming the missing or extra columns, before the scenario runs. A comparison that fails
-to run reports its error with an `ERROR` status and no row counts; in `--json` output its
-`comparison_status` is `not_run` and its row counts are `null`.
+As in unit tests, an `__expected__<model>` CTE compares only the columns it lists, matched by
+name, so column order does not matter and unlisted model columns are ignored. Row counts are always
+compared, and rows are compared in both directions: `mismatched` counts model rows the expected
+output lacks and `missing` counts expected rows the model did not produce. An expected CTE without
+explicit column names, such as `SELECT *`, is compared on every column by position.
+
+When the CTE's columns and the model's output columns are both known statically, listing a column
+the model does not output fails planning with `S512` before the scenario runs. Set
+`expected_columns "all"` in the `SCENARIO()` header to also require every model output column to be
+listed; a missing column then fails with `S512`, naming it.
+
+A comparison that fails to run reports its error with an `ERROR` status and no row counts; in
+`--json` output its `comparison_status` is `not_run` and its row counts are `null`.
 
 For sources with two-part identity, use double underscores: `__source__raw__orders`.
 
@@ -129,12 +137,13 @@ available only to the model are not included. See
 
 ### SCENARIO() header
 
-The header holds metadata and an optional time limit:
+The header holds metadata, an optional time limit and the expected-column mode:
 
 | Field | Description |
 |-------|-------------|
 | `description` | Required description of the behaviour the scenario proves ([Descriptions](/docs/concepts/models/configuration#descriptions)) |
 | `tags` | Optional list of string tags |
+| `expected_columns` | Optional. `"listed"` (default) compares only the columns each `__expected__` CTE lists; `"all"` also requires every model output column to be listed |
 | `timeout` | Optional time limit for the scenario's warehouse run, such as `"10m"`, or `"disabled"`; overrides `[settings] scenario_timeout` and the target's `scenario_timeout` |
 
 At the limit SQLBuild cancels the scenario's running statement, still drops the relations the

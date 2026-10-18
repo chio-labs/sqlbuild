@@ -900,21 +900,22 @@ _EXPECTED_COLUMNS_PROJECT_FILES: dict[str, str] = {
     ),
 }
 _EXPECTED_COLUMNS_SCENARIO_PATH: str = "tests/scenarios/order_flags__expected.sql"
-_EXPECTED_COLUMNS_SCENARIO_HEADER: str = (
-    'SCENARIO (description "Order flags keep their status");\n\n'
-)
+_EXPECTED_COLUMNS_DESCRIPTION: str = 'description "Order flags keep their status"'
 _EXPECTED_COLUMNS_FIXTURE: str = (
     "WITH __ref__orders AS (\n  SELECT 'o1' AS order_id, 'placed' AS status\n),\n\n"
 )
 
 
-def build_expected_columns_scenario_project_files(*, expected_sql: str) -> dict[str, str]:
+def build_expected_columns_scenario_project_files(
+    *, expected_sql: str, header_options: str
+) -> dict[str, str]:
     """Build an order-flags project whose scenario expects `expected_sql` for the model."""
 
     return {
         **_EXPECTED_COLUMNS_PROJECT_FILES,
         _EXPECTED_COLUMNS_SCENARIO_PATH: (
-            f"{_EXPECTED_COLUMNS_SCENARIO_HEADER}{_EXPECTED_COLUMNS_FIXTURE}"
+            f"SCENARIO ({_EXPECTED_COLUMNS_DESCRIPTION}{header_options});\n\n"
+            f"{_EXPECTED_COLUMNS_FIXTURE}"
             f"__expected__order_flags AS (\n  {expected_sql}\n)\n"
         ),
     }

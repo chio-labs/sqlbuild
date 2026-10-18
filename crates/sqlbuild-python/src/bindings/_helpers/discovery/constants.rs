@@ -103,7 +103,12 @@ pub(crate) const SQL_TEST_HEADER_KEYS: [&str; 8] = [
     "sql_analysis",
     "timeout",
 ];
-pub(crate) const SQL_SCENARIO_HEADER_KEYS: [&str; 3] = ["description", "tags", "timeout"];
+pub(crate) const SQL_SCENARIO_HEADER_KEYS: [&str; 4] =
+    ["description", "expected_columns", "tags", "timeout"];
+/// `SCENARIO (expected_columns ...)` values: compare listed columns, or require every column.
+pub(crate) const SCENARIO_EXPECTED_COLUMNS_KEY: &str = "expected_columns";
+pub(crate) const SCENARIO_EXPECTED_COLUMNS_VALUES: [&str; 2] = ["listed", "all"];
+pub(crate) const SCENARIO_EXPECTED_COLUMNS_ALL: &str = "all";
 /// The fields a SQL hook entry reports, in output order.
 pub(crate) const SQL_HOOK_OUTPUT_FIELDS: [&str; 6] = [
     "statement",

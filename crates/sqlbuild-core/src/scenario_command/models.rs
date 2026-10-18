@@ -50,6 +50,7 @@ pub struct ExpectedRow {
     pub actual_row_count: Option<i64>,
     pub expected_row_count: Option<i64>,
     pub mismatched_row_count: Option<i64>,
+    pub missing_row_count: Option<i64>,
     pub error: Option<CodedText>,
 }
 

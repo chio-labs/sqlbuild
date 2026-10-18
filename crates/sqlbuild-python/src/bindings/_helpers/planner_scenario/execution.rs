@@ -5,6 +5,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
 use crate::bindings::_helpers::compiled_project::records::compiled_model_record;
+use crate::bindings::_helpers::discovery::constants::{
+    SCENARIO_EXPECTED_COLUMNS_ALL, SCENARIO_EXPECTED_COLUMNS_KEY,
+};
 use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream_deps;
@@ -25,6 +28,7 @@ use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fi
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
@@ -283,13 +287,21 @@ fn model_context<'py>(
     .into_any())
 }
 
-/// Reject an expected CTE whose listed columns cannot be compared with its model's output.
-fn check_expected_columns(
+/// Whether the scenario requires its expected CTEs to list every model output column.
+fn requires_all_columns(scenario: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let header: Bound<'_, PyAny> =
+        native_field(&native_field(scenario, "scenario_file")?, "header_values")?;
+    let value: Bound<'_, PyAny> = mapping_get(&header, SCENARIO_EXPECTED_COLUMNS_KEY)?;
+    Ok(!value.is_none() && value.extract::<String>()? == SCENARIO_EXPECTED_COLUMNS_ALL)
+}
+
+/// The columns compared by name, after rejecting an expected CTE that cannot be compared.
+fn compared_columns(
     scenario: &Bound<'_, PyAny>,
     context: &SqlContext<'_>,
     (model, model_name): (Option<Bound<'_, PyAny>>, &str),
     authored_sql: &str,
-) -> PyResult<()> {
+) -> PyResult<Option<Vec<String>>> {
     let py = scenario.py();
     let model_columns: Option<Vec<String>> = match model {
         Some(model) => model_reads::inferred_names(&model)?,
@@ -300,10 +312,11 @@ fn check_expected_columns(
     let columns =
         scenario_expected_columns(authored_sql, dialect.as_deref(), model_columns.as_deref());
     let scenario_name: String = native_field(scenario, "name")?.extract()?;
+    let all_columns: bool = requires_all_columns(scenario)?;
     let Some(message) =
-        scenario_expected_column_message(&scenario_name, model_name, &columns, true)
+        scenario_expected_column_message(&scenario_name, model_name, &columns, all_columns)
     else {
-        return Ok(());
+        return Ok(columns.listed);
     };
     Err(error(
         py,
@@ -326,7 +339,8 @@ fn expectations<'py>(
         let name = name.strip_prefix("__expected__").unwrap_or(&name);
         let target = required_target(&context.relations, "model_locations", name, "model")?;
         let authored: String = native_field(&cte, "sql_body")?.extract()?;
-        check_expected_columns(scenario, context, (models.get_item(name)?, name), &authored)?;
+        let compared =
+            compared_columns(scenario, context, (models.get_item(name)?, name), &authored)?;
         let sql = resolve_sql(context, &authored, false)?;
         expected.push(new_record_with(
             py,
@@ -335,6 +349,13 @@ fn expectations<'py>(
                 ("model_name", string(py, name)),
                 ("actual_destination", target),
                 ("expected_sql", string(py, &sql)),
+                (
+                    "compared_columns",
+                    match compared {
+                        Some(columns) => PyTuple::new(py, columns)?.into_any(),
+                        None => py.None().into_bound(py),
+                    },
+                ),
             ],
         )?);
     }

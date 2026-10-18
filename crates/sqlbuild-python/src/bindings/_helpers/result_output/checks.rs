@@ -18,10 +18,11 @@ const DECIMAL_KIND: &str = "decimal";
 const SCALAR_KINDS: [&str; 5] = ["string", "integer", "boolean", "float", "null"];
 const COLLECTION_KINDS: [&str; 2] = ["list", "set"];
 const ERROR_FIELDS: [&str; 3] = ["error_code", "error_help", "error_message"];
-const EXPECTED_COUNT_FIELDS: [&str; 3] = [
+const EXPECTED_COUNT_FIELDS: [&str; 4] = [
     "actual_row_count",
     "expected_row_count",
     "mismatched_row_count",
+    "missing_row_count",
 ];
 const COMPARISON_COMPLETED: &str = "completed";
 const COMPARISON_NOT_RUN: &str = "not_run";

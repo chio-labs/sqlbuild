@@ -235,15 +235,21 @@ pub(crate) fn describe_missing_expected_columns(
     ))
 }
 
-/// SQL comparing a scenario's actual output with its expected SQL.
+/// SQL comparing a scenario's actual output with its expected SQL on the compared columns.
 #[pyfunction]
-#[pyo3(signature = (*, actual_sql, expected_sql, set_difference_operator))]
+#[pyo3(signature = (*, actual_sql, expected_sql, set_difference_operator, compared_columns = None))]
 pub(crate) fn build_scenario_expected_comparison_sql(
     actual_sql: &str,
     expected_sql: &str,
     set_difference_operator: &str,
+    compared_columns: Option<Vec<String>>,
 ) -> String {
-    scenario_expected_comparison_sql(actual_sql, expected_sql, set_difference_operator)
+    scenario_expected_comparison_sql(
+        actual_sql,
+        expected_sql,
+        compared_columns.as_deref(),
+        set_difference_operator,
+    )
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
