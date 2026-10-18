@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use crate::project_reuse::_helpers::entry::{read_delta_base, write_entry};
+use crate::project_reuse::_helpers::entry::{read_delta_base, read_delta_output, write_entry};
 use crate::project_reuse::_helpers::files::{project_file_changes, unverified_paths};
 use crate::project_reuse::models::{ImageSections, ProjectFileChanges, StoredProjectFile};
 use crate::project_reuse::tests::helpers::{stamp, stored_inputs, stored_output};
@@ -71,7 +71,10 @@ fn given_stored_compile_with_image_when_reading_delta_base_then_only_an_intact_i
         .expect("stored compile");
         (test_case.edit)(&path);
 
-        let read = read_delta_base(&path);
+        let read = read_delta_base(&path).and_then(|base| {
+            let output = read_delta_output(&path, &base)?;
+            Some((base.inputs, output, base.image))
+        });
 
         assert_eq!(
             read,

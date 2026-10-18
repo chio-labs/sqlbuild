@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
+use crate::digest::types::ContentDigest;
 use crate::project_snapshot::models::{PathStamp, SnapshotRules};
 
 /// Constants the Python host owns, passed once so both sides agree.
@@ -71,6 +72,14 @@ pub struct StoredInputs {
 
 /// Named sections of one project image, in stored order.
 pub type ImageSections = Vec<(String, Vec<u8>)>;
+
+/// The stored compile a delta compile patches: its inputs and image, and which output it names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeltaBase {
+    pub inputs: StoredInputs,
+    pub image: ImageSections,
+    pub output_identity: ContentDigest,
+}
 
 /// The project paths that differ from the stored compile's, each list sorted.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

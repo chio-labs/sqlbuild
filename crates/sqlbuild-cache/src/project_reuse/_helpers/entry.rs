@@ -12,7 +12,7 @@ use crate::project_reuse::constants::{
     REUSE_MAX_STORED_IMAGES, REUSE_OUTPUT_SUFFIX, REUSE_STORE_SUFFIX,
 };
 use crate::project_reuse::models::{
-    ImageSections, SettingsInputs, StoredInputs, StoredOutput, StoredProjectFile,
+    DeltaBase, ImageSections, SettingsInputs, StoredInputs, StoredOutput, StoredProjectFile,
 };
 use crate::project_snapshot::models::PathStamp;
 use crate::store::errors::StoreDecodeError;
@@ -115,12 +115,21 @@ pub(crate) fn read_entry(path: &Path) -> Option<(StoredInputs, StoredOutput)> {
     Some((slot.inputs, output))
 }
 
-/// The stored inputs, output and image of the slot, or `None` when any cannot be read.
-pub(crate) fn read_delta_base(path: &Path) -> Option<(StoredInputs, StoredOutput, ImageSections)> {
+/// The stored inputs and image of the slot, or `None` when either cannot be read.
+pub(crate) fn read_delta_base(path: &Path) -> Option<DeltaBase> {
     let slot: StoredSlot = read_slot(path)?;
     let image: ImageSections = read_slot_image(path, &slot)?;
-    let output: StoredOutput = read_output(path, &slot)?;
-    Some((slot.inputs, output, image))
+    Some(DeltaBase {
+        inputs: slot.inputs,
+        image,
+        output_identity: slot.output_identity,
+    })
+}
+
+/// The output of the stored compile `base` was read from, or `None` when it no longer is.
+pub(crate) fn read_delta_output(path: &Path, base: &DeltaBase) -> Option<StoredOutput> {
+    let bytes: Vec<u8> = std::fs::read(output_path(path)).ok()?;
+    decoded_output(&bytes, &base.output_identity).ok()
 }
 
 /// The image the slot names, or `None` when it has none or it cannot be read.
