@@ -51,7 +51,7 @@ test:
 	@mkdir -p /tmp/opencode
 	@log="/tmp/opencode/test-$$(date +%Y%m%d-%H%M%S).log"; \
 	echo "Logging to $$log"; \
-	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv --color=yes -n auto --dist loadfile 2>&1 | tee "$$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv --color=yes -n auto --dist loadfile --max-worker-restart=0 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "TEST_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
 	exit $$status
