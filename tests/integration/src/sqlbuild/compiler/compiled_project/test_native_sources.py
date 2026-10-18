@@ -131,6 +131,29 @@ def test_given_source_when_compiling_then_native_project_holds_its_attached_entr
             expected_message="SQL syntax error in source expression 'raw_orders'",
             expects_help=True,
         ),
+        NativeSourceErrorTestCase(
+            description="first of several expressions that do not parse",
+            source_yml=(
+                "sources:\n"
+                '  - name: open_orders\n    expression: "SELECT 1 AS id"\n'
+                '  - name: first_orders\n    expression: "SELECT FROM WHERE"\n'
+                '  - name: second_orders\n    expression: "SELECT , FROM"\n'
+            ),
+            expected_message="SQL syntax error in source expression 'first_orders'",
+            expects_help=True,
+        ),
+        NativeSourceErrorTestCase(
+            description="earlier source error before a later expression that does not parse",
+            source_yml=(
+                "sources:\n  - name: raw_orders\n    columns:\n      - name: amount\n"
+                "        meta:\n          unit: ${currency}\n"
+                '  - name: broken_orders\n    expression: "SELECT FROM WHERE"\n'
+            ),
+            expected_message=(
+                "source raw_orders column amount meta references unknown variable 'currency'"
+            ),
+            expects_help=False,
+        ),
     ],
     ids=lambda case: case.description,
 )

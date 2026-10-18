@@ -44,6 +44,14 @@ pub(crate) fn own_entry<'a, 'py>(
 
 /// Each model's header facts on the compile pool, or in turn when the pool cannot start.
 pub(crate) fn all_header_facts(headers: &[Option<NativeHeader>]) -> Vec<Option<HeaderFacts>> {
+    pooled(headers, facts_of)
+}
+
+/// `each` of every item in order, run on the compile pool, or in turn when the pool cannot start.
+pub(crate) fn pooled<T: Sync, R: Send>(
+    items: &[T],
+    each: impl Fn(&T) -> R + Sync + Send,
+) -> Vec<R> {
     let pool: &Result<ThreadPool, ThreadPoolBuildError> = POOL.get_or_init(|| {
         ThreadPoolBuilder::new()
             .num_threads(PREPASS_WORKERS)
@@ -52,8 +60,8 @@ pub(crate) fn all_header_facts(headers: &[Option<NativeHeader>]) -> Vec<Option<H
             .build()
     });
     match pool {
-        Ok(pool) => pool.install(|| headers.par_iter().map(facts_of).collect()),
-        Err(_) => headers.iter().map(facts_of).collect(),
+        Ok(pool) => pool.install(|| items.par_iter().map(&each).collect()),
+        Err(_) => items.iter().map(each).collect(),
     }
 }
 

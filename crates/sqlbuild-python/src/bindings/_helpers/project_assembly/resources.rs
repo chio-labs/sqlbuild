@@ -9,9 +9,11 @@ use pyo3::{PyErr, pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::assembly::project::main::check_sql_syntax::check_sql_syntax;
 use sqlbuild_analysis::assembly::project::main::sql_syntax_error::sql_syntax_error as check_syntax_error;
 use sqlbuild_analysis::assembly::project::models::{SyntaxCheck, SyntaxFailure, SyntaxMode};
+use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use sqlbuild_core::panics::main::native_failure::native_failure;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
+use crate::bindings::_helpers::compiled_project::model_loop_prepass::pooled;
 use crate::bindings::types::CompilerDetach;
 
 const SYNTAX_CHECK_CONTEXT: &str = "native SQL syntax check";
@@ -51,6 +53,23 @@ pub(crate) fn syntax_error_message(
     py.compiler_detach(|| Ok(check_syntax_error(check, dialect, mode)))
         .map_err(compiler_error)?
         .map_err(syntax_value_error)
+}
+
+/// Each check's `syntax_error_message`, in order, parsed together on the compile pool.
+pub(crate) fn syntax_error_messages(
+    py: Python<'_>,
+    checks: &[SyntaxCheck],
+    dialect: &str,
+    mode: SyntaxMode,
+) -> Vec<PyResult<Option<String>>> {
+    py.detach(|| {
+        pooled(checks, |check| {
+            catch_compiler_panic(|| Ok(check_syntax_error(check, dialect, mode)))
+        })
+    })
+    .into_iter()
+    .map(|outcome| outcome.map_err(compiler_error)?.map_err(syntax_value_error))
+    .collect()
 }
 
 /// The `ValueError` Python's syntax validation raises before parsing.
