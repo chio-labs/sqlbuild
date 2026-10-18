@@ -3,29 +3,31 @@
 use std::collections::{BTreeSet, HashSet, VecDeque};
 
 use crate::refactoring::_helpers::edits::header_edits::{
-    add_column_entry_edit, column_config_edits, column_entry_edits, consumer_column_header_edits,
-    header_tokens, schema_column_edits, unhandled_word_offsets,
+    HeaderToken, add_column_entry_edit, audit_argument_strings, column_config_edits,
+    column_entry_edits, consumer_column_header_edits, header_tokens, schema_column_edits,
+    unhandled_word_offsets,
 };
 use crate::refactoring::_helpers::edits::text_edits::{
-    RefactorParts, manual_at, merge_parts, path_edits,
+    RefactorParts, manual_at, merge_parts, path_edits, whole_word_offsets,
 };
 use crate::refactoring::_helpers::edits::yaml_edits::yaml_column_edits;
 use crate::refactoring::_helpers::files::project_files::{
     AuthoredBody, ProjectSqlFile, authored_bodies, project_sql_files, yaml_files,
 };
+use crate::refactoring::_helpers::planning::audit_arguments::{ArgumentUsage, argument_usage};
 use crate::refactoring::_helpers::planning::column_references::{
-    BodyContext, BodyMapping, ColumnQuery, ResourceColumns, analyze_column, columns_of,
-    consumer_edits, output_edits, resource_columns,
+    BodyContext, BodyEdits, BodyMapping, ColumnFacts, ColumnQuery, ExpressionSite, ResourceColumns,
+    analyze_column, columns_of, consumer_edits, expression_edits, output_edits, resource_columns,
 };
 use crate::refactoring::_helpers::planning::model_planning::{
     find_model, needs_column_migration, validate_identifier,
 };
-use crate::refactoring::_helpers::scanning::chars::chars;
+use crate::refactoring::_helpers::scanning::chars::{chars, slice};
 use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
-use crate::refactoring::_helpers::scanning::sql_sites::{analysis_sql, model_body};
+use crate::refactoring::_helpers::scanning::sql_sites::{AnalysisSql, analysis_sql, model_body};
 use crate::refactoring::constants::{
-    EXPECTED_FIXTURE_PREFIX, MIGRATE_FROM_KEY, MODEL_RESOURCE_TYPE, REF_FIXTURE_PREFIX, REF_KIND,
-    ROOT_SCOPE,
+    AUDIT_ARGUMENT_TABLE, ESCAPE_CHARACTER, EXPECTED_FIXTURE_PREFIX, MIGRATE_FROM_KEY,
+    MODEL_RESOURCE_TYPE, REF_FIXTURE_PREFIX, REF_KIND, ROOT_SCOPE,
 };
 use crate::refactoring::errors::RefactorError;
 use crate::refactoring::models::{
@@ -272,7 +274,7 @@ fn declarations(
     ]))
 }
 
-fn header_parts(
+pub(crate) fn header_parts(
     context: &ColumnRenameContext<'_>,
     model: &ModelFacts,
 ) -> Result<RefactorParts, RefactorError> {
@@ -293,18 +295,23 @@ fn header_parts(
     let mut edits = column_config_edits(&text, &tokens, old, new);
     edits.extend(entry_edits.unwrap_or_default());
     edits.extend(added);
-    let handled: Vec<usize> = edits.iter().map(|edit| edit.start).collect();
-    let manual: Vec<ManualLocation> = unhandled_word_offsets(&text, &tokens, old, &handled)
-        .into_iter()
-        .map(|offset| {
-            manual_at(
-                path,
-                &text,
-                Some(offset),
-                format!("the MODEL header mentions {old} here; update it by hand"),
-            )
-        })
-        .collect();
+    let mut handled: Vec<usize> = edits.iter().map(|edit| edit.start).collect();
+    let arguments = audit_argument_parts(context, model, (path, &text), &tokens)?;
+    handled.extend(arguments.handled);
+    edits.extend(arguments.edits.edits);
+    let mut manual: Vec<ManualLocation> = arguments.edits.manual;
+    manual.extend(
+        unhandled_word_offsets(&text, &tokens, old, &handled)
+            .into_iter()
+            .map(|offset| {
+                manual_at(
+                    path,
+                    &text,
+                    Some(offset),
+                    format!("the MODEL header mentions {old} here; update it by hand"),
+                )
+            }),
+    );
     let migrations = if migrate {
         vec![MigrationDeclaration {
             model_name: model.name.clone(),
@@ -320,6 +327,118 @@ fn header_parts(
         migrations,
         ..RefactorParts::default()
     })
+}
+
+/// Audit argument edits and the header string tokens they settle.
+struct ArgumentParts {
+    edits: BodyEdits,
+    handled: Vec<usize>,
+}
+
+/// Rename the column in audit string arguments the audit's SQL splices in as expressions.
+fn audit_argument_parts(
+    context: &ColumnRenameContext<'_>,
+    model: &ModelFacts,
+    file: (&str, &[char]),
+    tokens: &[HeaderToken],
+) -> Result<ArgumentParts, RefactorError> {
+    let (path, text) = file;
+    let (old, _) = context.names();
+    let mut parts = ArgumentParts {
+        edits: BodyEdits::default(),
+        handled: Vec::new(),
+    };
+    for argument in audit_argument_strings(tokens) {
+        let token = argument.token;
+        let expression = slice(text, token.start + 1, token.end.saturating_sub(1));
+        let mentions = whole_word_offsets(&chars(&expression), old);
+        if mentions.is_empty() {
+            continue;
+        }
+        parts.handled.push(token.start);
+        let usage = argument_usage(
+            &context.facts.authored_files,
+            &argument.audit,
+            &argument.key,
+        );
+        if usage != ArgumentUsage::Sql {
+            let reason = non_sql_argument_reason(old, &argument.audit, &argument.key, usage);
+            parts
+                .edits
+                .manual
+                .extend(mentions.into_iter().map(|offset| {
+                    manual_at(path, text, Some(token.start + 1 + offset), reason.clone())
+                }));
+            continue;
+        }
+        let prefix = format!("SELECT * FROM {AUDIT_ARGUMENT_TABLE} WHERE ");
+        let site = ExpressionSite {
+            path,
+            contents: text,
+            prefix: prefix.chars().count(),
+            offset: token.start + 1,
+        };
+        let rendered: AnalysisSql = analysis_sql(&chars(&expression), context.scan);
+        let unknown_relation = rendered
+            .tables
+            .iter()
+            .find(|((kind, name), _)| columns_of(&context.columns, kind, name).is_empty())
+            .map(|((_, name), _)| name.clone());
+        if let Some(relation) = unknown_relation {
+            let reason = format!(
+                "this audit argument reads {relation}, whose columns SQLBuild does not know, so {old} here is not renamed; update it by hand"
+            );
+            parts
+                .edits
+                .manual
+                .extend(mentions.into_iter().map(|offset| {
+                    manual_at(path, text, Some(token.start + 1 + offset), reason.clone())
+                }));
+            continue;
+        }
+        let mut target_tables: BTreeSet<String> = rendered.placeholders(REF_KIND, &model.name);
+        target_tables.insert(AUDIT_ARGUMENT_TABLE.to_owned());
+        let mut tables = vec![(
+            (REF_KIND.to_owned(), model.name.clone()),
+            BTreeSet::from([AUDIT_ARGUMENT_TABLE.to_owned()]),
+        )];
+        tables.extend(rendered.tables);
+        let analysis = AnalysisSql {
+            sql: format!("{prefix}{}", rendered.sql),
+            tables,
+        };
+        let analysed = if expression.contains(ESCAPE_CHARACTER) {
+            ColumnFacts::default()
+        } else {
+            analyze_column(
+                &analysis,
+                &context.facts.dialect,
+                &context.columns,
+                &ColumnQuery {
+                    column: old,
+                    target_tables,
+                    target_ctes: BTreeSet::new(),
+                    output_scopes: BTreeSet::new(),
+                },
+            )?
+        };
+        let result = expression_edits(&analysed, &site, context.names());
+        parts.edits.edits.extend(result.edits);
+        parts.edits.manual.extend(result.manual);
+    }
+    Ok(parts)
+}
+
+/// Why an audit argument that is not known to be SQL is left for a hand edit.
+fn non_sql_argument_reason(old: &str, audit: &str, key: &str, usage: ArgumentUsage) -> String {
+    match usage {
+        ArgumentUsage::Literal => format!(
+            "audit {audit} quotes argument {key} as a string, so {old} here is not renamed; update it by hand if it names the column"
+        ),
+        _ => format!(
+            "no SQL definition of audit {audit} shows whether argument {key} is SQL, so {old} here is not renamed; update it by hand if it names the column"
+        ),
+    }
 }
 
 fn consumers<'a>(

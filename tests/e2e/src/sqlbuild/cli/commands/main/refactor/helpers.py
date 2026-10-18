@@ -184,6 +184,81 @@ ORDER_SHAPE: dict[str, str] = {
         "materialized table,", "materialized table,\n  model_schema order_shape,"
     ),
 }
+FLAGGED_ORDERS: str = (
+    "MODEL (\n"
+    '  description "Orders with a flag",\n'
+    "  materialized table,\n"
+    "  columns (\n"
+    "    order_id (type VARCHAR)\n"
+    "    is_flagged (type BOOLEAN)\n"
+    "  ),\n"
+    ");\n\n"
+    "SELECT\n"
+    "  CAST('o1' AS VARCHAR) AS order_id,\n"
+    "  CAST(TRUE AS BOOLEAN) AS is_flagged\n"
+)
+FLAGGED_ORDER_SUMMARY: str = (
+    "MODEL (\n"
+    '  description "Orders summary",\n'
+    "  materialized table,\n"
+    ");\n\n"
+    "WITH orders AS (\n"
+    "  SELECT *\n"
+    '  FROM __ref("flagged_orders")\n'
+    ")\n\n"
+    "SELECT\n"
+    "  order_id,\n"
+    "  is_flagged\n"
+    "FROM orders\n"
+)
+FLAGGED_CONTRACT: dict[str, str] = {
+    "models/marts/flagged_orders.sql": FLAGGED_ORDERS,
+    "models/marts/flagged_order_summary.sql": FLAGGED_ORDER_SUMMARY,
+}
+FLAGGED_AUDITS: dict[str, str] = {
+    "models/marts/_sqlbuild/_audits/generic/flag_check.sql": (
+        "AUDIT ();\n\nSELECT *\nFROM @relation\nWHERE @where_condition AND order_id IS NULL\n"
+    ),
+    "models/marts/flagged_orders.sql": FLAGGED_ORDERS.replace(
+        "is_flagged (type BOOLEAN)",
+        "is_flagged (type BOOLEAN, audits [flag_check "
+        "(where_condition \"is_flagged = TRUE AND 'is_flagged' <> ''\")])",
+    ).replace(
+        "  ),\n);",
+        '  ),\n  audits [flag_check (name "orders_flag", where_condition "NOT is_flagged")],\n);',
+    ),
+    "models/marts/flagged_order_summary.sql": FLAGGED_ORDER_SUMMARY.replace(
+        "  materialized table,\n",
+        '  materialized table,\n  audits [flag_check (where_condition "is_flagged IS NULL")],\n',
+    ),
+}
+_FLAG_CHECK: str = (
+    "AUDIT ();\n\nSELECT *\nFROM @relation\nWHERE @where_condition AND order_id IS NULL\n"
+)
+FLAGGED_SUBQUERY_AUDITS: dict[str, str] = {
+    "models/marts/_sqlbuild/_audits/generic/flag_check.sql": _FLAG_CHECK,
+    "models/marts/vip_flags.sql": (
+        'MODEL (description "VIP flags", materialized table);\n'
+        "SELECT CAST(TRUE AS BOOLEAN) AS is_flagged\n"
+    ),
+    "models/marts/flagged_orders.sql": FLAGGED_ORDERS.replace(
+        "  ),\n);",
+        "  ),\n  audits [\n"
+        '    flag_check (name "vip_flag", where_condition '
+        "'is_flagged IN (SELECT is_flagged FROM __ref(\"vip_flags\"))'),\n"
+        '    flag_check (name "own_flag", where_condition '
+        "'is_flagged IN (SELECT is_flagged FROM __ref(\"flagged_orders\"))'),\n"
+        "  ],\n);",
+    ),
+}
+FLAGGED_LITERAL_AUDIT: dict[str, str] = {
+    "models/marts/_sqlbuild/_audits/generic/prefix_check.sql": (
+        "AUDIT ();\n\nSELECT *\nFROM @relation\nWHERE @'prefix' = ''\n"
+    ),
+    "models/marts/flagged_orders.sql": FLAGGED_ORDERS.replace(
+        "  ),\n);", '  ),\n  audits [prefix_check (prefix "is_flagged")],\n);'
+    ),
+}
 ORDERS_MACRO: dict[str, str] = {
     "sqlbuild_project.toml": _PROJECT_TOML + "\n[references]\nenforce_explicit = false\n",
     "models/staging/_sqlbuild/_macros/orders.py": (

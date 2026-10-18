@@ -1,3 +1,4 @@
+pub(crate) mod audit_arguments;
 pub(crate) mod column_planning;
 pub(crate) mod column_references;
 pub(crate) mod declaration_moves;

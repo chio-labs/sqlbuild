@@ -13,6 +13,17 @@ pub const CTE_SCOPE_PREFIX: &str = "cte:";
 pub const MIGRATE_FROM_KEY: &str = "migrate_from";
 pub const CURSOR_INPUTS_KEY: &str = "cursor_inputs";
 pub const COLUMNS_KEY: &str = "columns";
+pub const AUDITS_KEY: &str = "audits";
+/// The relation an audit string argument is analysed against, standing for the audited model.
+pub const AUDIT_ARGUMENT_TABLE: &str = "__sqb_audit_target__";
+/// The escape character of quoted MODEL header values.
+pub const ESCAPE_CHARACTER: char = '\\';
+/// The quote of SQL string literals.
+pub const SQL_STRING_QUOTE: char = '\'';
+/// The character that starts a generic audit parameter such as `@expression`.
+pub const AUDIT_PARAMETER_SIGIL: char = '@';
+/// The directory holding generic audit definitions, as in `audits/generic/`.
+pub const GENERIC_AUDIT_DIRECTORY: &str = "generic";
 pub const RELATIONSHIPS_AUDIT: &str = "relationships";
 pub const RELATIONSHIPS_TO_KEY: &str = "to";
 pub const RELATIONSHIPS_FIELD_KEY: &str = "field";
@@ -39,6 +50,7 @@ pub const HEADER_DESCRIPTION_KEY: &str = "description";
 pub const HEADER_INDENT: &str = "  ";
 pub const HEADER_SEPARATOR: &str = ",";
 pub const HEADER_OPEN_PAREN: &str = "(";
+pub const LIST_OPENER: &str = "[";
 pub const HEADER_OPENERS: [&str; 3] = ["(", "[", "{"];
 pub const HEADER_CLOSERS: [&str; 3] = [")", "]", "}"];
 pub const PARENTHESIZED_EMPTY_TOKENS: usize = 2;

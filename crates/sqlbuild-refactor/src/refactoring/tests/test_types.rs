@@ -210,3 +210,10 @@ pub(crate) struct SourceContractTestCase {
     pub(crate) overwrite: bool,
     pub(crate) expected_edit: ContractEdit,
 }
+
+pub(super) struct HeaderPartsTestCase {
+    pub(super) description: &'static str,
+    pub(super) contents: &'static str,
+    pub(super) expected_edits: &'static [&'static str],
+    pub(super) expected_manual: &'static [&'static str],
+}
