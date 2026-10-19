@@ -146,6 +146,37 @@ retention = "30d"
 
 Use a single ClickHouse server or ClickHouse Cloud; `ON CLUSTER` stores are not supported yet.
 
+## Filtering what Recall stores
+
+By default Recall stores every lifecycle event and every output byte. To decide yourself, write a
+[sink](/docs/concepts/observability/sinks) with a parameter annotated `RecallWriter`: it replaces
+Recall's default for its stream, and Recall stores only what it publishes.
+
+```python
+from sqlbuild.recall import RecallWriter
+from sqlbuild.sinks import CommandOutputRecord, command_output_sink
+
+
+@command_output_sink
+def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:
+    redacted: bytes = record.data.replace(b"secret-token", b"[redacted]")
+    writer.publish_command_output(record.replace(data=redacted))
+```
+
+- A `@command_output_sink` replacement receives each output chunk with its exact bytes in
+  `record.data` (record schema version 2). `record.replace(data=…, message=…)` returns a copy that
+  keeps the record ID and sequence; publish at most one record per call.
+- A `@lifecycle_event_sink` replacement receives each event its `event_kinds` and `min_severity`
+  accept and keeps it with `writer.publish_lifecycle(event)`.
+- A record the sink does not publish is counted as `filtered`; a sink that raises has its record
+  counted as `failed`, and Recall never falls back to storing the unfiltered record. The command's
+  exit code and output are unaffected. `output_invocations.filter_active` is `1` for invocations
+  that ran a replacement.
+- There is at most one replacement per stream; discovery fails with `D015` naming each
+  `path:function` otherwise. A replacement takes only its record and the writer, not providers, and
+  the provider name `recall_writer` is reserved.
+- Other sinks keep receiving every record. With `enabled = false`, no replacement runs.
+
 ## Querying history
 
 Use [`sqb recall`](/docs/cli/recall) to read the store. Queries are read-only `SELECT` statements,

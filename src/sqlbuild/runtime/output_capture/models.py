@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -17,7 +18,7 @@ from sqlbuild.runtime.output_capture.types import CommandOutputStream, OutputRec
 
 @dataclass(frozen=True)
 class CommandOutputRecord:
-    """One ANSI-free bounded text chunk ready for destination serialization."""
+    """One ANSI-free bounded text chunk; schema version 2 adds its exact bytes in ``data``."""
 
     invocation_id: str
     sequence: int
@@ -34,6 +35,7 @@ class CommandOutputRecord:
     schema_version: int = CURRENT_COMMAND_OUTPUT_SCHEMA_VERSION
     producer: str = "sqlbuild"
     producer_version: str = field(default=SQLBUILD_COMMAND_OUTPUT_PRODUCER_VERSION)
+    data: bytes = b""
 
     def __post_init__(self) -> None:
         """Validate and freeze the known command-output wire contract."""
@@ -45,6 +47,17 @@ class CommandOutputRecord:
         """Return a deterministic destination key for this invocation sequence."""
 
         return f"{self.invocation_id}:command-output:{self.sequence}"
+
+    def replace(
+        self, *, data: bytes | None = None, message: str | None = None
+    ) -> CommandOutputRecord:
+        """Return a copy with new ``data`` or ``message`` that keeps the record ID and sequence."""
+
+        return dataclasses.replace(
+            self,
+            data=self.data if data is None else data,
+            message=self.message if message is None else message,
+        )
 
 
 @dataclass(frozen=True)

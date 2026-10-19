@@ -2,6 +2,7 @@
 
 use crate::command_output::constants::{
     COMMAND_OUTPUT_LOSS_RECORD_TYPE, COMMAND_OUTPUT_RECORD_TYPE, CURRENT_SCHEMA_VERSION,
+    RECALL_REPLACEMENT_SCHEMA_VERSION,
 };
 use crate::command_output::models::RecordShape;
 
@@ -35,6 +36,9 @@ pub fn validate_output_record(shape: &RecordShape) -> Result<(), String> {
     if !shape.message_is_text {
         return Err("message must be a string".to_owned());
     }
+    if !shape.data_is_bytes {
+        return Err("data must be bytes".to_owned());
+    }
     let chunk_index = at_least("chunk_index", shape.chunk_index, 0)?;
     let chunk_count = at_least("chunk_count", shape.chunk_count, 1)?;
     let dropped = at_least("dropped_records", shape.dropped_records, 0)?;
@@ -54,8 +58,13 @@ pub fn validate_output_record(shape: &RecordShape) -> Result<(), String> {
         Some(COMMAND_OUTPUT_RECORD_TYPE | COMMAND_OUTPUT_LOSS_RECORD_TYPE) => {}
         _ => return Err("record_type is unknown".to_owned()),
     }
-    if shape.schema_version != Some(CURRENT_SCHEMA_VERSION) {
-        return Err(format!("schema_version must be {CURRENT_SCHEMA_VERSION}"));
+    if !matches!(
+        shape.schema_version,
+        Some(CURRENT_SCHEMA_VERSION | RECALL_REPLACEMENT_SCHEMA_VERSION)
+    ) {
+        return Err(format!(
+            "schema_version must be {CURRENT_SCHEMA_VERSION} or {RECALL_REPLACEMENT_SCHEMA_VERSION}"
+        ));
     }
     Ok(())
 }

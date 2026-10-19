@@ -7,13 +7,13 @@ use crate::writer::models::SetupOutcome;
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
     artifact_counts, close_under_held_lock, event_counts, output_stored_while_running,
-    recorded_session, session_on_corrupt_store,
+    recorded_session, replaced_session, session_on_corrupt_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
     ArtifactSizeTestCase, CorruptStoreTestCase, EventBuildTestCase, HeldLockTestCase,
-    RecordedSession, SessionTestCase, StoredWhileRunningTestCase,
+    RecordedSession, ReplacementTestCase, SessionTestCase, StoredWhileRunningTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -200,6 +200,39 @@ fn given_heartbeats_due_faster_than_batches_fill_when_running_then_queued_record
         assert_eq!(
             output_stored_while_running(test_case.heartbeat, test_case.wait),
             test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_an_output_replacement_when_closed_then_published_filtered_and_failed_chunks_are_accounted()
+{
+    let test_cases = [ReplacementTestCase {
+        description: "one chunk published changed, one filtered, one failed",
+        output: &[
+            (OutputStream::Stderr, b"drop that\n"),
+            (OutputStream::Stdout, b"boom\n"),
+            (OutputStream::Stderr, b"keep this\n"),
+        ],
+        expected_transcript: b"KEEP THIS\n",
+        expected_accounting: vec![vec![
+            RecallValue::Integer(1),
+            RecallValue::Integer(1),
+            RecallValue::Integer(2),
+            RecallValue::Integer(1),
+            RecallValue::Text("dropped".to_owned()),
+        ]],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            replaced_session(test_case.output),
+            (
+                test_case.expected_transcript.to_vec(),
+                test_case.expected_accounting
+            ),
             "{}",
             test_case.description
         );

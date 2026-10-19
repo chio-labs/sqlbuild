@@ -1,5 +1,6 @@
 //! The `sqb` entry: invocation scopes, parsing, observed dispatch and the error projection.
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use pyo3::exceptions::PySystemExit;
@@ -16,7 +17,9 @@ use crate::bindings::_helpers::build_progress::transient_lines::shared_transient
 use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
 use crate::bindings::_helpers::cli::dispatch::{command_facts, dispatch_command};
 use crate::bindings::_helpers::cli::launch_state::offer_launch_record;
-use crate::bindings::_helpers::cli::observability::cli_observability_scope;
+use crate::bindings::_helpers::cli::observability::{
+    CliObservabilityScope, cli_observability_scope,
+};
 use crate::bindings::_helpers::compile_command::report::format_compile_error_json;
 use crate::bindings::_helpers::compile_driver::python_calls::{
     call_with, imported, keywords, within,
@@ -397,12 +400,27 @@ fn lifecycle_event<'py>(
     )
 }
 
-/// Subscribe the invocation's Recall session to every lifecycle fact and SQL artifact.
-fn subscribe_recall(dispatcher: &Bound<'_, PyAny>, recall: &InvocationRecall) -> PyResult<()> {
+/// Install the discovered Recall replacement sinks, release the context row, and subscribe the session to every lifecycle fact and SQL artifact.
+fn subscribe_recall(
+    (scope, dispatcher): (&Bound<'_, CliObservabilityScope>, &Bound<'_, PyAny>),
+    recall: &InvocationRecall,
+) -> PyResult<()> {
     let Some(session) = recall.session.clone() else {
         return Ok(());
     };
-    let sink = Bound::new(dispatcher.py(), RecallLifecycleSink { session })?;
+    let py: Python<'_> = dispatcher.py();
+    let (lifecycle, output) = scope.get().recall_sinks(py)?;
+    let filter_active: bool = recall
+        .replacements
+        .configure(&session, (&lifecycle, &output))?;
+    session.publish_context(filter_active);
+    let sink = Bound::new(
+        py,
+        RecallLifecycleSink {
+            session,
+            replacements: Arc::clone(&recall.replacements),
+        },
+    )?;
     dispatcher.call_method1("subscribe_history", (sink,))?;
     Ok(())
 }
@@ -432,6 +450,9 @@ fn observed_dispatch<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = invocation.py();
     if !policy.observed {
+        if let Some(session) = &invocation.recall.session {
+            session.publish_context(false);
+        }
         return dispatch_command(&invocation.args, invocation.handlers.clone());
     }
     let command: String = invocation.command_name();
@@ -441,20 +462,20 @@ fn observed_dispatch<'py>(
             .unwrap_or(u64::MAX)
             .into_bound_py_any(py)
     };
-    let scope: Bound<'py, PyAny> = Bound::new(
+    let observability: Bound<'py, CliObservabilityScope> = Bound::new(
         py,
         cli_observability_scope(
             invocation.args.clone().unbind(),
             invocation.project_dir()?.unbind(),
         ),
-    )?
-    .into_any();
+    )?;
+    let scope: Bound<'py, PyAny> = observability.clone().into_any();
     within(&scope, |dispatcher| {
         let publish = |event: Bound<'py, PyAny>| -> PyResult<()> {
             dispatcher.call_method1("publish_lifecycle", (event,))?;
             Ok(())
         };
-        subscribe_recall(dispatcher, &invocation.recall)?;
+        subscribe_recall((&observability, dispatcher), &invocation.recall)?;
         let payload: Bound<'py, PyDict> = PyDict::new(py);
         payload.set_item("command", &command)?;
         add_invocation_context(invocation, &payload)?;
@@ -551,7 +572,14 @@ fn parsed_invocation<'py>(
         InvocationRecall::default()
     };
     let recall_sink: Bound<'py, PyAny> = match recall.session.clone() {
-        Some(session) => Bound::new(py, RecallLifecycleSink { session })?.into_any(),
+        Some(session) => Bound::new(
+            py,
+            RecallLifecycleSink {
+                session,
+                replacements: Arc::clone(&recall.replacements),
+            },
+        )?
+        .into_any(),
         None => py.None().into_bound(py),
     };
     let closure_recall: InvocationRecall = recall.clone();

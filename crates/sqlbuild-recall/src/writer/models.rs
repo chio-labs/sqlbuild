@@ -68,6 +68,17 @@ impl Priority {
     pub const COUNT: usize = 8;
 }
 
+/// What a Recall replacement made of one output chunk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReplacedOutput {
+    /// Store these bytes under the chunk's sequence.
+    Published(Vec<u8>),
+    /// Store nothing; counted as filtered.
+    Filtered,
+    /// Store nothing; counted as failed.
+    Failed,
+}
+
 /// Where a session writes.
 #[derive(Clone, Debug)]
 pub enum SessionStore {
@@ -92,6 +103,8 @@ pub struct SessionConfig {
     pub setup_budget: Duration,
     /// Whether this session runs retention maintenance after delivery.
     pub maintenance: bool,
+    /// Hold the context row until `RecallSession::publish_context` says whether a replacement filters history.
+    pub defer_context: bool,
     pub maintenance_owner: String,
 }
 

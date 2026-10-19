@@ -116,6 +116,7 @@ pub struct RecordShape {
     pub occurred_at_is_utc: bool,
     pub stream_is_known: bool,
     pub message_is_text: bool,
+    pub data_is_bytes: bool,
     pub chunk_index: Option<i64>,
     pub chunk_count: Option<i64>,
     pub dropped_records: Option<i64>,

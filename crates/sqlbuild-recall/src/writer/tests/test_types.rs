@@ -1,5 +1,6 @@
-use crate::records::models::{OutputStream, RecallValue};
-use crate::writer::models::{DeliveryStream, Priority, SetupOutcome};
+use crate::records::models::{OutputChunk, OutputStream, RecallValue};
+use crate::writer::models::{DeliveryStream, Priority, ReplacedOutput, SetupOutcome};
+use crate::writer::types::OutputReplacement;
 
 /// What one recorded session left in the store.
 #[derive(Debug, PartialEq)]
@@ -82,4 +83,27 @@ pub(crate) struct StoredWhileRunningTestCase {
     pub(crate) heartbeat: std::time::Duration,
     pub(crate) wait: std::time::Duration,
     pub(crate) expected_rows: Vec<Vec<RecallValue>>,
+}
+
+pub(crate) struct ReplacementTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) output: &'static [(OutputStream, &'static [u8])],
+    pub(crate) expected_transcript: &'static [u8],
+    pub(crate) expected_accounting: Vec<Vec<RecallValue>>,
+}
+
+/// Publishes `keep…` chunks upper-cased, filters `drop…` chunks and fails on anything else.
+#[derive(Debug)]
+pub(crate) struct PrefixReplacement;
+
+impl OutputReplacement for PrefixReplacement {
+    fn replace(&self, chunk: &OutputChunk) -> ReplacedOutput {
+        if chunk.data.starts_with(b"keep") {
+            ReplacedOutput::Published(chunk.data.to_ascii_uppercase())
+        } else if chunk.data.starts_with(b"drop") {
+            ReplacedOutput::Filtered
+        } else {
+            ReplacedOutput::Failed
+        }
+    }
 }

@@ -6,6 +6,13 @@
 
 Online: https://sqlbuild.com/docs/concepts/observability/sinks/
 
+## Contents
+
+- Lifecycle sink
+- Command-output sink
+- Configuration
+- Delivery behavior
+
 Project sinks consume one declared record type. Lifecycle and command-output streams remain separate
 even when they share a provider and destination.
 
@@ -58,6 +65,10 @@ def publish_output(record: CommandOutputRecord, destination_client: DestinationC
 Command output groups adjacent text into bounded byte chunks and flushes on elapsed time, stream
 change, size, or close. A loss record reports bounded-queue drops. This stream is useful for remote
 transcripts but is not lifecycle evidence.
+
+A sink with a parameter annotated `sqlbuild.recall.RecallWriter` is not an ordinary sink: it
+decides what [Recall](recall.md#filtering-what-recall-stores) stores for
+its stream.
 
 ## Configuration
 

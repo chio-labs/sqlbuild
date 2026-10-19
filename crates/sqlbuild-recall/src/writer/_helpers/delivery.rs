@@ -1,6 +1,6 @@
 //! The delivery thread: table setup, batched writes with retries, heartbeats, the final delivery rows and maintenance. It alone opens and uses the store connection.
 
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::records::main::delivery_row::delivery_row;
@@ -29,6 +29,7 @@ use crate::writer::constants::{
     SETUP_RETRY_MS,
 };
 use crate::writer::models::{DeliveryStream, SessionConfig, SessionStore, SetupOutcome};
+use crate::writer::types::OutputReplacement;
 
 /// State shared by producers, the session handle and the delivery thread.
 #[derive(Debug)]
@@ -37,6 +38,8 @@ pub(crate) struct Shared {
     pub(crate) wake: Condvar,
     pub(crate) setup: Mutex<Option<SetupOutcome>>,
     pub(crate) setup_done: Condvar,
+    /// The replacement sink output passes through, once one is configured.
+    pub(crate) output_replacement: OnceLock<Arc<dyn OutputReplacement>>,
 }
 
 pub(crate) fn locked(mutex: &Mutex<WriterState>) -> MutexGuard<'_, WriterState> {
@@ -322,11 +325,14 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
     let batching: Batching = batching(config);
     loop {
         let (batch, closing) = next_batch(shared, next_heartbeat, batching);
-        let built: Built = materializer.build(batch);
-        if !built.settled.is_empty() || !built.unbuildable.is_empty() {
+        let built: Built =
+            materializer.build(batch, shared.output_replacement.get().map(Arc::as_ref));
+        if !built.settled.is_empty() || !built.unbuildable.is_empty() || !built.filtered.is_empty()
+        {
             let mut state = locked(&shared.state);
             state.account(&built.settled, Ok(&InsertOutcome::default()));
             state.account_unbuildable(&built.unbuildable);
+            state.account_filtered(&built.filtered);
         }
         let mut rows: Vec<RecallRow> = built.rows;
         let now: SystemTime = SystemTime::now();

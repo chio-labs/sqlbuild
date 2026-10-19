@@ -288,6 +288,10 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.runtime.event_exporting.main._invoke_lifecycle_event_sink",
         "invoke_lifecycle_event_sink",
     ),
+    "invoke_recall_sink": (
+        "sqlbuild.runtime.event_exporting.main._invoke_recall_sink",
+        "invoke_recall_sink",
+    ),
     "run_command_output_sinks": (
         "sqlbuild.runtime.event_exporting.main._run_command_output_sinks",
         "run_command_output_sinks",

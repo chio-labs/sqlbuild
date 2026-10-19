@@ -10,11 +10,29 @@ use sqlbuild_recall::writer::models::RecallSession;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::recall::events::{escaped_text, event_object};
+use crate::bindings::_helpers::recall::replacements::RecallReplacements;
 
-/// Publishes lifecycle events and SQL artifacts of the active session; delivery is best effort.
+/// Queue `event` in `session`; an event that cannot be encoded is skipped.
+pub(crate) fn publish_lifecycle_event(
+    py: Python<'_>,
+    session: &RecallSession,
+    event: &Bound<'_, PyAny>,
+) -> PyResult<()> {
+    if let Some(object) = event_object(event)? {
+        session.publish_event_object(object);
+        return Ok(());
+    }
+    let encoded = host::entry(py, ExecutorHost::LifecycleEventToJson)?.call1((event,))?;
+    let text = escaped_text(encoded.downcast::<PyString>()?)?;
+    drop(session.publish_event(&text));
+    Ok(())
+}
+
+/// Publishes lifecycle events, through the Recall replacement sink when one is configured, and SQL artifacts of the active session; delivery is best effort.
 #[pyclass(module = "sqlbuild._native", frozen)]
 pub(crate) struct RecallLifecycleSink {
     pub(crate) session: Arc<RecallSession>,
+    pub(crate) replacements: Arc<RecallReplacements>,
 }
 
 #[pymethods]
@@ -52,14 +70,13 @@ impl RecallLifecycleSink {
 
 impl RecallLifecycleSink {
     fn publish(&self, py: Python<'_>, event: &Bound<'_, PyAny>) -> PyResult<()> {
-        if let Some(object) = event_object(event)? {
-            self.session.publish_event_object(object);
+        if self
+            .replacements
+            .deliver_lifecycle(py, &self.session, event)?
+        {
             return Ok(());
         }
-        let encoded = host::entry(py, ExecutorHost::LifecycleEventToJson)?.call1((event,))?;
-        let text = escaped_text(encoded.downcast::<PyString>()?)?;
-        drop(self.session.publish_event(&text));
-        Ok(())
+        publish_lifecycle_event(py, &self.session, event)
     }
 }
 

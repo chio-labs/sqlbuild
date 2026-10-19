@@ -6,5 +6,7 @@ pub(crate) mod constants;
 pub(crate) mod events;
 pub(crate) mod registration;
 pub(crate) mod rendering;
+pub(crate) mod replacements;
 pub(crate) mod session;
 pub(crate) mod sinks;
+pub(crate) mod writer;

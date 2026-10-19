@@ -37,6 +37,7 @@ use crate::bindings::_helpers::recall::constants::{
     STDOUT_STREAM_INDEX,
 };
 use crate::bindings::_helpers::recall::events::escaped_text;
+use crate::bindings::_helpers::recall::replacements::{RecallReplacements, in_output_replacement};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::config_json::dumped_json;
 
@@ -50,6 +51,8 @@ pub(crate) struct InvocationRecall {
     pub(crate) command: String,
     /// The resolved settings and project directory, for notices at the end of the run.
     pub(crate) settings: Option<(RecallSettings, PathBuf)>,
+    /// The Recall replacement sinks, configured once runtime extensions are discovered.
+    pub(crate) replacements: Arc<RecallReplacements>,
 }
 
 /// The text of an optional attribute value.
@@ -343,6 +346,7 @@ fn started_session(
         heartbeat_interval: heartbeat_interval(),
         setup_budget: Duration::ZERO,
         maintenance: true,
+        defer_context: true,
     });
     Ok(Some(Arc::new(session)))
 }
@@ -374,6 +378,7 @@ pub(crate) fn start_invocation_recall(
         adapter: settings.project_adapter.clone(),
         command: facts.command.clone().unwrap_or_default(),
         settings: Some((settings, project_dir)),
+        replacements: Arc::default(),
     })
 }
 
@@ -457,6 +462,9 @@ pub(crate) fn forward_output(
     let Some(session) = session.filter(|session| session.invocation_id() == invocation_id) else {
         return;
     };
+    if in_output_replacement() {
+        return;
+    }
     let stream = if stream == STDOUT_STREAM_INDEX {
         OutputStream::Stdout
     } else {

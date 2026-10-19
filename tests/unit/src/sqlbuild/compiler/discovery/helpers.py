@@ -2,6 +2,9 @@ from pathlib import Path
 
 import sqlbuild._native as _native
 from sqlbuild._native import (
+    DiscoveredCommandOutputSink,
+    DiscoveredEventExporter,
+    DiscoveredRuntimeExtensions,
     DiscoveredSqlModelFile,
     DiscoveredSqlScenarioFile,
     DiscoveredSqlTestBlock,
@@ -173,3 +176,45 @@ def parse_schema_yml(
         _native.load_yaml_document(str(file_path), contents, "schema"),
         str(file_path),
     )
+
+
+RECALL_SINK_IMPORTS: str = (
+    "from sqlbuild.recall import RecallWriter\n"
+    "from sqlbuild.sinks import (\n"
+    "    CommandOutputRecord, LifecycleEvent, command_output_sink, lifecycle_event_sink,\n"
+    ")\n\n"
+)
+
+
+def write_recall_sink_project(*, project_dir: Path, files: dict[str, str]) -> None:
+    """Write a project named `orders` with `files`, each relative to the project directory."""
+
+    _ = (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    for relative, contents in files.items():
+        path: Path = project_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(contents, encoding="utf-8")
+
+
+def recall_sink_names(
+    extensions: DiscoveredRuntimeExtensions,
+) -> tuple[tuple[tuple[tuple[str, str], ...], ...], tuple[tuple[str, ...], ...]]:
+    """Each stream's replacement as `(name, writer_parameter)`, then the ordinary sinks' names."""
+
+    lifecycle: tuple[tuple[DiscoveredEventExporter, str], ...] = tuple(
+        filter(None, (extensions.recall_lifecycle_sink,))
+    )
+    output: tuple[tuple[DiscoveredCommandOutputSink, str], ...] = tuple(
+        filter(None, (extensions.recall_output_sink,))
+    )
+    replacements: tuple[tuple[tuple[str, str], ...], ...] = (
+        tuple((sink.name, writer) for sink, writer in lifecycle),
+        tuple((sink.name, writer) for sink, writer in output),
+    )
+    ordinary: tuple[tuple[str, ...], ...] = (
+        tuple(sink.name for sink in extensions.event_exporters),
+        tuple(sink.name for sink in extensions.command_output_sinks),
+    )
+    return replacements, ordinary

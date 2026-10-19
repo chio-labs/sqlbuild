@@ -5,7 +5,7 @@ use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python, pyfunction,
     wrap_pyfunction,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyString, PyStringMethods};
+use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyString, PyStringMethods};
 use sqlbuild_core::command_output::constants::{
     COMMAND_OUTPUT_LOSS_RECORD_TYPE, COMMAND_OUTPUT_RECORD_TYPE, CURRENT_SCHEMA_VERSION,
     INVOCATION_CONTEXT_ENV, MAX_INVOCATION_CONTEXT_BYTES, MAX_INVOCATION_CONTEXT_DEPTH,
@@ -101,6 +101,7 @@ fn record_shape(record: &Bound<'_, PyAny>) -> PyResult<RecordShape> {
         stream_is_known: field("stream")?
             .is_instance(&host::entry(py, ExecutorHost::CommandOutputStream)?)?,
         message_is_text: field("message")?.is_instance_of::<PyString>(),
+        data_is_bytes: field("data")?.is_instance_of::<PyBytes>(),
         chunk_index: plain_int(&field("chunk_index")?),
         chunk_count: plain_int(&field("chunk_count")?),
         dropped_records: plain_int(&field("dropped_records")?),

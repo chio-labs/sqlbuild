@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from tests.integration.src.sqlbuild.cli.recall._test_types import (
+    FailingReplacementTestCase,
+    ReplacementLifecycleTestCase,
+    ReplacementOutputTestCase,
+)
+from tests.integration.src.sqlbuild.cli.recall.helpers import (
+    EVENT_LOG_SINK,
+    FAILING_SINKS,
+    filtering_lifecycle_sink,
+    logged_event_types,
+    recall_rows,
+    rewriting_output_sink,
+    run,
+    write_project,
+    write_sinks,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReplacementLifecycleTestCase(
+            description="statement events are filtered from Recall but reach the other sink",
+            dropped_prefix="statement_",
+            expected_filter_active=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_filtering_lifecycle_sink_when_building_then_recall_keeps_what_it_publishes(
+    test_case: ReplacementLifecycleTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_sinks(
+        write_project(tmp_path / "orders_shop"),
+        {
+            "recall_events": filtering_lifecycle_sink(test_case.dropped_prefix),
+            "event_log": EVENT_LOG_SINK,
+        },
+    )
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    logged, kept = logged_event_types(project_dir, test_case.dropped_prefix)
+    assert built.returncode == 0, built.stderr
+    assert b"Recall" not in built.stderr
+    assert len(kept) < len(logged)
+    assert recall_rows(project_dir, "SELECT event_type FROM events ORDER BY event_type") == [
+        [event] for event in kept
+    ]
+    assert recall_rows(
+        project_dir,
+        "SELECT accepted, delivered, filtered, failed FROM recall_delivery WHERE stream = 'events'",
+    ) == [[len(logged), len(kept), len(logged) - len(kept), 0]]
+    assert recall_rows(project_dir, "SELECT filter_active FROM output_invocations") == [
+        [test_case.expected_filter_active]
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReplacementOutputTestCase(
+            description="a pass-through sink keeps every byte",
+            replaced=(b"", b""),
+            expected_complete=1,
+        ),
+        ReplacementOutputTestCase(
+            description="a rewriting sink stores the rewritten bytes",
+            replaced=(b"binary", b"BINARY"),
+            expected_complete=1,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_output_replacement_sink_when_recalled_then_its_bytes_are_stored_exactly(
+    test_case: ReplacementOutputTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_sinks(
+        write_project(tmp_path / "orders_shop"),
+        {"recall_output": rewriting_output_sink(test_case.replaced)},
+    )
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+    stdout: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "recall", "output", "last", "--stream", "stdout"
+    )
+    stderr: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "recall", "output", "last", "--stream", "stderr"
+    )
+
+    old, new = test_case.replaced
+    assert built.returncode == 0, built.stderr
+    assert old in built.stdout
+    assert stdout.stdout == built.stdout.replace(old, new)
+    assert stderr.stdout == built.stderr.replace(old, new)
+    assert recall_rows(project_dir, "SELECT complete, filter_active FROM output_invocations") == [
+        [test_case.expected_complete, 1]
+    ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FailingReplacementTestCase(
+            description="raising sinks count their records as failed and the build succeeds",
+            expected_failed_streams=[["events"], ["output"]],
+            expected_notice=b"sqb build completed successfully; only its Recall history is affected",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_raising_replacement_sinks_when_building_then_records_fail_and_the_command_does_not(
+    test_case: FailingReplacementTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_sinks(
+        write_project(tmp_path / "orders_shop"), {"recall": FAILING_SINKS}
+    )
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    assert built.returncode == 0, built.stderr
+    assert b"sink failed" not in built.stdout + built.stderr
+    assert b"Recall" not in built.stdout
+    assert built.stderr.rstrip().endswith(test_case.expected_notice + b".")
+    assert (
+        recall_rows(
+            project_dir,
+            "SELECT stream FROM recall_delivery WHERE failed > 0 AND failed = accepted "
+            "AND delivered = 0 ORDER BY stream",
+        )
+        == test_case.expected_failed_streams
+    )
+    assert recall_rows(project_dir, "SELECT command FROM recall_invocations") == [["build"]]
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-vv"])

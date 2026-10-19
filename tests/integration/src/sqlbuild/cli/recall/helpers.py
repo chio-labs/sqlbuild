@@ -1,6 +1,8 @@
 """Synthetic DuckDB projects and process helpers for local Recall tests."""
 
+import itertools
 import json
+import operator
 import os
 import re
 import signal
@@ -327,3 +329,69 @@ def simultaneous_builds(project_dir: Path, targets: tuple[str, ...]) -> list[int
         start(project_dir, "build", "--target", target) for target in targets
     ]
     return [process.wait(timeout=600) for process in started]
+
+
+RECALL_SINK_IMPORTS: str = (
+    "from pathlib import Path\n\n"
+    "from sqlbuild.recall import RecallWriter\n"
+    "from sqlbuild.sinks import (\n"
+    "    CommandOutputRecord, LifecycleEvent, command_output_sink, lifecycle_event_sink,\n"
+    ")\n\n"
+)
+EVENT_LOG_SINK: str = (
+    "@lifecycle_event_sink\n"
+    "def event_log(event: LifecycleEvent) -> None:\n"
+    "    with (Path(__file__).parents[1] / 'events.log').open('a') as log:\n"
+    "        log.write(event.event_type + '\\n')\n"
+)
+FAILING_SINKS: str = (
+    "@lifecycle_event_sink\n"
+    "def recall_events(event: LifecycleEvent, writer: RecallWriter) -> None:\n"
+    "    raise RuntimeError('lifecycle sink failed')\n\n"
+    "@command_output_sink\n"
+    "def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:\n"
+    "    raise RuntimeError('output sink failed')\n"
+)
+
+
+def filtering_lifecycle_sink(dropped_prefix: str) -> str:
+    """A Recall lifecycle replacement keeping every event whose type lacks `dropped_prefix`."""
+
+    return (
+        "@lifecycle_event_sink\n"
+        "def recall_events(event: LifecycleEvent, writer: RecallWriter) -> None:\n"
+        f"    if not event.event_type.startswith({dropped_prefix!r}):\n"
+        "        writer.publish_lifecycle(event)\n"
+    )
+
+
+def rewriting_output_sink(replaced: tuple[bytes, bytes]) -> str:
+    """A Recall output replacement storing each chunk with `replaced[0]` as `replaced[1]`."""
+
+    old, new = replaced
+    return (
+        "@command_output_sink\n"
+        "def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:\n"
+        f"    data = record.data.replace({old!r}, {new!r})\n"
+        "    writer.publish_command_output(record.replace(data=data))\n"
+    )
+
+
+def write_sinks(project_dir: Path, sinks: dict[str, str]) -> Path:
+    """Add `sinks/<name>.py` modules holding the given sink definitions."""
+
+    for name, source in sinks.items():
+        path: Path = project_dir / "sinks" / f"{name}.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(RECALL_SINK_IMPORTS + source, encoding="utf-8")
+    return project_dir
+
+
+def logged_event_types(project_dir: Path, dropped_prefix: str) -> tuple[list[str], list[str]]:
+    """The sorted event types `event_log` wrote, then those not starting with `dropped_prefix`."""
+
+    logged: list[str] = sorted(
+        (project_dir / "events.log").read_text(encoding="utf-8").splitlines()
+    )
+    dropped: operator.methodcaller = operator.methodcaller("startswith", dropped_prefix)
+    return logged, list(itertools.filterfalse(dropped, logged))

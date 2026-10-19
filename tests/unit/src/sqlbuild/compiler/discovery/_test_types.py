@@ -105,3 +105,20 @@ class DiscoverUniqueTestNameTestCase:
     repo_files: dict[str, str]
     expected_test_block_names: tuple[str | None, ...]
     expected_case_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RecallSinkDiscoveryTestCase:
+    description: str
+    sink_files: dict[str, str]
+    expected_replacements: tuple[tuple[tuple[str, str], ...], ...]
+    expected_ordinary: tuple[tuple[str, ...], tuple[str, ...]]
+
+
+@dataclass(frozen=True)
+class InvalidRecallSinkTestCase:
+    description: str
+    project_files: dict[str, str]
+    expected_error: type[Exception]
+    expected_code: str
+    expected_message: str

@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crate::records::main::invocation_row::invocation_row;
@@ -14,7 +15,7 @@ use crate::writer::main::start_recall_session::start_recall_session;
 use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, SessionConfig, SessionStore, SetupOutcome,
 };
-use crate::writer::tests::test_types::RecordedSession;
+use crate::writer::tests::test_types::{PrefixReplacement, RecordedSession};
 
 /// The envelope of invocation `invocation_id`.
 pub(crate) fn envelope(invocation_id: &str) -> RowEnvelope {
@@ -88,6 +89,7 @@ pub(crate) fn config(path: PathBuf, invocation_id: &str) -> SessionConfig {
         setup_budget: Duration::from_secs(2),
         maintenance: true,
         maintenance_owner: "test:42".to_owned(),
+        defer_context: false,
     }
 }
 
@@ -340,4 +342,33 @@ pub(crate) fn output_stored_while_running(
         .expect("the query is valid");
     drop(session.close());
     stored.rows
+}
+
+/// The transcript and output accounting a session with a deferred context and `PrefixReplacement` stored for `output`.
+pub(crate) fn replaced_session(
+    output: &[(OutputStream, &[u8])],
+) -> (Vec<u8>, Vec<Vec<RecallValue>>) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    let session = start_recall_session(SessionConfig {
+        defer_context: true,
+        ..config(path.clone(), "replaced")
+    });
+    session.set_output_replacement(Arc::new(PrefixReplacement));
+    session.publish_context(true);
+    for (stream, data) in output {
+        session.append_output(*stream, data);
+    }
+    drop(session.close());
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    let transcript =
+        read_output_transcript(&store, "replaced", None).expect("the transcript can be read");
+    let facts = query_store(
+        &store,
+        "SELECT filtered, failed, missing_sequences, filter_active, gap_reason \
+         FROM output_invocations",
+        None,
+    )
+    .expect("the query is valid");
+    (transcript.data, facts.rows)
 }

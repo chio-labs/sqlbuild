@@ -7,9 +7,11 @@ use serde_json::{Map, Value};
 
 use crate::records::constants::{DROPPED_BEFORE_COLUMN, MAX_OUTPUT_CHUNK_BYTES};
 use crate::records::main::format_timestamp::format_timestamp;
+use crate::records::main::invocation_row::invocation_row;
 use crate::records::main::output_row::output_row;
 use crate::records::models::{
-    DeliveryCounts, OutputChunk, OutputStream, RecallRow, RecallValue, RowEnvelope,
+    DeliveryCounts, InvocationContext, OutputChunk, OutputStream, RecallRow, RecallValue,
+    RowEnvelope,
 };
 use crate::store::models::InsertOutcome;
 use crate::writer::_helpers::delivery::stream_of;
@@ -97,6 +99,8 @@ pub(crate) struct WriterState {
     pub(crate) degraded: Option<String>,
     /// Store notices the user should see, such as a corrupt store moved aside.
     pub(crate) notices: Vec<String>,
+    /// The context row's content while its replacement-filter flag is still unknown.
+    pub(crate) held_context: Option<InvocationContext>,
     capacity: (usize, usize),
 }
 
@@ -141,6 +145,7 @@ impl WriterState {
             rejecting: false,
             degraded: None,
             notices: Vec::new(),
+            held_context: None,
             capacity,
         }
     }
@@ -419,6 +424,22 @@ impl WriterState {
     /// Whether any output is pending.
     pub(crate) fn has_pending_output(&self) -> bool {
         self.pending.is_some()
+    }
+
+    /// Count records a replacement sink chose not to store as filtered.
+    pub(crate) fn account_filtered(&mut self, streams: &[DeliveryStream]) {
+        for stream in streams {
+            self.counts_mut(*stream).filtered += 1;
+        }
+    }
+
+    /// Queue the held context row, recording whether a replacement sink filters this invocation.
+    pub(crate) fn release_context(&mut self, filter_active: bool) {
+        if let Some(mut context) = self.held_context.take() {
+            context.recall_filter_active = filter_active;
+            let row = invocation_row(&self.envelope, &context);
+            self.push(vec![row], DeliveryStream::Invocation, Priority::Context);
+        }
     }
 
     /// Count records the delivery thread could not turn into rows as failed.
