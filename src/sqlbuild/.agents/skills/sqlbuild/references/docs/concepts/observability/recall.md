@@ -142,7 +142,8 @@ retention = "30d"
 - **Setup.** On first use Recall creates its `recall_*` MergeTree tables and the views above in that
   database, and adds columns that a newer SQLBuild introduces. After that, writing needs only
   `INSERT` and `SELECT` on the tables. If the user may not create them, the command still succeeds
-  and prints the complete DDL for an administrator to run.
+  and prints the complete DDL for an administrator to run; a store created from it accepts writers
+  limited to `SELECT` and `INSERT`.
 - **Writes.** History is sent in batches of up to 5,000 rows about once a second, one insert per
   table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
   concurrent commands can write one store.
@@ -151,7 +152,7 @@ retention = "30d"
   is counted once. Before writing, Recall looks up the batch's keys: a key already stored with
   different content keeps the stored row, and the rejected copy is listed in `conflicts`.
 - **Retention.** Every table carries a TTL of `retention` (SQL text a week longer, and refreshed
-  while it is still referenced), and the views hide rows past `retention` at once. ClickHouse drops
+  while it is still referenced), and the views hide rows past their TTL at once. ClickHouse drops
   expired daily parts in the background, so rows may stay on disk for a while after the views stop
   showing them. Retention belongs to the store: when a project's `retention` differs from the
   tables' TTL, Recall warns once a day with the `ALTER TABLE … MODIFY TTL` and view statements that
@@ -182,9 +183,12 @@ def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:
   keeps the record ID and sequence; publish at most one record per call.
 - A `@lifecycle_event_sink` replacement receives each event its `event_kinds` and `min_severity`
   accept and keeps it with `writer.publish_lifecycle(event)`.
-- A record the sink does not publish is counted as `filtered`; a sink that raises has its record
-  counted as `failed`, and Recall never falls back to storing the unfiltered record. The command's
-  exit code and output are unaffected. `output_invocations.filter_active` is `1` for invocations
+- Both replacements run on Recall's background thread, so a slow one never delays the command or
+  other sinks by more than `shutdown_timeout`; what it has not handled by then is counted as
+  `dropped`. Output written before discovery finishes is held until the replacement can see it.
+- A record the sink does not publish is counted as `filtered`; a sink that raises an exception has
+  its record counted as `failed`, and Recall never falls back to storing the unfiltered record. The
+  command's exit code and output are unaffected. `output_invocations.filter_active` is `1` for invocations
   that ran a replacement.
 - There is at most one replacement per stream; discovery fails with `D015` naming each
   `path:function` otherwise. A replacement takes only its record and the writer, not providers, and
