@@ -107,25 +107,34 @@ pub(crate) fn published_shape<'py>(
     inputs: &Bound<'py, PyDict>,
     profile: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let py: Python<'py> = model.py();
     let shape: Bound<'py, PyDict> = binding_shape(model, columns, inputs, profile)?;
-    let values: Bound<'py, PyAny> = native_field(&native_field(model, "config")?, "values")?;
-    let snapshot: Bound<'py, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
-    if mapping_get(&values, "materialized")?.eq(snapshot)? {
-        for (key, default) in [
-            ("valid_from_column", VALID_FROM_DEFAULT),
-            ("valid_to_column", VALID_TO_DEFAULT),
-        ] {
-            let name: Bound<'py, PyAny> = mapping_get(&values, key)?;
-            let name: Bound<'py, PyAny> = if name.is_truthy()? {
-                name
-            } else {
-                PyString::new(py, default).into_any()
-            };
-            shape.set_item(name.str()?, UNKNOWN)?;
-        }
+    for name in snapshot_validity_columns(model)? {
+        shape.set_item(name, UNKNOWN)?;
     }
     Ok(shape)
+}
+
+/// A snapshot model's validity column names, which the snapshot adds to its query's columns.
+pub(crate) fn snapshot_validity_columns(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    let py: Python<'_> = model.py();
+    let values: Bound<'_, PyAny> = native_field(&native_field(model, "config")?, "values")?;
+    let snapshot: Bound<'_, PyAny> = enum_member(py, RecordId::MaterializationType, "SNAPSHOT")?;
+    if !mapping_get(&values, "materialized")?.eq(snapshot)? {
+        return Ok(Vec::new());
+    }
+    let mut names: Vec<String> = Vec::with_capacity(2);
+    for (key, default) in [
+        ("valid_from_column", VALID_FROM_DEFAULT),
+        ("valid_to_column", VALID_TO_DEFAULT),
+    ] {
+        let name: Bound<'_, PyAny> = mapping_get(&values, key)?;
+        names.push(if name.is_truthy()? {
+            name.str()?.extract()?
+        } else {
+            default.to_owned()
+        });
+    }
+    Ok(names)
 }
 
 /// Inferred columns, re-quoted from authored SQL where the dialect keeps quoted case.
