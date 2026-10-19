@@ -1,5 +1,6 @@
 //! Enum and constant references expanded natively, for model queries and every other caller.
 
+use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use pyo3::FromPyObject;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyInt, PyTuple};
@@ -12,6 +13,7 @@ use sqlbuild_analysis::compiled_project::models::{
 };
 
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
+use crate::bindings::_helpers::sqltext::declaration_references::ScannedReference;
 
 const ENUM_REFERENCE_KIND: u8 = 0;
 const ENUM_KIND: &str = "enum";
@@ -38,11 +40,6 @@ const DECLARATION: &str = "declaration";
 const THROUGH: &str = "through";
 const CONSUMER: &str = "consumer";
 const ENUM_MEMBER: &str = "enum_member";
-
-/// `(kind, name, member, start, end)` for one natively scanned reference.
-pub(crate) type ScannedReference = (u8, String, Option<String>, usize, usize);
-/// `(source start, source end, output start, output end)`.
-pub(crate) type SpanRow = (usize, usize, usize, usize);
 
 /// The Python classes expansion builds usages and errors from.
 #[derive(FromPyObject)]
@@ -82,7 +79,14 @@ pub(crate) fn expand_declarations<'py>(
 ) -> PyResult<ExpandedDeclarations<'py>> {
     let mut splices: Vec<DeclarationSplice> = Vec::with_capacity(request.references.len());
     let mut usages: Vec<Bound<'py, PyAny>> = Vec::new();
-    for (kind, name, member, start, end) in request.references {
+    for ScannedReference {
+        kind,
+        name,
+        member,
+        start,
+        end,
+    } in request.references
+    {
         let (replacement, visibility) = if *kind == ENUM_REFERENCE_KIND {
             enum_text(request, name, member.as_deref())?
         } else {
@@ -281,13 +285,11 @@ pub(crate) fn span_rows(spliced: &SplicedSql) -> Vec<SpanRow> {
     spliced
         .spans
         .iter()
-        .map(|span| {
-            (
-                span.source_start,
-                span.source_end,
-                span.output_start,
-                span.output_end,
-            )
+        .map(|span| SpanRow {
+            source_start: span.source_start,
+            source_end: span.source_end,
+            output_start: span.output_start,
+            output_end: span.output_end,
         })
         .collect()
 }

@@ -63,6 +63,16 @@ struct DeclarationRowPy<'py>(
     Option<String>,
 );
 
+/// The code, path, line, column and message that identify one fault.
+#[derive(Hash, PartialEq, Eq)]
+struct FaultIdentity {
+    code: String,
+    path: String,
+    line: u64,
+    column: u64,
+    message: String,
+}
+
 /// The request's project facts, which models, tests and scenarios are built beside.
 struct ProjectRows<'py> {
     memo: Option<(String, String)>,
@@ -410,7 +420,7 @@ fn finalized<'py>(
         .str()?
         .to_str()?
         .to_owned();
-    let mut fixable: HashSet<(String, String, u64, u64, String)> = HashSet::new();
+    let mut fixable: HashSet<FaultIdentity> = HashSet::new();
     let mut faults: Vec<Fault> = Vec::with_capacity(findings.len());
     for finding in &findings {
         let fault: Fault = finding_fault(finding)?;
@@ -518,14 +528,14 @@ fn declaration_member((name, value): (String, Bound<'_, PyAny>)) -> PyResult<Dec
     })
 }
 
-fn fault_identity(fault: &Fault) -> (String, String, u64, u64, String) {
-    (
-        fault.code.clone(),
-        fault.path.clone(),
-        fault.line,
-        fault.column,
-        fault.message.clone(),
-    )
+fn fault_identity(fault: &Fault) -> FaultIdentity {
+    FaultIdentity {
+        code: fault.code.clone(),
+        path: fault.path.clone(),
+        line: fault.line,
+        column: fault.column,
+        message: fault.message.clone(),
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

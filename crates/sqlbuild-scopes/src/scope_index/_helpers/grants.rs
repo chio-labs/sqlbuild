@@ -26,12 +26,14 @@ pub(crate) fn unique_grants(index: &ScopeIndex, grants: Vec<GrantRecord>) -> Vec
         .collect()
 }
 
-type GrantKey<'a> = (
-    &'a ResourceIdentity,
-    &'a DeclarationIdentity,
-    GrantThroughKey<'a>,
-    GrantKind,
-);
+/// What makes two grants the same: resource, declaration, what grants it and its kind.
+#[derive(PartialEq, Eq, Hash)]
+struct GrantKey<'a> {
+    resource: &'a ResourceIdentity,
+    declaration: &'a DeclarationIdentity,
+    through: GrantThroughKey<'a>,
+    kind: GrantKind,
+}
 
 #[derive(PartialEq, Eq, Hash)]
 enum GrantThroughKey<'a> {
@@ -40,17 +42,17 @@ enum GrantThroughKey<'a> {
 }
 
 fn grant_key<'a>(index: &'a ScopeIndex, grant: &'a GrantRecord) -> GrantKey<'a> {
-    (
-        &grant.resource,
-        &index.declarations[grant.declaration].identity,
-        match &grant.through {
+    GrantKey {
+        resource: &grant.resource,
+        declaration: &index.declarations[grant.declaration].identity,
+        through: match &grant.through {
             GrantThrough::Model(name) => GrantThroughKey::Model(name),
             GrantThrough::Declaration(declaration) => {
                 GrantThroughKey::Declaration(&index.declarations[*declaration].identity)
             }
         },
-        grant.kind,
-    )
+        kind: grant.kind,
+    }
 }
 
 /// Visibility and identity lookups over one index, as the Python grant functions use them.

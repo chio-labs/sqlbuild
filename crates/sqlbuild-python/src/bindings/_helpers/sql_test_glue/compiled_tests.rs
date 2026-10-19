@@ -3,13 +3,14 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use sqlbuild_analysis::compiler::models::{AssembledSqlTestFacts, SqlTestHelperDiagnostic};
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::sql_test_glue::assembly::{
-    AssemblyRequest, AssemblyRow, DiagnosticRow, FactsRow, assemble_compiled_sql_tests,
+    AssemblyRequest, AssemblyRow, assemble_compiled_sql_tests,
 };
 
 /// Fields a direct-logic compiled payload copies from its input payload, in order.
@@ -159,7 +160,14 @@ fn compiled_payload<'py>(
 fn keyed_diagnostic<'py>(
     classes: &Classes<'py>,
     (test_input, resource_name): (&Bound<'py, PyAny>, &str),
-    (line, column, end_line, end_column, message, help): DiagnosticRow,
+    SqlTestHelperDiagnostic {
+        line,
+        column,
+        end_line,
+        end_column,
+        message,
+        help,
+    }: SqlTestHelperDiagnostic,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = classes.py();
     let path: Bound<'py, PyAny> =
@@ -203,11 +211,17 @@ fn keyed_diagnostic<'py>(
 fn compiled_test<'py>(
     classes: &Classes<'py>,
     test_input: &Bound<'py, PyAny>,
-    facts: FactsRow,
+    facts: AssembledSqlTestFacts,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyTuple>)> {
     let py: Python<'py> = classes.py();
-    let (name, scope_rows, target_model_names, case_fingerprint, resource_name, diagnostics) =
-        facts;
+    let AssembledSqlTestFacts {
+        name,
+        scope_deps: scope_rows,
+        target_model_names,
+        case_fingerprint,
+        diagnostic_resource_name: resource_name,
+        diagnostics,
+    } = facts;
     let scope_deps: Vec<Bound<'py, PyAny>> = scope_rows
         .iter()
         .map(|(resource_type, dep)| classes.object_key(resource_type, dep))

@@ -208,7 +208,7 @@ fn given_quoted_commented_and_malformed_fragments_when_scanning_then_every_scann
             prepared
                 .1
                 .first()
-                .map(|site| site.5.clone())
+                .map(|site| site.original_text.clone())
                 .unwrap_or_default()
         });
         assert_eq!(
@@ -277,7 +277,7 @@ fn given_lint_dialect_when_preparing_macro_sites_then_backticks_follow_rules_quo
     for test_case in test_cases {
         let lint_sql = format!("SELECT @m({} x) AS y", test_case.fragment);
         let lint_site = prepare(&lint_sql, &lint_sql, &[], test_case.dialect)?
-            .and_then(|prepared| prepared.1.first().map(|site| site.5.clone()))
+            .and_then(|prepared| prepared.1.first().map(|site| site.original_text.clone()))
             .unwrap_or_default();
         assert_eq!(
             lint_site, test_case.expected_lint_site,
@@ -311,7 +311,13 @@ fn given_dollar_quoted_apostrophe_when_preparing_lint_sites_then_later_reference
     let sql = "SELECT $$Customer's order$$ AS note, $tag$it's$tag$ AS tag FROM __ref(\"orders\") o";
     for test_case in test_cases {
         let sites: Vec<String> = prepare(sql, sql, &[], test_case.dialect)?
-            .map(|prepared| prepared.1.into_iter().map(|site| site.5).collect())
+            .map(|prepared| {
+                prepared
+                    .1
+                    .into_iter()
+                    .map(|site| site.original_text)
+                    .collect()
+            })
             .unwrap_or_default();
         assert_eq!(sites, test_case.expected_sites, "{}", test_case.description);
     }

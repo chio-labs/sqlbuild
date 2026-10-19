@@ -196,27 +196,61 @@ fn block_bodies(blocks: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
         .collect()
 }
 
+/// One discovered file group: its role, attribute, body field and whether it has blocks.
+struct FileGroup {
+    role: SqlFileRole,
+    attribute: &'static str,
+    body: Option<&'static str>,
+    blocks: bool,
+}
+
 fn authored_files(discovered: &Bound<'_, PyAny>) -> PyResult<Vec<AuthoredFile>> {
-    let groups: [(SqlFileRole, &str, Option<&str>, bool); 6] = [
-        (SqlFileRole::Test, "test_files", None, true),
-        (
-            SqlFileRole::Scenario,
-            "scenario_files",
-            Some("sql_body"),
-            false,
-        ),
-        (SqlFileRole::Audit, "audit_files", None, true),
-        (SqlFileRole::Hook, "sql_hook_files", Some("sql_body"), false),
-        (
-            SqlFileRole::Function,
-            "sql_function_files",
-            Some("body_sql"),
-            false,
-        ),
-        (SqlFileRole::Schema, "model_schema_files", None, false),
+    let groups: [FileGroup; 6] = [
+        FileGroup {
+            role: SqlFileRole::Test,
+            attribute: "test_files",
+            body: None,
+            blocks: true,
+        },
+        FileGroup {
+            role: SqlFileRole::Scenario,
+            attribute: "scenario_files",
+            body: Some("sql_body"),
+            blocks: false,
+        },
+        FileGroup {
+            role: SqlFileRole::Audit,
+            attribute: "audit_files",
+            body: None,
+            blocks: true,
+        },
+        FileGroup {
+            role: SqlFileRole::Hook,
+            attribute: "sql_hook_files",
+            body: Some("sql_body"),
+            blocks: false,
+        },
+        FileGroup {
+            role: SqlFileRole::Function,
+            attribute: "sql_function_files",
+            body: Some("body_sql"),
+            blocks: false,
+        },
+        FileGroup {
+            role: SqlFileRole::Schema,
+            attribute: "model_schema_files",
+            body: None,
+            blocks: false,
+        },
     ];
     let mut files: Vec<AuthoredFile> = Vec::new();
-    for (role, attribute, body, blocks) in groups {
+    for FileGroup {
+        role,
+        attribute,
+        body,
+        blocks,
+    } in groups
+    {
         for item in native_field(discovered, attribute)?.try_iter()? {
             let item: Bound<'_, PyAny> = item?;
             let texts: Vec<String> = match (body, blocks) {

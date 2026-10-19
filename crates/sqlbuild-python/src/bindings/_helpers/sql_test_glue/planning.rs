@@ -7,9 +7,8 @@ use sqlbuild_analysis::compiler::main::sql_test_chains::resolve_sql_test_chains;
 use sqlbuild_analysis::compiler::main::sql_test_glue::plan_sql_test_batch;
 use sqlbuild_analysis::compiler::main::sql_test_plan_errors::sql_test_plan_error_messages;
 use sqlbuild_analysis::compiler::models::{
-    SqlTestAssertionStep, SqlTestChainBatch, SqlTestChainModel, SqlTestChainStep, SqlTestCte,
-    SqlTestPlan, SqlTestPlanBatch, SqlTestPlanFunction, SqlTestPlanModel, SqlTestPlanPayload,
-    SqlTestPlanTest,
+    SqlTestChainBatch, SqlTestChainModel, SqlTestCte, SqlTestPlan, SqlTestPlanBatch,
+    SqlTestPlanFunction, SqlTestPlanModel, SqlTestPlanPayload, SqlTestPlanTest,
 };
 
 use crate::bindings::_helpers::analysis::model_reads;
@@ -21,37 +20,30 @@ use crate::bindings::types::CompilerDetach;
 const MODEL_RESOURCE_TYPE: &str = "model";
 const PLANNING_WORKERS: usize = 4;
 
-pub(crate) type CtePair = (String, String);
-/// `(model, SQL, expected SQL, lifted CTEs, body, expected columns, expected lifted CTEs)`.
-pub(crate) type ChainRow = (
-    String,
-    String,
-    Option<String>,
-    Vec<CtePair>,
-    Option<String>,
-    Option<Vec<String>>,
-    Vec<CtePair>,
-);
-/// `(name, resolved SQL, lifted CTEs, comparison body)`.
-pub(crate) type AssertionRow = (String, String, Vec<CtePair>, Option<String>);
-/// `(model, severity, message)`.
-pub(crate) type WarningRow = (Option<String>, &'static str, String);
-/// `(SQL, chain, assertions, model names, warnings, distinct error messages)`.
-pub(crate) type PlanRow = (
-    Option<String>,
-    Vec<ChainRow>,
-    Vec<AssertionRow>,
-    Vec<String>,
-    Vec<WarningRow>,
-    Vec<String>,
-);
+/// A native SQL-test plan with its distinct error messages.
+pub(crate) struct PlanRow {
+    pub(crate) plan: SqlTestPlan,
+    pub(crate) error_messages: Vec<String>,
+}
+
+positional_record! {
+    extract;
+    /// An SQL function's name with its rendered UDF and table-function call affixes.
+    pub(crate) struct FunctionRow {
+        pub(crate) name: String,
+        pub(crate) udf_prefix: String,
+        pub(crate) udf_suffix: String,
+        pub(crate) table_function_prefix: String,
+        pub(crate) table_function_suffix: String,
+    }
+}
 
 /// The planning request: compiled models and tests, with the adapter's facts.
 pub(crate) struct PlanningRequest<'py> {
     pub(crate) models: Vec<Bound<'py, PyAny>>,
     /// Cursor-rendered SQL by model index, for models whose SQL uses cursor intrinsics.
     pub(crate) rendered_model_sql: HashMap<usize, String>,
-    pub(crate) functions: Vec<(String, String, String, String, String)>,
+    pub(crate) functions: Vec<FunctionRow>,
     pub(crate) tests: Vec<Bound<'py, PyAny>>,
     /// Cursor-rendered model query overrides by test index, replacing the test's own.
     pub(crate) rendered_test_overrides: HashMap<usize, BTreeMap<String, String>>,
@@ -171,13 +163,13 @@ fn model_dependencies(model: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 }
 
 fn plan_function(
-    (name, udf_prefix, udf_suffix, table_function_prefix, table_function_suffix): (
-        String,
-        String,
-        String,
-        String,
-        String,
-    ),
+    FunctionRow {
+        name,
+        udf_prefix,
+        udf_suffix,
+        table_function_prefix,
+        table_function_suffix,
+    }: FunctionRow,
 ) -> SqlTestPlanFunction {
     SqlTestPlanFunction {
         name,
@@ -242,36 +234,8 @@ fn cte(value: &Bound<'_, PyAny>) -> PyResult<SqlTestCte> {
 
 fn plan_row(plan: SqlTestPlan) -> PlanRow {
     let error_messages: Vec<String> = sql_test_plan_error_messages(&plan);
-    (
-        plan.sql,
-        plan.chain.into_iter().map(chain_row).collect(),
-        plan.assertions.into_iter().map(assertion_row).collect(),
-        plan.model_names,
-        plan.warnings
-            .into_iter()
-            .map(|warning| (warning.model_name, warning.severity, warning.message))
-            .collect(),
+    PlanRow {
+        plan,
         error_messages,
-    )
-}
-
-fn chain_row(step: SqlTestChainStep) -> ChainRow {
-    (
-        step.model_name,
-        step.resolved_sql,
-        step.expected_cte_sql,
-        step.lifted_ctes,
-        step.comparison_body_sql,
-        step.expected_columns,
-        step.expected_lifted_ctes,
-    )
-}
-
-fn assertion_row(step: SqlTestAssertionStep) -> AssertionRow {
-    (
-        step.name,
-        step.resolved_sql,
-        step.lifted_ctes,
-        step.comparison_body_sql,
-    )
+    }
 }

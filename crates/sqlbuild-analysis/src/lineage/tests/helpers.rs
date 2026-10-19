@@ -4,8 +4,9 @@ use crate::lineage::main::build_fast_lineage::build_fast_lineage;
 use crate::lineage::main::build_rich_lineage::build_rich_lineage;
 use crate::lineage::models::RelationFingerprint;
 use crate::lineage::models::{
-    FastLineageModel, FastLineageOutcome, FastLineageRequest, LineageColumn, LineageResourceType,
-    LineageSchemaResource, RichLineageColumn, RichLineageRequest, RichSchemaResource,
+    FastLineageModel, FastLineageOutcome, FastLineageRequest, LineageColumn, LineageOutcomeParts,
+    LineageResourceType, LineageSchemaResource, RichLineageColumn, RichLineageRequest,
+    RichSchemaResource,
 };
 use crate::semantic_validation::models::ProjectCatalog;
 
@@ -64,7 +65,12 @@ fn catalog() -> ProjectCatalog {
 fn described_outcome(
     outcome: FastLineageOutcome,
 ) -> (&'static str, Vec<String>, bool, Option<String>) {
-    let (status, columns, has_star, detail) = outcome.into_parts();
+    let LineageOutcomeParts {
+        status,
+        columns,
+        has_star,
+        detail,
+    } = outcome.into_parts();
     (status, described(&columns), has_star, detail)
 }
 
@@ -139,7 +145,12 @@ pub(crate) fn rich_outcome(
     };
     let mut outcomes = build_rich_lineage(&request).expect("the rich lineage pool builds");
     assert_eq!(outcomes.len(), 1);
-    let (status, columns, has_star, detail) = outcomes.remove(0).into_parts();
+    let LineageOutcomeParts {
+        status,
+        columns,
+        has_star,
+        detail,
+    } = outcomes.remove(0).into_parts();
     (
         status,
         columns.iter().map(described_rich_column).collect(),

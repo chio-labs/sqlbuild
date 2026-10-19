@@ -192,7 +192,12 @@ fn pivot_proof(
     if truthy(pivot.get("unpivot")) {
         return failure("UNPIVOT does not produce a dynamic column family".to_owned());
     }
-    let (pivot_columns, aggregates, dynamic, columns_valid) = components(pivot, context.dialect);
+    let PivotComponents {
+        pivot_columns,
+        aggregates,
+        dynamic,
+        columns_valid,
+    } = components(pivot, context.dialect);
     if !dynamic {
         return failure(
             "static pivot values must use ordinary exact column declarations".to_owned(),
@@ -309,11 +314,18 @@ fn fixed_names(
         .collect()
 }
 
+/// Python's `_pivot_components` for one pivot clause.
+struct PivotComponents<'a> {
+    pivot_columns: Vec<&'a str>,
+    aggregates: Vec<&'a Value>,
+    /// Whether the pivot values come from a dynamic source.
+    dynamic: bool,
+    /// Whether every pivot column resolved to a name.
+    columns_valid: bool,
+}
+
 /// Python's `_pivot_components`: pivot columns, aggregates, dynamic values, columns valid.
-fn components<'a>(
-    pivot: &'a Map<String, Value>,
-    dialect: &str,
-) -> (Vec<&'a str>, Vec<&'a Value>, bool, bool) {
+fn components<'a>(pivot: &'a Map<String, Value>, dialect: &str) -> PivotComponents<'a> {
     if SIMPLIFIED_PIVOT_DIALECTS.contains(&dialect) && truthy(pivot.get("using")) {
         let expressions: Vec<&Value> = dict_list(pivot.get("expressions"));
         let columns: Vec<&str> = expressions
@@ -321,12 +333,12 @@ fn components<'a>(
             .filter_map(|expression| column_name(Some(expression)))
             .collect();
         let valid: bool = columns.len() == expressions.len();
-        return (
-            columns,
-            dict_list(pivot.get("using")),
-            !truthy(pivot.get("fields")),
-            valid,
-        );
+        return PivotComponents {
+            pivot_columns: columns,
+            aggregates: dict_list(pivot.get("using")),
+            dynamic: !truthy(pivot.get("fields")),
+            columns_valid: valid,
+        };
     }
     let fields: Vec<&Value> = dict_list(pivot.get("fields"));
     let columns: Vec<&str> = fields
@@ -335,7 +347,12 @@ fn components<'a>(
         .collect();
     let dynamic: bool = fields.iter().any(|field| has_dynamic_values(field));
     let valid: bool = columns.len() == fields.len();
-    (columns, dict_list(pivot.get("expressions")), dynamic, valid)
+    PivotComponents {
+        pivot_columns: columns,
+        aggregates: dict_list(pivot.get("expressions")),
+        dynamic,
+        columns_valid: valid,
+    }
 }
 
 /// Python's `_has_dynamic_value_source` for one pivot field.
@@ -651,13 +668,24 @@ fn failure(reason: String) -> PivotOutcome {
 }
 
 /// Python's `_families_equal` key for one family.
-fn normalized(family: &DynamicFamily) -> (String, String, String, String, String, Option<&str>) {
-    (
-        casefold(&family.name),
-        casefold(&family.pivot_column),
-        casefold(&family.value_column),
-        casefold(&family.aggregate),
-        casefold(&family.data_type),
-        family.name_pattern.as_deref(),
-    )
+#[derive(PartialEq, Eq)]
+struct FamilyKey<'a> {
+    name: String,
+    pivot_column: String,
+    value_column: String,
+    aggregate: String,
+    data_type: String,
+    name_pattern: Option<&'a str>,
+}
+
+/// Python's `_families_equal` key for one family.
+fn normalized(family: &DynamicFamily) -> FamilyKey<'_> {
+    FamilyKey {
+        name: casefold(&family.name),
+        pivot_column: casefold(&family.pivot_column),
+        value_column: casefold(&family.value_column),
+        aggregate: casefold(&family.aggregate),
+        data_type: casefold(&family.data_type),
+        name_pattern: family.name_pattern.as_deref(),
+    }
 }

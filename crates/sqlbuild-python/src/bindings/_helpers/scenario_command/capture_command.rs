@@ -15,8 +15,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
 use crate::bindings::_helpers::scenario_command::presentation::{
-    CompletionKind, SectionStatus, activity, begin_section, connection_hooks, progress_relay,
-    write_completion,
+    CompletionKind, RelayContext, SectionStatus, activity, begin_section, connection_hooks,
+    progress_relay, write_completion,
 };
 use crate::bindings::_helpers::scenario_command::setup::{
     CompileInputs, ScenarioProject, capture_limits, capture_settings, cli_user_error, compile,
@@ -101,12 +101,12 @@ pub(crate) fn run_scenario_capture_command(
     let relay = progress_relay(
         &stream,
         &section,
-        (
-            &project.project_dir,
-            &adapter,
-            CompletionKind::Capture,
-            style,
-        ),
+        RelayContext {
+            project_dir: &project.project_dir,
+            adapter: &adapter,
+            kind: CompletionKind::Capture,
+            style: style,
+        },
     )?;
     let results: Vec<Bound<'_, PyAny>> = call_with(
         &host::entry(py, ExecutorHost::RunScenarioCapturePipeline)?,

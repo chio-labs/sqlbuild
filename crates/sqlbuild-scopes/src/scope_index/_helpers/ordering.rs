@@ -11,14 +11,23 @@ pub(crate) fn resource_key(record: &ResourceRecord) -> (String, String) {
     (record.path.clone(), resource_text(&record.identity))
 }
 
+/// A declaration sort key: identity text, path, then line and column as `P` compares them.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct DeclarationKey<P> {
+    identity: String,
+    path: String,
+    line: P,
+    column: P,
+}
+
 /// The builder's `_declaration_key`, which compares line and column as integers.
-pub(crate) fn declaration_key(record: &DeclarationRecord) -> (String, String, i64, i64) {
-    (
-        declaration_text(&record.identity),
-        record.path.clone(),
-        record.line,
-        record.column,
-    )
+pub(crate) fn declaration_key(record: &DeclarationRecord) -> DeclarationKey<i64> {
+    DeclarationKey {
+        identity: declaration_text(&record.identity),
+        path: record.path.clone(),
+        line: record.line,
+        column: record.column,
+    }
 }
 
 /// The lookup's `resource_sort_key`.
@@ -34,13 +43,13 @@ pub(crate) fn canonical_resource_key(
 /// The lookup's `declaration_sort_key`, which compares line and column as text.
 pub(crate) fn canonical_declaration_key(
     record: &DeclarationRecord,
-) -> Result<(String, String, String, String), ScopeDeferral> {
-    Ok((
-        declaration_text(&record.identity),
-        normalize_path(&record.path)?,
-        record.line.to_string(),
-        record.column.to_string(),
-    ))
+) -> Result<DeclarationKey<String>, ScopeDeferral> {
+    Ok(DeclarationKey {
+        identity: declaration_text(&record.identity),
+        path: normalize_path(&record.path)?,
+        line: record.line.to_string(),
+        column: record.column.to_string(),
+    })
 }
 
 /// Stable sort of `members` by a fallible key, as Python's `sorted(..., key=...)`.

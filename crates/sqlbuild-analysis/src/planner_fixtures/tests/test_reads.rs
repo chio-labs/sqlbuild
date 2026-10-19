@@ -1,6 +1,6 @@
 use crate::planner_fixtures::_helpers::resolved_reads::resolved_reads;
 use crate::planner_fixtures::_helpers::stub_markers::stub_markers;
-use crate::planner_fixtures::models::{FixtureReadCache, FixtureReadKey};
+use crate::planner_fixtures::models::{FixtureReadCache, FixtureReadKey, FixtureReadReference};
 use crate::planner_fixtures::tests::test_types::{FixtureMarkerTestCase, FixtureReadCacheTestCase};
 
 #[test]
@@ -50,7 +50,12 @@ fn given_repeated_reads_when_resolving_then_full_reference_identity_controls_reu
     for test_case in test_cases {
         let key = FixtureReadKey {
             sql: "SELECT order_id FROM __source(\"orders\")".to_owned(),
-            references: vec![("source".into(), "orders".into(), None, None)],
+            references: vec![FixtureReadReference {
+                kind: "source".into(),
+                name: "orders".into(),
+                package: None,
+                argument_count: None,
+            }],
             dialect: Some("duckdb".into()),
         };
         let (cache, initial) = resolved_reads(FixtureReadCache::default(), &key);
@@ -59,12 +64,12 @@ fn given_repeated_reads_when_resolving_then_full_reference_identity_controls_reu
         assert_eq!(cache.misses, 1, "{}", test_case.description);
         let changed = FixtureReadKey {
             sql: test_case.sql.to_owned(),
-            references: vec![(
-                "source".into(),
-                "orders".into(),
-                test_case.package.map(str::to_owned),
-                test_case.argument_count,
-            )],
+            references: vec![FixtureReadReference {
+                kind: "source".into(),
+                name: "orders".into(),
+                package: test_case.package.map(str::to_owned),
+                argument_count: test_case.argument_count,
+            }],
             dialect: test_case.dialect.map(str::to_owned),
         };
         let (cache, reads) = resolved_reads(cache, &changed);

@@ -21,7 +21,9 @@ use sqlbuild_analysis::resource_diagnostics::main::missing_description::missing_
 use sqlbuild_analysis::resource_diagnostics::main::yaml_help::yaml_help;
 use sqlbuild_analysis::resource_diagnostics::models::{CursorModel, HeaderHelp};
 
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
+use crate::bindings::_helpers::compiled_project::seed_views::SeedParts;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
@@ -36,8 +38,39 @@ const PYTHON_UDF_DECORATOR: &str = "udf";
 /// A loader's description, relative path and whether that path is a YAML file.
 pub(crate) type LoaderRow = (Option<String>, String, bool);
 
-/// A Python resource's kind, name, description (a `str` that may hold surrogates), location, help.
-type PythonResourceRow = (String, String, Option<Py<PyString>>, Py<PyAny>, String);
+positional_record! {
+    extract;
+    /// A Python resource's kind, name, description (a `str` that may hold surrogates), location, help.
+    struct PythonResourceRow {
+        kind: String,
+        name: String,
+        description: Option<Py<PyString>>,
+        location: Py<PyAny>,
+        help: String,
+    }
+}
+
+positional_record! {
+    extract;
+    /// A scenario's name, relative path, contents and authored header description.
+    struct ScenarioDescriptionRow {
+        name: String,
+        path: String,
+        contents: String,
+        raw: Py<PyAny>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// A SQL hook file's name, relative path, contents and description.
+    struct HookDescriptionRow {
+        name: String,
+        path: String,
+        contents: String,
+        description: Option<String>,
+    }
+}
 
 /// What the resource diagnostics read beyond the owner, and the Python values they build.
 #[derive(FromPyObject)]
@@ -53,9 +86,9 @@ pub(crate) struct DiagnosticSettings {
     /// Each discovered audit factory's name, relative path and line.
     audit_factories: Vec<(String, String, usize)>,
     /// Each scenario's name, relative path, contents and authored header description.
-    scenarios: Vec<(String, String, String, Py<PyAny>)>,
+    scenarios: Vec<ScenarioDescriptionRow>,
     /// Each SQL hook file's name, relative path, contents and description.
-    sql_hooks: Vec<(String, String, String, Option<String>)>,
+    sql_hooks: Vec<HookDescriptionRow>,
     /// Each loader by name.
     loaders: HashMap<String, LoaderRow>,
     /// Python-defined resources: kind, name, description, location and help, read by Python.
@@ -277,7 +310,13 @@ fn missing_descriptions<'py>(
             &help,
         )?);
     }
-    for (name, path, contents, raw) in &diagnostics.settings.scenarios {
+    for ScenarioDescriptionRow {
+        name,
+        path,
+        contents,
+        raw,
+    } in &diagnostics.settings.scenarios
+    {
         let raw: &Bound<'py, PyAny> = raw.bind(py);
         let description: Option<String> = if raw.is_instance_of::<PyString>() {
             Some(raw.extract()?)
@@ -301,7 +340,11 @@ fn missing_descriptions<'py>(
         )?);
     }
     for seed in project.seeds() {
-        let (_, _, entry, schema_file) = seed.parts();
+        let SeedParts {
+            schema_entry: entry,
+            schema_file,
+            ..
+        } = seed.parts();
         let entry: &Bound<'py, PyAny> = entry.bind(py);
         let schema_file: &Bound<'py, PyAny> = schema_file.bind(py);
         let name: String = native_field(entry, "name")?.extract()?;
@@ -324,7 +367,13 @@ fn missing_descriptions<'py>(
     for function in project.functions() {
         found.push(function_description(diagnostics, function)?);
     }
-    for (name, path, contents, description) in &diagnostics.settings.sql_hooks {
+    for HookDescriptionRow {
+        name,
+        path,
+        contents,
+        description,
+    } in &diagnostics.settings.sql_hooks
+    {
         let entry: String = format!("description \"What {name} does\"");
         let help: String = header_help(&HeaderHelp {
             kind: "hook",
@@ -341,7 +390,14 @@ fn missing_descriptions<'py>(
             &help,
         )?);
     }
-    for (kind, name, description, location, help) in &diagnostics.settings.python_resources {
+    for PythonResourceRow {
+        kind,
+        name,
+        description,
+        location,
+        help,
+    } in &diagnostics.settings.python_resources
+    {
         let text = description
             .as_ref()
             .map(|description| docstring_text(description.bind(py)));
@@ -484,7 +540,7 @@ fn cursor_without_inputs<'py>(
         let kinds: Vec<&str> = record
             .references
             .iter()
-            .map(|(kind, _, _, _)| kind.as_str())
+            .map(|ReferenceRow { kind, .. }| kind.as_str())
             .collect();
         let materialized: Option<String> = config_text(&values, "materialized")?;
         let cursor: Option<String> = config_text(&values, CURSOR_KEY)?;

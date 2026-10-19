@@ -1,7 +1,7 @@
 //! Authored SQL expanded through project vars, declarations and macros, with each pass's spans.
 
 use pyo3::prelude::{
-    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+    Bound, IntoPyObject, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -16,15 +16,18 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, NativeAttr, RecordId};
 use crate::bindings::_helpers::records::registry;
 use crate::bindings::_helpers::render::declaration_expansion::{
-    DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
+    DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
     expand_declarations, span_rows,
 };
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
 use crate::bindings::_helpers::render::declaration_values::resolved_declaration_context;
+use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::render::macro_expansion_result::{ExpansionRequest, macro_output};
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
-use crate::bindings::_helpers::sqltext::static_sql::{InterpolationSources, interpolation_batch};
+use crate::bindings::_helpers::sqltext::static_sql::{
+    InterpolationRow, InterpolationSources, interpolation_batch,
+};
 
 const DECLARATION_FIELDS: [&str; 4] = [
     "enums",
@@ -53,7 +56,13 @@ fn substituted<'py>(
     let text: String = sql.extract()?;
     let path: String = file_path.str()?.extract()?;
     let rows = interpolation_batch(sources, &[(text.clone(), path)])?;
-    let Some((rendered, spans, reads, error)) = rows.into_iter().next() else {
+    let Some(InterpolationRow {
+        sql: rendered,
+        spans,
+        reads,
+        error,
+    }) = rows.into_iter().next()
+    else {
         return Ok((text, Vec::new()));
     };
     record_reads(py, reads.iter().map(|(kind, name)| (*kind, name.as_str())))?;
@@ -69,7 +78,14 @@ fn substituted<'py>(
 fn span_objects<'py>(py: Python<'py>, spans: &[SpanRow]) -> PyResult<Bound<'py, PyTuple>> {
     let objects: Vec<Bound<'py, PyAny>> = spans
         .iter()
-        .map(|span| new_record(py, RecordId::ExpansionSpan, *span, None))
+        .map(|span| {
+            new_record(
+                py,
+                RecordId::ExpansionSpan,
+                IntoPyObject::into_pyobject(*span, py)?,
+                None,
+            )
+        })
         .collect::<PyResult<_>>()?;
     PyTuple::new(py, objects)
 }

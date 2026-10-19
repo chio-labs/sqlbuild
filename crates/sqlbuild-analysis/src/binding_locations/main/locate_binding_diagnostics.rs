@@ -3,9 +3,11 @@
 use std::collections::HashSet;
 
 use crate::binding_locations::constants::{ERROR_SEVERITY, UNKNOWN_TABLE_INTERNAL_CODE};
-use crate::binding_locations::models::{AuthoredSpan, BindingSource, LocatedDiagnostic};
+use crate::binding_locations::models::{
+    AuthoredSpan, BindingSource, LocatedDiagnostic, SeenDiagnostic,
+};
+use crate::semantic_validation::models::DiagnosticRow;
 use crate::semantic_validation::models::{BindingPositions, PositionInput};
-use crate::semantic_validation::types::DiagnosticRow;
 
 /// Each reported diagnostic in order; an error mapping a position is the mapper's message.
 pub fn locate_binding_diagnostics(
@@ -17,9 +19,18 @@ pub fn locate_binding_diagnostics(
         .find(source.query)
         .map(|start| source.authored[..start].matches('\n').count());
     let mut positions: Option<BindingPositions> = None;
-    let mut seen: HashSet<(String, String, Option<usize>, Option<usize>)> = HashSet::new();
+    let mut seen: HashSet<SeenDiagnostic> = HashSet::new();
     let mut located: Vec<LocatedDiagnostic> = Vec::new();
-    for (code, message, line, column, start, end, severity) in rows {
+    for DiagnosticRow {
+        code,
+        message,
+        line,
+        column,
+        start,
+        end,
+        severity,
+    } in rows
+    {
         if code == UNKNOWN_TABLE_INTERNAL_CODE {
             continue;
         }
@@ -39,7 +50,12 @@ pub fn locate_binding_diagnostics(
                 *column,
             ),
         };
-        let key = (code.clone(), message.clone(), line, column);
+        let key = SeenDiagnostic {
+            code: code.clone(),
+            message: message.clone(),
+            line,
+            column,
+        };
         if seen.contains(&key) && start.is_some() && severity == ERROR_SEVERITY {
             continue;
         }

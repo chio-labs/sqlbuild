@@ -120,9 +120,22 @@ fn build_analysis_cache_context<'py>(
     )
 }
 
+/// Semantic analysis cache outcome counts for one invocation.
+pub(crate) struct AnalysisCacheCounts {
+    pub(crate) batch_hits: usize,
+    pub(crate) entry_hits: usize,
+    pub(crate) misses: usize,
+    pub(crate) bypasses: usize,
+}
+
 /// Record semantic analysis cache outcomes for one invocation.
 pub(crate) fn record_analysis_cache_metrics(
-    (batch_hits, entry_hits, misses, bypasses): (usize, usize, usize, usize),
+    AnalysisCacheCounts {
+        batch_hits,
+        entry_hits,
+        misses,
+        bypasses,
+    }: AnalysisCacheCounts,
 ) {
     for (metric, value) in [
         ("analysis_batch_cache_hits", batch_hits),

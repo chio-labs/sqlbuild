@@ -10,16 +10,19 @@ use sqlbuild_sqltext::compiler::main::sql_interpolation::interpolate_sql;
 use sqlbuild_sqltext::compiler::models::InterpolationRead;
 use sqlbuild_sqltext::compiler::types::InterpolationHost;
 
+use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
+
 const ENVIRONMENT_READ: &str = "env";
 const CONTEXT_READ: &str = "ctx";
 
-/// `(sql or None when unchanged, spans, reads, error message or None)` for one SQL text.
-pub(crate) type InterpolationRow = (
-    Option<String>,
-    Vec<(usize, usize, usize, usize)>,
-    Vec<(&'static str, String)>,
-    Option<String>,
-);
+/// One SQL text interpolated: its SQL, substitution spans, reads and error message.
+pub(crate) struct InterpolationRow {
+    /// The interpolated SQL, or `None` when unchanged.
+    pub(crate) sql: Option<String>,
+    pub(crate) spans: Vec<SpanRow>,
+    pub(crate) reads: Vec<(&'static str, String)>,
+    pub(crate) error: Option<String>,
+}
 
 /// Project variables, the environment, context values (or `None`) and the variable renderer.
 #[derive(FromPyObject)]
@@ -154,13 +157,18 @@ pub(crate) fn interpolation_batch(
     let mut rows = Vec::with_capacity(sqls.len());
     for (sql, file_path) in sqls {
         let row = match interpolate_sql(&host, sql, file_path) {
-            Ok(result) => (result.sql, result.spans, read_rows(result.reads), None),
-            Err(failure) => (
-                None,
-                Vec::new(),
-                read_rows(failure.reads),
-                Some(failure.message),
-            ),
+            Ok(result) => InterpolationRow {
+                sql: result.sql,
+                spans: result.spans.into_iter().map(SpanRow::from).collect(),
+                reads: read_rows(result.reads),
+                error: None,
+            },
+            Err(failure) => InterpolationRow {
+                sql: None,
+                spans: Vec::new(),
+                reads: read_rows(failure.reads),
+                error: Some(failure.message),
+            },
         };
         if let Some(error) = host.raised.borrow_mut().take() {
             return Err(error);

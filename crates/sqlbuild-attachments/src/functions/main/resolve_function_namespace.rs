@@ -8,26 +8,26 @@ use crate::functions::models::{FunctionLanguage, FunctionNamespace, NamespaceInp
 pub fn resolve_function_namespace(inputs: &NamespaceInputs) -> FunctionNamespace {
     let inherit: bool =
         inputs.language == FunctionLanguage::Sql || inputs.inherit_default_namespace;
-    let (database, logical_database, fingerprint_database, fingerprint_logical_database) = part(
+    let database = part(
         inputs.header_database.as_ref(),
         inputs.default_database.as_ref(),
         inputs.target_database.as_ref(),
         inherit,
     );
-    let (schema, logical_schema, fingerprint_schema, fingerprint_logical_schema) = part(
+    let schema = part(
         inputs.header_schema.as_ref(),
         inputs.default_schema.as_ref(),
         inputs.target_schema.as_ref(),
         inherit,
     );
     FunctionNamespace {
-        database,
-        schema,
-        logical_database,
-        logical_schema,
-        fingerprint_database,
-        fingerprint_schema,
-        fingerprint_logical_database,
-        fingerprint_logical_schema,
+        database: database.physical,
+        schema: schema.physical,
+        logical_database: database.logical,
+        logical_schema: schema.logical,
+        fingerprint_database: database.fingerprint,
+        fingerprint_schema: schema.fingerprint,
+        fingerprint_logical_database: database.fingerprint_logical,
+        fingerprint_logical_schema: schema.fingerprint_logical,
     }
 }

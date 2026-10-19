@@ -10,15 +10,36 @@ use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::types::CompilerDetach;
 
-/// `(cleaned SQL, dialect, input schemas, return types, nullability rules, recover, null filter)`.
-type RecoveryRow = (String, String, Shapes, Pairs, Option<Pairs>, bool, bool);
-/// `(deferral, types, nullability, sorted direct outputs, sorted non-null outputs)`.
-type FactsRow = (Option<String>, Pairs, Pairs, Vec<String>, Vec<String>);
+positional_record! {
+    extract;
+    /// One query's CTE fact recovery request, as the oracle tests send it.
+    struct RecoveryRow {
+        cleaned_sql: String,
+        dialect: String,
+        input_schemas: Shapes,
+        function_return_types: Pairs,
+        nullability_rules: Option<Pairs>,
+        recover: bool,
+        null_filter: bool,
+    }
+}
+
+positional_record! {
+    into;
+    /// The deferral, types, nullability, sorted direct outputs and sorted non-null outputs.
+    struct FactsRow {
+        deferral: Option<String>,
+        types: Pairs,
+        nullability: Pairs,
+        direct_outputs: Vec<String>,
+        non_null_outputs: Vec<String>,
+    }
+}
 
 /// The facts native enrichment recovers for one query, or the reason it defers to Python.
 #[pyfunction]
 fn _oracle_cte_fact_recovery(py: Python<'_>, request: RecoveryRow) -> PyResult<FactsRow> {
-    let (
+    let RecoveryRow {
         cleaned_sql,
         dialect,
         input_schemas,
@@ -26,7 +47,7 @@ fn _oracle_cte_fact_recovery(py: Python<'_>, request: RecoveryRow) -> PyResult<F
         nullability_rules,
         recover,
         null_filter,
-    ) = request;
+    } = request;
     let request = CteFactRequest {
         cleaned_sql,
         dialect,
@@ -40,20 +61,20 @@ fn _oracle_cte_fact_recovery(py: Python<'_>, request: RecoveryRow) -> PyResult<F
         .compiler_detach(|| Ok(recover_cte_facts(&request)))
         .map_err(value_error)?;
     Ok(match facts {
-        Ok(facts) => (
-            None,
-            facts.types,
-            facts.nullability,
-            facts.direct_outputs,
-            facts.non_null_outputs,
-        ),
-        Err(deferral) => (
-            Some(deferral),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        ),
+        Ok(facts) => FactsRow {
+            deferral: None,
+            types: facts.types,
+            nullability: facts.nullability,
+            direct_outputs: facts.direct_outputs,
+            non_null_outputs: facts.non_null_outputs,
+        },
+        Err(deferral) => FactsRow {
+            deferral: Some(deferral),
+            types: Vec::new(),
+            nullability: Vec::new(),
+            direct_outputs: Vec::new(),
+            non_null_outputs: Vec::new(),
+        },
     })
 }
 

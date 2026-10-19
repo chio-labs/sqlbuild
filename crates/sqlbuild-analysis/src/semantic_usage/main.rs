@@ -227,16 +227,26 @@ fn physical_source_name(expression: &Expression) -> Option<String> {
     }
 }
 
+/// The identity two usage facts share when one repeats the other.
+#[derive(PartialEq, Eq, Hash)]
+struct UsageKey {
+    context: String,
+    expression_sql: String,
+    source_name: String,
+    column: String,
+    start: Option<usize>,
+}
+
 fn dedupe(mut uses: Vec<UsageFact>) -> Vec<UsageFact> {
-    let mut seen: HashSet<(String, String, String, String, Option<usize>)> = HashSet::new();
+    let mut seen: HashSet<UsageKey> = HashSet::new();
     uses.retain(|fact| {
-        seen.insert((
-            fact.context.clone(),
-            fact.expression_sql.clone(),
-            fact.source_name.clone(),
-            fact.column.clone(),
-            fact.start,
-        ))
+        seen.insert(UsageKey {
+            context: fact.context.clone(),
+            expression_sql: fact.expression_sql.clone(),
+            source_name: fact.source_name.clone(),
+            column: fact.column.clone(),
+            start: fact.start,
+        })
     });
     uses
 }

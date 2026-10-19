@@ -13,11 +13,11 @@ use crate::bindings::_helpers::analysis_session::profile_inputs::{
     profile_dialect, return_types, shape_rows,
 };
 use crate::bindings::_helpers::analysis_session::query_columns::{
-    ColumnsRow, QueryRow, infer_query_columns,
+    ColumnsRow, QueryRequestRow, QueryRow, infer_query_columns,
 };
 use crate::bindings::_helpers::analysis_session::session::{
-    ContractRow, FamilyRow, NativeModelAnalysisSession, PivotModelRow,
-    infer_expression_source_shapes, prove_dynamic_column_contracts,
+    ContractRow, ExpressionShapesRow, FamilyRow, NativeModelAnalysisSession, PivotModelRow,
+    PivotRequestRow, infer_expression_source_shapes, prove_dynamic_column_contracts,
 };
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::compile_driver::stage_work::{
@@ -154,13 +154,13 @@ pub(crate) fn expression_source_shapes<'py>(
         let shapes: Vec<Option<Pairs>> = infer_expression_source_shapes(
             py,
             native,
-            (
+            ExpressionShapesRow {
                 dialect,
-                case_sensitive,
-                return_types(&profile)?,
-                Some(rules),
-                pending_names,
-            ),
+                case_sensitive_shapes: case_sensitive,
+                function_return_types: return_types(&profile)?,
+                nullability_rules: Some(rules),
+                expressions: pending_names,
+            },
             adapter_rules,
         )?;
         for (expression, shape) in pending.keys().iter().zip(shapes) {
@@ -223,17 +223,20 @@ pub(crate) fn dynamic_contract_proofs<'py>(
         }
         prove_dynamic_column_contracts(
             py,
-            (
-                dialect_or_generic(&native_field(tables, "dialect")?)?,
-                shape_rows(&native_field(tables, "column_types_by_table")?)?,
-                shape_rows(&native_field(
+            PivotRequestRow {
+                dialect: dialect_or_generic(&native_field(tables, "dialect")?)?,
+                column_types: shape_rows(&native_field(tables, "column_types_by_table")?)?,
+                authoritative_types: shape_rows(&native_field(
                     tables,
                     "authoritative_column_types_by_table",
                 )?)?,
-                shape_rows(&native_field(tables, "column_nullability_by_table")?)?,
-                families,
-                rows,
-            ),
+                column_nullability: shape_rows(&native_field(
+                    tables,
+                    "column_nullability_by_table",
+                )?)?,
+                families_by_table: families,
+                models: rows,
+            },
         )?
     } else {
         let session: PyRef<'py, NativeModelAnalysisSession> = session.extract()?;
@@ -251,14 +254,14 @@ pub(crate) fn family_rows(families: &Bound<'_, PyAny>) -> PyResult<Vec<FamilyRow
     let mut rows: Vec<FamilyRow> = Vec::new();
     for family in families.try_iter()? {
         let family: Bound<'_, PyAny> = family?;
-        rows.push((
-            native_field(&family, "name")?.extract()?,
-            native_field(&family, "pivot_column")?.extract()?,
-            native_field(&family, "value_column")?.extract()?,
-            native_field(&family, "aggregate")?.extract()?,
-            native_field(&family, "type")?.extract()?,
-            native_field(&family, "name_pattern")?.extract()?,
-        ));
+        rows.push(FamilyRow {
+            name: native_field(&family, "name")?.extract()?,
+            pivot_column: native_field(&family, "pivot_column")?.extract()?,
+            value_column: native_field(&family, "value_column")?.extract()?,
+            aggregate: native_field(&family, "aggregate")?.extract()?,
+            data_type: native_field(&family, "type")?.extract()?,
+            name_pattern: native_field(&family, "name_pattern")?.extract()?,
+        });
     }
     Ok(rows)
 }
@@ -310,15 +313,15 @@ pub(crate) fn query_column_rows(
     infer_query_columns(
         py,
         catalog,
-        (
+        QueryRequestRow {
             dialect,
-            return_types(profile)?,
-            rules,
-            shape_rows(types)?,
-            shape_rows(nullability)?,
-            rows,
+            function_return_types: return_types(profile)?,
+            nullability_rules: rules,
+            types: shape_rows(types)?,
+            nullability: shape_rows(nullability)?,
+            queries: rows,
             normalization_dialect,
-        ),
+        },
         adapter_rules,
     )
 }
@@ -359,14 +362,14 @@ fn query_row(query: &Bound<'_, PyAny>) -> PyResult<QueryRow> {
             }
         }
     }
-    Ok((
-        native_field(query, "sql")?.extract()?,
+    Ok(QueryRow {
+        sql: native_field(query, "sql")?.extract()?,
         placeholders,
         analysis_names,
-        lineage,
-        native_field(query, "recover_cte_facts")?.extract()?,
-        native_field(query, "mode")?.extract()?,
-    ))
+        lineage_references: lineage,
+        recover_cte_facts: native_field(query, "recover_cte_facts")?.extract()?,
+        mode: native_field(query, "mode")?.extract()?,
+    })
 }
 
 trait OrderedDict {

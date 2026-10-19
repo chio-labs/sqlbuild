@@ -120,9 +120,9 @@ fn given_built_in_audit_on_missing_column_when_checking_then_reports_once_at_its
                 );
                 (
                     diagnostic.message,
-                    diagnostic.span.0,
-                    diagnostic.span.1,
-                    diagnostic.span.3.unwrap_or_default(),
+                    diagnostic.span.line,
+                    diagnostic.span.column,
+                    diagnostic.span.end_column.unwrap_or_default(),
                 )
             });
         assert_eq!(

@@ -131,12 +131,12 @@ fn resource_rows(
     for resource in resources.try_iter()? {
         let resource: Bound<'_, PyAny> = resource?;
         let (tags, folder) = describe(&resource)?;
-        rows.push((
-            graph_key(&native_field(&resource, "key")?)?,
-            graph_keys(&native_field(&resource, "deps")?)?,
+        rows.push(ResourceRow {
+            key: graph_key(&native_field(&resource, "key")?)?,
+            deps: graph_keys(&native_field(&resource, "deps")?)?,
             tags,
             folder,
-        ));
+        });
     }
     Ok(rows)
 }

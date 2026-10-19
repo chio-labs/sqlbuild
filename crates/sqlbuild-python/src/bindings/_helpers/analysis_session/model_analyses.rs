@@ -19,11 +19,14 @@ use crate::bindings::_helpers::analysis_session::session::{
 use crate::bindings::_helpers::analysis_session::stage_functions::family_rows;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::cache::native_store::{content_digest, current_code_identity};
-use crate::bindings::_helpers::compile_driver::analysis_cache::record_analysis_cache_metrics;
+use crate::bindings::_helpers::compile_driver::analysis_cache::{
+    AnalysisCacheCounts, record_analysis_cache_metrics,
+};
 use crate::bindings::_helpers::compiled_project::model_input_view::{
     AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
     input_reference_rows,
 };
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
@@ -106,36 +109,46 @@ fn session_request<'py>(
         let (name, declared): (String, Bound<'py, PyAny>) = item?.extract()?;
         families.push((name, family_rows(&declared)?));
     }
-    let (types, nullability, complete, schemas): (Shapes, Shapes, Shapes, Shapes) =
-        match declared_rows(request, catalog)? {
-            Some(rows) => rows,
-            None => (
-                shape_rows(&request.column_types)?,
-                shape_rows(&request.nullability)?,
-                shape_rows(&request.complete_schemas)?,
-                shape_rows(&native_field(catalog, "schemas")?)?,
-            ),
-        };
-    Ok((
-        profile_dialect(profile)?,
-        case_sensitive_shapes(profile, &native_field(profile, "sql_analysis_dialect")?)?,
-        return_types(profile)?,
-        Some(rules),
-        request.rich_type_inference,
-        types,
-        nullability,
-        complete,
-        schemas,
-        families,
-        model_rows(profile.py(), &request.model_inputs)?,
-    ))
+    let shapes: RelationShapes = match declared_rows(request, catalog)? {
+        Some(rows) => rows,
+        None => RelationShapes {
+            types: shape_rows(&request.column_types)?,
+            nullability: shape_rows(&request.nullability)?,
+            complete: shape_rows(&request.complete_schemas)?,
+            schemas: shape_rows(&native_field(catalog, "schemas")?)?,
+        },
+    };
+    Ok(RequestRow {
+        dialect: profile_dialect(profile)?,
+        case_sensitive_shapes: case_sensitive_shapes(
+            profile,
+            &native_field(profile, "sql_analysis_dialect")?,
+        )?,
+        function_return_types: return_types(profile)?,
+        nullability_rules: Some(rules),
+        rich_type_inference: request.rich_type_inference,
+        column_types: shapes.types,
+        column_nullability: shapes.nullability,
+        complete_schemas: shapes.complete,
+        catalog_schemas: shapes.schemas,
+        dynamic_families_by_table: families,
+        models: model_rows(profile.py(), &request.model_inputs)?,
+    })
+}
+
+/// The column types, nullability, complete schemas and catalog schemas a session reads.
+struct RelationShapes {
+    types: Shapes,
+    nullability: Shapes,
+    complete: Shapes,
+    schemas: Shapes,
 }
 
 /// The caller's native declaration rows when they still match the maps and catalog they mirror.
 fn declared_rows(
     request: &ModelAnalysisRequest<'_, '_>,
     catalog: &Bound<'_, PyAny>,
-) -> PyResult<Option<(Shapes, Shapes, Shapes, Shapes)>> {
+) -> PyResult<Option<RelationShapes>> {
     let Some(declared) = request.declared else {
         return Ok(None);
     };
@@ -151,12 +164,12 @@ fn declared_rows(
     if !unchanged {
         return Ok(None);
     }
-    Ok(Some((
-        declared.types.rows().clone(),
-        declared.nullability.rows().clone(),
-        complete.clone(),
-        complete.clone(),
-    )))
+    Ok(Some(RelationShapes {
+        types: declared.types.rows().clone(),
+        nullability: declared.nullability.rows().clone(),
+        complete: complete.clone(),
+        schemas: complete.clone(),
+    }))
 }
 
 /// The analysis store's path and environment, or None where Python bypasses its cache.
@@ -276,7 +289,13 @@ fn record_cache(
     python: &[Bound<'_, PyAny>],
     stats: Option<CacheStatsRow>,
 ) -> PyResult<()> {
-    let Some((hits, misses, _, failure)) = stats else {
+    let Some(CacheStatsRow {
+        hits,
+        misses,
+        failure,
+        ..
+    }) = stats
+    else {
         return record_metrics((0, 0, python.len()));
     };
     if let Some(failure) = failure {
@@ -294,7 +313,12 @@ fn record_cache(
 
 /// Record the analysis cache entries a native session read, missed and bypassed.
 fn record_metrics((hits, misses, bypasses): (usize, usize, usize)) -> PyResult<()> {
-    record_analysis_cache_metrics((0, hits, misses, bypasses));
+    record_analysis_cache_metrics(AnalysisCacheCounts {
+        batch_hits: 0,
+        entry_hits: hits,
+        misses,
+        bypasses,
+    });
     Ok(())
 }
 
@@ -334,15 +358,15 @@ fn model_rows<'py>(py: Python<'py>, model_inputs: &[Bound<'py, PyAny>]) -> PyRes
             Some(schema) => family_rows(&schema.dynamic_columns)?,
             None => Vec::new(),
         };
-        rows.push((
-            input_model_name(model_input)?,
+        rows.push(ModelRow {
+            name: input_model_name(model_input)?,
             query_sql,
             placeholders,
-            references,
-            recovers,
+            reference_rows: references,
+            recover_cte_facts: recovers,
             snapshot_columns,
-            families,
-        ));
+            dynamic_families: families,
+        });
     }
     Ok(rows)
 }
@@ -352,7 +376,7 @@ fn analysed_references(model_input: &Bound<'_, PyAny>) -> PyResult<Vec<(String, 
     if model_input.is_instance_of::<NativeModelInput>() {
         return Ok(input_reference_rows(model_input)?
             .into_iter()
-            .map(|(kind, name, _, _)| (kind, name))
+            .map(|ReferenceRow { kind, name, .. }| (kind, name))
             .collect());
     }
     let mut references: Vec<(String, String)> = Vec::new();

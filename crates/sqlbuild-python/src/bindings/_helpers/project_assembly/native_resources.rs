@@ -20,6 +20,7 @@ use crate::bindings::_helpers::authored_values::project_vars::project_var_text;
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_error};
 use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::model_config::template_data::record_reads;
 use crate::bindings::_helpers::project_assembly::models::{
     NativeProjectResources, NativeResourceFailure,
@@ -43,13 +44,42 @@ const CONTEXT_READ: &str = "ctx";
 const NATIVE_FAILURE_PREFIX: &str = "NativeCompilerError: ";
 
 /// `(kind, name, package)`.
-type ReferenceRow = (String, String, Option<String>);
-/// `(name, managed, database, schema)`.
-type SourceRow = (String, bool, Option<String>, Option<String>);
-/// `(kind, name, tags, references)`.
-type FunctionRow = (String, String, Vec<String>, Vec<ReferenceRow>);
+type ResourceReferenceRow = (String, String, Option<String>);
 /// `(references, attached (kind, name))`.
-type AuditRow = (Vec<ReferenceRow>, Option<(String, String)>);
+type AuditRow = (Vec<ResourceReferenceRow>, Option<(String, String)>);
+
+positional_record! {
+    extract;
+    /// `(name, managed, database, schema)`.
+    struct SourceRow {
+        name: String,
+        managed: bool,
+        database: Option<String>,
+        schema: Option<String>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// `(kind, name, tags, references)`.
+    struct FunctionRow {
+        kind: String,
+        name: String,
+        tags: Vec<String>,
+        references: Vec<ResourceReferenceRow>,
+    }
+}
+
+positional_record! {
+    into;
+    /// `(database, schema, logical database, logical schema)` of one seed.
+    struct NamespaceRow {
+        database: Option<String>,
+        schema: Option<String>,
+        logical_database: Option<String>,
+        logical_schema: Option<String>,
+    }
+}
 
 /// The request's named variables and the Python exceptions opaque ones raise, by index.
 type RequestVariables<'py> = (Vec<(String, Variable)>, Vec<Bound<'py, PyAny>>);
@@ -143,7 +173,7 @@ fn environment_rows(
         .collect()
 }
 
-fn references(rows: Vec<ReferenceRow>) -> Vec<Reference> {
+fn references(rows: Vec<ResourceReferenceRow>) -> Vec<Reference> {
     rows.into_iter()
         .map(|(kind, name, package)| Reference {
             kind,
@@ -166,9 +196,16 @@ fn tags(value: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
 
 fn model_facts(model_input: &Bound<'_, PyAny>, checks: &Bound<'_, PyAny>) -> PyResult<ModelFacts> {
     let model_file: Bound<'_, PyAny> = native_field(model_input, "model_file")?;
-    let reference_rows: Vec<ReferenceRow> = input_reference_rows(model_input)?
+    let reference_rows: Vec<ResourceReferenceRow> = input_reference_rows(model_input)?
         .into_iter()
-        .map(|(kind, name, package, _)| (kind, name, package))
+        .map(
+            |ReferenceRow {
+                 kind,
+                 name,
+                 package,
+                 ..
+             }| (kind, name, package),
+        )
         .collect();
     let mut syntax_checks: Vec<SyntaxCheck> = Vec::new();
     for check in checks.try_iter()? {
@@ -280,7 +317,12 @@ fn project_request<'py>(
     let sources: Vec<SourceFacts> = rows("source_inputs")?
         .into_iter()
         .map(|row| {
-            let (name, managed, database, schema): SourceRow = row.extract()?;
+            let SourceRow {
+                name,
+                managed,
+                database,
+                schema,
+            }: SourceRow = row.extract()?;
             Ok(SourceFacts {
                 name,
                 managed,
@@ -292,7 +334,12 @@ fn project_request<'py>(
     let functions: Vec<FunctionFacts> = rows("sql_function_inputs")?
         .into_iter()
         .map(|row| {
-            let (kind, name, tags, reference_rows): FunctionRow = row.extract()?;
+            let FunctionRow {
+                kind,
+                name,
+                tags,
+                references: reference_rows,
+            }: FunctionRow = row.extract()?;
             Ok(FunctionFacts {
                 kind,
                 name,
@@ -383,20 +430,13 @@ fn failure_object<'py>(
     .into_any())
 }
 
-fn namespace_row(
-    namespace: Namespace,
-) -> (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-) {
-    (
-        namespace.database,
-        namespace.schema,
-        namespace.logical_database,
-        namespace.logical_schema,
-    )
+fn namespace_row(namespace: Namespace) -> NamespaceRow {
+    NamespaceRow {
+        database: namespace.database,
+        schema: namespace.schema,
+        logical_database: namespace.logical_database,
+        logical_schema: namespace.logical_schema,
+    }
 }
 
 /// `NativeProjectResources` for the native result, replaying its template reads first.

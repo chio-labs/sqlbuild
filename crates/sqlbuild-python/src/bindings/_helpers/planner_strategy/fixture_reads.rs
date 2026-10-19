@@ -6,16 +6,17 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::planner_fixtures::main::required_columns::required_columns;
 use sqlbuild_analysis::planner_fixtures::main::star_keys::star_keys;
 use sqlbuild_analysis::planner_fixtures::models::{
-    FixtureReadKey, FixtureReadModel, FixtureReadRequirements, FixtureReadSchemas,
-    FixtureStarRelation,
+    FixtureReadKey, FixtureReadModel, FixtureReadReference, FixtureReadRequirements,
+    FixtureReadSchemas, FixtureStarRelation,
 };
-use sqlbuild_analysis::planner_fixtures::types::FixtureReadReference;
 use sqlbuild_analysis::required_columns::models::ColumnRead;
 use sqlbuild_core::panics::main::catch_compiler_panic::catch_compiler_panic;
 use std::collections::{HashMap, HashSet};
 
 use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::analysis::model_reads::{lineage_facts, proven_inputs, star_flags};
+use crate::bindings::_helpers::analysis::model_reads::{
+    LineageFactRow, lineage_facts, proven_inputs, star_flags,
+};
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::planner_strategy::constants::HIGH_CONFIDENCE;
 use crate::bindings::_helpers::planner_strategy::fixture_context::work_counts;
@@ -63,12 +64,12 @@ pub(crate) fn required_fixture_columns(
         let mut references: Vec<FixtureReadReference> = Vec::new();
         for reference in native_field(&model, "references")?.try_iter()? {
             let reference = reference?;
-            references.push((
-                native_field(&reference, "ref_kind")?.extract()?,
-                native_field(&reference, "ref_name")?.extract()?,
-                native_field(&reference, "ref_package")?.extract()?,
-                native_field(&reference, "call_argument_count")?.extract()?,
-            ));
+            references.push(FixtureReadReference {
+                kind: native_field(&reference, "ref_kind")?.extract()?,
+                name: native_field(&reference, "ref_name")?.extract()?,
+                package: native_field(&reference, "ref_package")?.extract()?,
+                argument_count: native_field(&reference, "call_argument_count")?.extract()?,
+            });
         }
         models.push(FixtureReadModel {
             name: name.clone(),
@@ -102,7 +103,12 @@ pub(crate) fn required_fixture_columns(
 
 pub(crate) fn lineage_reads(model: &Bound<'_, PyAny>) -> PyResult<Vec<ColumnRead>> {
     let mut reads: Vec<ColumnRead> = Vec::new();
-    for (_, _, confidence, sources) in lineage_facts(model)?.unwrap_or_default() {
+    for LineageFactRow {
+        confidence,
+        sources,
+        ..
+    } in lineage_facts(model)?.unwrap_or_default()
+    {
         if confidence != HIGH_CONFIDENCE {
             continue;
         }

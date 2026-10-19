@@ -12,7 +12,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
 };
 use crate::bindings::_helpers::compiled_project::loop_classes::model_loop_classes;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
-use crate::bindings::_helpers::compiled_project::model_loop::NativeModelLoop;
+use crate::bindings::_helpers::compiled_project::model_loop::{LoopSwitches, NativeModelLoop};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
 use crate::bindings::_helpers::model_config::contract_classes::contract_classes;
@@ -275,12 +275,13 @@ pub(crate) fn build_model_inputs<'py>(
             native_field(&syntax, "native_mapping")?.extract()?,
             reserved_cursor_markers(),
             (
-                (
-                    native_field(&settings, "sql_analysis")?.extract()?,
+                LoopSwitches {
+                    sql_analysis: native_field(&settings, "sql_analysis")?.extract()?,
                     no_sql_validation,
-                    defer_model_sql_validation,
-                    native_field(&settings, "require_sql_analysis")?.extract()?,
-                ),
+                    defer_sql_validation: defer_model_sql_validation,
+                    require_sql_analysis: native_field(&settings, "require_sql_analysis")?
+                        .extract()?,
+                },
                 project_config_path.str()?.extract()?,
             ),
         )

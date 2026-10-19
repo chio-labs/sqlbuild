@@ -9,8 +9,8 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::semantic_checks::main::resource_sql_diagnostics::resource_sql_diagnostics;
 use sqlbuild_analysis::semantic_checks::models::{
-    AuditSqlInput, HookModelInput, HookSqlInput, ResourceSqlDiagnostic, ResourceSqlFailure,
-    ResourceSqlKind, ResourceSqlRequest, SqlTestSqlInput,
+    AuditSqlInput, HookModelInput, HookSqlInput, ResourceSpan, ResourceSqlDiagnostic,
+    ResourceSqlFailure, ResourceSqlKind, ResourceSqlRequest, SqlTestSqlInput,
 };
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
@@ -272,7 +272,7 @@ fn opts_out(values: &Bound<'_, PyAny>) -> PyResult<bool> {
 fn row_relations(rows: Vec<ReferenceRow>) -> Vec<String> {
     let mut names: Vec<String> = rows
         .into_iter()
-        .filter_map(|(kind, name, _, _)| relation_name(&kind, name))
+        .filter_map(|ReferenceRow { kind, name, .. }| relation_name(&kind, name))
         .collect();
     names.sort_unstable();
     names.dedup();
@@ -318,7 +318,12 @@ fn python_diagnostic<'py>(
     classes: &DiagnosticClasses<'py>,
     diagnostic: ResourceSqlDiagnostic,
 ) -> PyResult<Bound<'py, PyAny>> {
-    let (line, column, end_line, end_column) = diagnostic.span;
+    let ResourceSpan {
+        line,
+        column,
+        end_line,
+        end_column,
+    } = diagnostic.span;
     let location: Bound<'py, PyDict> = PyDict::new(py);
     location.set_item("path", classes.path.call1((&diagnostic.path,))?)?;
     location.set_item("line", line)?;

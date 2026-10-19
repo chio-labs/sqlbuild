@@ -33,14 +33,17 @@ const RELATION_SUFFIX: &str = "__";
 const CONSTANT_KIND: &str = "constant";
 const RELATIONSHIP_CONSUMER_KINDS: [&str; 2] = ["test", "scenario"];
 
-/// `(sql, spans, argument references, dependencies, usages)` of one expansion.
-type ExpansionRow<'py> = (
-    String,
-    Vec<SpanRow>,
-    Vec<ResourceRef>,
-    Vec<Py<PyAny>>,
-    Vec<Py<PyAny>>,
-);
+positional_record! {
+    into;
+    /// `(sql, spans, argument references, dependencies, usages)` of one expansion.
+    struct ExpansionRow {
+        sql: String,
+        spans: Vec<SpanRow>,
+        argument_references: Vec<ResourceRef>,
+        dependencies: Vec<Py<PyAny>>,
+        usages: Vec<Py<PyAny>>,
+    }
+}
 
 /// The Python classes, enums and helpers an expansion builds facts, errors and contexts from.
 #[derive(FromPyObject)]
@@ -87,8 +90,17 @@ pub(crate) struct NativeMacroExpansion {
     pub(crate) facts: RefCell<ExpansionFacts>,
 }
 
-/// The `(macros, overrides, context, declarations, consumer)` one expansion reads.
-type StateInput = (Py<PyDict>, Py<PyDict>, Py<PyAny>, Py<PyAny>, Py<PyAny>);
+positional_record! {
+    extract;
+    /// The `(macros, overrides, context, declarations, consumer)` one expansion reads.
+    pub(crate) struct StateInput {
+        pub(crate) loaded_macros: Py<PyDict>,
+        pub(crate) overrides: Py<PyDict>,
+        pub(crate) macro_context: Py<PyAny>,
+        pub(crate) declarations: Py<PyAny>,
+        pub(crate) consumer: Py<PyAny>,
+    }
+}
 
 #[pymethods]
 impl NativeMacroExpansion {
@@ -99,7 +111,13 @@ impl NativeMacroExpansion {
         enforce_explicit: bool,
         classes: Py<PyDict>,
     ) -> PyResult<Self> {
-        let (loaded_macros, overrides, macro_context, declarations, consumer) = state;
+        let StateInput {
+            loaded_macros,
+            overrides,
+            macro_context,
+            declarations,
+            consumer,
+        } = state;
         Ok(Self {
             file_path: file_path.clone().unbind(),
             file_label: file_path.str()?.to_string(),
@@ -119,15 +137,15 @@ impl NativeMacroExpansion {
         slf: &Bound<'py, Self>,
         sql: &Bound<'py, PyString>,
         bridge: &Bound<'py, PyAny>,
-    ) -> PyResult<ExpansionRow<'py>> {
+    ) -> PyResult<ExpansionRow> {
         let output: ExpansionOutput = expanded(slf, sql.to_str()?, bridge)?;
-        Ok((
-            output.sql,
-            output.spans.into_iter().map(span_row).collect(),
-            output.argument_references,
-            output.dependencies,
-            output.usages,
-        ))
+        Ok(ExpansionRow {
+            sql: output.sql,
+            spans: output.spans.into_iter().map(span_row).collect(),
+            argument_references: output.argument_references,
+            dependencies: output.dependencies,
+            usages: output.usages,
+        })
     }
 
     /// `render_relation`: an approved call-site reference's placeholder, else its reference call.

@@ -9,7 +9,9 @@ use crate::bindings::_helpers::compiled_project::function_loop::{
 };
 use crate::bindings::_helpers::compiled_project::function_views::AttachedFunction;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
-use crate::bindings::_helpers::compiled_project::model_loop_calls::report_invalid_calls;
+use crate::bindings::_helpers::compiled_project::model_loop_calls::{
+    CallOrigin, report_invalid_calls,
+};
 use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, ModelConfigs};
 use crate::bindings::_helpers::compiled_project::model_loop_external::external_errors;
 use crate::bindings::_helpers::compiled_project::model_loop_header::{
@@ -63,10 +65,11 @@ use crate::bindings::_helpers::model_config::header_metadata::ContractClasses;
 use crate::bindings::_helpers::model_config::model_validator::NativeModelValidator;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::declaration_expansion::{
-    DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer, SpanRow,
+    DeclarationExpansion, ExpandedDeclarations, ExpansionClasses, ExpansionConsumer,
     expand_declarations,
 };
 use crate::bindings::_helpers::render::declaration_values::ConstantRendering;
+use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::render::macro_call_rows::span_row;
 use crate::bindings::_helpers::sqltext::declaration_references::declaration_scan;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
@@ -118,8 +121,19 @@ const COMPILE_ERROR_KEY: &str = "compile_error";
 
 /// The native validator, header contract classes, and the loop's Python classes.
 type LoopChecks = (Py<PyAny>, Py<PyDict>, Py<PyDict>);
+positional_record! {
+    extract;
+    /// Whether SQL analysis runs, is skipped, is deferred, and is required.
+    pub(crate) struct LoopSwitches {
+        pub(crate) sql_analysis: bool,
+        pub(crate) no_sql_validation: bool,
+        pub(crate) defer_sql_validation: bool,
+        pub(crate) require_sql_analysis: bool,
+    }
+}
+
 /// `(analysis switches, project config path)`.
-type LoopSettingsInput = ((bool, bool, bool, bool), String);
+type LoopSettingsInput = (LoopSwitches, String);
 
 /// The Python classes and error factory the loop builds usages, hooks and errors with.
 #[derive(FromPyObject)]
@@ -216,7 +230,12 @@ impl NativeModelLoop {
     ) -> PyResult<Self> {
         let (validator, contract_classes, loop_classes) = checks;
         let (
-            (sql_analysis, no_sql_validation, defer_sql_validation, require_sql_analysis),
+            LoopSwitches {
+                sql_analysis,
+                no_sql_validation,
+                defer_sql_validation,
+                require_sql_analysis,
+            },
             project_config_path,
         ) = settings;
         Python::attach(|py| index_sql_hook_definitions(loop_classes.bind(py)))?;
@@ -291,19 +310,30 @@ fn prepared_rows<'py>(
         &sqls,
     )?;
     let mut rows: Vec<ModelLoopRow> = Vec::with_capacity(model_files.len());
-    for (((model_file, paths), (authored, _)), (rendered, spans, reads, error)) in model_files
+    for (((model_file, paths), (authored, _)), interpolated) in model_files
         .into_iter()
         .zip(paths)
         .zip(sqls)
         .zip(interpolated)
     {
+        let SqlInterpolationRow {
+            sql: rendered,
+            spans,
+            reads,
+            error,
+        } = interpolated;
         let sql: String = rendered.unwrap_or(authored);
         let scan: Option<DeclarationScan> = error.is_none().then(|| declaration_scan(&sql));
         let reads: Vec<(String, String)> = reads
             .into_iter()
             .map(|(kind, name)| (kind.to_owned(), name))
             .collect();
-        let interpolation: InterpolationRow = (sql, reads, error, spans);
+        let interpolation: InterpolationRow = InterpolationRow {
+            sql,
+            reads,
+            error,
+            spans,
+        };
         rows.push(ModelLoopRow::new((model_file, paths), scan, interpolation));
     }
     Ok(rows)
@@ -673,7 +703,12 @@ impl NativeModelLoop {
             context,
             &self.syntax,
             &scanned.invalid_calls,
-            (Some(name), relative_path, file_path, contents),
+            CallOrigin {
+                name: Some(name),
+                relative_path,
+                file_path,
+                contents,
+            },
         )?;
         let analysis: (bool, Option<Bound<'py, PyAny>>) = (
             analysed && scanned.invalid_calls.is_empty(),
@@ -807,7 +842,9 @@ impl NativeModelLoop {
         let rows: Vec<(&str, &str, bool)> = references
             .iter()
             .zip(&external)
-            .map(|((kind, name, _, _), error)| (kind.as_str(), name.as_str(), error.is_some()))
+            .map(|(ReferenceRow { kind, name, .. }, error)| {
+                (kind.as_str(), name.as_str(), error.is_some())
+            })
             .collect();
         let unmanaged: Bound<'_, PyAny> = native_field(
             &native_field(config, RETENTION_ATTRIBUTE)?,
@@ -851,7 +888,9 @@ fn applied_interpolation(
     context: &LoopContext<'_, '_>,
     interpolation: &InterpolationRow,
 ) -> PyResult<String> {
-    let (sql, reads, error, _) = interpolation;
+    let InterpolationRow {
+        sql, reads, error, ..
+    } = interpolation;
     record_reads(context, reads)?;
     match error {
         Some(message) => Err(compile_error(context.classes, message, None)),
@@ -919,13 +958,11 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Span rows as the spliced spans the scan-fault locator maps through.
 fn spliced_spans(rows: &[SpanRow]) -> Vec<SplicedSpan> {
     rows.iter()
-        .map(
-            |&(source_start, source_end, output_start, output_end)| SplicedSpan {
-                source_start,
-                source_end,
-                output_start,
-                output_end,
-            },
-        )
+        .map(|row| SplicedSpan {
+            source_start: row.source_start,
+            source_end: row.source_end,
+            output_start: row.output_start,
+            output_end: row.output_end,
+        })
         .collect()
 }

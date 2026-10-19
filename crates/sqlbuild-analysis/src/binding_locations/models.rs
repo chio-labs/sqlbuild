@@ -1,6 +1,15 @@
 //! A model's authored SQL texts and the located diagnostics read from them.
 
-use crate::semantic_validation::types::Expansion;
+use crate::semantic_validation::models::Expansion;
+
+/// A reported diagnostic's identity: an error repeating it at a known start is dropped.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(crate) struct SeenDiagnostic {
+    pub(crate) code: String,
+    pub(crate) message: String,
+    pub(crate) line: Option<usize>,
+    pub(crate) column: Option<usize>,
+}
 
 /// The texts one model's binding diagnostics are mapped back through.
 #[derive(Clone, Copy, Debug)]

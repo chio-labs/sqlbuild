@@ -23,17 +23,32 @@ use crate::bindings::types::CompilerDetach;
 const QUERY_COLUMNS_CONTEXT: &str = "native query column analysis";
 const PROJECTION_FACTS_CONTEXT: &str = "native fixture projection facts";
 
-/// `(sql, placeholders, analysis names, lineage references, recover CTE facts, mode)`.
-pub(crate) type QueryRow = (
-    String,
-    Pairs,
-    Vec<String>,
-    Vec<(String, String, String)>,
-    bool,
-    String,
-);
-/// `(dialect, return types, rules, types, nullability, queries, normalization dialect)`.
-type RequestRow = (String, Pairs, Pairs, Shapes, Shapes, Vec<QueryRow>, String);
+positional_record! {
+    extract;
+    /// `(sql, placeholders, analysis names, lineage references, recover CTE facts, mode)`.
+    pub(crate) struct QueryRow {
+        pub(crate) sql: String,
+        pub(crate) placeholders: Pairs,
+        pub(crate) analysis_names: Vec<String>,
+        pub(crate) lineage_references: Vec<(String, String, String)>,
+        pub(crate) recover_cte_facts: bool,
+        pub(crate) mode: String,
+    }
+}
+
+positional_record! {
+    extract;
+    /// `(dialect, return types, rules, types, nullability, queries, normalization dialect)`.
+    pub(crate) struct QueryRequestRow {
+        pub(crate) dialect: String,
+        pub(crate) function_return_types: Pairs,
+        pub(crate) nullability_rules: Pairs,
+        pub(crate) types: Shapes,
+        pub(crate) nullability: Shapes,
+        pub(crate) queries: Vec<QueryRow>,
+        pub(crate) normalization_dialect: String,
+    }
+}
 /// `([(name, type)], NULL literal names, quoted names)`.
 type ProjectionFactsRow = (Vec<(String, String)>, Vec<String>, Vec<String>);
 /// `(succeeded, [(name, type, nullability)] or None, has star)`.
@@ -45,10 +60,10 @@ pub(crate) type ColumnsRow = (bool, Option<Vec<(String, Option<String>, String)>
 pub(crate) fn infer_query_columns(
     py: Python<'_>,
     catalog: Option<PyRef<'_, ProjectCatalog>>,
-    request: RequestRow,
+    request: QueryRequestRow,
     adapter_rules: Option<(Py<PyDict>, Py<PyAny>)>,
 ) -> PyResult<Vec<ColumnsRow>> {
-    let (
+    let QueryRequestRow {
         dialect,
         function_return_types,
         nullability_rules,
@@ -56,7 +71,7 @@ pub(crate) fn infer_query_columns(
         nullability,
         queries,
         normalization_dialect,
-    ) = request;
+    } = request;
     let queries: Vec<QueryColumnsInput> = queries
         .into_iter()
         .map(query_input)
@@ -99,7 +114,14 @@ pub(crate) fn query_columns_error(failure: QueryColumnsFailure) -> PyErr {
 }
 
 fn query_input(row: QueryRow) -> Result<QueryColumnsInput, String> {
-    let (sql, placeholders, analysis_names, lineage_references, recover_cte_facts, mode) = row;
+    let QueryRow {
+        sql,
+        placeholders,
+        analysis_names,
+        lineage_references,
+        recover_cte_facts,
+        mode,
+    } = row;
     let mode: QueryColumnsMode = match mode.as_str() {
         "batch" => QueryColumnsMode::Batch,
         "reanalysis" => QueryColumnsMode::Reanalysis,

@@ -87,14 +87,27 @@ fn empty_fixture_call_body(text: &[char], index: usize) -> Option<usize> {
     literal(text, after, ")", false)
 }
 
-/// Every empty fixture CTE in `text`: start, prefix end, name and end.
-fn empty_fixture_ctes(text: &[char]) -> Vec<(usize, usize, String, usize)> {
-    let mut found: Vec<(usize, usize, String, usize)> = Vec::new();
+/// One empty fixture CTE: where it starts, where its prefix ends, its name and its end.
+struct EmptyFixtureCte {
+    start: usize,
+    prefix_end: usize,
+    name: String,
+    end: usize,
+}
+
+/// Every empty fixture CTE in `text`.
+fn empty_fixture_ctes(text: &[char]) -> Vec<EmptyFixtureCte> {
+    let mut found: Vec<EmptyFixtureCte> = Vec::new();
     let mut index = 0;
     while index < text.len() {
         match empty_fixture_cte(text, index) {
             Some((prefix_end, name, end)) => {
-                found.push((index, prefix_end, name, end));
+                found.push(EmptyFixtureCte {
+                    start: index,
+                    prefix_end,
+                    name,
+                    end,
+                });
                 index = end;
             }
             None => index += 1,
@@ -109,11 +122,11 @@ pub(crate) fn prepared_test_sql(sql_body: &str) -> (String, Vec<String>) {
     let ctes = empty_fixture_ctes(&body);
     let mut opened: Vec<char> = Vec::with_capacity(body.len());
     let mut copied = 0;
-    for (start, prefix_end, name, end) in &ctes {
-        opened.extend_from_slice(&body[copied..*start]);
-        opened.extend_from_slice(&body[*start..*prefix_end]);
-        opened.extend(name.chars());
-        copied = *end;
+    for cte in &ctes {
+        opened.extend_from_slice(&body[copied..cte.start]);
+        opened.extend_from_slice(&body[cte.start..cte.prefix_end]);
+        opened.extend(cte.name.chars());
+        copied = cte.end;
     }
     opened.extend_from_slice(&body[copied..]);
     let mut sql = String::with_capacity(opened.len());
@@ -128,6 +141,6 @@ pub(crate) fn prepared_test_sql(sql_body: &str) -> (String, Vec<String>) {
         }
     }
     let mut relations = reference_names(&body);
-    relations.extend(ctes.into_iter().map(|(_, _, name, _)| name));
+    relations.extend(ctes.into_iter().map(|cte| cte.name));
     (sql, relations)
 }

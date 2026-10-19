@@ -5,6 +5,7 @@ use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
 
 use crate::bindings::_helpers::compiled_project::model_input_view::input_reference_rows;
+use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
@@ -86,7 +87,7 @@ pub(crate) fn resolve_cursor_input_roles<'py>(
         Err(_) => {
             let cursor: Bound<'py, PyAny> = mapping_get(&values, "cursor")?;
             if cursor.is_instance_of::<PyString>() {
-                for (_, name, _, _) in input_reference_rows(model)? {
+                for ReferenceRow { name, .. } in input_reference_rows(model)? {
                     filter.set_item(name, &cursor)?;
                 }
             }

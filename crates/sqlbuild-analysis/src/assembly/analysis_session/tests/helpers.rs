@@ -230,7 +230,7 @@ pub(crate) fn described(outcome: &ModelOutcome) -> Vec<String> {
         analysis
             .binding_diagnostics
             .iter()
-            .map(|row| row.0.as_str())
+            .map(|row| row.code.as_str())
             .collect::<Vec<_>>()
     ));
     lines

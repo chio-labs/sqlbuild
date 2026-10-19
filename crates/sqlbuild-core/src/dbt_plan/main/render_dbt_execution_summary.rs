@@ -14,7 +14,10 @@ pub fn render_dbt_execution_summary(
     if results.is_empty() {
         return None;
     }
-    let (mut passed, mut warned, mut failed, mut skipped): (i64, i64, i64, i64) = (0, 0, 0, 0);
+    let mut passed: i64 = 0;
+    let mut warned: i64 = 0;
+    let mut failed: i64 = 0;
+    let mut skipped: i64 = 0;
     let mut elapsed: f64 = 0.0;
     for result in results {
         let status: String = result.status.to_lowercase();

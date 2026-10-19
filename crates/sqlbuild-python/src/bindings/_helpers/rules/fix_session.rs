@@ -461,12 +461,12 @@ impl<'py> FixSession<'py> {
             .map(|(path, reason)| {
                 violation(
                     &path,
-                    (
-                        "format-fix-skipped",
-                        &format!("Rule fixes skipped this file: {}", reason.str()?),
-                        "warning",
-                        "Fix the reported problem, then rerun `sqb format --fix`.",
-                    ),
+                    ViolationDetails {
+                        code: "format-fix-skipped",
+                        message: &format!("Rule fixes skipped this file: {}", reason.str()?),
+                        severity: "warning",
+                        remediation: "Fix the reported problem, then rerun `sqb format --fix`.",
+                    },
                 )
             })
             .collect()
@@ -681,9 +681,17 @@ fn refused<'py>(report: &Bound<'py, PyAny>, reason: &str) -> PyResult<Bound<'py,
     )
 }
 
+/// The code, message, severity and remediation of one whole-file violation.
+struct ViolationDetails<'a> {
+    code: &'a str,
+    message: &'a str,
+    severity: &'a str,
+    remediation: &'a str,
+}
+
 fn violation<'py>(
     path: &Bound<'py, PyAny>,
-    details: (&str, &str, &str, &str),
+    details: ViolationDetails<'_>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py = path.py();
     new_record_with(
@@ -693,11 +701,14 @@ fn violation<'py>(
             ("file_path", path.clone()),
             ("line", 1_i64.into_pyobject(py)?.into_any()),
             ("column", 1_i64.into_pyobject(py)?.into_any()),
-            ("code", details.0.into_pyobject(py)?.into_any()),
-            ("message", details.1.into_pyobject(py)?.into_any()),
-            ("severity", details.2.into_pyobject(py)?.into_any()),
+            ("code", details.code.into_pyobject(py)?.into_any()),
+            ("message", details.message.into_pyobject(py)?.into_any()),
+            ("severity", details.severity.into_pyobject(py)?.into_any()),
             ("engine", "native".into_pyobject(py)?.into_any()),
-            ("remediation", details.3.into_pyobject(py)?.into_any()),
+            (
+                "remediation",
+                details.remediation.into_pyobject(py)?.into_any(),
+            ),
         ],
     )
 }
@@ -705,12 +716,12 @@ fn violation<'py>(
 fn verification_fault<'py>(path: &Bound<'py, PyAny>, reason: &str) -> PyResult<Bound<'py, PyAny>> {
     violation(
         path,
-        (
-            "format-fix-verification-failed",
-            reason,
-            "fault",
-            "Restructure the SQL manually and recompile; the original file was retained.",
-        ),
+        ViolationDetails {
+            code: "format-fix-verification-failed",
+            message: reason,
+            severity: "fault",
+            remediation: "Restructure the SQL manually and recompile; the original file was retained.",
+        },
     )
 }
 

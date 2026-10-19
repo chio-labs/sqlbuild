@@ -445,6 +445,27 @@ pub struct ResourceSqlRequest {
     pub hook_files: Vec<(String, Arc<str>)>,
 }
 
+/// A resource SQL finding's authored start and, when it covers text, its end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ResourceSpan {
+    pub line: i64,
+    pub column: i64,
+    pub end_line: Option<i64>,
+    pub end_column: Option<i64>,
+}
+
+impl ResourceSpan {
+    /// A span that marks only its start.
+    pub fn start(line: i64, column: i64) -> Self {
+        Self {
+            line,
+            column,
+            end_line: None,
+            end_column: None,
+        }
+    }
+}
+
 /// A located resource SQL finding, or a rejected `sql_analysis false` with its note.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResourceSqlDiagnostic {
@@ -454,8 +475,7 @@ pub struct ResourceSqlDiagnostic {
     pub code: String,
     pub message: String,
     pub path: String,
-    /// `(line, column, end line, end column)`.
-    pub span: (i64, i64, Option<i64>, Option<i64>),
+    pub span: ResourceSpan,
     pub note: Option<String>,
     pub help: Option<String>,
 }

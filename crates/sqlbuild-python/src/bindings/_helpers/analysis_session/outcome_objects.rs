@@ -15,27 +15,45 @@ use crate::bindings::_helpers::records::ids::RecordId;
 const LINEAGE_NATIVE: &str = "native";
 
 type Object<'py> = Bound<'py, PyAny>;
-/// `(succeeded, columns, lineage source, lineage rows, star, resolved, bindings, validated, SQL)`.
-type OutcomeObjects<'py> = (
-    Object<'py>,
-    Object<'py>,
-    String,
-    Object<'py>,
-    Object<'py>,
-    Object<'py>,
-    Object<'py>,
-    Object<'py>,
-    Object<'py>,
-);
-/// `(output proven, fixed columns, families, input relations, failure reason, bare pivot)`.
-type ProofObjects<'py> = (
-    Object<'py>,
-    Object<'py>,
-    Object<'py>,
-    Object<'py>,
-    Object<'py>,
-    Object<'py>,
-);
+positional_record! {
+    extract;
+    /// A session outcome row: its analysis, lineage, binding diagnostics and cleaned SQL.
+    struct OutcomeObjects<'py> {
+        succeeded: Object<'py>,
+        columns: Object<'py>,
+        source: String,
+        rows: Object<'py>,
+        has_star: Object<'py>,
+        star_resolved: Object<'py>,
+        raw: Object<'py>,
+        validated: Object<'py>,
+        cleaned: Object<'py>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// A dynamic pivot proof row.
+    struct ProofObjects<'py> {
+        output_proven: Object<'py>,
+        columns: Object<'py>,
+        families: Object<'py>,
+        inputs: Object<'py>,
+        failure_reason: Object<'py>,
+        bare: Object<'py>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// A lineage row: output column, transform and confidence codes and its sources.
+    struct LineageObjects<'py> {
+        output_column: Object<'py>,
+        transform_code: Object<'py>,
+        confidence_code: Object<'py>,
+        sources: Object<'py>,
+    }
+}
 
 /// The outcome at `position` of a finished session as `ModelSqlAnalysis`, for hand-built inputs.
 #[pyfunction]
@@ -49,7 +67,17 @@ pub(crate) fn session_outcome_analysis<'py>(
         .get("session")?
         .call_method1("outcome_rows", (request.get("position")?,))?
         .extract()?;
-    let (succeeded, columns, source, rows, has_star, star_resolved, raw, validated, cleaned): OutcomeObjects<'py> = outcome.extract()?;
+    let OutcomeObjects {
+        succeeded,
+        columns,
+        source,
+        rows,
+        has_star,
+        star_resolved,
+        raw,
+        validated,
+        cleaned,
+    } = outcome.extract()?;
     let lineage: Bound<'py, PyAny> = if source != LINEAGE_NATIVE {
         lineage_facts(&rows)?
     } else if succeeded.is_truthy()? {
@@ -101,8 +129,14 @@ fn proof<'py>(row: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     if row.is_none() {
         return Ok(row.clone());
     }
-    let (output_proven, columns, families, inputs, failure_reason, bare): ProofObjects<'py> =
-        row.extract()?;
+    let ProofObjects {
+        output_proven,
+        columns,
+        families,
+        inputs,
+        failure_reason,
+        bare,
+    } = row.extract()?;
     let family_class: Bound<'py, PyAny> = record_class(py, RecordId::DynamicColumnFamilyProof)?;
     let mut proofs: Vec<Bound<'py, PyAny>> = Vec::new();
     for family in families.try_iter()? {
@@ -174,12 +208,12 @@ fn compact_lineage<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
     };
     let mut compact: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in rows.try_iter()? {
-        let (output_column, transform_code, confidence_code, sources): (
-            Bound<'py, PyAny>,
-            Bound<'py, PyAny>,
-            Bound<'py, PyAny>,
-            Bound<'py, PyAny>,
-        ) = row?.extract()?;
+        let LineageObjects {
+            output_column,
+            transform_code,
+            confidence_code,
+            sources,
+        } = row?.extract()?;
         let mut source_indexes: Vec<Bound<'py, PyAny>> = Vec::new();
         for source in sources.try_iter()? {
             let (resource_type, resource_name, column_name): (
@@ -225,12 +259,12 @@ fn lineage_facts<'py>(rows: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let source_class: Bound<'py, PyAny> = record_class(py, RecordId::CompiledLineageSourceFact)?;
     let mut facts: Vec<Bound<'py, PyAny>> = Vec::new();
     for row in rows.try_iter()? {
-        let (output_column, transform_code, confidence_code, sources): (
-            Bound<'py, PyAny>,
-            Bound<'py, PyAny>,
-            Bound<'py, PyAny>,
-            Bound<'py, PyAny>,
-        ) = row?.extract()?;
+        let LineageObjects {
+            output_column,
+            transform_code,
+            confidence_code,
+            sources,
+        } = row?.extract()?;
         let mut upstream: Vec<Bound<'py, PyAny>> = Vec::new();
         for source in sources.try_iter()? {
             let (resource_type, resource_name, column_name): (

@@ -423,16 +423,23 @@ pub(crate) fn old_name_reference_message(
     old_name_message(owner_label, written, method, model_name)
 }
 
-/// `(audit name, target, gated, read)` for one attached-audit ordering edge.
-pub(crate) type GateRow = (String, ResourceKey, ResourceKey, ResourceKey);
-/// `(hook name, gated, read, HookReadType value, path)` for one hook-read ordering edge.
-pub(crate) type HookRow = (
-    String,
-    ResourceKey,
-    ResourceKey,
-    &'static str,
-    Option<String>,
-);
+/// One attached-audit ordering edge: the audit, its target, and the gated and read resources.
+pub(crate) struct GateRow {
+    pub(crate) audit_name: String,
+    pub(crate) target: ResourceKey,
+    pub(crate) gated: ResourceKey,
+    pub(crate) read: ResourceKey,
+}
+
+/// One hook-read ordering edge: the hook, the gated and read resources, its type and path.
+pub(crate) struct HookRow {
+    pub(crate) hook_name: String,
+    pub(crate) gated: ResourceKey,
+    pub(crate) read: ResourceKey,
+    /// The `HookReadType` value.
+    pub(crate) hook_type: &'static str,
+    pub(crate) path: Option<String>,
+}
 
 /// The attached-audit gate edges and hook-read edges of one project, in Python's order.
 pub(crate) fn native_execution_gate_edges(
@@ -452,7 +459,12 @@ pub(crate) fn native_execution_gate_edges(
 }
 
 fn gate_row(edge: GateEdge) -> GateRow {
-    (edge.audit_name, edge.target, edge.gated, edge.read)
+    GateRow {
+        audit_name: edge.audit_name,
+        target: edge.target,
+        gated: edge.gated,
+        read: edge.read,
+    }
 }
 
 fn hook_row(edge: HookEdge) -> HookRow {
@@ -461,7 +473,13 @@ fn hook_row(edge: HookEdge) -> HookRow {
         HookType::Sql => "SQL",
         HookType::InlineSql => "inline SQL",
     };
-    (edge.hook_name, edge.gated, edge.read, hook_type, edge.path)
+    HookRow {
+        hook_name: edge.hook_name,
+        gated: edge.gated,
+        read: edge.read,
+        hook_type,
+        path: edge.path,
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

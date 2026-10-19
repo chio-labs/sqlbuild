@@ -4,25 +4,14 @@ use sqlbuild_core::text::main::ignorecase_key::ignorecase_key;
 
 use crate::semantic_checks::_helpers::resource_sql::resources::{ResourceSql, find_code_points};
 use crate::semantic_checks::_helpers::resource_sql::scanning::word_at;
-use crate::semantic_checks::models::ResourceSqlFailure;
+use crate::semantic_checks::models::{ResourceSpan, ResourceSqlFailure};
 use crate::semantic_validation::main::truth_test_spans::truth_test_spans;
-use crate::semantic_validation::models::{BindingPositions, PositionInput};
+use crate::semantic_validation::models::{BindingPositions, DiagnosticRow, PositionInput};
 
-/// A binding finding: code, message, line, column, start, end and severity.
-pub(crate) type Finding = (
-    String,
-    String,
-    Option<usize>,
-    Option<usize>,
-    Option<usize>,
-    Option<usize>,
-    String,
-);
+/// A binding finding: code, message, cleaned position and severity.
+pub(crate) type Finding = DiagnosticRow;
 
 const UNSUPPORTED_TRUTH_TEST_CODE: &str = "B103";
-
-/// `(line, column, end line, end column)`.
-pub(crate) type Span = (i64, i64, Option<i64>, Option<i64>);
 
 /// Python's `_offset_location`: the 1-based line and column of a code-point offset.
 pub(crate) fn offset_location(text: &str, offset: usize) -> (i64, i64) {
@@ -89,7 +78,7 @@ fn mapped_span(
     resource: &ResourceSql,
     cleaned_sql: &str,
     finding: &Finding,
-) -> Result<Option<Span>, ResourceSqlFailure> {
+) -> Result<Option<ResourceSpan>, ResourceSqlFailure> {
     let mapper = BindingPositions::new(PositionInput {
         authored: resource.contents.to_string(),
         query: resource.authored_body.clone(),
@@ -99,27 +88,36 @@ fn mapped_span(
     })
     .map_err(ResourceSqlFailure::Normalization)?;
     let (line, column) = mapper
-        .position(finding.4, finding.2, finding.3, &finding.1)
+        .position(
+            finding.start,
+            finding.line,
+            finding.column,
+            &finding.message,
+        )
         .map_err(ResourceSqlFailure::Normalization)?;
     let (Some(line), Some(column)) = (line, column) else {
         return Ok(None);
     };
-    let (end_line, end_column) = match finding.5 {
+    let (end_line, end_column) = match finding.end {
         Some(end) => mapper
             .position(Some(end), None, None, "")
             .map_err(ResourceSqlFailure::Normalization)?,
         None => (None, None),
     };
-    Ok(Some((
-        line as i64,
-        column as i64,
-        usize_line(end_line),
-        usize_line(end_column),
-    )))
+    Ok(Some(ResourceSpan {
+        line: line as i64,
+        column: column as i64,
+        end_line: usize_line(end_line),
+        end_column: usize_line(end_column),
+    }))
 }
 
 /// The authored span of the truth-value test a B103 finding starts at, matched by its order.
-fn truth_test_span(resource: &ResourceSql, cleaned_sql: &str, start: usize) -> Option<Span> {
+fn truth_test_span(
+    resource: &ResourceSql,
+    cleaned_sql: &str,
+    start: usize,
+) -> Option<ResourceSpan> {
     let cleaned: Vec<(usize, usize)> = truth_test_spans(cleaned_sql);
     let order: usize = cleaned
         .iter()
@@ -134,7 +132,12 @@ fn truth_test_span(resource: &ResourceSql, cleaned_sql: &str, start: usize) -> O
     let length: usize = resource.authored_body[test_start..test_end].chars().count();
     let (line, column) = offset_location(&resource.contents, offset);
     let (end_line, end_column) = offset_location(&resource.contents, offset + length);
-    Some((line, column, Some(end_line), Some(end_column)))
+    Some(ResourceSpan {
+        line,
+        column,
+        end_line: Some(end_line),
+        end_column: Some(end_column),
+    })
 }
 
 /// Python's `_location`: the offending authored text, falling back to the body start.
@@ -142,18 +145,18 @@ pub(crate) fn location(
     resource: &ResourceSql,
     cleaned_sql: &str,
     finding: &Finding,
-) -> Result<Span, ResourceSqlFailure> {
+) -> Result<ResourceSpan, ResourceSqlFailure> {
     let body_offset = find_code_points(&resource.contents, &resource.authored_body).unwrap_or(0);
-    if finding.4.is_none() {
+    if finding.start.is_none() {
         let text: Vec<char> = resource.contents.chars().collect();
-        if let Some(offset) = quoted_name_offset(&text, body_offset, &finding.1) {
+        if let Some(offset) = quoted_name_offset(&text, body_offset, &finding.message) {
             let (line, column) = offset_location(&resource.contents, offset);
-            return Ok((line, column, None, None));
+            return Ok(ResourceSpan::start(line, column));
         }
     }
-    if finding.0 == UNSUPPORTED_TRUTH_TEST_CODE
+    if finding.code == UNSUPPORTED_TRUTH_TEST_CODE
         && let Some(span) = finding
-            .4
+            .start
             .and_then(|start| truth_test_span(resource, cleaned_sql, start))
     {
         return Ok(span);
@@ -162,7 +165,7 @@ pub(crate) fn location(
         return Ok(span);
     }
     let (line, column) = offset_location(&resource.contents, body_offset);
-    Ok((line, column, None, None))
+    Ok(ResourceSpan::start(line, column))
 }
 
 /// Code-point starts of each line of `text`.
@@ -187,12 +190,12 @@ fn offset(starts: &[usize], line: i64, column: i64) -> Option<usize> {
 }
 
 /// Python's `_text_from`: the authored text of a span, or from its start.
-pub(crate) fn text_from(resource: &ResourceSql, span: Span) -> String {
+pub(crate) fn text_from(resource: &ResourceSql, span: ResourceSpan) -> String {
     let starts = line_starts(&resource.contents);
-    let Some(start) = offset(&starts, span.0, span.1) else {
+    let Some(start) = offset(&starts, span.line, span.column) else {
         return String::new();
     };
-    let end = match (span.2, span.3) {
+    let end = match (span.end_line, span.end_column) {
         (Some(line), Some(column)) => offset(&starts, line, column),
         _ => None,
     };
@@ -204,12 +207,12 @@ pub(crate) fn text_from(resource: &ResourceSql, span: Span) -> String {
 }
 
 /// Python's `_line_at`: the authored line of a span, or empty text.
-pub(crate) fn line_at(resource: &ResourceSql, span: Span) -> String {
+pub(crate) fn line_at(resource: &ResourceSql, span: ResourceSpan) -> String {
     let lines: Vec<&str> = resource.contents.lines().collect();
-    if span.0 < 1 {
+    if span.line < 1 {
         return String::new();
     }
     lines
-        .get((span.0 - 1) as usize)
+        .get((span.line - 1) as usize)
         .map_or_else(String::new, |line| (*line).to_owned())
 }

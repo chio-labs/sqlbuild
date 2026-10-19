@@ -61,26 +61,32 @@ const MODEL_TARGET: &str = "model";
 const SOURCE_TARGET: &str = "source";
 const SEED_TARGET: &str = "seed";
 
-/// An audit block, its name, SQL body, evidence SQL, measurement flag and header values.
-pub(crate) type AuditBlockRow = (
-    Py<PyAny>,
-    Option<String>,
-    String,
-    Option<String>,
-    bool,
-    Py<PyDict>,
-);
+positional_record! {
+    extract, into;
+    /// An audit block, its name, SQL body, evidence SQL, measurement flag and header values.
+    pub(crate) struct AuditBlockRow {
+        pub(crate) block: Py<PyAny>,
+        pub(crate) name: Option<String>,
+        pub(crate) sql_body: String,
+        pub(crate) evidence_sql: Option<String>,
+        pub(crate) measurement: bool,
+        pub(crate) header: Py<PyDict>,
+    }
+}
 
-/// An audit file's paths, stem, discovered file, generic flag, contents and blocks.
-pub(crate) type AuditFileRow = (
-    String,
-    String,
-    String,
-    Py<PyAny>,
-    bool,
-    String,
-    Vec<AuditBlockRow>,
-);
+positional_record! {
+    extract, into;
+    /// An audit file's paths, stem, discovered file, generic flag, contents and blocks.
+    pub(crate) struct AuditFileRow {
+        pub(crate) file_path: String,
+        pub(crate) relative_path: String,
+        pub(crate) stem: String,
+        pub(crate) file: Py<PyAny>,
+        pub(crate) generic: bool,
+        pub(crate) contents: String,
+        pub(crate) blocks: Vec<AuditBlockRow>,
+    }
+}
 
 /// What every audit in one compile resolves against, and the Python values it builds with.
 #[derive(FromPyObject)]
@@ -132,8 +138,8 @@ pub(crate) fn attached_audits<'py>(
         settings,
     };
     let mut audits: Vec<AttachedAudit> = Vec::new();
-    for file in files.iter().filter(|file| !file.4) {
-        for block in &file.6 {
+    for file in files.iter().filter(|file| !file.generic) {
+        for block in &file.blocks {
             audits.push(scope.singular(file, block)?);
         }
     }
@@ -158,41 +164,41 @@ fn generic_definitions<'a, 'py>(
 ) -> PyResult<Definitions<'a, 'py>> {
     let py: Python<'py> = context.host.py();
     let mut project: BTreeMap<String, Definition<'a>> = BTreeMap::new();
-    for file in files.iter().filter(|file| file.4) {
-        let [block] = file.6.as_slice() else {
+    for file in files.iter().filter(|file| file.generic) {
+        let [block] = file.blocks.as_slice() else {
             let message: String = format!(
                 "Generic audit definition {} must contain exactly one AUDIT block",
-                file.1
+                file.relative_path
             );
             return Err(compile_error(context.classes, &message, None));
         };
-        let header: &Bound<'_, PyDict> = block.5.bind(py);
-        if block.4
+        let header: &Bound<'_, PyDict> = block.header.bind(py);
+        if block.measurement
             && (header.contains(MEASUREMENT_HEADER_KEYS[0])?
                 || header.contains(MEASUREMENT_HEADER_KEYS[1])?)
         {
             let message: String = format!(
                 "Generic measurement audit definition {} must not define thresholds or \
                  minimum_samples in its AUDIT header; attachment owns policy",
-                file.1
+                file.relative_path
             );
             return Err(compile_error(context.classes, &message, None));
         }
-        if let Some(existing) = project.get(&file.2) {
+        if let Some(existing) = project.get(&file.stem) {
             let message: String = format!(
                 "Duplicate generic audit definition found for '{}' in {} and {}",
-                file.2, existing.file.1, file.1
+                file.stem, existing.file.relative_path, file.relative_path
             );
             return Err(compile_error(context.classes, &message, None));
         }
-        project.insert(file.2.clone(), Definition { file, block });
+        project.insert(file.stem.clone(), Definition { file, block });
     }
     let mut shadows: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut definitions: HashMap<String, Definition<'a>> = HashMap::new();
     for builtin in builtins {
-        if let Some(block) = builtin.6.first() {
+        if let Some(block) = builtin.blocks.first() {
             definitions.insert(
-                builtin.2.clone(),
+                builtin.stem.clone(),
                 Definition {
                     file: builtin,
                     block,
@@ -202,7 +208,11 @@ fn generic_definitions<'a, 'py>(
     }
     for (name, definition) in project {
         if definitions.contains_key(&name) {
-            shadows.push(shadow_warning(context, &name, &definition.file.1)?);
+            shadows.push(shadow_warning(
+                context,
+                &name,
+                &definition.file.relative_path,
+            )?);
         }
         definitions.insert(name, definition);
     }
@@ -251,8 +261,20 @@ impl<'py> AuditScope<'_, 'py> {
     /// One singular audit block, as `_build_singular_audit_inputs` builds it.
     fn singular(&self, file: &AuditFileRow, block: &AuditBlockRow) -> PyResult<AttachedAudit> {
         let py: Python<'py> = self.context.host.py();
-        let (_, relative_path, stem, audit_file, _, _, _) = file;
-        let (audit_block, block_name, sql_body, evidence_sql, measurement, header) = block;
+        let AuditFileRow {
+            relative_path,
+            stem,
+            file: audit_file,
+            ..
+        } = file;
+        let AuditBlockRow {
+            block: audit_block,
+            name: block_name,
+            sql_body,
+            evidence_sql,
+            measurement,
+            header,
+        } = block;
         let audit_name: String = block_name.clone().unwrap_or_else(|| stem.clone());
         let identity: Bound<'py, PyAny> = self
             .settings
@@ -394,7 +416,7 @@ impl<'py> AuditScope<'_, 'py> {
         let minimum_samples: Bound<'py, PyAny> = native_field(instance, "minimum_samples")?;
         let instance_severity: Option<String> = native_field(instance, "severity")?.extract()?;
         let label: String = format!("{owner_file} audit '{definition_name}'");
-        let measurement: bool = definition.block.4;
+        let measurement: bool = definition.block.measurement;
         if measurement {
             if instance_severity.is_some() {
                 let message: String = format!(
@@ -425,8 +447,8 @@ impl<'py> AuditScope<'_, 'py> {
         let rendering: AuditRendering = render_attached_audit(&AuditAttachment {
             owner_label: owner_file.to_owned(),
             definition_name: definition_name.clone(),
-            sql_body: definition.block.2.clone(),
-            evidence_sql: definition.block.3.clone(),
+            sql_body: definition.block.sql_body.clone(),
+            evidence_sql: definition.block.evidence_sql.clone(),
             implicit_arguments: implicit,
             explicit_arguments: argument_pairs(native_field(instance, "arguments")?.downcast()?)?,
             has_thresholds: !thresholds.is_none(),
@@ -455,7 +477,7 @@ impl<'py> AuditScope<'_, 'py> {
             &format!("Audit '{definition_name}'"),
         )?;
         let calls: Vec<(&str, &str)> = reference_calls(&expanded.references);
-        self.checked_references(&definition.file.1, &calls)?;
+        self.checked_references(&definition.file.relative_path, &calls)?;
         let (severity, source) = rendered
             .policies
             .map_err(|message| compile_error(self.context.classes, &message, None))?;
@@ -471,13 +493,13 @@ impl<'py> AuditScope<'_, 'py> {
         }
         usages.extend(expanded.usages);
         Ok(AttachedAudit {
-            audit_file: definition.file.3.clone_ref(py),
-            audit_block: definition.block.0.clone_ref(py),
+            audit_file: definition.file.file.clone_ref(py),
+            audit_block: definition.block.block.clone_ref(py),
             definition_name: definition
                 .block
-                .1
+                .name
                 .clone()
-                .unwrap_or_else(|| definition.file.2.clone()),
+                .unwrap_or_else(|| definition.file.stem.clone()),
             sql_body: expanded.sql_body,
             measurement,
             evidence_sql: expanded.evidence_sql,
@@ -508,7 +530,12 @@ impl<'py> AuditScope<'_, 'py> {
         identity: &Bound<'py, PyAny>,
         label: &str,
     ) -> PyResult<ExpandedAudit<'py>> {
-        let (file_path, relative_path, _, _, _, contents, _) = file;
+        let AuditFileRow {
+            file_path,
+            relative_path,
+            contents,
+            ..
+        } = file;
         let declarations: Bound<'py, PyAny> = file_declarations(self.context, file_path, identity)?;
         let body: AuthoredExpansion<'py> =
             expanded_authored_sql(self.context, (sql.0, file_path), &declarations)?;
@@ -682,7 +709,7 @@ impl<'py> AuditScope<'_, 'py> {
 fn reference_calls(references: &[ReferenceRow]) -> Vec<(&str, &str)> {
     references
         .iter()
-        .map(|(kind, name, _, _)| (kind.as_str(), name.as_str()))
+        .map(|ReferenceRow { kind, name, .. }| (kind.as_str(), name.as_str()))
         .collect()
 }
 

@@ -24,7 +24,17 @@ use sqlbuild_cache::project_snapshot::models::SnapshotRules;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
 
-type SettingsRow = (bool, Vec<String>, Vec<String>, Vec<String>, Vec<String>);
+positional_record! {
+    extract;
+    /// Settings case sensitivity, names, prefixes, env files and secrets directories.
+    struct SettingsRow {
+        case_sensitive: bool,
+        names: Vec<String>,
+        prefixes: Vec<String>,
+        env_files: Vec<String>,
+        secrets_dirs: Vec<String>,
+    }
+}
 type ReplayRow = (String, Vec<String>, i64);
 type LaunchIdentityRow = (String, BTreeMap<String, String>, Vec<String>);
 /// A written artifact's digest, or a kept artifact's size and mtime.
@@ -254,7 +264,13 @@ impl NativeReuseAttempt {
 }
 
 fn settings_inputs(row: SettingsRow) -> SettingsInputs {
-    let (case_sensitive, names, prefixes, env_files, secrets_dirs) = row;
+    let SettingsRow {
+        case_sensitive,
+        names,
+        prefixes,
+        env_files,
+        secrets_dirs,
+    } = row;
     SettingsInputs {
         case_sensitive,
         names,

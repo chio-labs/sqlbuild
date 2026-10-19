@@ -7,8 +7,14 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 
-/// `(output, transform kind, confidence, [(resource type, resource, column)])` of one lineage output.
-pub(crate) type LineageFactRow = (String, String, String, Vec<(String, String, String)>);
+/// One lineage output with its transform kind and confidence values, and its sources.
+pub(crate) struct LineageFactRow {
+    pub(crate) output_column: String,
+    pub(crate) transform: String,
+    pub(crate) confidence: String,
+    /// `(resource type, resource, column)` of each source.
+    pub(crate) sources: Vec<(String, String, String)>,
+}
 
 const TRANSFORM_VALUES: [&str; 6] = [
     "direct",
@@ -139,12 +145,12 @@ pub(crate) fn lineage_facts(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Lin
         };
         let mut facts: Vec<LineageFactRow> = Vec::with_capacity(rows.len());
         for row in rows {
-            facts.push((
-                row.output_column,
-                coded(&TRANSFORM_VALUES, row.transform_code)?,
-                coded(&CONFIDENCE_VALUES, row.confidence_code)?,
-                row.sources,
-            ));
+            facts.push(LineageFactRow {
+                output_column: row.output_column,
+                transform: coded(&TRANSFORM_VALUES, row.transform_code)?,
+                confidence: coded(&CONFIDENCE_VALUES, row.confidence_code)?,
+                sources: row.sources,
+            });
         }
         return Ok(Some(facts));
     }
@@ -164,12 +170,12 @@ pub(crate) fn lineage_facts(model: &Bound<'_, PyAny>) -> PyResult<Option<Vec<Lin
                 native_field(&source, "column_name")?.extract()?,
             ));
         }
-        facts.push((
-            native_field(&output, "output_column")?.extract()?,
-            native_field(&output, "transform_kind")?.str()?.extract()?,
-            native_field(&output, "confidence")?.str()?.extract()?,
+        facts.push(LineageFactRow {
+            output_column: native_field(&output, "output_column")?.extract()?,
+            transform: native_field(&output, "transform_kind")?.str()?.extract()?,
+            confidence: native_field(&output, "confidence")?.str()?.extract()?,
             sources,
-        ));
+        });
     }
     Ok(Some(facts))
 }

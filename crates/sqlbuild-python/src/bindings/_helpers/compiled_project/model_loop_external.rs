@@ -20,7 +20,13 @@ pub(crate) fn external_errors(
     relative_path: &str,
 ) -> PyResult<Vec<Option<PyErr>>> {
     let mut errors: Vec<Option<PyErr>> = Vec::with_capacity(references.len());
-    for (kind, name, package, _) in references {
+    for ReferenceRow {
+        kind,
+        name,
+        package,
+        ..
+    } in references
+    {
         errors.push(if kind == DBT_REF_KIND {
             external_error(context, (kind, name, package.as_deref()), relative_path)?
         } else {

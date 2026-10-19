@@ -2,7 +2,7 @@
 
 use crate::semantic_validation::_helpers::diagnostics::column_pattern;
 use crate::semantic_validation::_helpers::normalization::normalize;
-use crate::semantic_validation::models::{BindingPositions, PositionInput};
+use crate::semantic_validation::models::{BindingPositions, Expansion, PositionInput};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::{LazyLock, OnceLock};
@@ -10,7 +10,6 @@ use std::sync::{LazyLock, OnceLock};
 const POPULAR_TOKEN_THRESHOLD: usize = 200;
 static TOKENS: LazyLock<Result<Regex, String>> =
     LazyLock::new(|| Regex::new(r"\w+|[^\w\s]").map_err(|error| error.to_string()));
-type Mapping = (usize, usize, usize, usize);
 
 impl BindingPositions {
     pub fn new(request: PositionInput) -> Result<Self, String> {
@@ -75,7 +74,13 @@ impl BindingPositions {
             .unwrap_or_else(|| *self.offsets.last().unwrap_or(&0));
         for pass in self.passes.iter().rev() {
             let mut adjusted = mapped as isize;
-            for &(source_start, source_end, output_start, output_end) in pass {
+            for &Expansion {
+                source_start,
+                source_end,
+                output_start,
+                output_end,
+            } in pass
+            {
                 if mapped < output_start {
                     break;
                 }
@@ -227,28 +232,31 @@ fn align_offsets(original: &str, normalized: &str) -> Result<Vec<usize>, String>
     blocks.sort();
     let ac = byte_char_map(original);
     let bc = byte_char_map(normalized);
-    let mut mappings: Vec<Mapping> = Vec::new();
+    let mut mappings: Vec<Expansion> = Vec::new();
     for (ai, bi, size) in blocks {
         for i in 0..size {
-            mappings.push((
-                ac[a[ai + i].start()],
-                ac[a[ai + i].end()],
-                bc[b[bi + i].start()],
-                bc[b[bi + i].end()],
-            ));
+            mappings.push(Expansion {
+                source_start: ac[a[ai + i].start()],
+                source_end: ac[a[ai + i].end()],
+                output_start: bc[b[bi + i].start()],
+                output_end: bc[b[bi + i].end()],
+            });
         }
     }
     let mut offsets = Vec::with_capacity(normalized.chars().count() + 1);
     let original_len = original.chars().count();
     let mut index = 0;
     for offset in 0..=normalized.chars().count() {
-        while index < mappings.len() && offset > mappings[index].3 {
+        while index < mappings.len() && offset > mappings[index].output_end {
             index += 1;
         }
         offsets.push(match mappings.get(index) {
-            Some(&(start, end, target, _)) => {
-                start + offset.saturating_sub(target).min(end - start)
-            }
+            Some(&Expansion {
+                source_start: start,
+                source_end: end,
+                output_start: target,
+                ..
+            }) => start + offset.saturating_sub(target).min(end - start),
             None => original_len,
         });
     }

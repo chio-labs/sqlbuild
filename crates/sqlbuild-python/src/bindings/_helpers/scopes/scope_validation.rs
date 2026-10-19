@@ -57,15 +57,15 @@ fn tuple_from<'py>(py: Python<'py>, items: Vec<Bound<'py, PyAny>>) -> PyResult<B
 }
 
 fn usage_row(usage: &Bound<'_, PyAny>) -> PyResult<UsageRow> {
-    Ok((
-        qualified_row(&native_field(usage, "consumer")?)?,
-        qualified_row(&native_field(usage, "declaration")?)?,
-        value_of(usage, "kind")?,
-        optional_item(usage, "through")?
+    Ok(UsageRow {
+        consumer: qualified_row(&native_field(usage, "consumer")?)?,
+        declaration: qualified_row(&native_field(usage, "declaration")?)?,
+        kind: value_of(usage, "kind")?,
+        through: optional_item(usage, "through")?
             .map(|through| qualified_row(&through))
             .transpose()?,
-        field(usage, "enum_member")?,
-    ))
+        enum_member: field(usage, "enum_member")?,
+    })
 }
 
 fn dependency_row(
