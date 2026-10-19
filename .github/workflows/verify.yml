@@ -23,6 +23,7 @@ jobs:
       compiler_differential: ${{ steps.scope.outputs.compiler_differential }}
       duckdb: ${{ steps.scope.outputs.duckdb }}
       postgres: ${{ steps.scope.outputs.postgres }}
+      clickhouse: ${{ steps.scope.outputs.clickhouse }}
       performance: ${{ steps.scope.outputs.performance }}
       format_performance: ${{ steps.scope.outputs.format_performance }}
       rules_performance: ${{ steps.scope.outputs.rules_performance }}
@@ -50,11 +51,12 @@ jobs:
               echo "checks=$6"
               echo "wheels=$7"
               echo "compiler_differential=$8"
+              echo "clickhouse=$9"
             } >> "${GITHUB_OUTPUT}"
           }
 
           if [[ "${EVENT_NAME}" != "pull_request" && "${EVENT_NAME}" != "merge_group" ]]; then
-            write_scope true true true true true true true true
+            write_scope true true true true true true true true true
             exit 0
           fi
 
@@ -66,7 +68,7 @@ jobs:
           if [[ -z "${BASE_SHA}" || -z "${HEAD_SHA}" ]] || \
              ! git diff --name-only -z "${BASE_SHA}...${HEAD_SHA}" > "${changed_paths}"; then
             echo "Could not diff ${BASE_SHA:-<none>}...${HEAD_SHA:-<none>}; running every suite" >&2
-            write_scope true true true true true true true true
+            write_scope true true true true true true true true true
             exit 0
           fi
 
@@ -112,12 +114,13 @@ jobs:
                 && "${HEAD_REF}" == release-please--branches--* ]] && release_metadata_only; then
             echo "Release Please pull request changes only release metadata; skipping the suites" \
               | tee -a "${GITHUB_STEP_SUMMARY}"
-            write_scope false false false false false false false false
+            write_scope false false false false false false false false false
             exit 0
           fi
 
           duckdb=false
           postgres=false
+          clickhouse=false
           performance=false
           format_performance=false
           rules_performance=false
@@ -182,6 +185,9 @@ jobs:
               tests/e2e/src/sqlbuild/cli/commands/main/postgres/*|tests/integration/src/sqlbuild/adapters/postgres/*|tests/integration/src/sqlbuild/runtime/execution_history/*)
                 postgres=true
                 ;;
+              src/sqlbuild/adapters/clickhouse/*|tests/e2e/src/sqlbuild/cli/commands/main/clickhouse/*|tests/integration/src/sqlbuild/adapters/clickhouse/*)
+                clickhouse=true
+                ;;
               tests/e2e/*)
                 duckdb=true
                 ;;
@@ -201,7 +207,7 @@ jobs:
           done < "${changed_paths}"
 
           if [[ "${changed}" != "true" ]]; then
-            write_scope true true true true true true true true
+            write_scope true true true true true true true true true
             exit 0
           fi
 
@@ -213,6 +219,7 @@ jobs:
           if [[ "${broad}" == "true" ]]; then
             duckdb=true
             postgres=true
+            clickhouse=true
             format_performance=true
             compiler_differential=true
           fi
@@ -224,7 +231,8 @@ jobs:
             "${rules_performance}" \
             "${checks}" \
             "${wheels}" \
-            "${compiler_differential}"
+            "${compiler_differential}" \
+            "${clickhouse}"
 
   lockfile:
     name: Lockfile consistency
@@ -853,6 +861,39 @@ jobs:
           -m "real_warehouse and postgres"
           -vv --color=yes -n auto --dist loadfile
 
+  clickhouse:
+    name: ClickHouse integration and E2E tests
+    needs: [changes, lockfile]
+    if: needs.changes.outputs.clickhouse == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            Cargo.lock
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --locked --all-groups --all-extras
+      - name: Verify Docker
+        run: docker info
+      - name: Run ClickHouse tests
+        env:
+          PYTHONUNBUFFERED: "1"
+          TESTCONTAINERS_RYUK_DISABLED: "true"
+        run: >-
+          uv run pytest tests
+          -m "real_warehouse and clickhouse"
+          -vv --color=yes -n auto --dist loadfile
+
   wheels:
     name: Wheels
     needs: [changes]
@@ -891,6 +932,7 @@ jobs:
         cache_compile_performance,
         rules_performance,
         postgres,
+        clickhouse,
         wheels,
       ]
     runs-on: ubuntu-24.04
@@ -913,6 +955,7 @@ jobs:
           CACHE_COMPILE_PERFORMANCE_RESULT: ${{ needs.cache_compile_performance.result }}
           RULES_PERFORMANCE_RESULT: ${{ needs.rules_performance.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
+          CLICKHOUSE_RESULT: ${{ needs.clickhouse.result }}
           WHEELS_RESULT: ${{ needs.wheels.result }}
         run: |
           if [[ "${CHANGES_RESULT}" != "success" || "${LOCKFILE_RESULT}" != "success" ]]; then
@@ -937,6 +980,7 @@ jobs:
             "${CACHE_COMPILE_PERFORMANCE_RESULT}" \
             "${RULES_PERFORMANCE_RESULT}" \
             "${POSTGRES_RESULT}" \
+            "${CLICKHOUSE_RESULT}" \
             "${WHEELS_RESULT}"; do
             if [[ "${result}" != "success" && "${result}" != "skipped" ]]; then
               echo "A selected verification suite did not pass: ${result}" >&2

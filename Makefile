@@ -153,6 +153,7 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/audit \
 	tests/e2e/src/sqlbuild/cli/commands/main/bigquery \
 	tests/e2e/src/sqlbuild/cli/commands/main/check \
+	tests/e2e/src/sqlbuild/cli/commands/main/clickhouse \
 	tests/e2e/src/sqlbuild/cli/commands/main/compile \
 	tests/e2e/src/sqlbuild/cli/commands/main/databricks \
 	tests/e2e/src/sqlbuild/cli/commands/main/dbt \
@@ -456,6 +457,16 @@ test-real-postgres:
 	env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and postgres" -vv --color=yes -n auto --dist load 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "TEST_REAL_POSTGRES_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
+
+
+test-real-clickhouse:
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-clickhouse-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and clickhouse" -vv --color=yes -n auto --dist loadfile 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_CLICKHOUSE_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
 	exit $$status
 
 

@@ -47,7 +47,8 @@
 					"docs/concepts/adapters/sqlite",
 					"docs/concepts/adapters/bigquery",
 					"docs/concepts/adapters/databricks",
-					"docs/concepts/adapters/sqlserver"
+					"docs/concepts/adapters/sqlserver",
+					"docs/concepts/adapters/clickhouse"
 				]
 			},
 			"docs/concepts/sources",

@@ -35,6 +35,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [BigQuery](concepts/adapters/bigquery.md) (`concepts/adapters/bigquery`) - BigQuery adapter configuration for SQLBuild.
 - [Databricks](concepts/adapters/databricks.md) (`concepts/adapters/databricks`) - Databricks adapter configuration for SQLBuild.
 - [SQL Server](concepts/adapters/sqlserver.md) (`concepts/adapters/sqlserver`) - Microsoft SQL Server adapter configuration for SQLBuild.
+- [ClickHouse](concepts/adapters/clickhouse.md) (`concepts/adapters/clickhouse`) - ClickHouse adapter configuration for SQLBuild.
 - [Sources](concepts/sources.md) (`concepts/sources`) - Declare external data inputs for your pipeline.
 - [Seeds](concepts/seeds.md) (`concepts/seeds`) - Load static CSV data into your pipeline as tables.
 - [Overview](concepts/models.md) (`concepts/models`) - SQL model anatomy, references, dependencies, and the model documentation guide.
