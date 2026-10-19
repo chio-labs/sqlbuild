@@ -1,0 +1,14 @@
+//! Built-in Recall defaults.
+
+/// The local store, relative to the project directory.
+pub const DEFAULT_STORE_DIRECTORY: &str = "logs";
+pub const DEFAULT_STORE_FILE_NAME: &str = "recall.sqlite3";
+pub const DEFAULT_RETENTION_DAYS: u32 = 30;
+pub const DEFAULT_SHUTDOWN_TIMEOUT_MS: u64 = 3_000;
+pub const DEFAULT_DIAGNOSTICS_MIN_SEVERITY: &str = "info";
+/// The connection key naming a connection's adapter; never passed to `connect()`.
+pub const CONNECTION_ADAPTER_KEY: &str = "adapter";
+pub const SQLITE_ADAPTER: &str = "sqlite";
+pub const SQLITE_PATH_KEY: &str = "path";
+pub const PROJECT_FILE_NAME: &str = "sqlbuild_project.toml";
+pub const LOCAL_FILE_NAME: &str = "sqlbuild_local.toml";

@@ -472,6 +472,7 @@ crate_names = [
     "sqlbuild-model-config",
     "sqlbuild-pysource",
     "sqlbuild-python",
+    "sqlbuild-recall",
     "sqlbuild-refactor",
     "sqlbuild-render",
     "sqlbuild-rules",

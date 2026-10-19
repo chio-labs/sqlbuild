@@ -1,0 +1,99 @@
+//! An open SQLite Recall store and the outcomes of its operations.
+
+use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
+
+use crate::records::models::{RecallValue, RowEnvelope};
+use crate::schema::models::Table;
+
+/// One open store file. Only one thread uses a store.
+#[derive(Debug)]
+pub struct SqliteStore {
+    pub(crate) connection: rusqlite::Connection,
+    pub path: PathBuf,
+}
+
+/// Whether a store is opened for writing, creating it when missing, or only for reading.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenMode {
+    ReadWrite,
+    ReadOnly,
+}
+
+/// A row whose key was already stored with different content; the first row is kept.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConflictEvidence {
+    pub table: Table,
+    pub record_key: String,
+    pub existing_sha256: String,
+    pub rejected_sha256: String,
+}
+
+/// What one insert batch did, per table.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InsertOutcome {
+    /// Rows written or already present with equal content, by table.
+    pub delivered: Vec<(Table, u64)>,
+    pub conflicts: Vec<ConflictEvidence>,
+}
+
+/// What a maintenance run is allowed to do.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MaintenanceRequest {
+    pub now: SystemTime,
+    pub retention_days: u32,
+    pub owner: String,
+    pub budget: Duration,
+    pub envelope: RowEnvelope,
+}
+
+/// What a maintenance run did.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MaintenanceOutcome {
+    /// False when another process maintained the store within the interval.
+    pub ran: bool,
+    pub deleted_invocations: u64,
+    pub deleted_artifacts: u64,
+    /// False when the budget ran out with expired invocations left; the next run is overdue.
+    pub complete: bool,
+}
+
+/// The rows of a read-only query.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct QueryResult {
+    pub columns: Vec<String>,
+    pub rows: Vec<Vec<RecallValue>>,
+    /// More rows existed beyond the limit.
+    pub truncated: bool,
+}
+
+/// One column of a table or view, as the store describes it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DescribedColumn {
+    pub name: String,
+    pub declared_type: String,
+    pub nullable: bool,
+}
+
+/// One table or view of the store.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DescribedRelation {
+    pub name: String,
+    /// `table` or `view`.
+    pub kind: String,
+    pub columns: Vec<DescribedColumn>,
+}
+
+/// One invocation's stored output and how complete it is.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OutputTranscript {
+    pub invocation_id: String,
+    pub data: Vec<u8>,
+    pub status: Option<String>,
+    pub missing_sequences: i64,
+    pub reported_drops: i64,
+    pub filtered: i64,
+    pub flush_complete: bool,
+    pub complete: bool,
+    pub gap_reason: Option<String>,
+}
