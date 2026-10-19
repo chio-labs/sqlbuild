@@ -1,3 +1,4 @@
+use crate::assembly::analysis_session::models::RelationTables;
 use std::collections::HashMap;
 
 use crate::assembly::analysis_session::_helpers::cte_facts::{
@@ -123,6 +124,8 @@ pub(crate) fn orders_request(models: Vec<ModelRequest>) -> SessionRequest {
         nullability_rules: Some(Vec::new()),
         nullability_callback: None,
         rich_type_inference: true,
+        forced_order: None,
+        retain_relations: false,
         column_types: raw_orders.clone(),
         column_nullability: shapes(&[(
             "raw_orders",
@@ -384,6 +387,7 @@ pub(crate) fn finished_session(tables: PivotTables) -> FinishedSession {
         pool: catalog("duckdb", &Vec::new()).analysis_pool(),
         models: HashMap::new(),
         dynamic_proofs: HashMap::new(),
+        relations: None,
     }
 }
 
@@ -653,4 +657,31 @@ pub(crate) fn column_view(finished: &ModelColumns) -> ColumnView<'_> {
         }),
         finished.proven_star,
     )
+}
+
+/// `request` with `relations`' facts added for every relation it does not analyse.
+pub(crate) fn injected_relations(
+    mut request: SessionRequest,
+    relations: &RelationTables,
+) -> SessionRequest {
+    let analysed: Vec<String> = request
+        .models
+        .iter()
+        .map(|model| model.name.clone())
+        .collect();
+    for (table, facts) in [
+        (&mut request.column_types, &relations.types),
+        (&mut request.column_nullability, &relations.nullability),
+        (&mut request.complete_schemas, &relations.complete),
+    ] {
+        let present: Vec<String> = table.iter().map(|(name, _)| name.clone()).collect();
+        table.extend(
+            facts
+                .iter()
+                .filter(|(name, _)| !analysed.contains(name) && !present.contains(name))
+                .cloned(),
+        );
+    }
+    request.forced_order = Some((relations.dependency_ordered, relations.cyclic));
+    request
 }

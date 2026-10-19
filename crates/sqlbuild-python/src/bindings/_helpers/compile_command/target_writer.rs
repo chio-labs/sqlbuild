@@ -467,6 +467,9 @@ fn plan_tests<'py>(
         count_stage(py, SQL_TEST_MODEL_CHAINS, 1)?;
         let chains: Bound<'py, PyAny> =
             sql_test_model_chain_names_by_key(project, &tests)?.into_any();
+        crate::bindings::_helpers::compile_delta::report_hooks::record_test_chains(
+            &tests, &chains,
+        )?;
         Some((context, chains))
     };
     let tests: Vec<Bound<'py, PyAny>> = tests.try_iter()?.collect::<PyResult<_>>()?;
@@ -613,9 +616,16 @@ fn write_static_tests<'py>(
             }
         }
     }
-    record_compile_timing("cache_publication_ms", || {
-        write_cache(&native_field(project, "compile_cache_dir")?, &records)
-    })?;
+    let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
+    if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+        let mut kept: HashMap<String, SqlTestArtifactRecord> = read_cache(&cache_dir)?;
+        for (key, record) in records.drain(..) {
+            kept.insert(key, record);
+        }
+        records = kept.into_iter().collect();
+        records.sort_by(|left, right| left.0.cmp(&right.0));
+    }
+    record_compile_timing("cache_publication_ms", || write_cache(&cache_dir, &records))?;
     Ok((managed, diagnostics))
 }
 
@@ -627,7 +637,8 @@ pub(crate) fn write_static_target<'py>(
     prepared: Prepared<'_, 'py>,
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_dir.py();
-    let remove_stale_files: bool = prepared_target(target_dir)?;
+    let remove_stale_files: bool = prepared_target(target_dir)?
+        && crate::bindings::_helpers::compile_delta::context::injection().is_none();
     let mut batch: ArtifactBatch = ArtifactBatch::new(remove_stale_files, prepared.recorder);
     let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut managed_models: Vec<PathBuf> = Vec::new();

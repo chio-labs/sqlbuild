@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::digest::main::digest_files::digest_files;
 use crate::digest::main::hex_digest::hex_digest;
 use crate::project_reuse::constants::NATIVE_DIGEST_PREFIX;
-use crate::project_reuse::models::{ReuseAttempt, StoredProjectFile};
+use crate::project_reuse::models::{ProjectFileChanges, ReuseAttempt, StoredProjectFile};
 use crate::project_snapshot::main::text_path::text_path;
 use crate::project_snapshot::models::PathStamp;
 
@@ -201,4 +201,61 @@ pub(crate) fn pending_digest_bytes(
         .filter(|stamp| !digests.contains_key(&stamp.relative_path))
         .map(|stamp| stamp.size)
         .sum()
+}
+
+/// Paths whose content, kind or presence differs; files in `unverified` compare by digest.
+pub(crate) fn project_file_changes(
+    stored: &[StoredProjectFile],
+    current: &[PathStamp],
+    (digests, unverified): (&HashMap<String, String>, &HashSet<String>),
+) -> ProjectFileChanges {
+    let previous_by_path: HashMap<&str, &StoredProjectFile> = by_path(stored);
+    let mut changes: ProjectFileChanges = ProjectFileChanges::default();
+    let mut seen: HashSet<&str> = HashSet::with_capacity(current.len());
+    for stamp in current {
+        let path: &str = stamp.relative_path.as_str();
+        seen.insert(path);
+        let Some(previous) = previous_by_path.get(path) else {
+            changes.added.push(stamp.relative_path.clone());
+            continue;
+        };
+        if previous.stamp.kind != stamp.kind || previous.stamp.link != stamp.link {
+            changes.changed.push(stamp.relative_path.clone());
+            continue;
+        }
+        if !hashable(stamp) || !unverified.contains(path) {
+            continue;
+        }
+        let current_digest: Option<&String> = digests.get(path);
+        if current_digest.is_none() || current_digest != previous.digest.as_ref() {
+            changes.changed.push(stamp.relative_path.clone());
+        }
+    }
+    for file in stored {
+        if !seen.contains(file.stamp.relative_path.as_str()) {
+            changes.removed.push(file.stamp.relative_path.clone());
+        }
+    }
+    changes.changed.sort();
+    changes.added.sort();
+    changes.removed.sort();
+    changes
+}
+
+/// Hashable current files whose stored digest may no longer apply: restamped or stored racy.
+pub(crate) fn unverified_paths(
+    stored: &[StoredProjectFile],
+    current: &[PathStamp],
+) -> HashSet<String> {
+    let previous_by_path: HashMap<&str, &StoredProjectFile> = by_path(stored);
+    current
+        .iter()
+        .filter(|stamp| hashable(stamp))
+        .filter(|stamp| {
+            previous_by_path
+                .get(stamp.relative_path.as_str())
+                .is_some_and(|previous| previous.racy || previous.stamp != **stamp)
+        })
+        .map(|stamp| stamp.relative_path.clone())
+        .collect()
 }

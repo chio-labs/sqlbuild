@@ -97,7 +97,32 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     };
     let project_dir: PathBuf = run.project_dir.extract()?;
     let mut digests: FactDigests<'py> = FactDigests::new(run.project, &project_dir)?;
-    let models: Vec<(String, String, Option<String>)> = digests.replay.model_rows()?;
+    let models: Vec<(String, String, Option<String>)> =
+        match crate::bindings::_helpers::compile_delta::context::injection() {
+            Some(injection) => {
+                let Some(mut rows) = injection.model_subjects.clone() else {
+                    return Err(
+                        crate::bindings::_helpers::compile_delta::context::delta_unsupported(
+                            "the custom rules' subjects were not recorded",
+                        ),
+                    );
+                };
+                let fresh: Vec<(String, String, Option<String>)> = digests.replay.model_rows()?;
+                for row in &mut rows {
+                    if let Some(found) = fresh.iter().find(|candidate| candidate.0 == row.0) {
+                        row.clone_from(found);
+                    }
+                }
+                rows
+            }
+            None => {
+                let rows: Vec<(String, String, Option<String>)> = digests.replay.model_rows()?;
+                crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+                    capture.model_subjects = Some(rows.clone());
+                });
+                rows
+            }
+        };
     let mut model_paths: Vec<String> = models.iter().map(|(path, _, _)| path.clone()).collect();
     model_paths.sort();
     let mut cache: CustomRuleCache = CustomRuleCache::new(
@@ -112,6 +137,14 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         readset_digests.push(reproducible(digests.combined(readset))?);
     }
     let plan: HostPlan = cache.plan(readset_digests);
+    if !plan.is_empty() && crate::bindings::_helpers::compile_delta::context::injection().is_some()
+    {
+        return Err(
+            crate::bindings::_helpers::compile_delta::context::delta_unsupported(
+                "a custom rule must run again",
+            ),
+        );
+    }
     if !plan.is_empty() {
         let rules: Vec<(String, HostRuleSubject)> = custom
             .iter()
@@ -135,6 +168,15 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         let evaluations: Vec<CustomEvaluation> = evaluations(host_run, &mut digests, enabled)?;
         cache.record(py, evaluations)?;
     }
+    crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+        capture.fact_digests.extend(
+            digests
+                .digests
+                .iter()
+                .filter(|(key, _)| !is_tree_fact(key))
+                .map(|(key, digest)| (key.clone(), digest.clone())),
+        );
+    });
     let elapsed_ms: i64 = (started.elapsed().as_secs_f64() * 1000.0).round_ties_even() as i64;
     let cpu_ms: i64 = ((cpu_seconds(py)? - started_cpu) * 1000.0) as i64;
     outcome(
@@ -231,6 +273,12 @@ impl<'py> FactDigests<'py> {
     fn digest(&mut self, key: &FactKey) -> Encoded<String> {
         if let Some(cached) = self.digests.get(key) {
             return Ok(cached.clone());
+        }
+        if let Some(injected) =
+            crate::bindings::_helpers::compile_delta::context::injected_fact_digest(key)
+        {
+            self.digests.insert(key.clone(), injected.clone());
+            return Ok(injected);
         }
         let digest: String = self.replay.digest(key)?;
         self.digests.insert(key.clone(), digest.clone());

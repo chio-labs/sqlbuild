@@ -1,5 +1,6 @@
 //! `build_project_audit_inputs`: singular and attached generic audits attached natively.
 
+use crate::bindings::_helpers::compile_delta::context::record_source_reads;
 use std::collections::{BTreeMap, HashMap};
 
 use crate::bindings::_helpers::model_config::header_metadata::HeaderColumns;
@@ -573,6 +574,12 @@ impl<'py> AuditScope<'_, 'py> {
             .downcast()?
             .clone();
         let known: KnownResources<'_> = validator.get().known_resources();
+        record_source_reads(
+            calls
+                .iter()
+                .filter(|(kind, _)| *kind == SOURCE_TARGET)
+                .map(|(_, name)| *name),
+        );
         match audit_reference_error(relative_path, calls, &known) {
             Some(message) => Err(compile_error(self.context.classes, &message, None)),
             None => Ok(()),

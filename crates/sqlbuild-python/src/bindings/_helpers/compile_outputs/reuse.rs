@@ -123,6 +123,14 @@ fn poisoned<T>(_: T) -> pyo3::PyErr {
     PyValueError::new_err("compile reuse attempt is poisoned")
 }
 
+impl NativeReuseAttempt {
+    /// Run `body` on the native attempt.
+    pub(crate) fn with_attempt<T>(&self, body: impl FnOnce(&ReuseAttempt) -> T) -> PyResult<T> {
+        let attempt = self.attempt.lock().map_err(poisoned)?;
+        Ok(body(&attempt))
+    }
+}
+
 #[pymethods]
 impl NativeReuseAttempt {
     /// `"hit"`, `"miss"` or `"bypass"`.
@@ -187,7 +195,7 @@ impl NativeReuseAttempt {
     fn record(&self, py: Python<'_>, record: CompileRecordPy) -> PyResult<(&'static str, usize)> {
         compiler_guard(|| {
             let rules: ReuseRules = record.rules.into();
-            let compile: CompileRecord = CompileRecord {
+            let mut compile: CompileRecord = CompileRecord {
                 stdout: record.stdout,
                 stderr_lines: record.stderr_lines,
                 exit_code: record.exit_code,
@@ -207,7 +215,29 @@ impl NativeReuseAttempt {
                 artifacts_written: record.artifacts_written,
                 dag_path: record.dag_path,
                 json_output: record.json_output,
+                image: crate::bindings::_helpers::compile_delta::context::take_pending_image(),
+                vouched_target_stamps: None,
             };
+            if let Some(merge) =
+                crate::bindings::_helpers::compile_delta::context::take_record_merge()
+            {
+                for stamp in &merge.kept {
+                    compile
+                        .artifacts
+                        .entry(stamp.relative_path.clone())
+                        .or_insert(RecordedArtifact::Kept {
+                            size: stamp.size,
+                            mtime_ns: stamp.mtime_ns,
+                        });
+                }
+                compile.vouched_target_stamps = Some(merge.kept);
+                compile
+                    .template_environment_names
+                    .extend(merge.environment_names);
+                compile.template_environment_names.sort();
+                compile.template_environment_names.dedup();
+                compile.module_paths.extend(merge.module_paths);
+            }
             let attempt = self.attempt.lock().map_err(poisoned)?;
             let result: RecordResult = py
                 .detach(|| record_reuse(&attempt, &compile, &rules))

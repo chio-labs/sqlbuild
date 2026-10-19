@@ -160,6 +160,7 @@ pub(crate) fn selectionless_rules_request(
                     request: Mutex::new(Some(RowsRequest {
                         request,
                         memo: None,
+                        retain: false,
                     })),
                 })
             })
@@ -293,11 +294,19 @@ fn built_request(
         let model_rows: Vec<ModelRow> =
             project_model_rows(facts.borrow().facts(), &names).map_err(value_error)?;
         request.models = built_models(&rows, &request, model_rows)?;
+        let request: EvaluateRequest =
+            crate::bindings::_helpers::compile_delta::rules_rows::whole_project_request(request)?;
+        let delta: bool = crate::bindings::_helpers::compile_delta::context::injection().is_some();
         let memo: Option<(String, PathBuf)> = rows
             .memo
             .take()
+            .filter(|_| !delta)
             .map(|(identity, path)| (identity, PathBuf::from(path)));
-        Ok(RowsRequest { request, memo })
+        Ok(RowsRequest {
+            request,
+            memo,
+            retain: crate::bindings::_helpers::compile_delta::context::capturing(),
+        })
     })
 }
 
@@ -332,10 +341,16 @@ fn evaluated<'py>(
             .map_err(value_error)?,
         Some((early, interrupted)) => early.answer(py, request, interrupted)?,
     };
-    let evaluation: RowsEvaluation = evaluation.map_err(|error| match error {
+    let mut evaluation: RowsEvaluation = evaluation.map_err(|error| match error {
         RowsError::Rules(message) => value_error(message),
         RowsError::Io(error) => PyOSError::new_err(error.to_string()),
     })?;
+    if let Some(retained) = evaluation.retained.take() {
+        crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+            capture.rules =
+                Some(crate::bindings::_helpers::compile_delta::context::CapturedRules { retained });
+        });
+    }
     let classes = FindingClasses::new(py)?;
     let findings: Vec<Bound<'py, PyAny>> = evaluation
         .faults

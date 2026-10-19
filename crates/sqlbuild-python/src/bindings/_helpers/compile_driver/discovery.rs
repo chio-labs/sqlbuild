@@ -49,6 +49,8 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::IntoPyObjectExt;
 
 const SQL_ANALYSIS_SETTING_KEY: &str = "sql_analysis";
+/// The setting that turns delta compiles, and the project image they read, off.
+const DELTA_COMPILE_SETTING_KEY: &str = "delta_compile";
 
 /// Declaration file collections counted into the declaration-parse lifecycle, in field order.
 const DECLARATION_COLLECTIONS: [&str; 14] = [
@@ -236,6 +238,20 @@ fn assembled_inputs<'py>(
         local_config: &local_config,
     })?;
     reject_unsupported_python_paths(project_dir)?;
+    let delta_settings: &Bound<'py, PyAny> =
+        if native_field(&local_config, "setting_overrides")?.contains(DELTA_COMPILE_SETTING_KEY)? {
+            &local_config
+        } else {
+            &project_config
+        };
+    if !native_field(
+        &native_field(delta_settings, "settings")?,
+        DELTA_COMPILE_SETTING_KEY,
+    )?
+    .is_truthy()?
+    {
+        crate::bindings::_helpers::compile_delta::context::stop_capture();
+    }
     let sql_analysis_override: &Bound<'py, PyAny> = request.sql_analysis_enabled_override.bind(py);
     let sql_analysis_enabled: Bound<'py, PyAny> = if !sql_analysis_override.is_none() {
         sql_analysis_override.clone()

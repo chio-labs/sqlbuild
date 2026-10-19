@@ -41,6 +41,9 @@ use crate::bindings::_helpers::attachments::cursor_intrinsics::{
 use crate::bindings::_helpers::compile_command::constants::{
     REUSE_DISABLE_ENV_VAR, TRACKED_ENVIRONMENT_PREFIXES, UNTRACKED_ENVIRONMENT_NAMES,
 };
+use crate::bindings::_helpers::compile_delta::driver::{
+    DELTA_DISABLE_ENV_VAR, DELTA_VERIFY_ENV_VAR,
+};
 use crate::bindings::_helpers::frontier::stage_capture::CAPTURE_DIR_ENV_VAR;
 use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
 use crate::bindings::_helpers::result_output::event_writer::RESULT_PATH_ENV;
@@ -69,6 +72,8 @@ pub(crate) const EXPORTED_TEXTS: &[(&str, &str)] = &[
     ("STAGED_PROMOTION_MODE", STAGED_PROMOTION_MODE),
     ("STAGE_CAPTURE_DIR_ENV_VAR", CAPTURE_DIR_ENV_VAR),
     ("COMPILE_REUSE_DISABLE_ENV_VAR", REUSE_DISABLE_ENV_VAR),
+    ("DELTA_COMPILE_DISABLE_ENV_VAR", DELTA_DISABLE_ENV_VAR),
+    ("DELTA_COMPILE_VERIFY_ENV_VAR", DELTA_VERIFY_ENV_VAR),
     ("SQLBUILD_QUERY_TAG_APP", QUERY_TAG_APP),
     ("COMMAND_OUTPUT_RECORD_TYPE", COMMAND_OUTPUT_RECORD_TYPE),
     (

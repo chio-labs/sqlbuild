@@ -9,8 +9,13 @@ use serde_json::Value;
 use crate::constants::{API_VERSION, NATIVE_ROWS_MEMO_VERSION};
 use crate::engine::_helpers::cache::PendingBucketWrite;
 use crate::engine::_helpers::evaluation::{EvaluationControl, evaluate_request_with};
+use crate::engine::_helpers::retained::encoded_rows;
 use crate::errors::RowsError;
-use crate::models::{EvaluateRequest, Model, RowsEvaluation, RowsRequest};
+use crate::models::{EvaluateRequest, Model, RetainedRows, RowsEvaluation, RowsRequest};
+
+/// The shared key prefix of fields a request serializes but evaluation derives again.
+const DERIVED_FIELD_PREFIX: &str = ",\"empty_input_only";
+const DERIVED_FIELDS: [&str; 2] = ["_test_count\":", "\":"];
 
 /// A rows request whose models are digested, ready to evaluate once.
 #[derive(Debug)]
@@ -20,6 +25,8 @@ pub(crate) struct PreparedRows {
     memo: Option<(String, PathBuf)>,
     /// The digest of every evaluation input the request carries, when it was asked for.
     pub(crate) key: Option<String>,
+    /// The request kept for the project image, when it was asked for.
+    pub(crate) retained: Option<RetainedRows>,
 }
 
 /// What a speculative evaluation found, with every write it would have made still pending.
@@ -41,13 +48,21 @@ pub(crate) fn evaluate_rows(rows: RowsRequest) -> Result<RowsEvaluation, RowsErr
 
 /// Digest `rows`' models and derive its memo identity and, when asked, its speculation key.
 pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, RowsError> {
-    let RowsRequest { mut request, memo } = rows;
+    let RowsRequest {
+        mut request,
+        memo,
+        retain,
+    } = rows;
     let models: Vec<Model> = std::mem::take(&mut request.models)
         .into_iter()
         .map(digested)
         .collect::<Result<_, _>>()?;
+    let mut request_json: Option<Vec<u8>> = None;
     let memo: Option<(String, PathBuf)> = match memo {
-        Some((code_identity, path)) => Some((identity(&request, &models, &code_identity)?, path)),
+        Some((code_identity, path)) => {
+            let kept: Option<&mut Option<Vec<u8>>> = retain.then_some(&mut request_json);
+            Some((identity(&request, &models, &code_identity, kept)?, path))
+        }
         None => None,
     };
     let key: Option<String> = if keyed {
@@ -55,13 +70,80 @@ pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, Ro
     } else {
         None
     };
+    let retained: Option<RetainedRows> = if retain {
+        retained_rows(&request, &models, request_json)
+    } else {
+        None
+    };
     request.models = models;
-    Ok(PreparedRows { request, memo, key })
+    Ok(PreparedRows {
+        request,
+        memo,
+        key,
+        retained,
+    })
+}
+
+/// `request`'s model-free JSON, each model's row without SQL text, and each model's digest.
+fn retained_rows(
+    request: &EvaluateRequest,
+    models: &[Model],
+    request_json: Option<Vec<u8>>,
+) -> Option<RetainedRows> {
+    let request_json: Vec<u8> = match request_json {
+        Some(json) => json,
+        None => {
+            let Ok(json) = serde_json::to_vec(request) else {
+                return None;
+            };
+            json
+        }
+    };
+    Some(RetainedRows {
+        request_json: without_derived_fields(request_json),
+        rows: encoded_rows(models),
+        digests: models
+            .iter()
+            .map(|model| model.payload_digest.clone().unwrap_or_default())
+            .collect(),
+    })
+}
+
+/// `json` without the derived fields; compact JSON escapes quotes, so keys only match as keys.
+fn without_derived_fields(json: Vec<u8>) -> Vec<u8> {
+    let Ok(text) = std::str::from_utf8(&json) else {
+        return json;
+    };
+    let mut kept: Vec<u8> = Vec::with_capacity(json.len());
+    let mut copied: usize = 0;
+    for (start, _) in text.match_indices(DERIVED_FIELD_PREFIX) {
+        if start < copied {
+            continue;
+        }
+        let rest: &str = &text[start + DERIVED_FIELD_PREFIX.len()..];
+        let Some(field) = DERIVED_FIELDS
+            .iter()
+            .find(|field| rest.starts_with(**field))
+        else {
+            continue;
+        };
+        let value: &str = &rest[field.len()..];
+        let length: usize = value.find([',', '}']).unwrap_or(value.len());
+        kept.extend_from_slice(&json[copied..start]);
+        copied = start + DERIVED_FIELD_PREFIX.len() + field.len() + length;
+    }
+    kept.extend_from_slice(&json[copied..]);
+    kept
 }
 
 /// Answer a prepared request from the memo or evaluate it, writing the cache and memo at once.
 pub(crate) fn evaluate_prepared(prepared: PreparedRows) -> Result<RowsEvaluation, RowsError> {
-    let PreparedRows { request, memo, .. } = prepared;
+    let PreparedRows {
+        request,
+        memo,
+        retained,
+        ..
+    } = prepared;
     let reused: Option<String> = memo
         .as_ref()
         .and_then(|(identity, path)| read_response(path, identity));
@@ -76,7 +158,9 @@ pub(crate) fn evaluate_prepared(prepared: PreparedRows) -> Result<RowsEvaluation
             (response, false)
         }
     };
-    decode(&response, was_reused)
+    let mut evaluation: RowsEvaluation = decode(&response, was_reused)?;
+    evaluation.retained = retained;
+    Ok(evaluation)
 }
 
 /// Evaluate a prepared request as `evaluate_prepared` does, holding every write it would make.
@@ -154,7 +238,7 @@ fn speculation_key(
         }
         None => {
             hasher.update(b"unmemoized\0");
-            hasher.update(identity(request, models, "")?.as_bytes());
+            hasher.update(identity(request, models, "", None)?.as_bytes());
         }
     }
     Ok(hasher.finalize().to_hex().to_string())
@@ -162,24 +246,34 @@ fn speculation_key(
 
 /// `model` with the BLAKE3 digest of its exact facts, which keys its cached findings.
 fn digested(mut model: Model) -> Result<Model, RowsError> {
-    let mut hasher: blake3::Hasher = blake3::Hasher::new();
-    serde_json::to_writer(&mut hasher, &model).map_err(rules_error)?;
-    model.payload_digest = Some(hasher.finalize().to_hex().to_string());
+    if model.payload_digest.is_none() {
+        let mut hasher: blake3::Hasher = blake3::Hasher::new();
+        serde_json::to_writer(&mut hasher, &model).map_err(rules_error)?;
+        model.payload_digest = Some(hasher.finalize().to_hex().to_string());
+    }
     Ok(model)
 }
 
-/// The memo version, build, model-free request and every model's digest, in order.
+/// The memo version, build, request and model digests, keeping the request's JSON in `kept`.
 fn identity(
     request: &EvaluateRequest,
     models: &[Model],
     code_identity: &str,
+    kept: Option<&mut Option<Vec<u8>>>,
 ) -> Result<String, RowsError> {
     let mut hasher: blake3::Hasher = blake3::Hasher::new();
     for part in [NATIVE_ROWS_MEMO_VERSION, code_identity] {
         hasher.update(part.as_bytes());
         hasher.update(b"\0");
     }
-    serde_json::to_writer(&mut hasher, request).map_err(rules_error)?;
+    match kept {
+        Some(kept) => {
+            let json: Vec<u8> = serde_json::to_vec(request).map_err(rules_error)?;
+            hasher.update(&json);
+            *kept = Some(json);
+        }
+        None => serde_json::to_writer(&mut hasher, request).map_err(rules_error)?,
+    }
     hasher.update(b"\0");
     hasher.update(&(models.len() as u64).to_le_bytes());
     for model in models {

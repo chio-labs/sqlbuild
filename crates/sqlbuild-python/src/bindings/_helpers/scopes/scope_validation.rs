@@ -355,10 +355,21 @@ pub(crate) fn scope_index_with_compile_usages<'py>(
     usages.extend(usage_records(
         model_schema_scope_usages(&schema_files, &resolver)?.as_any(),
     )?);
+    let digests: bool = crate::bindings::_helpers::compile_delta::context::capturing();
     for model in native_field(inputs, "model_inputs")?.try_iter()? {
         let model: Bound<'py, PyAny> = model?;
-        usages.extend(usage_records(&native_field(&model, "macro_usages")?)?);
-        usages.extend(usage_records(&native_field(&model, "declaration_usages")?)?);
+        let macro_usages: Vec<Bound<'py, PyAny>> =
+            usage_records(&native_field(&model, "macro_usages")?)?;
+        let declaration_usages: Vec<Bound<'py, PyAny>> =
+            usage_records(&native_field(&model, "declaration_usages")?)?;
+        if digests {
+            crate::bindings::_helpers::compile_delta::image_facts::record_model_usages(
+                &model,
+                (&macro_usages, &declaration_usages),
+            )?;
+        }
+        usages.extend(macro_usages);
+        usages.extend(declaration_usages);
     }
     for group in COMPILE_USAGE_GROUPS {
         for item in native_field(inputs, group)?.try_iter()? {

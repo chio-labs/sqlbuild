@@ -51,6 +51,7 @@ class CacheUseTestCase:
     description: str
     run: CompileRun
     mode: str
+    models: int = 3000
     expected_result: None = None
 
 
@@ -60,6 +61,7 @@ class CacheUseErrorTestCase:
     run: CompileRun
     mode: str
     expected_message: str
+    models: int = 3000
 
 
 @dataclass(frozen=True)

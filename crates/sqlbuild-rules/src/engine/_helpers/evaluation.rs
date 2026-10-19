@@ -22,7 +22,7 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
@@ -59,6 +59,10 @@ struct PendingModelRule<'a> {
     model: &'a Model,
     identity: Option<String>,
 }
+
+/// The error a delta compile's rules request raises when a row without SQL needs evaluating.
+pub(crate) const STRIPPED_ROW_MISSED: &str =
+    "delta compile unsupported: a model's rule findings are no longer cached";
 
 struct CompletedModelRule {
     index: usize,
@@ -151,6 +155,9 @@ fn evaluate_native_models(
             model,
             identity,
         });
+    }
+    if pending_models.iter().any(|pending| pending.model.stripped) {
+        return Err(STRIPPED_ROW_MISSED.to_owned());
     }
     let project_dir = Path::new(&context.request.project_dir);
     let completed = evaluate_pending_models(pending_models, context)?;
@@ -325,6 +332,26 @@ pub(crate) fn evaluate_request(request: EvaluateRequest) -> Result<String, Strin
 
 /// Evaluate `request`, publishing its cache bucket and stopping early as `control` says.
 pub(crate) fn evaluate_request_with(
+    request: EvaluateRequest,
+    control: &EvaluationControl<'_>,
+) -> Result<String, String> {
+    let store: Option<PathBuf> = request.config.cache.enabled.then(|| {
+        crate::engine::_helpers::cache::fixture_summaries_path(
+            Path::new(&request.project_dir),
+            &request.rules_cache_path,
+        )
+    });
+    crate::rules::_helpers::sql_test_rules::with_fixture_memo(store.as_deref(), || {
+        let evaluated: Result<String, String> = evaluated_request(request, control);
+        let keep: bool = match &evaluated {
+            Ok(_) => !control.cancelled(),
+            Err(_failed) => false,
+        };
+        (evaluated, keep)
+    })
+}
+
+fn evaluated_request(
     request: EvaluateRequest,
     control: &EvaluationControl<'_>,
 ) -> Result<String, String> {

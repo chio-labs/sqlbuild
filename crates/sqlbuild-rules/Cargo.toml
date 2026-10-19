@@ -20,6 +20,7 @@ serde_json.workspace = true
 sha2.workspace = true
 sqlbuild-analysis.workspace = true
 sqlbuild-attachments.workspace = true
+sqlbuild-cache.workspace = true
 sqlbuild-core.workspace = true
 sqlbuild-scopes.workspace = true
 sqlbuild-sqltext.workspace = true

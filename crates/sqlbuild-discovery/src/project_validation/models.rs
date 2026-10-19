@@ -174,6 +174,8 @@ pub struct ProjectFacts {
     pub event_exporters: Vec<NamedPath>,
     pub providers: Vec<NamedPath>,
     pub path_default_keys: Vec<String>,
+    /// Every model path of the whole project when discovery read only some of its models.
+    pub project_model_paths: Option<Vec<String>>,
     /// Python's `csv.field_size_limit()`, or `None` for its default.
     pub csv_field_limit: Option<usize>,
 }

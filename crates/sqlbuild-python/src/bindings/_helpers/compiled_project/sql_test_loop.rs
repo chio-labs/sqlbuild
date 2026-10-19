@@ -1,5 +1,6 @@
 //! `build_test_inputs`: SQL test blocks expanded, classified and checked natively.
 
+use crate::bindings::_helpers::compile_delta::context::record_test_source_reads;
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
 
@@ -748,6 +749,7 @@ impl<'py> TestScope<'_, 'py> {
                         .into_iter()
                         .filter(|name| !mock_models.contains(name))
                         .collect();
+                record_test_source_reads(relative_path, mock_sources.iter().map(String::as_str));
                 if let Some(message) = unknown_test_target(
                     relative_path,
                     &self.catalog,

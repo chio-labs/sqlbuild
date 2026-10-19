@@ -13,7 +13,10 @@ pub fn discover_scenario_files(
     tree: &ProjectTree,
     options: &SqlTestFileOptions,
 ) -> Result<Vec<DiscoveredFile<DiscoveredScenarioFile>>, StageFailure> {
-    discover_sql_files(root, tree, SQL_SCENARIOS_ROOT, |file_path, contents| {
-        parse_scenario_file(file_path, contents, options)
-    })
+    discover_sql_files(
+        root,
+        tree,
+        (SQL_SCENARIOS_ROOT, None),
+        |file_path, contents| parse_scenario_file(file_path, contents, options),
+    )
 }

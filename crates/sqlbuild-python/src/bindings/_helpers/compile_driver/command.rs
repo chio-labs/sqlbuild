@@ -57,12 +57,15 @@ fn retain_until_exit(value: &Bound<'_, PyAny>) -> PyResult<()> {
 }
 
 /// What one full compile reports for reuse recording.
-struct CommandOutcome<'py> {
-    exit_code: i64,
-    compile_cache_enabled: bool,
-    artifacts_written: bool,
-    dag_artifact_path: Bound<'py, PyAny>,
+pub(crate) struct CommandOutcome<'py> {
+    pub(crate) exit_code: i64,
+    pub(crate) compile_cache_enabled: bool,
+    pub(crate) artifacts_written: bool,
+    pub(crate) dag_artifact_path: Bound<'py, PyAny>,
 }
+
+/// One compile's outcome, input reads and artifact writes, before it is stored and printed.
+pub(crate) type PhasesOutcome<'py> = (CommandOutcome<'py>, Bound<'py, PyAny>, Bound<'py, PyAny>);
 
 /// The per-invocation recorders a compile runs inside.
 struct Recorders<'py> {
@@ -84,34 +87,66 @@ pub(crate) fn run_compile_command<'py>(
         Some(attempt) => native_field(attempt, "started")?.extract()?,
         None => monotonic(py)?,
     };
-    let path_class: Bound<'py, PyAny> = imported(py, "pathlib", "Path")?;
-    let effective_request: Bound<'py, PyAny> = if native_field(&request, "project_dir")?.is_none() {
-        replaced(
-            &request.clone(),
-            &[("project_dir", path_class.call_method0("cwd")?)],
-        )?
-    } else {
-        request.clone()
-    };
+    let effective_request: Bound<'py, PyAny> = resolved_request(&request)?;
     let attempt: Bound<'py, PyAny> = match reuse_attempt {
         Some(attempt) => attempt,
         None => bypass_attempt(py, &effective_request, total_start)?,
     };
     let output: Bound<'py, PyAny> = Bound::new(py, RecordedCompileOutput::new())?.into_any();
     let status: Status<'py> = Status(compile_status(&request)?);
-    let gc: Bound<'py, PyModule> = py.import("gc")?;
+    collecting_later(py, || {
+        recorded_compile(
+            (&effective_request, &attempt),
+            (&output, &status),
+            total_start,
+        )
+    })?
+}
+
+/// The resolved request, output recorder and phases of a compile neither stored nor printed.
+pub(crate) fn unrecorded_compile<'py>(
+    request: &Bound<'py, PyAny>,
+    attempt: &Bound<'py, PyAny>,
+) -> PyResult<(
+    Bound<'py, PyAny>,
+    Bound<'py, PyAny>,
+    PyResult<PhasesOutcome<'py>>,
+)> {
+    let py: Python<'py> = request.py();
+    let total_start: f64 = native_field(attempt, "started")?.extract()?;
+    let effective_request: Bound<'py, PyAny> = resolved_request(request)?;
+    let output: Bound<'py, PyAny> = Bound::new(py, RecordedCompileOutput::new())?.into_any();
+    let status: Status<'py> = Status(py.None().into_bound(py));
+    let phases: PyResult<PhasesOutcome<'py>> = collecting_later(py, || {
+        compile_phases(
+            (&effective_request, attempt),
+            (&output, &status),
+            total_start,
+        )
+    })?;
+    Ok((effective_request, output, phases))
+}
+
+/// `request` with its project directory resolved to the working directory when unset.
+pub(crate) fn resolved_request<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if !native_field(request, "project_dir")?.is_none() {
+        return Ok(request.clone());
+    }
+    let cwd: Bound<'py, PyAny> = imported(request.py(), "pathlib", "Path")?.call_method0("cwd")?;
+    replaced(&request.clone(), &[("project_dir", cwd)])
+}
+
+/// Run `body` with Python's garbage collector paused, then resume or freeze it as compiles do.
+fn collecting_later<T>(py: Python<'_>, body: impl FnOnce() -> T) -> PyResult<T> {
+    let gc: Bound<'_, PyModule> = py.import("gc")?;
     let was_enabled: bool = gc.call_method0("isenabled")?.is_truthy()?;
     gc.call_method0("disable")?;
-    let exit_code: PyResult<i64> = recorded_compile(
-        (&effective_request, &attempt),
-        (&output, &status),
-        total_start,
-    );
+    let result: T = body();
     let deferred: bool = RETAINED_UNTIL_EXIT.get(py).is_some();
     if deferred || was_enabled {
         gc.call_method0(if deferred { "freeze" } else { "enable" })?;
     }
-    exit_code
+    Ok(result)
 }
 
 /// `CompileReuseAttempt` of a compile that did not consult the reuse record.
@@ -166,55 +201,26 @@ fn recorded_compile<'py>(
     (output, status): (&Bound<'py, PyAny>, &Status<'py>),
     total_start: f64,
 ) -> PyResult<i64> {
-    let py: Python<'py> = request.py();
-    let skip_write: bool = native_field(request, "profile_flags")?
-        .getattr("skip_write")?
-        .is_truthy()?;
-    let compiled: PyResult<(CommandOutcome<'py>, Bound<'py, PyAny>, Bound<'py, PyAny>)> =
-        collect_compile_timings(|detailed_timings| {
-            within(
-                &Bound::new(py, record_compile_input_reads())?.into_any(),
-                |input_reads| {
-                    let artifact_writes: Py<CompileArtifactWrites> = new_artifact_recorder(py)?;
-                    let manager: Bound<'py, PyAny> = call_with(
-                        &registry::native(py, NativeAttr::PreparedCompileArtifacts)?,
-                        &[
-                            (
-                                "enabled",
-                                PyBool::new(py, !skip_write).to_owned().into_any(),
-                            ),
-                            (
-                                "artifact_writes",
-                                artifact_writes.bind(py).clone().into_any(),
-                            ),
-                        ],
-                    )?;
-                    retain_until_exit(&manager)?;
-                    within(&manager, |prepared_artifacts| {
-                        let recorders: Recorders<'py> = Recorders {
-                            detailed_timings: Rc::clone(detailed_timings),
-                            input_reads: input_reads.clone(),
-                            artifact_writes: artifact_writes.clone_ref(py),
-                            prepared_artifacts: prepared_artifacts.clone(),
-                        };
-                        let reuse_timings: Bound<'py, PyAny> =
-                            compile_reuse_timings(attempt)?.into_any();
-                        let outcome: CommandOutcome<'py> = compiled_with_status(
-                            (request, &recorders),
-                            (status, output),
-                            (total_start, &reuse_timings),
-                        )?;
-                        Ok((
-                            outcome,
-                            recorders.input_reads,
-                            recorders.artifact_writes.into_bound(py).into_any(),
-                        ))
-                    })
-                },
-            )
-        });
+    let phases: PyResult<PhasesOutcome<'py>> =
+        compile_phases((request, attempt), (output, status), total_start);
     close_status(status)?;
-    let (outcome, input_reads, artifact_writes) = compiled?;
+    let phases: PhasesOutcome<'py> = phases?;
+    crate::bindings::_helpers::compile_delta::verify::full_compile_finished(
+        output,
+        (phases.0.exit_code, phases.0.artifacts_written),
+        &phases.2,
+    )?;
+    store_and_print((request, attempt), output, phases)
+}
+
+/// Store a finished compile for reuse, then print its recorded output.
+pub(crate) fn store_and_print<'py>(
+    (request, attempt): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    output: &Bound<'py, PyAny>,
+    phases: PhasesOutcome<'py>,
+) -> PyResult<i64> {
+    let py: Python<'py> = request.py();
+    let (outcome, input_reads, artifact_writes): PhasesOutcome<'py> = phases;
     let stored: PyResult<()> = write_reusable_compile(
         py,
         Some(keywords(
@@ -246,6 +252,64 @@ fn recorded_compile<'py>(
     printed?;
     stored?;
     Ok(outcome.exit_code)
+}
+
+/// Run the compile's phases inside its recorders, without storing or printing it.
+pub(crate) fn compile_phases<'py>(
+    (request, attempt): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+    (output, status): (&Bound<'py, PyAny>, &Status<'py>),
+    total_start: f64,
+) -> PyResult<PhasesOutcome<'py>> {
+    let py: Python<'py> = request.py();
+    let skip_write: bool = native_field(request, "profile_flags")?
+        .getattr("skip_write")?
+        .is_truthy()?;
+    let staging: bool =
+        !skip_write && crate::bindings::_helpers::compile_delta::context::injection().is_none();
+    let (outcome, input_reads, artifact_writes): (
+        CommandOutcome<'py>,
+        Bound<'py, PyAny>,
+        Bound<'py, PyAny>,
+    ) = collect_compile_timings(|detailed_timings| {
+        within(
+            &Bound::new(py, record_compile_input_reads())?.into_any(),
+            |input_reads| {
+                let artifact_writes: Py<CompileArtifactWrites> = new_artifact_recorder(py)?;
+                let manager: Bound<'py, PyAny> = call_with(
+                    &registry::native(py, NativeAttr::PreparedCompileArtifacts)?,
+                    &[
+                        ("enabled", PyBool::new(py, staging).to_owned().into_any()),
+                        (
+                            "artifact_writes",
+                            artifact_writes.bind(py).clone().into_any(),
+                        ),
+                    ],
+                )?;
+                retain_until_exit(&manager)?;
+                within(&manager, |prepared_artifacts| {
+                    let recorders: Recorders<'py> = Recorders {
+                        detailed_timings: Rc::clone(detailed_timings),
+                        input_reads: input_reads.clone(),
+                        artifact_writes: artifact_writes.clone_ref(py),
+                        prepared_artifacts: prepared_artifacts.clone(),
+                    };
+                    let reuse_timings: Bound<'py, PyAny> =
+                        compile_reuse_timings(attempt)?.into_any();
+                    let outcome: CommandOutcome<'py> = compiled_with_status(
+                        (request, &recorders),
+                        (status, output),
+                        (total_start, &reuse_timings),
+                    )?;
+                    Ok((
+                        outcome,
+                        recorders.input_reads,
+                        recorders.artifact_writes.into_bound(py).into_any(),
+                    ))
+                })
+            },
+        )
+    })?;
+    Ok((outcome, input_reads, artifact_writes))
 }
 
 /// `_run_compile_with_status`: analyze, run the output phases and record the command output.
@@ -308,6 +372,10 @@ fn compiled_with_status<'py>(
             .chain(native_field(&written, "diagnostics")?.try_iter()?)
             .chain(withheld.try_iter()?)
             .collect::<PyResult<Vec<_>>>()?,
+    )?;
+    crate::bindings::_helpers::compile_delta::report_hooks::record_compile_facts(
+        &native_field(&analysis, "graph")?,
+        &diagnostics,
     )?;
     let mut exit_code: i64 = 0;
     for diagnostic in diagnostics.as_any().try_iter()? {

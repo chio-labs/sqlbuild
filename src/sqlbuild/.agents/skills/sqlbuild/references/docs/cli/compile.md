@@ -129,11 +129,33 @@ prints `Recording compile for reuse...` and a completion line to stderr before t
 
 ### Compiling after an edit
 
-Any change runs the whole compile again: every model, test, and audit is rendered again, and
-contracts and semantic validation run for the whole project. No render is carried over from the
-previous compile; rendering runs natively and does not run unchanged macro calls again. Every
-model's SQL references are scanned again too; no reference scan is kept between compiles. A few
-caches under `target/cache/` shorten the rest:
+When only model SQL files and SQL test files changed since the stored compile, `sqb compile`
+compiles just those files against it. It renders, analyses and checks the changed models and SQL
+tests, plus any model whose inputs' columns, types or nullability the edit changed, and takes
+everything else from a project image stored beside the stored compile. It prints one line to
+stderr, for example `Compiled 1 changed file(s) against the previous compile (1 model(s), 2.1s)`,
+then the same report and exit code a full compile would produce, including any errors the edit
+introduces or fixes. Project-wide rules still run over the whole project.
+
+The compile runs in full instead, decided before any compile work starts, when:
+
+- A file was added, removed or renamed, or any file other than a model or SQL test changed, such
+  as `sqlbuild_project.toml`, a source or schema YAML file, a macro, a seed or a function.
+- An edited model changes what it references, or changes a header setting other than its
+  `description`, `columns`, `dynamic_columns`, `model_schema`, `audits`, `contract`, or a switch
+  between `view` and `table` materialization.
+- A custom rule reads something the edit changed, such as a model's contract or materialization.
+- The stored compile reported errors or warnings other than rule findings in model or SQL test
+  files the edit did not change.
+- The stored compile used the other output format (`--json` or text), or has no project image.
+
+A few edits are found to need a full compile only part-way through, for example when a macro's
+arguments change which models or sources it reads, or when the edit changes the shape of so many
+models that a full compile is cheaper.
+
+Otherwise, an edit runs the whole compile again, and a few caches under `target/cache/` shorten
+it: every model, test, and audit is rendered again, and contracts and semantic validation run for
+the whole project. Every model's SQL references are scanned again too.
 
 - An unchanged model takes its column analysis from `model-analyses.bin`. Entries are keyed by
   the model's query and settings, the inferred columns, types and nullability of every relation
@@ -146,8 +168,9 @@ caches under `target/cache/` shorten the rest:
 - Macro call results are reused as described in
   [Macros must be deterministic](../concepts/macros.md#macros-must-be-deterministic).
 
-An edit therefore costs a full render of the project plus the analysis, test scans, and rules of
-what changed. The output is byte-identical to `sqb compile --no-cache`.
+Either way, the output is byte-identical to `sqb compile --no-cache`. To turn compiling only the
+changed files off, set `delta_compile = false` under `[settings]` or set
+`SQLBUILD_DISABLE_DELTA_COMPILE=1`; compiles then no longer store a project image.
 
 Known limits:
 

@@ -47,7 +47,7 @@ pub(crate) fn answer(
     rows: RowsRequest,
     stop: &AtomicBool,
 ) -> SpeculativeAnswer {
-    let prepared: PreparedRows = match prepare(rows, true) {
+    let mut prepared: PreparedRows = match prepare(rows, true) {
         Ok(prepared) => prepared,
         Err(error) => {
             drop(speculative);
@@ -77,7 +77,10 @@ pub(crate) fn answer(
         };
     match outcome {
         Some(outcome) => SpeculativeAnswer::Answered {
-            evaluation: commit(outcome),
+            evaluation: commit(outcome).map(|mut evaluation| {
+                evaluation.retained = prepared.retained.take();
+                evaluation
+            }),
             used: true,
         },
         None => SpeculativeAnswer::Answered {

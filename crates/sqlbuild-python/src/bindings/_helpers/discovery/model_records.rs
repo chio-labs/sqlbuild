@@ -69,6 +69,10 @@ fn model_items<'py>(
         for file in files {
             let raw: bool = tree.get().inner.raw_relative(&file.relative_path).is_some();
             if !raw && let FileOutcome::Parsed(model) = file.outcome {
+                crate::bindings::_helpers::compile_delta::header_keys::record_header_keys(
+                    &file.relative_path,
+                    &model.header_values,
+                );
                 let file_path: String = root.display_path(&file.relative_path);
                 let paths = DiscoveredPaths::Native(file.relative_path.clone(), file_path);
                 let built = model_record(py, model, paths, options.extract_implicit_alias_columns)?
@@ -102,6 +106,17 @@ pub(crate) struct ModelFileSelection<'py> {
     pub(crate) on_fault: Option<Bound<'py, PyAny>>,
 }
 
+/// The options model discovery parses headers with.
+pub(crate) fn model_file_options() -> ModelFileOptions {
+    ModelFileOptions {
+        supported_keys: sorted_keys(&constants::SQL_MODEL_HEADER_KEYS),
+        removed_keys: sorted_keys(&constants::REMOVED_SQL_MODEL_HEADER_KEYS),
+        extract_implicit_alias_columns: false,
+        extract_output_column_locations: false,
+        path_filter: None,
+    }
+}
+
 /// The (selected) model files; `extraction` is `(implicit alias columns, output locations)`.
 pub(crate) fn discovered_model_files<'py>(
     project_dir: &Bound<'py, PyAny>,
@@ -115,6 +130,8 @@ pub(crate) fn discovered_model_files<'py>(
         removed_keys: sorted_keys(&constants::REMOVED_SQL_MODEL_HEADER_KEYS),
         extract_implicit_alias_columns,
         extract_output_column_locations,
+        path_filter: crate::bindings::_helpers::compile_delta::context::injection()
+            .map(|injection| std::sync::Arc::new(injection.model_paths.clone())),
     };
     let items: Vec<ModelItem<'py>> = model_items(project_dir, &options)?;
     let faults = FileFaults {

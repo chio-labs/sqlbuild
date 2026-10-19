@@ -78,6 +78,20 @@ def test_given_compile_runs_when_taking_phase_medians_then_reports_only_complete
                 timings_ms={},
                 analysis_cache_misses=1,
                 analysis_cache_bypasses=0,
+                analysed_models=3000,
+            ),
+            mode=EDIT_MODE,
+        ),
+        CacheUseTestCase(
+            description="a delta edit analyses only the edited model, afresh",
+            run=CompileRun(
+                label="head",
+                wall_seconds=1.0,
+                cpu_seconds=1.0,
+                timings_ms={},
+                analysis_cache_misses=0,
+                analysis_cache_bypasses=1,
+                analysed_models=1,
             ),
             mode=EDIT_MODE,
         ),
@@ -110,7 +124,10 @@ def test_given_compile_runs_when_taking_phase_medians_then_reports_only_complete
 def test_given_observed_cache_use_when_checking_then_accepts_the_run(
     test_case: CacheUseTestCase,
 ) -> None:
-    assert check_cache_use(run=test_case.run, mode=test_case.mode) is test_case.expected_result
+    assert (
+        check_cache_use(run=test_case.run, mode=test_case.mode, models=test_case.models)
+        is test_case.expected_result
+    )
 
 
 @pytest.mark.parametrize(
@@ -138,9 +155,38 @@ def test_given_observed_cache_use_when_checking_then_accepts_the_run(
                 timings_ms={},
                 analysis_cache_misses=0,
                 analysis_cache_bypasses=3000,
+                analysed_models=3000,
             ),
             mode=EDIT_MODE,
             expected_message="bypassed the analysis cache for 3000 models",
+        ),
+        CacheUseErrorTestCase(
+            description="a delta edit that analysed nothing afresh did not observe the edit",
+            run=CompileRun(
+                label="head",
+                wall_seconds=1.0,
+                cpu_seconds=1.0,
+                timings_ms={},
+                analysis_cache_misses=0,
+                analysis_cache_bypasses=0,
+                analysed_models=1,
+            ),
+            mode=EDIT_MODE,
+            expected_message="delta compile analysed no model afresh",
+        ),
+        CacheUseErrorTestCase(
+            description="a warm compile that bypassed the cache, even for few models, is rejected",
+            run=CompileRun(
+                label="head",
+                wall_seconds=1.0,
+                cpu_seconds=1.0,
+                timings_ms={},
+                analysis_cache_misses=0,
+                analysis_cache_bypasses=1,
+                analysed_models=1,
+            ),
+            mode=WARM_MODE,
+            expected_message="bypassed the analysis cache for 1 models",
         ),
         CacheUseErrorTestCase(
             description="a warm compile that missed the cache is not an unchanged compile",
@@ -162,7 +208,7 @@ def test_given_unobserved_cache_use_when_checking_then_rejects_the_run(
     test_case: CacheUseErrorTestCase,
 ) -> None:
     with pytest.raises(CompileComparisonError, match=test_case.expected_message):
-        check_cache_use(run=test_case.run, mode=test_case.mode)
+        check_cache_use(run=test_case.run, mode=test_case.mode, models=test_case.models)
 
 
 @pytest.mark.parametrize(

@@ -8,23 +8,30 @@ use crate::project_reuse::_helpers::entry::{
     read_output, read_slot, remove_entry, rewrite_inputs, write_entry,
 };
 use crate::project_reuse::_helpers::files::{
-    carried_forward_digests, compare_project_files, needs_refresh, restamped_paths,
-    stored_project_files, with_missing_digests,
+    carried_forward_digests, compare_project_files, needs_refresh, project_file_changes,
+    restamped_paths, stored_project_files, unverified_paths, with_missing_digests,
 };
 use crate::project_reuse::_helpers::identity::{
     environment_digest, module_stamps, module_stamps_unchanged, search_path_stamps,
     settings_inputs_digest, tracked_environment_names,
 };
+use crate::project_reuse::_helpers::image::{image_path, mark_used};
 use crate::project_reuse::_helpers::target::{target_files_unchanged, verified_target_files};
 use crate::project_reuse::_helpers::timings::compile_timings_span;
 use crate::project_reuse::errors::ReuseRecordError;
 use crate::project_reuse::models::{
-    CompileRecord, RecordOutcome, RecordResult, ReuseAttempt, ReuseCheck, ReuseOutcome, ReuseRules,
-    SettingsInputs, StoredInputs, StoredOutput,
+    CompileRecord, DeltaCandidate, RecordOutcome, RecordResult, ReuseAttempt, ReuseCheck,
+    ReuseOutcome, ReuseRules, SettingsInputs, StoredInputs, StoredOutput,
 };
 use crate::project_snapshot::main::snapshot_project_files::snapshot_project_files;
 use crate::project_snapshot::main::text_path::text_path;
 use crate::project_snapshot::models::PathStamp;
+
+const NO_STORED_COMPILE: &str = "no stored compile";
+const REUSE_BYPASSED: &str = "compile reuse is off";
+const OUTPUT_UNREADABLE: &str = "the stored output cannot be replayed";
+const IDENTITY_CHANGED: &str = "the invocation, runtime, environment or settings changed";
+const TARGET_CHANGED: &str = "the compiled target changed";
 
 fn now_ns() -> i64 {
     SystemTime::now()
@@ -65,8 +72,10 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
         replay: None,
         replay_failed: false,
         digested_files: 0,
+        delta: DeltaCandidate::Unavailable(NO_STORED_COMPILE),
     };
     if bypassed(&check) {
+        attempt.delta = DeltaCandidate::Unavailable(REUSE_BYPASSED);
         return attempt;
     }
     attempt.outcome = ReuseOutcome::Miss;
@@ -87,6 +96,7 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
                 return attempt;
             }
             attempt.outcome = ReuseOutcome::Hit;
+            mark_used(&image_path(&check.store_path));
             if needs_refresh(&inputs.project_files, &attempt.snapshot) {
                 let refreshed: StoredInputs = StoredInputs {
                     project_files: stored_project_files(
@@ -103,6 +113,29 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
             return attempt;
         }
         attempt.restamped = restamped_paths(&inputs.project_files, &attempt.snapshot);
+        if comparison.unchanged {
+            attempt.delta = DeltaCandidate::Unavailable(OUTPUT_UNREADABLE);
+        } else if !comparison.identity_unchanged {
+            attempt.delta = DeltaCandidate::Unavailable(IDENTITY_CHANGED);
+        } else if !target_files_unchanged(
+            &inputs.target_files,
+            &attempt.project_dir,
+            inputs.target_tree,
+            rules,
+        ) {
+            attempt.delta = DeltaCandidate::Unavailable(TARGET_CHANGED);
+        } else {
+            let unverified: HashSet<String> =
+                unverified_paths(&inputs.project_files, &attempt.snapshot);
+            let known: usize = attempt.digests.len();
+            attempt.digests = with_missing_digests(&attempt, &unverified, rules.racy_window_ns);
+            attempt.digested_files += attempt.digests.len() - known;
+            attempt.delta = DeltaCandidate::Files(project_file_changes(
+                &inputs.project_files,
+                &attempt.snapshot,
+                (&attempt.digests, &unverified),
+            ));
+        }
     }
     let known: usize = attempt.digests.len();
     attempt.digests = with_missing_digests(&attempt, &HashSet::new(), rules.racy_window_ns);
@@ -113,6 +146,7 @@ pub(crate) fn check(check: ReuseCheck<'_>) -> ReuseAttempt {
 /// Whether a stored compile still matches, with the digests still valid either way.
 struct Comparison {
     unchanged: bool,
+    identity_unchanged: bool,
     digests: HashMap<String, String>,
     digested_files: usize,
 }
@@ -136,6 +170,7 @@ fn checked(attempt: &ReuseAttempt, inputs: &StoredInputs, rules: &ReuseRules) ->
         (false, HashMap::new(), 0)
     };
     Comparison {
+        identity_unchanged,
         unchanged: files_unchanged
             && target_files_unchanged(
                 &inputs.target_files,
@@ -228,8 +263,7 @@ fn store(
     }
     write_entry(
         &attempt.store_path,
-        &inputs,
-        &output,
+        (&inputs, &output, record.image.as_ref()),
         rules.max_stored_entries,
     )?;
     Ok(RecordResult {

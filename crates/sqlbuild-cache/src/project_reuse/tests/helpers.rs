@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::project_reuse::_helpers::entry::write_entry;
 use crate::project_reuse::_helpers::sections::{decode_sections, encode_sections};
 use crate::project_reuse::models::{SettingsInputs, StoredInputs, StoredOutput, StoredProjectFile};
+use crate::project_reuse::types::ImageSections;
 use crate::project_snapshot::models::PathStamp;
 
 pub(crate) fn stamp(relative_path: &str, kind: &'static str, link: Option<&str>) -> PathStamp {
@@ -64,7 +65,12 @@ pub(crate) fn stored_output() -> StoredOutput {
 pub(crate) fn store_aged_slots(directory: &Path, slots: u64, max_entries: usize) {
     for slot in 0..slots {
         let path = directory.join(format!("slot{slot}.store"));
-        write_entry(&path, &stored_inputs(), &stored_output(), max_entries).expect("stored");
+        write_entry(
+            &path,
+            (&stored_inputs(), &stored_output(), None),
+            max_entries,
+        )
+        .expect("stored");
         let stamp = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(slot + 1);
         std::fs::File::options()
             .write(true)
@@ -123,7 +129,7 @@ pub(crate) fn replace_output(path: &Path) {
         stdout: "{\"command\": \"build\"}\n".to_owned(),
         ..stored_output()
     };
-    write_entry(&other, &stored_inputs(), &output, usize::MAX).expect("other compile");
+    write_entry(&other, (&stored_inputs(), &output, None), usize::MAX).expect("other compile");
     std::fs::rename(output_file(&other), output_file(path)).expect("swapped output");
 }
 
@@ -163,4 +169,17 @@ pub(crate) fn damage(path: &Path) {
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
     std::fs::write(path, bytes).expect("damaged slot");
+}
+
+/// A small project image of two sections.
+pub(crate) fn image() -> ImageSections {
+    vec![
+        ("facts".to_owned(), b"{\"models\": [\"orders\"]}".to_vec()),
+        ("rules".to_owned(), b"{}".to_vec()),
+    ]
+}
+
+/// The image file beside the slot at `path`.
+pub(crate) fn image_file(path: &Path) -> PathBuf {
+    path.with_extension("image")
 }

@@ -8,6 +8,8 @@ use sqlbuild_sqltext::compiler::models::AuthoredValue;
 pub struct SqlTestFileOptions {
     pub test_keys: Vec<String>,
     pub scenario_keys: Vec<String>,
+    /// Discover only these project-relative paths, when given.
+    pub path_filter: Option<std::sync::Arc<std::collections::BTreeSet<String>>>,
 }
 
 /// One `TEST(...)` block whose header parsed with only supported keys.

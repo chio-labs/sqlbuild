@@ -14,6 +14,7 @@ use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FORMAT};
 
 use crate::bindings::_helpers::cli::launch_state::launch_record_path;
+use crate::bindings::_helpers::cli::progress::{NativeProgressProjector, current_projector};
 use crate::bindings::_helpers::compile_command::constants::{
     COMPILE_CACHE_DISABLE_ENV_VAR, COMPILE_CACHE_DISABLE_VALUE, COMPILE_COMMAND_NAME,
     COMPILED_DIRECTORY_NAME, COMPUTE_LOG_DIRECTORY_NAME, EXCLUDED_DIRECTORIES,
@@ -30,12 +31,17 @@ use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::runtime_identity::{
     invocation_identity, redirected_output_files, runtime_identity,
 };
+use crate::bindings::_helpers::compile_delta::driver::{
+    self, DELTA_VERIFY_ENV_VAR, DeltaOutcome, delta_enabled, env_enabled,
+};
+use crate::bindings::_helpers::compile_delta::{context, verify};
 use crate::bindings::_helpers::compile_driver::command::run_compile_command;
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::compile_outputs::reuse::{ReuseCheckPy, check_compile_reuse};
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
+use crate::bindings::_helpers::macro_bridge::first_compile::keep_delta_claim;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
@@ -49,6 +55,8 @@ const HIT: &str = "hit";
 const CHECKED_HIT: &str = "hit";
 const CHECKED_BYPASS: &str = "bypass";
 const MISS: &str = "miss";
+/// The logging format that prints its one argument as given.
+const LOG_TEXT: &str = "%s";
 const BYPASS: &str = "bypass";
 
 fn listed<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -57,6 +65,21 @@ fn listed<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 
 fn reuse_logger(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     imported(py, "logging", "getLogger")?.call1((REUSE_LOGGER_NAME,))
+}
+
+/// Log one message at debug level on the compile reuse logger.
+pub(crate) fn reuse_debug(py: Python<'_>, message: &str) -> PyResult<()> {
+    reuse_debug_with(py, LOG_TEXT, message)
+}
+
+/// Log `argument` through the logging `format` at debug level on the compile reuse logger.
+fn reuse_debug_with<'py>(
+    py: Python<'py>,
+    format: &str,
+    argument: impl pyo3::IntoPyObject<'py>,
+) -> PyResult<()> {
+    let _ = reuse_logger(py)?.call_method1("debug", (format, argument))?;
+    Ok(())
 }
 
 /// The reuse constants the native check, the stored compile and the launch record share.
@@ -403,12 +426,10 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         base.push(("outcome", outcome(py, BYPASS)?));
         return reuse_attempt(py, &base);
     }
-    reuse_logger(py)?.call_method1(
-        "debug",
-        (
-            "Compile reuse check digested %d project files",
-            native.call_method0("digested_files")?,
-        ),
+    reuse_debug_with(
+        py,
+        "Compile reuse check digested %d project files",
+        native.call_method0("digested_files")?,
     )?;
     let check_ms: i64 = if native.call_method0("replay_failed")?.is_truthy()? {
         0
@@ -484,12 +505,119 @@ pub(crate) fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     if native_field(&attempt, "outcome")?.eq(outcome(py, HIT)?)? && !exit_code.is_none() {
         return Ok(exit_code);
     }
-    run_compile_command(
-        py,
-        request.clone(),
-        Some(attempt).filter(|value| !value.is_none()),
-    )
-    .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
+    let missed: bool = native_field(&attempt, "outcome")?.eq(outcome(py, MISS)?)?;
+    let code: PyResult<i64> = if missed && delta_enabled() {
+        compiled_with_delta(request, &attempt)
+    } else {
+        run_compile_command(py, request.clone(), Some(attempt))
+    };
+    context::reset();
+    verify::disarm();
+    code.and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
+}
+
+/// Compile the changed files as a delta when it can, otherwise (or to verify it) in full.
+fn compiled_with_delta<'py>(
+    request: &Bound<'py, PyAny>,
+    attempt: &Bound<'py, PyAny>,
+) -> PyResult<i64> {
+    let py: Python<'py> = request.py();
+    let verifying: bool = env_enabled(DELTA_VERIFY_ENV_VAR);
+    let started: f64 = monotonic(py)?;
+    let projector: Option<pyo3::Py<NativeProgressProjector>> = current_projector(py)?;
+    if let Some(projector) = &projector {
+        projector.get().hold_lines();
+    }
+    let ran: PyResult<DeltaOutcome<'py>> = driver::run(request, attempt);
+    let held: Vec<String> = projector
+        .as_ref()
+        .map(|projector| projector.get().release_lines())
+        .unwrap_or_default();
+    let delta: DeltaOutcome<'py> = match ran {
+        Ok(delta) => delta,
+        Err(error) => DeltaOutcome::Fallback(format!("the delta compile failed: {error}")),
+    };
+    let write_held = || -> PyResult<()> {
+        match &projector {
+            Some(projector) => projector.get().write_held(py, &held),
+            None => Ok(()),
+        }
+    };
+    context::reset();
+    let project_dir: Bound<'py, PyAny> = native_field(attempt, "project_dir")?;
+    let cache: Bound<'py, PyAny> = cache_directory(&project_dir)?;
+    let compiled_root: PathBuf = std::path::absolute(
+        project_dir
+            .extract::<PathBuf>()?
+            .join(TARGET_DIRECTORY_NAME)
+            .join(COMPILED_DIRECTORY_NAME),
+    )?;
+    match delta {
+        DeltaOutcome::Finished(finished) if !verifying => {
+            keep_delta_claim();
+            write_held()?;
+            let (files, models) = (finished.changed_files, finished.rerun_models);
+            let committing: std::time::Instant = std::time::Instant::now();
+            let code: i64 = driver::commit(*finished, (request, attempt))?;
+            driver::trace(py, "delta record and print", committing)?;
+            let seconds: f64 = elapsed_ms(py, started)? as f64 / MILLISECONDS_PER_SECOND;
+            print_stderr(
+                py,
+                &format!(
+                    "Compiled {files} changed file(s) against the previous compile ({models} model(s), {seconds:.1}s)"
+                )
+                .into_bound_py_any(py)?,
+            )?;
+            return Ok(code);
+        }
+        DeltaOutcome::Raised(error) if !verifying => {
+            keep_delta_claim();
+            write_held()?;
+            return Err(error);
+        }
+        DeltaOutcome::Fallback(reason) => {
+            reuse_debug(py, &format!("Delta compile fell back: {reason}"))?;
+            if verifying {
+                print_stderr(
+                    py,
+                    &format!("delta compile fell back: {reason}").into_bound_py_any(py)?,
+                )?;
+            }
+            context::start_capture();
+            return run_compile_command(py, request.clone(), Some(attempt.clone()));
+        }
+        DeltaOutcome::Finished(finished) => verify::hold_expected(verify::Expected {
+            stdout: Some(finished.stdout.clone()),
+            exit_code: Some(finished.phases.0.exit_code),
+            artifacts_written: finished.phases.0.artifacts_written,
+            raised: None,
+            compiled: verify::compiled_digests(&compiled_root),
+            compiled_root: compiled_root.to_string_lossy().into_owned(),
+        }),
+        DeltaOutcome::Raised(error) => verify::hold_expected(verify::Expected {
+            raised: Some(error.to_string()),
+            compiled_root: compiled_root.to_string_lossy().into_owned(),
+            ..verify::Expected::default()
+        }),
+    }
+    context::start_capture();
+    let full: PyResult<i64> = run_compile_command(py, request.clone(), Some(attempt.clone()));
+    let raised: Option<String> = full.as_ref().err().map(ToString::to_string);
+    let differences: Vec<String> = verify::differences(raised);
+    if differences.is_empty() {
+        print_stderr(py, &"delta compile verified".into_bound_py_any(py)?)?;
+        return full;
+    }
+    let cache_dir: PathBuf = cache.extract()?;
+    verify::write_mismatch(&cache_dir, &differences);
+    for difference in &differences {
+        print_stderr(
+            py,
+            &format!("delta compile mismatch: {difference}").into_bound_py_any(py)?,
+        )?;
+    }
+    full?;
+    Ok(verify::MISMATCH_EXIT_CODE)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

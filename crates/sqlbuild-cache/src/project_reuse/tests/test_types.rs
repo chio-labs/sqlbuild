@@ -59,3 +59,36 @@ pub(crate) struct LinkCycleTestCase {
     pub(crate) description: &'static str,
     pub(crate) expected_paths: &'static [&'static str],
 }
+
+/// A stored compile with an image, edited before the delta base is read back.
+pub(crate) struct ImageReadTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) edit: fn(&Path),
+    pub(crate) expected_read: bool,
+}
+
+/// Slots stored oldest first, each with an image, then some read as delta bases.
+pub(crate) struct ImagePruneTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) slots: u64,
+    /// Slots read as delta bases before one more slot is stored.
+    pub(crate) read: &'static [u64],
+    pub(crate) expected_images: &'static [&'static str],
+}
+
+/// A stored and a current project file and how the delta changed set sees them.
+pub(crate) struct ChangedFileTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) stored_digest: Option<&'static str>,
+    pub(crate) racy: bool,
+    pub(crate) mtime_shift_ns: i64,
+    pub(crate) current_digest: Option<&'static str>,
+    pub(crate) expected_changed: &'static [&'static str],
+}
+
+/// A stored compile with an image, stored again with or without one.
+pub(crate) struct ImageRestoreTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) stored_again: Option<fn() -> crate::project_reuse::types::ImageSections>,
+    pub(crate) expected_image_kept: bool,
+}
