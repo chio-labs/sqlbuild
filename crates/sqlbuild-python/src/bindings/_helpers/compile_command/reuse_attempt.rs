@@ -68,7 +68,16 @@ fn reuse_logger(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
 
 /// Log one message at debug level on the compile reuse logger.
 pub(crate) fn reuse_debug(py: Python<'_>, message: &str) -> PyResult<()> {
-    let _ = reuse_logger(py)?.call_method1("debug", (LOG_TEXT, message))?;
+    reuse_debug_with(py, LOG_TEXT, message)
+}
+
+/// Log `argument` through the logging `format` at debug level on the compile reuse logger.
+fn reuse_debug_with<'py>(
+    py: Python<'py>,
+    format: &str,
+    argument: impl pyo3::IntoPyObject<'py>,
+) -> PyResult<()> {
+    let _ = reuse_logger(py)?.call_method1("debug", (format, argument))?;
     Ok(())
 }
 
@@ -416,10 +425,10 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         base.push(("outcome", outcome(py, BYPASS)?));
         return reuse_attempt(py, &base);
     }
-    let digested: usize = native.call_method0("digested_files")?.extract()?;
-    reuse_debug(
+    reuse_debug_with(
         py,
-        &format!("Compile reuse check digested {digested} project files"),
+        "Compile reuse check digested %d project files",
+        native.call_method0("digested_files")?,
     )?;
     let check_ms: i64 = if native.call_method0("replay_failed")?.is_truthy()? {
         0
