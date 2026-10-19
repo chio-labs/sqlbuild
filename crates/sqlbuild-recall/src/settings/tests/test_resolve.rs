@@ -1,101 +1,115 @@
-use std::path::Path;
+use crate::settings::models::{RecallSettings, StoreLocation};
+use crate::settings::tests::helpers::{defaults, resolved};
+use crate::settings::tests::test_types::{ResolveErrorTestCase, ResolveTestCase};
 
-use crate::settings::main::resolve_recall_settings::resolve_recall_settings;
-use crate::settings::models::{SettingsRequest, StoreLocation};
+const DEFAULT_PROJECT: &[(&str, &str)] = &[(
+    "sqlbuild_project.toml",
+    "name = \"shop\"\nadapter = \"duckdb\"\ndefault_target = \"dev\"\n[targets.dev]\nschema = \"analytics\"\n",
+)];
 
-fn project(files: &[(&str, &str)]) -> tempfile::TempDir {
-    let directory = tempfile::tempdir().expect("temporary directory");
-    for (name, text) in files {
-        std::fs::write(directory.path().join(name), text).expect("write config");
-    }
-    directory
-}
-
-fn request(directory: &Path, target: Option<&str>) -> SettingsRequest {
-    SettingsRequest {
-        project_dir: directory.to_path_buf(),
-        selected_target: target.map(str::to_owned),
-    }
-}
-
-#[test]
-fn given_no_recall_section_when_resolved_then_local_sqlite_is_on_by_default() {
-    let directory = project(&[(
+const LAYERED_PROJECT: &[(&str, &str)] = &[
+    (
         "sqlbuild_project.toml",
-        "name = \"shop\"\nadapter = \"duckdb\"\ndefault_target = \"dev\"\n[targets.dev]\nschema = \"analytics\"\n",
-    )]);
-    let settings = resolve_recall_settings(&request(directory.path(), None)).expect("settings");
-    assert!(settings.enabled);
-    assert_eq!(settings.target.as_deref(), Some("dev"));
-    assert_eq!(
-        settings.store,
-        StoreLocation::Sqlite {
-            path: directory.path().join("logs").join("recall.sqlite3")
-        }
-    );
-    assert_eq!(settings.retention_days, 30);
-    assert_eq!(settings.shutdown_timeout_ms, 3000);
-    assert_eq!(settings.diagnostics_min_severity, "info");
-    assert_eq!(settings.destination_schema.as_deref(), Some("analytics"));
-    assert_eq!(settings.project_adapter.as_deref(), Some("duckdb"));
-}
+        "name = \"shop\"\nadapter = \"duckdb\"\n\
+         [recall]\nretention = \"10d\"\nconnection = \"history\"\n\
+         [connections.history]\nadapter = \"sqlite\"\npath = \"state/history.sqlite3\"\n\
+         [connections.central]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
+         [targets.dev]\n[targets.dev.recall]\nenabled = false\n\
+         [targets.prod]\n[targets.prod.recall]\nconnection = \"central\"\n",
+    ),
+    (
+        "sqlbuild_local.toml",
+        "[recall]\nshutdown_timeout = \"1s\"\n[connections.history]\npath = \"/tmp/opencode/elsewhere.sqlite3\"\n",
+    ),
+];
 
 #[test]
-fn given_layers_when_resolved_then_target_over_local_over_project() {
-    let directory = project(&[
-        (
-            "sqlbuild_project.toml",
-            "name = \"shop\"\nadapter = \"duckdb\"\n\
-             [recall]\nretention = \"10d\"\nconnection = \"history\"\n\
-             [connections.history]\nadapter = \"sqlite\"\npath = \"state/history.sqlite3\"\n\
-             [connections.central]\nadapter = \"clickhouse\"\nhost = \"localhost\"\n\
-             [targets.dev]\n[targets.dev.recall]\nenabled = false\n\
-             [targets.prod]\n[targets.prod.recall]\nconnection = \"central\"\n",
-        ),
-        (
-            "sqlbuild_local.toml",
-            "[recall]\nshutdown_timeout = \"1s\"\n[connections.history]\npath = \"/tmp/opencode/elsewhere.sqlite3\"\n",
-        ),
-    ]);
-    let dev = resolve_recall_settings(&request(directory.path(), Some("dev"))).expect("dev");
-    assert!(!dev.enabled);
-    assert_eq!(dev.retention_days, 10);
-    assert_eq!(dev.shutdown_timeout_ms, 1000);
-    assert_eq!(
-        dev.store,
-        StoreLocation::Sqlite {
-            path: "/tmp/opencode/elsewhere.sqlite3".into()
-        }
-    );
-    let prod = resolve_recall_settings(&request(directory.path(), Some("prod"))).expect("prod");
-    assert!(prod.enabled);
-    assert_eq!(
-        prod.store,
-        StoreLocation::Unsupported {
-            connection: "central".to_owned(),
-            adapter: "clickhouse".to_owned()
-        }
-    );
+fn given_project_layers_when_resolved_then_target_over_local_over_project_over_defaults() {
+    let test_cases = [
+        ResolveTestCase {
+            description: "without a recall section local SQLite is on by default",
+            files: DEFAULT_PROJECT,
+            target: None,
+            expected_settings: RecallSettings {
+                target: Some("dev".to_owned()),
+                destination_schema: Some("analytics".to_owned()),
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "the target disables recall and the local file moves the store",
+            files: LAYERED_PROJECT,
+            target: Some("dev"),
+            expected_settings: RecallSettings {
+                enabled: false,
+                target: Some("dev".to_owned()),
+                store: StoreLocation::Sqlite {
+                    path: "/tmp/opencode/elsewhere.sqlite3".into(),
+                },
+                connection: Some("history".to_owned()),
+                retention_days: 10,
+                shutdown_timeout_ms: 1000,
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a non-SQLite connection is reported as unsupported",
+            files: LAYERED_PROJECT,
+            target: Some("prod"),
+            expected_settings: RecallSettings {
+                target: Some("prod".to_owned()),
+                store: StoreLocation::Unsupported {
+                    connection: "central".to_owned(),
+                    adapter: "clickhouse".to_owned(),
+                },
+                connection: Some("central".to_owned()),
+                retention_days: 10,
+                shutdown_timeout_ms: 1000,
+                ..defaults()
+            },
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            resolved(test_case.files, test_case.target),
+            Ok(format!("{:?}", test_case.expected_settings)),
+            "{}",
+            test_case.description
+        );
+    }
 }
 
 #[test]
 fn given_invalid_settings_when_resolved_then_the_error_names_the_setting() {
-    let unknown = project(&[(
-        "sqlbuild_project.toml",
-        "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nconnection = \"missing\"\n",
-    )]);
-    let error = resolve_recall_settings(&request(unknown.path(), None)).expect_err("unknown");
-    assert!(
-        error.message.contains("unknown connection 'missing'"),
-        "{error}"
-    );
-    let bad = project(&[(
-        "sqlbuild_project.toml",
-        "name = \"x\"\nadapter = \"duckdb\"\n[targets.dev.recall]\nretention = \"soon\"\n",
-    )]);
-    let error = resolve_recall_settings(&request(bad.path(), Some("dev"))).expect_err("bad");
-    assert!(
-        error.message.starts_with("targets.dev.recall.retention"),
-        "{error}"
-    );
+    let test_cases = [
+        ResolveErrorTestCase {
+            description: "unknown connections are named",
+            files: &[(
+                "sqlbuild_project.toml",
+                "name = \"x\"\nadapter = \"duckdb\"\n[recall]\nconnection = \"missing\"\n",
+            )],
+            target: None,
+            expected_message_fragment: "unknown connection 'missing'",
+        },
+        ResolveErrorTestCase {
+            description: "target settings are named with their path",
+            files: &[(
+                "sqlbuild_project.toml",
+                "name = \"x\"\nadapter = \"duckdb\"\n[targets.dev.recall]\nretention = \"soon\"\n",
+            )],
+            target: Some("dev"),
+            expected_message_fragment: "targets.dev.recall.retention",
+        },
+    ];
+
+    for test_case in test_cases {
+        let message: String =
+            resolved(test_case.files, test_case.target).expect_err("the settings are invalid");
+        assert!(
+            message.contains(test_case.expected_message_fragment),
+            "{}: {message}",
+            test_case.description
+        );
+    }
 }
