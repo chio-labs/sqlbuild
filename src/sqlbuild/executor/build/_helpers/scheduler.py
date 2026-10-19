@@ -47,6 +47,8 @@ from sqlbuild.executor.run.models import ModelExecutionResult, ModelMaterializat
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
 from sqlbuild.runtime.contracts.types import ExecutionResourceKind
+from sqlbuild.runtime.observability.classes.statement_lifecycle import StatementLifecycle
+from sqlbuild.runtime.observability.constants import MODEL_BUILD_PURPOSE
 
 type _BuildWorkerResult = (
     ModelExecutionResult
@@ -91,19 +93,20 @@ def _dispatch_model(
 ) -> ModelExecutionResult:
     """Route a model to the correct executor, then report a stalled cursor window as a warning."""
 
-    return with_waiting_on_empty_inputs_warning(
-        _dispatch_model_entry(
-            context=context,
-            promotion_mode=promotion_mode,
-            snapshots=snapshots,
-            allow_snapshot_schema_change=allow_snapshot_schema_change,
-            custom_materializations=custom_materializations,
-            target=target,
-            effective_vars=effective_vars,
-            warehouse_relations=warehouse_relations,
-            on_progress=on_progress,
+    with StatementLifecycle.purpose_scope(MODEL_BUILD_PURPOSE):
+        return with_waiting_on_empty_inputs_warning(
+            _dispatch_model_entry(
+                context=context,
+                promotion_mode=promotion_mode,
+                snapshots=snapshots,
+                allow_snapshot_schema_change=allow_snapshot_schema_change,
+                custom_materializations=custom_materializations,
+                target=target,
+                effective_vars=effective_vars,
+                warehouse_relations=warehouse_relations,
+                on_progress=on_progress,
+            )
         )
-    )
 
 
 def _dispatch_model_entry(

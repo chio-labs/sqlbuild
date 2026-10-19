@@ -764,11 +764,14 @@ class BuildScheduler:
         | LoadExecutionResult
     ):
         resource_kind: str = self._canonical_resource_kind(key=key)
+        planned: ModelPlanEntry | None = self._indexes.model_entries_by_key.get(key)
         with ResourceAttemptLifecycle(
             resource_id=self._canonical_resource_id(key=key),
             resource_kind=resource_kind,
             resource_name=key.name,
             run_id=self._run_id,
+            plan_action=None if planned is None else str(planned.action),
+            plan_reason_code=None if planned is None else str(planned.reason),
         ) as lifecycle:
             with CostContext.scope(
                 run_id=self._run_id,

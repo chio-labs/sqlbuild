@@ -24,9 +24,11 @@ from sqlbuild.runtime.observability.models import (
     OpaqueLifecycleEvent,
 )
 from sqlbuild.runtime.observability.types import (
+    ArtifactSubscriber,
     DiagnosticRegistration,
     DiagnosticSubscriber,
     HealthCallback,
+    HistorySubscriber,
     KnownLifecycleSubscriber,
     LifecycleRegistration,
     OpaqueLifecycleSubscriber,
@@ -55,6 +57,7 @@ class EventDispatcher:
             | tuple[Literal["diagnostic"], DiagnosticLog, bool]
         ] = deque()
         self._publishing = False
+        self._artifact_subscribers: tuple[ArtifactSubscriber, ...] = ()
 
     @overload
     def subscribe_lifecycle(
@@ -88,6 +91,35 @@ class EventDispatcher:
         with self._lock:
             self._diagnostics = (*self._diagnostics, registration)
         return partial(self._unsubscribe_diagnostics, token=token)
+
+    def subscribe_artifacts(self, subscriber: ArtifactSubscriber) -> Unsubscribe:
+        """Register a subscriber for executed SQL text; only history stores subscribe."""
+
+        with self._lock:
+            self._artifact_subscribers = (*self._artifact_subscribers, subscriber)
+        return partial(self._unsubscribe_artifacts, subscriber=subscriber)
+
+    def subscribe_history(self, subscriber: HistorySubscriber) -> Unsubscribe:
+        """Register a history store for every known lifecycle fact and executed SQL text."""
+
+        lifecycle: Unsubscribe = self.subscribe_lifecycle(
+            subscriber=subscriber, accepts_opaque=False
+        )
+        artifacts: Unsubscribe = self.subscribe_artifacts(subscriber.record_sql)
+        return partial(self._unsubscribe_history, unsubscribers=(lifecycle, artifacts))
+
+    def publish_sql_artifact(
+        self, *, sql: str, statement_id: str | None, resource_id: str | None
+    ) -> None:
+        """Hand executed SQL text to artifact subscribers; it never enters lifecycle payloads."""
+
+        with self._lock:
+            subscribers: tuple[ArtifactSubscriber, ...] = self._artifact_subscribers
+        for subscriber in subscribers:
+            try:
+                subscriber(sql=sql, statement_id=statement_id, resource_id=resource_id)
+            except Exception as error:
+                self._report_failure(channel="lifecycle", subscriber=subscriber, error=error)
 
     def publish_lifecycle(self, event: LifecycleEvent | OpaqueLifecycleEvent) -> None:
         """Synchronously publish a lifecycle fact to the current ordered snapshot."""
@@ -184,6 +216,18 @@ class EventDispatcher:
                 registration for registration in self._lifecycle if registration[0] is not token
             )
 
+    def _unsubscribe_history(self, *, unsubscribers: tuple[Unsubscribe, ...]) -> None:
+        for unsubscribe in unsubscribers:
+            unsubscribe()
+
+    def _unsubscribe_artifacts(self, *, subscriber: ArtifactSubscriber) -> None:
+        with self._lock:
+            self._artifact_subscribers = tuple(
+                registered
+                for registered in self._artifact_subscribers
+                if registered is not subscriber
+            )
+
     def _unsubscribe_diagnostics(self, *, token: object) -> None:
         with self._lock:
             self._diagnostics = tuple(
@@ -194,7 +238,10 @@ class EventDispatcher:
         self,
         *,
         channel: Literal["lifecycle", "diagnostic"],
-        subscriber: KnownLifecycleSubscriber | OpaqueLifecycleSubscriber | DiagnosticSubscriber,
+        subscriber: KnownLifecycleSubscriber
+        | OpaqueLifecycleSubscriber
+        | DiagnosticSubscriber
+        | ArtifactSubscriber,
         error: BaseException,
     ) -> None:
         callback: HealthCallback | None = self._health_callback
