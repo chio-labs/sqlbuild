@@ -1335,7 +1335,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-recall"
-version = "0.158.2"
+version = "0.159.0"
 dependencies = [
  "blake3",
  "rusqlite",
