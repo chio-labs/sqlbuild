@@ -408,6 +408,21 @@ def age_recorded_invocations(*, config: dict[str, object], database: str, days: 
     execute_clickhouse_sql(config=config, statements=tuple(statements))
 
 
+def age_stored_artifacts(*, config: dict[str, object], database: str, days: int) -> None:
+    """Move every stored SQL text's `seen_at` `days` earlier, as if not refreshed since."""
+
+    table: str = f"{database}.recall_artifacts"
+    execute_clickhouse_sql(
+        config=config,
+        statements=(
+            f"INSERT INTO {table} SELECT * REPLACE (seen_at - INTERVAL {days} DAY AS seen_at) "
+            f"FROM {table}",
+            f"ALTER TABLE {table} DELETE WHERE seen_at > now64(6) - INTERVAL {days - 1} DAY "
+            "SETTINGS mutations_sync = 2",
+        ),
+    )
+
+
 def expire_recall_parts(*, config: dict[str, object], database: str) -> None:
     """Apply every Recall table's TTL now, as background TTL merges eventually would."""
 

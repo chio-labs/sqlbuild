@@ -168,3 +168,11 @@ class ClickHouseRecallPartialInsertTestCase:
     description: str
     revoked_inserts: tuple[str, ...]
     expected_delivery: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallArtifactAgeTestCase:
+    description: str
+    artifact_age_days: int
+    reference_age_days: int
+    expected_availability: list[list[object]]

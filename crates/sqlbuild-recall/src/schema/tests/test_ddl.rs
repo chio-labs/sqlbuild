@@ -135,6 +135,17 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
             expected_count: 1,
         },
         StatementSetTestCase {
+            description: "SQL text stays visible as long as its TTL keeps it",
+            statements: views(None)
+                .into_iter()
+                .filter(|statement| statement.contains("`recall_artifacts` FINAL"))
+                .collect(),
+            required_fragments: &[
+                "`recall_artifacts` FINAL WHERE seen_at >= now64(6) - INTERVAL 21 DAY",
+            ],
+            expected_count: 1,
+        },
+        StatementSetTestCase {
             description: "views deduplicate rows and filter by retention",
             statements: views(None),
             required_fragments: &["now64(6) - INTERVAL 14 DAY", " FINAL WHERE "],

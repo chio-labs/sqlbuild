@@ -5,15 +5,15 @@ use crate::schema::constants::{OUTPUT_TAIL_RECORDS, REPLACING_ENGINE};
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::{DdlOptions, Table};
 
-/// `table`'s rows within retention, one copy per key: `FINAL` for replacing tables, so filters on the sorting key reach the read, else the first ingested copy.
+/// `table`'s rows within its TTL, one copy per key: `FINAL` for replacing tables, so filters on the sorting key reach the read, else the first ingested copy. SQL text outlives retention like its TTL, so every reference still within retention finds it.
 fn deduplicated(table: Table, options: &DdlOptions) -> String {
     let spec = table_spec(table);
+    let days: u32 = options.retention_days.saturating_add(spec.ttl_extra_days);
     if spec.clickhouse_engine == REPLACING_ENGINE {
         return format!(
             "(SELECT * FROM {name} FINAL WHERE {expiry} >= now64(6) - INTERVAL {days} DAY)",
             name = clickhouse_table(spec.name, options),
             expiry = spec.expiry_column,
-            days = options.retention_days,
         );
     }
     format!(
@@ -21,7 +21,6 @@ fn deduplicated(table: Table, options: &DdlOptions) -> String {
          ORDER BY ingested_at ASC LIMIT 1 BY {key})",
         name = clickhouse_table(spec.name, options),
         expiry = spec.expiry_column,
-        days = options.retention_days,
         key = spec.key.join(", "),
     )
 }

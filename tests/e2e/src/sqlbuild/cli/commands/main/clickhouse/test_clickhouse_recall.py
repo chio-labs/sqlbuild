@@ -9,6 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallAbandonedTestCase,
+    ClickHouseRecallArtifactAgeTestCase,
     ClickHouseRecallConcurrencyTestCase,
     ClickHouseRecallDuplicateTestCase,
     ClickHouseRecallExpiryTestCase,
@@ -21,6 +22,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     age_recorded_invocations,
+    age_stored_artifacts,
     apply_printed_ddl,
     apply_printed_retention_fix,
     duplicate_recall_rows,
@@ -526,6 +528,49 @@ def test_given_one_refused_table_when_building_then_only_its_records_count_as_fa
             "ORDER BY stream",
         )
         == test_case.expected_delivery
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallArtifactAgeTestCase(
+            description="SQL seen past retention stays available to a reference within it",
+            artifact_age_days=33,
+            reference_age_days=27,
+            expected_availability=[[1, 1]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_sql_older_than_retention_when_still_referenced_then_artifacts_show_it_available(
+    test_case: ClickHouseRecallArtifactAgeTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(project_dir, "build").returncode == 0
+    age_recorded_invocations(
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        days=test_case.reference_age_days,
+    )
+    age_stored_artifacts(
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        days=test_case.artifact_age_days,
+    )
+
+    assert (
+        recall_rows(
+            project_dir,
+            "SELECT toUInt8(count() > 0), min(available) FROM artifacts "
+            "WHERE startsWith(invocation_id, 'aged-')",
+        )
+        == test_case.expected_availability
     )
 
 
