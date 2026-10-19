@@ -40,7 +40,6 @@ CONNECTION_OPTION_KEYS: frozenset[str] = frozenset(
 )
 VIEW_ENGINES: frozenset[str] = frozenset({"View", "MaterializedView", "LiveView", "WindowView"})
 RELATION_NOT_FOUND_CODES: frozenset[int] = frozenset({60, 81})
-ATOMIC_DATABASE_ENGINES: frozenset[str] = frozenset({"Atomic", "Replicated"})
 NULLABLE_WRAPPER: str = "Nullable"
 TYPE_WRAPPERS: tuple[str, ...] = ("Nullable", "LowCardinality")
 TYPE_ALIASES: dict[str, str] = {

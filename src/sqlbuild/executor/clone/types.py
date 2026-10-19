@@ -19,10 +19,6 @@ class CloneFingerprintProgressCallback(Protocol):
     ) -> None: ...
 
 
-class CloneFingerprintProgressReporter(CloneFingerprintProgressCallback, Protocol):
-    def write_interrupted(self) -> None: ...
-
-
 class CloneStatus(StrEnum):
     SUCCESS = "success"
     WARNING = "warning"

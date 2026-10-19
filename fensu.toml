@@ -21,6 +21,1097 @@ require_cacheable = true
 [targets.python.evaluation]
 exclude = ["tests/e2e/fixtures/**"]
 
+[targets.python.dead_code]
+enabled = true
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.*"]
+symbols = ["main"]
+reason = "Repository tooling runs these modules with `python -m scripts.<name>` from the Makefile, CI and pre-commit."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.fensu_policy.rules.*"]
+symbols = ["*"]
+reason = "Fensu loads these custom rule modules from rule_modules in this file."
+
+[[targets.python.dead_code.roots]]
+modules = [
+    "sqlbuild.rule_engine._helpers.host.custom_host",
+    "sqlbuild.rule_engine._helpers.host.custom_host_launch",
+]
+symbols = ["main"]
+reason = "The custom-rule host processes run these modules with `python -m`; native code starts the launcher, which starts the host."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild._native_host"]
+symbols = ["*"]
+reason = "Native code imports this module by path and reads its attributes by name."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.contract.classes.base_adapter"]
+symbols = ["BaseAdapter"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.contract.exceptions"]
+symbols = ["AdapterUserError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.contract.models"]
+symbols = ["ColumnInfo", "ExpressionInferenceProfile", "RelationInfo", "RelationLookup", "RetentionRequest", "RowDiffSampling", "RowDiffTolerance", "RowDiffTolerances", "TableFreshnessMetadata", "TableFreshnessRequest"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.contract.types"]
+symbols = ["BuiltinAdapter", "FrameworkType", "LifeCycleEventKind", "MigrationTransfer", "RetentionScope", "TableFreshnessStatus"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.discovery.main._session_warehouse_support"]
+symbols = ["adapter_supports_session_warehouse"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.discovery.main.builtins"]
+symbols = ["builtin_adapter_classes"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.discovery.main.project_adapters"]
+symbols = ["discover_project_adapters"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.discovery.main.resolve_adapter"]
+symbols = ["resolve_adapter"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main._get_columns_for_inspection"]
+symbols = ["get_columns_for_inspection"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main._list_relations_for_inspection"]
+symbols = ["list_relations_for_inspection"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main.active_inspection_catalog"]
+symbols = ["active_inspection_catalog"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main.inspection_query_sink"]
+symbols = ["inspection_query_sink"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main.open_inspection_catalog"]
+symbols = ["open_inspection_catalog"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main.record_inspection_query"]
+symbols = ["record_inspection_query"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main.relation_lookup"]
+symbols = ["build_relation_lookup"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name"]
+symbols = ["resolve_relation_location_qualified_name"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main.run_bounded_inspections"]
+symbols = ["run_bounded_inspections"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.main.run_recorded_inspection_query"]
+symbols = ["run_recorded_inspection_query"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.relations.models"]
+symbols = ["InspectionQueryRecord", "StatementMetadataEffect"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.type_system.main.conditional_result_nullability"]
+symbols = ["conditional_result_nullability"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.type_system.main.first_arg_nullability"]
+symbols = ["first_arg_nullability"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.type_system.main.normalize_relation_type"]
+symbols = ["normalize_relation_type"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.type_system.main.normalize_type"]
+symbols = ["normalize_type"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.type_system.main.safe_cast_nullability"]
+symbols = ["safe_cast_nullability"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.cli.commands.main.entrypoint._dispatch_with_compute_logs"]
+symbols = ["dispatch_with_compute_logs"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.cli.compile_reuse._helpers.provider_settings"]
+symbols = ["provider_settings_inputs"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.cli.compile_reuse._helpers.startup_inputs"]
+symbols = ["startup_inputs"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.cli.compile_reuse.models"]
+symbols = ["CompileReuseRequest"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.auditing.types"]
+symbols = ["AuditEvaluationMode", "AuditOutcome", "AuditSeverity", "ThresholdOperator"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.compile._helpers.diagnostics.python_resources"]
+symbols = ["python_resource_rows"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.compile._helpers.macro_bridge.call_store"]
+symbols = ["target_context_with_macro_call_store"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.compile._helpers.render.user_macros"]
+symbols = ["inventory_project_macros", "load_project_macros", "macro_invocation_context"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.compile.types"]
+symbols = ["AttachedAuditTargetKind", "FunctionLanguage", "SqlTestMode"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks"]
+symbols = ["discover_command_output_sink_functions"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.discovery._helpers.filesystem.project_modules"]
+symbols = ["import_python_root_module", "install_python_root_package", "load_materialize_function", "load_provider_module", "load_python_node_module", "load_sink_module", "module_functions", "module_provider_classes", "parameter_annotations", "provider_usages", "requires_arguments", "restore_python_root_modules", "source_line", "validate_event_exporter_signature"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.discovery._helpers.validation.discovery"]
+symbols = ["validate_discovered_inputs"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.discovery.main.runtime_extensions"]
+symbols = ["discover_runtime_extensions"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.macro_bridge.classes.macro_bridge"]
+symbols = ["run_with_macro_bridge"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.macro_bridge.main._macro_store_module_paths"]
+symbols = ["macro_store_module_paths"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.macro_bridge.main.active_macro_bridge"]
+symbols = ["active_macro_bridge"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.pipeline._helpers.materializations"]
+symbols = ["load_custom_materializations"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.python_nodes._helpers.user_inventory"]
+symbols = ["python_node_dependency_key", "python_node_identity"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.python_nodes.main._hook_identities"]
+symbols = ["build_hook_identities"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.python_nodes.types"]
+symbols = ["PythonNodeKind", "PythonNodeStatus"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.references.models"]
+symbols = ["ProjectRelation", "ProjectRelationIndex", "RelationName"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.cost.models"]
+symbols = ["CostResourceContext", "RunCostSummary"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.cost.types"]
+symbols = ["CostCapability", "CostStatus"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.cursor_algebra.exceptions"]
+symbols = ["CursorAlgebraError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.cursor_algebra.types"]
+symbols = ["BoundSentinel"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.diagnostics._helpers.process_resources"]
+symbols = ["read_process_resources"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.diagnostics.constants"]
+symbols = ["SQL_PRIVATE_RECORD_MARKER"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.diagnostics.main.diagnostics_context"]
+symbols = ["diagnostics_context"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.diagnostics.main.log_debug_event"]
+symbols = ["log_debug_event"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.diagnostics.main.log_sql"]
+symbols = ["log_sql"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.diagnostics.main.process_resource_reporting"]
+symbols = ["process_resource_reporting"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.diagnostics.models"]
+symbols = ["ProcessResourceUsage"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.errors.contracts.exceptions"]
+symbols = ["ExecutorInputError", "SharedInputError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.auditing.main._current_audit_result_projection"]
+symbols = ["current_audit_result_projection"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.auditing.models"]
+symbols = ["AuditExecutionResult"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.build.models"]
+symbols = ["BuildCallbacks", "BuildCustomizations", "BuildExecutionResult", "BuildInitialState", "BuildRuntimeParams", "FunctionExecutionResult", "SeedExecutionResult"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.build.types"]
+symbols = ["BuildStatus"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.clone.main._build_destination_transient_models"]
+symbols = ["build_destination_transient_models"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.clone.main._build_retention_requests"]
+symbols = ["build_destination_retention_requests"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.clone.main._fingerprinting"]
+symbols = ["copy_clone_fingerprints"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.clone.main._run_prephase_clone_stream"]
+symbols = ["run_prephase_clone_stream"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.clone.main.execute"]
+symbols = ["execute_clone"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.clone.models"]
+symbols = ["CloneExecutionInput", "CloneItemResult", "CloneSourceEntries"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.clone.types"]
+symbols = ["CloneStatus"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.diff.classes.query_artifact_lifecycle"]
+symbols = ["QueryDiffArtifactLifecycle"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.diff.exceptions"]
+symbols = ["FullDiffSizeGuardError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.diff.main._execute_query"]
+symbols = ["execute_query_diff"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.diff.main.execute"]
+symbols = ["execute_diff"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.diff.models"]
+symbols = ["DiffExecutionOptions", "DiffExecutionResult", "FullDiffSizeLimits", "RowDiffSamplingOverride"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.janitor.main.execute"]
+symbols = ["execute_janitor_plan"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.janitor.models"]
+symbols = ["JanitorArchiveCandidate", "JanitorArchivedRelation", "JanitorBlockedSchema", "JanitorDeleteCandidate", "JanitorDirectStatePruneCandidate", "JanitorOldNameView", "JanitorOldNameViewPlanning", "JanitorPlan", "JanitorQueryDiffArtifactCandidate", "JanitorRelationKey", "JanitorSkippedRelation", "JanitorSkippedSchema"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.load.main.run"]
+symbols = ["run_load_pipeline"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.load.models"]
+symbols = ["LoadCallbacks", "LoadExecutionResult", "LoadRuntimeParams"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.migrations._helpers.relation_for_location"]
+symbols = ["migration_relation_for_location"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.old_name_views._helpers.janitor"]
+symbols = ["is_compatibility_view"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline._helpers.auditing"]
+symbols = ["run_audit_pipeline_with_callbacks"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline._helpers.scenario"]
+symbols = ["run_scenario_capture_pipeline", "run_scenario_local_test_pipeline", "run_scenario_test_pipeline", "select_scenario_snapshot_capture_candidates"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline._helpers.seeding"]
+symbols = ["run_seed_pipeline"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline._helpers.testing"]
+symbols = ["run_test_pipeline"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline.exceptions"]
+symbols = ["AuditExecutionError", "TemporaryTestFunctionError", "WarehouseConnectionError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure"]
+symbols = ["raise_warehouse_connection_failure"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline.main.run"]
+symbols = ["run_build_pipeline"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline.models"]
+symbols = ["AuditPipelineCallbacks", "TestPipelineCallbacks"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.python_nodes._helpers.ingress_execution"]
+symbols = ["execute_ingress_python_loader_nodes"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.python_nodes.classes.run_state"]
+symbols = ["PythonNodeRunState"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.python_nodes.main._checks"]
+symbols = ["execute_python_checks"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.python_nodes.main._ingress"]
+symbols = ["run_ingress_python_loader_nodes"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.python_nodes.main.read_side"]
+symbols = ["create_read_side_python_execution_tracker"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.python_nodes.models"]
+symbols = ["IngressCallbacks", "PythonCheckCallbacks", "PythonCheckExecutionResult", "PythonNodeExecutionResult", "PythonNodeRuntime"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.run.models"]
+symbols = ["ModelExecutionResult"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.scenario.models"]
+symbols = ["ScenarioCaptureSettings", "ScenarioLocalReplaySource", "ScenarioSnapshotCaptureLimits", "ScenarioTestSettings"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.scheduling.types"]
+symbols = ["ExecutionStatus"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.testing.models"]
+symbols = ["SqlTestExecutionResult"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dagster.constants"]
+symbols = ["ASSET_SELECTION_COMMANDS", "CHECK_METADATA_EXCLUDED_KEYS", "CLONE_COMMAND", "COMPLETED_EXECUTION_STATUSES", "DAGSTER_ASSET_ENABLED_FIELD", "DAGSTER_ASSET_NODE_KINDS", "DAGSTER_CHECK_ENABLED_FIELD", "DAGSTER_CHECK_NAME_FIELD", "DAGSTER_DIRECT_KIND_NODE_KINDS", "DEFAULT_SELECTABLE_NODE_KINDS", "EXPLICIT_SELECTION_FLAGS", "INSUFFICIENT_CHECK_STATUS", "LIVE_EVENT_COMMANDS", "LOADER_NODE_KIND", "LOAD_SELECTABLE_NODE_KINDS", "MATERIALIZABLE_NODE_KINDS", "MODEL_NODE_KIND", "SCENARIO_CHECK_KIND", "SOURCE_NODE_KIND", "STANDALONE_CHECK_COMMANDS", "SUCCESS_EXECUTION_STATUS", "VIEW_MATERIALIZATION_TYPE", "WARNING_CHECK_SEVERITY"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dagster.exceptions"]
+symbols = ["DagsterDagInputError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dbt._helpers.profile.load"]
+symbols = ["load_dbt_yaml"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dbt._helpers.profile.render"]
+symbols = ["render_selected_dbt_profile_output"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dbt.exceptions"]
+symbols = ["DbtProfileError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dlt.constants"]
+symbols = ["DLT_INTEGRATION_KIND"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dlt.exceptions"]
+symbols = ["DltIntegrationError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dlt.main._loaders"]
+symbols = ["dlt_loader_function"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dlt.models"]
+symbols = ["DltResourceConfig", "DltSourceConfig"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.ingestr.constants"]
+symbols = ["INGESTR_INTEGRATION_KIND"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.ingestr.exceptions"]
+symbols = ["IngestrIntegrationError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.ingestr.main._loaders"]
+symbols = ["ingestr_loader_function"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.ingestr.models"]
+symbols = ["IngestrSourceConfig"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.rivers.constants"]
+symbols = ["RIVERS_ASSET_NODE_KINDS"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.microbatches.classes.event_codec"]
+symbols = ["MicrobatchEventCodec"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.microbatches.constants"]
+symbols = ["MICROBATCH_COLUMNS", "MICROBATCH_COLUMN_TYPES", "MICROBATCH_DIRECT_INDEXES", "MICROBATCH_GENERATION_WILDCARD", "MICROBATCH_TABLE_NAME"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.microbatches.exceptions"]
+symbols = ["MicrobatchStateError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.microbatches.models"]
+symbols = ["MicrobatchCoverageProjection", "MicrobatchInterval", "ProjectedMicrobatchInterval", "ReplayRequirementProjection"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.microbatches.types"]
+symbols = ["ReplayRequirementState"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.provider.exceptions"]
+symbols = ["ProviderInputError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.provider.main.session"]
+symbols = ["build_provider_session"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.constants"]
+symbols = ["RELATION_RENDERER"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.main.read_asset_definition"]
+symbols = ["read_asset_definition"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.main.read_audit_factory_definition"]
+symbols = ["read_audit_factory_definition"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.main.read_check_definition"]
+symbols = ["read_check_definition"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.main.read_factory_definition"]
+symbols = ["read_factory_definition"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.main.read_hook_definition"]
+symbols = ["read_hook_definition"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.main.read_loader_definition"]
+symbols = ["read_loader_definition"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.main.read_task_definition"]
+symbols = ["read_task_definition"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.models"]
+symbols = ["AuditCase", "SqlResourceRef"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.python_nodes.types"]
+symbols = ["PythonCheckSeverity", "SqlResourceRefKind"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.rule_engine._helpers.engine._custom_catalogue"]
+symbols = ["load_custom_rules"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.rule_engine._helpers.engine.custom_payloads"]
+symbols = ["custom_rule_payloads"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.compute_logs.classes.text_tee"]
+symbols = ["TextComputeLogTee"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.compute_logs.exceptions"]
+symbols = ["CaptureAlreadyExistsError", "CaptureNotFoundError", "CaptureStateError", "ComputeLogMetadataError", "ComputeLogPathError", "InvalidCaptureIdError", "InvalidComputeLogCursorError", "InvalidComputeLogLimitError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.compute_logs.models"]
+symbols = ["CaptureByteCounts", "CaptureInventory", "CaptureInventoryItem", "CaptureMetadata", "ComputeLogReadChunk", "FinalCaptureMetadata", "PruneResult"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.compute_logs.types"]
+symbols = ["ComputeLogStream"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.contracts.models"]
+symbols = ["ConnectionHooks"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.contracts.types"]
+symbols = ["ExecutionResourceKind"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.event_exporting.exceptions"]
+symbols = ["EventExporterInputError", "EventExporterStateError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.event_exporting.main._invoke_lifecycle_event_sink"]
+symbols = ["invoke_lifecycle_event_sink"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.event_exporting.main._run_command_output_sinks"]
+symbols = ["run_command_output_sinks"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.event_exporting.main.get_lifecycle_event_sink_definition"]
+symbols = ["get_lifecycle_event_sink_definition"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.execution_history.exceptions"]
+symbols = ["ExecutionHistoryStorageError", "IntegrityConflictError", "InvalidCursorError", "InvalidEventError", "InvalidFilterError", "InvalidLimitError", "ProjectionConsistencyError", "UnsupportedSchemaVersionError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.execution_history.models"]
+symbols = ["EventPage", "RunPage", "RunRecord", "StoredEvent"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.execution_history.types"]
+symbols = ["RunStatus"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.execution_limits.exceptions"]
+symbols = ["ExecutionDurationLimitError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.execution_limits.main.execution_deadline_scope"]
+symbols = ["execution_deadline_scope"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.execution_limits.models"]
+symbols = ["RunItemTimeouts"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.classes.event_dispatcher"]
+symbols = ["EventDispatcher"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.classes.operation_lifecycle"]
+symbols = ["OperationLifecycle"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.exceptions"]
+symbols = ["ObservabilityValidationError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.create_lifecycle_event"]
+symbols = ["create_lifecycle_event"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.current_execution_identity"]
+symbols = ["current_execution_identity"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.diagnostic_log_to_json"]
+symbols = ["diagnostic_log_to_json"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.dispatcher_scope"]
+symbols = ["dispatcher_scope"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.invocation_external_context_scope"]
+symbols = ["invocation_external_context_scope"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.invocation_scope"]
+symbols = ["invocation_scope"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.lifecycle_event_from_json"]
+symbols = ["lifecycle_event_from_json"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.lifecycle_event_to_json"]
+symbols = ["lifecycle_event_to_json"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.main.run_scope"]
+symbols = ["run_scope"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.observability.models"]
+symbols = ["DiagnosticLog", "LifecycleEvent", "OperationAttributes"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.output_capture.exceptions"]
+symbols = ["CommandOutputValidationError", "OutputCaptureInputError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.output_capture.main.configured_output_capture_scope"]
+symbols = ["configured_output_capture_scope"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.output_capture.models"]
+symbols = ["BoundCommandOutputSink", "CommandOutputCaptureSummary", "CommandOutputRecord", "OutputCaptureContext"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.runtime.output_capture.types"]
+symbols = ["CommandOutputStream", "OutputRecordPriority"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.sql_values.exceptions"]
+symbols = ["SqlValueRenderingError"]
+reason = "Native code resolves these through the sqlbuild._native_host name table."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.bigquery.classes.bigquery_adapter"]
+symbols = ["BigQueryAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.clickhouse.classes.clickhouse_adapter"]
+symbols = ["ClickHouseAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.databricks.classes.databricks_adapter"]
+symbols = ["DatabricksAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.duckdb.classes.duckdb_adapter"]
+symbols = ["DuckDbAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.motherduck.classes.motherduck_adapter"]
+symbols = ["MotherDuckAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.postgres.classes.postgres_adapter"]
+symbols = ["PostgresAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.snowflake.classes.snowflake_adapter"]
+symbols = ["SnowflakeAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.sqlite.classes.sqlite_adapter"]
+symbols = ["SqliteAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapters.sqlserver.classes.sqlserver_adapter"]
+symbols = ["SqlServerAdapter"]
+reason = "Built-in adapter discovery imports this class by name from BUILTIN_ADAPTER_IMPORTS."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance._helpers.dense_project"]
+symbols = ["dense_model_path", "dense_test_path"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance._helpers.diagnostic_measurement"]
+symbols = ["measure_diagnostic_compile", "measure_function_name_scan", "measure_position_mapping"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance._helpers.diagnostic_project"]
+symbols = ["write_cascade_project", "write_diagnostic_project", "write_function_name_project", "write_single_model_diagnostic_project", "write_undescribed_project"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance._helpers.varied_benchmark"]
+symbols = ["run_varied_cache_benchmark"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance._helpers.varied_project"]
+symbols = ["write_varied_compile_project"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance._helpers.varied_statistics"]
+symbols = ["varied_project_statistics"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance.main.assert_required_cgroup_memory_limit"]
+symbols = ["assert_required_cgroup_memory_limit"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance.main.read_compile_measurement"]
+symbols = ["read_compile_measurement"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance.main.semantic_compile_fingerprint"]
+symbols = ["semantic_compile_fingerprint"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.cold_compile_performance.models"]
+symbols = ["VariedProjectStatistics"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.compiler_differential._helpers.corpus.emitted_codes"]
+symbols = ["analysis_error_codes", "case_emitted_codes", "discovery_error_codes", "emitted_failure_codes", "inline_compile_codes", "render_error_codes", "unaccounted_inline_codes"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.compiler_differential._helpers.coverage.analysis"]
+symbols = ["analysis_capture_problems"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.compiler_differential._helpers.coverage.discovery"]
+symbols = ["discovery_capture_problems"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.compiler_differential._helpers.coverage.render"]
+symbols = ["render_capture_problems"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.compiler_differential.constants"]
+symbols = ["ANALYSIS_UNREACHABLE_CODES", "DISCOVERY_UNREACHABLE_CODES", "RENDER_UNREACHABLE_CODES"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.compiler_differential.main.failure_cases"]
+symbols = ["failure_cases"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.compiler_differential.main.generate_project"]
+symbols = ["generate_project"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.compiler_differential.models"]
+symbols = ["EmittedCodes"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.delta_compile_series._helpers.outcomes"]
+symbols = ["full_compile_difference"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.delta_compile_series.constants"]
+symbols = ["DELTA_COMPILE_LINE", "DOUBLE_CAST", "DOUBLE_COLUMN", "FLOAT_CAST", "FLOAT_COLUMN", "PROJECT_CONFIG"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.delta_compile_series.main.run_delta_compile_sequence"]
+symbols = ["run_delta_compile_sequence"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.delta_compile_series.main.run_delta_compile_series"]
+symbols = ["run_delta_compile_series"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.delta_compile_series.main.write_delta_compile_project"]
+symbols = ["write_delta_compile_project"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.delta_compile_series.models"]
+symbols = ["DeltaCompileOutcome", "DeltaCompileSequence", "DeltaCompileSeries"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.delta_compile_series.types"]
+symbols = ["SequenceEdit"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.docs_skill._helpers.navigation"]
+symbols = ["list_ordered_page_paths"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.format_performance._helpers.model_project"]
+symbols = ["write_model_format_project"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.native_module_paths._helpers.crates"]
+symbols = ["native_module_path_errors", "scan_native_crates"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.native_module_paths._helpers.host_roots"]
+symbols = ["host_dead_code_roots", "host_targets"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.native_module_paths._helpers.scan"]
+symbols = ["scan_native_source"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.native_module_paths.models"]
+symbols = ["NativeModulePathScan"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.setting_help.main.find_settings_without_snippet"]
+symbols = ["find_settings_without_snippet"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["scripts.setting_help.main.parse_setting_snippet"]
+symbols = ["parse_setting_snippet"]
+reason = "Tests and benchmarks run this tooling; Fensu does not count tests as roots."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.integrations.dagster.constants", "sqlbuild.integrations.rivers.constants"]
+symbols = ["*_EXCLUSIONS", "*_MEMBERS"]
+reason = "Exhaustiveness guards: tests prove every enum member is either a member or an exclusion of each derived set."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.compiler.compile.types"]
+symbols = ["AuditInput", "TypedSqlValueRenderer"]
+reason = "src/sqlbuild/_native.pyi annotates native bindings with these protocols; Fensu does not read stubs."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.adapter.contract._helpers.raw_statement_audit"]
+symbols = ["audit_raw_statement_calls"]
+reason = "A unit test runs this repository audit over the adapter sources."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.clone.main._prephase_row_from_clone_item"]
+symbols = ["prephase_row_from_clone_item"]
+reason = "The clone prephase-row tests use this entry point; production calls the helper directly."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline._helpers.auditing"]
+symbols = ["run_audit_pipeline"]
+reason = "The audit pipeline tests drive this callback-free form; production calls run_audit_pipeline_with_callbacks."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.executor.pipeline._helpers.scenario"]
+symbols = ["_ScenarioPipelineResult"]
+reason = "PEP 695 type-parameter bounds in this module use the protocol; Fensu does not count bounds as references."
+
+[[targets.python.dead_code.roots]]
+modules = ["sqlbuild.rule_engine._helpers.host.module_state"]
+symbols = ["module_state_token"]
+reason = "The custom-rule host tests compute expected module-state tokens with it."
+
 [targets.python.thresholds]
 max_positional_args = 1
 
@@ -52,11 +1143,6 @@ reason = "Native bindings own run-cost allocation, Snowflake cost collection, th
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
-path = "src/sqlbuild/lint/__init__.py"
-reason = "Native bindings own lint entry points, expansion preparation and compiler-verified fix planning; this package retains boundary models, custom-rule and macro callbacks."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
 path = "src/sqlbuild/cli/compile_reuse/__init__.py"
 reason = "Native bindings own the compile reuse check, runtime identity, replay and launch records; this package declares the reuse models and keeps the provider settings and startup inputs the native code reads from the interpreter."
 
@@ -64,6 +1150,26 @@ reason = "Native bindings own the compile reuse check, runtime identity, replay 
 rule = "FFR309"
 path = "src/sqlbuild/microbatches/__init__.py"
 reason = "Native bindings own microbatch coverage and replay projection, event IDs and state SQL; this package keeps the executor's direct event store, the event row codec and the event, scope and projection models it consumes."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/lint/__init__.py"
+reason = "Empty package kept so the tests of the native lint, expansion and fix planning keep their mirrored location; it declares nothing."
+
+[[targets.python.rule_exceptions]]
+rule = "FFL108"
+path = "src/sqlbuild/lint/__init__.py"
+reason = "Empty package kept so the tests of the native lint, expansion and fix planning keep their mirrored location; it declares nothing."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
+path = "src/sqlbuild/presentation/__init__.py"
+reason = "Empty package kept so the tests of the native CLI presentation keep their mirrored location; it declares nothing."
+
+[[targets.python.rule_exceptions]]
+rule = "FFL108"
+path = "src/sqlbuild/presentation/__init__.py"
+reason = "Empty package kept so the tests of the native CLI presentation keep their mirrored location; it declares nothing."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -79,21 +1185,6 @@ reason = "Native bindings own configuration resolution; this package only declar
 rule = "FFR309"
 path = "src/sqlbuild/integrations/dbt/__init__.py"
 reason = "Native bindings own the dbt interop commands, the dbt runner, its JSON event stream and project initialisation; this package keeps the dbt models, types and errors and the PyYAML and Jinja profile glue they call."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/frontier/__init__.py"
-reason = "Native bindings own the compile frontier and the installed code identity; this package only declares the frontier constants, types and errors they read and raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/planner/__init__.py"
-reason = "Native bindings own planning, plan entries, plan output, command plans and the planner value records; this package only declares the plan models, types, constants and errors the executor, integrations and pipeline import."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/migrations/__init__.py"
-reason = "Native bindings own migration planning and state rows; this package only declares the migration models, decisions and table names the executor imports."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -114,11 +1205,6 @@ reason = "Native bindings open planning connections and report their lifecycle; 
 rule = "FFR309"
 path = "src/sqlbuild/errors/contracts/__init__.py"
 reason = "Native bindings read expected-error codes, messages and help; this package only declares the shared and executor input errors callers raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/presentation/__init__.py"
-reason = "Native bindings own CLI styling, terminal width and the transient line coordinator; this package only declares the display options and presentation types callers pass."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
@@ -189,11 +1275,6 @@ reason = "SQL references are scanned natively; the package keeps the reference m
 rule = "FFR309"
 path = "src/sqlbuild/sql_values/exceptions.py"
 reason = "Typed SQL values are normalized and state literals rendered natively; the namespace package keeps the value models, types and the rendering error adapters raise."
-
-[[targets.python.rule_exceptions]]
-rule = "FFR309"
-path = "src/sqlbuild/compiler/lineage/__init__.py"
-reason = "Column lineage is built natively; the package keeps only the lineage models, enums and errors the native graph and its callers share."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR601"

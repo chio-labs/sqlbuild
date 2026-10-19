@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from scripts.native_module_paths._helpers.crates import native_module_path_errors
 from scripts.native_module_paths._helpers.scan import scan_native_source
 
 SOURCE_LABEL: str = "lib.rs"
+FENSU_CONFIG: Path = Path(__file__).parents[5] / "fensu.toml"
 
 
 def native_source_errors(source: str) -> tuple[str, ...]:

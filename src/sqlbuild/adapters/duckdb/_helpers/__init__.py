@@ -1,1 +1,0 @@
-"""DuckDB adapter helpers."""

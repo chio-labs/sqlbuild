@@ -15,7 +15,6 @@ CURSOR_TEXT_FUNCTION_NAME: str = "sqb_cursor_text"
 LOCKED_ERROR_FRAGMENTS: tuple[str, ...] = ("database is locked", "database table is locked")
 MISSING_RELATION_ERROR_FRAGMENT: str = "no such table"
 READ_STATEMENT_KEYWORDS: frozenset[str] = frozenset({"SELECT", "PRAGMA", "EXPLAIN", "VALUES"})
-TRANSACTION_END_KEYWORDS: frozenset[str] = frozenset({"COMMIT", "END", "ROLLBACK"})
 WRITE_GATE_POLL_SECONDS: float = 0.1
 TYPEOF_TYPE_NAMES: dict[str, str] = {
     "integer": "INTEGER",

@@ -34,3 +34,6 @@ DYNAMIC_MODULE_PATHS: tuple[re.Pattern[str], ...] = (
 )
 HOST_MODULE: str = "sqlbuild._native_host"
 HOST_ENTRY: re.Pattern[str] = re.compile(r"\bHostEntry\s*\{\s*name:\s*" + ATTRIBUTE_NAME)
+HOST_ROOT_REASON: str = "Native code resolves these through the sqlbuild._native_host name table."
+MODULE_FILE_ATTRIBUTE: str = "__file__"
+PYTHON_SUFFIX: str = ".py"
