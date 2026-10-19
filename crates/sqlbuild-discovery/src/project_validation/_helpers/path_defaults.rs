@@ -13,11 +13,18 @@ pub(crate) fn validate_path_defaults(facts: &ProjectFacts) -> Result<(), Validat
     if facts.path_default_keys.is_empty() {
         return Ok(());
     }
-    let model_paths: Vec<String> = facts
-        .models
-        .iter()
-        .map(|model| {
-            let path: String = model.file.path.replace('\\', "/");
+    let discovered: Vec<&str> = match &facts.project_model_paths {
+        Some(paths) => paths.iter().map(String::as_str).collect(),
+        None => facts
+            .models
+            .iter()
+            .map(|model| model.file.path.as_str())
+            .collect(),
+    };
+    let model_paths: Vec<String> = discovered
+        .into_iter()
+        .map(|path| {
+            let path: String = path.replace('\\', "/");
             path.strip_prefix(MODELS_PREFIX)
                 .map_or(path.clone(), str::to_owned)
         })

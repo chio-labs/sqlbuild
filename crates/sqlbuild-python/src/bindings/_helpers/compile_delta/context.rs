@@ -103,6 +103,8 @@ pub(crate) struct DeltaInjection {
     pub(crate) project_dir: std::path::PathBuf,
     /// Every model and SQL test file of the whole project, as project-relative POSIX paths.
     pub(crate) source_paths: BTreeSet<String>,
+    /// Every model file of the whole project, which path defaults are matched against.
+    pub(crate) project_model_paths: Vec<String>,
     /// Every model name of the whole project, which references resolve against.
     pub(crate) model_names: Vec<String>,
     /// The whole project's relation facts, injected for relations the delta does not analyse.

@@ -69,6 +69,12 @@ _BODY_EDIT: tuple[str, str, str] = (
     "COALESCE(b.amount, ",
     "COALESCE(b.amount, 1 + ",
 )
+_PATH_DEFAULT_EDIT: tuple[str, str, str] = (
+    "sqlbuild_project.toml",
+    "[defaults]",
+    '[path_defaults."sales000/intermediate/clean/batch00000"]\nmaterialized = "table"\n\n'
+    "[defaults]",
+)
 _REUSE_ROOT: str = "target/cache/compiler-native-v1/project-reuse-v3"
 _EDITED_MODEL: str = (
     "models/sales000/intermediate/clean/batch00000/sales000__int_clean__orders_00003.sql"
@@ -179,6 +185,12 @@ def test_given_seeded_edit_series_when_compiling_each_edit_then_output_matches_f
             expected_delta_line=True,
             json_output=True,
             adapter=_UNTYPED_ADAPTER,
+        ),
+        DeltaCompileFullCopyTestCase(
+            description="a path default matching only unchanged models",
+            stored_edits=(_PATH_DEFAULT_EDIT,),
+            edits=(_BODY_EDIT,),
+            expected_delta_line=True,
         ),
         DeltaCompileFullCopyTestCase(
             description="a SQL test expecting another model falls back after its round",

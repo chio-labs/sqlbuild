@@ -292,6 +292,11 @@ fn lent_injection(
             .map(|model| model.relative_path.clone())
             .chain(image.tests.iter().map(|test| test.relative_path.clone()))
             .collect(),
+        project_model_paths: image
+            .models
+            .iter()
+            .map(|model| model.relative_path.clone())
+            .collect(),
         model_names: image
             .models
             .iter()
