@@ -4,7 +4,8 @@ use std::collections::VecDeque;
 
 use crate::cli_text::models::CliStyle;
 use crate::progress::constants::{
-    FAILED_SUFFIX, KIND_WIDTH, SCENARIO_RESOURCE_PREFIX, SKIPPED_SUFFIX,
+    AUDIT_OUTCOME_STATUSES, AUDIT_RESOURCE_KIND, AUDIT_RESOURCE_PREFIX, FAILED_SUFFIX, KIND_WIDTH,
+    SCENARIO_RESOURCE_PREFIX, SKIPPED_SUFFIX,
 };
 use crate::progress::models::{ProgressEvent, ProgressProjection};
 use crate::terminal_events::models::TerminalRequest;
@@ -17,6 +18,27 @@ fn display_resource_name(resource_id: Option<&str>, resource_name: &str) -> Stri
     };
     let scenario_name: &str = scenario.split(':').next().unwrap_or(scenario);
     format!("{scenario_name}/{resource_name}")
+}
+
+/// `name (target.column)` from an audit identifier `audit:<name>:<kind>[:<target>[:<column>]]`.
+fn audit_display_name(resource_id: Option<&str>, resource_name: &str) -> String {
+    let Some(identity) = resource_id.and_then(|id| id.strip_prefix(AUDIT_RESOURCE_PREFIX)) else {
+        return resource_name.to_owned();
+    };
+    let attached: Vec<&str> = identity.split(':').skip(2).collect();
+    if attached.is_empty() {
+        return resource_name.to_owned();
+    }
+    format!("{resource_name} ({})", attached.join("."))
+}
+
+/// The row name of one resource: audits name their target, scenario resources their scenario.
+fn resource_display_name(kind: &str, resource_id: Option<&str>, resource_name: &str) -> String {
+    if kind == AUDIT_RESOURCE_KIND {
+        audit_display_name(resource_id, resource_name)
+    } else {
+        display_resource_name(resource_id, resource_name)
+    }
 }
 
 /// Remember an attempt, keeping the position of its first sighting.
@@ -84,7 +106,8 @@ pub(crate) fn consume_resource_start(
         use_color: projection.settings.use_color,
     }
     .status("START");
-    let display_name: String = display_resource_name(Some(resource_id), resource_name);
+    let display_name: String =
+        resource_display_name(resource_kind, Some(resource_id), resource_name);
     lines.push(format!(
         "  {counter}{resource_kind:<KIND_WIDTH$}{display_name} {status}"
     ));
@@ -132,10 +155,24 @@ pub(crate) fn render_resource_terminal(
     let Some(resource_kind) = &event.payload.resource_kind else {
         return (projection, None);
     };
+    let audit: bool = resource_kind == AUDIT_RESOURCE_KIND;
+    let recorded: Option<&str> = projection
+        .audit_outcomes
+        .get(attempt_id)
+        .and_then(|outcome| {
+            AUDIT_OUTCOME_STATUSES
+                .iter()
+                .find(|(value, _)| value == outcome)
+                .map(|(_, status)| *status)
+        });
     let status_text: &str = if event.event_type.ends_with(FAILED_SUFFIX) {
         "FAIL"
     } else if event.event_type.ends_with(SKIPPED_SUFFIX) {
         "SKIP"
+    } else if let Some(status) = recorded {
+        status
+    } else if audit {
+        "PASS"
     } else {
         "OK"
     };
@@ -148,7 +185,8 @@ pub(crate) fn render_resource_terminal(
         .duration_ms
         .map(|duration| format!(" {:.2}s", duration / 1000.0))
         .unwrap_or_default();
-    let display_name: String = display_resource_name(event.resource_id.as_deref(), resource_name);
+    let display_name: String =
+        resource_display_name(resource_kind, event.resource_id.as_deref(), resource_name);
     let line: String = format!("  {resource_kind:<KIND_WIDTH$}{display_name} {status}{elapsed}");
     (projection, Some(line))
 }

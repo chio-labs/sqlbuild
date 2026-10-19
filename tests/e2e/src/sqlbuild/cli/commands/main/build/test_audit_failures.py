@@ -11,7 +11,9 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     AuditFailureBuildE2ETestCase,
     MeasurementAuditCliE2ETestCase,
+    StandaloneAuditRowE2ETestCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import seed_audit_files
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
     prepare_inline_project,
     run_sqb,
@@ -265,3 +267,49 @@ def test_given_measurement_audit_when_running_cli_then_outcome_controls_exit_and
     assert result.returncode == test_case.expected_exit_code
     assert test_case.expected_output in result.stdout
     assert "FAIL" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        StandaloneAuditRowE2ETestCase(
+            description="passing seed audits name their column and show PASS",
+            status_values=("placed", "shipped"),
+            expected_exit_code=0,
+            expected_rows=(
+                "  audit     not_null (order_statuses.status_id) PASS",
+                "  audit     accepted_values (order_statuses.status) PASS",
+            ),
+        ),
+        StandaloneAuditRowE2ETestCase(
+            description="a failing warn seed audit shows WARN",
+            status_values=("placed",),
+            expected_exit_code=0,
+            expected_rows=(
+                "  audit     not_null (order_statuses.status_id) PASS",
+                "  audit     accepted_values (order_statuses.status) WARN",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_seed_audits_when_building_then_rows_show_target_and_outcome(
+    test_case: StandaloneAuditRowE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="seed_audit_rows",
+        repo_files=seed_audit_files(test_case.status_values),
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"),
+        project_dir=project_dir,
+    )
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == test_case.expected_exit_code, test_case.description + output
+    assert all(row in result.stdout for row in test_case.expected_rows), (
+        test_case.description + output
+    )

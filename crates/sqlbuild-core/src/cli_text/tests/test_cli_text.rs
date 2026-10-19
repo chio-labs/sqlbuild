@@ -79,6 +79,13 @@ fn given_partial_reasons_when_building_notice_then_groups_by_reason() {
             ),
         },
         NoticeTestCase {
+            description: "one partial model is counted in the singular",
+            reasons: vec![("alpha".to_owned(), vec!["SQL analysis disabled".to_owned()])],
+            expected_notice: Some(
+                "Semantic checks were partial for 1 model:\n  alpha: SQL analysis disabled; enable sql_analysis, then run `sqb compile --no-cache`.",
+            ),
+        },
+        NoticeTestCase {
             description: "complete checks print no notice",
             reasons: Vec::new(),
             expected_notice: None,

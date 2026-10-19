@@ -22,6 +22,9 @@ from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRe
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.main._project_results import project_audit_result_batch
+from sqlbuild.executor.auditing.main._record_audit_progress_outcome import (
+    record_audit_progress_outcome,
+)
 from sqlbuild.executor.auditing.main.audit_result_publication_scope import (
     audit_result_publication_scope,
 )
@@ -579,6 +582,9 @@ def _execute_entry(
             relation_overrides=None,
             run_scope_phase=AuditRunScope.FINAL,
             quality_scope="standalone",
+        )
+        record_audit_progress_outcome(
+            resource_attempt_id=lifecycle.resource_attempt_id, result=result
         )
         if result.outcome == AuditOutcome.ERROR:
             lifecycle.failed()
