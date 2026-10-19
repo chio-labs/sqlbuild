@@ -191,3 +191,10 @@ class ClickHouseRecallFirstReleaseStoreTestCase:
     expected_recorded: list[list[object]]
     expected_notice: str
     expected_heartbeat_columns: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallUnlimitedOutputTestCase:
+    description: str
+    thread_lines: str
+    expected_minimum_bytes: int

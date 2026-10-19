@@ -21,6 +21,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallQueryOutputSinkTestCase,
     ClickHouseRecallRetentionConflictTestCase,
     ClickHouseRecallRetentionTestCase,
+    ClickHouseRecallUnlimitedOutputTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     FIRST_RELEASE_EDITS,
@@ -691,6 +692,40 @@ def test_given_a_first_release_store_when_a_select_insert_user_builds_then_histo
         )
         == test_case.expected_heartbeat_columns
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallUnlimitedOutputTestCase(
+            description="output past the local store's 2 MiB default is kept whole",
+            thread_lines="200000",
+            expected_minimum_bytes=5 * 512 * 1024,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_large_output_when_recorded_in_clickhouse_then_no_output_limit_applies(
+    test_case: ClickHouseRecallUnlimitedOutputTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+    built: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "build", ORDERS_TASK_THREAD_LINES=test_case.thread_lines
+    )
+
+    recalled: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "recall", "output", "last", "--stream", "stdout"
+    )
+
+    assert built.returncode == 0, built.stderr
+    assert len(built.stdout) >= test_case.expected_minimum_bytes
+    assert recalled.stdout == built.stdout
+    assert recalled.stderr == b""
 
 
 if __name__ == "__main__":
