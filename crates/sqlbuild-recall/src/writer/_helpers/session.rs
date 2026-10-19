@@ -238,6 +238,16 @@ impl RecallSession {
     pub fn close(&self) -> DeliverySummary {
         self.begin_close();
         while !self.wait_closed(self.shutdown_timeout) {}
+        if locked(&self.shared.state).finished {
+            let delivery = self
+                .delivery
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(delivery) = delivery {
+                drop(delivery.join());
+            }
+        }
         self.summary()
     }
 

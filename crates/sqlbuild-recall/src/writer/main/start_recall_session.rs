@@ -28,16 +28,25 @@ pub fn start_recall_session(config: SessionConfig) -> RecallSession {
         shared: Arc::clone(&shared),
         shutdown_timeout: config.shutdown_timeout,
         min_severity: severity_rank(&config.diagnostics_min_severity),
+        delivery: Mutex::new(None),
     };
     let spawned = std::thread::Builder::new()
         .name("sqlbuild-recall".to_owned())
         .spawn(move || deliver(&shared, &config));
-    if let Err(error) = spawned {
-        let mut state = locked(&session.shared.state);
-        state.degraded = Some(format!("cannot start the Recall delivery thread: {error}"));
-        state.rejecting = true;
-        state.drop_all();
-        state.finished = true;
+    match spawned {
+        Ok(handle) => {
+            *session
+                .delivery
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(handle);
+        }
+        Err(error) => {
+            let mut state = locked(&session.shared.state);
+            state.degraded = Some(format!("cannot start the Recall delivery thread: {error}"));
+            state.rejecting = true;
+            state.drop_all();
+            state.finished = true;
+        }
     }
     session
 }

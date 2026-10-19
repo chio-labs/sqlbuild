@@ -1,7 +1,8 @@
 //! Writer configuration, delivery streams, priorities and the delivery summary.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::records::models::{DeliveryCounts, InvocationContext, RowEnvelope};
@@ -129,4 +130,6 @@ pub struct RecallSession {
     pub(crate) shared: Arc<Shared>,
     pub(crate) shutdown_timeout: Duration,
     pub(crate) min_severity: usize,
+    /// The delivery thread, joined at close once it has finished so no thread outlives the session.
+    pub(crate) delivery: Mutex<Option<JoinHandle<()>>>,
 }

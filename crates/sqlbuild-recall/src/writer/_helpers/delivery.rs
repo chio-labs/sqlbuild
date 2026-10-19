@@ -311,6 +311,7 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
         };
         drop(maintain_sqlite_store(&store, &request));
     }
+    drop(store);
     let mut state = locked(&shared.state);
     state.finished = true;
     shared.wake.notify_all();
