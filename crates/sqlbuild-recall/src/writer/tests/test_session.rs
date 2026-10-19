@@ -1,19 +1,21 @@
 use std::time::Duration;
 
 use crate::records::models::{OutputStream, RecallValue};
+use crate::schema::models::Table;
 use crate::writer::models::SetupOutcome;
 
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
     artifact_counts, close_under_held_lock, event_counts, output_stored_while_running,
-    recorded_session, replaced_session, session_on_corrupt_store,
+    partially_inserted, recorded_session, replaced_session, session_on_corrupt_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
     ArtifactSizeTestCase, CorruptStoreTestCase, EventBuildTestCase, HeldLockTestCase,
-    RecordedSession, ReplacementTestCase, SessionTestCase, StoredWhileRunningTestCase,
+    PartialInsertTestCase, RecordedSession, ReplacementTestCase, SessionTestCase,
+    StoredWhileRunningTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -233,6 +235,31 @@ fn given_an_output_replacement_when_closed_then_published_filtered_and_failed_ch
                 test_case.expected_transcript.to_vec(),
                 test_case.expected_accounting
             ),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_one_table_of_a_batch_failing_when_written_then_only_its_records_count_as_failed() {
+    let test_cases = [
+        PartialInsertTestCase {
+            description: "a refused output insert fails the output, not the events",
+            failing: Table::Output,
+            expected_counts: [(1, 1, 0), (1, 0, 1)],
+        },
+        PartialInsertTestCase {
+            description: "a refused heartbeat insert fails no record",
+            failing: Table::Heartbeats,
+            expected_counts: [(1, 1, 0), (1, 1, 0)],
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            partially_inserted(test_case.failing),
+            test_case.expected_counts,
             "{}",
             test_case.description
         );

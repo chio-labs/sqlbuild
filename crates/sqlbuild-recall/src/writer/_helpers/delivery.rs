@@ -193,6 +193,14 @@ fn heartbeat(config: &SessionConfig, now: SystemTime) -> RecallRow {
     )
 }
 
+/// The stream whose records are stored in `table`; `None` for the store's own bookkeeping.
+pub(crate) fn record_stream(table: Table) -> Option<DeliveryStream> {
+    match table {
+        Table::Heartbeats | Table::Delivery | Table::Meta | Table::Conflicts => None,
+        other => Some(stream_of(other)),
+    }
+}
+
 pub(crate) fn stream_of(table: Table) -> DeliveryStream {
     match table {
         Table::Output => DeliveryStream::Output,

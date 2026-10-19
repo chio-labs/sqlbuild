@@ -14,7 +14,7 @@ use crate::records::models::{
     RowEnvelope,
 };
 use crate::store::models::InsertOutcome;
-use crate::writer::_helpers::delivery::stream_of;
+use crate::writer::_helpers::delivery::{record_stream, stream_of};
 use crate::writer::_helpers::tail::{TailRing, TailSegment};
 use crate::writer::constants::{QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
 use crate::writer::models::{DeliveryStream, Priority};
@@ -449,7 +449,7 @@ impl WriterState {
         }
     }
 
-    /// Count a written batch as delivered, less conflicts, or a failed one as failed.
+    /// Count a written batch as delivered, less conflicts and records of tables whose insert failed, or a failed one as failed.
     pub(crate) fn account(
         &mut self,
         batch: &[DeliveryStream],
@@ -457,8 +457,20 @@ impl WriterState {
     ) {
         match outcome {
             Ok(outcome) => {
+                let failed: Vec<DeliveryStream> = outcome
+                    .failed
+                    .iter()
+                    .filter_map(|table| record_stream(*table))
+                    .collect();
                 for stream in batch {
-                    self.counts_mut(*stream).delivered += 1;
+                    if failed.contains(stream) {
+                        self.counts_mut(*stream).failed += 1;
+                    } else {
+                        self.counts_mut(*stream).delivered += 1;
+                    }
+                }
+                if let Some(reason) = &outcome.failure {
+                    self.degraded.get_or_insert_with(|| reason.clone());
                 }
                 for conflict in &outcome.conflicts {
                     let stream = stream_of(conflict.table);

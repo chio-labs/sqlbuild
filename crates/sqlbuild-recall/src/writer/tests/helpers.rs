@@ -6,6 +6,7 @@ use crate::records::main::invocation_row::invocation_row;
 use crate::records::models::{
     DeliveryCounts, InvocationContext, OutputStream, RecallValue, RowEnvelope,
 };
+use crate::schema::models::Table;
 use crate::store::main::open_sqlite_store::open_sqlite_store;
 use crate::store::main::query_store::query_store;
 use crate::store::main::read_output_transcript::read_output_transcript;
@@ -15,7 +16,7 @@ use crate::writer::main::start_recall_session::start_recall_session;
 use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, SessionConfig, SessionStore, SetupOutcome,
 };
-use crate::writer::tests::test_types::{PrefixReplacement, RecordedSession};
+use crate::writer::tests::test_types::{PartialStore, PrefixReplacement, RecordedSession};
 
 /// The envelope of invocation `invocation_id`.
 pub(crate) fn envelope(invocation_id: &str) -> RowEnvelope {
@@ -371,4 +372,25 @@ pub(crate) fn replaced_session(
     )
     .expect("the query is valid");
     (transcript.data, facts.rows)
+}
+
+/// `(accepted, delivered, failed)` of events and output after one batch whose insert into `failing` fails.
+pub(crate) fn partially_inserted(failing: Table) -> [(u64, u64, u64); 2] {
+    let session = start_recall_session(SessionConfig {
+        store: SessionStore::Hosted(Arc::new(PartialStore { failing })),
+        ..config(PathBuf::from("unused"), "partial")
+    });
+    session.append_output(OutputStream::Stdout, b"printed\n");
+    session
+        .publish_event(
+            r#"{"event_id":"e1","event_type":"invocation_completed","schema_version":2,
+            "producer":"sqlbuild","producer_version":"1","occurred_at":"2026-10-19T00:00:01.000000Z",
+            "invocation_id":"partial","invocation_sequence":1,"payload":{"command":"build"}}"#,
+        )
+        .expect("the event is valid");
+    let summary = session.close();
+    [DeliveryStream::Events, DeliveryStream::Output].map(|stream| {
+        let counts = stream_counts(&summary, stream);
+        (counts.accepted, counts.delivered, counts.failed)
+    })
 }

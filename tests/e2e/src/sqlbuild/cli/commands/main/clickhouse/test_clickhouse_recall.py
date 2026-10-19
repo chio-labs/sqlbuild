@@ -14,6 +14,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallExpiryTestCase,
     ClickHouseRecallLimitedWriterTestCase,
     ClickHouseRecallOutputTestCase,
+    ClickHouseRecallPartialInsertTestCase,
     ClickHouseRecallPermissionTestCase,
     ClickHouseRecallRetentionConflictTestCase,
     ClickHouseRecallRetentionTestCase,
@@ -479,6 +480,53 @@ def test_given_a_store_from_the_printed_ddl_when_a_select_insert_user_builds_the
     assert [built.returncode for built in builds] == [0 for _ in builds]
     assert [b"Recall" in built.stderr for built in builds] == [False for _ in builds]
     assert recorded == test_case.expected_recorded
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallPartialInsertTestCase(
+            description="refused output inserts fail the output and leave the events delivered",
+            revoked_inserts=("recall_output",),
+            expected_delivery=[["events", 1, 0], ["output", 0, 1]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_one_refused_table_when_building_then_only_its_records_count_as_failed(
+    test_case: ClickHouseRecallPartialInsertTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    creator: Path = write_recall_project(
+        parent=tmp_path / "creator", config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(creator, "build").returncode == 0
+
+    with limited_user(
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        revoked_inserts=test_case.revoked_inserts,
+    ) as writer:
+        built: subprocess.CompletedProcess[bytes] = run(
+            write_recall_project(
+                parent=tmp_path / "writer", config=writer, database=recall_database
+            ),
+            "build",
+        )
+
+    assert built.returncode == 0, built.stderr
+    assert (
+        recall_rows(
+            creator,
+            "SELECT stream, toUInt8(delivered = accepted), toUInt8(failed = accepted) "
+            "FROM recall_delivery FINAL WHERE stream IN ('events', 'output') AND invocation_id = "
+            "(SELECT invocation_id FROM invocations ORDER BY invocation_started_at DESC LIMIT 1) "
+            "ORDER BY stream",
+        )
+        == test_case.expected_delivery
+    )
 
 
 if __name__ == "__main__":

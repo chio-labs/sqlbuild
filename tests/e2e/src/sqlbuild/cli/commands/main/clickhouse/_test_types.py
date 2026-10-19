@@ -161,3 +161,10 @@ class ClickHouseRecallLimitedWriterTestCase:
     description: str
     between_builds: tuple[str, ...]
     expected_recorded: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallPartialInsertTestCase:
+    description: str
+    revoked_inserts: tuple[str, ...]
+    expected_delivery: list[list[object]]

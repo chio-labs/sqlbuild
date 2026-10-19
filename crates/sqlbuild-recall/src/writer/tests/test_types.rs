@@ -1,4 +1,10 @@
-use crate::records::models::{OutputChunk, OutputStream, RecallValue};
+use std::time::{Duration, Instant};
+
+use crate::records::models::{OutputChunk, OutputStream, RecallRow, RecallValue, RowEnvelope};
+use crate::schema::models::Table;
+use crate::store::errors::StoreError;
+use crate::store::models::InsertOutcome;
+use crate::store::types::{RecallStore, RecallStoreOpener};
 use crate::writer::models::{DeliveryStream, Priority, ReplacedOutput, SetupOutcome};
 use crate::writer::types::OutputReplacement;
 
@@ -105,5 +111,53 @@ impl OutputReplacement for PrefixReplacement {
         } else {
             ReplacedOutput::Failed
         }
+    }
+}
+
+pub(crate) struct PartialInsertTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) failing: Table,
+    /// `(accepted, delivered, failed)` of the events and output streams.
+    pub(crate) expected_counts: [(u64, u64, u64); 2],
+}
+
+/// A hosted store whose insert into `failing` fails while the batch's other tables are written.
+#[derive(Debug)]
+pub(crate) struct PartialStore {
+    pub(crate) failing: Table,
+}
+
+impl RecallStore for PartialStore {
+    fn insert(&self, rows: &[RecallRow], _give_up: Instant) -> Result<InsertOutcome, StoreError> {
+        let failing: bool = rows.iter().any(|row| row.table == self.failing);
+        Ok(InsertOutcome {
+            failed: if failing {
+                vec![self.failing]
+            } else {
+                Vec::new()
+            },
+            failure: failing.then(|| "the insert was refused".to_owned()),
+            ..InsertOutcome::default()
+        })
+    }
+}
+
+impl RecallStoreOpener for PartialStore {
+    fn open(
+        &self,
+        _envelope: &RowEnvelope,
+        _give_up: Instant,
+    ) -> Result<Box<dyn RecallStore>, StoreError> {
+        Ok(Box::new(Self {
+            failing: self.failing,
+        }))
+    }
+
+    fn batch_rows(&self) -> usize {
+        1_000
+    }
+
+    fn batch_window(&self) -> Duration {
+        Duration::from_millis(10)
     }
 }

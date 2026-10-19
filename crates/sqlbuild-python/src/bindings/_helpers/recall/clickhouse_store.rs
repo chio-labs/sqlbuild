@@ -386,10 +386,22 @@ impl RecallStore for ClickHouseStore {
                 &stored,
                 (&format_timestamp(now), &format_timestamp(refresh_before)),
             );
+            let mut outcome: InsertOutcome = plan.outcome;
             for (table, table_rows) in &plan.inserts {
-                self.write(py, *table, table_rows, now)?;
+                match self.write(py, *table, table_rows, now) {
+                    Ok(()) => {}
+                    Err(error) if error.kind == StoreErrorKind::Busy => return Err(error),
+                    Err(error) => {
+                        outcome.failed.push(*table);
+                        outcome.failure.get_or_insert(error.message);
+                    }
+                }
             }
-            Ok(plan.outcome)
+            let failed: &[Table] = &outcome.failed;
+            outcome
+                .delivered
+                .retain(|(table, _)| !failed.contains(table));
+            Ok(outcome)
         })
     }
 
