@@ -580,7 +580,8 @@ when the test connections close.
 | PostgreSQL | SQL function in the session's `pg_temp` schema, called as `pg_temp.<name>` |
 | Snowflake | `CREATE TEMPORARY FUNCTION __sqb_test__<name>` in the session's current schema, for SQL and Python UDFs and table functions |
 | Databricks | `CREATE TEMPORARY FUNCTION __sqb_test__<name>` for SQL functions |
-| BigQuery, SQL Server | Not supported; tests call the built function |
+| BigQuery, SQL Server, ClickHouse | Not supported; tests call the built function (ClickHouse functions are server-wide) |
+| SQLite | Not applicable; SQLite has no SQL functions |
 
 When an adapter cannot create a copy (a Databricks Python UDF, for example), or the warehouse
 refuses to create it (the role lacks permission, or the Snowflake session has no current schema),
