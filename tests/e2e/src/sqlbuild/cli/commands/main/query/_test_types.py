@@ -32,3 +32,33 @@ class QueryExecutionErrorCliTestCase:
     command: tuple[str, ...]
     expected_stderr_fragment: str
     expected_returncode: int = 2
+
+
+@dataclass(frozen=True)
+class QueryUnrelatedProjectFaultTestCase:
+    description: str
+    repo_files: dict[str, str]
+    expected_rows: tuple[dict[str, int], ...] = ({"order_id": 7},)
+
+
+@dataclass(frozen=True)
+class QueryProjectDiscoveryTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_project_discoveries: int
+
+
+@dataclass(frozen=True)
+class QueryTargetConnectionTestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class QueryConnectionConfigErrorTestCase:
+    description: str
+    project_toml: str
+    expected_stderr_fragment: str
+    expected_returncode: int = 1
