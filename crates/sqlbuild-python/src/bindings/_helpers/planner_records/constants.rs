@@ -629,6 +629,7 @@ const R_MODEL_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("snapshot_schema_change", FieldDefault::None),
         FieldSpec::new("table_type", FieldDefault::Text("transient")),
         FieldSpec::new("physical_storage", FieldDefault::EmptyDict),
+        FieldSpec::new("expected_output_columns", FieldDefault::None),
         FieldSpec::new("on_schema_change", FieldDefault::None),
         FieldSpec::new("type_enforcement", FieldDefault::False),
         FieldSpec::new("declared_columns", FieldDefault::EmptyTuple),

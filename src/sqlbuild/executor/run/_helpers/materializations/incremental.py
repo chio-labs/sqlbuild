@@ -37,12 +37,12 @@ from sqlbuild.executor.run._helpers.execution.hook_phases import (
     run_post_hook_phase,
     run_pre_hook_phase,
 )
-from sqlbuild.executor.run._helpers.execution.inferred_types import inferred_column_types
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
 from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
+from sqlbuild.executor.run._helpers.execution.table_config import model_output_config
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.contracts import validate_runtime_contract
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
@@ -517,7 +517,7 @@ def _prepare_delta_relation(
                 connection=connection,
                 destination=delta_qualified,
                 sql=preparation.resolved_sql,
-                config={"inferred_column_types": inferred_column_types(context.entry)},
+                config=model_output_config(context.entry),
                 statement_recorder=statement_recorder,
             )
             lifecycle.completed(metadata={"changed_count": 1})

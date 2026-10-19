@@ -84,3 +84,12 @@ class ClickHouseWaffleShopE2ETestCase:
     expected_return_codes: tuple[int, int, int]
     expected_summary_fragments: tuple[str, str, str]
     expected_row_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class ClickHouseOutputColumnNameE2ETestCase:
+    description: str
+    selected_order_id: str
+    expected_return_code: int
+    expected_output_fragments: tuple[str, ...]
+    expected_columns: tuple[tuple[object, ...], ...]

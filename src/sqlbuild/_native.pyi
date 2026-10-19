@@ -15711,6 +15711,7 @@ class ModelPlanEntry(NativeRecord):
     snapshot_schema_change: str | None
     table_type: str
     physical_storage: dict[str, object]
+    expected_output_columns: tuple[str, ...] | None
     on_schema_change: OnSchemaChange | None
     type_enforcement: bool
     declared_columns: tuple[ColumnInfo, ...]
@@ -15796,6 +15797,7 @@ class ModelPlanEntry(NativeRecord):
         snapshot_schema_change: str | None = ...,
         table_type: str = ...,
         physical_storage: dict[str, object] = ...,
+        expected_output_columns: tuple[str, ...] | None = ...,
         on_schema_change: OnSchemaChange | None = ...,
         type_enforcement: bool = ...,
         declared_columns: tuple[ColumnInfo, ...] = ...,

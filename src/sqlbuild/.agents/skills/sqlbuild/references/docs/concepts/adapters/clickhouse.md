@@ -172,7 +172,7 @@ ClickHouse returns a type's default value (`0`, the epoch, an empty string) from
 
 ## SQL differences to watch
 
-- In a query that joins three or more tables, ClickHouse names a selected column such as `c.customer_id` literally `c.customer_id` when another joined table also has a `customer_id`. Alias such columns (`c.customer_id AS customer_id`) so the table gets the column name other warehouses give it.
+- In a query that joins three or more tables, ClickHouse names a selected column such as `c.customer_id` literally `c.customer_id` when another joined table also has a `customer_id`. Alias such columns (`c.customer_id AS customer_id`) so the table gets the column name other warehouses give it. When SQL analysis knows the model's output columns, a build that produces such a name fails with `A711` naming the column and the alias to add.
 - `CURRENT_TIMESTAMP` needs parentheses: write `CURRENT_TIMESTAMP()` or `now()`.
 
 ## Limits

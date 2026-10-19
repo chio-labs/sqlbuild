@@ -12,7 +12,7 @@ from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 from sqlbuild._native import (
     SeedCsvSettings,
@@ -86,6 +86,7 @@ from sqlbuild.adapter.relations.main.get_columns_for_relations import (
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
+from sqlbuild.adapters.clickhouse._helpers.output_columns import alias_qualified_columns
 from sqlbuild.adapters.clickhouse._helpers.partition_rewrite import (
     artifact_relation,
     generation_comment,
@@ -113,10 +114,13 @@ from sqlbuild.adapters.clickhouse.constants import (
     DEFAULT_HTTPS_PORT,
     DSN_OPTION,
     EXCHANGE_UNSUPPORTED_CODES,
+    EXPECTED_OUTPUT_COLUMNS_CONFIG_KEY,
     GENERATION_COMMENT_PREFIX,
     MAX_IDENTIFIER_LENGTH,
     MAX_QUERY_SIZE_BYTES,
     MINIMUM_SERVER_VERSION,
+    MODEL_NAME_CONFIG_KEY,
+    OUTPUT_COLUMN_NAME_CODE,
     PHYSICAL_STORAGE_CONFIG_KEY,
     RELATION_NOT_FOUND_CODES,
     RELATION_SEPARATOR,
@@ -2155,6 +2159,45 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         stmt: str
         for stmt in statements:
             self.execute(connection=connection, sql=stmt)
+        expected: object = (config or {}).get(EXPECTED_OUTPUT_COLUMNS_CONFIG_KEY)
+        if expected:
+            self._check_output_column_names(
+                connection=connection,
+                destination=destination,
+                model_name=str((config or {}).get(MODEL_NAME_CONFIG_KEY) or destination),
+                expected=tuple(str(name) for name in cast(tuple[object, ...], expected)),
+            )
+
+    def _check_output_column_names(
+        self, *, connection: Any, destination: str, model_name: str, expected: tuple[str, ...]
+    ) -> None:
+        """Refuse a table whose columns ClickHouse named ``alias.column`` instead of ``column``."""
+
+        renamed: tuple[tuple[str, str], ...] = alias_qualified_columns(
+            actual=tuple(
+                column.name
+                for column in self.describe_relation(connection=connection, relation=destination)
+            ),
+            expected=expected,
+        )
+        if not renamed:
+            return
+        self.execute(connection=connection, sql=f"DROP TABLE IF EXISTS {destination}")
+        pairs: str = ", ".join(
+            f"'{produced}' instead of '{wanted}'" for produced, wanted in renamed
+        )
+        aliases: str = ", ".join(f"{produced} AS {wanted}" for produced, wanted in renamed)
+        raise AdapterUserError(
+            message=(
+                f"model '{model_name}' produced columns named after their table alias on "
+                f"ClickHouse: {pairs}"
+            ),
+            code=OUTPUT_COLUMN_NAME_CODE,
+            help=(
+                "ClickHouse names a selected alias.column after the alias when another joined "
+                f"table has the same column; alias it in the model: {aliases}"
+            ),
+        )
 
     def create_view_as(
         self,

@@ -308,6 +308,20 @@ fn logical_ddl<'py>(
     Ok(statements.join(DDL_SEPARATOR))
 }
 
+/// The output column names SQL analysis inferred for the model, when it inferred them.
+fn expected_output_columns<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    let inferred: Bound<'py, PyAny> = native_field(model, "inferred_columns")?;
+    if inferred.is_none() {
+        return Ok(none(py));
+    }
+    let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
+    for column in inferred.try_iter()? {
+        names.push(native_field(&column?, "name")?);
+    }
+    Ok(PyTuple::new(py, names)?.into_any())
+}
+
 /// The model's physical table layout, refused on adapters whose tables have none.
 fn storage_fields<'py>(
     request: &ModelEntryDecisions<'py>,
@@ -668,6 +682,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     entry.set_item("merge_exclude_columns", merge_exclude)?;
     entry.set_item("table_type", table_type)?;
     storage_fields(request, &values, &entry)?;
+    entry.set_item("expected_output_columns", expected_output_columns(model)?)?;
     entry.set_item("on_schema_change", policy)?;
     entry.set_item("type_enforcement", enforcement)?;
     contract_fields(model, &values, &entry)?;

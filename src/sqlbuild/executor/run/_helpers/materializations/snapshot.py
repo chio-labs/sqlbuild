@@ -44,12 +44,12 @@ from sqlbuild.executor.run._helpers.execution.hook_phases import (
     run_post_hook_phase,
     run_pre_hook_phase,
 )
-from sqlbuild.executor.run._helpers.execution.inferred_types import inferred_column_types
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
 from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
+from sqlbuild.executor.run._helpers.execution.table_config import model_output_config
 from sqlbuild.executor.run._helpers.materializations.full_refresh import (
     promote_full_refresh_rebuild,
     relation_exists,
@@ -192,7 +192,7 @@ def execute_snapshot_entry(  # noqa: PLR0915
                     connection=connection,
                     destination=delta_qualified,
                     sql=entry.resolved_sql,
-                    config={"inferred_column_types": inferred_column_types(entry)},
+                    config=model_output_config(entry),
                     statement_recorder=statement_recorder,
                 )
                 lifecycle.completed(metadata={"changed_count": 1})

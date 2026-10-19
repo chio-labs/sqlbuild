@@ -72,3 +72,11 @@ class SessionSettingConflictTestCase:
     settings: dict[str, object]
     expected_code: str
     expected_message: str
+
+
+@dataclass(frozen=True)
+class AliasQualifiedColumnsTestCase:
+    description: str
+    actual: tuple[str, ...]
+    expected: tuple[str, ...]
+    expected_pairs: tuple[tuple[str, str], ...]
