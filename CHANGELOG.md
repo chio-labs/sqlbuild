@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.160.0](https://github.com/chio-labs/sqlbuild/compare/v0.159.0...v0.160.0) (2026-10-19)
+
+
+### Features
+
+* add a ClickHouse adapter and fix CLI rename, errors and test functions ([#1152](https://github.com/chio-labs/sqlbuild/issues/1152)) ([7d3b43a](https://github.com/chio-labs/sqlbuild/commit/7d3b43a760c15aa6a5b4d82e8dbab4e267c59a8c))
+
 ## [0.159.0](https://github.com/chio-labs/sqlbuild/compare/v0.158.2...v0.159.0) (2026-10-19)
 
 
