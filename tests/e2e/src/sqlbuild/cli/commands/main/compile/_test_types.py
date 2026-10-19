@@ -539,6 +539,17 @@ class SetOperationLifecycleTestCase:
 
 
 @dataclass(frozen=True)
+class FromQuerySetOperationTestCase:
+    description: str
+    adapter: str
+    models: tuple[SetOperationModel, ...]
+    expected_column_counts: tuple[tuple[str, int], ...]
+    lineage_target: str
+    expected_lineage: tuple[tuple[str, str, str], ...]
+    expected_rule_summary: str
+
+
+@dataclass(frozen=True)
 class SetOperationArityMismatchTestCase:
     description: str
     models: tuple[SetOperationModel, ...]
