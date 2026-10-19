@@ -60,3 +60,10 @@ pub(crate) struct QuarantineTestCase {
     /// Whether the move was made, copies moved aside, and whether a SQLite store is at the path.
     pub(crate) expected_outcome: (bool, usize, bool),
 }
+
+pub(crate) struct TruncationNoteTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) omitted: u64,
+    pub(crate) kept: (u64, u64),
+    pub(crate) expected_note: &'static str,
+}

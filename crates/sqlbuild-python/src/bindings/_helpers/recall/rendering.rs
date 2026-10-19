@@ -159,7 +159,9 @@ fn relation_note(name: &str) -> &'static str {
         }
         "statements" => "one row per statement; outcome no_terminal means no terminal fact arrived",
         "audit_results" => "one row per evaluated audit",
-        "output_invocations" => "output completeness per invocation: gaps, drops, filtering, flush",
+        "output_invocations" => {
+            "output completeness per invocation: gaps, drops, filtering, truncation, flush"
+        }
         "output_tail" => "the last 200 output chunks of each invocation as text",
         "output_transcripts" => "exact stdout, stderr and combined bytes per invocation",
         "events" => "every lifecycle fact",

@@ -125,7 +125,9 @@ const OUTPUT_INVOCATIONS: &str = "WITH received AS (
         SUM(CASE WHEN stream = 'stdout' THEN byte_count ELSE 0 END) AS stdout_bytes,
         SUM(CASE WHEN stream = 'stderr' THEN byte_count ELSE 0 END) AS stderr_bytes,
         MAX(sequence) AS max_sequence,
-        SUM(dropped_before) AS queue_drops
+        SUM(dropped_before) AS queue_drops,
+        SUM(COALESCE(omitted_sequences, 1)) AS spans,
+        SUM(COALESCE(omitted_bytes, 0)) AS truncated_bytes
     FROM recall_output
     GROUP BY invocation_id
 ),
@@ -144,9 +146,10 @@ counted AS (
         COALESCE(received.bytes, 0) AS bytes,
         COALESCE(received.stdout_bytes, 0) AS stdout_bytes,
         COALESCE(received.stderr_bytes, 0) AS stderr_bytes,
+        COALESCE(received.truncated_bytes, 0) AS truncated_bytes,
         received.max_sequence,
         MAX(
-            COALESCE(received.max_sequence + 1 - received.chunks, 0),
+            COALESCE(received.max_sequence + 1 - received.spans, 0),
             COALESCE(delivery.accepted, 0) - COALESCE(received.chunks, 0)
         ) AS missing_sequences,
         MAX(COALESCE(received.queue_drops, 0), COALESCE(delivery.dropped, 0)) AS reported_drops,
@@ -168,6 +171,7 @@ SELECT
     bytes,
     stdout_bytes,
     stderr_bytes,
+    truncated_bytes,
     max_sequence,
     missing_sequences,
     reported_drops,
@@ -176,6 +180,7 @@ SELECT
     filter_active,
     flush_complete,
     CASE
+        WHEN missing_sequences = 0 AND truncated_bytes > 0 THEN 'truncated'
         WHEN missing_sequences = 0 THEN NULL
         WHEN filtered >= missing_sequences THEN 'filtered'
         WHEN filtered + reported_drops + failed >= missing_sequences THEN 'dropped'
@@ -183,7 +188,8 @@ SELECT
     END AS gap_reason,
     CASE
         WHEN delivery_reported AND flush_complete = 1 AND missing_sequences = 0
-            AND reported_drops = 0 AND filtered = 0 AND failed = 0 AND chunks >= delivered
+            AND reported_drops = 0 AND filtered = 0 AND failed = 0 AND truncated_bytes = 0
+            AND chunks >= delivered
         THEN 1 ELSE 0
     END AS complete
 FROM counted";

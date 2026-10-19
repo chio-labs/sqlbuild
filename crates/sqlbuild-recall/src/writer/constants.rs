@@ -27,5 +27,3 @@ pub const MINIMUM_MAINTENANCE_MS: u64 = 200;
 pub const MAX_ARTIFACT_BYTES: usize = 4 * 1024 * 1024;
 /// What a JSON scalar counts toward the queue's byte capacity.
 pub const JSON_SCALAR_BYTES: usize = 8;
-/// Output of each stream recorded per invocation; later output is counted as filtered.
-pub const OUTPUT_STREAM_CAPTURE_BYTES: usize = 1024 * 1024;

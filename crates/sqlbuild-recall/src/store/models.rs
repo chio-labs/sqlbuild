@@ -114,6 +114,7 @@ pub struct DescribedRelation {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OutputTranscript {
     pub invocation_id: String,
+    /// The recorded bytes in order, with a note line where output past `max_output_bytes` was left out.
     pub data: Vec<u8>,
     pub status: Option<String>,
     pub missing_sequences: i64,
@@ -122,4 +123,12 @@ pub struct OutputTranscript {
     pub flush_complete: bool,
     pub complete: bool,
     pub gap_reason: Option<String>,
+}
+
+/// One stored output row, as the transcript needs it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StoredChunk {
+    pub(crate) stream: String,
+    pub(crate) data: Vec<u8>,
+    pub(crate) omitted_bytes: Option<i64>,
 }

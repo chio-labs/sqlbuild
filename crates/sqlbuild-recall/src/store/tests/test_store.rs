@@ -1,5 +1,6 @@
 use crate::records::main::invocation_row::invocation_row;
 use crate::records::models::{InvocationContext, OutputStream, RecallValue};
+use crate::store::_helpers::truncation::truncation_note;
 use crate::store::errors::StoreErrorKind;
 use crate::store::main::describe_store::describe_store;
 use crate::store::main::query_store::query_store;
@@ -16,6 +17,7 @@ use crate::store::tests::helpers::{
 use crate::store::tests::test_types::{LockedDirectoryTestCase, QuarantineTestCase};
 use crate::store::tests::test_types::{
     NewerSchemaTestCase, QueryTestCase, ResolveInvocationTestCase, TranscriptTestCase,
+    TruncationNoteTestCase,
 };
 
 #[test]
@@ -237,6 +239,35 @@ fn given_a_stale_observation_when_quarantining_then_only_the_observed_file_is_mo
         assert_eq!(
             quarantine_after(test_case.race),
             test_case.expected_outcome,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_truncated_output_when_noted_then_sizes_read_naturally() {
+    let test_cases = [
+        TruncationNoteTestCase {
+            description: "the default limit keeps equal halves",
+            omitted: 23_600_000,
+            kept: (1_048_576, 1_048_576),
+            expected_note: "\u{2026} 23.6 MB of stdout not recorded (kept the first and last \
+                            1 MiB). Raise [recall] max_output_bytes to keep more.\n",
+        },
+        TruncationNoteTestCase {
+            description: "an odd limit keeps one more byte at the start",
+            omitted: 999,
+            kept: (3, 2),
+            expected_note: "\u{2026} 999 bytes of stdout not recorded (kept the first 3 bytes \
+                            and the last 2 bytes). Raise [recall] max_output_bytes to keep more.\n",
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            truncation_note("stdout", test_case.omitted, test_case.kept),
+            test_case.expected_note,
             "{}",
             test_case.description
         );

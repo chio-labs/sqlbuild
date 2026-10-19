@@ -2,6 +2,8 @@
 
 use std::path::PathBuf;
 
+use crate::settings::constants::DEFAULT_SQLITE_MAX_OUTPUT_BYTES;
+
 /// Where Recall writes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StoreLocation {
@@ -9,6 +11,17 @@ pub enum StoreLocation {
     Sqlite { path: PathBuf },
     /// A connection whose adapter this build cannot write Recall rows to yet.
     Unsupported { connection: String, adapter: String },
+}
+
+impl StoreLocation {
+    /// The per-stream output limit when none is configured: bounded for the local file, which every command writes; `None` records everything.
+    #[must_use]
+    pub fn default_max_output_bytes(&self) -> Option<u64> {
+        match self {
+            Self::Sqlite { .. } => Some(DEFAULT_SQLITE_MAX_OUTPUT_BYTES),
+            Self::Unsupported { .. } => None,
+        }
+    }
 }
 
 /// The effective settings: target, store and policies.
@@ -23,6 +36,8 @@ pub struct RecallSettings {
     pub retention_days: u32,
     pub shutdown_timeout_ms: u64,
     pub diagnostics_min_severity: String,
+    /// Bytes of each output stream recorded, half from its start and half from its end; `None` records everything.
+    pub max_output_bytes: Option<u64>,
     pub project_name: Option<String>,
     pub project_adapter: Option<String>,
     pub destination_database: Option<String>,

@@ -1,7 +1,7 @@
 //! `recall_section`: validate one Recall settings table.
 
 use crate::models::ConfigValue;
-use crate::recall::_helpers::values::{non_empty, retention_days, timeout_ms};
+use crate::recall::_helpers::values::{non_empty, output_bytes, retention_days, timeout_ms};
 use crate::recall::constants::{MAX_RETENTION_DAYS, RECALL_KEYS, RECALL_SEVERITIES};
 use crate::recall::models::RecallSection;
 
@@ -36,6 +36,14 @@ pub fn recall_section(value: &ConfigValue, label: &str) -> Result<RecallSection,
                     format!(
                         "{label}.shutdown_timeout must be a duration such as '3s' or '500ms', \
                          at most 600s"
+                    )
+                })?);
+            }
+            "max_output_bytes" => {
+                section.max_output_bytes = Some(output_bytes(value).ok_or_else(|| {
+                    format!(
+                        "{label}.max_output_bytes must be a whole number of bytes, such as \
+                         2097152, or 0 to record all output"
                     )
                 })?);
             }

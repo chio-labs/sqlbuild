@@ -57,7 +57,7 @@ const INVOCATION_COLUMNS: [ColumnSpec; 19] = [
     ColumnSpec::optional("argv_digest", ColumnType::Text),
 ];
 
-const OUTPUT_COLUMNS: [ColumnSpec; 9] = [
+const OUTPUT_COLUMNS: [ColumnSpec; 11] = [
     ColumnSpec::required("record_id", ColumnType::Text),
     ColumnSpec::required("sequence", ColumnType::Integer),
     ColumnSpec::required("stream", ColumnType::Text),
@@ -67,6 +67,8 @@ const OUTPUT_COLUMNS: [ColumnSpec; 9] = [
     ColumnSpec::required("byte_count", ColumnType::Integer),
     ColumnSpec::optional("priority", ColumnType::Text),
     ColumnSpec::required("dropped_before", ColumnType::Integer),
+    ColumnSpec::optional("omitted_bytes", ColumnType::Integer),
+    ColumnSpec::optional("omitted_sequences", ColumnType::Integer),
 ];
 
 const EVENT_COLUMNS: [ColumnSpec; 29] = [

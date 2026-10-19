@@ -8,4 +8,6 @@ pub struct RecallSection {
     pub retention_days: Option<u32>,
     pub shutdown_timeout_ms: Option<u64>,
     pub diagnostics_min_severity: Option<String>,
+    /// Bytes of each output stream to record; `Some(0)` records everything.
+    pub max_output_bytes: Option<u64>,
 }

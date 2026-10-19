@@ -227,7 +227,9 @@ received AS (
         sumIf(byte_count, stream = 'stdout') AS stdout_bytes,
         sumIf(byte_count, stream = 'stderr') AS stderr_bytes,
         max(sequence) AS max_sequence,
-        sum(dropped_before) AS queue_drops
+        sum(dropped_before) AS queue_drops,
+        sum(coalesce(omitted_sequences, 1)) AS spans,
+        sum(coalesce(omitted_bytes, 0)) AS truncated_bytes
     FROM {output} GROUP BY invocation_id
 ),
 delivery AS (SELECT * FROM {delivery} WHERE stream = 'output'),
@@ -246,9 +248,10 @@ counted AS (
         coalesce(received.bytes, 0) AS bytes,
         coalesce(received.stdout_bytes, 0) AS stdout_bytes,
         coalesce(received.stderr_bytes, 0) AS stderr_bytes,
+        coalesce(received.truncated_bytes, 0) AS truncated_bytes,
         received.max_sequence AS max_sequence,
         greatest(
-            coalesce(received.max_sequence + 1 - received.chunks, 0),
+            coalesce(toInt64(received.max_sequence) + 1 - toInt64(received.spans), 0),
             coalesce(toInt64(delivery.accepted), 0) - coalesce(toInt64(received.chunks), 0)
         ) AS missing_sequences,
         greatest(coalesce(received.queue_drops, 0), coalesce(delivery.dropped, 0)) AS reported_drops,
@@ -266,16 +269,18 @@ counted AS (
 )
 SELECT
     invocation_id, invocation_started_at, chunks, bytes, stdout_bytes, stderr_bytes,
-    max_sequence, missing_sequences, reported_drops, filtered, failed, filter_active,
-    flush_complete,
+    truncated_bytes, max_sequence, missing_sequences, reported_drops, filtered, failed,
+    filter_active, flush_complete,
     multiIf(
+        missing_sequences = 0 AND truncated_bytes > 0, 'truncated',
         missing_sequences = 0, NULL,
         filtered >= missing_sequences, 'filtered',
         filtered + reported_drops + failed >= missing_sequences, 'dropped',
         'unexplained'
     ) AS gap_reason,
     toUInt8(delivery_reported AND flush_complete = 1 AND missing_sequences = 0
-        AND reported_drops = 0 AND filtered = 0 AND failed = 0 AND chunks >= delivered)
+        AND reported_drops = 0 AND filtered = 0 AND failed = 0 AND truncated_bytes = 0
+        AND chunks >= delivered)
         AS complete
 FROM counted"
     )

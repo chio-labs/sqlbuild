@@ -39,6 +39,14 @@ pub(crate) fn timeout_ms(text: &str) -> Option<u64> {
     (millis <= MAX_SHUTDOWN_TIMEOUT_MS).then_some(millis)
 }
 
+/// A non-negative TOML integer of bytes; `None` for anything else.
+pub(crate) fn output_bytes(value: &ConfigValue) -> Option<u64> {
+    match value {
+        ConfigValue::Integer(bytes) if *bytes >= 0 => Some(bytes.unsigned_abs()),
+        _ => None,
+    }
+}
+
 /// A trimmed non-empty string, or the message for `label.key`.
 pub(crate) fn non_empty<'a>(
     value: &'a ConfigValue,

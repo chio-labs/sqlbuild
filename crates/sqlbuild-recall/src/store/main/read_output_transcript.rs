@@ -4,8 +4,9 @@ use rusqlite::OptionalExtension;
 
 use crate::records::models::OutputStream;
 use crate::store::_helpers::sqlite::checked;
+use crate::store::_helpers::truncation::with_truncation_notes;
 use crate::store::errors::StoreError;
-use crate::store::models::{OutputTranscript, SqliteStore};
+use crate::store::models::{OutputTranscript, SqliteStore, StoredChunk};
 
 /// The bytes of `stream`, or both streams interleaved by sequence when `None`.
 pub fn read_output_transcript(
@@ -15,23 +16,29 @@ pub fn read_output_transcript(
 ) -> Result<OutputTranscript, StoreError> {
     let mut statement = checked(
         store.connection.prepare(
-            "SELECT data FROM recall_output WHERE invocation_id = ?1 \
+            "SELECT stream, data, omitted_bytes FROM recall_output WHERE invocation_id = ?1 \
              AND (?2 IS NULL OR stream = ?2) ORDER BY sequence",
         ),
         "read Recall output",
     )?;
-    let chunks: Vec<Vec<u8>> = checked(
+    let chunks: Vec<StoredChunk> = checked(
         statement
             .query_map(
                 rusqlite::params![invocation_id, stream.map(OutputStream::as_str)],
-                |row| row.get(0),
+                |row| {
+                    Ok(StoredChunk {
+                        stream: row.get(0)?,
+                        data: row.get(1)?,
+                        omitted_bytes: row.get(2)?,
+                    })
+                },
             )
             .and_then(Iterator::collect),
         "read Recall output",
     )?;
     let mut transcript = OutputTranscript {
         invocation_id: invocation_id.to_owned(),
-        data: chunks.concat(),
+        data: with_truncation_notes(&chunks),
         ..OutputTranscript::default()
     };
     transcript.status = checked(

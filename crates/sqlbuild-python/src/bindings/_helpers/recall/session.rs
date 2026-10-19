@@ -322,6 +322,7 @@ fn started_session(
         retention_days: settings.retention_days,
         shutdown_timeout: Duration::from_millis(settings.shutdown_timeout_ms),
         diagnostics_min_severity: settings.diagnostics_min_severity.clone(),
+        max_output_bytes: settings.max_output_bytes,
         heartbeat_interval: heartbeat_interval(),
         setup_budget: Duration::ZERO,
         maintenance: true,

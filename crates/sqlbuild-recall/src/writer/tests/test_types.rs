@@ -72,7 +72,7 @@ pub(crate) struct OutputDropTestCase {
 
 pub(crate) struct CaptureLimitTestCase {
     pub(crate) description: &'static str,
-    pub(crate) limit: usize,
-    pub(crate) writes: Vec<(OutputStream, usize)>,
-    pub(crate) expected_outcome: (Vec<[Option<RecallValue>; 3]>, u64),
+    pub(crate) limit: Option<u64>,
+    pub(crate) writes: Vec<(OutputStream, &'static [u8])>,
+    pub(crate) expected_rows: Vec<[Option<RecallValue>; 6]>,
 }

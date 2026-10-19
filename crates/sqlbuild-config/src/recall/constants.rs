@@ -2,10 +2,11 @@
 
 pub const RECALL_SECTION: &str = "recall";
 /// Keys `[recall]` and `targets.<name>.recall` accept, sorted.
-pub const RECALL_KEYS: [&str; 5] = [
+pub const RECALL_KEYS: [&str; 6] = [
     "connection",
     "diagnostics_min_severity",
     "enabled",
+    "max_output_bytes",
     "retention",
     "shutdown_timeout",
 ];

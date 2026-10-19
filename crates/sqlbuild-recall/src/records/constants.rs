@@ -50,3 +50,7 @@ pub(crate) const MARCH_BASED_JANUARY_INDEX: i64 = 10;
 pub const DROPPED_BEFORE_COLUMN: &str = "dropped_before";
 /// Initial capacity of the buffer a row's content hash is computed over.
 pub(crate) const CONTENT_HASH_BUFFER_BYTES: usize = 1_024;
+/// The output column holding the bytes a truncation gap replaces.
+pub const OMITTED_BYTES_COLUMN: &str = "omitted_bytes";
+/// The output column holding the sequences a truncation gap accounts for.
+pub const OMITTED_SEQUENCES_COLUMN: &str = "omitted_sequences";

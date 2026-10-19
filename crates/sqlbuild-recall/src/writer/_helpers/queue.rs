@@ -13,9 +13,8 @@ use crate::records::models::{
 };
 use crate::store::models::InsertOutcome;
 use crate::writer::_helpers::delivery::stream_of;
-use crate::writer::constants::{
-    OUTPUT_STREAM_CAPTURE_BYTES, QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY,
-};
+use crate::writer::_helpers::tail::{TailRing, TailSegment};
+use crate::writer::constants::{QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
 use crate::writer::models::{DeliveryStream, Priority};
 
 /// SQL a statement executed, hashed and turned into rows on the delivery thread.
@@ -81,11 +80,14 @@ pub(crate) struct WriterState {
     pending: Option<Pending>,
     next_sequence: u64,
     offsets: [u64; 2],
-    /// Bytes of each stream accepted for recording, pending or emitted.
+    /// Bytes of each stream recorded from its start, pending or emitted.
     captured: [usize; 2],
-    /// The stream whose output past the capture limit the latest sequence stands for.
-    skipping: Option<OutputStream>,
-    output_limit: usize,
+    /// Bytes of each stream recorded from its start; `None` records everything.
+    head_limit: Option<usize>,
+    /// The end of each stream past its head limit, kept until the session closes.
+    tails: [TailRing; 2],
+    /// The stream whose newest tail segment holds the latest sequence, so it may grow.
+    tail_open: Option<OutputStream>,
     unreported_output_drops: u64,
     pub(crate) diagnostic_sequence: u64,
     pub(crate) closing: bool,
@@ -128,8 +130,9 @@ impl WriterState {
             next_sequence: 0,
             offsets: [0; 2],
             captured: [0; 2],
-            skipping: None,
-            output_limit: OUTPUT_STREAM_CAPTURE_BYTES,
+            head_limit: None,
+            tails: Default::default(),
+            tail_open: None,
             unreported_output_drops: 0,
             diagnostic_sequence: 0,
             closing: false,
@@ -142,10 +145,15 @@ impl WriterState {
         }
     }
 
-    /// The same state recording at most `limit` bytes of each output stream.
-    #[cfg(test)]
-    pub(crate) fn with_output_limit(mut self, limit: usize) -> Self {
-        self.output_limit = limit;
+    /// The same state recording at most `limit` bytes of each output stream: the first half and the last half; `None` records everything.
+    pub(crate) fn with_output_limit(mut self, limit: Option<u64>) -> Self {
+        let Some(limit) = limit.map(|limit| usize::try_from(limit).unwrap_or(usize::MAX)) else {
+            self.head_limit = None;
+            return self;
+        };
+        let tail: usize = limit / 2;
+        self.head_limit = Some(limit - tail);
+        self.tails = [TailRing::new(tail), TailRing::new(tail)];
         self
     }
 
@@ -251,6 +259,12 @@ impl WriterState {
         self.bytes = 0;
     }
 
+    fn push_chunk(&mut self, mut chunk: OutputChunk) {
+        chunk.dropped_before = std::mem::take(&mut self.unreported_output_drops);
+        let row = output_row(&self.envelope, &chunk);
+        self.push(vec![row], DeliveryStream::Output, Priority::Output);
+    }
+
     fn emit(&mut self, stream: OutputStream, data: Vec<u8>, occurred_at: &str) {
         let index = usize::from(stream == OutputStream::Stderr);
         let chunk = OutputChunk {
@@ -258,17 +272,17 @@ impl WriterState {
             stream,
             occurred_at: occurred_at.to_owned(),
             byte_offset: self.offsets[index],
-            dropped_before: std::mem::take(&mut self.unreported_output_drops),
+            dropped_before: 0,
             data,
+            omitted: None,
         };
         self.next_sequence += 1;
-        self.skipping = None;
+        self.tail_open = None;
         self.offsets[index] += chunk.data.len() as u64;
-        let row = output_row(&self.envelope, &chunk);
-        self.push(vec![row], DeliveryStream::Output, Priority::Output);
+        self.push_chunk(chunk);
     }
 
-    /// Accept `data` written to `stream`: a stream switch flushes the other stream first, so the shared sequence preserves interleaving; full chunks are emitted at once.
+    /// Accept `data` written to `stream`: a stream switch flushes the other stream first, so the shared sequence preserves interleaving; full chunks are emitted at once. Past the head limit, bytes go to the stream's tail ring.
     pub(crate) fn append_output(&mut self, stream: OutputStream, data: &[u8], now: SystemTime) {
         if data.is_empty() {
             return;
@@ -281,26 +295,80 @@ impl WriterState {
             self.flush_output();
         }
         let index = usize::from(stream == OutputStream::Stderr);
-        let room: usize = self.output_limit.saturating_sub(self.captured[index]);
-        let (kept, skipped) = data.split_at(room.min(data.len()));
-        self.captured[index] += kept.len();
-        self.record_output(stream, kept, now);
-        if !skipped.is_empty() {
-            self.skip_output(stream);
+        let Some(head_limit) = self.head_limit else {
+            self.record_output(stream, data, now);
+            return;
+        };
+        let room: usize = head_limit.saturating_sub(self.captured[index]);
+        let (head, rest) = data.split_at(room.min(data.len()));
+        self.captured[index] += head.len();
+        self.record_output(stream, head, now);
+        if !rest.is_empty() {
+            self.tail_output(stream, rest, now);
+        }
+        if self.closing {
+            self.flush_tails();
         }
     }
 
-    /// Output past the stream's capture limit is not recorded: one sequence stands for each contiguous run of it and is counted as filtered, so readers see a filtered gap.
-    fn skip_output(&mut self, stream: OutputStream) {
-        if self.skipping == Some(stream) {
-            return;
+    /// Keep the newest bytes of `stream` past its head limit in its ring, each run under a sequence reserved now so the global order holds; what the ring cannot hold is counted as omitted.
+    fn tail_output(&mut self, stream: OutputStream, data: &[u8], now: SystemTime) {
+        let index = usize::from(stream == OutputStream::Stderr);
+        let occurred_at: String = format_timestamp(now);
+        if !self.tails[index].active() {
+            self.flush_output();
+            self.tails[index].activate(
+                self.next_sequence,
+                self.offsets[index],
+                occurred_at.clone(),
+            );
+            self.next_sequence += 1;
+            self.tail_open = None;
         }
+        let capacity: usize = self.tails[index].capacity();
+        let skipped: usize = data.len().saturating_sub(capacity);
+        let mut rest: &[u8] = &data[skipped..];
+        if skipped > 0 {
+            self.tails[index].evict_to(0);
+            self.tails[index].omit(skipped);
+            self.offsets[index] += skipped as u64;
+            self.tail_open = None;
+        }
+        self.tails[index].evict_to(capacity - rest.len());
+        while !rest.is_empty() {
+            let room: usize = if self.tail_open == Some(stream) {
+                self.tails[index].room(MAX_OUTPUT_CHUNK_BYTES)
+            } else {
+                0
+            };
+            if room == 0 {
+                self.tails[index].open(TailSegment::new(
+                    self.next_sequence,
+                    self.offsets[index],
+                    occurred_at.clone(),
+                ));
+                self.next_sequence += 1;
+                self.tail_open = Some(stream);
+                continue;
+            }
+            let (taken, after) = rest.split_at(room.min(rest.len()));
+            self.tails[index].extend(taken);
+            self.offsets[index] += taken.len() as u64;
+            rest = after;
+        }
+    }
+
+    /// Queue each stream's gap and kept tail, as when the session closes.
+    pub(crate) fn flush_tails(&mut self) {
         self.flush_output();
-        self.next_sequence += 1;
-        self.skipping = Some(stream);
-        let counts = self.counts_mut(DeliveryStream::Output);
-        counts.accepted += 1;
-        counts.filtered += 1;
+        for stream in [OutputStream::Stdout, OutputStream::Stderr] {
+            let index = usize::from(stream == OutputStream::Stderr);
+            let chunks: Vec<OutputChunk> = self.tails[index].take(stream);
+            for chunk in chunks {
+                self.push_chunk(chunk);
+            }
+        }
+        self.tail_open = None;
     }
 
     /// Chunk `data` without copying it more than once: fill the pending chunk, emit full chunks straight from `data`, keep the remainder pending.

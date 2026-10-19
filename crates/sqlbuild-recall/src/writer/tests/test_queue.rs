@@ -115,35 +115,68 @@ fn given_a_full_queue_when_output_is_dropped_then_each_drop_is_counted_once() {
 }
 
 #[test]
-fn given_output_past_the_capture_limit_when_appended_then_each_skipped_run_is_one_filtered_sequence()
- {
+fn given_output_past_the_limit_when_closed_then_head_and_tail_are_exact_around_one_gap() {
     let test_cases = [
         CaptureLimitTestCase {
-            description: "output within the limit is recorded whole",
-            limit: 10,
-            writes: vec![(OutputStream::Stdout, 4), (OutputStream::Stdout, 6)],
-            expected_outcome: (vec![chunk_facts(0, "stdout", 10)], 0),
+            description: "output within the first half is one chunk",
+            limit: Some(8),
+            writes: vec![(OutputStream::Stdout, b"01"), (OutputStream::Stdout, b"23")],
+            expected_rows: vec![chunk_facts((0, "stdout", 0), b"0123", None)],
         },
         CaptureLimitTestCase {
-            description: "each run past a stream's limit leaves one filtered sequence",
-            limit: 10,
+            description: "output within the limit is kept whole around an empty gap",
+            limit: Some(8),
             writes: vec![
-                (OutputStream::Stdout, 25),
-                (OutputStream::Stdout, 3),
-                (OutputStream::Stderr, 5),
-                (OutputStream::Stdout, 5),
+                (OutputStream::Stdout, b"0123"),
+                (OutputStream::Stdout, b"45"),
             ],
-            expected_outcome: (
-                vec![chunk_facts(0, "stdout", 10), chunk_facts(2, "stderr", 5)],
-                2,
-            ),
+            expected_rows: vec![
+                chunk_facts((0, "stdout", 0), b"0123", None),
+                chunk_facts((1, "stdout", 4), b"", Some((0, 1))),
+                chunk_facts((2, "stdout", 4), b"45", None),
+            ],
+        },
+        CaptureLimitTestCase {
+            description: "the first and last halves are kept around a gap counting the middle",
+            limit: Some(8),
+            writes: vec![(OutputStream::Stdout, b"0123456789")],
+            expected_rows: vec![
+                chunk_facts((0, "stdout", 0), b"0123", None),
+                chunk_facts((1, "stdout", 4), b"", Some((2, 1))),
+                chunk_facts((2, "stdout", 6), b"6789", None),
+            ],
+        },
+        CaptureLimitTestCase {
+            description: "interleaved stderr keeps its place around the kept stdout tail",
+            limit: Some(8),
+            writes: vec![
+                (OutputStream::Stdout, b"0123"),
+                (OutputStream::Stdout, b"ab"),
+                (OutputStream::Stderr, b"E1"),
+                (OutputStream::Stdout, b"cdef"),
+                (OutputStream::Stdout, b"gh"),
+                (OutputStream::Stderr, b"E2"),
+            ],
+            expected_rows: vec![
+                chunk_facts((0, "stdout", 0), b"0123", None),
+                chunk_facts((1, "stdout", 4), b"", Some((4, 2))),
+                chunk_facts((3, "stderr", 0), b"E1", None),
+                chunk_facts((4, "stdout", 8), b"efgh", None),
+                chunk_facts((5, "stderr", 2), b"E2", None),
+            ],
+        },
+        CaptureLimitTestCase {
+            description: "no limit records everything",
+            limit: None,
+            writes: vec![(OutputStream::Stdout, b"0123456789")],
+            expected_rows: vec![chunk_facts((0, "stdout", 0), b"0123456789", None)],
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
             capped(test_case.limit, &test_case.writes),
-            test_case.expected_outcome,
+            test_case.expected_rows,
             "{}",
             test_case.description
         );

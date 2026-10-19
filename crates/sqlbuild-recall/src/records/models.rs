@@ -86,6 +86,16 @@ pub struct OutputChunk {
     pub byte_offset: u64,
     /// Output records the queue dropped just before this one.
     pub dropped_before: u64,
+    /// On the empty chunk standing for output past the stream's limit: the bytes and sequences it replaces.
+    pub omitted: Option<OmittedOutput>,
+}
+
+/// Output of one stream that was not recorded because it exceeded `max_output_bytes`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OmittedOutput {
+    pub bytes: u64,
+    /// Sequences this gap accounts for, its own included.
+    pub sequences: u64,
 }
 
 /// The context of one invocation, written once when it starts.

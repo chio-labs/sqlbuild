@@ -11,7 +11,8 @@ use crate::writer::models::{DeliveryStream, Priority, RecallSession, SessionConf
 /// Start the delivery thread and queue the invocation's context row first.
 #[must_use]
 pub fn start_recall_session(config: SessionConfig) -> RecallSession {
-    let mut state = WriterState::new(config.envelope.clone());
+    let mut state =
+        WriterState::new(config.envelope.clone()).with_output_limit(config.max_output_bytes);
     state.push(
         vec![invocation_row(&config.envelope, &config.context)],
         DeliveryStream::Invocation,

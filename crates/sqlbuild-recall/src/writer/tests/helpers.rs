@@ -83,6 +83,7 @@ pub(crate) fn config(path: PathBuf, invocation_id: &str) -> SessionConfig {
         retention_days: 30,
         shutdown_timeout: Duration::from_secs(5),
         diagnostics_min_severity: "info".to_owned(),
+        max_output_bytes: None,
         heartbeat_interval: Duration::from_secs(30),
         setup_budget: Duration::from_secs(2),
         maintenance: true,
@@ -273,33 +274,50 @@ pub(crate) fn output_drops(capacity: usize, chunks: usize) -> (u64, Vec<Option<R
     )
 }
 
-/// Each emitted chunk's sequence, stream and size, and the filtered count, with an output limit of `limit` bytes per stream.
+/// Every output row after `writes` and close, by sequence: sequence, stream, byte offset, data and omitted bytes and sequences.
 pub(crate) fn capped(
-    limit: usize,
-    writes: &[(OutputStream, usize)],
-) -> (Vec<[Option<RecallValue>; 3]>, u64) {
+    limit: Option<u64>,
+    writes: &[(OutputStream, &[u8])],
+) -> Vec<[Option<RecallValue>; 6]> {
     let mut state = WriterState::new(envelope("inv")).with_output_limit(limit);
-    for (stream, length) in writes {
-        state.append_output(*stream, &vec![b'x'; *length], SystemTime::now());
+    for (stream, data) in writes {
+        state.append_output(*stream, data, SystemTime::now());
     }
-    state.flush_output();
-    let chunks = state
+    state.flush_tails();
+    let mut rows: Vec<[Option<RecallValue>; 6]> = state
         .take_batch(usize::MAX)
         .iter()
         .flat_map(|record| record.rows().iter())
-        .map(|row| ["sequence", "stream", "byte_count"].map(|name| row.value(name).cloned()))
+        .map(|row| {
+            [
+                "sequence",
+                "stream",
+                "byte_offset",
+                "data",
+                "omitted_bytes",
+                "omitted_sequences",
+            ]
+            .map(|name| row.value(name).cloned())
+        })
         .collect();
-    (
-        chunks,
-        state.counts[DeliveryStream::Output.index()].filtered,
-    )
+    rows.sort_by_key(|row| format!("{:020?}", row[0]));
+    rows
 }
 
-/// A chunk's sequence, stream and byte count, as `capped` reports them.
-pub(crate) fn chunk_facts(sequence: i64, stream: &str, bytes: i64) -> [Option<RecallValue>; 3] {
+/// A row as `capped` reports it; `omitted` is set on a truncation gap.
+pub(crate) fn chunk_facts(
+    (sequence, stream, offset): (i64, &str, i64),
+    data: &[u8],
+    omitted: Option<(i64, i64)>,
+) -> [Option<RecallValue>; 6] {
     [
         Some(RecallValue::Integer(sequence)),
         Some(RecallValue::Text(stream.to_owned())),
-        Some(RecallValue::Integer(bytes)),
+        Some(RecallValue::Integer(offset)),
+        Some(RecallValue::Blob(data.to_vec())),
+        Some(omitted.map_or(RecallValue::Null, |(bytes, _)| RecallValue::Integer(bytes))),
+        Some(omitted.map_or(RecallValue::Null, |(_, sequences)| {
+            RecallValue::Integer(sequences)
+        })),
     ]
 }

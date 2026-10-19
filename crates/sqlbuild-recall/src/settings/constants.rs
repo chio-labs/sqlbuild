@@ -12,3 +12,5 @@ pub const SQLITE_ADAPTER: &str = "sqlite";
 pub const SQLITE_PATH_KEY: &str = "path";
 pub const PROJECT_FILE_NAME: &str = "sqlbuild_project.toml";
 pub const LOCAL_FILE_NAME: &str = "sqlbuild_local.toml";
+/// Bytes of each output stream the local SQLite store keeps per invocation: the first and last MiB.
+pub const DEFAULT_SQLITE_MAX_OUTPUT_BYTES: u64 = 2 * 1024 * 1024;

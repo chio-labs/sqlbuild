@@ -3,6 +3,7 @@
 use std::path::Path;
 use std::time::Duration;
 
+use rusqlite::config::DbConfig;
 use rusqlite::{Connection, OpenFlags};
 
 use crate::schema::constants::MINIMUM_SQLITE_VERSION;
@@ -107,9 +108,14 @@ pub fn open_sqlite_store(path: &Path, mode: OpenMode) -> Result<SqliteStore, Sto
         }
         checked(
             connection.execute_batch(&format!(
-                "PRAGMA synchronous = NORMAL; PRAGMA journal_size_limit = {JOURNAL_SIZE_LIMIT_BYTES};"
+                "PRAGMA synchronous = NORMAL; PRAGMA journal_size_limit = {JOURNAL_SIZE_LIMIT_BYTES}; \
+                 PRAGMA wal_autocheckpoint = 0;"
             )),
             "set store pragmas",
+        )?;
+        checked(
+            connection.set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true),
+            "keep the WAL at close",
         )?;
     } else {
         checked(

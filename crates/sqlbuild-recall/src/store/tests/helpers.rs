@@ -66,6 +66,7 @@ pub(crate) fn chunk(
             data: data.to_vec(),
             byte_offset: 0,
             dropped_before: 0,
+            omitted: None,
         },
     )
 }

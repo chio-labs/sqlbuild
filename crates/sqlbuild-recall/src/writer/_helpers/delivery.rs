@@ -10,6 +10,7 @@ use crate::records::models::RecallRow;
 use crate::schema::models::Table;
 use crate::store::constants::{BUSY_TIMEOUT_MS, MAINTENANCE_BUDGET_MS};
 use crate::store::errors::{StoreError, StoreErrorKind};
+use crate::store::main::checkpoint_sqlite_store::checkpoint_sqlite_store;
 use crate::store::main::ensure_sqlite_schema::ensure_sqlite_schema;
 use crate::store::main::insert_rows::insert_rows;
 use crate::store::main::maintain_sqlite_store::maintain_sqlite_store;
@@ -245,6 +246,7 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
             return;
         }
     };
+    drop(checkpoint_sqlite_store(&store));
     let mut next_heartbeat: SystemTime = SystemTime::now();
     let mut materializer = Materializer::new(config.envelope.clone());
     loop {

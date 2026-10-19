@@ -188,7 +188,7 @@ impl RecallSession {
         if !state.closing {
             state.closing = true;
             state.deadline = Some(Instant::now() + self.shutdown_timeout);
-            state.flush_output();
+            state.flush_tails();
         }
         self.shared.wake.notify_all();
     }

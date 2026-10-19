@@ -1,3 +1,4 @@
+pub mod checkpoint_sqlite_store;
 pub mod describe_store;
 pub mod ensure_sqlite_schema;
 pub mod insert_rows;

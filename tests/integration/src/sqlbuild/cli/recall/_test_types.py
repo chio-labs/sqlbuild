@@ -129,5 +129,21 @@ class CorruptStoreRaceTestCase:
 @dataclass(frozen=True)
 class CaptureLimitTestCase:
     description: str
+    extra_toml: str
     stdout_bytes: int
-    expected_recorded: list[list[object]]
+    expected_kept: tuple[int, int]
+    expected_gap: list[object]
+
+
+@dataclass(frozen=True)
+class TruncationNoteTestCase:
+    description: str
+    stdout_bytes: int
+    expected_kept: int
+
+
+@dataclass(frozen=True)
+class InvalidOutputLimitTestCase:
+    description: str
+    value: str
+    expected_message: bytes

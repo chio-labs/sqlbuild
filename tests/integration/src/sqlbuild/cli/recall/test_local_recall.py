@@ -17,6 +17,7 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     DisabledRecallTestCase,
     FailingStderrTestCase,
     HeldLockTestCase,
+    InvalidOutputLimitTestCase,
     JsonQueryTestCase,
     ReadOnlyStoreTestCase,
     RecallOutputTestCase,
@@ -25,11 +26,13 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     RecordedFactsTestCase,
     RepeatedBuildTestCase,
     TextOutputTestCase,
+    TruncationNoteTestCase,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     EMITTED_STDERR,
     EMITTED_STDOUT,
     EMITTED_TAIL,
+    MEBIBYTE,
     build_while_store_locked,
     build_with_failing_recall_notices,
     build_with_read_only_logs,
@@ -700,28 +703,123 @@ def test_given_a_corrupt_store_when_builds_race_then_one_moves_it_and_both_are_r
     "test_case",
     [
         CaptureLimitTestCase(
-            description="stdout past the capture limit is a filtered gap; stderr stays whole",
-            stdout_bytes=3 * 1024 * 1024,
-            expected_recorded=[[1024 * 1024, 1, "filtered", 0]],
+            description="under the default limit stdout is byte-exact",
+            extra_toml="",
+            stdout_bytes=1536 * 1024,
+            expected_kept=(MEBIBYTE * 1024, 0),
+            expected_gap=[None, 1],
+        ),
+        CaptureLimitTestCase(
+            description="past the default limit the first and last MiB are kept exactly",
+            extra_toml="",
+            stdout_bytes=3 * MEBIBYTE,
+            expected_kept=(MEBIBYTE, MEBIBYTE),
+            expected_gap=["truncated", 0],
+        ),
+        CaptureLimitTestCase(
+            description="a larger target limit keeps everything",
+            extra_toml="\n[targets.dev.recall]\nmax_output_bytes = 8388608\n",
+            stdout_bytes=3 * MEBIBYTE,
+            expected_kept=(MEBIBYTE * 1024, 0),
+            expected_gap=[None, 1],
+        ),
+        CaptureLimitTestCase(
+            description="zero records all output",
+            extra_toml="\n[recall]\nmax_output_bytes = 0\n",
+            stdout_bytes=3 * MEBIBYTE,
+            expected_kept=(MEBIBYTE * 1024, 0),
+            expected_gap=[None, 1],
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_output_past_the_capture_limit_when_recorded_then_the_rest_is_a_filtered_gap(
+def test_given_an_output_limit_when_recorded_then_kept_bytes_are_exact_around_one_gap(
     test_case: CaptureLimitTestCase, tmp_path: Path
 ) -> None:
-    project_dir: Path = write_project(tmp_path / "orders_shop")
+    project_dir: Path = write_project(tmp_path / "orders_shop", extra_toml=test_case.extra_toml)
 
     built: subprocess.CompletedProcess[bytes] = run(
         project_dir, "build", ORDERS_TASK_STDOUT_BYTES=str(test_case.stdout_bytes)
     )
-    recorded: list[list[object]] = recall_rows(
+    [[stdout_hex, gap_reason, complete, truncated, warning_first]] = recall_rows(
         project_dir,
-        "SELECT o.stdout_bytes, instr(CAST(t.stderr AS TEXT), 'from the task') > 0, "
-        "o.gap_reason, o.complete "
+        "SELECT hex(t.stdout), o.gap_reason, o.complete, o.truncated_bytes, "
+        "instr(CAST(t.combined AS TEXT), 'from the task') < instr(t.combined, 'yyyy') "
         "FROM output_invocations o JOIN output_transcripts t USING (invocation_id)",
     )
+    head, tail = test_case.expected_kept
+    expected: bytes = built.stdout[:head] + built.stdout[len(built.stdout) - tail :]
 
     assert built.returncode == 0, built.stderr.decode(errors="replace")
-    assert len(built.stdout) > test_case.stdout_bytes
-    assert recorded == test_case.expected_recorded
+    assert bytes.fromhex(str(stdout_hex)) == expected
+    assert [gap_reason, complete] == test_case.expected_gap
+    assert truncated == len(built.stdout) - len(expected)
+    assert warning_first == 1
+    assert b"max_output_bytes" not in built.stdout + built.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TruncationNoteTestCase(
+            description="the note sits where stdout was left out",
+            stdout_bytes=3 * MEBIBYTE,
+            expected_kept=MEBIBYTE,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_truncated_output_when_shown_then_a_note_marks_the_gap(
+    test_case: TruncationNoteTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+    built: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "build", ORDERS_TASK_STDOUT_BYTES=str(test_case.stdout_bytes)
+    )
+
+    shown: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "recall", "output", "last", "--stream", "stdout"
+    )
+    omitted: int = len(built.stdout) - 2 * test_case.expected_kept
+    note: bytes = (
+        f"\u2026 {omitted / 1_000_000:.1f} MB of stdout not recorded (kept the first and last "
+        "1 MiB). Raise [recall] max_output_bytes to keep more.\n"
+    ).encode()
+
+    assert shown.returncode == 0, shown.stderr.decode(errors="replace")
+    assert shown.stdout == (
+        built.stdout[: test_case.expected_kept]
+        + b"\n"
+        + note
+        + built.stdout[len(built.stdout) - test_case.expected_kept :]
+    )
+    assert shown.stderr == b""
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        InvalidOutputLimitTestCase(
+            description="a negative limit is a configuration error",
+            value="-1",
+            expected_message=b"error[D001]",
+        ),
+        InvalidOutputLimitTestCase(
+            description="a size string is a configuration error",
+            value='"2MiB"',
+            expected_message=b"recall.max_output_bytes must be a whole number of bytes",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_invalid_output_limit_when_running_then_the_command_fails_with_its_code(
+    test_case: InvalidOutputLimitTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(
+        tmp_path / "orders_shop", extra_toml=f"\n[recall]\nmax_output_bytes = {test_case.value}\n"
+    )
+
+    completed: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+
+    assert completed.returncode != 0
+    assert test_case.expected_message in completed.stderr

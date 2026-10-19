@@ -34,6 +34,7 @@ pub(crate) fn defaults() -> RecallSettings {
         retention_days: 30,
         shutdown_timeout_ms: 3000,
         diagnostics_min_severity: "info".to_owned(),
+        max_output_bytes: Some(2 * 1024 * 1024),
         project_name: Some("shop".to_owned()),
         project_adapter: Some("duckdb".to_owned()),
         destination_database: None,

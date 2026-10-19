@@ -48,6 +48,11 @@ pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettin
         documents,
         (effective.connection.as_deref(), project_adapter.as_deref()),
     )?;
+    let max_output_bytes: Option<u64> = match effective.max_output_bytes {
+        Some(0) => None,
+        Some(bytes) => Some(bytes),
+        None => store.default_max_output_bytes(),
+    };
     Ok(RecallSettings {
         enabled: effective.enabled.unwrap_or(true),
         target: target.clone(),
@@ -60,6 +65,7 @@ pub fn resolve_recall_settings(request: &SettingsRequest) -> Result<RecallSettin
         diagnostics_min_severity: effective
             .diagnostics_min_severity
             .unwrap_or_else(|| DEFAULT_DIAGNOSTICS_MIN_SEVERITY.to_owned()),
+        max_output_bytes,
         project_name: string_at(project.as_ref(), &["name"]),
         project_adapter,
         destination_database: target_field("database"),

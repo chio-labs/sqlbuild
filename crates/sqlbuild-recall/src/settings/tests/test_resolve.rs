@@ -23,6 +23,12 @@ const LAYERED_PROJECT: &[(&str, &str)] = &[
     ),
 ];
 
+const OUTPUT_LIMIT_PROJECT: &[(&str, &str)] = &[(
+    "sqlbuild_project.toml",
+    "name = \"shop\"\nadapter = \"duckdb\"\n[recall]\nmax_output_bytes = 0\n\
+     [targets.dev]\n[targets.dev.recall]\nmax_output_bytes = 8388608\n[targets.prod]\n",
+)];
+
 #[test]
 fn given_project_layers_when_resolved_then_target_over_local_over_project_over_defaults() {
     let test_cases = [
@@ -65,6 +71,27 @@ fn given_project_layers_when_resolved_then_target_over_local_over_project_over_d
                 connection: Some("central".to_owned()),
                 retention_days: 10,
                 shutdown_timeout_ms: 1000,
+                max_output_bytes: None,
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "a target raises the output limit over the project's unlimited one",
+            files: OUTPUT_LIMIT_PROJECT,
+            target: Some("dev"),
+            expected_settings: RecallSettings {
+                target: Some("dev".to_owned()),
+                max_output_bytes: Some(8_388_608),
+                ..defaults()
+            },
+        },
+        ResolveTestCase {
+            description: "zero records all output",
+            files: OUTPUT_LIMIT_PROJECT,
+            target: Some("prod"),
+            expected_settings: RecallSettings {
+                target: Some("prod".to_owned()),
+                max_output_bytes: None,
                 ..defaults()
             },
         },

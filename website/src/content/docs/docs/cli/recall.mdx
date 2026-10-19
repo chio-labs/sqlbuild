@@ -100,7 +100,9 @@ sqb recall output last --tail 20             # only the last 20 lines
 | `--tail` | Print only the last N lines |
 | `--target` | Target whose store to read |
 
-Output that Recall could not record completely is followed by a note on stderr naming the gap.
+Where output past [`max_output_bytes`](/docs/concepts/observability/recall#output-limit) was left
+out, a note line marks the gap in place. Output that Recall could not record completely for any
+other reason is followed by a note on stderr naming the gap.
 
 ## Errors
 

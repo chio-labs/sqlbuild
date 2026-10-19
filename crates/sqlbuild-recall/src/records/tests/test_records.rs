@@ -156,6 +156,7 @@ fn given_records_when_rowed_then_columns_are_promoted() {
                     data: vec![0, 255, 10],
                     byte_offset: 12,
                     dropped_before: 1,
+                    omitted: None,
                 },
             ),
             expected_columns: vec![

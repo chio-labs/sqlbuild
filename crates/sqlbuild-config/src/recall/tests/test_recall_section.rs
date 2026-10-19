@@ -15,6 +15,7 @@ fn given_valid_sections_when_validated_then_settings_are_typed() {
                 ("retention", text("720h")),
                 ("shutdown_timeout", text("1500ms")),
                 ("diagnostics_min_severity", text("debug")),
+                ("max_output_bytes", ConfigValue::Integer(4_194_304)),
             ]),
             expected_section: RecallSection {
                 enabled: Some(false),
@@ -22,6 +23,15 @@ fn given_valid_sections_when_validated_then_settings_are_typed() {
                 retention_days: Some(30),
                 shutdown_timeout_ms: Some(1500),
                 diagnostics_min_severity: Some("debug".to_owned()),
+                max_output_bytes: Some(4_194_304),
+            },
+        },
+        ValidSectionTestCase {
+            description: "zero output bytes means record everything",
+            value: table(&[("max_output_bytes", ConfigValue::Integer(0))]),
+            expected_section: RecallSection {
+                max_output_bytes: Some(0),
+                ..RecallSection::default()
             },
         },
         ValidSectionTestCase {
@@ -44,6 +54,18 @@ fn given_valid_sections_when_validated_then_settings_are_typed() {
 #[test]
 fn given_invalid_sections_when_validated_then_the_message_names_the_key() {
     let test_cases = [
+        InvalidSectionTestCase {
+            description: "output bytes must not be negative",
+            value: table(&[("max_output_bytes", ConfigValue::Integer(-1))]),
+            label: "recall",
+            expected_message_prefix: "recall.max_output_bytes must be",
+        },
+        InvalidSectionTestCase {
+            description: "output bytes must be an integer, not a size string",
+            value: table(&[("max_output_bytes", text("2MiB"))]),
+            label: "recall",
+            expected_message_prefix: "recall.max_output_bytes must be",
+        },
         InvalidSectionTestCase {
             description: "unknown keys are listed",
             value: table(&[("mode", text("x"))]),

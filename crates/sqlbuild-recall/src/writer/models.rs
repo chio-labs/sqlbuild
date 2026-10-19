@@ -75,6 +75,8 @@ pub struct SessionConfig {
     pub retention_days: u32,
     pub shutdown_timeout: Duration,
     pub diagnostics_min_severity: String,
+    /// Bytes of each output stream recorded, the first and last half; `None` records everything.
+    pub max_output_bytes: Option<u64>,
     pub heartbeat_interval: Duration,
     pub setup_budget: Duration,
     /// Whether this session runs retention maintenance after delivery.

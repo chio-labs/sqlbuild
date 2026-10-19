@@ -22,3 +22,11 @@ pub const COMPANION_SUFFIXES: [&str; 2] = ["-wal", "-shm"];
 pub const QUARANTINE_LOCK_SUFFIX: &str = ".lock";
 /// Pause between attempts to take the quarantine lock.
 pub const QUARANTINE_LOCK_RETRY_MS: u64 = 10;
+/// The step between decimal size units.
+pub const DECIMAL_UNIT_STEP: f64 = 1000.0;
+/// The step between binary size units.
+pub const BINARY_UNIT_STEP: u64 = 1024;
+/// Decimal size units above bytes, for omitted output.
+pub const DECIMAL_UNITS: [&str; 4] = ["kB", "MB", "GB", "TB"];
+/// Binary size units above bytes, for kept output.
+pub const BINARY_UNITS: [&str; 4] = ["KiB", "MiB", "GiB", "TiB"];

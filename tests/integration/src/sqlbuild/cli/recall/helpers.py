@@ -16,6 +16,7 @@ PYTHON_CLI: Path = Path(sys.executable).with_name("sqlbuild-python")
 EMITTED_STDOUT: bytes = b"binary \x00\xff\xfe chunk\n"
 EMITTED_STDERR: bytes = "warning \u2713 from the task\n".encode()
 EMITTED_TAIL: bytes = b"after the warning\n"
+MEBIBYTE: int = 1024 * 1024
 EMPTY_RESULT: bytes = b'{"rows": []}'
 NUMBERED_LINE: re.Pattern[bytes] = re.compile(rb"^(\d+) std(?:out|err)$", re.MULTILINE)
 PROJECT_TOML: str = (
