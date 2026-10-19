@@ -131,12 +131,11 @@ def _rename_relation(
             statement_recorder=recorder,
         )
         return
-    adapter.rename_view(
-        connection=connection,
-        origin=origin,
-        destination=destination,
-        statement_recorder=recorder,
-    )
+    statements: tuple[str, ...] = adapter.render_rename_view(origin=origin, destination=destination)
+    recorder.record_many(statements)
+    statement: str
+    for statement in statements:
+        _ = adapter.execute(connection=connection, sql=statement)
 
 
 def _drop_archive(

@@ -2372,7 +2372,10 @@ def _physical_cursor_envelope(
     cursor_column: str | None = context.entry.cursor_column
     if cursor_column is None:
         return None
-    quoted_cursor: str = context.adapter.render_identifier(cursor_column)
+    quoted_cursor: str = context.adapter.render_cursor_operand(
+        expression=context.adapter.render_identifier(cursor_column),
+        cursor_type=context.entry.cursor_type,
+    )
     try:
         cursor: Any = context.adapter.execute(
             connection=context.connection,
@@ -2483,7 +2486,10 @@ def _count_unaccounted_intervals(
     targets: MicrobatchTargets,
     intervals: tuple[MicrobatchInterval, ...],
 ) -> dict[tuple[str, str], int] | ModelExecutionResult:
-    cursor_column: str = context.adapter.render_identifier(context.entry.cursor_column or "")
+    cursor_column: str = context.adapter.render_cursor_operand(
+        expression=context.adapter.render_identifier(context.entry.cursor_column or ""),
+        cursor_type=context.entry.cursor_type,
+    )
     counts: dict[tuple[str, str], int] = {}
     chunk_start: int
     for chunk_start in range(0, len(intervals), _UNACCOUNTED_COUNT_CHUNK_SIZE):

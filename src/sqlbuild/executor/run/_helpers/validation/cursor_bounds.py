@@ -541,7 +541,9 @@ def _query_watermark_values(
         adapter=adapter,
         connection=connection,
         relation=relation,
-        cursor_column=cursor_column,
+        cursor_column=adapter.render_cursor_operand(
+            expression=cursor_column, cursor_type=cursor_type
+        ),
         read_minimum=read_minimum,
         query_index=query_index,
         total=total,
@@ -706,7 +708,8 @@ def _query_target_max(
         name=target_name,
     ):
         return None
-    sql: str = f"SELECT MAX({cursor_column}) FROM {target_relation}"
+    operand: str = adapter.render_cursor_operand(expression=cursor_column, cursor_type=cursor_type)
+    sql: str = f"SELECT MAX({operand}) FROM {target_relation}"
     cursor: Any = adapter.execute(connection=connection, sql=sql)
     row: Any = cursor.fetchone()
     if row is None or row[0] is None:

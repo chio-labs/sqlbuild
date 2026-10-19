@@ -1555,7 +1555,11 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         )
         projections: str = "COUNT(*)"
         if cursor_column is not None:
-            projections += f", MIN({cursor_column}), MAX({cursor_column})"
+            operand: str = self.render_cursor_operand(
+                expression=cursor_column,
+                cursor_type=None if start_cursor is None else start_cursor.kind,
+            )
+            projections += f", MIN({operand}), MAX({operand})"
         query: str = f"SELECT {projections} FROM {relation}"
         if cursor_filter:
             query += f" WHERE {cursor_filter}"

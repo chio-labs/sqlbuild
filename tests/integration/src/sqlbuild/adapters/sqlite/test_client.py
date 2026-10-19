@@ -38,6 +38,7 @@ from tests.integration.src.sqlbuild.adapters.sqlite.helpers import (
     fetch_rows,
     pragma_values,
     recorder,
+    render_relations,
     run_sql,
     write_incrementally,
 )
@@ -179,10 +180,11 @@ def test_given_file_connection_when_connecting_then_sqlite_enables_wal_and_pragm
     "test_case",
     [
         SqliteNamespaceListingTestCase(
-            description="lists every schema, splitting only registered prefixes",
+            description="lists every schema; tables SQLBuild did not create stay in main",
             schemas=None,
             expected_relations=(
                 RelationInfo(None, "main", "daily__totals", "BASE TABLE"),
+                RelationInfo(None, "main", "analytics__legacy_orders", "BASE TABLE"),
                 RelationInfo(None, "analytics", "orders", "BASE TABLE"),
                 RelationInfo(None, "analytics", "orders_view", "VIEW"),
             ),
@@ -204,6 +206,9 @@ def test_given_schemas_when_listing_relations_then_sqlite_reports_logical_names(
     adapter.ensure_schema(
         connection=connection, database=None, schema="analytics", statement_recorder=recorder()
     )
+    render_relations(
+        adapter=adapter, relations=(("analytics", "orders"), ("analytics", "orders_view"))
+    )
     create_orders(adapter=adapter, connection=connection, relation="analytics__orders")
     run_sql(
         adapter=adapter,
@@ -211,6 +216,7 @@ def test_given_schemas_when_listing_relations_then_sqlite_reports_logical_names(
         statements=(
             "CREATE VIEW analytics__orders_view AS SELECT * FROM analytics__orders",
             "CREATE TABLE daily__totals (total INTEGER)",
+            "CREATE TABLE analytics__legacy_orders (order_id INTEGER)",
         ),
     )
 
@@ -229,16 +235,16 @@ def test_given_schemas_when_listing_relations_then_sqlite_reports_logical_names(
     "test_case",
     [
         SqliteTypedTableTestCase(
-            description="passes declared types through and declares inferred computed types",
+            description="passes types through and reports unenforced decimals as numbers",
             select_sql=(
                 "SELECT order_id, amount, ordered_at, amount * 2 AS doubled, 1 AS one FROM orders"
             ),
             config={"inferred_column_types": {"doubled": "DECIMAL(12, 2)"}},
             expected_columns=(
                 ColumnInfo("order_id", "INTEGER"),
-                ColumnInfo("amount", "DECIMAL(10,2)"),
+                ColumnInfo("amount", "NUMERIC"),
                 ColumnInfo("ordered_at", "TIMESTAMP"),
-                ColumnInfo("doubled", "DECIMAL(12, 2)"),
+                ColumnInfo("doubled", "NUMERIC"),
                 ColumnInfo("one", "INTEGER"),
             ),
             expected_rows=(
@@ -443,6 +449,14 @@ def test_given_dependent_view_when_swapping_then_sqlite_view_reads_new_table(
     adapter.ensure_schema(
         connection=connection, database=None, schema="analytics", statement_recorder=recorder()
     )
+    render_relations(
+        adapter=adapter,
+        relations=(
+            ("analytics", "orders"),
+            ("analytics", "orders__staging"),
+            ("analytics", "order_ids"),
+        ),
+    )
     run_sql(
         adapter=adapter,
         connection=connection,
@@ -630,7 +644,8 @@ def test_given_two_schemas_when_creating_state_tables_then_sqlite_names_indexes_
         connection=connection,
         sql=(
             "SELECT name FROM sqlite_schema WHERE type = 'table' "
-            "AND name LIKE '%sqlbuild%' AND name <> '_sqlbuild_schemas' ORDER BY name"
+            "AND name LIKE '%sqlbuild%' AND name NOT IN ('_sqlbuild_schemas', '_sqlbuild_relations') "
+            "ORDER BY name"
         ),
     )
     indexes: tuple[tuple[object, ...], ...] = fetch_rows(

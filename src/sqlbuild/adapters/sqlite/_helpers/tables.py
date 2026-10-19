@@ -8,16 +8,14 @@ from typing import Any
 from uuid import uuid4
 
 from sqlbuild.adapters.sqlite._helpers.catalog import quote_identifier
-from sqlbuild.adapters.sqlite.constants import DECIMAL_TEXT_TYPE_PREFIX
+from sqlbuild.adapters.sqlite.constants import DECIMAL_TEXT_TYPE_PREFIX, EXACT_DECIMAL_TYPE_PATTERN
 
 _CREATE_TABLE_AS: re.Pattern[str] = re.compile(
     r"^\s*CREATE\s+TABLE\s+(?!IF\s)(?!TEMP\s)(?!TEMPORARY\s)"
     r"(\"(?:[^\"]|\"\")+\"|[^\s(]+)\s+AS\s+(.+)$",
     re.IGNORECASE | re.DOTALL,
 )
-_DECIMAL_TYPE: re.Pattern[str] = re.compile(
-    r"^\s*(?:DECIMAL|NUMERIC)\s*(?:\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\))?\s*$", re.IGNORECASE
-)
+_DECIMAL_TYPE: re.Pattern[str] = re.compile(EXACT_DECIMAL_TYPE_PATTERN, re.IGNORECASE)
 
 
 def split_create_table_as(sql: str) -> tuple[str, str] | None:
@@ -69,7 +67,7 @@ def create_table_typed(
 
 
 def storage_type(declared: str) -> str:
-    """Return the type a column is declared with; exact decimals are stored as text."""
+    """Return the type a column is declared with; `DECIMAL(p,s)` is stored as canonical text."""
 
     if _DECIMAL_TYPE.match(declared) is None:
         return declared
@@ -77,7 +75,7 @@ def storage_type(declared: str) -> str:
 
 
 def decimal_scale(target_type: str) -> int | None:
-    """Return a decimal type's scale, or None when the type is not a decimal."""
+    """Return a `DECIMAL(p,s)` type's scale, or None for any other type, including bare DECIMAL."""
 
     match: re.Match[str] | None = _DECIMAL_TYPE.match(target_type)
     if match is None:

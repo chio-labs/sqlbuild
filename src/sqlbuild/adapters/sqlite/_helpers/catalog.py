@@ -12,9 +12,13 @@ from sqlbuild.adapters.sqlite.constants import (
     DECIMAL_TEXT_TYPE_PREFIX,
     DECIMAL_TYPE_NAMES,
     IDENTIFIER_QUOTE,
+    INTERNAL_TABLE_NAMES,
     INVALID_SCHEMA_NAME_CODE,
     MAIN_SCHEMA,
     MAIN_SCHEMA_PREFIX,
+    NUMBER_DECIMAL_REPORTED_TYPE,
+    NUMBER_DECIMAL_TYPE_PATTERN,
+    RELATION_REGISTRY_TABLE,
     SCHEMA_NAME_SEPARATOR,
     SCHEMA_REGISTRY_TABLE,
     SQLITE_INTERNAL_PREFIX,
@@ -25,6 +29,7 @@ from sqlbuild.adapters.sqlite.constants import (
     VIEW_RELATION_TYPE,
 )
 
+_NUMBER_DECIMAL_TYPE: re.Pattern[str] = re.compile(NUMBER_DECIMAL_TYPE_PATTERN, re.IGNORECASE)
 _VIEW_BODY: re.Pattern[str] = re.compile(VIEW_BODY_PATTERN, re.IGNORECASE | re.DOTALL)
 
 
@@ -77,21 +82,37 @@ def registered_schemas(connection: Any) -> frozenset[str]:
     return frozenset(str(row[0]).lower() for row in rows)
 
 
-def logical_location(*, table_name: str, schemas: frozenset[str]) -> tuple[str, str]:
-    """Split one physical table name into its schema and relation name."""
+def registry_exists(connection: Any) -> bool:
+    """Return whether the relation registry table exists in this file."""
 
-    prefix: str
-    rest: str
-    prefix, separator, rest = table_name.partition(SCHEMA_NAME_SEPARATOR)
-    if separator and rest and prefix.lower() in schemas:
-        return prefix, rest
-    return MAIN_SCHEMA, table_name
+    row: object = connection.execute_with(
+        sql="SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?",
+        parameters=(RELATION_REGISTRY_TABLE,),
+    ).fetchone()
+    return row is not None
+
+
+def registry_locations(connection: Any) -> dict[str, tuple[str, str]]:
+    """Return the registered (schema, name) of each schema relation by lowered table name."""
+
+    if not registry_exists(connection):
+        return {}
+    rows: list[tuple[Any, ...]] = connection.execute(
+        f"SELECT physical_name, schema_name, relation_name FROM {RELATION_REGISTRY_TABLE}"
+    ).fetchall()
+    return {str(row[0]).lower(): (str(row[1]), str(row[2])) for row in rows}
+
+
+def logical_location(*, table_name: str, locations: dict[str, tuple[str, str]]) -> tuple[str, str]:
+    """Return a table's registered (schema, name); unregistered tables belong to `main`."""
+
+    return locations.get(table_name.lower(), (MAIN_SCHEMA, table_name))
 
 
 def catalog_relations(connection: Any) -> tuple[tuple[str, str, str, str], ...]:
     """Return (schema, name, physical name, relation type) for every user table and view."""
 
-    schemas: frozenset[str] = registered_schemas(connection)
+    locations: dict[str, tuple[str, str]] = registry_locations(connection)
     rows: list[tuple[Any, ...]] = connection.execute(
         "SELECT name, type FROM sqlite_schema WHERE type IN ('table', 'view') ORDER BY name"
     ).fetchall()
@@ -100,12 +121,12 @@ def catalog_relations(connection: Any) -> tuple[tuple[str, str, str, str], ...]:
     for row in rows:
         table_name: str = str(row[0])
         if table_name.lower().startswith(SQLITE_INTERNAL_PREFIX) or (
-            table_name == SCHEMA_REGISTRY_TABLE
+            table_name in INTERNAL_TABLE_NAMES
         ):
             continue
         schema: str
         name: str
-        schema, name = logical_location(table_name=table_name, schemas=schemas)
+        schema, name = logical_location(table_name=table_name, locations=locations)
         relation_type: str = (
             VIEW_RELATION_TYPE if row[1] == SQLITE_VIEW_TYPE else BASE_TABLE_RELATION_TYPE
         )
@@ -133,13 +154,15 @@ def relation_columns(*, connection: Any, table_name: str) -> tuple[ColumnInfo, .
 
 
 def reported_type(declared: str) -> str:
-    """Report a decimal stored as canonical text under its decimal type."""
+    """Report `DECIMAL(p,s)` only for canonical decimal text; other decimals are numbers."""
 
     upper: str = declared.upper()
     if upper.startswith(DECIMAL_TEXT_TYPE_PREFIX) and upper[
         len(DECIMAL_TEXT_TYPE_PREFIX) :
     ].startswith(DECIMAL_TYPE_NAMES):
         return declared[len(DECIMAL_TEXT_TYPE_PREFIX) :]
+    if _NUMBER_DECIMAL_TYPE.match(declared) is not None:
+        return NUMBER_DECIMAL_REPORTED_TYPE
     return declared
 
 

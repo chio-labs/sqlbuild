@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run_sqb
 
 SQLITE_FILE: str = "warehouse.sqlite"
 DUCKDB_FILE: str = "warehouse.duckdb"
@@ -528,3 +529,196 @@ def execute_sqlite(*, db_path: Path, sql: str) -> None:
         connection.commit()
     finally:
         connection.close()
+
+
+def execute_sqlite_script(*, db_path: Path, sql: str) -> None:
+    connection: sqlite3.Connection = sqlite3.connect(db_path)
+    try:
+        connection.executescript(sql)
+    finally:
+        connection.close()
+
+
+RAW_PAYMENTS_SQL: str = (
+    "CREATE TABLE raw_payments (payment_id INTEGER, amount DECIMAL(10,2));"
+    "INSERT INTO raw_payments VALUES (1, 1.5), (2, 2);"
+)
+CHANGED_RAW_PAYMENTS_SQL: str = (
+    "UPDATE raw_payments SET amount = 2.25 WHERE payment_id = 1;"
+    "INSERT INTO raw_payments VALUES (3, 4);"
+)
+_PAYMENT_SOURCES: str = """sources:
+  - name: raw_payments
+    description: Raw payments.
+    schema: main
+    table: raw_payments
+    columns:
+      - name: payment_id
+        type: INTEGER
+      - name: amount
+        type: DECIMAL(10,2)
+"""
+UNDECLARED_PAYMENT_SOURCES: str = """sources:
+  - name: raw_payments
+    description: Raw payments read with their warehouse types.
+    schema: main
+    table: raw_payments
+"""
+_PAYMENTS_MODEL: str = """MODEL (
+  description "Payments merged by id under an exact decimal contract.",
+  materialized incremental,
+  incremental_strategy merge,
+  unique_key payment_id,
+  on_schema_change append_new_columns,
+  contract enforced,
+  columns (
+    payment_id (type INTEGER, nullable false),
+    amount (type DECIMAL(10,2)),
+  ),
+);
+
+SELECT payment_id, amount FROM __source("raw_payments")
+"""
+DECIMAL_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SQLITE_TOML,
+    "sources/raw.yml": _PAYMENT_SOURCES,
+    "models/payments.sql": _PAYMENTS_MODEL,
+    "models/payment_ledger.sql": """MODEL (
+  description "Payments computed from numbers under the same contract.",
+  materialized table,
+  contract enforced,
+  columns (
+    payment_id (type INTEGER, nullable false),
+    amount (type DECIMAL(10,2)),
+  ),
+);
+
+SELECT payment_id, amount * 1.0 AS amount FROM __source("raw_payments")
+""",
+}
+EVOLVED_DECIMAL_PROJECT_FILES: dict[str, str] = {
+    "models/payments.sql": _PAYMENTS_MODEL.replace(
+        "    amount (type DECIMAL(10,2)),\n",
+        "    amount (type DECIMAL(10,2)),\n    fee (type DECIMAL(10,2)),\n",
+    ).replace("SELECT payment_id, amount FROM", "SELECT payment_id, amount, 0.1 AS fee FROM"),
+}
+PAYMENT_ROWS_SQL: str = (
+    "SELECT payment_id, amount, typeof(amount) FROM analytics__payments ORDER BY payment_id"
+)
+LEDGER_AGREEMENT_SQL: str = (
+    "SELECT COUNT(*) FROM analytics__payments AS p JOIN analytics__payment_ledger AS l "
+    "USING (payment_id) WHERE p.amount = l.amount"
+)
+EVOLVED_PAYMENT_ROWS_SQL: str = (
+    "SELECT payment_id, amount, fee, typeof(fee) FROM analytics__payments ORDER BY payment_id"
+)
+FEE_DECLARATION_SQL: str = (
+    "SELECT type FROM pragma_table_info('analytics__payments') WHERE name = 'fee'"
+)
+
+
+_TIMESTAMP_EVENTS_HEADER: str = "order_id,amount_cents,ordered_at\n"
+ISO_EVENTS_CSV: str = _TIMESTAMP_EVENTS_HEADER + (
+    "1,100,2026-01-01T10:00:00\n"
+    "2,200,2026-01-01 10:30:00.250\n"
+    "4,400,2026-01-01 11:59:59.999\n"
+    "5,500,2026-01-01T11:00:00Z\n"
+    "6,600,2026-01-01T09:59:59.999\n"
+)
+OFFSET_EVENTS_CSV: str = ISO_EVENTS_CSV + "3,300,2026-01-01T12:15:00+02:00\n"
+
+
+def build_cursor_window_files(*, adapter: str, events_csv: str) -> dict[str, str]:
+    """Build an hourly microbatch project over timestamps written in several ISO forms."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "hourly_shop"\n'
+            f'adapter = "{adapter}"\n'
+            'default_target = "dev"\n\n'
+            f"[connection]\n{_CONNECTIONS[adapter]}\n"
+            "[targets.dev]\n"
+            f'schema = "{SCHEMA}"\n'
+        ),
+        "seeds/order_events.csv": events_csv,
+        "seeds/seeds.yml": STRATEGY_PROJECT_FILES["seeds/seeds.yml"],
+        "models/hourly_orders.sql": """MODEL (
+  description "Orders in hourly microbatches.",
+  materialized incremental,
+  incremental_strategy delete_insert,
+  incremental_mode microbatch,
+  microbatch_strategy watermark,
+  cursor_watermark_mode all,
+  cursor ordered_at,
+  cursor_type timestamp,
+  cursor_grain hour,
+  cursor_inputs (order_events (column ordered_at, roles [filter, watermark]),),
+  batch_size 1h,
+  cursor_start "2026-01-01 08:00:00",
+);
+
+SELECT order_id, amount_cents, ordered_at FROM __seed("order_events")
+""",
+    }
+
+
+def model_order_ids(*, adapter: str, project_dir: Path) -> tuple[tuple[object, ...], ...]:
+    """Read the hourly model's order ids from either engine."""
+
+    return _ORDER_ID_READERS[adapter](project_dir)
+
+
+_ORDER_ID_READERS: MappingProxyType[str, Callable[[Path], tuple[tuple[object, ...], ...]]] = (
+    MappingProxyType(
+        {
+            "sqlite": lambda project_dir: sqlite_rows(
+                db_path=project_dir / SQLITE_FILE,
+                sql=f"SELECT order_id FROM {SCHEMA}__hourly_orders ORDER BY 1",
+            ),
+            "duckdb": lambda project_dir: tuple(
+                tuple(row)
+                for row in query_duckdb(
+                    db_path=project_dir / DUCKDB_FILE,
+                    sql=f"SELECT order_id FROM {SCHEMA}.hourly_orders ORDER BY 1",
+                )
+            ),
+        }
+    )
+)
+
+
+_SCHEMA_PER_MODEL_TOML: str = (
+    'name = "staging_shop"\n'
+    'adapter = "sqlite"\n'
+    'default_target = "dev"\n\n'
+    "[connection]\n"
+    f'path = "{SQLITE_FILE}"\n\n'
+    "[defaults]\n"
+    'schema = "main"\n\n'
+    "[targets.dev]\n"
+    'schema = "preserve"\n'
+)
+STAGING_ORDERS_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SCHEMA_PER_MODEL_TOML,
+    "models/orders.sql": """MODEL (description "Staged.", materialized table, schema "staging");
+
+SELECT 1 AS order_id
+""",
+}
+MAIN_STAGING_ORDERS_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SCHEMA_PER_MODEL_TOML,
+    "models/staging__orders.sql": """MODEL (description "Orders kept in main.", materialized table);
+
+SELECT 2 AS order_id
+""",
+}
+
+
+def run_sqb_commands(
+    *, project_dir: Path, commands: tuple[tuple[str, ...], ...]
+) -> tuple[subprocess.CompletedProcess[str], ...]:
+    """Run sqb commands in order in one project."""
+
+    return tuple(
+        run_sqb(command=("--no-color", *command), project_dir=project_dir) for command in commands
+    )

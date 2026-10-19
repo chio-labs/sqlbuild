@@ -148,3 +148,56 @@ class SqliteCastTestCase:
     description: str
     target_type: str
     expected_sql: str
+
+
+@dataclass(frozen=True)
+class SqliteCollisionTestCase:
+    description: str
+    first: tuple[str, str]
+    second: tuple[str, str]
+    expected_code: str
+
+
+@dataclass(frozen=True)
+class SqliteJanitorViewRenameTestCase:
+    description: str
+    expected_relations: tuple[RelationInfo, ...]
+    expected_registry_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqliteDecimalDiffTestCase:
+    description: str
+    left_sql: str
+    right_sql: str
+    expected_counts: tuple[int, int, int, int]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqliteInterruptTestCase:
+    description: str
+    interrupt_after_seconds: float
+    expected_error_fragment: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqliteMergeCountTestCase:
+    description: str
+    source_sql: str
+    expected_affected: int
+
+
+@dataclass(frozen=True)
+class SqliteReadOnlyPathTestCase:
+    description: str
+    file_name: str
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqliteRetypeIndexTestCase:
+    description: str
+    expected_indexes: tuple[tuple[object, ...], ...]
+    expected_columns: tuple[ColumnInfo, ...]

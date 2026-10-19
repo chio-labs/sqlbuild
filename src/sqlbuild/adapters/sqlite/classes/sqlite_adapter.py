@@ -15,6 +15,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, ClassVar
+from urllib.parse import quote
 
 from sqlbuild._native import (
     MICROBATCH_END_SENTINEL,
@@ -103,20 +104,30 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.sqlite._helpers.catalog import (
     catalog_relations,
+    logical_location,
     physical_name,
     quote_identifier,
     registered_schemas,
+    registry_locations,
     relation_columns,
     unquote_relation,
     validate_schema_name,
     view_body,
 )
+from sqlbuild.adapters.sqlite._helpers.relations import (
+    record_relation_changes,
+    relation_changes,
+    rename_view,
+    split_rename_view,
+)
 from sqlbuild.adapters.sqlite._helpers.tables import (
     create_table_typed,
     decimal_scale,
     split_create_table_as,
+    storage_type,
 )
 from sqlbuild.adapters.sqlite._helpers.timestamps import canonical_timestamp_text
+from sqlbuild.adapters.sqlite.classes.logical_relations import LogicalRelations
 from sqlbuild.adapters.sqlite.classes.sqlite_connection import SqliteConnection
 from sqlbuild.adapters.sqlite.constants import (
     BOOLEAN_TYPE_MARKER,
@@ -167,6 +178,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         historical_insert=HistoricalSnapshotInsertStyle.WITH_INSERT,
     )
 
+    def __init__(self) -> None:
+        self._logical_relations: LogicalRelations = LogicalRelations()
+
     def connect(self, config: dict[str, Any]) -> SqliteConnection:
         if sqlite3.sqlite_version_info < MINIMUM_SQLITE_VERSION:
             minimum: str = ".".join(str(part) for part in MINIMUM_SQLITE_VERSION)
@@ -190,7 +204,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         read_only: bool = bool(config.get("read_only", False))
         if path != MEMORY_DATABASE_PATH and not read_only:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        target: str = f"file:{Path(path).as_posix()}?mode=ro" if read_only else path
+        target: str = (
+            f"file:{quote(Path(path).as_posix(), safe='/:')}?mode=ro" if read_only else path
+        )
         raw_connection: sqlite3.Connection = sqlite3.connect(
             target,
             timeout=busy_timeout,
@@ -214,6 +230,36 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     def _execute(self, *, connection: SqliteConnection, sql: str) -> Any:
         log_sql(logger=logging.getLogger("sqlbuild.adapter.sqlite"), sql=sql)
+        removed: tuple[str, ...]
+        added: tuple[str, ...]
+        removed, added = relation_changes(sql)
+        if not removed and not added:
+            return self._execute_statement(connection=connection, sql=sql)
+        owns_transaction: bool = not connection.in_transaction()
+        if owns_transaction:
+            connection.execute("BEGIN IMMEDIATE")
+        try:
+            cursor: Any = self._execute_statement(connection=connection, sql=sql)
+            record_relation_changes(
+                connection=connection,
+                removed=removed,
+                added=added,
+                locate=self._logical_relations.lookup,
+            )
+        except BaseException:
+            if owns_transaction and connection.in_transaction():
+                connection.execute("ROLLBACK")
+            raise
+        if owns_transaction:
+            connection.execute("COMMIT")
+        return cursor
+
+    def _execute_statement(self, *, connection: SqliteConnection, sql: str) -> Any:
+        view_rename: tuple[str, str] | None = split_rename_view(sql)
+        if view_rename is not None:
+            return rename_view(
+                connection=connection, origin=view_rename[0], destination=view_rename[1]
+            )
         create_table_as: tuple[str, str] | None = split_create_table_as(sql)
         if create_table_as is None:
             return connection.execute(sql)
@@ -232,6 +278,12 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         """Take the write lock up front so a read lock is never upgraded mid-transaction."""
 
         self.execute(connection=connection, sql="BEGIN IMMEDIATE")
+
+    def rollback(self, connection: Any) -> None:
+        """Roll back only an open transaction; SQLite ends it itself on interrupts."""
+
+        if connection.in_transaction():
+            self.execute(connection=connection, sql="ROLLBACK")
 
     def interrupt_connection(self, connection: Any) -> bool:
         connection.interrupt()
@@ -339,7 +391,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         cursor_type: str | None,
         is_date: bool,
     ) -> str:
-        quoted_cursor: str = self.render_identifier(cursor_column)
+        quoted_cursor: str = self.render_cursor_operand(
+            expression=self.render_identifier(cursor_column), cursor_type=cursor_type
+        )
         maximum_literal: str = (
             _quote_sql_string(maximum_allowed)
             if is_date
@@ -359,10 +413,20 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> str:
         if cursor_column is None or start_cursor is None:
             return ""
-        clauses: list[str] = [f"{cursor_column} >= {self._cursor_value_literal(start_cursor)}"]
+        operand: str = self.render_cursor_operand(
+            expression=cursor_column, cursor_type=start_cursor.kind
+        )
+        clauses: list[str] = [f"{operand} >= {self._cursor_value_literal(start_cursor)}"]
         if end_cursor is not None:
-            clauses.append(f"{cursor_column} < {self._cursor_value_literal(end_cursor)}")
+            clauses.append(f"{operand} < {self._cursor_value_literal(end_cursor)}")
         return " AND ".join(clauses)
+
+    def render_cursor_operand(self, *, expression: str, cursor_type: str | None) -> str:
+        """Compare timestamp cursors in canonical UTC text, whatever form the column stores."""
+
+        if str(cursor_type).lower() == CursorKind.INTEGER:
+            return expression
+        return f"{CURSOR_TEXT_FUNCTION_NAME}({expression})"
 
     def schema_exists(
         self,
@@ -403,12 +467,21 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         name: str,
     ) -> bool:
         del database
-        row: object = connection.execute_with(
-            sql="SELECT 1 FROM sqlite_schema "
+        table_name: str = physical_name(schema=schema, name=name)
+        row: tuple[Any, ...] | None = connection.execute_with(
+            sql="SELECT name FROM sqlite_schema "
             "WHERE type IN ('table', 'view') AND lower(name) = lower(?)",
-            parameters=(physical_name(schema=schema, name=name),),
+            parameters=(table_name,),
         ).fetchone()
-        return row is not None
+        if row is None:
+            return False
+        located: tuple[str, str] = logical_location(
+            table_name=str(row[0]), locations=registry_locations(connection)
+        )
+        return (located[0].lower(), located[1].lower()) == (
+            (schema or MAIN_SCHEMA).lower(),
+            name.lower(),
+        )
 
     def list_relations(
         self,
@@ -613,7 +686,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         columns: tuple[str, ...] | None = None,
         cursor_type: str | None = None,
     ) -> tuple[str, ...]:
-        quoted_cursor_column: str = self.render_identifier(cursor_column)
+        quoted_cursor_column: str = self.render_cursor_operand(
+            expression=self.render_identifier(cursor_column), cursor_type=cursor_type
+        )
         start_literal: str = self.render_cursor_bound_literal(
             value=cursor_start, cursor_type=cursor_type
         )
@@ -770,23 +845,15 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         destination: str,
         statement_recorder: StatementRecorder,
     ) -> None:
-        """Recreate the view under its new name, since SQLite cannot alter a view."""
+        """Rename a view; SQLite recreates it from its stored definition in one transaction."""
 
-        row: tuple[Any, ...] | None = connection.execute_with(
-            sql="SELECT sql FROM sqlite_schema WHERE type = 'view' AND lower(name) = lower(?)",
-            parameters=(unquote_relation(origin),),
-        ).fetchone()
-        if row is None:
-            raise AdapterUserError(message=f"SQLite view '{origin}' does not exist")
-        statements: tuple[str, ...] = (
-            *self.render_drop_view(destination=origin, if_exists=False),
-            f"CREATE VIEW {destination} AS {view_body(str(row[0]))}",
+        statements: tuple[str, ...] = self.render_rename_view(
+            origin=origin, destination=destination
         )
         statement_recorder.record_many(statements)
-        with self.transaction(connection):
-            statement: str
-            for statement in statements:
-                self.execute(connection=connection, sql=statement)
+        statement: str
+        for statement in statements:
+            self.execute(connection=connection, sql=statement)
 
     def supports_transactional_ddl(self) -> bool:
         return True
@@ -799,12 +866,13 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         cursor_end_exclusive: str,
         cursor_type: str | None,
     ) -> str:
-        return self._render_seed_select_before_cursor_impl(
-            origin=origin,
-            cursor_column=cursor_column,
-            cursor_end_exclusive=cursor_end_exclusive,
-            cursor_type=cursor_type,
+        operand: str = self.render_cursor_operand(
+            expression=self.render_identifier(cursor_column), cursor_type=cursor_type
         )
+        end_literal: str = self.render_cursor_bound_literal(
+            value=cursor_end_exclusive, cursor_type=cursor_type
+        )
+        return f"SELECT * FROM {origin} WHERE {operand} < {end_literal}"
 
     def relation_names_match(self, *, left: str, right: str) -> bool:
         return self._relation_names_match_impl(left=left, right=right)
@@ -818,7 +886,8 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         self, *, destination: str, columns: tuple[ColumnInfo, ...]
     ) -> tuple[str, ...]:
         return tuple(
-            f"ALTER TABLE {destination} ADD COLUMN {self.render_identifier(col.name)} {col.type}"
+            f"ALTER TABLE {destination} ADD COLUMN {self.render_identifier(col.name)} "
+            f"{storage_type(col.type)}"
             for col in columns
         )
 
@@ -1195,12 +1264,13 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             exclude_columns=exclude_columns,
         )
         statement_recorder.record_many(statements)
-        affected: int | None = None
+        affected: int | None = 0
         with self.transaction(connection):
             stmt: str
             for stmt in statements:
                 cursor: Any = self.execute(connection=connection, sql=stmt)
-                affected = self.affected_row_count(cursor=cursor)
+                count: int | None = self.affected_row_count(cursor=cursor)
+                affected = None if affected is None or count is None else affected + count
         return affected
 
     def load_seed(
@@ -1332,7 +1402,7 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         columns: tuple[ColumnInfo, ...],
         statement_recorder: StatementRecorder,
     ) -> None:
-        """Rebuild the table with the new types in one transaction; SQLite has no ALTER TYPE."""
+        """Rebuild the table with the new types in one transaction, keeping its indexes."""
 
         table_name: str = unquote_relation(destination)
         rebuilt: str = quote_identifier(f"{table_name}__sqlbuild_retype")
@@ -1350,11 +1420,17 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             else self.render_identifier(col.name)
             for col in current
         )
+        index_rows: list[tuple[Any, ...]] = connection.execute_with(
+            sql="SELECT sql FROM sqlite_schema WHERE type = 'index' AND lower(tbl_name) = lower(?) "
+            "AND sql IS NOT NULL ORDER BY name",
+            parameters=(table_name,),
+        ).fetchall()
         statements: tuple[str, ...] = (
             f"DROP TABLE IF EXISTS {rebuilt}",
             f"CREATE TABLE {rebuilt} AS SELECT {projections} FROM {destination}",
             f"DROP TABLE {destination}",
             f"ALTER TABLE {rebuilt} RENAME TO {quote_identifier(table_name)}",
+            *(str(row[0]) for row in index_rows),
         )
         statement_recorder.record_many(statements)
         token: Token[Mapping[str, str]] = _ENFORCED_COLUMN_TYPES.set(new_types)
@@ -2086,7 +2162,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             )
         if schema is None:
             return None
-        return physical_name(schema=schema, name=name)
+        physical: str = physical_name(schema=schema, name=name)
+        self._logical_relations.remember(schema=schema, name=name, physical=physical)
+        return physical
 
     def render_identifier(self, name: str) -> str:
         return '"' + name.replace('"', '""') + '"'
@@ -2284,13 +2362,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return (f"ALTER TABLE {origin} RENAME TO {destination}",)
 
     def render_rename_view(self, *, origin: str, destination: str) -> tuple[str, ...]:
-        raise AdapterUserError(
-            message=(
-                f"SQLite cannot rename view '{origin}' to '{destination}' with one statement; "
-                "rename_view recreates it from its stored definition"
-            ),
-            code=UNSUPPORTED_FEATURE_CODE,
-        )
+        """Render ALTER VIEW, which the adapter runs by recreating the view under the new name."""
+
+        return (f"ALTER VIEW {origin} RENAME TO {destination}",)
 
     def render_create_fingerprint_table_sql(
         self,

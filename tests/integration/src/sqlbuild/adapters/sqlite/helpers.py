@@ -9,6 +9,7 @@ from typing import Any
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.models import ColumnInfo, RowDiffSampleRow
 from sqlbuild.adapters.sqlite.classes.sqlite_adapter import SqliteAdapter
+from sqlbuild.executor.run._helpers.validation.type_enforcement import enforce_types_staged
 
 
 def run_sql(*, adapter: SqliteAdapter, connection: Any, statements: tuple[str, ...]) -> None:
@@ -21,6 +22,41 @@ def fetch_rows(
 ) -> tuple[tuple[object, ...], ...]:
     cursor: Any = adapter.execute(connection=connection, sql=sql)
     return tuple(tuple(row) for row in cursor.fetchall())
+
+
+def render_relations(
+    *, adapter: SqliteAdapter, relations: tuple[tuple[str, str], ...]
+) -> tuple[str | None, ...]:
+    """Render relations as the planner does, which records the schema each table belongs to."""
+
+    return tuple(
+        adapter.render_qualified_name(database=None, schema=schema, name=name)
+        for schema, name in relations
+    )
+
+
+def stage_contract_relation(
+    *, adapter: SqliteAdapter, connection: Any, name: str, sql: str
+) -> None:
+    """Create a relation and enforce a DECIMAL(10,2) payment contract on it, as staging does."""
+
+    adapter.create_table_as(
+        connection=connection, destination=name, sql=sql, statement_recorder=recorder()
+    )
+    enforce_types_staged(
+        adapter=adapter,
+        connection=connection,
+        staging_qualified=name,
+        staging_database=None,
+        staging_schema="main",
+        staging_table=name,
+        declared_columns=(
+            ColumnInfo("payment_id", "INTEGER"),
+            ColumnInfo("amount", "DECIMAL(10,2)"),
+        ),
+        table_type="table",
+        statement_recorder=recorder(),
+    )
 
 
 def recorder() -> StatementRecorder:

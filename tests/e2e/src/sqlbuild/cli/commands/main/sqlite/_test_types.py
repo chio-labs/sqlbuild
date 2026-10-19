@@ -57,3 +57,31 @@ class SqliteScenarioE2ETestCase:
     expected_outcomes: dict[str, tuple[str, str | None]]
     expected_tables: tuple[str, ...]
     expected_return_code: int = 1
+
+
+@dataclass(frozen=True)
+class SqliteDecimalContractE2ETestCase:
+    description: str
+    source_files: dict[str, str]
+    expected_payment_rows: tuple[tuple[object, ...], ...]
+    expected_agreeing_rows: int
+    expected_evolved_rows: tuple[tuple[object, ...], ...]
+    expected_fee_declaration: str
+
+
+@dataclass(frozen=True)
+class SqliteCollisionE2ETestCase:
+    description: str
+    first_files: dict[str, str]
+    second_files: dict[str, str]
+    expected_fragments: tuple[str, ...]
+    expected_tables: tuple[tuple[object, ...], ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqliteCursorWindowE2ETestCase:
+    description: str
+    events_csv: str
+    commands: tuple[tuple[str, ...], ...]
+    expected_order_ids: tuple[tuple[object, ...], ...]
