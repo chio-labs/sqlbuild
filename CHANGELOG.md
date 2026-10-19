@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.160.1](https://github.com/chio-labs/sqlbuild/compare/v0.160.0...v0.160.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* keep SQLite loader and source timestamps as text and add a waffle shop E2E ([#1154](https://github.com/chio-labs/sqlbuild/issues/1154)) ([f5b655e](https://github.com/chio-labs/sqlbuild/commit/f5b655ee6d95afbea3fa63adefcd47cc04b0e5d7))
+
 ## [0.160.0](https://github.com/chio-labs/sqlbuild/compare/v0.159.0...v0.160.0) (2026-10-19)
 
 
