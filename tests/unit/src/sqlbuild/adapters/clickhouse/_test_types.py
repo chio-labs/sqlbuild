@@ -64,3 +64,11 @@ class TableLayoutTestCase:
     description: str
     layout: dict[str, object]
     expected_clauses: str
+
+
+@dataclass(frozen=True)
+class SessionSettingConflictTestCase:
+    description: str
+    settings: dict[str, object]
+    expected_code: str
+    expected_message: str

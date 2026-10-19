@@ -117,6 +117,7 @@ from sqlbuild.adapters.clickhouse.constants import (
     RELATION_NOT_FOUND_CODES,
     RELATION_SEPARATOR,
     SESSION_SETTINGS,
+    SETTING_CONFLICT_CODE,
     SNAPSHOT_REBUILD_INFIX,
     SNAPSHOT_WORK_INFIX,
     STATE_TABLE_ENGINE_KEYWORD,
@@ -180,8 +181,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 help="Supported options: " + ", ".join(sorted(CONNECTION_OPTION_KEYS)),
             )
         secure: bool = bool(config.get("secure", False))
-        settings: dict[str, object] = dict(SESSION_SETTINGS)
-        settings.update(dict(config.get("settings") or {}))
+        settings: dict[str, object] = _session_settings(dict(config.get("settings") or {}))
         client_options: dict[str, Any] = {
             "host": str(config.get("host", "localhost")),
             "port": int(config.get("port", DEFAULT_HTTPS_PORT if secure else DEFAULT_HTTP_PORT)),
@@ -2645,3 +2645,33 @@ def _prune_history_sql(
         f"PARTITION BY {partition} ORDER BY {order}) AS __sqlbuild_history_rank FROM {table}) "
         f"WHERE __sqlbuild_history_rank > {retain_versions}) SETTINGS transform_null_in = 1"
     )
+
+
+def _session_settings(user_settings: dict[str, object]) -> dict[str, object]:
+    """Merge user settings under the required ones, refusing a user value that differs."""
+
+    conflicts: tuple[str, ...] = tuple(
+        sorted(
+            name
+            for name, value in user_settings.items()
+            if name in SESSION_SETTINGS
+            and _setting_text(value) != _setting_text(SESSION_SETTINGS[name])
+        )
+    )
+    if conflicts:
+        required: str = ", ".join(f"{name} = {SESSION_SETTINGS[name]!r}" for name in conflicts)
+        raise AdapterUserError(
+            message=(
+                "ClickHouse connection settings override settings SQLBuild requires: "
+                + ", ".join(conflicts)
+            ),
+            code=SETTING_CONFLICT_CODE,
+            help=f"Remove them from [connection.settings]; SQLBuild runs with {required}.",
+        )
+    return {**user_settings, **SESSION_SETTINGS}
+
+
+def _setting_text(value: object) -> str:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    return str(value).strip().lower()

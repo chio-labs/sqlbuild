@@ -18,6 +18,7 @@ SESSION_SETTINGS: dict[str, object] = {
     "date_time_input_format": "best_effort",
     "cast_string_to_date_time_mode": "best_effort",
 }
+SETTING_CONFLICT_CODE: str = "A710"
 CONNECTION_OPTION_KEYS: frozenset[str] = frozenset(
     {
         "host",

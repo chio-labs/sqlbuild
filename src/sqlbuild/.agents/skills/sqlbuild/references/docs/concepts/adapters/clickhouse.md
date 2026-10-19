@@ -159,7 +159,7 @@ Every query runs with these settings so SQL behaves the same as on other adapter
 | `mutations_sync`, `lightweight_deletes_sync` | `2` | Statements finish before the next one starts |
 | `date_time_input_format`, `cast_string_to_date_time_mode` | `best_effort` | ISO 8601 timestamps with `T` and offsets parse |
 
-Values under `settings` in the connection override these.
+The connection's `settings` may repeat these values but not change them: a different value fails to connect with `A710`, because SQLBuild's generated SQL depends on them.
 
 ClickHouse returns a type's default value (`0`, the epoch, an empty string) from `lag` and `lead` past the edge of a window frame unless the argument is `Nullable`. SQLBuild's generated snapshot SQL wraps those arguments in `toNullable` so they return `NULL` as on other adapters. Write the same in your own models when you rely on `NULL` there.
 
