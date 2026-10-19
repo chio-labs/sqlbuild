@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.161.0](https://github.com/chio-labs/sqlbuild/compare/v0.160.2...v0.161.0) (2026-10-19)
+
+
+### Features
+
+* record local command history with Recall ([#1155](https://github.com/chio-labs/sqlbuild/issues/1155)) ([4c0d23f](https://github.com/chio-labs/sqlbuild/commit/4c0d23f89c6c4559c25d303994c7cfd5de6de4a2))
+
+
+### Bug Fixes
+
+* stop false errors on stars, comments, set operations, snapshots and table-view switches ([#1158](https://github.com/chio-labs/sqlbuild/issues/1158)) ([b21b0ff](https://github.com/chio-labs/sqlbuild/commit/b21b0ff035d97b70415d49b687f63f1be22c2345))
+
 ## [0.160.2](https://github.com/chio-labs/sqlbuild/compare/v0.160.1...v0.160.2) (2026-10-19)
 
 
