@@ -41,8 +41,9 @@ of its history still succeeds, prints a warning followed by its own final status
 status `abandoned`.
 
 Every command is recorded except `sqb recall` itself, commands that create a project (such as
-`sqb init`), and raw-query `sqb diff`. A `sqb compile` answered from the launcher's warm cache is not
-recorded either.
+`sqb init`), and raw-query `sqb diff`. Commands `sqb` answers without starting Python are not
+recorded either: a `sqb compile` answered from the launcher's warm cache, and `sqb clean`, `sqb skills`,
+`sqb rules list` and `sqb rules show` in a project with no custom rules, rule options or sinks.
 
 The store is `logs/recall.sqlite3` in the project directory. Add `logs/` to `.gitignore`; the store
 can contain sensitive SQL and output.
