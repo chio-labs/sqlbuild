@@ -6,6 +6,8 @@ import fcntl
 import os
 import pty
 import re
+import shlex
+import signal
 import struct
 import subprocess
 import termios
@@ -22,6 +24,10 @@ SPINNER_GLYPHS: tuple[str, ...] = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "�
 SOURCE_LOADER_STRATEGIES_DIR: Path = (
     REPO_ROOT / "tests" / "e2e" / "fixtures" / "source_loader_strategies"
 )
+# Far above any healthy command, so only a hang trips it: one test fails instead of the CI job.
+SQB_COMMAND_TIMEOUT_SECONDS: float = 600.0
+_HANG_DUMP_GRACE_SECONDS: float = 30.0
+_HANG_OUTPUT_TAIL_CHARACTERS: int = 20_000
 
 
 def prepare_waffle_shop(tmp_path: Path) -> Path:
@@ -208,16 +214,76 @@ def run_sqb(
 
     process_env: dict[str, str] = dict(os.environ)
     process_env.update(env or {})
+    process_env.setdefault("PYTHONFAULTHANDLER", "1")
 
-    return subprocess.run(
-        ["uv", "run", "sqb", "--project-dir", str(project_dir), *command],
+    return run_with_hang_dump(
+        argv=("uv", "run", "sqb", "--project-dir", str(project_dir), *command),
         cwd=working_dir or REPO_ROOT,
-        capture_output=True,
-        text=True,
-        input=input_text,
         env=process_env,
-        check=False,
+        input_text=input_text,
+        timeout_seconds=SQB_COMMAND_TIMEOUT_SECONDS,
     )
+
+
+def run_with_hang_dump(
+    *,
+    argv: tuple[str, ...],
+    cwd: Path,
+    env: Mapping[str, str],
+    input_text: str | None,
+    timeout_seconds: float,
+) -> subprocess.CompletedProcess[str]:
+    """Run `argv` to completion, or fail with every Python thread's stack once it hangs.
+
+    Standard input carries `input_text`, or ends at once without it. The command runs in its own
+    process group. Past `timeout_seconds` the whole group receives
+    SIGABRT, so Python processes started with `PYTHONFAULTHANDLER` print all thread stacks to
+    stderr before they exit, and the group is then killed.
+    """
+
+    process: subprocess.Popen[str] = subprocess.Popen(
+        argv,
+        cwd=cwd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=dict(env),
+        process_group=0,
+    )
+    try:
+        stdout, stderr = process.communicate(input=input_text, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        stdout, stderr = _dump_and_kill_group(process=process)
+        raise AssertionError(
+            f"{shlex.join(argv)} did not finish within {timeout_seconds:.0f}s; "
+            "its process group was aborted to dump thread stacks.\n"
+            f"--- stdout (last {_HANG_OUTPUT_TAIL_CHARACTERS} characters) ---\n"
+            f"{stdout[-_HANG_OUTPUT_TAIL_CHARACTERS:]}\n"
+            f"--- stderr (last {_HANG_OUTPUT_TAIL_CHARACTERS} characters) ---\n"
+            f"{stderr[-_HANG_OUTPUT_TAIL_CHARACTERS:]}"
+        ) from None
+    return subprocess.CompletedProcess(
+        args=list(argv), returncode=process.returncode, stdout=stdout, stderr=stderr
+    )
+
+
+def _dump_and_kill_group(*, process: subprocess.Popen[str]) -> tuple[str, str]:
+    _signal_group(process_group=process.pid, signal_number=signal.SIGABRT)
+    try:
+        stdout, stderr = process.communicate(timeout=_HANG_DUMP_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        _signal_group(process_group=process.pid, signal_number=signal.SIGKILL)
+        stdout, stderr = process.communicate()
+    _signal_group(process_group=process.pid, signal_number=signal.SIGKILL)
+    return stdout or "", stderr or ""
+
+
+def _signal_group(*, process_group: int, signal_number: signal.Signals) -> None:
+    try:
+        os.killpg(process_group, signal_number)
+    except ProcessLookupError:
+        return
 
 
 def run_sqb_with_pty(
