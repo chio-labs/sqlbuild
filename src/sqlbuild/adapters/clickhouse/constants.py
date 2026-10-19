@@ -17,6 +17,7 @@ SESSION_SETTINGS: dict[str, object] = {
     "lightweight_deletes_sync": 2,
     "date_time_input_format": "best_effort",
     "cast_string_to_date_time_mode": "best_effort",
+    "insert_null_as_default": 0,
 }
 SETTING_CONFLICT_CODE: str = "A710"
 CONNECTION_OPTION_KEYS: frozenset[str] = frozenset(

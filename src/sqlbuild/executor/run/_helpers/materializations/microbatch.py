@@ -2861,6 +2861,13 @@ def _apply_microbatch_schema_change(
                 schema=targets.target_schema,
                 name=targets.target_table,
             )
+            target_columns = context.adapter.widen_target_nullability(
+                connection=context.connection,
+                destination=targets.target_qualified,
+                target_columns=target_columns,
+                incoming_columns=delta_columns,
+                statement_recorder=state.statement_recorder,
+            )
             schema_warnings: tuple[str, ...] = _apply_schema_change(
                 adapter=context.adapter,
                 connection=context.connection,

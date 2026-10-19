@@ -97,6 +97,7 @@ from sqlbuild.adapters.clickhouse._helpers.snapshot_rewrite import (
 from sqlbuild.adapters.clickhouse._helpers.table_layout import render_table_layout
 from sqlbuild.adapters.clickhouse._helpers.type_text import (
     canonical_type,
+    is_nullable_type,
     nullable_type,
     quote_string,
 )
@@ -1478,8 +1479,13 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             (ColumnInfo(name=name, type=left_map[name]), ColumnInfo(name=name, type=type_sql))
             for name, type_sql in right_map.items()
             if name in left_map
-            and not types_equal(
-                left=canonical_type(left_map[name]), right=canonical_type(type_sql), dialect=None
+            and (
+                not types_equal(
+                    left=canonical_type(left_map[name]),
+                    right=canonical_type(type_sql),
+                    dialect=None,
+                )
+                or is_nullable_type(left_map[name]) != is_nullable_type(type_sql)
             )
         )
         return SchemaDiffResult(
@@ -2006,6 +2012,38 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         statement: str
         for statement in statements:
             self.execute(connection=connection, sql=statement)
+
+    def widen_target_nullability(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        target_columns: tuple[ColumnInfo, ...],
+        incoming_columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> tuple[ColumnInfo, ...]:
+        """Make target columns ``Nullable`` where the incoming column of the same type is."""
+
+        incoming: dict[str, str] = {column.name.lower(): column.type for column in incoming_columns}
+        widened: tuple[ColumnInfo, ...] = tuple(
+            ColumnInfo(name=column.name, type=nullable_type(column.type))
+            for column in target_columns
+            if column.name.lower() in incoming
+            and is_nullable_type(incoming[column.name.lower()])
+            and not is_nullable_type(column.type)
+            and nullable_type(column.type) != column.type
+            and canonical_type(incoming[column.name.lower()]) == canonical_type(column.type)
+        )
+        if not widened:
+            return target_columns
+        self.alter_column_types(
+            connection=connection,
+            destination=destination,
+            columns=widened,
+            statement_recorder=statement_recorder,
+        )
+        by_name: dict[str, ColumnInfo] = {column.name: column for column in widened}
+        return tuple(by_name.get(column.name, column) for column in target_columns)
 
     def alter_column_types(
         self,

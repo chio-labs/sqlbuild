@@ -200,12 +200,18 @@ def execute_incremental_entry(
                 schema=target_schema,
                 name=delta_table,
             )
-            target_columns: tuple[ColumnInfo, ...] = inspect_runtime_relation_schema(
-                adapter=adapter,
+            target_columns: tuple[ColumnInfo, ...] = adapter.widen_target_nullability(
                 connection=connection,
-                database=target_database,
-                schema=target_schema,
-                name=target_table,
+                destination=target_qualified,
+                target_columns=inspect_runtime_relation_schema(
+                    adapter=adapter,
+                    connection=connection,
+                    database=target_database,
+                    schema=target_schema,
+                    name=target_table,
+                ),
+                incoming_columns=initial_delta_columns,
+                statement_recorder=statement_recorder,
             )
             delta_columns, type_warnings = _prepare_incremental_delta_types(
                 adapter=adapter,

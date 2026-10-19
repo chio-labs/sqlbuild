@@ -139,3 +139,11 @@ class ClickHouseStateTimestampTestCase:
     description: str
     created_at: datetime
     expected_created_at: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseSchemaDiffTestCase:
+    description: str
+    left_ddl_columns: str
+    right_ddl_columns: str
+    expected_type_changes: tuple[tuple[str, str, str], ...]

@@ -10,7 +10,13 @@ import pytest
 from sqlbuild._native import build_microbatch_insert_many_sql
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
-from sqlbuild.adapter.contract.models import ColumnInfo, CursorValue, QueryResult, RelationInfo
+from sqlbuild.adapter.contract.models import (
+    ColumnInfo,
+    CursorValue,
+    QueryResult,
+    RelationInfo,
+    SchemaDiffResult,
+)
 from sqlbuild.adapter.contract.types import RelationReadStatus
 from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -27,6 +33,7 @@ from tests.integration.src.sqlbuild.adapters.clickhouse._test_types import (
     ClickHouseRefusedFunctionTestCase,
     ClickHouseRewriteFaultTestCase,
     ClickHouseRewriteTestCase,
+    ClickHouseSchemaDiffTestCase,
     ClickHouseSeedTestCase,
     ClickHouseStateTableTestCase,
     ClickHouseStateTimestampTestCase,
@@ -894,3 +901,44 @@ def test_given_microbatch_event_when_publishing_state_then_clickhouse_keeps_micr
         connection=connection,
         sql=f"SELECT created_at FROM {clickhouse_schema}._sqlbuild_microbatches",
     ) == (test_case.expected_created_at)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseSchemaDiffTestCase(
+            description="nullability differences are type changes",
+            left_ddl_columns="id Int64, amount Int64, note Nullable(String), code String",
+            right_ddl_columns=(
+                "id Int64, amount Nullable(Int64), note String, code LowCardinality(String)"
+            ),
+            expected_type_changes=(
+                ("amount", "Int64", "Nullable(Int64)"),
+                ("note", "Nullable(String)", "String"),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_relations_differing_in_nullability_when_diffing_schema_then_changes_are_reported(
+    test_case: ClickHouseSchemaDiffTestCase,
+    adapter: ClickHouseAdapter,
+    connection: Any,
+    clickhouse_schema: str,
+) -> None:
+    left: str = f"{clickhouse_schema}.left_orders"
+    right: str = f"{clickhouse_schema}.right_orders"
+    adapter.execute(
+        connection=connection,
+        sql=f"CREATE TABLE {left} ({test_case.left_ddl_columns}) ENGINE = MergeTree ORDER BY id",
+    )
+    adapter.execute(
+        connection=connection,
+        sql=f"CREATE TABLE {right} ({test_case.right_ddl_columns}) ENGINE = MergeTree ORDER BY id",
+    )
+
+    result: SchemaDiffResult = adapter.diff_schema(connection=connection, left=left, right=right)
+
+    assert tuple(
+        (before.name, before.type, after.type) for before, after in result.type_changed_columns
+    ) == (test_case.expected_type_changes)

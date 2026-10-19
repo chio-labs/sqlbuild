@@ -841,6 +841,20 @@ class BigQueryAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         del connection, destination
         return None
 
+    def widen_target_nullability(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        target_columns: tuple[ColumnInfo, ...],
+        incoming_columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> tuple[ColumnInfo, ...]:
+        """Return the target columns unchanged; this warehouse never stores NULL as a default."""
+
+        del connection, destination, incoming_columns, statement_recorder
+        return target_columns
+
     def alter_column_types(
         self,
         *,

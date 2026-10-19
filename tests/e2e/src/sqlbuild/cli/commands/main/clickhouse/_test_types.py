@@ -67,3 +67,12 @@ class ClickHouseLayoutChangeE2ETestCase:
     expected_warning_codes: tuple[str, ...]
     expected_full_refresh_warning_codes: tuple[str, ...]
     expected_rebuilt_fragment: str
+
+
+@dataclass(frozen=True)
+class ClickHouseNullabilityE2ETestCase:
+    description: str
+    model_sql: str
+    edited_select: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_types: tuple[tuple[object, ...], ...]

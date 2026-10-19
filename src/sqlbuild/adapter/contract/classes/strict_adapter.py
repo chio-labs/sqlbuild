@@ -48,6 +48,19 @@ class StrictAdapter(
     adapter_name: ClassVar[str]
 
     @abstractmethod
+    def widen_target_nullability(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        target_columns: tuple[ColumnInfo, ...],
+        incoming_columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> tuple[ColumnInfo, ...]:
+        """Let target columns admit NULL where incoming ones do; return the target columns."""
+        ...
+
+    @abstractmethod
     def supports_zero_copy_clone(self) -> bool:
         """Return whether clone operations can use zero-copy semantics."""
         ...
