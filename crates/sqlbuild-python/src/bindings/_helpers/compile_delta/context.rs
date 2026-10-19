@@ -15,6 +15,10 @@ use crate::bindings::_helpers::compile_delta::image::PendingRules;
 /// The facts a full compile leaves for its project image beyond its analysis record.
 #[derive(Debug, Default)]
 pub(crate) struct ImageCapture {
+    /// The sources functions and audits read, which a delta compile always keeps.
+    pub(crate) pinned_sources: BTreeSet<String>,
+    /// The sources each SQL test file reads, which a delta compile keeps when it reruns it.
+    pub(crate) test_sources: BTreeMap<String, BTreeSet<String>>,
     /// The relation facts the model analysis session ended with.
     pub(crate) relations: Option<RelationTables>,
     /// The built-in rules request and its raw findings, before suppressions.
@@ -151,6 +155,29 @@ pub(crate) fn capture(record: impl FnOnce(&mut ImageCapture)) {
     if let Some(capture) = locked(&CAPTURE).as_mut() {
         record(capture);
     }
+}
+
+/// Record sources a resource other than a model reads, when a capture is running.
+pub(crate) fn record_source_reads<'a>(names: impl IntoIterator<Item = &'a str>) {
+    capture(|capture| {
+        capture
+            .pinned_sources
+            .extend(names.into_iter().map(str::to_owned));
+    });
+}
+
+/// Record sources an SQL test file reads, when a capture is running.
+pub(crate) fn record_test_source_reads<'a>(
+    relative_path: &str,
+    names: impl IntoIterator<Item = &'a str>,
+) {
+    capture(|capture| {
+        capture
+            .test_sources
+            .entry(relative_path.replace('\\', "/"))
+            .or_default()
+            .extend(names.into_iter().map(str::to_owned));
+    });
 }
 
 /// Mark the running capture as unusable as a delta base.

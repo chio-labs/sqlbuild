@@ -6,6 +6,9 @@ use std::path::Path;
 use sqlbuild_cache::digest::main::bytes_digest::bytes_digest;
 use sqlbuild_discovery::model_files::main::parse_model_text::parse_model_text;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
+use sqlbuild_sqltext::sql_references::main::extract_sql_references::extract_sql_references;
+use sqlbuild_sqltext::sql_references::models::ReferenceExtraction;
+use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::bindings::_helpers::compile_delta::context::{capture, capturing};
 use crate::bindings::_helpers::discovery::model_records::model_file_options;
@@ -74,32 +77,77 @@ fn encode_value(value: &AuthoredValue, out: &mut Vec<u8>) {
     }
 }
 
-fn header_keys(values: &[(String, AuthoredValue)]) -> HeaderKeys {
+/// The pseudo header key holding a digest of the sources a model's authored query names.
+const REFERENCES_KEY: &str = "\u{0}sources";
+const SOURCE_KIND: &str = "source";
+
+/// A digest of the source calls `query_sql` names, scanned with plain `--` comments. A delta
+/// compile discovers only the sources its models read before, so an edit changing it falls back.
+fn references_digest(query_sql: &str) -> String {
+    let syntax: LexicalSyntax = LexicalSyntax {
+        line_comment_prefixes: vec![LINE_COMMENT.to_owned()],
+        ..LexicalSyntax::default()
+    };
+    let mut buffer: Vec<u8> = Vec::new();
+    match extract_sql_references(query_sql, &syntax) {
+        ReferenceExtraction::Extracted(scan) => {
+            for reference in scan
+                .references
+                .iter()
+                .filter(|reference| reference.kind == SOURCE_KIND)
+            {
+                for part in [
+                    reference.kind,
+                    &reference.name,
+                    reference.package.as_deref().unwrap_or(""),
+                ] {
+                    buffer.extend_from_slice(&(part.len() as u64).to_le_bytes());
+                    buffer.extend_from_slice(part.as_bytes());
+                }
+            }
+        }
+        ReferenceExtraction::Failed(_) => buffer.push(0xff),
+    }
+    short_hex(&bytes_digest(&buffer))
+}
+
+const LINE_COMMENT: &str = "--";
+
+fn short_hex(digest: &[u8]) -> String {
+    let mut hex: String = String::with_capacity(KEPT_DIGEST_BYTES * 2);
+    for byte in &digest[..KEPT_DIGEST_BYTES] {
+        hex.push(char::from(HEX[usize::from(byte >> 4)]));
+        hex.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    hex
+}
+
+fn header_keys(values: &[(String, AuthoredValue)], query_sql: &str) -> HeaderKeys {
     let mut buffer: Vec<u8> = Vec::new();
     let mut keys: HeaderKeys = values
         .iter()
         .map(|(key, value)| {
             buffer.clear();
             encode_value(value, &mut buffer);
-            let digest = bytes_digest(&buffer);
-            let mut hex: String = String::with_capacity(KEPT_DIGEST_BYTES * 2);
-            for byte in &digest[..KEPT_DIGEST_BYTES] {
-                hex.push(char::from(HEX[usize::from(byte >> 4)]));
-                hex.push(char::from(HEX[usize::from(byte & 0x0f)]));
-            }
+            let hex: String = short_hex(&bytes_digest(&buffer));
             (key.clone(), hex)
         })
         .collect();
+    keys.push((REFERENCES_KEY.to_owned(), references_digest(query_sql)));
     keys.sort();
     keys
 }
 
 /// Record one discovered model's header keys for the image.
-pub(crate) fn record_header_keys(relative_path: &str, values: &[(String, AuthoredValue)]) {
+pub(crate) fn record_header_keys(
+    relative_path: &str,
+    values: &[(String, AuthoredValue)],
+    query_sql: &str,
+) {
     if !capturing() {
         return;
     }
-    let keys: HeaderKeys = header_keys(values);
+    let keys: HeaderKeys = header_keys(values, query_sql);
     let path: String = relative_path.replace('\\', "/");
     capture(|capture| {
         capture.header_keys.insert(path, keys);
@@ -138,7 +186,7 @@ pub(crate) fn header_change(
     let Ok(parsed) = parse_model_text(&file_path, contents, &model_file_options()) else {
         return HeaderChange::Unparsed;
     };
-    let current: HeaderKeys = header_keys(&parsed.header_values);
+    let current: HeaderKeys = header_keys(&parsed.header_values, &parsed.query_sql);
     let stored_map: BTreeMap<&str, &str> = stored
         .iter()
         .map(|(key, digest)| (key.as_str(), digest.as_str()))
@@ -155,6 +203,11 @@ pub(crate) fn header_change(
         .collect();
     if changed.is_empty() {
         return HeaderChange::Unchanged;
+    }
+    if changed.contains(REFERENCES_KEY) {
+        return HeaderChange::Unsupported(format!(
+            "{relative_path} changed which sources it reads"
+        ));
     }
     for key in &changed {
         if key == MATERIALIZED_KEY {

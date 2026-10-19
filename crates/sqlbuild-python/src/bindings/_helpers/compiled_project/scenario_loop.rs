@@ -1,5 +1,6 @@
 //! `build_scenario_inputs`: SQL scenarios expanded, classified and checked natively.
 
+use crate::bindings::_helpers::compile_delta::context::record_test_source_reads;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_analysis::compiler::main::scenario_helper_scope::scenario_helper_scope;
@@ -154,6 +155,12 @@ impl<'py> TestScope<'_, 'py> {
                 sources: source_names(&references),
             });
         }
+        record_test_source_reads(
+            origin.1,
+            sources
+                .iter()
+                .flat_map(|cte| cte.sources.iter().map(String::as_str)),
+        );
         if let Some(message) = scenario_source_violation(origin.1, &sources, &self.catalog.sources)
         {
             return Err(compile_error(self.context.classes, &message, None));

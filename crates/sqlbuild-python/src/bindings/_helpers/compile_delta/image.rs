@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compile_delta::header_keys::HeaderKeys;
 use crate::bindings::_helpers::compile_delta::image_codec::{Decoder, Encoder};
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
-const IMAGE_FORMAT: &str = "sqlbuild-project-image-v4";
+const IMAGE_FORMAT: &str = "sqlbuild-project-image-v5";
 const GATE_SECTION: &str = "gate";
 const FACTS_SECTION: &str = "facts";
 const RULES_SECTION: &str = "rules";
@@ -34,6 +34,8 @@ pub(crate) struct ProjectImage {
     pub(crate) diagnostics: Vec<CapturedDiagnostic>,
     pub(crate) text_models: Option<Vec<(String, bool, i64)>>,
     pub(crate) environment_names: Vec<String>,
+    pub(crate) pinned_sources: Vec<String>,
+    pub(crate) test_sources: BTreeMap<String, Vec<String>>,
     pub(crate) model_shapes: Vec<ModelShape>,
     pub(crate) lint_model_keys: Option<Vec<(String, String)>>,
     pub(crate) lint_file_keys: Option<Vec<(String, Option<String>)>>,
@@ -197,6 +199,8 @@ struct StoredFacts {
     diagnostics: Vec<CapturedDiagnostic>,
     text_models: Option<Vec<(String, bool, i64)>>,
     environment_names: Vec<String>,
+    pinned_sources: Vec<String>,
+    test_sources: BTreeMap<String, Vec<String>>,
     model_shapes: StoredShapes,
     lint_model_keys: Option<Vec<(String, String)>>,
     lint_file_keys: Option<Vec<(String, Option<String>)>>,
@@ -363,6 +367,12 @@ impl StoredFacts {
                 encoder.optional_string(key.as_deref());
             }
         }
+        encoder.strings(self.pinned_sources.iter().map(String::as_str));
+        encoder.count(self.test_sources.len());
+        for (path, names) in &self.test_sources {
+            encoder.string(path);
+            encoder.strings(names.iter().map(String::as_str));
+        }
         encoder.bytes(&misc);
         Ok(encoder.finish())
     }
@@ -402,6 +412,11 @@ impl StoredFacts {
         } else {
             None
         };
+        let pinned_sources: Vec<String> = decoder.strings()?;
+        let test_sources: BTreeMap<String, Vec<String>> = decoder
+            .list(|decoder| Some((decoder.string()?, decoder.strings()?)))?
+            .into_iter()
+            .collect();
         let (diagnostics, text_models, environment_names): StoredMisc =
             serde_json::from_slice(decoder.bytes()?).ok()?;
         decoder.finish()?;
@@ -418,6 +433,8 @@ impl StoredFacts {
             diagnostics,
             text_models,
             environment_names,
+            pinned_sources,
+            test_sources,
             model_shapes,
             lint_model_keys,
             lint_file_keys,
@@ -471,6 +488,12 @@ impl ProjectImage {
             diagnostics: capture.diagnostics,
             text_models: capture.text_models,
             environment_names,
+            pinned_sources: capture.pinned_sources.into_iter().collect(),
+            test_sources: capture
+                .test_sources
+                .into_iter()
+                .map(|(path, names)| (path, names.into_iter().collect()))
+                .collect(),
             model_shapes,
             lint_model_keys: capture.lint_model_keys,
             lint_file_keys: capture.lint_file_keys,
@@ -509,6 +532,8 @@ impl ProjectImage {
             diagnostics: self.diagnostics,
             text_models: self.text_models,
             environment_names: self.environment_names,
+            pinned_sources: self.pinned_sources,
+            test_sources: self.test_sources,
             lint_model_keys: self.lint_model_keys,
             lint_file_keys: self.lint_file_keys,
         };
@@ -571,6 +596,8 @@ impl ProjectImage {
             diagnostics: facts.diagnostics,
             text_models: facts.text_models,
             environment_names: facts.environment_names,
+            pinned_sources: facts.pinned_sources,
+            test_sources: facts.test_sources,
             model_shapes,
             lint_model_keys: facts.lint_model_keys,
             lint_file_keys: facts.lint_file_keys,

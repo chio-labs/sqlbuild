@@ -41,6 +41,8 @@ pub(crate) const ERRORS_ON_DELTA_PATH: bool = true;
 /// How many times a changed relation shape may pull its dependents into the delta.
 const MAX_ROUNDS: usize = 4;
 const MODELS_ROOT: &str = "models/";
+/// What every error for a reference to an undiscovered source says.
+const UNKNOWN_SOURCE: &str = "unknown source";
 /// The upstream kind of a source a model reads.
 const SOURCE_KIND: &str = "source";
 const TESTS_ROOT: &str = "tests/";
@@ -366,6 +368,11 @@ fn ran_round<'py>(
                 .iter()
                 .chain(&rerun.test_paths)
                 .any(|path| message.contains(path.as_str()));
+            if rerun.sources.is_some() && message.contains(UNKNOWN_SOURCE) {
+                return Ok(RoundOutcome::Stop(DeltaOutcome::Fallback(format!(
+                    "the delta compile read a source it did not discover: {message}"
+                ))));
+            }
             return Ok(RoundOutcome::Stop(if owned && ERRORS_ON_DELTA_PATH {
                 DeltaOutcome::Raised(error)
             } else {
@@ -490,6 +497,15 @@ pub(crate) fn run<'py>(
                     .flat_map(|model| &model.upstream)
                     .filter(|(kind, _)| kind == SOURCE_KIND)
                     .map(|(_, name)| name.clone())
+                    .chain(image.pinned_sources.iter().cloned())
+                    .chain(
+                        rerun
+                            .test_paths
+                            .iter()
+                            .filter_map(|path| image.test_sources.get(path))
+                            .flatten()
+                            .cloned(),
+                    )
                     .collect()
             });
         rerun.sources = sources_read.clone();
@@ -698,6 +714,15 @@ fn finished<'py>(
             .map_or("no error diagnostic", |diagnostic| diagnostic.json.as_str());
         return fallback(format!("the edit reports errors: {first}"));
     }
+    if rerun.sources.is_some()
+        && ran
+            .capture
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.json.contains(UNKNOWN_SOURCE))
+    {
+        return fallback("the delta compile read a source it did not discover");
+    }
     if unowned(rerun, &base.image.diagnostics) != unowned(rerun, &ran.capture.diagnostics) {
         return fallback("diagnostics outside the changed files differ");
     }
@@ -809,6 +834,14 @@ fn patched_image(base: ProjectImage, rerun: &Rerun, capture: ImageCapture) -> Pr
         image.model_shapes = shapes;
     }
     image.header_keys.extend(capture.header_keys);
+    let mut pinned: BTreeSet<String> = std::mem::take(&mut image.pinned_sources)
+        .into_iter()
+        .collect();
+    pinned.extend(capture.pinned_sources);
+    image.pinned_sources = pinned.into_iter().collect();
+    for (path, names) in capture.test_sources {
+        image.test_sources.insert(path, names.into_iter().collect());
+    }
     image.lint_model_keys = capture.lint_model_keys;
     image.lint_file_keys = capture.lint_file_keys;
     image
