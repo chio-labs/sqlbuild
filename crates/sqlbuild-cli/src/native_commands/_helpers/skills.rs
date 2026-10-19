@@ -10,7 +10,7 @@ use crate::native_commands::constants::{HOME_VARIABLE, SKILL_FILES_HEADER};
 use crate::native_commands::errors::PythonNeeded;
 use crate::native_commands::models::{CommandOutput, InstalledPackage, SkillsOptions};
 
-/// `Path.home()` from `HOME`, unless only Python's password lookup could tell.
+/// `Path.home()` from `HOME` (`USERPROFILE` on Windows), unless only Python could tell.
 pub(crate) fn home_dir() -> Result<PathBuf, PythonNeeded> {
     std::env::var_os(HOME_VARIABLE)
         .filter(|home| !home.is_empty())

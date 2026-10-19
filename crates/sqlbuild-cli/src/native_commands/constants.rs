@@ -27,7 +27,11 @@ pub(crate) const SITE_DIRECTORIES: [&str; 2] = ["site-packages", "dist-packages"
 pub(crate) const WINDOWS_SITE_DIRECTORY: [&str; 2] = ["Lib", "site-packages"];
 /// The packaged skill beneath the `sqlbuild` package directory.
 pub(crate) const SKILLS_DIRECTORY: [&str; 3] = [".agents", "skills", "sqlbuild"];
+/// The variable `Path.home()` reads first; without it `sqb` defers to Python's other lookups.
+#[cfg(not(windows))]
 pub(crate) const HOME_VARIABLE: &str = "HOME";
+#[cfg(windows)]
+pub(crate) const HOME_VARIABLE: &str = "USERPROFILE";
 /// The exit status of a command stopped by Ctrl+C.
 #[cfg(unix)]
 pub(crate) const INTERRUPTED_EXIT_CODE: i32 = 130;
