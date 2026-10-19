@@ -209,10 +209,10 @@ need to execute SQL against controlled data. Use an audit when the answer depend
 A finding contains a stable code, project-relative path, line, column, explanation, and remediation.
 This makes the same requirement usable in a terminal, JSON output, CI annotation, or agent workflow.
 
-Intentional departures remain explicit. Exact exceptions and path- or resource-scoped ignores
-require a reason; exact exceptions are stale-checked so obsolete suppressions do not silently
-accumulate. Mandatory compiler correctness cannot be suppressed. A project can forbid exceptions,
-scoped ignores and inline suppressions entirely with `[rules] allow_exceptions = false`.
+Intentional departures remain explicit and live only in `sqlbuild_project.toml`. Exact and
+relation-level exceptions and path- or resource-scoped ignores require a reason; exceptions are
+stale-checked so obsolete entries do not silently accumulate. There are no inline suppression
+comments, and mandatory compiler correctness cannot be excepted at all.
 
 See [Findings and exceptions](rules/findings-and-exceptions.md) for configuration examples.
 
@@ -234,5 +234,6 @@ and [Execution and caching](rules/execution-and-caching.md) for the Rules lifecy
 
     Select exact Rules or families and configure project-owned options.
     Understand diagnostics, exact exceptions, path ignores, and stale checks.
+    Keep each domain's published layer free of consumer-specific variants.
     Learn evaluation order, focused execution, and dependency-aware reuse.
     List, inspect, run, and generate guidance for configured Rules.

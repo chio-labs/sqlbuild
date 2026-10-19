@@ -61,6 +61,10 @@ reviewed exceptions. Listed tests are not flagged and still count toward `SQBRTE
 `min_tests_per_model`. Entries that name no existing test are reported as stale. See
 [Empty-input tests](/docs/concepts/testing#empty-input-tests).
 
+`SQBRGRAPH103` and `SQBRPROJECT107` accept `published_layers`, and `SQBRPROJECT107` accepts
+`allowed_qualifiers`, a list of `{ qualifier, reason }` tables with an optional `domain`. See
+[Published-layer Rules](/docs/concepts/rules/published-layer-rules).
+
 Unknown Rule codes, option names, and invalid option values fail configuration.
 
 ## Focused selection
