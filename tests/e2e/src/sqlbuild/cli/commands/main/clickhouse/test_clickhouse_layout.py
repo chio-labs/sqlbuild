@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
+    ClickHouseLayoutChangeE2ETestCase,
     ClickHousePhysicalLayoutE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
@@ -112,5 +114,98 @@ def test_given_partitioned_layout_when_building_incrementally_then_only_touched_
                 sql=f"SELECT count(), sum(amount) FROM {schema_name}.events FINAL",
             )
         ) == (test_case.expected_totals)
+    finally:
+        cleanup_clickhouse_schema(config=config, schema_name=schema_name)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseLayoutChangeE2ETestCase(
+            description="a changed partitioning warns until a full refresh applies it",
+            first_partition_by="toYYYYMM(event_time)",
+            changed_partition_by="toMonday(event_time)",
+            full_refresh_args=(
+                "--full-refresh",
+                "--start-cursor-ts",
+                "2026-01-01T00:00:00",
+                "--end-cursor-ts",
+                "2026-02-01T00:00:00",
+            ),
+            expected_warning_codes=("PHYSICAL_LAYOUT_PENDING",),
+            expected_full_refresh_warning_codes=(),
+            expected_rebuilt_fragment="PARTITION BY toMonday(event_time)",
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_changed_layout_when_planning_incremental_then_warns_until_full_refresh(
+    tmp_path: Path,
+    test_case: ClickHouseLayoutChangeE2ETestCase,
+    clickhouse_e2e_config: dict[str, object],
+) -> None:
+    schema_name: str = build_unique_schema_name(prefix="sqb_layout_change")
+    config: dict[str, object] = clickhouse_e2e_config
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="clickhouse_layout",
+        repo_files=build_partitioned_events_project_files(
+            schema_name=schema_name, config=config, partition_by=test_case.first_partition_by
+        ),
+    )
+    create_clickhouse_schema(config=config, schema_name=schema_name)
+    execute_clickhouse_sql(
+        config=config,
+        statements=(
+            f"CREATE TABLE {schema_name}.raw_events (event_id Int64, amount Int64, "
+            "event_time DateTime64(6, 'UTC')) ENGINE = MergeTree ORDER BY event_id",
+            f"INSERT INTO {schema_name}.raw_events VALUES (1, 10, '2026-01-05 08:00:00')",
+        ),
+    )
+    try:
+        first: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build"), project_dir=project_dir
+        )
+        assert first.returncode == 0, first.stdout + first.stderr
+        model_path: Path = project_dir / "models" / "events.sql"
+        model_path.write_text(
+            model_path.read_text().replace(
+                test_case.first_partition_by, test_case.changed_partition_by
+            )
+        )
+
+        plan: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "plan", "--json"), project_dir=project_dir
+        )
+        full_refresh_plan: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "plan", "--json", *test_case.full_refresh_args),
+            project_dir=project_dir,
+        )
+        rebuild: subprocess.CompletedProcess[str] = run_sqb(
+            command=("--no-color", "build", *test_case.full_refresh_args), project_dir=project_dir
+        )
+
+        assert (plan.returncode, full_refresh_plan.returncode, rebuild.returncode) == (0, 0, 0), (
+            plan.stderr + full_refresh_plan.stderr + rebuild.stdout + rebuild.stderr
+        )
+        assert tuple(
+            filter(None, (warning.get("code") for warning in json.loads(plan.stdout)["warnings"]))
+        ) == (test_case.expected_warning_codes)
+        assert tuple(
+            filter(
+                None,
+                (
+                    warning.get("code")
+                    for warning in json.loads(full_refresh_plan.stdout)["warnings"]
+                ),
+            )
+        ) == (test_case.expected_full_refresh_warning_codes)
+        assert test_case.expected_rebuilt_fragment in str(
+            fetch_clickhouse_rows(
+                config=config,
+                sql="SELECT create_table_query FROM system.tables "
+                f"WHERE database = '{schema_name}' AND name = 'events'",
+            )[0][0]
+        )
     finally:
         cleanup_clickhouse_schema(config=config, schema_name=schema_name)

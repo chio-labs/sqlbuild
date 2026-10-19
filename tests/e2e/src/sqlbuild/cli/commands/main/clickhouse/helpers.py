@@ -195,7 +195,7 @@ def build_orders_project_files(*, schema_name: str, config: dict[str, object]) -
 
 
 def build_partitioned_events_project_files(
-    *, schema_name: str, config: dict[str, object]
+    *, schema_name: str, config: dict[str, object], partition_by: str = "toYYYYMM(event_time)"
 ) -> dict[str, str]:
     return {
         "sqlbuild_project.toml": build_clickhouse_project_toml(

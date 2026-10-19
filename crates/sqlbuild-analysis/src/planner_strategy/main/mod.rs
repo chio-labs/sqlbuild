@@ -13,6 +13,7 @@ pub mod microbatch_limit_warning;
 pub mod microbatch_lookback;
 pub mod model_plan_action;
 pub mod model_warnings;
+pub mod physical_layout_warning;
 pub mod schema_actions;
 pub mod singular_attachment;
 pub mod table_type_ddl;

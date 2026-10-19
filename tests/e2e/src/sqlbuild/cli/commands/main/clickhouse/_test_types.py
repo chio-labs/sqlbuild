@@ -56,3 +56,14 @@ class ClickHousePhysicalLayoutE2ETestCase:
     expected_create_fragments: tuple[str, ...]
     expected_partition_rewrites: dict[str, bool]
     expected_totals: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseLayoutChangeE2ETestCase:
+    description: str
+    first_partition_by: str
+    changed_partition_by: str
+    full_refresh_args: tuple[str, ...]
+    expected_warning_codes: tuple[str, ...]
+    expected_full_refresh_warning_codes: tuple[str, ...]
+    expected_rebuilt_fragment: str

@@ -5,7 +5,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction};
 
+use sqlbuild_analysis::planner_strategy::main::materialization_type::materialization_type;
 use sqlbuild_analysis::planner_strategy::main::microbatch_lookback::microbatch_lookback;
+use sqlbuild_analysis::planner_strategy::main::physical_layout_warning::physical_layout_warning;
 use sqlbuild_analysis::planner_strategy::main::table_type_ddl::table_type_ddl;
 use sqlbuild_analysis::planner_strategy::models::{CursorTypeCheck, LookbackConfig};
 use sqlbuild_model_config::execution_limits::constants::MODEL_MAX_DURATION_KEY;
@@ -24,7 +26,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_strategy::constants::{
     CUSTOM_MATERIALIZATION, DDL_SEPARATOR, ENFORCED_CONTRACT, MICROBATCH_MODE,
-    PHYSICAL_STORAGE_DIALECT, PHYSICAL_STORAGE_UNSUPPORTED_CODE,
+    PHYSICAL_STORAGE_DIALECT, PHYSICAL_STORAGE_UNSUPPORTED_CODE, TABLE_RECREATING_ACTIONS,
 };
 use crate::bindings::_helpers::planner_strategy::cursor_inputs::model_values;
 use crate::bindings::_helpers::planner_strategy::cursor_types::{
@@ -36,7 +38,9 @@ use crate::bindings::_helpers::planner_strategy::models::ModelEntryDecisions;
 use crate::bindings::_helpers::planner_strategy::strategy::{
     model_warning_records, resolve_schema_actions, warning_inputs,
 };
-use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::planner_strategy::values::{
+    input_error, optional_string, plan_warning, text,
+};
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
@@ -400,7 +404,35 @@ fn model_warnings<'py>(
     if let Some(cursor_warning) = cursor_type_warning_record(&name, &check)? {
         warnings.push(cursor_warning);
     }
+    if let Some(layout_warning) = layout_warning(request, &name)? {
+        warnings.push(layout_warning);
+    }
     PyTuple::new(py, warnings)
+}
+
+/// The warning of an incremental model whose table keeps a physical layout it no longer declares.
+fn layout_warning<'py>(
+    request: &ModelEntryDecisions<'py>,
+    name: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let action: String = text(&native_field(&request.action, "value")?)?;
+    let metadata = |field: &str| -> PyResult<Option<String>> {
+        optional_string(&native_field(&request.change_result, field)?)
+    };
+    let (previous, current) = (
+        metadata("previous_metadata_json")?,
+        metadata("fingerprint_metadata_json")?,
+    );
+    physical_layout_warning(
+        &text(name)?,
+        (
+            materialization_type(Some(&text(&request.materialization_type)?)),
+            TABLE_RECREATING_ACTIONS.contains(&action.as_str()),
+        ),
+        (previous.as_deref(), current.as_deref()),
+    )
+    .map(|row| plan_warning(name, row))
+    .transpose()
 }
 
 /// The cursor bounds the logical DDL renders: placeholders for runtime-owned windows, else the batch range or cursor bounds.

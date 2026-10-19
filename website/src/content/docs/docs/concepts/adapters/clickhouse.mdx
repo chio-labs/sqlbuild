@@ -108,7 +108,7 @@ MODEL (
 
 Quote expressions that are not plain column names. Compile rejects malformed values, replicated and shared engines, and these fields on views and snapshots; other adapters reject them with `A011` when planning.
 
-The fields are part of the model's version, so `sqb plan` reports a changed layout as a config change. A table model is rebuilt with the new layout. An incremental model keeps writing into its existing table, whose layout only changes on `--full-refresh`.
+The fields are part of the model's version, so `sqb plan` reports a changed layout as a config change. A table model is rebuilt with the new layout. An incremental model keeps writing into its existing table with the old layout, and `sqb plan` warns with `PHYSICAL_LAYOUT_PENDING` until a full refresh (`sqb build <model> --full-refresh`, with `--start-cursor-ts` and `--end-cursor-ts` for a cursor model) rebuilds the table with the new layout.
 
 ClickHouse rejects nullable sorting and partitioning keys by default. Wrap the column in `assumeNotNull()` or `coalesce()` in the expression, or set `table_settings (allow_nullable_key true)`.
 
