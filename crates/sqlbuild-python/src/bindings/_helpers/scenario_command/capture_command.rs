@@ -105,7 +105,7 @@ pub(crate) fn run_scenario_capture_command(
             project_dir: &project.project_dir,
             adapter: &adapter,
             kind: CompletionKind::Capture,
-            style: style,
+            style,
         },
     )?;
     let results: Vec<Bound<'_, PyAny>> = call_with(
