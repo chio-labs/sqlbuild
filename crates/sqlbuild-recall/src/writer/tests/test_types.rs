@@ -208,3 +208,9 @@ impl PendingLifecycleEvent for CopyingReplacement {
         )
     }
 }
+
+pub(crate) struct CoreReleaseStoreTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) write: fn(&std::path::Path),
+    pub(crate) expected_rows: Vec<Vec<RecallValue>>,
+}

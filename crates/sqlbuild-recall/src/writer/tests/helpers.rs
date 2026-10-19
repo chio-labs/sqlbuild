@@ -441,3 +441,104 @@ pub(crate) fn pending_event_counts(copies: &[Option<usize>]) -> (u64, u64, u64, 
         counts.failed,
     )
 }
+
+/// The heartbeat columns the first Recall release lacks, and the view text that reads them.
+const CORE_RELEASE_EDITS: [(&str, &str); 3] = [
+    (
+        ",\n        MIN(command) AS command, MIN(subcommand) AS subcommand",
+        "",
+    ),
+    (
+        "COALESCE(context.command, started.command, beats.command)",
+        "COALESCE(context.command, started.command)",
+    ),
+    (
+        "COALESCE(context.subcommand, beats.subcommand) AS subcommand",
+        "context.subcommand",
+    ),
+];
+
+/// A store at schema version 1 as the first Recall release creates it: heartbeats without `command` or `subcommand`.
+pub(crate) fn core_release_store(path: &std::path::Path) {
+    use crate::schema::main::ddl_script::ddl_script;
+    use crate::schema::main::view_statements::view_statements;
+    use crate::schema::models::{DdlOptions, Dialect};
+
+    let options = DdlOptions {
+        database: None,
+        retention_days: 30,
+        cluster: None,
+    };
+    std::fs::create_dir_all(path.parent().expect("the store has a directory"))
+        .expect("the store directory can be created");
+    let connection = rusqlite::Connection::open(path).expect("the store opens");
+    connection
+        .execute_batch(&ddl_script(Dialect::Sqlite, &options))
+        .expect("the script runs");
+    let views = view_statements(Dialect::Sqlite, &options);
+    for (name, _) in &views {
+        connection
+            .execute_batch(&format!("DROP VIEW \"{name}\""))
+            .expect("the view drops");
+    }
+    connection
+        .execute_batch(
+            "ALTER TABLE recall_heartbeats DROP COLUMN command; \
+             ALTER TABLE recall_heartbeats DROP COLUMN subcommand; \
+             INSERT INTO recall_meta (component, key, value, recorded_at, invocation_id, \
+             invocation_started_at, schema_version, producer_version, ingested_at, content_hash) \
+             VALUES ('schema', 'schema_version', '1', '2026-10-01T00:00:00.000000Z', 'core', \
+             '2026-10-01T00:00:00.000000Z', 1, 'core', '2026-10-01T00:00:00.000000Z', '')",
+        )
+        .expect("the release schema is restored");
+    for (_, statement) in views {
+        let released: String = CORE_RELEASE_EDITS
+            .iter()
+            .fold(statement, |text, (new, old)| text.replace(new, old));
+        connection
+            .execute_batch(&released)
+            .expect("the release view is created");
+    }
+}
+
+/// Write a heartbeat naming the command straight into the store, before any upgrade.
+pub(crate) fn insert_heartbeat(path: &std::path::Path) {
+    use crate::records::main::heartbeat_row::heartbeat_row;
+    use crate::store::main::insert_rows::insert_rows;
+
+    let store = open_sqlite_store(path, OpenMode::ReadWrite).expect("the store opens");
+    let beat = heartbeat_row(
+        &envelope("core"),
+        ("2026-10-19T00:00:01.000000Z", "2026-10-19T00:01:31.000000Z"),
+        (None, Some(1)),
+        (Some("build"), None),
+    );
+    insert_rows(&store, &[beat], "2026-10-19T00:00:01.000000Z").expect("the row is written");
+}
+
+/// Record a short run through a session.
+pub(crate) fn record_run(path: &std::path::Path) {
+    let session = start_recall_session(config(path.to_path_buf(), "core"));
+    session.append_output(OutputStream::Stdout, b"built\n");
+    drop(session.wait_for_setup(Duration::from_secs(10)));
+    std::thread::sleep(Duration::from_millis(300));
+    drop(session.close());
+}
+
+/// What `write` leaves in a store the first Recall release created.
+pub(crate) fn written_to_core_release_store(write: fn(&std::path::Path)) -> Vec<Vec<RecallValue>> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    core_release_store(&path);
+    write(&path);
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    query_store(
+        &store,
+        "SELECT (SELECT COUNT(*) FROM recall_heartbeats), (SELECT command FROM invocations), \
+         (SELECT COUNT(*) FROM pragma_table_xinfo('recall_heartbeats') \
+          WHERE name IN ('command', 'subcommand'))",
+        None,
+    )
+    .expect("the query is valid")
+    .rows
+}

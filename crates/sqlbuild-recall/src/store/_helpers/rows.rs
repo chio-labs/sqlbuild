@@ -1,11 +1,15 @@
 //! Idempotent row writes: insert once, compare content on a duplicate key, record conflicts.
 
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
+
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::records::main::conflict_row::conflict_row;
 use crate::records::models::{RecallRow, RecallValue, RowEnvelope};
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::Table;
+use crate::store::_helpers::schema::stored_columns;
 use crate::store::_helpers::sqlite::{SqlValue, checked};
 use crate::store::errors::StoreError;
 use crate::store::models::{ConflictEvidence, InsertOutcome};
@@ -24,15 +28,20 @@ fn text_of(row: &RecallRow, column: &str) -> String {
     key_text(row.value(column))
 }
 
-/// Insert one row; `Some(evidence)` when its key holds different content.
+/// Insert one row's values for the columns its table has; `Some(evidence)` when its key holds different content.
 fn write_row(
     connection: &Connection,
-    row: &RecallRow,
+    (row, columns): (&RecallRow, &HashSet<String>),
     ingested_at: &str,
 ) -> Result<Option<ConflictEvidence>, StoreError> {
     let spec = table_spec(row.table);
     let ingested: RecallValue = RecallValue::Text(ingested_at.to_owned());
-    let mut names: Vec<&str> = row.values.iter().map(|(name, _)| *name).collect();
+    let stored: Vec<&(&str, RecallValue)> = row
+        .values
+        .iter()
+        .filter(|(name, _)| columns.contains(*name))
+        .collect();
+    let mut names: Vec<&str> = stored.iter().map(|(name, _)| *name).collect();
     names.push("ingested_at");
     let placeholders: Vec<String> = (1..=names.len()).map(|index| format!("?{index}")).collect();
     let sql = format!(
@@ -41,8 +50,7 @@ fn write_row(
         names.join(", "),
         placeholders.join(", ")
     );
-    let parameters: Vec<SqlValue<'_>> = row
-        .values
+    let parameters: Vec<SqlValue<'_>> = stored
         .iter()
         .map(|(_, value)| SqlValue(value))
         .chain(std::iter::once(SqlValue(&ingested)))
@@ -105,8 +113,14 @@ pub(crate) fn write_rows(
     ingested_at: &str,
 ) -> Result<InsertOutcome, StoreError> {
     let mut outcome = InsertOutcome::default();
+    let mut columns: HashMap<Table, HashSet<String>> = HashMap::new();
+    for row in rows.iter().map(|row| row.table).chain([Table::Conflicts]) {
+        if let Entry::Vacant(entry) = columns.entry(row) {
+            entry.insert(stored_columns(connection, row)?);
+        }
+    }
     for row in rows {
-        match write_row(connection, row, ingested_at)? {
+        match write_row(connection, (row, &columns[&row.table]), ingested_at)? {
             None => match outcome
                 .delivered
                 .iter_mut()
@@ -128,7 +142,11 @@ pub(crate) fn write_rows(
                     ingested_at,
                 );
                 if row.table != Table::Conflicts {
-                    write_row(connection, &conflict, ingested_at)?;
+                    write_row(
+                        connection,
+                        (&conflict, &columns[&Table::Conflicts]),
+                        ingested_at,
+                    )?;
                 }
                 outcome.conflicts.push(evidence);
             }

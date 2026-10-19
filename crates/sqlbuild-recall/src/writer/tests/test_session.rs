@@ -7,16 +7,17 @@ use crate::writer::models::SetupOutcome;
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
-    artifact_counts, close_under_held_lock, event_counts, invocation_during_discovery,
-    output_stored_while_running, partially_inserted, pending_event_counts, recorded_session,
-    replaced_session, session_on_corrupt_store,
+    artifact_counts, close_under_held_lock, event_counts, insert_heartbeat,
+    invocation_during_discovery, output_stored_while_running, partially_inserted,
+    pending_event_counts, record_run, recorded_session, replaced_session, session_on_corrupt_store,
+    written_to_core_release_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
-    ArtifactSizeTestCase, CorruptStoreTestCase, DiscoveryTestCase, EventBuildTestCase,
-    HeldLockTestCase, PartialInsertTestCase, PendingEventTestCase, RecordedSession,
-    ReplacementTestCase, SessionTestCase, StoredWhileRunningTestCase,
+    ArtifactSizeTestCase, CoreReleaseStoreTestCase, CorruptStoreTestCase, DiscoveryTestCase,
+    EventBuildTestCase, HeldLockTestCase, PartialInsertTestCase, PendingEventTestCase,
+    RecordedSession, ReplacementTestCase, SessionTestCase, StoredWhileRunningTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -314,6 +315,39 @@ fn given_pending_events_when_replaced_on_the_delivery_thread_then_each_outcome_i
         assert_eq!(
             pending_event_counts(&test_case.copies),
             test_case.expected_counts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_store_from_the_first_release_when_written_then_rows_land_and_columns_are_added() {
+    let test_cases = [
+        CoreReleaseStoreTestCase {
+            description: "a session adds the heartbeat columns and records the run",
+            write: record_run,
+            expected_rows: vec![vec![
+                RecallValue::Integer(1),
+                RecallValue::Text("build".to_owned()),
+                RecallValue::Integer(2),
+            ]],
+        },
+        CoreReleaseStoreTestCase {
+            description: "a write before any upgrade stores only the columns the table has",
+            write: insert_heartbeat,
+            expected_rows: vec![vec![
+                RecallValue::Integer(1),
+                RecallValue::Null,
+                RecallValue::Integer(0),
+            ]],
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            written_to_core_release_store(test_case.write),
+            test_case.expected_rows,
             "{}",
             test_case.description
         );
