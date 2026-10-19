@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.janitor._test_types import (
     JanitorDirectStatePruningE2ETestCase,
     JanitorDisabledE2ETestCase,
     JanitorInvalidConfigE2ETestCase,
+    JanitorNonInteractiveE2ETestCase,
     JanitorSourceOverlapE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.janitor.helpers import (
@@ -151,6 +152,62 @@ def test_given_stale_relations_when_running_direct_janitor_then_it_archives_trac
     assert "Eligible expired VDEs" not in janitor_result.stdout
     assert "Eligible state backups" not in janitor_result.stdout
     assert "Eligible expired locks" not in janitor_result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        JanitorNonInteractiveE2ETestCase(
+            description="janitor without auto-approve refuses when stdin is not a terminal",
+            janitor_command=("--no-color", "janitor"),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "error[C503]: janitor cleanup requires confirmation, but stdin is not a terminal",
+                "pass --auto-approve",
+            ),
+            expected_existing_tables=("janitor_tracked_extra", "janitor_untracked_extra"),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_piped_stdin_when_janitor_needs_confirmation_then_it_refuses_cleanly(
+    test_case: JanitorNonInteractiveE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_janitor_project(
+        tmp_path=tmp_path,
+        project_name="janitor_non_interactive_project",
+        janitor_config=dedent(
+            """
+              enabled = true
+              retention_days = 0
+            """
+        ),
+    )
+    db_path: Path = project_dir / "janitor.duckdb"
+    build_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build", "--full-refresh"),
+        project_dir=project_dir,
+    )
+    create_janitor_demo_relations(db_path=db_path)
+
+    janitor_result: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.janitor_command,
+        project_dir=project_dir,
+        input_text="",
+    )
+
+    output: str = janitor_result.stdout + janitor_result.stderr
+    assert build_result.returncode == 0, build_result.stdout + build_result.stderr
+    assert janitor_result.returncode == test_case.expected_exit_code, test_case.description + output
+    assert "Traceback" not in output, test_case.description + output
+    assert all(
+        fragment in janitor_result.stderr for fragment in test_case.expected_stderr_fragments
+    ), test_case.description + output
+    assert all(
+        table_exists(db_path=db_path, table_name=table_name)
+        for table_name in test_case.expected_existing_tables
+    ), test_case.description
 
 
 @pytest.mark.parametrize(
