@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.158.2](https://github.com/chio-labs/sqlbuild/compare/v0.158.1...v0.158.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* scenario, SQL test and dialect fixes for fixtures, checks and truth tests ([#1147](https://github.com/chio-labs/sqlbuild/issues/1147)) ([a411860](https://github.com/chio-labs/sqlbuild/commit/a411860fcadf4bd23d509df3f63ba8990ca77029))
+
 ## [0.158.1](https://github.com/chio-labs/sqlbuild/compare/v0.158.0...v0.158.1) (2026-10-18)
 
 
