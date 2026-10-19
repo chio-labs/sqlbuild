@@ -8,6 +8,7 @@ use sqlbuild_recall::writer::models::RecallSession;
 
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::recall::events::event_object;
 
 /// Publishes lifecycle events and SQL artifacts of the active session; delivery is best effort.
 #[pyclass(module = "sqlbuild._native", frozen)]
@@ -18,6 +19,10 @@ pub(crate) struct RecallLifecycleSink {
 #[pymethods]
 impl RecallLifecycleSink {
     fn __call__(&self, py: Python<'_>, event: &Bound<'_, PyAny>) -> PyResult<()> {
+        if let Some(object) = event_object(event)? {
+            drop(self.session.publish_event_object(&object));
+            return Ok(());
+        }
         let encoded = host::entry(py, ExecutorHost::LifecycleEventToJson)?.call1((event,))?;
         let text = encoded
             .downcast::<PyString>()?

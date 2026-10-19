@@ -3,6 +3,7 @@ pub mod conflict_row;
 pub mod delivery_row;
 pub mod diagnostic_input_from_json;
 pub mod diagnostic_row;
+pub mod event_object_row;
 pub mod event_row;
 pub mod format_timestamp;
 pub mod heartbeat_row;

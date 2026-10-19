@@ -2,6 +2,9 @@
 
 use std::time::{Duration, Instant, SystemTime};
 
+use serde_json::{Map, Value};
+
+use crate::records::_helpers::events::event_object;
 use crate::records::constants::{
     ARTIFACT_DIGEST_PREFIX, EXECUTED_SQL_ROLE, SEVERITY_ORDER, SQL_ARTIFACT_KIND, SQL_MEDIA_TYPE,
 };
@@ -9,7 +12,7 @@ use crate::records::errors::RecordError;
 use crate::records::main::artifact_rows::artifact_rows;
 use crate::records::main::diagnostic_input_from_json::diagnostic_input_from_json;
 use crate::records::main::diagnostic_row::diagnostic_row;
-use crate::records::main::event_row::event_row;
+use crate::records::main::event_object_row::event_object_row;
 use crate::records::main::format_timestamp::format_timestamp;
 use crate::records::main::sha256_hex::sha256_hex;
 use crate::records::models::{ArtifactInput, OutputStream, RecallValue};
@@ -73,8 +76,14 @@ impl RecallSession {
 
     /// Queue one lifecycle event from its canonical JSON.
     pub fn publish_event(&self, event_json: &str) -> Result<(), RecordError> {
+        let event: Map<String, Value> = event_object(event_json)?;
+        self.publish_event_object(&event)
+    }
+
+    /// Queue one lifecycle event already decoded to its canonical JSON object.
+    pub fn publish_event_object(&self, event: &Map<String, Value>) -> Result<(), RecordError> {
         let mut state = locked(&self.shared.state);
-        let row = event_row(&state.envelope, event_json)?;
+        let row = event_object_row(&state.envelope, event)?;
         let priority = match row.value("severity") {
             Some(RecallValue::Text(severity)) => event_priority(severity),
             _ => Priority::Lifecycle,

@@ -55,3 +55,33 @@ pub(crate) const RECALL_OPTIONS: [&str; 13] = [
     "stream",
     "tail",
 ];
+/// Required text envelope fields of a known lifecycle event.
+pub(crate) const EVENT_TEXT_FIELDS: [&str; 5] = [
+    "event_id",
+    "event_type",
+    "producer",
+    "producer_version",
+    "invocation_id",
+];
+/// Optional correlation fields of a known lifecycle event.
+pub(crate) const EVENT_OPTIONAL_TEXT_FIELDS: [&str; 5] = [
+    "run_id",
+    "resource_id",
+    "resource_attempt_id",
+    "operation_id",
+    "statement_id",
+];
+/// The first lifecycle schema version carrying invocation sequence and external context.
+pub(crate) const INVOCATION_METADATA_SCHEMA_VERSION: i64 = 2;
+/// `datetime` attributes of an ISO-8601 timestamp, most significant first.
+pub(crate) const TIMESTAMP_PARTS: [&str; 7] = [
+    "year",
+    "month",
+    "day",
+    "hour",
+    "minute",
+    "second",
+    "microsecond",
+];
+/// `str(datetime.UTC)`.
+pub(crate) const UTC_ZONE_NAME: &str = "UTC";
