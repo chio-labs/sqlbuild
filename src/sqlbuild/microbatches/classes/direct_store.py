@@ -72,6 +72,7 @@ class DirectMicrobatchEventStore:
                             sql=build_microbatch_insert_many_sql(
                                 events=missing,
                                 render_qualified_name=self._adapter.render_qualified_name,
+                                timestamp_type=self._adapter.state_timestamp_type,
                             ),
                         )
                         inserted += len(missing)

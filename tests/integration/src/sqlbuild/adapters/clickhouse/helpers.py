@@ -6,13 +6,20 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 import duckdb
 
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
+from sqlbuild.microbatches.models import MicrobatchEvent, MicrobatchScope
+from sqlbuild.microbatches.types import (
+    MicrobatchCompletionType,
+    MicrobatchFingerprintStatus,
+    MicrobatchRecordType,
+    MicrobatchRunType,
+)
 from tests.integration.src.sqlbuild.adapters.clickhouse._test_types import (
     ClickHouseRewriteTestCase,
 )
@@ -47,6 +54,38 @@ class FailingExecute:
         self._count += 1
         self._failures.get(self._count, _ignore_statement)(sql)
         return self._execute(connection=connection, sql=sql)
+
+
+def microbatch_completion(*, schema: str, created_at: datetime) -> MicrobatchEvent:
+    return MicrobatchEvent(
+        event_id="event-1",
+        record_type=MicrobatchRecordType.PARTITION_COMPLETION,
+        scope=MicrobatchScope(
+            scope_kind="direct_logical",
+            scope_key=f"clickhouse:{schema}.orders",
+            model_name="orders",
+            target_database=None,
+            target_schema=schema,
+            target_name="orders",
+            physical_generation_id="*",
+        ),
+        origin_run_id="origin-run",
+        execution_run_id="execution-run",
+        run_type=MicrobatchRunType.REPLAY_ON_CHANGE,
+        completion_type=MicrobatchCompletionType.RECOVERY,
+        run_start="0",
+        run_end="1",
+        partition_start="0",
+        partition_end="1",
+        batch_size="1",
+        cursor_column="batch_id",
+        cursor_type="integer",
+        model_version_hash="F2",
+        definition_hash="definition",
+        fingerprint_status=MicrobatchFingerprintStatus.KNOWN,
+        rows_affected=0,
+        created_at=created_at,
+    )
 
 
 def build_unique_schema_name(*, prefix: str) -> str:

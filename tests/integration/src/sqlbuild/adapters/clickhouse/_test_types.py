@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlbuild.adapter.contract.models import ColumnInfo
 
@@ -131,3 +132,10 @@ class ClickHouseColumnMigrationTestCase:
     renamed: tuple[str, str]
     dropped: tuple[str, ...]
     expected_columns: tuple[ColumnInfo, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseStateTimestampTestCase:
+    description: str
+    created_at: datetime
+    expected_created_at: tuple[tuple[object, ...], ...]

@@ -118,6 +118,7 @@ from sqlbuild.adapters.clickhouse.constants import (
     SNAPSHOT_REBUILD_INFIX,
     SNAPSHOT_WORK_INFIX,
     STATE_TABLE_ENGINE_KEYWORD,
+    STATE_TIMESTAMP_TYPE,
     TIMEOUT_OPTIONS,
     VERIFY_OPTION,
     VIEW_ENGINES,
@@ -149,6 +150,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     )
     max_identifier_length: ClassVar[int] = MAX_IDENTIFIER_LENGTH
     relation_grants_supported: ClassVar[bool] = False
+    state_timestamp_type: ClassVar[str | None] = STATE_TIMESTAMP_TYPE
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="Nullable(DateTime64(6, 'UTC'))",
         distinct_condition=render_is_distinct_from,

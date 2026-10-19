@@ -115,6 +115,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     statement_limit_excludes_queueing: ClassVar[bool] = False
     metadata_inspection_concurrency: ClassVar[int] = 1
     supports_session_warehouse: ClassVar[bool] = False
+    state_timestamp_type: ClassVar[str | None] = None
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="TIMESTAMP",
         distinct_condition=render_is_distinct_from,

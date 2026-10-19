@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from sqlbuild._native import build_microbatch_insert_many_sql
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
 from sqlbuild.adapter.contract.models import ColumnInfo, CursorValue, QueryResult, RelationInfo
@@ -28,6 +29,7 @@ from tests.integration.src.sqlbuild.adapters.clickhouse._test_types import (
     ClickHouseRewriteTestCase,
     ClickHouseSeedTestCase,
     ClickHouseStateTableTestCase,
+    ClickHouseStateTimestampTestCase,
     ClickHouseSwapTestCase,
 )
 from tests.integration.src.sqlbuild.adapters.clickhouse.helpers import (
@@ -39,6 +41,7 @@ from tests.integration.src.sqlbuild.adapters.clickhouse.helpers import (
     execute_all,
     fetch_rows,
     interrupt_running_query,
+    microbatch_completion,
     oracle_rows,
     order_rows_as_dates,
     recorded_statements,
@@ -849,3 +852,45 @@ def test_given_table_when_migrating_columns_then_clickhouse_alters_in_place(
     assert adapter.describe_relation(connection=connection, relation=relation) == (
         test_case.expected_columns
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseStateTimestampTestCase(
+            description="microbatch event times keep microseconds",
+            created_at=datetime(2026, 1, 1, 0, 0, 0, 123456, tzinfo=UTC),
+            expected_created_at=((datetime(2026, 1, 1, 0, 0, 0, 123456),),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_microbatch_event_when_publishing_state_then_clickhouse_keeps_microseconds(
+    test_case: ClickHouseStateTimestampTestCase,
+    adapter: ClickHouseAdapter,
+    connection: Any,
+    clickhouse_schema: str,
+) -> None:
+    adapter.execute(
+        connection=connection,
+        sql=adapter.render_create_microbatch_state_table_sql(
+            database=None, schema=clickhouse_schema
+        ),
+    )
+
+    adapter.execute(
+        connection=connection,
+        sql=build_microbatch_insert_many_sql(
+            events=(
+                microbatch_completion(schema=clickhouse_schema, created_at=test_case.created_at),
+            ),
+            render_qualified_name=adapter.render_qualified_name,
+            timestamp_type=adapter.state_timestamp_type,
+        ),
+    )
+
+    assert fetch_rows(
+        adapter=adapter,
+        connection=connection,
+        sql=f"SELECT created_at FROM {clickhouse_schema}._sqlbuild_microbatches",
+    ) == (test_case.expected_created_at)
