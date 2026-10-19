@@ -136,6 +136,8 @@ The compile runs in full instead, decided before any compile work starts, when:
   `description`, `columns`, `dynamic_columns`, `model_schema`, `audits`, `contract`, or a switch
   between `view` and `table` materialization.
 - A custom rule reads something the edit changed, such as a model's contract or materialization.
+- The stored compile reported errors or warnings other than rule findings in model or SQL test
+  files the edit did not change.
 - The stored compile used the other output format (`--json` or text), or has no project image.
 
 A few edits are found to need a full compile only part-way through, for example when a macro's
