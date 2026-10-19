@@ -1,7 +1,7 @@
 [package]
 name = "sqlbuild-cli"
 version.workspace = true
-description = "The native `sqb` executable: reused compiles served without Python, every other command handed to the Python CLI."
+description = "The native `sqb` executable: reused compiles and Python-free commands served without Python, every other command handed to the Python CLI."
 edition.workspace = true
 license-file = "LICENSE"
 publish.workspace = true
@@ -21,7 +21,9 @@ getrandom.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlbuild-cache.workspace = true
+sqlbuild-config.workspace = true
 sqlbuild-core.workspace = true
+sqlbuild-rules.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

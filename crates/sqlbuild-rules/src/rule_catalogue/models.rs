@@ -85,3 +85,14 @@ pub struct SkillTarget {
     pub path: std::path::PathBuf,
     pub state: String,
 }
+
+/// One catalogue rule as `sqb rules list` prints it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RuleListing {
+    pub code: String,
+    pub family: String,
+    pub message: String,
+    pub custom: bool,
+    /// The `RuleSubject` value, or `None` when the rule declares none.
+    pub subject: Option<String>,
+}

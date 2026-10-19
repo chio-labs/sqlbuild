@@ -3,11 +3,16 @@
 use std::io::{self, Write};
 use std::path::Path;
 
-use crate::launcher::constants::{PROGRAM_NAME, PYTHON_CLI_SCRIPT};
+use crate::launcher::constants::{PROGRAM_NAME, PROGRAM_VERSION, PYTHON_CLI_SCRIPT};
 
-/// argparse's `--version` line: `sqb <version>` on stdout.
+/// argparse's `--version` line: `sqb <version>`.
+pub(crate) fn version_line() -> String {
+    format!("{PROGRAM_NAME} {PROGRAM_VERSION}\n")
+}
+
+/// Print the `--version` line on stdout.
 pub(crate) fn print_version() {
-    let _ = writeln!(io::stdout(), "{PROGRAM_NAME} {}", env!("CARGO_PKG_VERSION"));
+    let _ = io::stdout().write_all(version_line().as_bytes());
 }
 
 /// The Python CLI script is not installed beside this program.
