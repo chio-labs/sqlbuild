@@ -183,3 +183,11 @@ class ClickHouseRecallQueryOutputSinkTestCase:
     description: str
     sql: str
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallFirstReleaseStoreTestCase:
+    description: str
+    expected_recorded: list[list[object]]
+    expected_notice: str
+    expected_heartbeat_columns: tuple[tuple[object, ...], ...]

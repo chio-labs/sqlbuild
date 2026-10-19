@@ -13,6 +13,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallConcurrencyTestCase,
     ClickHouseRecallDuplicateTestCase,
     ClickHouseRecallExpiryTestCase,
+    ClickHouseRecallFirstReleaseStoreTestCase,
     ClickHouseRecallLimitedWriterTestCase,
     ClickHouseRecallOutputTestCase,
     ClickHouseRecallPartialInsertTestCase,
@@ -22,6 +23,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallRetentionTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
+    FIRST_RELEASE_EDITS,
     age_recorded_invocations,
     age_stored_artifacts,
     apply_printed_ddl,
@@ -636,6 +638,59 @@ def test_given_an_output_sink_when_querying_clickhouse_recall_then_the_sink_sees
     assert queried.returncode == 0, queried.stderr
     assert test_case.expected_fragment.encode() in queried.stdout
     assert test_case.expected_fragment in (project_dir / "output.log").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallFirstReleaseStoreTestCase(
+            description="heartbeats without the newer columns are still written",
+            expected_recorded=[["build", "completed", 1]],
+            expected_notice="ADD COLUMN IF NOT EXISTS `command` Nullable(String)",
+            expected_heartbeat_columns=((0,),),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_first_release_store_when_a_select_insert_user_builds_then_history_is_written(
+    test_case: ClickHouseRecallFirstReleaseStoreTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    readonly: Path = write_recall_project(
+        parent=tmp_path / "readonly",
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        settings=("", "settings = { readonly = 2 }\n"),
+    )
+    apply_printed_ddl(
+        config=clickhouse_e2e_config,
+        stderr=run(readonly, "build").stderr.decode(errors="replace"),
+        edits=FIRST_RELEASE_EDITS,
+    )
+
+    with limited_user(config=clickhouse_e2e_config, database=recall_database) as writer:
+        project_dir: Path = write_recall_project(
+            parent=tmp_path / "writer", config=writer, database=recall_database
+        )
+        built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+        recorded: list[list[object]] = recall_rows(
+            project_dir,
+            "SELECT command, status, toUInt8(last_heartbeat_at IS NOT NULL) FROM invocations",
+        )
+
+    assert built.returncode == 0, built.stderr
+    assert test_case.expected_notice in built.stderr.decode(errors="replace")
+    assert recorded == test_case.expected_recorded
+    assert (
+        fetch_clickhouse_rows(
+            config=clickhouse_e2e_config,
+            sql=f"SELECT count() FROM system.columns WHERE database = '{recall_database}' "
+            "AND table = 'recall_heartbeats' AND name IN ('command', 'subcommand')",
+        )
+        == test_case.expected_heartbeat_columns
+    )
 
 
 if __name__ == "__main__":

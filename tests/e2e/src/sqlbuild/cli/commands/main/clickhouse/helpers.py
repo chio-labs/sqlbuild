@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import uuid
 from collections.abc import Iterator
@@ -458,10 +459,31 @@ def apply_printed_retention_fix(*, config: dict[str, object], stderr: str) -> in
     return len(statements)
 
 
-def apply_printed_ddl(*, config: dict[str, object], stderr: str) -> None:
-    """Run, as an administrator, the script a permission notice printed for creating the store."""
+FIRST_RELEASE_EDITS: tuple[tuple[str, str], ...] = (
+    (
+        "    `pid` Nullable(Int64),\n    `command` Nullable(String),\n"
+        "    `subcommand` Nullable(String),",
+        "    `pid` Nullable(Int64),",
+    ),
+    (",\n        min(command) AS command, min(subcommand) AS subcommand", ""),
+    (
+        "coalesce(context.command, started.command, beats.command)",
+        "coalesce(context.command, started.command)",
+    ),
+    (
+        "coalesce(context.subcommand, beats.subcommand) AS subcommand",
+        "context.subcommand AS subcommand",
+    ),
+)
 
-    script: str = stderr.split(" with:\n\n", 1)[1].split("\nsqb ", 1)[0].strip()
+
+def apply_printed_ddl(
+    *, config: dict[str, object], stderr: str, edits: tuple[tuple[str, str], ...] = ()
+) -> None:
+    """Run, as an administrator, the script a permission notice printed, with `edits` applied."""
+
+    printed: str = stderr.split(" with:\n\n", 1)[1].split("\nsqb ", 1)[0].strip()
+    script: str = functools.reduce(lambda text, edit: text.replace(*edit), edits, printed)
     execute_clickhouse_sql(
         config=config,
         statements=tuple(

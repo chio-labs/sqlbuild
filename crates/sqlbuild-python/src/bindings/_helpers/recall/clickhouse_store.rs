@@ -90,6 +90,12 @@ struct StoreState {
     version: i64,
 }
 
+/// A store ready to write: its tables with their `CREATE` queries, and the column additions an administrator must run.
+struct ReadyStore {
+    tables: Vec<(String, String)>,
+    refused_columns: Vec<String>,
+}
+
 /// The store the delivery thread writes.
 struct ClickHouseStore {
     location: ClickHouseLocation,
@@ -218,48 +224,36 @@ impl ClickHouseStore {
         Ok(())
     }
 
-    /// Create missing tables, add missing columns and replace the views when this build's schema is newer or columns were added; a newer store keeps its views.
+    /// Create a store whose tables are missing; on existing tables add missing columns where allowed, create missing views, and replace views only on a version upgrade.
     fn ensure_schema(
         &mut self,
         py: Python<'_>,
         envelope: &RowEnvelope,
-    ) -> Result<Vec<(String, String)>, StoreError> {
+    ) -> Result<ReadyStore, StoreError> {
         let StoreState {
             tables,
             views,
             version,
         } = self.state(py)?;
-        let complete: bool = tables.len() == ALL_TABLES.len() && views.len() == VIEW_NAMES.len();
-        if complete {
-            self.read_columns(py)?;
-            let columns_complete: bool = self.missing_columns().is_empty();
-            if columns_complete && version >= RECALL_SCHEMA_VERSION {
-                return Ok(tables);
-            }
-            if columns_complete && version == 0 {
-                self.record_version(py, envelope)?;
-                return Ok(tables);
-            }
-        }
-        self.require_database(py)?;
-        for statement in table_statements(Dialect::ClickHouse, &self.location.options) {
-            self.command(py, &statement, "create the Recall tables")?;
+        if tables.len() < ALL_TABLES.len() {
+            self.create(py, envelope, &views)?;
+            return Ok(ReadyStore {
+                tables: self.state(py)?.tables,
+                refused_columns: Vec::new(),
+            });
         }
         self.read_columns(py)?;
-        let missing: Vec<(Table, ColumnSpec)> = self.missing_columns();
-        let added: bool = !missing.is_empty();
-        for (table, column) in missing {
-            let statement = add_column_statement(
-                Dialect::ClickHouse,
-                &self.location.options,
-                (table_spec(table), &column),
-            );
-            self.command(py, &statement, "add a Recall column")?;
+        let refused: Vec<String> = self.add_columns(py)?;
+        let upgrade: bool = version > 0 && version < RECALL_SCHEMA_VERSION;
+        let views_due: bool = upgrade || views.len() < VIEW_NAMES.len();
+        if views_due && !refused.is_empty() {
+            return Err(StoreError {
+                kind: StoreErrorKind::Permission,
+                message: "the Recall views need columns this user may not add".to_owned(),
+            });
         }
-        self.read_columns(py)?;
-        let upgrade: bool = version < RECALL_SCHEMA_VERSION;
         for (name, statement) in view_statements(Dialect::ClickHouse, &self.location.options) {
-            if upgrade || added {
+            if upgrade {
                 self.command(py, &statement, "create the Recall views")?;
             } else if !views.contains(name) {
                 let statement =
@@ -267,10 +261,68 @@ impl ClickHouseStore {
                 self.command(py, &statement, "create the Recall views")?;
             }
         }
-        if upgrade {
+        if version < RECALL_SCHEMA_VERSION {
             self.record_version(py, envelope)?;
         }
-        Ok(self.state(py)?.tables)
+        Ok(ReadyStore {
+            tables,
+            refused_columns: refused,
+        })
+    }
+
+    /// Create every table, column and view of a store whose tables are missing.
+    fn create(
+        &mut self,
+        py: Python<'_>,
+        envelope: &RowEnvelope,
+        views: &HashSet<String>,
+    ) -> Result<(), StoreError> {
+        self.require_database(py)?;
+        for statement in table_statements(Dialect::ClickHouse, &self.location.options) {
+            self.command(py, &statement, "create the Recall tables")?;
+        }
+        self.read_columns(py)?;
+        let refused: Vec<String> = self.add_columns(py)?;
+        if !refused.is_empty() {
+            return Err(StoreError {
+                kind: StoreErrorKind::Permission,
+                message: "the Recall tables need columns this user may not add".to_owned(),
+            });
+        }
+        for (name, statement) in view_statements(Dialect::ClickHouse, &self.location.options) {
+            if !views.contains(name) {
+                self.command(py, &statement, "create the Recall views")?;
+            }
+        }
+        self.record_version(py, envelope)
+    }
+
+    /// Add the additive columns the stored tables lack; when the user may not, the statements an administrator must run.
+    fn add_columns(&mut self, py: Python<'_>) -> Result<Vec<String>, StoreError> {
+        let missing: Vec<(Table, ColumnSpec)> = self.missing_columns();
+        let statements: Vec<String> = missing
+            .iter()
+            .map(|(table, column)| {
+                add_column_statement(
+                    Dialect::ClickHouse,
+                    &self.location.options,
+                    (table_spec(*table), column),
+                )
+            })
+            .collect();
+        for (index, statement) in statements.iter().enumerate() {
+            match self.command(py, statement, "add a Recall column") {
+                Ok(()) => {}
+                Err(error) if error.kind == StoreErrorKind::Permission => {
+                    return Ok(statements[index..].to_vec());
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        if !missing.is_empty() {
+            self.read_columns(py)?;
+        }
+        Ok(Vec::new())
     }
 
     /// Every column this build writes that the stored tables lack.
@@ -347,6 +399,17 @@ impl ClickHouseStore {
                 }
             })
             .collect())
+    }
+
+    /// The notice for columns this user may not add: history is written without them until an administrator adds them.
+    fn columns_notice(&self, statements: &[String]) -> String {
+        format!(
+            "the ClickHouse store in `{}` lacks columns this version of SQLBuild writes, and this \
+             user may not add them; history is still written without them. An administrator can \
+             add them with:\n\n{};\n",
+            self.location.database(),
+            statements.join(";\n\n")
+        )
     }
 
     fn retention_conflict(&self, tables: &[(String, String)]) -> Option<String> {
@@ -436,7 +499,18 @@ impl RecallStoreOpener for ClickHouseStoreOpener {
                 notices: Vec::new(),
             };
             match store.ensure_schema(py, envelope) {
-                Ok(tables) => {
+                Ok(ReadyStore {
+                    tables,
+                    refused_columns: refused,
+                }) => {
+                    if !refused.is_empty()
+                        && (self.retention_notice)(
+                            &self.project_dir,
+                            &format!("{}:columns", self.location.database()),
+                        )
+                    {
+                        store.notices.push(store.columns_notice(&refused));
+                    }
                     if let Some(notice) = store.retention_conflict(&tables)
                         && (self.retention_notice)(
                             &self.project_dir,
