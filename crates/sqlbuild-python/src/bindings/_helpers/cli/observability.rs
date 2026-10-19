@@ -334,10 +334,14 @@ impl Observed {
                 &host::entry(py, UserCodeHost::DiscoverRuntimeExtensions)?,
                 &[("project_dir", project_dir.clone())],
             )?;
-            self.recall_sinks = Some((
-                native_field(&extensions, "recall_lifecycle_sink")?.unbind(),
-                native_field(&extensions, "recall_output_sink")?.unbind(),
-            ));
+            let lifecycle_replacement: Bound<'_, PyAny> =
+                native_field(&extensions, "recall_lifecycle_sink")?;
+            let output_replacement: Bound<'_, PyAny> =
+                native_field(&extensions, "recall_output_sink")?;
+            if !lifecycle_replacement.is_none() || !output_replacement.is_none() {
+                withhold_launch_record(py)?;
+            }
+            self.recall_sinks = Some((lifecycle_replacement.unbind(), output_replacement.unbind()));
             let event_exporters: Bound<'_, PyAny> = native_field(&extensions, "event_exporters")?;
             let sinks: Bound<'_, PyAny> = native_field(&extensions, "command_output_sinks")?;
             command_output_sinks = sinks.is_truthy()?;

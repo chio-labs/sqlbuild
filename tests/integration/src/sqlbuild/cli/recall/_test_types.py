@@ -176,3 +176,10 @@ class FailingReplacementTestCase:
     description: str
     expected_failed_streams: list[list[object]]
     expected_notice: bytes
+
+
+@dataclass(frozen=True)
+class ReplacementLaunchRecordTestCase:
+    description: str
+    sinks: dict[str, str]
+    expected_records: int

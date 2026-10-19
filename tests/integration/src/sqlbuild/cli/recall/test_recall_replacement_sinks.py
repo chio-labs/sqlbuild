@@ -5,14 +5,18 @@ from pathlib import Path
 
 import pytest
 
+from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR
 from tests.integration.src.sqlbuild.cli.recall._test_types import (
     FailingReplacementTestCase,
+    ReplacementLaunchRecordTestCase,
     ReplacementLifecycleTestCase,
     ReplacementOutputTestCase,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     EVENT_LOG_SINK,
     FAILING_SINKS,
+    NATIVE_SQB,
+    environment,
     filtering_lifecycle_sink,
     logged_event_types,
     recall_rows,
@@ -138,6 +142,45 @@ def test_given_raising_replacement_sinks_when_building_then_records_fail_and_the
         == test_case.expected_failed_streams
     )
     assert recall_rows(project_dir, "SELECT command FROM recall_invocations") == [["build"]]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ReplacementLaunchRecordTestCase(
+            description="without sinks sqb may replay the compile",
+            sinks={},
+            expected_records=1,
+        ),
+        ReplacementLaunchRecordTestCase(
+            description="a Recall output replacement alone withholds the launch record",
+            sinks={"recall_output": rewriting_output_sink((b"", b""))},
+            expected_records=0,
+        ),
+        ReplacementLaunchRecordTestCase(
+            description="a Recall lifecycle replacement alone withholds the launch record",
+            sinks={"recall_events": filtering_lifecycle_sink("statement_")},
+            expected_records=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_only_replacement_sinks_when_compiling_through_sqb_then_no_launch_record_is_left(
+    test_case: ReplacementLaunchRecordTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_sinks(write_project(tmp_path / "orders_shop"), test_case.sinks)
+
+    compiled: subprocess.CompletedProcess[bytes] = subprocess.run(
+        [str(NATIVE_SQB), "compile"],
+        cwd=project_dir,
+        capture_output=True,
+        check=False,
+        env=environment(**{REUSE_DISABLE_ENV_VAR: "0"}),
+    )
+
+    assert compiled.returncode == 0, compiled.stderr
+    records: list[Path] = list((project_dir / "target" / "cache" / "launcher-v1").glob("*.json"))
+    assert len(records) == test_case.expected_records
 
 
 if __name__ == "__main__":
