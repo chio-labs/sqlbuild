@@ -170,10 +170,20 @@ fn projected(
         return Ok(Projected::Declined);
     };
     let shape: Option<&str> = analysis.get("shape").and_then(Value::as_str);
-    if !matches!(shape, Some(SELECT_SHAPE | SET_OPERATION_SHAPE)) || !eligible(projections) {
+    if !matches!(shape, Some(SELECT_SHAPE | SET_OPERATION_SHAPE))
+        || !(has_star_projection(analysis) || eligible(projections))
+    {
         return Ok(Projected::Declined);
     }
     native_projection(input, analysis, cleaned, projections).map(Projected::Native)
+}
+
+/// Whether the analysis expanded a star; the legacy analysis cannot, so it never answers one.
+fn has_star_projection(analysis: &Value) -> bool {
+    analysis
+        .get("starProjections")
+        .and_then(Value::as_array)
+        .is_some_and(|stars| !stars.is_empty())
 }
 
 /// The compact facts as Python's columns and lineage.
@@ -248,10 +258,7 @@ fn native_projection(
             sources,
         });
     }
-    let has_star: bool = analysis
-        .get("starProjections")
-        .and_then(Value::as_array)
-        .is_some_and(|stars| !stars.is_empty());
+    let has_star: bool = has_star_projection(analysis);
     if has_star && input.model.references.len() == 1 {
         let order: HashMap<&str, usize> = declared_order(input);
         let fallback: usize = order.len();

@@ -1168,3 +1168,12 @@ class DeltaCompileOptOutTestCase:
     env: dict[str, str]
     expected_delta_line: bool = False
     expected_images: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StarBesideCastConstantTestCase:
+    """A model selecting a star beside a cast constant and the columns it must compile and build."""
+
+    description: str
+    query_sql: str
+    expected_columns: tuple[str, ...]

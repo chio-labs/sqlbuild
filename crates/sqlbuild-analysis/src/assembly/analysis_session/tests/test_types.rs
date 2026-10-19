@@ -17,6 +17,15 @@ pub(crate) struct SessionTestCase {
     pub(crate) expected_outcomes: &'static [&'static [&'static str]],
 }
 
+/// A session over the orders request, run with or without rich type inference.
+pub(crate) struct StarExpansionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) rich_type_inference: bool,
+    pub(crate) models: &'static [ModelSpec],
+    /// `step_lines` of each step, in order.
+    pub(crate) expected_steps: &'static [&'static [&'static str]],
+}
+
 pub(crate) struct SessionFactsTestCase {
     pub(crate) description: &'static str,
     pub(crate) models: &'static [ModelSpec],

@@ -265,6 +265,17 @@ pub(crate) fn session_lines(models: &[ModelSpec]) -> (Vec<Vec<String>>, Vec<Vec<
     )
 }
 
+/// [`session_lines`]' steps with rich type inference as given, every model's types declared empty.
+pub(crate) fn session_steps(models: &[ModelSpec], rich_type_inference: bool) -> Vec<Vec<String>> {
+    let mut request: SessionRequest = orders_request(model_requests(models));
+    request.rich_type_inference = rich_type_inference;
+    for (name, ..) in models {
+        request.column_types.push(((*name).to_owned(), Vec::new()));
+    }
+    let (steps, _, _) = completed(started(request));
+    steps.iter().map(step_lines).collect()
+}
+
 /// Run `models` and describe the facts the finished session kept for each, or `none`.
 pub(crate) fn fact_lines(models: &[ModelSpec]) -> Vec<String> {
     let (_, _, finished) = completed(started(orders_request(model_requests(models))));

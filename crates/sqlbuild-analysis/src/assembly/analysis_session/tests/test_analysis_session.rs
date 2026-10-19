@@ -6,11 +6,12 @@ use crate::assembly::analysis_session::models::PivotOutcome;
 use crate::assembly::analysis_session::tests::helpers::{
     catalog, expected_facts, fact_lines, failed, finished_session, kept_model_analyses,
     legacy_lines, lines, model_requests, orders_request, pivot_request, proven, recovered_facts,
-    session_lines,
+    session_lines, session_steps,
 };
 use crate::assembly::analysis_session::tests::test_types::{
     CteRecoveryTestCase, KeptAnalysisTestCase, LegacyAnalysisTestCase, ModelSpec, PivotTestCase,
-    SessionFactsTestCase, SessionFailureTestCase, SessionTestCase, UnscheduledTestCase,
+    SessionFactsTestCase, SessionFailureTestCase, SessionTestCase, StarExpansionTestCase,
+    UnscheduledTestCase,
 };
 
 /// A model whose missing column stays untyped over a known input, so completion re-analyses it.
@@ -20,6 +21,9 @@ const UNTYPED_ORDERS: ModelSpec = (
     &["raw_orders"],
     &[],
 );
+
+/// A producer whose output types stay unknown without rich inference.
+const STAR_PRODUCER: ModelSpec = ("stg_orders", "SELECT 1 AS order_id, 10 AS amount", &[], &[]);
 
 #[test]
 fn given_models_when_running_the_session_then_publishes_as_python_does() {
@@ -171,6 +175,68 @@ fn given_models_when_running_the_session_then_publishes_as_python_does() {
             "{}",
             test_case.description
         );
+    }
+}
+
+#[test]
+fn given_a_star_beside_a_cast_constant_when_running_the_session_then_expands_the_star() {
+    let test_cases = [
+        StarExpansionTestCase {
+            description: "fast inference keeps the starred columns before the cast constant",
+            rich_type_inference: false,
+            models: &[
+                STAR_PRODUCER,
+                (
+                    "orders_flagged",
+                    "SELECT *, CAST(1 AS INTEGER) AS flag FROM __ref(\"stg_orders\")",
+                    &[],
+                    &["stg_orders"],
+                ),
+            ],
+            expected_steps: &[&[
+                "publish stg_orders order_id:UNKNOWN amount:UNKNOWN",
+                "publish orders_flagged order_id:UNKNOWN amount:UNKNOWN flag:INT",
+            ]],
+        },
+        StarExpansionTestCase {
+            description: "fast inference expands a star over a derived table",
+            rich_type_inference: false,
+            models: &[
+                STAR_PRODUCER,
+                (
+                    "orders_flagged",
+                    "SELECT *, CAST(1 AS INTEGER) AS flag \
+                     FROM (SELECT order_id, amount FROM __ref(\"stg_orders\")) AS edited",
+                    &[],
+                    &["stg_orders"],
+                ),
+            ],
+            expected_steps: &[&[
+                "publish stg_orders order_id:UNKNOWN amount:UNKNOWN",
+                "publish orders_flagged order_id:UNKNOWN amount:UNKNOWN flag:INT",
+            ]],
+        },
+        StarExpansionTestCase {
+            description: "rich inference keeps the starred columns beside the cast constant",
+            rich_type_inference: true,
+            models: &[
+                STAR_PRODUCER,
+                (
+                    "orders_flagged",
+                    "SELECT *, CAST(1 AS INTEGER) AS flag FROM __ref(\"stg_orders\")",
+                    &[],
+                    &["stg_orders"],
+                ),
+            ],
+            expected_steps: &[&[
+                "publish stg_orders order_id:INT amount:INT",
+                "publish orders_flagged order_id:INT amount:INT flag:INT",
+            ]],
+        },
+    ];
+    for test_case in test_cases {
+        let steps = session_steps(test_case.models, test_case.rich_type_inference);
+        assert_eq!(steps, test_case.expected_steps, "{}", test_case.description);
     }
 }
 
