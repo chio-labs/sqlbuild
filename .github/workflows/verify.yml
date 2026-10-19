@@ -301,8 +301,14 @@ jobs:
             target: test-e2e-duckdb-inspection
           - name: integrations
             target: test-e2e-duckdb-integrations
+          # `sqb` runs Python in its own process; this shard keeps the exec fallback covered.
+          - name: CLI commands, exec host
+            target: test-e2e-duckdb-cli
+            host_mode: exec
     env:
       PYTEST_XDIST_AUTO_NUM_WORKERS: "4"
+      # Fail instead of silently falling back, so these shards prove the in-process host.
+      SQLBUILD_HOST_MODE: ${{ matrix.host_mode || 'embedded' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
