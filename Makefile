@@ -179,7 +179,8 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/snowflake \
 	tests/e2e/src/sqlbuild/cli/commands/main/sqlite \
 	tests/e2e/src/sqlbuild/cli/commands/main/sqlserver \
-	tests/e2e/src/sqlbuild/cli/commands/main/test
+	tests/e2e/src/sqlbuild/cli/commands/main/test \
+	tests/e2e/src/sqlbuild/cli/commands/shared
 
 E2E_DUCKDB_INSPECTION_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/clone \
