@@ -41,6 +41,8 @@ pub(crate) const ERRORS_ON_DELTA_PATH: bool = true;
 /// How many times a changed relation shape may pull its dependents into the delta.
 const MAX_ROUNDS: usize = 4;
 const MODELS_ROOT: &str = "models/";
+/// How a rules diagnostic's report JSON names its phase; rules run over the whole project.
+const RULE_PHASE: &str = "\"phase\": \"rule\"";
 /// What every error for a reference to an undiscovered source says.
 const UNKNOWN_SOURCE: &str = "unknown source";
 /// The upstream kind of a source a model reads.
@@ -488,6 +490,13 @@ pub(crate) fn run<'py>(
             return fallback("too many models would compile again");
         }
         rerun = rerun.with_tests(&image, &changed_tests);
+        if image
+            .diagnostics
+            .iter()
+            .any(|diagnostic| kept_only_by_full_compiles(&rerun, diagnostic))
+        {
+            return fallback("the stored compile reports problems in files the edit leaves alone");
+        }
         let sources_read: Option<BTreeSet<String>> =
             (!image.diagnostics.iter().any(outside_resources)).then(|| {
                 image
@@ -669,6 +678,17 @@ fn first_rerun(
     Ok((rerun, changed_tests))
 }
 
+/// Whether a stored diagnostic concerns a model or SQL test the delta does not compile again
+/// and comes from a phase other than rules, which only a full compile reports again.
+fn kept_only_by_full_compiles(rerun: &Rerun, diagnostic: &CapturedDiagnostic) -> bool {
+    !rerun.owns(diagnostic)
+        && !diagnostic.json.contains(RULE_PHASE)
+        && diagnostic
+            .paths
+            .iter()
+            .any(|path| path.starts_with(MODELS_ROOT) || path.starts_with(TESTS_ROOT))
+}
+
 /// Whether a stored diagnostic concerns a file other than a model or SQL test, which a delta
 /// compile then reads in full.
 fn outside_resources(diagnostic: &CapturedDiagnostic) -> bool {
@@ -723,8 +743,21 @@ fn finished<'py>(
     {
         return fallback("the delta compile read a source it did not discover");
     }
-    if unowned(rerun, &base.image.diagnostics) != unowned(rerun, &ran.capture.diagnostics) {
-        return fallback("diagnostics outside the changed files differ");
+    let (stored, fresh) = (
+        unowned(rerun, &base.image.diagnostics),
+        unowned(rerun, &ran.capture.diagnostics),
+    );
+    if stored != fresh {
+        let only = |left: &[&str], right: &[&str]| {
+            left.iter()
+                .find(|item| !right.contains(item))
+                .map_or(String::new(), |item| (*item).to_owned())
+        };
+        return fallback(format!(
+            "diagnostics outside the changed files differ: stored {} / delta {}",
+            only(&stored, &fresh),
+            only(&fresh, &stored)
+        ));
     }
     let recorded: Bound<'py, PyAny> = ran.output.getattr("stdout")?;
     if recorded.is_none() {

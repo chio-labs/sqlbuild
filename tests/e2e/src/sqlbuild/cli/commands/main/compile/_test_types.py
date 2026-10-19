@@ -1103,3 +1103,30 @@ class EarlyBuiltinRulesEditTestCase:
     expected_diagnostics: tuple[tuple[str, str, int, int], ...]
     expected_early_outcomes: tuple[tuple[int, int], ...]
     expected_rule_cache_outcomes: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class DeltaCompileEdit:
+    """One edit a seeded delta compile series can make, and whether it may compile as a delta."""
+
+    kind: str
+    pattern: str
+    replacement: str
+    on_test_file: bool = False
+    # A fallback reason fragment when the edit must compile in full; `None` when it is a delta.
+    fallback_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class DeltaCompileSeriesTestCase:
+    description: str
+    seed: int
+    json_output: bool
+    steps: int
+
+
+@dataclass(frozen=True)
+class DeltaCompileOptOutTestCase:
+    description: str
+    settings: str
+    env: dict[str, str]

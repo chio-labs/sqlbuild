@@ -5095,3 +5095,45 @@ def json_diagnostic_codes(stdout: str) -> tuple[str, ...]:
 
     document: dict[str, Any] = json.loads(stdout or "{}")
     return tuple(str(diagnostic["code"]) for diagnostic in document.get("diagnostics", ()))
+
+
+DELTA_COMPILE_LINE: str = "against the previous compile"
+DELTA_VERIFIED_LINE: str = "delta compile verified"
+DELTA_FALLBACK_PREFIX: str = "delta compile fell back: "
+DELTA_MISMATCH_PREFIX: str = "delta compile mismatch: "
+
+
+class DeltaCompileRun(NamedTuple):
+    """One fresh-process compile with compile reuse and, optionally, the delta verifier."""
+
+    returncode: int
+    stdout: str
+    stderr: str
+
+    @property
+    def verified(self) -> bool:
+        return DELTA_VERIFIED_LINE in self.stderr
+
+    @property
+    def mismatches(self) -> list[str]:
+        return [line for line in self.stderr.splitlines() if line.startswith(DELTA_MISMATCH_PREFIX)]
+
+    @property
+    def fallback_reason(self) -> str | None:
+        for line in self.stderr.splitlines():
+            if line.startswith(DELTA_FALLBACK_PREFIX):
+                return line.removeprefix(DELTA_FALLBACK_PREFIX)
+        return None
+
+
+def run_delta_compile(
+    *, project_dir: Path, json_output: bool, env: dict[str, str] | None = None
+) -> DeltaCompileRun:
+    """Compile in a fresh process with compile reuse enabled and the given extra environment."""
+
+    result: subprocess.CompletedProcess[str] = run_installed_sqb(
+        project_dir=project_dir,
+        args=("compile", "--json") if json_output else ("compile",),
+        env={REUSE_DISABLE_ENV_VAR: "0", **(env or {})},
+    )
+    return DeltaCompileRun(returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
