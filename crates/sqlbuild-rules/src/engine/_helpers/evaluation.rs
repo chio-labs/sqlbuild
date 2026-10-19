@@ -112,7 +112,11 @@ fn evaluate_native_models(
                 "SQBRDECLARATION201" | "SQBRDECLARATION301" | "SQBRTEST301"
             )
     });
-    let model_limit = if all_models_required { models.len() } else { 1 };
+    let model_limit = if all_models_required {
+        models.len()
+    } else {
+        models.len().min(1)
+    };
     let mut bucket = cache
         .map(|store| store.native_rules_bucket(model_rules_fingerprint))
         .transpose()?
