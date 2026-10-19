@@ -1,10 +1,10 @@
 //! The session handle: producers queue records; `close` flushes within the shutdown budget.
 
+use std::sync::MutexGuard;
 use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::{Map, Value};
 
-use crate::records::_helpers::events::event_object;
 use crate::records::constants::{
     ARTIFACT_DIGEST_PREFIX, EXECUTED_SQL_ROLE, SEVERITY_ORDER, SQL_ARTIFACT_KIND, SQL_MEDIA_TYPE,
 };
@@ -13,11 +13,13 @@ use crate::records::main::artifact_rows::artifact_rows;
 use crate::records::main::diagnostic_input_from_json::diagnostic_input_from_json;
 use crate::records::main::diagnostic_row::diagnostic_row;
 use crate::records::main::event_object_row::event_object_row;
+use crate::records::main::event_row::event_row;
 use crate::records::main::format_timestamp::format_timestamp;
 use crate::records::main::sha256_hex::sha256_hex;
-use crate::records::models::{ArtifactInput, OutputStream, RecallValue};
-use crate::store::constants::MAINTENANCE_BUDGET_MS;
+use crate::records::models::{ArtifactInput, OutputStream, RecallRow, RecallValue};
 use crate::writer::_helpers::delivery::locked;
+use crate::writer::_helpers::queue::WriterState;
+use crate::writer::constants::MAX_ARTIFACT_BYTES;
 use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, RecallSession, SetupOutcome,
 };
@@ -76,21 +78,27 @@ impl RecallSession {
 
     /// Queue one lifecycle event from its canonical JSON.
     pub fn publish_event(&self, event_json: &str) -> Result<(), RecordError> {
-        let event: Map<String, Value> = event_object(event_json)?;
-        self.publish_event_object(&event)
+        let state = locked(&self.shared.state);
+        let row = event_row(&state.envelope, event_json)?;
+        self.queue_event(state, row);
+        Ok(())
     }
 
     /// Queue one lifecycle event already decoded to its canonical JSON object.
     pub fn publish_event_object(&self, event: &Map<String, Value>) -> Result<(), RecordError> {
-        let mut state = locked(&self.shared.state);
+        let state = locked(&self.shared.state);
         let row = event_object_row(&state.envelope, event)?;
+        self.queue_event(state, row);
+        Ok(())
+    }
+
+    fn queue_event(&self, mut state: MutexGuard<'_, WriterState>, row: RecallRow) {
         let priority = match row.value("severity") {
             Some(RecallValue::Text(severity)) => event_priority(severity),
             _ => Priority::Lifecycle,
         };
         state.push(vec![row], DeliveryStream::Events, priority);
         self.shared.wake.notify_one();
-        Ok(())
     }
 
     /// Queue one diagnostic from its canonical JSON, when at or above the minimum severity.
@@ -116,6 +124,13 @@ impl RecallSession {
 
     /// Queue the SQL a statement executed, once per digest per invocation.
     pub fn publish_sql(&self, sql: &str, statement_id: Option<&str>, resource_id: Option<&str>) {
+        if sql.len() > MAX_ARTIFACT_BYTES {
+            let mut state = locked(&self.shared.state);
+            let counts = state.counts_mut(DeliveryStream::Artifacts);
+            counts.accepted += 1;
+            counts.dropped += 1;
+            return;
+        }
         let digest = format!("{ARTIFACT_DIGEST_PREFIX}{}", sha256_hex(sql.as_bytes()));
         let mut state = locked(&self.shared.state);
         if !state.artifacts_seen.insert(digest.clone()) {
@@ -167,36 +182,68 @@ impl RecallSession {
         }
     }
 
-    /// Flush within the shutdown budget, write the delivery rows and return the accounting. Records still queued at the deadline are counted as dropped.
-    pub fn close(&self) -> DeliverySummary {
-        let deadline = Instant::now() + self.shutdown_timeout;
-        let wait_until = deadline + Duration::from_millis(MAINTENANCE_BUDGET_MS + 500);
-        {
-            let mut state = locked(&self.shared.state);
-            if !state.closing {
-                state.closing = true;
-                state.deadline = Some(deadline);
-                state.flush_output();
-            }
-            self.shared.wake.notify_all();
-            while !state.finished {
-                let now = Instant::now();
-                if now >= wait_until {
-                    state.rejecting = true;
-                    state.drop_all();
-                    state.degraded.get_or_insert_with(|| {
-                        "Recall delivery did not finish within the shutdown timeout".to_owned()
-                    });
-                    break;
-                }
-                state = self
-                    .shared
-                    .wake
-                    .wait_timeout(state, wait_until - now)
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .0;
-            }
+    /// Start closing: flush pending output and give delivery the shutdown budget from now.
+    pub fn begin_close(&self) {
+        let mut state = locked(&self.shared.state);
+        if !state.closing {
+            state.closing = true;
+            state.deadline = Some(Instant::now() + self.shutdown_timeout);
+            state.flush_output();
         }
+        self.shared.wake.notify_all();
+    }
+
+    /// Wait up to `slice` for delivery to finish; past the deadline, drop what is left and report done.
+    pub fn wait_closed(&self, slice: Duration) -> bool {
+        let mut state = locked(&self.shared.state);
+        let Some(deadline) = state.deadline else {
+            return state.finished;
+        };
+        let until: Instant = (Instant::now() + slice).min(deadline);
+        while !state.finished {
+            let now = Instant::now();
+            if now >= deadline {
+                state.rejecting = true;
+                state.drop_all();
+                state.degraded.get_or_insert_with(|| {
+                    "Recall delivery did not finish within the shutdown timeout".to_owned()
+                });
+                return true;
+            }
+            if now >= until {
+                return false;
+            }
+            state = self
+                .shared
+                .wake
+                .wait_timeout(state, until - now)
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .0;
+        }
+        true
+    }
+
+    /// Stop waiting for delivery at once, as on a second interrupt; what is queued is dropped.
+    pub fn abandon(&self) {
+        let mut state = locked(&self.shared.state);
+        state.rejecting = true;
+        state.drop_all();
+        state
+            .degraded
+            .get_or_insert_with(|| "Recall delivery was interrupted".to_owned());
+        self.shared.wake.notify_all();
+    }
+
+    /// Flush within the shutdown budget, a hard cap on the delay, and return the accounting; records still queued at the deadline are counted as dropped.
+    pub fn close(&self) -> DeliverySummary {
+        self.begin_close();
+        while !self.wait_closed(self.shutdown_timeout) {}
         self.summary()
+    }
+
+    /// Store notices the user should see, such as a corrupt store moved aside.
+    #[must_use]
+    pub fn notices(&self) -> Vec<String> {
+        locked(&self.shared.state).notices.clone()
     }
 }

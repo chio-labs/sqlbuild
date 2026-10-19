@@ -80,3 +80,38 @@ class RepeatedBuildTestCase:
     builds: int
     sql: str
     expected_rows: list[list[object]]
+
+
+@dataclass(frozen=True)
+class RecordedCommandTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_recorded: list[list[object]]
+
+
+@dataclass(frozen=True)
+class HeldLockTestCase:
+    description: str
+    shutdown_seconds: float
+    builds_before_lock: int
+    expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class ConcurrentWritersTestCase:
+    description: str
+    lines_per_stream: int
+    expected_order: list[int]
+
+
+@dataclass(frozen=True)
+class CorruptStoreTestCase:
+    description: str
+    expected_notice_prefix: str
+    expected_recorded: list[list[object]]
+
+
+@dataclass(frozen=True)
+class FailingStderrTestCase:
+    description: str
+    expected_exit_code: int

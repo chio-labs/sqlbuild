@@ -15,3 +15,13 @@ pub const SETUP_BUDGET_MS: u64 = 2_000;
 pub const MAX_RETRY_BACKOFF_MS: u64 = 500;
 /// A batch that stays busy this long while the command runs is counted as failed.
 pub const RUNNING_RETRY_LIMIT_MS: u64 = 30_000;
+/// Pause between setup attempts while another writer holds the store.
+pub const SETUP_RETRY_MS: u64 = 50;
+/// Longest wait between wall-clock checks, so a resumed process beats promptly.
+pub const CLOCK_CHECK_MS: u64 = 1_000;
+/// Budget for the final delivery rows, inside the shutdown budget.
+pub const FINAL_ROWS_BUDGET_MS: u64 = 500;
+/// Maintenance is skipped when less than this remains of the shutdown budget.
+pub const MINIMUM_MAINTENANCE_MS: u64 = 200;
+/// SQL longer than this is counted as dropped without hashing or copying it.
+pub const MAX_ARTIFACT_BYTES: usize = 4 * 1024 * 1024;

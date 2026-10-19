@@ -60,16 +60,16 @@ fn given_expired_recent_and_running_invocations_when_maintained_then_only_expire
             expected_rows: vec![vec![text("sha256:recent")]],
         },
         MaintenanceTestCase {
-            description: "a claim stops another run within a day; the next day the stale run expires",
+            description: "a claim stops another run within a day, and an unfinished run that beat within retention is kept",
             batch: mixed,
             runs: &[(0, 5), (3600, 5), (90_000, 5)],
             sql: "SELECT COUNT(*) FROM recall_invocations",
             expected_outcomes: vec![
                 ran(1, 1, true),
                 MaintenanceOutcome::default(),
-                ran(1, 0, true),
+                ran(0, 0, true),
             ],
-            expected_rows: vec![vec![integer(1)]],
+            expected_rows: vec![vec![integer(2)]],
         },
         MaintenanceTestCase {
             description: "a starved run leaves the next run overdue",

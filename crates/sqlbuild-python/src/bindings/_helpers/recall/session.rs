@@ -15,7 +15,10 @@ use sqlbuild_recall::schema::main::ddl_script::ddl_script;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
 use sqlbuild_recall::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
-use sqlbuild_recall::writer::constants::{DEFAULT_HEARTBEAT_INTERVAL_MS, SETUP_BUDGET_MS};
+use sqlbuild_recall::store::main::quarantine_store::quarantine_store;
+use sqlbuild_recall::store::main::store_header_is_foreign::store_header_is_foreign;
+use sqlbuild_recall::store::main::store_location_problem::store_location_problem;
+use sqlbuild_recall::writer::constants::DEFAULT_HEARTBEAT_INTERVAL_MS;
 use sqlbuild_recall::writer::main::start_recall_session::start_recall_session;
 use sqlbuild_recall::writer::models::{
     DeliverySummary, RecallSession, SessionConfig, SetupOutcome,
@@ -26,8 +29,8 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::recall::constants::{
-    DDL_NOTICE_PREFIX, HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH, MINIMUM_HEARTBEAT_SECONDS,
-    NOTICE_INTERVAL_SECONDS, STDOUT_STREAM_INDEX,
+    CLOSE_POLL_MS, DDL_NOTICE_PREFIX, HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH,
+    MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS, STDOUT_STREAM_INDEX,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::config_json::dumped_json;
@@ -38,6 +41,10 @@ pub(crate) struct InvocationRecall {
     pub(crate) session: Option<Arc<RecallSession>>,
     pub(crate) target: Option<String>,
     pub(crate) adapter: Option<String>,
+    /// The command name, for the closing status line.
+    pub(crate) command: String,
+    /// The resolved settings and project directory, for notices at the end of the run.
+    pub(crate) settings: Option<(RecallSettings, PathBuf)>,
 }
 
 /// The text of an optional attribute value.
@@ -202,16 +209,16 @@ fn target_phrase(settings: &RecallSettings) -> String {
         .map_or_else(String::new, |target| format!(" for target `{target}`"))
 }
 
-fn report_permission(
-    py: Python<'_>,
+/// The DDL notice for an unwritable store, when one is due for it.
+fn permission_notice(
     (settings, project_dir): (&RecallSettings, &Path),
     reason: &str,
-) -> PyResult<()> {
+) -> Option<String> {
     let StoreLocation::Sqlite { path } = &settings.store else {
-        return Ok(());
+        return None;
     };
     if !notice_due(project_dir, &path.to_string_lossy()) {
-        return Ok(());
+        return None;
     }
     let script = ddl_script(
         Dialect::Sqlite,
@@ -221,33 +228,48 @@ fn report_permission(
             cluster: None,
         },
     );
-    write_stderr(
-        py,
-        &format!(
-            "Recall history is not being written{}: {reason}. An administrator can create the \
-             store at {} with:\n\n{script}\n",
-            target_phrase(settings),
-            path.display()
-        ),
-    )
+    Some(format!(
+        "Recall history is not being written{}: {reason}. An administrator can create the \
+         store at {} with:\n\n{script}\n",
+        target_phrase(settings),
+        path.display()
+    ))
 }
 
-fn report_unsupported(
-    py: Python<'_>,
+fn unsupported_notice(
     (settings, project_dir): (&RecallSettings, &Path),
     (connection, adapter): (&str, &str),
-) -> PyResult<()> {
-    if !notice_due(project_dir, connection) {
-        return Ok(());
-    }
-    write_stderr(
-        py,
-        &format!(
+) -> Option<String> {
+    notice_due(project_dir, connection).then(|| {
+        format!(
             "Recall history is not being written{}: connection `{connection}` uses adapter \
              `{adapter}`, which this version cannot store Recall history in.\n",
             target_phrase(settings)
+        )
+    })
+}
+
+/// Write `text` to stderr; a notice that cannot be written never changes the command's outcome.
+fn notify(py: Python<'_>, text: Option<String>) {
+    if let Some(text) = text {
+        drop(write_stderr(py, &text));
+    }
+}
+
+/// Move a store whose file is not a database aside before the command prints anything.
+fn quarantined_notice(path: &Path) -> Option<String> {
+    if !store_header_is_foreign(path) {
+        return None;
+    }
+    Some(match quarantine_store(path, SystemTime::now()) {
+        Ok(moved) => format!(
+            "Recall: {} was not a valid database; it was moved to {} and a fresh store was \
+             started.\n",
+            path.display(),
+            moved.display()
         ),
-    )
+        Err(error) => format!("Recall history is not being written: {error}.\n"),
+    })
 }
 
 fn started_session(
@@ -261,10 +283,18 @@ fn started_session(
             connection,
             adapter,
         } => {
-            report_unsupported(py, (settings, project_dir), (connection, adapter))?;
+            notify(
+                py,
+                unsupported_notice((settings, project_dir), (connection, adapter)),
+            );
             return Ok(None);
         }
     };
+    notify(py, quarantined_notice(&store_path));
+    if let Some(reason) = store_location_problem(&store_path) {
+        notify(py, permission_notice((settings, project_dir), &reason));
+        return Ok(None);
+    }
     let Some(invocation_id) = text_value(&native_field(identity, "invocation_id")?)? else {
         return Ok(None);
     };
@@ -286,17 +316,13 @@ fn started_session(
         shutdown_timeout: Duration::from_millis(settings.shutdown_timeout_ms),
         diagnostics_min_severity: settings.diagnostics_min_severity.clone(),
         heartbeat_interval: heartbeat_interval(),
-        setup_budget: Duration::from_millis(SETUP_BUDGET_MS),
+        setup_budget: Duration::ZERO,
         maintenance: true,
     });
-    let setup = py.detach(|| session.wait_for_setup(Duration::from_millis(SETUP_BUDGET_MS)));
-    if let Some(SetupOutcome::PermissionDenied { reason }) = &setup {
-        report_permission(py, (settings, project_dir), reason)?;
-    }
     Ok(Some(Arc::new(session)))
 }
 
-/// Begin recording when Recall is enabled; invalid settings record nothing and the command reports them.
+/// Begin recording when Recall is enabled, without waiting on the store; invalid settings record nothing and the command reports them.
 pub(crate) fn start_invocation_recall(
     py: Python<'_>,
     args: &Bound<'_, PyAny>,
@@ -319,36 +345,76 @@ pub(crate) fn start_invocation_recall(
     };
     Ok(InvocationRecall {
         session,
-        target: settings.target,
-        adapter: settings.project_adapter,
+        target: settings.target.clone(),
+        adapter: settings.project_adapter.clone(),
+        command: facts.command.clone().unwrap_or_default(),
+        settings: Some((settings, project_dir)),
     })
 }
 
-/// Close the session: flush within the shutdown budget and warn when history is incomplete.
-pub(crate) fn finish_invocation_recall(py: Python<'_>, recall: &InvocationRecall) -> PyResult<()> {
+/// The closing sentence after a Recall notice, so the command's own outcome stays the last word.
+fn final_status(command: &str, exit_code: Option<i64>) -> String {
+    match exit_code {
+        Some(0) => {
+            format!("sqb {command} completed successfully; only its Recall history is affected.\n")
+        }
+        Some(code) => format!("sqb {command} failed with exit code {code}.\n"),
+        None => format!("sqb {command} failed.\n"),
+    }
+}
+
+/// What Recall must tell the user about this run once delivery has finished.
+fn closing_notices(recall: &InvocationRecall, session: &RecallSession) -> Vec<String> {
+    let mut notices: Vec<String> = session
+        .notices()
+        .into_iter()
+        .map(|notice| format!("Recall: {notice}.\n"))
+        .collect();
+    if let (Some(SetupOutcome::PermissionDenied { reason }), Some((settings, project_dir))) =
+        (session.wait_for_setup(Duration::ZERO), &recall.settings)
+    {
+        notices.extend(permission_notice((settings, project_dir), &reason));
+        return notices;
+    }
+    let summary: DeliverySummary = session.summary();
+    let total = summary.total();
+    if total.dropped > 0 || total.failed > 0 {
+        let reason = summary
+            .degraded_reason
+            .as_deref()
+            .map_or_else(String::new, |reason| format!(": {reason}"));
+        notices.push(format!(
+            "warning: Recall history for this run is incomplete ({} dropped, {} failed){reason}\n",
+            total.dropped, total.failed
+        ));
+    }
+    notices
+}
+
+/// Close the session within its shutdown budget; a further interrupt stops waiting at once. Notices end with the command's own outcome.
+pub(crate) fn finish_invocation_recall(
+    py: Python<'_>,
+    recall: &InvocationRecall,
+    exit_code: Option<i64>,
+) -> PyResult<()> {
     let Some(session) = &recall.session else {
         return Ok(());
     };
-    let summary: DeliverySummary = py.detach(|| session.close());
-    let total = summary.total();
-    let permission = matches!(
-        session.wait_for_setup(Duration::ZERO),
-        Some(SetupOutcome::PermissionDenied { .. })
-    );
-    if permission || (total.dropped == 0 && total.failed == 0) {
-        return Ok(());
+    session.begin_close();
+    while !py.detach(|| session.wait_closed(Duration::from_millis(CLOSE_POLL_MS))) {
+        if let Err(interrupt) = py.check_signals() {
+            session.abandon();
+            return Err(interrupt);
+        }
     }
-    let reason = summary
-        .degraded_reason
-        .as_deref()
-        .map_or_else(String::new, |reason| format!(": {reason}"));
-    write_stderr(
-        py,
-        &format!(
-            "warning: Recall history for this run is incomplete ({} dropped, {} failed){reason}\n",
-            total.dropped, total.failed
-        ),
-    )
+    let notices: Vec<String> = closing_notices(recall, session);
+    if !notices.is_empty() {
+        notify(
+            py,
+            Some(notices.concat() + &final_status(&recall.command, exit_code)),
+        );
+    }
+    Ok(())
 }
 
 /// Forward bytes a process stream accepted to `session` when it records `invocation_id`.

@@ -8,17 +8,19 @@ use crate::records::main::format_timestamp::format_timestamp;
 use crate::records::main::heartbeat_row::heartbeat_row;
 use crate::records::models::RecallRow;
 use crate::schema::models::Table;
-use crate::store::constants::MAINTENANCE_BUDGET_MS;
+use crate::store::constants::{BUSY_TIMEOUT_MS, MAINTENANCE_BUDGET_MS};
 use crate::store::errors::{StoreError, StoreErrorKind};
 use crate::store::main::ensure_sqlite_schema::ensure_sqlite_schema;
 use crate::store::main::insert_rows::insert_rows;
 use crate::store::main::maintain_sqlite_store::maintain_sqlite_store;
 use crate::store::main::open_sqlite_store::open_sqlite_store;
+use crate::store::main::quarantine_store::quarantine_store;
 use crate::store::models::{InsertOutcome, MaintenanceRequest, OpenMode, SqliteStore};
 use crate::writer::_helpers::queue::{Queued, WriterState};
 use crate::writer::constants::{
-    BATCH_ROWS, BATCH_WINDOW_MS, HEARTBEAT_STALE_INTERVALS, MAX_RETRY_BACKOFF_MS,
-    OUTPUT_COALESCE_MS, RUNNING_RETRY_LIMIT_MS,
+    BATCH_ROWS, BATCH_WINDOW_MS, CLOCK_CHECK_MS, FINAL_ROWS_BUDGET_MS, HEARTBEAT_STALE_INTERVALS,
+    MAX_RETRY_BACKOFF_MS, MINIMUM_MAINTENANCE_MS, OUTPUT_COALESCE_MS, RUNNING_RETRY_LIMIT_MS,
+    SETUP_RETRY_MS,
 };
 use crate::writer::models::{DeliveryStream, SessionConfig, SetupOutcome};
 
@@ -46,20 +48,47 @@ fn publish_setup(shared: &Shared, outcome: SetupOutcome) {
     shared.setup_done.notify_all();
 }
 
-fn open_and_setup(config: &SessionConfig) -> Result<SqliteStore, StoreError> {
+/// When busy retries stop: the close deadline once closing, else the running retry limit.
+fn retry_limit(shared: &Shared, started: Instant) -> Instant {
+    locked(&shared.state)
+        .deadline
+        .unwrap_or_else(|| started + Duration::from_millis(RUNNING_RETRY_LIMIT_MS))
+}
+
+/// Each SQLite busy wait ends by `give_up`, so no write outlasts the shutdown budget.
+fn bound_busy_wait(store: &SqliteStore, give_up: Instant) {
+    let remaining: Duration = give_up
+        .saturating_duration_since(Instant::now())
+        .min(Duration::from_millis(BUSY_TIMEOUT_MS));
+    drop(store.connection.busy_timeout(remaining));
+}
+
+fn open_and_setup(shared: &Shared, config: &SessionConfig) -> Result<SqliteStore, StoreError> {
     let started = Instant::now();
+    let mut quarantined: bool = false;
     loop {
         let attempt =
             open_sqlite_store(&config.store_path, OpenMode::ReadWrite).and_then(|store| {
+                bound_busy_wait(&store, retry_limit(shared, started));
                 let now = format_timestamp(SystemTime::now());
                 ensure_sqlite_schema(&store, &config.envelope, &now).map(|()| store)
             });
         match attempt {
             Err(error)
                 if error.kind == StoreErrorKind::Busy
-                    && started.elapsed() < Duration::from_millis(RUNNING_RETRY_LIMIT_MS) =>
+                    && Instant::now() < retry_limit(shared, started) =>
             {
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(Duration::from_millis(SETUP_RETRY_MS));
+            }
+            Err(error) if error.kind == StoreErrorKind::Corrupt && !quarantined => {
+                quarantined = true;
+                let moved = quarantine_store(&config.store_path, SystemTime::now())?;
+                locked(&shared.state).notices.push(format!(
+                    "the Recall store {} was not a valid database; it was moved to {} and a \
+                     fresh store was started",
+                    config.store_path.display(),
+                    moved.display()
+                ));
             }
             other => return other,
         }
@@ -74,6 +103,7 @@ fn write_batch(
 ) -> Result<InsertOutcome, StoreError> {
     let mut backoff = Duration::from_millis(10);
     loop {
+        bound_busy_wait(store, give_up);
         let now = format_timestamp(SystemTime::now());
         match insert_rows(store, rows, &now) {
             Err(error) if error.kind == StoreErrorKind::Busy && Instant::now() < give_up => {
@@ -105,7 +135,7 @@ pub(crate) fn stream_of(table: Table) -> DeliveryStream {
 }
 
 /// Wait until a batch is due: 500 rows, the batch window, closing, or a timed duty.
-fn next_batch(shared: &Shared, next_heartbeat: Instant) -> (Vec<Queued>, bool) {
+fn next_batch(shared: &Shared, next_heartbeat: SystemTime) -> (Vec<Queued>, bool) {
     let mut state = locked(&shared.state);
     let mut first_seen: Option<Instant> = None;
     loop {
@@ -128,10 +158,13 @@ fn next_batch(shared: &Shared, next_heartbeat: Instant) -> (Vec<Queued>, bool) {
         if state.closing && state.queued() == 0 && !state.has_pending_output() {
             return (Vec::new(), true);
         }
-        if now >= next_heartbeat {
+        let until_heartbeat: Duration = next_heartbeat
+            .duration_since(SystemTime::now())
+            .unwrap_or(Duration::ZERO);
+        if until_heartbeat.is_zero() {
             return (Vec::new(), state.closing);
         }
-        let mut wait_until = next_heartbeat;
+        let mut wait_until = now + until_heartbeat.min(Duration::from_millis(CLOCK_CHECK_MS));
         if let Some(due) = state.output_due(Duration::from_millis(OUTPUT_COALESCE_MS)) {
             wait_until = wait_until.min(due);
         }
@@ -173,7 +206,7 @@ fn final_rows(config: &SessionConfig, state: &WriterState) -> Vec<RecallRow> {
 
 /// The delivery thread body.
 pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
-    let store = match open_and_setup(config) {
+    let store = match open_and_setup(shared, config) {
         Ok(store) => {
             publish_setup(shared, SetupOutcome::Ready);
             store
@@ -193,16 +226,17 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
             return;
         }
     };
-    let mut next_heartbeat = Instant::now();
+    let mut next_heartbeat: SystemTime = SystemTime::now();
     loop {
         let (batch, closing) = next_batch(shared, next_heartbeat);
         let mut rows: Vec<RecallRow> = batch
             .iter()
             .flat_map(|record| record.rows.clone())
             .collect();
-        if Instant::now() >= next_heartbeat && !closing {
-            rows.push(heartbeat(config, SystemTime::now()));
-            next_heartbeat = Instant::now() + config.heartbeat_interval;
+        let now: SystemTime = SystemTime::now();
+        if now >= next_heartbeat && !closing {
+            rows.push(heartbeat(config, now));
+            next_heartbeat = now + config.heartbeat_interval;
         }
         if !rows.is_empty() {
             let give_up = {
@@ -230,19 +264,24 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
             state.rejecting = true;
             let rows = final_rows(config, &state);
             drop(state);
-            let give_up = Instant::now() + Duration::from_millis(500);
+            let give_up = (Instant::now() + Duration::from_millis(FINAL_ROWS_BUDGET_MS))
+                .min(retry_limit(shared, Instant::now()));
             if let Err(error) = write_batch(&store, &rows, give_up) {
                 locked(&shared.state).degraded.get_or_insert(error.message);
             }
             break;
         }
     }
-    if config.maintenance {
+    let remaining: Duration = retry_limit(shared, Instant::now())
+        .saturating_duration_since(Instant::now())
+        .min(Duration::from_millis(MAINTENANCE_BUDGET_MS));
+    if config.maintenance && remaining >= Duration::from_millis(MINIMUM_MAINTENANCE_MS) {
+        bound_busy_wait(&store, Instant::now() + remaining);
         let request = MaintenanceRequest {
             now: SystemTime::now(),
             retention_days: config.retention_days,
             owner: config.maintenance_owner.clone(),
-            budget: Duration::from_millis(MAINTENANCE_BUDGET_MS),
+            budget: remaining,
             envelope: config.envelope.clone(),
         };
         drop(maintain_sqlite_store(&store, &request));

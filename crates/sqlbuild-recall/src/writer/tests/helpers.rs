@@ -162,3 +162,81 @@ pub(crate) fn unwritable_session() -> (bool, bool) {
         summary.degraded_reason.is_some(),
     )
 }
+
+/// Seconds `close` took and whether delivery degraded, while another connection holds the write lock.
+pub(crate) fn close_under_held_lock(shutdown: Duration) -> (f64, bool) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    let warm = start_recall_session(config(path.clone(), "warm"));
+    drop(warm.close());
+    let holder = rusqlite::Connection::open(&path).expect("the store opens");
+    holder
+        .execute_batch("BEGIN EXCLUSIVE")
+        .expect("the write lock is taken");
+    let session = start_recall_session(SessionConfig {
+        shutdown_timeout: shutdown,
+        ..config(path, "held")
+    });
+    session.append_output(OutputStream::Stdout, b"waiting\n");
+    let started = std::time::Instant::now();
+    let summary = session.close();
+    let elapsed = started.elapsed().as_secs_f64();
+    drop(holder);
+    (elapsed, summary.degraded_reason.is_some())
+}
+
+/// The notices and resulting store state after starting on a file that is not a database.
+pub(crate) fn session_on_corrupt_store() -> (usize, bool, Vec<Vec<RecallValue>>) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("recall.sqlite3");
+    std::fs::write(&path, b"this is not a database").expect("test files can be written");
+    let session = start_recall_session(config(path.clone(), "fresh"));
+    session.append_output(OutputStream::Stdout, b"kept\n");
+    let summary = session.close();
+    let moved: bool = std::fs::read_dir(directory.path())
+        .expect("the directory lists")
+        .filter_map(Result::ok)
+        .any(|entry| entry.file_name().to_string_lossy().contains(".corrupt-"));
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    let rows = query_store(&store, "SELECT status FROM invocations", None)
+        .expect("the query is valid")
+        .rows;
+    drop(summary);
+    (session.notices().len(), moved, rows)
+}
+
+/// Artifact counts after publishing SQL of `length` bytes.
+pub(crate) fn artifact_counts(length: usize) -> (u64, u64, u64) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let session = start_recall_session(config(directory.path().join("recall.sqlite3"), "sql"));
+    session.publish_sql(&"x".repeat(length), Some("s1"), None);
+    let summary = session.close();
+    let counts = summary
+        .streams
+        .iter()
+        .find(|(stream, _)| *stream == DeliveryStream::Artifacts)
+        .map(|(_, counts)| *counts)
+        .unwrap_or_default();
+    (counts.accepted, counts.delivered, counts.dropped)
+}
+
+/// Output chunks dropped by a queue of `capacity` records, as counted and as each delivered chunk reports them.
+pub(crate) fn output_drops(capacity: usize, chunks: usize) -> (u64, Vec<Option<RecallValue>>) {
+    let mut state = WriterState::with_capacity(envelope("inv"), (capacity, usize::MAX));
+    for index in 0..chunks {
+        let stream = [OutputStream::Stdout, OutputStream::Stderr][index % 2];
+        state.append_output(stream, b"x", SystemTime::now());
+    }
+    let mut taken: Vec<crate::writer::_helpers::queue::Queued> = state.take_batch(usize::MAX);
+    state.flush_output();
+    taken.extend(state.take_batch(usize::MAX));
+    let reported: Vec<Option<RecallValue>> = taken
+        .iter()
+        .flat_map(|record| record.rows.iter())
+        .map(|row| row.value("dropped_before").cloned())
+        .collect();
+    (
+        state.counts[DeliveryStream::Output.index()].dropped,
+        reported,
+    )
+}

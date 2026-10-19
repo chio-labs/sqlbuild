@@ -85,3 +85,5 @@ pub(crate) const TIMESTAMP_PARTS: [&str; 7] = [
 ];
 /// `str(datetime.UTC)`.
 pub(crate) const UTC_ZONE_NAME: &str = "UTC";
+/// How often closing checks for an interrupt while delivery finishes.
+pub(crate) const CLOSE_POLL_MS: u64 = 50;

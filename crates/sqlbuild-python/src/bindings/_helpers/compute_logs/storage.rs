@@ -114,16 +114,24 @@ impl LocalFilesystemComputeLogStorage {
         stream: usize,
         data: &[u8],
     ) -> PyResult<()> {
-        let written: Option<std::io::Result<()>> = {
-            let mut state = self.locked()?;
-            state
-                .writers
-                .get_mut(invocation_id)
-                .map(|writers| writers[stream].write_all(data))
+        let mut state = self.locked()?;
+        let Some(writers) = state.writers.get_mut(invocation_id) else {
+            return Err(not_active(py));
         };
-        match written {
-            Some(result) => Ok(result?),
-            None => Err(not_active(py)),
+        writers[stream].write_all(data)?;
+        self.forward_to_recall(invocation_id, stream, data);
+        Ok(())
+    }
+
+    /// Hand bytes the capture just accepted to Recall while its lock is held, so both keep one order.
+    fn forward_to_recall(&self, invocation_id: &str, stream: usize, data: &[u8]) {
+        let session = self.recall.get().map(Arc::as_ref);
+        if stream != DIAGNOSTICS_STREAM {
+            forward_output(session, invocation_id, (stream, data));
+            return;
+        }
+        if let Ok(line) = std::str::from_utf8(data) {
+            forward_diagnostic(session, invocation_id, line.trim_end_matches('\n'));
         }
     }
 
@@ -221,13 +229,7 @@ impl LocalFilesystemComputeLogStorage {
                 "compute log append data must be bytes",
             ));
         };
-        self.append_bytes(py, &invocation_id, stream, bytes.as_bytes())?;
-        forward_output(
-            self.recall.get().map(Arc::as_ref),
-            &invocation_id,
-            (stream, bytes.as_bytes()),
-        );
-        Ok(())
+        self.append_bytes(py, &invocation_id, stream, bytes.as_bytes())
     }
 
     /// Append one validated deterministic UTF-8 diagnostic JSON line.
@@ -253,9 +255,7 @@ impl LocalFilesystemComputeLogStorage {
         self.ensure_open(py)?;
         let invocation_id = capture_id(invocation_id)?;
         checked(py, validate_capture_id(&invocation_id))?;
-        self.append_bytes(py, &invocation_id, DIAGNOSTICS_STREAM, &line)?;
-        forward_diagnostic(self.recall.get().map(Arc::as_ref), &invocation_id, text);
-        Ok(())
+        self.append_bytes(py, &invocation_id, DIAGNOSTICS_STREAM, &line)
     }
 
     /// Read at most the public byte limit from an exact stream offset.

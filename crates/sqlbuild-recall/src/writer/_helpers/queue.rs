@@ -3,7 +3,7 @@
 use std::collections::{HashSet, VecDeque};
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::records::constants::MAX_OUTPUT_CHUNK_BYTES;
+use crate::records::constants::{DROPPED_BEFORE_COLUMN, MAX_OUTPUT_CHUNK_BYTES};
 use crate::records::main::format_timestamp::format_timestamp;
 use crate::records::main::output_row::output_row;
 use crate::records::models::{
@@ -50,6 +50,8 @@ pub(crate) struct WriterState {
     pub(crate) finished: bool,
     pub(crate) rejecting: bool,
     pub(crate) degraded: Option<String>,
+    /// Store notices the user should see, such as a corrupt store moved aside.
+    pub(crate) notices: Vec<String>,
     capacity: (usize, usize),
 }
 
@@ -90,6 +92,7 @@ impl WriterState {
             finished: false,
             rejecting: false,
             degraded: None,
+            notices: Vec::new(),
             capacity,
         }
     }
@@ -98,10 +101,19 @@ impl WriterState {
         &mut self.counts[stream.index()]
     }
 
+    /// Count `record` as dropped; a dropped output chunk hands its own earlier drops to the next chunk, so each drop is reported exactly once.
     fn drop_record(&mut self, record: &Queued) {
         self.counts_mut(record.stream).dropped += 1;
         if record.stream == DeliveryStream::Output {
-            self.unreported_output_drops += 1;
+            let carried: u64 = record
+                .rows
+                .iter()
+                .map(|row| match row.value(DROPPED_BEFORE_COLUMN) {
+                    Some(RecallValue::Integer(count)) => u64::try_from(*count).unwrap_or_default(),
+                    _ => 0,
+                })
+                .sum();
+            self.unreported_output_drops += 1 + carried;
         }
     }
 

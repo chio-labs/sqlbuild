@@ -10,11 +10,16 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     AbandonedRunTestCase,
     CombinedOutputTestCase,
     ConcurrentBuildsTestCase,
+    ConcurrentWritersTestCase,
+    CorruptStoreTestCase,
     DisabledRecallTestCase,
+    FailingStderrTestCase,
+    HeldLockTestCase,
     JsonQueryTestCase,
     ReadOnlyStoreTestCase,
     RecallOutputTestCase,
     RecallRejectionTestCase,
+    RecordedCommandTestCase,
     RecordedFactsTestCase,
     RepeatedBuildTestCase,
     TextOutputTestCase,
@@ -23,11 +28,18 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import (
     EMITTED_STDERR,
     EMITTED_STDOUT,
     EMITTED_TAIL,
+    build_while_store_locked,
+    build_with_failing_recall_notices,
     build_with_read_only_logs,
+    compute_log_streams,
     concurrent_builds,
     killed_build,
+    numbered_lines,
+    prepared_project,
     recall_rows,
     run,
+    timed_build,
+    write_corrupt_store,
     write_project,
 )
 
@@ -437,3 +449,212 @@ def test_given_identical_builds_when_recorded_then_artifacts_and_delivery_counts
 
     assert exit_codes == [0 for _ in range(test_case.builds)]
     assert rows == test_case.expected_rows
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RecordedCommandTestCase(
+            description="compile",
+            args=("compile",),
+            expected_recorded=[["compile", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="build",
+            args=("build",),
+            expected_recorded=[["build", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="plan",
+            args=("plan",),
+            expected_recorded=[["plan", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="dag",
+            args=("dag",),
+            expected_recorded=[["dag", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="check",
+            args=("check",),
+            expected_recorded=[["check", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="test",
+            args=("test",),
+            expected_recorded=[["test", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="lineage orders",
+            args=("lineage", "orders"),
+            expected_recorded=[["lineage", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="debug",
+            args=("debug",),
+            expected_recorded=[["debug", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="query SELECT 1 AS one",
+            args=("query", "SELECT 1 AS one"),
+            expected_recorded=[["query", "completed"]],
+        ),
+        RecordedCommandTestCase(
+            description="a raw-query diff is not observed, so it is not recorded",
+            args=(
+                "diff",
+                "--unkeyed",
+                "--left-query",
+                "SELECT 1 AS one",
+                "--right-query",
+                "SELECT 1 AS one",
+            ),
+            expected_recorded=[],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_successful_command_when_recorded_then_it_ends_completed(
+    test_case: RecordedCommandTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+    _ = run(project_dir, "build")
+
+    completed: subprocess.CompletedProcess[bytes] = run(project_dir, *test_case.args)
+    recorded: list[list[object]] = recall_rows(
+        project_dir,
+        "SELECT command, status FROM invocations "
+        f"WHERE command = '{test_case.args[0]}' ORDER BY invocation_started_at DESC LIMIT 1",
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode(errors="replace")
+    assert recorded == test_case.expected_recorded
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HeldLockTestCase(
+            description="a store locked by another process costs at most the budget",
+            shutdown_seconds=1.0,
+            builds_before_lock=1,
+            expected_exit_code=0,
+        ),
+        HeldLockTestCase(
+            description="a store another process holds before setup never delays the start",
+            shutdown_seconds=1.0,
+            builds_before_lock=0,
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_locked_store_when_building_then_start_and_exit_each_add_at_most_the_budget(
+    test_case: HeldLockTestCase, tmp_path: Path
+) -> None:
+    budget: str = f'\n[recall]\nshutdown_timeout = "{int(test_case.shutdown_seconds * 1000)}ms"\n'
+    baseline_dir: Path = prepared_project(tmp_path / "baseline", budget, builds=1)
+    project_dir: Path = prepared_project(
+        tmp_path / "locked", budget, builds=test_case.builds_before_lock
+    )
+    _, baseline_first, baseline_total = timed_build(baseline_dir)
+
+    locked, locked_first, locked_total = build_while_store_locked(project_dir)
+
+    slack: float = 0.75
+    assert locked.returncode == test_case.expected_exit_code
+    assert locked_first <= baseline_first + slack
+    assert locked_total <= baseline_total + test_case.shutdown_seconds + slack
+    assert (
+        locked.stderr.decode(errors="replace")
+        .rstrip()
+        .endswith("completed successfully; only its Recall history is affected.")
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ConcurrentWritersTestCase(
+            description="two threads writing both streams keep one global order",
+            lines_per_stream=400,
+            expected_order=list(range(800)),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_concurrent_stream_writers_when_recalled_then_order_matches_compute_logs(
+    test_case: ConcurrentWritersTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+
+    built: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "build", ORDERS_TASK_THREAD_LINES=str(test_case.lines_per_stream)
+    )
+    [[invocation_id, stdout_hex, stderr_hex, combined_hex]] = recall_rows(
+        project_dir,
+        "SELECT invocation_id, hex(stdout), hex(stderr), hex(combined) FROM output_transcripts",
+    )
+    numbered: list[int] = numbered_lines(bytes.fromhex(str(combined_hex)))
+
+    assert built.returncode == 0, built.stderr.decode(errors="replace")
+    assert (bytes.fromhex(str(stdout_hex)), bytes.fromhex(str(stderr_hex))) == (
+        compute_log_streams(project_dir, str(invocation_id))
+    )
+    assert numbered == test_case.expected_order
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CorruptStoreTestCase(
+            description="a store that is not a database is moved aside before any output",
+            expected_notice_prefix="Recall: ",
+            expected_recorded=[["build", "completed"]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_corrupt_store_when_building_then_it_is_moved_aside_and_recording_restarts(
+    test_case: CorruptStoreTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+    write_corrupt_store(project_dir)
+
+    built: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+    again: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+    recorded: list[list[object]] = recall_rows(
+        project_dir, "SELECT command, status FROM invocations ORDER BY invocation_started_at"
+    )
+    moved: list[Path] = list((project_dir / "logs").glob("recall.sqlite3.corrupt-*"))
+    first_line: str = built.stderr.decode(errors="replace").splitlines()[0]
+
+    assert (built.returncode, again.returncode) == (0, 0)
+    assert first_line.startswith(test_case.expected_notice_prefix)
+    assert str(moved[0].name) in first_line
+    assert len(moved) == 1
+    assert b".corrupt-" not in again.stderr
+    assert recorded == [*test_case.expected_recorded, *test_case.expected_recorded]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FailingStderrTestCase(
+            description="a Recall notice that cannot be written keeps the exit code",
+            expected_exit_code=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_failing_stderr_when_recall_reports_then_the_exit_code_is_unchanged(
+    test_case: FailingStderrTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(
+        tmp_path / "orders_shop", extra_toml='\n[recall]\nshutdown_timeout = "300ms"\n'
+    )
+    _ = run(project_dir, "build")
+
+    exit_code: int = build_with_failing_recall_notices(project_dir, tmp_path / "site")
+
+    assert exit_code == test_case.expected_exit_code

@@ -593,7 +593,11 @@ fn parsed_invocation<'py>(
             ("recall", recall_sink),
         ],
     );
-    let finished: PyResult<()> = finish_invocation_recall(py, &recall);
+    let exit_status: Option<i64> = match &dispatched {
+        Ok(code) if code.is_instance_of::<PyInt>() => Some(code.extract().unwrap_or(1)),
+        Ok(_) | Err(_) => None,
+    };
+    let finished: PyResult<()> = finish_invocation_recall(py, &recall, exit_status);
     let exit_code: Bound<'py, PyAny> = dispatched?;
     finished?;
     Ok(exit_code)

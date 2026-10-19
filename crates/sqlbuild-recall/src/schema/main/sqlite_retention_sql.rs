@@ -21,7 +21,7 @@ fn expired_invocations() -> String {
         "SELECT DISTINCT invocation_id FROM (\n    {}\n)\n\
          WHERE invocation_id NOT IN (\n\
          \x20   SELECT beat.invocation_id FROM recall_heartbeats AS beat\n\
-         \x20   WHERE beat.stale_at >= ?2 AND NOT EXISTS (\n\
+         \x20   WHERE (beat.stale_at >= ?2 OR beat.beat_at >= ?1) AND NOT EXISTS (\n\
          \x20       SELECT 1 FROM recall_events AS terminal\n\
          \x20       WHERE terminal.invocation_id = beat.invocation_id\n\
          \x20       AND terminal.event_type IN ('invocation_completed', 'invocation_failed')\n\
@@ -31,7 +31,7 @@ fn expired_invocations() -> String {
     )
 }
 
-/// The maintenance statements; running invocations are never deleted.
+/// The maintenance statements; running invocations, and unfinished ones that beat within retention, such as a suspended run, are never deleted.
 #[must_use]
 pub fn sqlite_retention_sql() -> SqliteRetentionSql {
     SqliteRetentionSql {

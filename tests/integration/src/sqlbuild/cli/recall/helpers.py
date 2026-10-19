@@ -2,11 +2,14 @@
 
 import json
 import os
+import re
 import signal
 import stat
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 PYTHON_CLI: Path = Path(sys.executable).with_name("sqlbuild-python")
@@ -14,6 +17,7 @@ EMITTED_STDOUT: bytes = b"binary \x00\xff\xfe chunk\n"
 EMITTED_STDERR: bytes = "warning \u2713 from the task\n".encode()
 EMITTED_TAIL: bytes = b"after the warning\n"
 EMPTY_RESULT: bytes = b'{"rows": []}'
+NUMBERED_LINE: re.Pattern[bytes] = re.compile(rb"^(\d+) std(?:out|err)$", re.MULTILINE)
 PROJECT_TOML: str = (
     'name = "orders_shop"\n'
     'adapter = "duckdb"\n'
@@ -30,8 +34,10 @@ ORDERS_MODEL: str = (
 )
 EMIT_TASK: str = (
     '"""A task that writes exact bytes to both streams."""\n\n'
+    "import itertools\n"
     "import os\n"
     "import sys\n"
+    "import threading\n"
     "import time\n\n"
     "from sqlbuild.tasks import task\n\n\n"
     "@task()\n"
@@ -45,7 +51,25 @@ EMIT_TASK: str = (
     f"    sys.stdout.write({EMITTED_TAIL.decode()!r})\n"
     "    sys.stdout.flush()\n"
     '    time.sleep(float(os.environ.get("ORDERS_TASK_SLEEP_SECONDS", "0")))\n'
-    "    return ctx.result()\n"
+    '    _write_concurrently(int(os.environ.get("ORDERS_TASK_THREAD_LINES", "0")))\n'
+    "    return ctx.result()\n\n\n"
+    "def _write_concurrently(lines):\n"
+    '    """Two threads write numbered lines; the number gives the true global order."""\n\n'
+    "    lock = threading.Lock()\n"
+    "    counter = itertools.count()\n\n"
+    "    def writer(name, stream):\n"
+    "        for _ in range(lines):\n"
+    "            with lock:\n"
+    '                stream.write(f"{next(counter)} {name}\\n")\n'
+    "                stream.flush()\n\n"
+    "    threads = [\n"
+    '        threading.Thread(target=writer, args=("stdout", sys.stdout)),\n'
+    '        threading.Thread(target=writer, args=("stderr", sys.stderr)),\n'
+    "    ]\n"
+    "    for thread in threads:\n"
+    "        thread.start()\n"
+    "    for thread in threads:\n"
+    "        thread.join()\n"
 )
 
 
@@ -185,3 +209,109 @@ def concurrent_builds(project_dir: Path, targets: tuple[str, ...]) -> tuple[list
         reads += 1
         unexpected_failures += int(reader.returncode != 0 and b"[C971]" not in reader.stderr)
     return [build.wait(timeout=600) for build in builds], reads, unexpected_failures
+
+
+def timed_build(project_dir: Path) -> tuple[subprocess.CompletedProcess[bytes], float, float]:
+    """A build with the seconds until its first stderr byte and until it exited."""
+
+    started: float = time.monotonic()
+    process: subprocess.Popen[bytes] = start(project_dir, "build")
+    assert process.stderr is not None
+    first_byte: bytes = process.stderr.read(1)
+    first_output: float = time.monotonic() - started
+    stdout, stderr = process.communicate(timeout=600)
+    return (
+        subprocess.CompletedProcess(process.args, process.returncode, stdout, first_byte + stderr),
+        first_output,
+        time.monotonic() - started,
+    )
+
+
+@contextmanager
+def held_store_lock(project_dir: Path) -> Iterator[None]:
+    """Another process holds the store's write lock while the block runs, creating it if absent."""
+
+    store: Path = project_dir / "logs" / "recall.sqlite3"
+    store.parent.mkdir(parents=True, exist_ok=True)
+    holder: subprocess.Popen[bytes] = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sqlite3, sys, time\n"
+            "connection = sqlite3.connect(sys.argv[1], isolation_level=None)\n"
+            "connection.execute('BEGIN EXCLUSIVE')\n"
+            "print('locked', flush=True)\n"
+            "time.sleep(600)\n",
+            str(store),
+        ],
+        stdout=subprocess.PIPE,
+    )
+    try:
+        assert holder.stdout is not None
+        _ = holder.stdout.readline()
+        yield
+    finally:
+        holder.kill()
+        _ = holder.wait(timeout=30)
+
+
+def build_while_store_locked(
+    project_dir: Path,
+) -> tuple[subprocess.CompletedProcess[bytes], float, float]:
+    """A timed build while another process holds the store's write lock."""
+
+    with held_store_lock(project_dir):
+        return timed_build(project_dir)
+
+
+def compute_log_streams(project_dir: Path, invocation_id: str) -> tuple[bytes, bytes]:
+    """The stdout and stderr bytes compute logs captured for one invocation."""
+
+    capture: Path = next((project_dir / "logs").glob(f"*/{invocation_id}"))
+    return (capture / "stdout.log").read_bytes(), (capture / "stderr.log").read_bytes()
+
+
+def write_corrupt_store(project_dir: Path) -> None:
+    """Replace the Recall store with a file that is not a database."""
+
+    store: Path = project_dir / "logs" / "recall.sqlite3"
+    store.parent.mkdir(parents=True, exist_ok=True)
+    _ = store.write_bytes(b"this file is not a database\n")
+
+
+FAILING_RECALL_STDERR: str = (
+    "import sys\n\n\n"
+    "class _RejectsRecallNotices:\n"
+    "    def __init__(self, stream):\n"
+    "        self._stream = stream\n\n"
+    "    def write(self, text):\n"
+    '        if "Recall" in text:\n'
+    '            raise OSError("stderr rejected the Recall notice")\n'
+    "        return self._stream.write(text)\n\n"
+    "    def __getattr__(self, name):\n"
+    "        return getattr(self._stream, name)\n\n\n"
+    "sys.stderr = _RejectsRecallNotices(sys.stderr)\n"
+)
+
+
+def build_with_failing_recall_notices(project_dir: Path, site_dir: Path) -> int:
+    """The exit code of a build whose Recall notices fail to write, while the store is locked."""
+
+    site_dir.mkdir(parents=True, exist_ok=True)
+    _ = (site_dir / "sitecustomize.py").write_text(FAILING_RECALL_STDERR, encoding="utf-8")
+    with held_store_lock(project_dir):
+        return run(project_dir, "build", PYTHONPATH=str(site_dir)).returncode
+
+
+def prepared_project(parent: Path, extra_toml: str, *, builds: int) -> Path:
+    """A project under `parent`, built `builds` times first."""
+
+    project_dir: Path = write_project(parent / "orders_shop", extra_toml=extra_toml)
+    _ = [run(project_dir, "build") for _ in range(builds)]
+    return project_dir
+
+
+def numbered_lines(output: bytes) -> list[int]:
+    """The leading numbers of the numbered lines in `output`, in order."""
+
+    return [int(number) for number in NUMBERED_LINE.findall(output)]

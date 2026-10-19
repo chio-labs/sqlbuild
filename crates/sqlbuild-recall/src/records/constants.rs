@@ -46,3 +46,5 @@ pub(crate) const DECIMAL_RADIX: u32 = 10;
 pub(crate) const FEBRUARY: i64 = 2;
 /// In a year counted from March, January is month index 10.
 pub(crate) const MARCH_BASED_JANUARY_INDEX: i64 = 10;
+/// The output column counting chunks dropped just before this one.
+pub const DROPPED_BEFORE_COLUMN: &str = "dropped_before";

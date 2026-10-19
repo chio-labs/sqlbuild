@@ -1,7 +1,9 @@
 use crate::records::models::{OutputStream, RecallValue};
 use crate::writer::models::{DeliveryStream, Priority};
-use crate::writer::tests::helpers::{chunked, pushed};
-use crate::writer::tests::test_types::{ChunkingTestCase, DisplacementTestCase};
+use crate::writer::tests::helpers::{chunked, output_drops, pushed};
+use crate::writer::tests::test_types::{
+    ChunkingTestCase, DisplacementTestCase, OutputDropTestCase,
+};
 
 #[test]
 fn given_a_full_queue_when_higher_priority_arrives_then_the_oldest_lowest_is_displaced() {
@@ -84,6 +86,28 @@ fn given_interleaved_and_large_writes_when_chunked_then_sequences_and_offsets_ar
         assert_eq!(
             chunked(&test_case.writes),
             test_case.expected_chunks,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_full_queue_when_output_is_dropped_then_each_drop_is_counted_once() {
+    let test_cases = [OutputDropTestCase {
+        description: "two chunks dropped by a full queue are counted once and reported once",
+        capacity: 1,
+        chunks: 4,
+        expected_drops: (
+            2,
+            vec![Some(RecallValue::Integer(0)), Some(RecallValue::Integer(2))],
+        ),
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            output_drops(test_case.capacity, test_case.chunks),
+            test_case.expected_drops,
             "{}",
             test_case.description
         );

@@ -13,6 +13,7 @@ pub(crate) fn store_error(error: &rusqlite::Error, doing: &str) -> StoreError {
             StoreErrorKind::Permission
         }
         Some(ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked) => StoreErrorKind::Busy,
+        Some(ErrorCode::NotADatabase | ErrorCode::DatabaseCorrupt) => StoreErrorKind::Corrupt,
         _ => StoreErrorKind::Other,
     };
     StoreError::new(kind, format!("{doing}: {error}"))

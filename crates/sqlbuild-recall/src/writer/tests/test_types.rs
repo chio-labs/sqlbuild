@@ -36,3 +36,29 @@ pub(crate) struct UnwritableTestCase {
     pub(crate) description: &'static str,
     pub(crate) expected_permission_and_degraded: (bool, bool),
 }
+
+pub(crate) struct HeldLockTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) shutdown_ms: u64,
+    pub(crate) expected_degraded: bool,
+}
+
+pub(crate) struct CorruptStoreTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) expected_notices: usize,
+    pub(crate) expected_moved: bool,
+    pub(crate) expected_rows: Vec<Vec<RecallValue>>,
+}
+
+pub(crate) struct ArtifactSizeTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) length: usize,
+    pub(crate) expected_counts: (u64, u64, u64),
+}
+
+pub(crate) struct OutputDropTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) capacity: usize,
+    pub(crate) chunks: usize,
+    pub(crate) expected_drops: (u64, Vec<Option<RecallValue>>),
+}

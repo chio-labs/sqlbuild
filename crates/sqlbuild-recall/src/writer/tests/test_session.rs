@@ -1,11 +1,20 @@
+use std::time::Duration;
+
 use crate::records::models::{OutputStream, RecallValue};
 use crate::writer::models::SetupOutcome;
-use crate::writer::tests::helpers::recorded_session;
+
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
+use crate::writer::tests::helpers::{
+    artifact_counts, close_under_held_lock, recorded_session, session_on_corrupt_store,
+};
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
-use crate::writer::tests::test_types::{RecordedSession, SessionTestCase};
+use crate::writer::tests::test_types::{
+    ArtifactSizeTestCase, CorruptStoreTestCase, HeldLockTestCase, RecordedSession, SessionTestCase,
+};
+
+const CLOSE_SLACK_SECONDS: f64 = 0.3;
 
 #[test]
 fn given_a_session_when_closed_then_every_record_and_the_delivery_rows_are_written() {
@@ -61,6 +70,79 @@ fn given_an_unwritable_store_when_started_then_setup_reports_permission_and_clos
         assert_eq!(
             unwritable_session(),
             test_case.expected_permission_and_degraded,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_held_write_lock_when_closed_then_the_shutdown_budget_caps_the_delay() {
+    let test_cases = [HeldLockTestCase {
+        description: "a locked store costs at most the shutdown budget at exit",
+        shutdown_ms: 700,
+        expected_degraded: true,
+    }];
+
+    for test_case in test_cases {
+        let (elapsed, degraded) =
+            close_under_held_lock(Duration::from_millis(test_case.shutdown_ms));
+        let budget: f64 = Duration::from_millis(test_case.shutdown_ms).as_secs_f64();
+        assert!(
+            elapsed <= budget + CLOSE_SLACK_SECONDS,
+            "{}: {elapsed:.3}s",
+            test_case.description
+        );
+        assert_eq!(
+            degraded, test_case.expected_degraded,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_file_that_is_not_a_database_when_started_then_it_is_moved_aside_once() {
+    let test_cases = [CorruptStoreTestCase {
+        description: "the corrupt file is kept aside and a fresh store records the run",
+        expected_notices: 1,
+        expected_moved: true,
+        expected_rows: vec![vec![RecallValue::Text("unknown".to_owned())]],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            session_on_corrupt_store(),
+            (
+                test_case.expected_notices,
+                test_case.expected_moved,
+                test_case.expected_rows
+            ),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_sql_of_different_sizes_when_published_then_oversized_sql_is_dropped_unhashed() {
+    let test_cases = [
+        ArtifactSizeTestCase {
+            description: "ordinary SQL is delivered with its reference",
+            length: 64,
+            expected_counts: (1, 1, 0),
+        },
+        ArtifactSizeTestCase {
+            description: "SQL above the artifact limit is counted as dropped",
+            length: 4 * 1024 * 1024 + 1,
+            expected_counts: (1, 0, 1),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            artifact_counts(test_case.length),
+            test_case.expected_counts,
             "{}",
             test_case.description
         );

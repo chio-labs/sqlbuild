@@ -7,6 +7,8 @@ pub enum StoreErrorKind {
     Permission,
     /// Another writer holds the lock past the busy timeout; retrying may succeed.
     Busy,
+    /// The file is not a SQLite database, or its pages are damaged.
+    Corrupt,
     /// The SQLite library is older than the store needs.
     Version,
     /// A query was rejected: not read-only, or invalid SQL.
