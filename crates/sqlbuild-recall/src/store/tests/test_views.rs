@@ -5,7 +5,7 @@ use crate::records::main::invocation_row::invocation_row;
 use crate::records::main::sha256_hex::sha256_hex;
 use crate::records::models::{ArtifactInput, InvocationContext, OutputStream, RecallValue};
 use crate::store::tests::helpers::{
-    NOW, chunk, chunks, delivered, envelope, event, integer, projected, text, wall_clock,
+    NOW, artifact, chunk, chunks, delivered, envelope, event, integer, projected, text, wall_clock,
 };
 use crate::store::tests::test_types::ProjectionTestCase;
 
@@ -411,6 +411,45 @@ fn given_audit_completed_facts_when_projected_then_audit_results_carry_outcome_a
             integer(3),
         ]],
     }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            projected(&test_case.batches, test_case.sql),
+            test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_the_same_sql_in_two_invocations_when_written_then_artifacts_are_shared_without_conflicts()
+{
+    let first = envelope("first", NOW);
+    let second = envelope("second", &wall_clock(60));
+    let seen_twice = || {
+        let mut rows = artifact_rows(&first, &artifact("sha256:shared", NOW)).to_vec();
+        rows.extend(artifact_rows(
+            &second,
+            &artifact("sha256:shared", &wall_clock(60)),
+        ));
+        vec![rows]
+    };
+    let test_cases = [
+        ProjectionTestCase {
+            description: "a repeated artifact is a duplicate, not a conflict",
+            batches: seen_twice(),
+            sql: "SELECT COUNT(*) FROM conflicts",
+            expected_rows: vec![vec![integer(0)]],
+        },
+        ProjectionTestCase {
+            description: "one content row serves both invocations' references",
+            batches: seen_twice(),
+            sql: "SELECT (SELECT COUNT(*) FROM recall_artifacts), \
+                  (SELECT COUNT(*) FROM artifacts WHERE available = 1)",
+            expected_rows: vec![vec![integer(1), integer(2)]],
+        },
+    ];
 
     for test_case in test_cases {
         assert_eq!(

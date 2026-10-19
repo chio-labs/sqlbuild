@@ -72,3 +72,11 @@ class ConcurrentBuildsTestCase:
     description: str
     targets: tuple[str, ...]
     expected_status: str
+
+
+@dataclass(frozen=True)
+class RepeatedBuildTestCase:
+    description: str
+    builds: int
+    sql: str
+    expected_rows: list[list[object]]

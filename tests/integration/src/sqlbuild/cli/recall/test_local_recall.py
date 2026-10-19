@@ -16,6 +16,7 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     RecallOutputTestCase,
     RecallRejectionTestCase,
     RecordedFactsTestCase,
+    RepeatedBuildTestCase,
     TextOutputTestCase,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
@@ -142,6 +143,16 @@ def test_given_interleaved_writes_when_recalled_combined_then_order_is_preserved
             sql="SELECT COUNT(*) > 0, SUM(outcome = 'completed') = COUNT(*), "
             "SUM(sql_available) = COUNT(*) FROM statements",
             expected_rows=[[1, 1, 1]],
+        ),
+        RecordedFactsTestCase(
+            description="natively encoded events keep payloads, promotions and UTC timestamps",
+            sql="SELECT COUNT(*) > 0, "
+            "SUM(payload = '{}' OR statement_kind IS NULL OR intent IS NULL), "
+            "SUM(occurred_at NOT GLOB "
+            "'[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]Z'), "
+            "SUM(invocation_sequence IS NULL) "
+            "FROM events WHERE event_type LIKE 'statement_%'",
+            expected_rows=[[1, 0, 0, 0]],
         ),
         RecordedFactsTestCase(
             description="the started event names target and adapter",
@@ -393,3 +404,36 @@ def test_given_four_concurrent_builds_and_a_reader_when_run_then_every_run_is_re
     assert recorded == [
         [target, test_case.expected_status, 1] for target in sorted(test_case.targets)
     ]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        RepeatedBuildTestCase(
+            description="repeated SQL is shared, never a conflict",
+            builds=2,
+            sql="SELECT (SELECT COUNT(*) FROM conflicts), "
+            "(SELECT SUM(conflicts) FROM recall_delivery)",
+            expected_rows=[[0, 0]],
+        ),
+        RepeatedBuildTestCase(
+            description="every stream of every build delivers exactly what it accepted",
+            builds=2,
+            sql="SELECT COUNT(DISTINCT invocation_id), "
+            "SUM(accepted != delivered + filtered + dropped + failed), "
+            "SUM(dropped + failed), MIN(flush_complete) FROM recall_delivery",
+            expected_rows=[[2, 0, 0, 1]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_identical_builds_when_recorded_then_artifacts_and_delivery_counts_stay_exact(
+    test_case: RepeatedBuildTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+
+    exit_codes: list[int] = [run(project_dir, "build").returncode for _ in range(test_case.builds)]
+    rows: list[list[object]] = recall_rows(project_dir, test_case.sql)
+
+    assert exit_codes == [0 for _ in range(test_case.builds)]
+    assert rows == test_case.expected_rows

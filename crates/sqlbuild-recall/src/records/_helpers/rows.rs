@@ -2,7 +2,7 @@
 
 use crate::records::_helpers::ids::content_sha256;
 use crate::records::models::{RecallRow, RecallValue, RowEnvelope};
-use crate::schema::constants::RECALL_SCHEMA_VERSION;
+use crate::schema::constants::{ARTIFACT_CONTENT_COLUMNS, RECALL_SCHEMA_VERSION};
 use crate::schema::models::Table;
 
 pub(crate) fn text(value: impl Into<String>) -> RecallValue {
@@ -23,7 +23,7 @@ pub(crate) fn boolean(value: bool) -> RecallValue {
     RecallValue::Integer(i64::from(value))
 }
 
-/// `values` plus the envelope columns and `content_sha256`.
+/// `values` plus the envelope columns and `content_sha256`; an artifact's digest covers only its content, since every invocation that sees it writes the same row.
 pub(crate) fn finish_row(
     table: Table,
     envelope: &RowEnvelope,
@@ -39,7 +39,16 @@ pub(crate) fn finish_row(
         RecallValue::Integer(RECALL_SCHEMA_VERSION),
     ));
     values.push(("producer_version", text(&envelope.producer_version)));
-    let digest: String = content_sha256(&values);
+    let digest: String = match table {
+        Table::Artifacts => content_sha256(
+            &values
+                .iter()
+                .filter(|(name, _)| ARTIFACT_CONTENT_COLUMNS.contains(name))
+                .cloned()
+                .collect::<Vec<_>>(),
+        ),
+        _ => content_sha256(&values),
+    };
     values.push(("content_sha256", RecallValue::Text(digest)));
     RecallRow { table, values }
 }
