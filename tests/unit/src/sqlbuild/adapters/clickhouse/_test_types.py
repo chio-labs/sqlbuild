@@ -80,3 +80,10 @@ class AliasQualifiedColumnsTestCase:
     actual: tuple[str, ...]
     expected: tuple[str, ...]
     expected_pairs: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class KeyIdentifiersTestCase:
+    description: str
+    key_expressions: tuple[str, ...]
+    expected_identifiers: frozenset[str]

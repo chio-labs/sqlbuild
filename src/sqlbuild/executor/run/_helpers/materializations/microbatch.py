@@ -92,6 +92,7 @@ from sqlbuild.executor.run._helpers.materializations.full_refresh import (
 from sqlbuild.executor.run._helpers.materializations.incremental import (
     _apply_schema_change,
     _execute_dml,
+    _widenable_columns,
 )
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
@@ -2865,7 +2866,10 @@ def _apply_microbatch_schema_change(
                 connection=context.connection,
                 destination=targets.target_qualified,
                 target_columns=target_columns,
-                incoming_columns=delta_columns,
+                incoming_columns=_widenable_columns(
+                    on_schema_change=context.entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                    incoming_columns=delta_columns,
+                ),
                 statement_recorder=state.statement_recorder,
             )
             schema_warnings: tuple[str, ...] = _apply_schema_change(

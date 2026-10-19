@@ -86,7 +86,10 @@ from sqlbuild.adapter.relations.main.get_columns_for_relations import (
 )
 from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize_numeric_family
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
-from sqlbuild.adapters.clickhouse._helpers.output_columns import alias_qualified_columns
+from sqlbuild.adapters.clickhouse._helpers.output_columns import (
+    alias_qualified_columns,
+    key_identifiers,
+)
 from sqlbuild.adapters.clickhouse._helpers.partition_rewrite import (
     artifact_relation,
     generation_comment,
@@ -120,6 +123,11 @@ from sqlbuild.adapters.clickhouse.constants import (
     MAX_QUERY_SIZE_BYTES,
     MINIMUM_SERVER_VERSION,
     MODEL_NAME_CONFIG_KEY,
+    NULL_IN_ORDINARY_COLUMN_CODE,
+    NULL_IN_ORDINARY_COLUMN_SERVER_CODE,
+    NULL_TARGET_COLUMN_PATTERN,
+    NULLABLE_KEY_CODE,
+    NULLABLE_KEY_SETTING,
     OUTPUT_COLUMN_NAME_CODE,
     PHYSICAL_STORAGE_CONFIG_KEY,
     RELATION_NOT_FOUND_CODES,
@@ -226,7 +234,25 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
 
     def _execute(self, *, connection: _ClickHouseConnection, sql: str) -> Any:
         log_sql(logger=logging.getLogger("sqlbuild.adapter.clickhouse"), sql=sql)
-        return connection.execute(sql)
+        try:
+            return connection.execute(sql)
+        except Exception as error:
+            if _error_code(error) != NULL_IN_ORDINARY_COLUMN_SERVER_CODE:
+                raise
+            column: re.Match[str] | None = NULL_TARGET_COLUMN_PATTERN.search(str(error))
+            raise AdapterUserError(
+                message=(
+                    "ClickHouse cannot store NULL in non-Nullable column "
+                    f"'{column.group(1) if column else '?'}'"
+                ),
+                code=NULL_IN_ORDINARY_COLUMN_CODE,
+                help=(
+                    "The model produces NULL where the table's column is not Nullable. With "
+                    "on_schema_change append_new_columns (the default) or sync_all_columns "
+                    "SQLBuild makes the column Nullable; otherwise wrap the expression in "
+                    "coalesce() or rebuild the table with --full-refresh."
+                ),
+            ) from error
 
     def close(self, connection: _ClickHouseConnection) -> None:
         connection.close()
@@ -2046,6 +2072,11 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         if not widened:
             return target_columns
+        self._refuse_nullable_key_columns(
+            connection=connection,
+            destination=destination,
+            columns=tuple(column.name for column in widened),
+        )
         self.alter_column_types(
             connection=connection,
             destination=destination,
@@ -2054,6 +2085,37 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         )
         by_name: dict[str, ColumnInfo] = {column.name: column for column in widened}
         return tuple(by_name.get(column.name, column) for column in target_columns)
+
+    def _refuse_nullable_key_columns(
+        self, *, connection: Any, destination: str, columns: tuple[str, ...]
+    ) -> None:
+        """Explain a key column that cannot become ``Nullable`` before ClickHouse refuses it."""
+
+        schema, name = _split_relation(destination)
+        row: Any = self.execute(
+            connection=connection,
+            sql="SELECT sorting_key, partition_key, primary_key, create_table_query "
+            f"FROM system.tables WHERE {_database_filter(schema)} AND name = {quote_string(name)}",
+        ).fetchone()
+        if row is None or NULLABLE_KEY_SETTING in str(row[3]):
+            return
+        keyed: tuple[str, ...] = tuple(
+            column for column in columns if column in key_identifiers(tuple(map(str, row[:3])))
+        )
+        if not keyed:
+            return
+        raise AdapterUserError(
+            message=(
+                f"{destination}: the model now produces NULL in key column(s) "
+                f"{', '.join(keyed)}, which ClickHouse cannot make Nullable"
+            ),
+            code=NULLABLE_KEY_CODE,
+            help=(
+                "Keep the key non-null in the model, for example coalesce(column, default) or "
+                "assumeNotNull(column), or set table_settings (allow_nullable_key true) and "
+                "rebuild the table with --full-refresh."
+            ),
+        )
 
     def alter_column_types(
         self,

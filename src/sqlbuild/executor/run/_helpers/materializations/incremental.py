@@ -75,6 +75,9 @@ from sqlbuild.runtime.observability.main.canonicalize_operation_adapter import (
 )
 
 _DEFAULT_ON_SCHEMA_CHANGE: OnSchemaChange = OnSchemaChange.APPEND_NEW_COLUMNS
+_SCHEMA_CHANGING_POLICIES: frozenset[OnSchemaChange] = frozenset(
+    {OnSchemaChange.APPEND_NEW_COLUMNS, OnSchemaChange.SYNC_ALL_COLUMNS}
+)
 
 
 @dataclass(frozen=True)
@@ -210,7 +213,10 @@ def execute_incremental_entry(
                     schema=target_schema,
                     name=target_table,
                 ),
-                incoming_columns=initial_delta_columns,
+                incoming_columns=_widenable_columns(
+                    on_schema_change=entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                    incoming_columns=initial_delta_columns,
+                ),
                 statement_recorder=statement_recorder,
             )
             delta_columns, type_warnings = _prepare_incremental_delta_types(
@@ -704,6 +710,16 @@ def _prepare_incremental_delta_types(
         for incoming, target in preserved_columns
     )
     return prepared_columns, warnings
+
+
+def _widenable_columns(
+    *, on_schema_change: OnSchemaChange, incoming_columns: tuple[ColumnInfo, ...]
+) -> tuple[ColumnInfo, ...]:
+    """The incoming columns target nullability may widen to, under a policy that changes schema."""
+
+    if on_schema_change in _SCHEMA_CHANGING_POLICIES:
+        return incoming_columns
+    return ()
 
 
 def _apply_schema_change(

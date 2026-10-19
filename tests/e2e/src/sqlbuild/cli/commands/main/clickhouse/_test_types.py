@@ -74,6 +74,8 @@ class ClickHouseNullabilityE2ETestCase:
     description: str
     model_sql: str
     edited_select: str
+    expected_return_code: int
+    expected_output_fragment: str
     expected_rows: tuple[tuple[object, ...], ...]
     expected_types: tuple[tuple[object, ...], ...]
 

@@ -1,5 +1,7 @@
 """ClickHouse adapter constants."""
 
+import re
+
 DEFAULT_DATABASE: str = "default"
 DEFAULT_HTTP_PORT: int = 8123
 DEFAULT_HTTPS_PORT: int = 8443
@@ -104,3 +106,9 @@ EXPECTED_OUTPUT_COLUMNS_CONFIG_KEY: str = "expected_output_columns"
 MODEL_NAME_CONFIG_KEY: str = "model_name"
 OUTPUT_COLUMN_NAME_CODE: str = "A711"
 QUALIFIER_SEPARATOR: str = "."
+NULLABLE_KEY_CODE: str = "A712"
+NULLABLE_KEY_SETTING: str = "allow_nullable_key = 1"
+KEY_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"`([^`]+)`|([A-Za-z_][A-Za-z0-9_]*)")
+NULL_IN_ORDINARY_COLUMN_SERVER_CODE: int = 349
+NULL_IN_ORDINARY_COLUMN_CODE: str = "A713"
+NULL_TARGET_COLUMN_PATTERN: re.Pattern[str] = re.compile(r"to destination column (\S+?):")

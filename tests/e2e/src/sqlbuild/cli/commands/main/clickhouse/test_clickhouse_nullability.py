@@ -45,11 +45,53 @@ _FIRST_SELECT: str = (
                 "nullIf(toString(o.order_id), '3') AS note\n"
                 'FROM __source("raw_orders") AS o\n'
             ),
+            expected_return_code=0,
+            expected_output_fragment="Completed successfully",
             expected_rows=(("1", "10", "1"), ("2", None, "2"), ("3", "30", None)),
             expected_types=(("Nullable(Int64)", "Nullable(String)"),),
         ),
         ClickHouseNullabilityE2ETestCase(
-            description="left join on an append model that ignores schema changes",
+            description="nullIf on a merge model that fails on schema changes",
+            model_sql=(
+                "MODEL (description 'One row per order.',\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy merge,\n"
+                "  unique_key [order_id],\n"
+                "  on_schema_change fail,\n"
+                ");\n\n"
+            ),
+            edited_select=(
+                "SELECT o.order_id AS order_id, nullIf(o.amount, 20) AS amount, "
+                "toString(o.order_id) AS note\n"
+                'FROM __source("raw_orders") AS o\n'
+            ),
+            expected_return_code=1,
+            expected_output_fragment="type changes: amount",
+            expected_rows=(("1", "10", "1"), ("2", "20", "2"), ("3", "30", "3")),
+            expected_types=(("Int64", "String"),),
+        ),
+        ClickHouseNullabilityE2ETestCase(
+            description="nullIf on a sorting key column",
+            model_sql=(
+                "MODEL (description 'One row per order.',\n"
+                "  materialized incremental,\n"
+                "  incremental_strategy merge,\n"
+                "  unique_key [order_id],\n"
+                "  order_by [note],\n"
+                ");\n\n"
+            ),
+            edited_select=(
+                "SELECT o.order_id AS order_id, o.amount AS amount, "
+                "nullIf(toString(o.order_id), '3') AS note\n"
+                'FROM __source("raw_orders") AS o\n'
+            ),
+            expected_return_code=1,
+            expected_output_fragment="A712",
+            expected_rows=(("1", "10", "1"), ("2", "20", "2"), ("3", "30", "3")),
+            expected_types=(("Int64", "String"),),
+        ),
+        ClickHouseNullabilityE2ETestCase(
+            description="left join on an append model that ignores schema changes fails loudly",
             model_sql=(
                 "MODEL (description 'One row per order load.',\n"
                 "  materialized incremental,\n"
@@ -63,20 +105,15 @@ _FIRST_SELECT: str = (
                 "LEFT JOIN (SELECT toInt64(1) AS order_id, 'one' AS note) AS r "
                 "ON o.order_id = r.order_id\n"
             ),
-            expected_rows=(
-                ("1", "10", "1"),
-                ("1", "10", "one"),
-                ("2", "20", "2"),
-                ("2", "20", None),
-                ("3", "30", "3"),
-                ("3", "30", None),
-            ),
-            expected_types=(("Int64", "Nullable(String)"),),
+            expected_return_code=1,
+            expected_output_fragment="A713",
+            expected_rows=(("1", "10", "1"), ("2", "20", "2"), ("3", "30", "3")),
+            expected_types=(("Int64", "String"),),
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_non_nullable_target_when_model_starts_producing_nulls_then_nulls_are_stored(
+def test_given_non_nullable_target_when_model_starts_producing_nulls_then_policy_decides(
     tmp_path: Path,
     test_case: ClickHouseNullabilityE2ETestCase,
     clickhouse_e2e_config: dict[str, object],
@@ -122,7 +159,8 @@ def test_given_non_nullable_target_when_model_starts_producing_nulls_then_nulls_
             command=("--no-color", "build"), project_dir=project_dir
         )
 
-        assert second.returncode == 0, second.stdout + second.stderr
+        assert second.returncode == test_case.expected_return_code, second.stdout + second.stderr
+        assert test_case.expected_output_fragment in second.stdout + second.stderr
         assert stringify_warehouse_rows(
             fetch_clickhouse_rows(
                 config=config,

@@ -137,7 +137,11 @@ SQLBuild does not deploy Python functions (`A707`) or SQL table functions (`A708
 
 ## Nullable columns
 
-ClickHouse columns hold `NULL` only when their type is `Nullable`, and a table built from a query takes each column's nullability from the query. When an incremental model later produces `NULL` in a column its table created as non-nullable, SQLBuild changes that column to `Nullable` with `ALTER TABLE ... MODIFY COLUMN` before writing, so the `NULL` is stored as `NULL`. A column in the sorting or partitioning key cannot become `Nullable` unless the table sets `allow_nullable_key`, so that write fails instead.
+ClickHouse columns hold `NULL` only when their type is `Nullable`, and a table built from a query takes each column's nullability from the query. When an incremental model later produces `NULL` in a column its table created as non-nullable, what happens follows `on_schema_change`:
+
+- `append_new_columns` (the default) and `sync_all_columns`: SQLBuild changes the column to `Nullable` with `ALTER TABLE ... MODIFY COLUMN` before writing, so the `NULL` is stored as `NULL`. A column in the sorting, partitioning or primary key cannot become `Nullable` unless the table sets `allow_nullable_key`, so that run fails with `A712`; keep the key non-null with `coalesce()` or `assumeNotNull()`, or set `table_settings (allow_nullable_key true)` and rebuild with `--full-refresh`.
+- `fail`: the run fails as a schema change and the table is untouched.
+- `ignore`: the table is not changed, and writing a `NULL` into the non-nullable column fails with `A713` instead of storing `0`, `''` or the epoch.
 
 ## Settings SQLBuild pins
 
