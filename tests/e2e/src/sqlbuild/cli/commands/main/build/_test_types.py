@@ -717,6 +717,7 @@ class SchemaBackfillBuildE2ETestCase:
     schema_after_text: str
     command: tuple[str, ...]
     expected_exit_code: int
+    expected_plan_exit_code: int
     expected_reason: str
     expected_backfill_action: str | None = None
     expected_backfill_duration: str | None = None
