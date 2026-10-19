@@ -418,9 +418,9 @@ fn add_invocation_context(
     if let Some(adapter) = &invocation.recall.adapter {
         payload.set_item("adapter", adapter)?;
     }
-    let select: Option<Vec<String>> = invocation.args.getattr("select")?.extract()?;
-    if let Some(select) = select {
-        payload.set_item("selection_count", select.len())?;
+    let select: Bound<'_, PyAny> = invocation.args.getattr("select")?;
+    if !select.is_none() {
+        payload.set_item("selection_count", select.len()?)?;
     }
     Ok(())
 }

@@ -147,3 +147,11 @@ class InvalidOutputLimitTestCase:
     description: str
     value: str
     expected_message: bytes
+
+
+@dataclass(frozen=True)
+class UndecodableArgumentTestCase:
+    description: str
+    selector: str
+    expected_error: bytes
+    expected_recorded: list[list[object]]

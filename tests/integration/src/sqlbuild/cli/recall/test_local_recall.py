@@ -27,6 +27,7 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     RepeatedBuildTestCase,
     TextOutputTestCase,
     TruncationNoteTestCase,
+    UndecodableArgumentTestCase,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     EMITTED_STDERR,
@@ -823,3 +824,35 @@ def test_given_an_invalid_output_limit_when_running_then_the_command_fails_with_
 
     assert completed.returncode != 0
     assert test_case.expected_message in completed.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        UndecodableArgumentTestCase(
+            description="an undecodable selector is recorded escaped; the command fails as before",
+            selector="orders\udcff",
+            expected_error=b"TypeError: str is not valid UTF-8: surrogates not allowed",
+            expected_recorded=[['["orders\\\\xff"]', 1]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_undecodable_argument_when_recorded_then_it_is_escaped_and_the_command_unchanged(
+    test_case: UndecodableArgumentTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+
+    completed: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "compile", "--json", "--select", test_case.selector
+    )
+    recorded: list[list[object]] = recall_rows(
+        project_dir,
+        "SELECT i.selection, json_extract(e.payload, '$.selection_count') "
+        "FROM invocations i JOIN events e USING (invocation_id) "
+        "WHERE e.event_type = 'invocation_started'",
+    )
+
+    assert completed.returncode == 1
+    assert completed.stderr.rstrip().endswith(test_case.expected_error)
+    assert recorded == test_case.expected_recorded

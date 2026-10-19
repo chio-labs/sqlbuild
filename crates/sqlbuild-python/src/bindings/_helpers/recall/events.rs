@@ -7,6 +7,7 @@ use pyo3::types::{
 };
 use serde_json::{Map, Number, Value};
 
+use crate::bindings::_helpers::discovery::snapshot::escaped;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::recall::constants::{
@@ -15,11 +16,19 @@ use crate::bindings::_helpers::recall::constants::{
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 
+/// The text of `text`; lone surrogates, which UTF-8 cannot hold, are kept as `\\xNN` or `\\uXXXX` escapes.
+pub(crate) fn escaped_text(text: &Bound<'_, PyString>) -> PyResult<String> {
+    match text.to_str() {
+        Ok(valid) => Ok(valid.to_owned()),
+        Err(_) => escaped(text),
+    }
+}
+
 fn text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if value.is_none() {
         return Ok(None);
     }
-    Ok(Some(value.str()?.to_string_lossy().into_owned()))
+    escaped_text(&value.str()?).map(Some)
 }
 
 fn json_items(dict: &Bound<'_, PyDict>) -> PyResult<Option<Value>> {
@@ -31,7 +40,7 @@ fn json_items(dict: &Bound<'_, PyDict>) -> PyResult<Option<Value>> {
         let Some(item) = json_value(&item)? else {
             return Ok(None);
         };
-        entries.insert(key.to_str()?.to_owned(), item);
+        entries.insert(escaped_text(key)?, item);
     }
     Ok(Some(Value::Object(entries)))
 }
@@ -53,7 +62,7 @@ fn json_value(value: &Bound<'_, PyAny>) -> PyResult<Option<Value>> {
         return Ok(Number::from_f64(value.extract::<f64>()?).map(Value::Number));
     }
     if let Ok(text) = value.downcast::<PyString>() {
-        return Ok(Some(Value::String(text.to_str()?.to_owned())));
+        return Ok(Some(Value::String(escaped_text(text)?)));
     }
     if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
         let mut items: Vec<Value> = Vec::new();

@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
-use pyo3::types::PyStringMethods;
 use sqlbuild_cli::dispatch::models::CommandFacts;
 use sqlbuild_recall::records::main::format_timestamp::format_timestamp;
 use sqlbuild_recall::records::main::sha256_hex::sha256_hex;
@@ -34,6 +33,7 @@ use crate::bindings::_helpers::recall::constants::{
     MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS, QUARANTINE_START_WAIT_MS,
     STDOUT_STREAM_INDEX,
 };
+use crate::bindings::_helpers::recall::events::escaped_text;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::config_json::dumped_json;
 
@@ -54,7 +54,7 @@ fn text_value(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if value.is_none() {
         return Ok(None);
     }
-    Ok(Some(value.str()?.to_string_lossy().into_owned()))
+    escaped_text(&value.str()?).map(Some)
 }
 
 fn list_attribute(args: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<String>> {
@@ -64,7 +64,7 @@ fn list_attribute(args: &Bound<'_, PyAny>, name: &str) -> PyResult<Vec<String>> 
         return Ok(items);
     }
     for item in value.try_iter()? {
-        items.push(item?.str()?.to_string_lossy().into_owned());
+        items.push(escaped_text(&item?.str()?)?);
     }
     Ok(items)
 }
