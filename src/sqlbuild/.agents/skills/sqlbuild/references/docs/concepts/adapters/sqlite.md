@@ -75,7 +75,9 @@ SQLite stores values by type affinity, so SQLBuild keeps column types explicitly
   its declared type; a computed column gets the type SQLBuild infers at compile time.
 - Timestamps and dates are ISO-8601 text. `CAST(x AS TIMESTAMP)` and `CAST(x AS DATE)` do not
   produce timestamps in SQLite (they keep only the leading number), so write timestamps as text
-  literals or use SQLite date functions.
+  literals or use SQLite date functions. SQLBuild never applies such a cast itself: source,
+  contract and type-change casts to a date or time type keep the stored text, and source loaders
+  write Python `datetime` values as UTC text in the form `YYYY-MM-DD HH:MM:SS[.ffffff]`.
 - Cursor windows, watermarks and window deletes compare timestamp cursors as UTC text in the
   form `YYYY-MM-DD HH:MM:SS[.ffffff]`, so values written with a `T` separator, fractional seconds
   or a UTC offset fall in the right window. A value with an offset belongs to the window of its UTC
