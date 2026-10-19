@@ -90,6 +90,7 @@ fn exact_count(value: &Bound<'_, PyAny>, fallback: i64) -> i64 {
 }
 
 impl LocalFilesystemComputeLogStorage {
+    /// Callers wait for this lock holding the GIL, so never run Python while holding it.
     fn locked(&self) -> PyResult<MutexGuard<'_, StorageState>> {
         self.state
             .lock()
@@ -116,6 +117,7 @@ impl LocalFilesystemComputeLogStorage {
     ) -> PyResult<()> {
         let mut state = self.locked()?;
         let Some(writers) = state.writers.get_mut(invocation_id) else {
+            drop(state);
             return Err(not_active(py));
         };
         writers[stream].write_all(data)?;
