@@ -15,6 +15,7 @@ _CREATE_TABLE_AS: re.Pattern[str] = re.compile(
     r"(\"(?:[^\"]|\"\")+\"|[^\s(]+)\s+AS\s+(.+)$",
     re.IGNORECASE | re.DOTALL,
 )
+_UNTYPED_VIEW_COLUMN_TYPE: str = "BLOB"
 _DECIMAL_TYPE: re.Pattern[str] = re.compile(EXACT_DECIMAL_TYPE_PATTERN, re.IGNORECASE)
 
 
@@ -49,7 +50,7 @@ def create_table_typed(
         column_sql: str = ", ".join(
             _column_definition(
                 name=str(row[1]),
-                declared=str(row[2] or "") or inferred_types.get(str(row[1]).lower(), ""),
+                declared=_probed_type(row[2]) or inferred_types.get(str(row[1]).lower(), ""),
                 column_types=column_types,
             )
             for row in rows
@@ -81,6 +82,13 @@ def decimal_scale(target_type: str) -> int | None:
     if match is None:
         return None
     return int(match.group(2) or 0)
+
+
+def _probed_type(declared: object) -> str:
+    """A view reports an untyped source column as BLOB; keep such columns untyped."""
+
+    text: str = str(declared or "")
+    return "" if text.upper() == _UNTYPED_VIEW_COLUMN_TYPE else text
 
 
 def _column_definition(*, name: str, declared: str, column_types: Mapping[str, str]) -> str:
