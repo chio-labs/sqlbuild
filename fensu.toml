@@ -132,6 +132,11 @@ reason = "The BigQuery backend intentionally owns behavior through its adapter c
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/adapters/clickhouse/__init__.py"
+reason = "The ClickHouse backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/adapters/databricks/constants.py"
 reason = "The Databricks backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
@@ -204,6 +209,11 @@ reason = "The shared DuckDB-backed adapter intentionally keeps overrideable meth
 rule = "FFR601"
 path = "src/sqlbuild/adapters/bigquery/classes/bigquery_adapter.py"
 reason = "The BigQuery adapter intentionally keeps overrideable backend behavior on one class."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR601"
+path = "src/sqlbuild/adapters/clickhouse/classes/clickhouse_adapter.py"
+reason = "The ClickHouse adapter intentionally keeps overrideable backend behavior on one class."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR601"

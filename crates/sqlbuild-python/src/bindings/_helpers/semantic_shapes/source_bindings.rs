@@ -35,6 +35,8 @@ const REF_KIND: &str = "ref";
 const SOURCE_KIND: &str = "source";
 const UNKNOWN: &str = "UNKNOWN";
 const GENERIC_DIALECT: &str = "generic";
+/// Dialects whose unquoted identifiers already bind with their exact case.
+const EXACT_UNQUOTED_DIALECTS: [&str; 1] = ["clickhouse"];
 
 type Object<'py> = Bound<'py, PyAny>;
 
@@ -80,6 +82,8 @@ pub(crate) fn source_binding_diagnostics<'py>(
     let sensitive: bool = !dialect.is_none()
         && CASE_SENSITIVE_BINDING_DIALECTS.contains(&dialect.extract::<String>()?.as_str())
         && !ignore_case.is_truthy()?;
+    let exact_unquoted: bool = !dialect.is_none()
+        && EXACT_UNQUOTED_DIALECTS.contains(&dialect.extract::<String>()?.as_str());
     let mut changed: HashSet<String> = HashSet::new();
     for item in mapping_items(&columns)?.try_iter()? {
         let (name, value): (String, Object<'py>) = item?.extract()?;
@@ -101,7 +105,12 @@ pub(crate) fn source_binding_diagnostics<'py>(
         }
         let quoted: Bound<'py, PyDict> = PyDict::new(py);
         for (column, column_type) in physical {
-            quoted.set_item(format!("\"{}\"", column.replace('"', "\"\"")), column_type)?;
+            let name: String = if exact_unquoted {
+                column
+            } else {
+                format!("\"{}\"", column.replace('"', "\"\""))
+            };
+            quoted.set_item(name, column_type)?;
         }
         shapes.set_item(name, quoted)?;
     }

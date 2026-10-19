@@ -260,6 +260,7 @@ pub const OPERATION_STRATEGIES: [&str; 10] = [
 ];
 pub const OPERATION_ADAPTERS: [&str; 9] = [
     "bigquery",
+    "clickhouse",
     "custom",
     "databricks",
     "duckdb",

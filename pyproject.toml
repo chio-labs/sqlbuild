@@ -45,6 +45,9 @@ postgres = [
 sqlserver = [
   "pymssql>=2.3.0",
 ]
+clickhouse = [
+  "clickhouse-connect>=0.8",
+]
 ingestr = [
   "ingestr>=1.0.0",
 ]
@@ -110,6 +113,7 @@ markers = [
   "databricks: tests that require a live Databricks warehouse",
   "postgres: tests that require a live PostgreSQL database",
   "sqlserver: tests that require a live Microsoft SQL Server database",
+  "clickhouse: tests that require a live ClickHouse server",
   "motherduck: tests that require live MotherDuck credentials",
   "performance: opt-in performance guard tests",
   "cold_compile_performance: fresh-process semantic compile scaling guards",
