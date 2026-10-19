@@ -240,6 +240,13 @@ class SelectorFileErrorTestCase:
 
 
 @dataclass(frozen=True)
+class SourceSelectionRulesTestCase:
+    description: str
+    selection_args: tuple[str, ...]
+    expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
 class DeepSqlAnalysisCompileTestCase:
     description: str
     function_depth: int

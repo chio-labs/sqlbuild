@@ -10,6 +10,7 @@ import pytest
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileSelectionTestCase,
     SelectorFileErrorTestCase,
+    SourceSelectionRulesTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import json_diagnostic_codes
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
@@ -175,6 +176,47 @@ def test_given_missing_selector_file_when_running_then_reports_a_coded_error(
     assert json_diagnostic_codes(result.stdout) == test_case.expected_json_codes, (
         test_case.description + output
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SourceSelectionRulesTestCase(
+            description="an exact source selection evaluates rules without models",
+            selection_args=("--select", "source:raw__orders"),
+            expected_stdout_fragment="Project compiled  0 models",
+        ),
+        SourceSelectionRulesTestCase(
+            description="a source glob selection evaluates rules without models",
+            selection_args=("--select", "source:raw_*"),
+            expected_stdout_fragment="Project compiled  0 models",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_rules_and_source_only_selection_when_compiling_then_compiles(
+    test_case: SourceSelectionRulesTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="compile_selection",
+        repo_files={
+            "sqlbuild_project.toml": _PROJECT_TOML + '\n[rules]\nselect = ["SQBRDECLARATION201"]\n',
+            **_SOURCE_FILES,
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "compile", *test_case.selection_args),
+        project_dir=project_dir,
+        working_dir=project_dir,
+    )
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == 0, test_case.description + output
+    assert "panicked" not in output, test_case.description + output
+    assert test_case.expected_stdout_fragment in result.stdout, test_case.description + output
 
 
 if __name__ == "__main__":
