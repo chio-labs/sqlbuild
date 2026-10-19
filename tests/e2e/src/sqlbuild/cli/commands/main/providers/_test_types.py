@@ -124,3 +124,10 @@ class FilteredSinkFailureE2ETestCase:
     expected_runs_only: tuple[str, ...]
     expected_errors_only: tuple[str, ...]
     expected_warning: str
+
+
+@dataclass(frozen=True)
+class SlowSinkExitE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_marker_entries: tuple[str, ...]

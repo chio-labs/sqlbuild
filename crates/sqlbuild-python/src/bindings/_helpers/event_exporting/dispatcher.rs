@@ -28,8 +28,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
 };
 use crate::bindings::_helpers::event_exporting::constants::{
-    DISPATCHER_THREAD_NAME, EXIT_JOIN_SECONDS, HEALTH_THREAD_NAME, JOIN_GRACE_SECONDS, NO_SECONDS,
-    NOTIFIER_THREAD_NAME, OUTPUT_SINK_THREAD_NAME, POLL_SECONDS, WORKER_ATTRIBUTE,
+    DISPATCHER_THREAD_NAME, EXIT_JOIN_SECONDS, HEALTH_THREAD_NAME, IDLE_WAIT_SECONDS,
+    JOIN_GRACE_SECONDS, NO_SECONDS, NOTIFIER_THREAD_NAME, OUTPUT_SINK_THREAD_NAME, POLL_SECONDS,
+    WORKER_ATTRIBUTE,
 };
 use crate::bindings::_helpers::event_exporting::models::{
     BoundEventExporter, EventExportSummary, EventExporterFailure,
@@ -85,7 +86,6 @@ pub(crate) struct State {
     pub(crate) blocked: HashSet<usize>,
     pub(crate) live_invocations: HashSet<u64>,
     pub(crate) next_invocation: u64,
-    idle_finalizers: Vec<Py<PyAny>>,
     dispatcher_running: bool,
     shutdown_started: bool,
     shutdown_complete: bool,
@@ -160,13 +160,6 @@ fn remaining_seconds(deadline: Instant) -> f64 {
     deadline
         .saturating_duration_since(Instant::now())
         .as_secs_f64()
-}
-
-/// Run finalizers, ignoring their failures.
-pub(crate) fn run_finalizers(py: Python<'_>, finalizers: Vec<Py<PyAny>>) {
-    for finalizer in finalizers {
-        drop(finalizer.bind(py).call0());
-    }
 }
 
 /// End a retired command-output sink thread once it has run every call queued before.
@@ -427,45 +420,51 @@ impl Shared {
         self.notify_all(py)
     }
 
-    /// Forget one finished invocation; once idle, run the finalizers waiting for it.
+    /// Forget one finished invocation and wake a caller waiting for delivery to become idle.
     pub(crate) fn invocation_finished(&self, py: Python<'_>, invocation: u64) -> PyResult<()> {
-        let (finalizers, retired): (Vec<Py<PyAny>>, Option<Py<PyAny>>) = {
+        let retired: Option<Py<PyAny>> = {
             let _held = self.hold(py)?;
             let mut state = self.locked()?;
             state.live_invocations.remove(&invocation);
-            if state.live_invocations.is_empty() && !state.dispatcher_running {
-                let retired: Option<Py<PyAny>> = if state.shutdown_complete {
-                    state.output_lane.take()
-                } else {
-                    None
-                };
-                (std::mem::take(&mut state.idle_finalizers), retired)
+            let retired: Option<Py<PyAny>> = if Self::idle(&state) && state.shutdown_complete {
+                state.output_lane.take()
             } else {
-                (Vec::new(), None)
-            }
-        };
-        retire_output_lane(py, retired)?;
-        run_finalizers(py, finalizers);
-        Ok(())
-    }
-
-    /// Mark the dispatcher thread finished and run idle finalizers.
-    pub(crate) fn dispatcher_finished(&self, py: Python<'_>) -> PyResult<()> {
-        let finalizers: Vec<Py<PyAny>> = {
-            let _held = self.hold(py)?;
-            let mut state = self.locked()?;
-            state.dispatcher_running = false;
-            let finalizers = if state.live_invocations.is_empty() {
-                std::mem::take(&mut state.idle_finalizers)
-            } else {
-                Vec::new()
+                None
             };
             drop(state);
             self.notify_all(py)?;
-            finalizers
+            retired
         };
-        run_finalizers(py, finalizers);
-        Ok(())
+        retire_output_lane(py, retired)
+    }
+
+    /// Mark the dispatcher thread finished.
+    pub(crate) fn dispatcher_finished(&self, py: Python<'_>) -> PyResult<()> {
+        let _held = self.hold(py)?;
+        self.locked()?.dispatcher_running = false;
+        self.notify_all(py)
+    }
+
+    /// Whether the dispatcher thread and every sink call have finished.
+    fn idle(state: &State) -> bool {
+        state.live_invocations.is_empty() && !state.dispatcher_running
+    }
+
+    /// Wait until delivery is idle, the idle wait ends or interpreter exit begins.
+    fn await_idle(&self, py: Python<'_>) -> PyResult<()> {
+        let deadline: Instant =
+            Instant::now() + self.invocation_timeout.min(seconds(IDLE_WAIT_SECONDS));
+        let _held = self.hold(py)?;
+        loop {
+            if Self::idle(&*self.locked()?) || interpreter_exiting(py)? {
+                return Ok(());
+            }
+            let remaining: f64 = remaining_seconds(deadline);
+            if remaining <= NO_SECONDS {
+                return Ok(());
+            }
+            self.wait(py, remaining.min(POLL_SECONDS))?;
+        }
     }
 
     /// Register a running invocation, returning its identity.
@@ -660,7 +659,6 @@ impl EventExporterDispatcher {
                 blocked: HashSet::new(),
                 live_invocations: HashSet::new(),
                 next_invocation: 0,
-                idle_finalizers: Vec::new(),
                 dispatcher_running: true,
                 shutdown_started: false,
                 shutdown_complete: false,
@@ -922,17 +920,10 @@ impl EventExporterDispatcher {
         Ok(summary)
     }
 
-    /// Run `finalizer` once the dispatcher thread and every live invocation have finished.
+    /// Run `finalizer` on the calling thread, never a daemon delivery thread, once delivery is idle or the idle wait ends.
     fn finalize_when_idle(&self, py: Python<'_>, finalizer: Py<PyAny>) -> PyResult<()> {
-        {
-            let _held = self.shared.hold(py)?;
-            let mut state = self.shared.locked()?;
-            if !state.live_invocations.is_empty() || state.dispatcher_running {
-                state.idle_finalizers.push(finalizer);
-                return Ok(());
-            }
-        }
-        run_finalizers(py, vec![finalizer]);
+        self.shared.await_idle(py)?;
+        drop(finalizer.bind(py).call0());
         Ok(())
     }
 

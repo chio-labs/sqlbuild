@@ -79,7 +79,9 @@ min_severity = "warning"
 `shutdown_timeout` sets how long a command waits at exit for lifecycle sinks to drain queued
 events. It is a fixed duration from `"0s"` to `"10m"`, defaults to `"2s"`, and is accepted only
 under `[sinks.lifecycle]`, not per named sink. `"0s"` drops anything still queued at exit. The
-setting does not change the one-second timeout for each sink call.
+setting does not change the one-second timeout for each sink call. A sink call still running when
+the budget ends gets up to that one second to return before providers are torn down; teardown
+always runs on the command's own thread.
 
 ```toml
 [sinks.lifecycle]

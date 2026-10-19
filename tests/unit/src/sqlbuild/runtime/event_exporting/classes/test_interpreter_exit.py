@@ -70,6 +70,35 @@ _FINALIZING_WORK: str = dedent(
             0,
         ),
         InterpreterExitTestCase(
+            "provider teardown waiting for a timed-out sink",
+            dedent(
+                """
+                from types import SimpleNamespace
+
+                from sqlbuild._native import BoundEventExporter, EventExporterDispatcher
+
+                def slow(*, event):
+                    time.sleep(0.3)
+
+                def teardown():
+                    time.sleep(0.5)
+                    print("teardown finished", file=sys.stderr, flush=True)
+
+                dispatcher = EventExporterDispatcher(
+                    exporters=(BoundEventExporter("slow", slow, {}),),
+                    shutdown_timeout_seconds=0.0,
+                )
+                dispatcher.enqueue(SimpleNamespace(event_type="statement_submitted"))
+                time.sleep(0.05)
+                dispatcher.shutdown()
+                dispatcher.finalize_when_idle(teardown)
+                time.sleep(0.35)
+                """
+            ),
+            0,
+            "teardown finished",
+        ),
+        InterpreterExitTestCase(
             "dispatcher never shut down",
             dedent(
                 """
@@ -102,3 +131,4 @@ def test_given_live_exporter_threads_when_interpreter_finalizes_then_process_exi
 
     assert result.returncode == test_case.expected_returncode, result.stderr
     assert "finalizing True" in result.stderr
+    assert test_case.expected_stderr in result.stderr

@@ -259,25 +259,26 @@ def test_given_full_queue_when_enqueuing_then_overflow_is_counted_per_exporter(
     (EventExporterDispatcherTestCase("last live invocation finalizes once", 0),),
     ids=lambda case: case.description,
 )
-def test_given_multiple_timed_out_invocations_when_registering_finalizer_then_last_return_runs_once(
+def test_given_multiple_timed_out_invocations_when_finalizing_then_runs_once_on_caller_after_last(
     test_case: EventExporterDispatcherTestCase,
 ) -> None:
     first_entered: threading.Event = threading.Event()
     second_entered: threading.Event = threading.Event()
     first_release: threading.Event = threading.Event()
     second_release: threading.Event = threading.Event()
-    finalized: threading.Event = threading.Event()
-    finalizer_calls: list[str] = []
+    calls: list[str] = []
 
     def first(*, event: LifecycleEvent) -> None:
         del event
         first_entered.set()
         first_release.wait()
+        calls.append("first returned")
 
     def second(*, event: LifecycleEvent) -> None:
         del event
         second_entered.set()
         second_release.wait()
+        calls.append("second returned")
 
     dispatcher: EventExporterDispatcher = EventExporterDispatcher(
         exporters=(
@@ -285,24 +286,29 @@ def test_given_multiple_timed_out_invocations_when_registering_finalizer_then_la
             BoundEventExporter("second", second, {}),
         ),
         shutdown_timeout_seconds=0.1,
-        invocation_timeout_seconds=0.02,
+        invocation_timeout_seconds=0.3,
     )
     dispatcher.enqueue(lifecycle_event())
-    assert first_entered.wait(timeout=0.2)
-    assert second_entered.wait(timeout=0.2)
+    assert first_entered.wait(timeout=1.0)
+    assert second_entered.wait(timeout=1.0)
     summary: EventExportSummary = dispatcher.shutdown()
 
     def finalize() -> None:
-        finalizer_calls.append("finalized")
-        finalized.set()
+        calls.append(f"finalized on {threading.current_thread().name}")
 
+    releases: tuple[threading.Timer, ...] = (
+        threading.Timer(0.05, first_release.set),
+        threading.Timer(0.1, second_release.set),
+    )
+    for release in releases:
+        release.start()
     dispatcher.finalize_when_idle(finalize)
-    first_release.set()
-    assert not finalized.wait(timeout=0.02)
-    second_release.set()
 
-    assert finalized.wait(timeout=0.2)
-    assert finalizer_calls == ["finalized"]
+    assert calls == [
+        "first returned",
+        "second returned",
+        f"finalized on {threading.current_thread().name}",
+    ]
     assert summary.delivered == test_case.expected_delivered
 
 

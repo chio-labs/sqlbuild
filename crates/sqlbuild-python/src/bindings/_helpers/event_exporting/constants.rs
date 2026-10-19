@@ -14,5 +14,7 @@ pub(crate) const POLL_SECONDS: f64 = 0.01;
 pub(crate) const JOIN_GRACE_SECONDS: f64 = 0.05;
 /// How long shutdown and interpreter exit wait for each stopped dispatcher thread.
 pub(crate) const EXIT_JOIN_SECONDS: f64 = 1.0;
+/// The longest a finalizer waits for sink calls still running after shutdown before it runs anyway.
+pub(crate) const IDLE_WAIT_SECONDS: f64 = 1.0;
 /// No time left before a deadline.
 pub(crate) const NO_SECONDS: f64 = 0.0;
