@@ -30,6 +30,19 @@ fn given_batch_when_normalizing_on_pool_or_in_turn_then_matches_single_calls_in_
             ],
             expected_failures: &[0, 2],
         },
+        NormalizationBatchTestCase {
+            description: "double-slash comments hide quotes and brackets",
+            dialect: "snowflake",
+            requests: &[
+                ("SELECT id // it's the key\nFROM orders", &[]),
+                (
+                    "// don't read \"items[0\nSELECT payload:item[0] AS item FROM inventory",
+                    &[],
+                ),
+                ("SELECT id FROM orders // trailing 'note", &[]),
+            ],
+            expected_failures: &[],
+        },
     ];
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(3)

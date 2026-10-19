@@ -539,6 +539,17 @@ class SetOperationLifecycleTestCase:
 
 
 @dataclass(frozen=True)
+class FromQuerySetOperationTestCase:
+    description: str
+    adapter: str
+    models: tuple[SetOperationModel, ...]
+    expected_column_counts: tuple[tuple[str, int], ...]
+    lineage_target: str
+    expected_lineage: tuple[tuple[str, str, str], ...]
+    expected_rule_summary: str
+
+
+@dataclass(frozen=True)
 class SetOperationArityMismatchTestCase:
     description: str
     models: tuple[SetOperationModel, ...]
@@ -1168,3 +1179,22 @@ class DeltaCompileOptOutTestCase:
     env: dict[str, str]
     expected_delta_line: bool = False
     expected_images: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StarBesideCastConstantTestCase:
+    """A model selecting a star beside a cast constant and the columns it must compile and build."""
+
+    description: str
+    query_sql: str
+    expected_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DialectLineCommentTestCase:
+    """A dialect's own line comment holding quotes and reference text, and the columns it keeps."""
+
+    description: str
+    project_toml: str
+    query_sql: str
+    expected_column_count: int

@@ -7,8 +7,9 @@ from typing import Any
 from sqlbuild._native import OPERATION_STRATEGIES
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
-from sqlbuild.adapter.contract.types import PromotionStrategy
+from sqlbuild.adapter.contract.types import PromotionStrategy, RelationType
 from sqlbuild.adapter.relations.main.cached_relation_exists import cached_relation_exists
+from sqlbuild.adapter.relations.main.cached_relation_type import cached_relation_type
 from sqlbuild.errors.contracts.exceptions import ExecutorInputError
 from sqlbuild.executor.run.models import BoundViewGuard
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
@@ -100,6 +101,52 @@ def promote_relation_to_destination(
             else:
                 raise ExecutorInputError(f"Unsupported promotion strategy: {strategy}")
         except Exception as error:
-            lifecycle.failed(error=error, attributes=terminal_attributes)
-            raise
+            if (
+                isinstance(error, ExecutorInputError)
+                or not existing
+                or not _dropped_replaced_view(
+                    adapter=adapter,
+                    connection=connection,
+                    destination=(destination_database, destination_schema, destination_name),
+                    destination_relation=destination_relation,
+                    statement_recorder=statement_recorder,
+                )
+            ):
+                lifecycle.failed(error=error, attributes=terminal_attributes)
+                raise
+            try:
+                adapter.rename(
+                    connection=connection,
+                    origin=origin_relation,
+                    destination=destination_relation,
+                    statement_recorder=statement_recorder,
+                )
+            except Exception as rename_error:
+                lifecycle.failed(error=rename_error, attributes=terminal_attributes)
+                raise
         lifecycle.completed(metadata={"changed_count": 1}, attributes=terminal_attributes)
+
+
+def _dropped_replaced_view(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    destination: tuple[str | None, str | None, str],
+    destination_relation: str,
+    statement_recorder: StatementRecorder,
+) -> bool:
+    """Drop the live destination when it is a view a table cannot replace; whether it was one."""
+
+    database, schema, name = destination
+    existing: RelationType | None = cached_relation_type(
+        adapter=adapter, connection=connection, database=database, schema=schema, name=name
+    )
+    if existing != RelationType.VIEW:
+        return False
+    adapter.drop_view(
+        connection=connection,
+        destination=destination_relation,
+        if_exists=True,
+        statement_recorder=statement_recorder,
+    )
+    return True

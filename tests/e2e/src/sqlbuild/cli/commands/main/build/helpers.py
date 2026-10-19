@@ -1142,3 +1142,12 @@ def seed_audit_files(status_values: tuple[str, ...]) -> dict[str, str]:
             "              severity: warn\n"
         ),
     }
+
+
+def order_totals_model_sql(*, materialized: str) -> str:
+    """One order totals model with the given materialization."""
+
+    return (
+        f"MODEL (description 'Order totals.', materialized {materialized});\n\n"
+        "SELECT 1 AS order_id, 250 AS total_cents\n"
+    )

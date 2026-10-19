@@ -48,6 +48,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::semantic_shapes::shapes::snapshot_validity_columns;
 use crate::bindings::_helpers::type_system::equality::types_equal as native_types_equal;
 
 const CHANGES_LOGGER: &str = "sqlbuild.planner.changes";
@@ -531,6 +532,11 @@ fn model_schema_findings<'py>(
     if warehouse.is_none() {
         return Ok(Vec::new());
     }
+    let validity: Vec<String> = snapshot_validity_columns(model)?;
+    let mut warehouse: Vec<(String, String)> = column_pairs(&warehouse)?;
+    for column in &validity {
+        warehouse.retain(|(name, _)| !column.eq_ignore_ascii_case(name));
+    }
     let schema_entry: Bound<'py, PyAny> = native_field(model, "schema_entry")?;
     let mut yml: Vec<(String, String)> = Vec::new();
     let mut type_enforcement: bool = false;
@@ -559,7 +565,7 @@ fn model_schema_findings<'py>(
         SchemaColumns {
             yml,
             inferred,
-            warehouse: column_pairs(&warehouse)?,
+            warehouse,
         },
         (type_enforcement, inferred_schema_complete),
         (dynamic, dialect),

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    FromQuerySetOperationTestCase,
     SetOperationArityMismatchTestCase,
     SetOperationLifecycleTestCase,
     SetOperationModel,
@@ -14,7 +16,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     SetOperationCompileResult,
     SetOperationLifecycleResult,
+    column_lineage_edges,
     compile_set_operation_project,
+    format_set_operation_models,
+    run_set_arity_rule,
     run_set_operation_lifecycle,
     write_set_operation_project,
 )
@@ -25,6 +30,43 @@ _INPUTS: str = (
     "), limits AS (SELECT 10 AS max_amount)\n"
 )
 _ALL_ORDERS: str = "SELECT o.order_id, o.amount FROM orders AS o"
+_ORDERS_QUERY: str = 'SELECT o.order_id, o.amount, o.status FROM __ref("orders") AS o'
+_RETURNS_QUERY: str = 'SELECT r.order_id, r.amount FROM __ref("returns") AS r'
+_FROM_QUERY_MODELS: tuple[SetOperationModel, ...] = (
+    SetOperationModel(
+        description="three-column orders",
+        name="orders",
+        query_sql="SELECT 1 AS order_id, 20 AS amount, 'open' AS status",
+    ),
+    SetOperationModel(
+        description="two-column returns",
+        name="returns",
+        query_sql="SELECT 2 AS order_id, 5 AS amount",
+    ),
+    SetOperationModel(
+        description="narrowed FROM query before UNION ALL",
+        name="union_all_orders",
+        query_sql=f"SELECT order_id, amount FROM ({_ORDERS_QUERY})\nUNION ALL\n{_RETURNS_QUERY}",
+    ),
+    SetOperationModel(
+        description="narrowed FROM query before EXCEPT",
+        name="except_orders",
+        query_sql=f"SELECT order_id, amount FROM ({_ORDERS_QUERY})\nEXCEPT\n{_RETURNS_QUERY}",
+    ),
+    SetOperationModel(
+        description="narrowed FROM query before INTERSECT",
+        name="intersect_orders",
+        query_sql=f"SELECT order_id, amount FROM ({_ORDERS_QUERY})\nINTERSECT\n{_RETURNS_QUERY}",
+    ),
+    SetOperationModel(
+        description="star over a FROM query before UNION ALL",
+        name="starred_orders",
+        query_sql=(
+            'SELECT * FROM (SELECT o.order_id, o.amount FROM __ref("orders") AS o)\n'
+            f"UNION ALL\n{_RETURNS_QUERY}"
+        ),
+    ),
+)
 
 
 @pytest.mark.parametrize(
@@ -129,6 +171,16 @@ _ALL_ORDERS: str = "SELECT o.order_id, o.amount FROM orders AS o"
                     expected_row_count=4,
                 ),
                 SetOperationModel(
+                    description="narrowed FROM query before UNION ALL",
+                    name="from_query_union_all",
+                    query_sql=(
+                        f"{_INPUTS}SELECT order_id, amount\n"
+                        "FROM (SELECT o.order_id, o.amount, 'open' AS status FROM orders AS o)\n"
+                        f"UNION ALL\n{_ALL_ORDERS}"
+                    ),
+                    expected_row_count=4,
+                ),
+                SetOperationModel(
                     description="parenthesized branches around a scalar subquery",
                     name="parenthesized_branches_union_all",
                     query_sql=(
@@ -141,7 +193,7 @@ _ALL_ORDERS: str = "SELECT o.order_id, o.amount FROM orders AS o"
             ),
             expected_column_count=2,
             expected_diagnostics=(),
-            expected_rule_summary="10 models evaluated, 0 findings",
+            expected_rule_summary="11 models evaluated, 0 findings",
             expected_indented_set_operation_lines=(),
         )
     ],
@@ -173,6 +225,63 @@ def test_given_set_operation_after_subquery_operand_when_compiling_building_and_
     assert result.recompiled.exit_code == 0, result.recompiled.output
     assert result.recompiled.diagnostics == test_case.expected_diagnostics
     assert result.recompiled.column_counts == expected_column_counts
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        FromQuerySetOperationTestCase(
+            description=f"{adapter} FROM query before a set operation",
+            adapter=adapter,
+            models=_FROM_QUERY_MODELS,
+            expected_column_counts=(
+                ("union_all_orders", 2),
+                ("except_orders", 2),
+                ("intersect_orders", 2),
+            ),
+            lineage_target="starred_orders.order_id",
+            expected_lineage=(("orders", "order_id", "direct"), ("returns", "order_id", "direct")),
+            expected_rule_summary="6 models evaluated, 0 findings",
+        )
+        for adapter in ("duckdb", "snowflake", "bigquery", "postgres")
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_set_operation_after_parenthesized_from_query_when_compiling_then_outer_queries_combine(
+    test_case: FromQuerySetOperationTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = tmp_path / "orders_project"
+    write_set_operation_project(
+        project_dir=project_dir, models=test_case.models, adapter=test_case.adapter
+    )
+
+    compiled: SetOperationCompileResult = compile_set_operation_project(project_dir=project_dir)
+    lineage: subprocess.CompletedProcess[str]
+    lineage_edges: tuple[tuple[str, str, str], ...]
+    lineage, lineage_edges = column_lineage_edges(
+        project_dir=project_dir, target=test_case.lineage_target
+    )
+    rules: subprocess.CompletedProcess[str] = run_set_arity_rule(project_dir=project_dir)
+    formatted: subprocess.CompletedProcess[str]
+    indented_set_operation_lines: tuple[str, ...]
+    formatted, indented_set_operation_lines = format_set_operation_models(project_dir=project_dir)
+    recompiled: SetOperationCompileResult = compile_set_operation_project(project_dir=project_dir)
+
+    expected_column_counts: dict[str, int] = dict(test_case.expected_column_counts)
+    assert compiled.exit_code == 0, compiled.output
+    assert compiled.diagnostics == ()
+    assert {
+        name: compiled.column_counts[name] for name in expected_column_counts
+    } == expected_column_counts
+    assert lineage.returncode == 0, lineage.stdout + lineage.stderr
+    assert lineage_edges == test_case.expected_lineage
+    assert rules.returncode == 0, rules.stdout + rules.stderr
+    assert test_case.expected_rule_summary in rules.stdout + rules.stderr
+    assert formatted.returncode == 0, formatted.stdout + formatted.stderr
+    assert indented_set_operation_lines == ()
+    assert recompiled.exit_code == 0, recompiled.output
+    assert recompiled.diagnostics == ()
 
 
 @pytest.mark.parametrize(

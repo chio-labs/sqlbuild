@@ -1354,3 +1354,21 @@ class StandaloneAuditRowE2ETestCase:
     status_values: tuple[str, ...]
     expected_exit_code: int
     expected_rows: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SnapshotValidityColumnsTestCase:
+    """A snapshot's validity column config and the column names its built relation holds."""
+
+    description: str
+    validity_config: str
+    expected_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MaterializationTypeChangeTestCase:
+    """A built model's materialization change and the relation type each build leaves."""
+
+    description: str
+    materializations: tuple[str, ...]
+    expected_table_types: tuple[str, ...]

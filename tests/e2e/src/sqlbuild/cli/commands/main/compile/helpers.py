@@ -2879,15 +2879,21 @@ class SetOperationLifecycleResult(NamedTuple):
 
 
 def write_set_operation_project(
-    *, project_dir: Path, models: tuple[SetOperationModel, ...]
+    *, project_dir: Path, models: tuple[SetOperationModel, ...], adapter: str = "duckdb"
 ) -> Path:
-    """Write a DuckDB project with one view per model and return its database path."""
+    """Write a project with one view per model and return its DuckDB database path.
+
+    Other adapters compile offline against a default database and never connect.
+    """
 
     database: Path = project_dir / "orders.duckdb"
+    target: str = {
+        True: f'[connection]\ndatabase = "{database}"\n',
+        False: '[defaults]\ndatabase = "example"\n',
+    }[adapter == "duckdb"]
     files: dict[str, str] = {
         "sqlbuild_project.toml": (
-            f'name = "orders"\nadapter = "duckdb"\n[connection]\ndatabase = "{database}"\n'
-            '[rules]\nselect = ["SQBRSQL020"]\n'
+            f'name = "orders"\nadapter = "{adapter}"\n{target}[rules]\nselect = ["SQBRSQL020"]\n'
         ),
     }
     for model in models:
@@ -2938,9 +2944,32 @@ def run_set_operation_lifecycle(
                 f"SELECT * FROM analytics.{model.name}"
             )
             relation_shapes[model.name] = (len(relation.columns), len(relation.fetchall()))
-    rules: subprocess.CompletedProcess[str] = run_sqb(
-        project_dir=project_dir, command=("rules", "run", "SQBRSQL020")
+    rules: subprocess.CompletedProcess[str] = run_set_arity_rule(project_dir=project_dir)
+    formatted: subprocess.CompletedProcess[str]
+    indented_set_operation_lines: tuple[str, ...]
+    formatted, indented_set_operation_lines = format_set_operation_models(project_dir=project_dir)
+    return SetOperationLifecycleResult(
+        compiled=compiled,
+        build=build,
+        relation_shapes=relation_shapes,
+        rules=rules,
+        format=formatted,
+        indented_set_operation_lines=indented_set_operation_lines,
+        recompiled=compile_set_operation_project(project_dir=project_dir),
     )
+
+
+def run_set_arity_rule(*, project_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Run the set-operation arity Rule over every model."""
+
+    return run_sqb(project_dir=project_dir, command=("rules", "run", "SQBRSQL020"))
+
+
+def format_set_operation_models(
+    *, project_dir: Path
+) -> tuple[subprocess.CompletedProcess[str], tuple[str, ...]]:
+    """Format every model and return the result and any set-operation lines left indented."""
+
     models_dir: Path = project_dir / "models"
     formatted: subprocess.CompletedProcess[str] = run_sqb(
         project_dir=project_dir, command=("format", str(models_dir))
@@ -2948,15 +2977,23 @@ def run_set_operation_lifecycle(
     indented_set_operation_lines: list[str] = []
     for path in sorted(models_dir.glob("*.sql")):
         indented_set_operation_lines.extend(_indented_set_operation_lines(path))
-    return SetOperationLifecycleResult(
-        compiled=compiled,
-        build=build,
-        relation_shapes=relation_shapes,
-        rules=rules,
-        format=formatted,
-        indented_set_operation_lines=tuple(indented_set_operation_lines),
-        recompiled=compile_set_operation_project(project_dir=project_dir),
+    return formatted, tuple(indented_set_operation_lines)
+
+
+def column_lineage_edges(
+    *, project_dir: Path, target: str
+) -> tuple[subprocess.CompletedProcess[str], tuple[tuple[str, str, str], ...]]:
+    """Return the lineage result and sorted `(model, column, transform)` upstream edges."""
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        project_dir=project_dir, command=("lineage", target, "--json")
     )
+    payload: dict[str, Any] = json.loads(result.stdout or '{"trace": []}')
+    edges: list[tuple[str, str, str]] = [
+        (edge["source"]["resource_name"], edge["source"]["column_name"], edge["transform"])
+        for edge in payload["trace"]
+    ]
+    return result, tuple(sorted(edges))
 
 
 class UnionFixtureCompileMeasurement(NamedTuple):
