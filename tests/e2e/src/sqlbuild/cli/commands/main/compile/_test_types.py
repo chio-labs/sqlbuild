@@ -368,7 +368,8 @@ class InspectionCommandPerformanceGuardTestCase:
 @dataclass(frozen=True)
 class PlanComparedToCompileGuardTestCase:
     description: str
-    expected_max_compile_ratio: float
+    expected_max_compile_cpu_ratio: float
+    expected_max_compile_wall_ratio: float
     expected_max_plan_wall_seconds: float
     expected_max_rss_bytes: int
 
