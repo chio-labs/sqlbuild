@@ -2,6 +2,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::cli_text::_helpers::summary_text::count_noun;
+
 use crate::cli_text::constants::{
     DEFAULT_ACTION, INVALID_UPSTREAM, NOTICE_DISPLAY_LIMIT, OPEN_INPUT, OPEN_SOURCE,
 };
@@ -53,9 +55,10 @@ pub fn semantic_coverage_notice(reasons: &[(String, Vec<String>)]) -> Option<Str
                 .push(model.as_str());
         }
     }
+    let count: i64 = i64::try_from(reasons.len()).unwrap_or(i64::MAX);
     let mut lines: Vec<String> = vec![format!(
-        "Semantic checks were partial for {} models:",
-        reasons.len()
+        "Semantic checks were partial for {}:",
+        count_noun(count, "model", None)
     )];
     for (reason, models) in groups.iter().take(NOTICE_DISPLAY_LIMIT) {
         let suffix: String = if models.len() > NOTICE_DISPLAY_LIMIT {

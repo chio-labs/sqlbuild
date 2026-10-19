@@ -1,8 +1,8 @@
 use crate::progress::models::{ProgressEvent, ProgressPayload, ProgressSettings};
 use crate::progress::tests::helpers::{
-    attempt_event, operation_event, orders_claim, plain, project_case,
+    attempt_event, audit_rows, operation_event, orders_claim, plain, project_case,
 };
-use crate::progress::tests::test_types::ProjectionTestCase;
+use crate::progress::tests::test_types::{AuditRowTestCase, ProjectionTestCase};
 
 #[test]
 fn given_lifecycle_facts_when_projecting_then_progress_lines_match() {
@@ -206,6 +206,60 @@ fn given_lifecycle_facts_when_projecting_then_progress_lines_match() {
                     .collect::<Vec<String>>(),
                 test_case.expected_durations
             ),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_standalone_audit_when_projecting_then_row_names_target_and_outcome() {
+    let test_cases = [
+        AuditRowTestCase {
+            description: "a seed column audit names its target and passes",
+            resource_id: "audit:not_null:seed:customers:customer_id",
+            terminal_event: "resource_attempt_completed",
+            recorded_outcomes: vec![("a1", "pass")],
+            expected_lines: vec![
+                "  audit     not_null (customers.customer_id) START",
+                "  audit     not_null (customers.customer_id) PASS 0.01s",
+            ],
+        },
+        AuditRowTestCase {
+            description: "a completed audit with a warn outcome shows WARN",
+            resource_id: "audit:not_null:source:raw_orders:order_id",
+            terminal_event: "resource_attempt_completed",
+            recorded_outcomes: vec![("a1", "warn")],
+            expected_lines: vec![
+                "  audit     not_null (raw_orders.order_id) START",
+                "  audit     not_null (raw_orders.order_id) WARN 0.01s",
+            ],
+        },
+        AuditRowTestCase {
+            description: "a failed singular audit has no target and shows FAIL",
+            resource_id: "audit:not_null:singular",
+            terminal_event: "resource_attempt_failed",
+            recorded_outcomes: vec![("a1", "error")],
+            expected_lines: vec![
+                "  audit     not_null START",
+                "  audit     not_null FAIL 0.01s",
+            ],
+        },
+        AuditRowTestCase {
+            description: "a completed audit without its own recorded outcome passes",
+            resource_id: "audit:not_null:model:orders",
+            terminal_event: "resource_attempt_completed",
+            recorded_outcomes: vec![("a2", "warn")],
+            expected_lines: vec![
+                "  audit     not_null (orders) START",
+                "  audit     not_null (orders) PASS 0.01s",
+            ],
+        },
+    ];
+    for test_case in test_cases {
+        assert_eq!(
+            audit_rows(&test_case),
+            test_case.expected_lines,
             "{}",
             test_case.description
         );

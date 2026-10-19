@@ -365,8 +365,8 @@ def test_given_retried_resource_when_final_result_claims_then_prior_attempt_rend
         RetryProjectionCase(
             description="same generic audit column on distinct targets",
             expected_lines=(
-                "  1/1  audit     not_null (id) START",
-                "  1/1  audit     not_null (id) START",
+                "  1/1  audit     not_null (orders.id) START",
+                "  1/1  audit     not_null (customers.id) START",
                 "  orders audit OK 0.10s  rich",
                 "  customers audit OK 0.20s  rich",
             ),
@@ -381,7 +381,7 @@ def test_given_same_name_distinct_resources_when_claimed_by_id_then_terminals_do
 ) -> None:
     stream: _FlushRecordingStream = _FlushRecordingStream()
     projector: NativeProgressProjector = NativeProgressProjector(stream=stream, use_color=False)
-    projector.configure_resources(ordinals={"not_null (id)": 1}, total=1)
+    projector.configure_resources(ordinals={"not_null": 1}, total=1)
     first_start: LifecycleEvent = replace(
         lifecycle_event(
             "resource_attempt_started",
@@ -390,7 +390,7 @@ def test_given_same_name_distinct_resources_when_claimed_by_id_then_terminals_do
             resource_attempt_id="first-attempt",
             payload={
                 "resource_kind": "audit",
-                "resource_name": "not_null (id)",
+                "resource_name": "not_null",
                 "attempt_number": 1,
             },
         ),
@@ -418,11 +418,11 @@ def test_given_same_name_distinct_resources_when_claimed_by_id_then_terminals_do
     for event in (first_start, second_start, second_terminal, first_terminal):
         projector.consume(event)
     first_duration: float | None = projector.consume_resource_terminal(
-        resource_name="not_null (id)", resource_id="audit:not_null:model:orders:id"
+        resource_name="not_null", resource_id="audit:not_null:model:orders:id"
     )
     stream.write(f"  orders audit OK {cast(float, first_duration) / 1000.0:.2f}s  rich\n")
     second_duration: float | None = projector.consume_resource_terminal(
-        resource_name="not_null (id)", resource_id="audit:not_null:model:customers:id"
+        resource_name="not_null", resource_id="audit:not_null:model:customers:id"
     )
     stream.write(f"  customers audit OK {cast(float, second_duration) / 1000.0:.2f}s  rich\n")
     projector.close()

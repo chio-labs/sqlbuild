@@ -49,3 +49,11 @@ pub(super) struct StatusSpinnerLineTestCase {
     pub(super) style: CliStyle,
     pub(super) expected_line: &'static str,
 }
+
+pub(super) struct AuditRowTestCase {
+    pub(super) description: &'static str,
+    pub(super) resource_id: &'static str,
+    pub(super) terminal_event: &'static str,
+    pub(super) recorded_outcomes: Vec<(&'static str, &'static str)>,
+    pub(super) expected_lines: Vec<&'static str>,
+}

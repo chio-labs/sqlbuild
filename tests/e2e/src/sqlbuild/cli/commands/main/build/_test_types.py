@@ -1345,3 +1345,11 @@ class WarehouseConnectionFailureE2ETestCase:
     expected_exit_code: int
     expected_stderr_fragments: tuple[str, ...]
     extra_files: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StandaloneAuditRowE2ETestCase:
+    description: str
+    status_values: tuple[str, ...]
+    expected_exit_code: int
+    expected_rows: tuple[str, ...]

@@ -268,6 +268,14 @@ impl NativeProgressProjector {
         Ok(())
     }
 
+    /// Record how one audit attempt ended, so its terminal row shows the outcome.
+    #[pyo3(signature = (*, resource_attempt_id, outcome))]
+    fn record_audit_outcome(&self, resource_attempt_id: &str, outcome: &str) -> PyResult<()> {
+        self.locked()?
+            .record_audit_outcome(resource_attempt_id, outcome);
+        Ok(())
+    }
+
     /// Return whether a visible canonical operation currently owns progress.
     #[pyo3(name = "is_operation_active", signature = (*, operation_name))]
     pub(crate) fn operation_active(&self, operation_name: &str) -> PyResult<bool> {

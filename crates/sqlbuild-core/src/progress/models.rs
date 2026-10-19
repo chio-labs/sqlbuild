@@ -78,6 +78,8 @@ pub struct ProgressProjection {
     pub(crate) operation_starts: HashMap<String, ProgressEvent>,
     pub(crate) quiet_operation_ids: HashSet<String>,
     pub(crate) enriched_resource_names: HashSet<String>,
+    /// Audit outcomes by attempt, which the audit's own terminal row shows.
+    pub(crate) audit_outcomes: HashMap<String, String>,
     pub(crate) resource_names: HashMap<String, String>,
     pub(crate) statement_starts: HashMap<String, ProgressEvent>,
     pub(crate) statement_query_ids: HashMap<String, String>,
@@ -106,6 +108,12 @@ impl ProgressProjection {
     pub fn expect_resource_enrichment(&mut self, resource_name: &str) {
         self.enriched_resource_names
             .insert(resource_name.to_owned());
+    }
+
+    /// Record how one audit attempt ended, before its terminal row renders.
+    pub fn record_audit_outcome(&mut self, resource_attempt_id: &str, outcome: &str) {
+        self.audit_outcomes
+            .insert(resource_attempt_id.to_owned(), outcome.to_owned());
     }
 
     /// Whether a visible operation with this name currently owns progress.

@@ -15,6 +15,9 @@ from sqlbuild.compiler.auditing.types import AuditOutcome, AuditRunScope
 from sqlbuild.executor.auditing.main._execute_reporting_errors import (
     execute_audit_reporting_errors,
 )
+from sqlbuild.executor.auditing.main._record_audit_progress_outcome import (
+    record_audit_progress_outcome,
+)
 from sqlbuild.executor.auditing.main.publish_completed_audit_results import (
     publish_completed_audit_results,
 )
@@ -61,6 +64,9 @@ def run_end_audits(
                 source_map=source_map,
                 run_scope_phase=AuditRunScope.FINAL,
                 quality_scope=quality_scope,
+            )
+            record_audit_progress_outcome(
+                resource_attempt_id=lifecycle.resource_attempt_id, result=result
             )
             if result.outcome == AuditOutcome.ERROR:
                 lifecycle.failed()
