@@ -1,5 +1,6 @@
 //! Compile reuse storage, fingerprint, environment and notice constants.
 
+use sqlbuild_cli::launcher::constants::{HOST_MODE_VARIABLE, HOST_REPORT_VARIABLE};
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 
 use crate::bindings::_helpers::frontier::stage_capture::CAPTURE_DIR_ENV_VAR;
@@ -15,9 +16,13 @@ pub(crate) const REUSE_DISABLE_ENV_VAR: &str = "SQLBUILD_DISABLE_COMPILE_REUSE";
 pub(crate) const REUSE_DISABLE_VALUE: &str = "1";
 pub(crate) const REUSE_LOGGER_NAME: &str = "sqlbuild.compile.reuse";
 pub(crate) const TRACKED_ENVIRONMENT_PREFIXES: [&str; 2] = ["SQLBUILD_", "SQB_"];
-/// Sorted; tracked-prefix variables that never invalidate a stored compile.
-pub(crate) const UNTRACKED_ENVIRONMENT_NAMES: [&str; 2] =
-    [CAPTURE_DIR_ENV_VAR, REUSE_DISABLE_ENV_VAR];
+/// Sorted; tracked-prefix variables that never invalidate a stored compile, such as the host mode.
+pub(crate) const UNTRACKED_ENVIRONMENT_NAMES: [&str; 4] = [
+    CAPTURE_DIR_ENV_VAR,
+    REUSE_DISABLE_ENV_VAR,
+    HOST_MODE_VARIABLE,
+    HOST_REPORT_VARIABLE,
+];
 pub(crate) const MISSING_ENVIRONMENT_VALUE: &str = "\0missing";
 pub(crate) const MISSING_FILE_DIGEST: &str = "\0missing";
 pub(crate) const PROJECT_CONFIG_FILENAMES: [&str; 2] =

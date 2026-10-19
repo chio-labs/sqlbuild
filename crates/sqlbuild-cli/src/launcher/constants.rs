@@ -23,3 +23,13 @@ pub const LAUNCH_KEY_DOMAIN: &str = "sqlbuild-launch-key-1";
 pub const MISSING_FILE_STAMP: &[u8] = b"missing";
 /// Exit code when the Python CLI cannot be started.
 pub const HANDOFF_FAILURE_EXIT_CODE: i32 = 1;
+/// Hidden override of how `sqb` starts Python: `embedded` (required) or `exec`; unset tries both.
+pub const HOST_MODE_VARIABLE: &str = "SQLBUILD_HOST_MODE";
+/// The `SQLBUILD_HOST_MODE` value that starts Python in the `sqb` process or fails.
+pub const EMBEDDED_HOST_MODE: &str = "embedded";
+/// The `SQLBUILD_HOST_MODE` value that always replaces `sqb` with the Python CLI script.
+pub const EXEC_HOST_MODE: &str = "exec";
+/// Set by `sqb` for the Python it starts: how it started it and why, as `sqb debug` reports.
+pub const HOST_REPORT_VARIABLE: &str = "SQLBUILD_PYTHON_HOST";
+/// The `sqb debug` host line when Python was not started by `sqb`.
+pub const UNREPORTED_HOST: &str = "not started by sqb";

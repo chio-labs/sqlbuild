@@ -62,6 +62,8 @@ pub struct DebugRuntime {
     pub sqlbuild_version: Option<String>,
     pub python_version: String,
     pub python_path: String,
+    /// How `sqb` started Python: in its own process, by `exec`, or not at all, and why.
+    pub python_host: String,
     pub os_info: String,
 }
 

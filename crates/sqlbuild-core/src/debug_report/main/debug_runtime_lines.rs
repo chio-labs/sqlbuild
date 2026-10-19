@@ -2,7 +2,7 @@
 
 use crate::debug_report::models::{DebugLine, DebugRuntime};
 
-/// The SQLBuild version, interpreter and platform lines.
+/// The SQLBuild version, interpreter, Python host and platform lines.
 #[must_use]
 pub fn debug_runtime_lines(runtime: &DebugRuntime) -> Vec<DebugLine> {
     vec![
@@ -12,6 +12,7 @@ pub fn debug_runtime_lines(runtime: &DebugRuntime) -> Vec<DebugLine> {
         ),
         DebugLine::plain("python version", &runtime.python_version),
         DebugLine::plain("python path", &runtime.python_path),
+        DebugLine::plain("python host", &runtime.python_host),
         DebugLine::plain("os info", &runtime.os_info),
     ]
 }

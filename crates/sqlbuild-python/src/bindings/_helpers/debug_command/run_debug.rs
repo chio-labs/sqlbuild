@@ -8,6 +8,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_cli::launcher::constants::{HOST_REPORT_VARIABLE, UNREPORTED_HOST};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::debug_report::main::debug_config_files::debug_config_files;
 use sqlbuild_core::debug_report::main::debug_configuration_lines::debug_configuration_lines;
@@ -80,6 +81,8 @@ fn runtime(py: Python<'_>) -> PyResult<DebugRuntime> {
         sqlbuild_version,
         python_version: platform.call_method0("python_version")?.str()?.extract()?,
         python_path: py.import("sys")?.getattr("executable")?.str()?.extract()?,
+        python_host: std::env::var(HOST_REPORT_VARIABLE)
+            .unwrap_or_else(|_| UNREPORTED_HOST.to_owned()),
         os_info: platform.call_method0("platform")?.str()?.extract()?,
     })
 }
