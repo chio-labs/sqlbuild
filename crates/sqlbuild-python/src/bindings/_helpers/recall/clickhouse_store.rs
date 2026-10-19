@@ -15,6 +15,7 @@ use sqlbuild_recall::clickhouse::main::store_state_sql::store_state_sql;
 use sqlbuild_recall::clickhouse::main::stored_rows_sql::stored_rows_sql;
 use sqlbuild_recall::clickhouse::main::ttl_mismatches::ttl_mismatches;
 use sqlbuild_recall::clickhouse::models::{StoredColumn, StoredRow, TtlMismatch};
+use sqlbuild_recall::records::main::epoch_micros::epoch_micros;
 use sqlbuild_recall::records::main::format_timestamp::format_timestamp;
 use sqlbuild_recall::records::main::meta_row::meta_row;
 use sqlbuild_recall::records::models::{OutputStream, RecallRow, RecallValue, RowEnvelope};
@@ -287,11 +288,7 @@ impl ClickHouseStore {
         now: SystemTime,
     ) -> Result<(), StoreError> {
         let columns: &[StoredColumn] = self.columns.get(&table).map_or(&[], Vec::as_slice);
-        let micros: i64 = now
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_or(0, |elapsed| {
-                i64::try_from(elapsed.as_micros()).unwrap_or(i64::MAX)
-            });
+        let micros: i64 = epoch_micros(now);
         let (names, block) = encode_rows(rows, columns, micros).map_err(|message| StoreError {
             kind: StoreErrorKind::Other,
             message,

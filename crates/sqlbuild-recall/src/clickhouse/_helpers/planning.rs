@@ -2,11 +2,11 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use crate::clickhouse::_helpers::literals::timestamp_micros;
 use crate::clickhouse::_helpers::record_key::record_key;
 use crate::clickhouse::constants::UNCHECKED_TABLES;
 use crate::clickhouse::models::{InsertPlan, StoredRow};
 use crate::records::main::conflict_row::conflict_row;
+use crate::records::main::timestamp_micros::timestamp_micros;
 use crate::records::models::{RecallRow, RecallValue, RowEnvelope};
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::Table;

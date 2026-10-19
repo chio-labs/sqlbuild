@@ -1,26 +1,12 @@
 //! ClickHouse literals and key expressions for the store's own queries.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use crate::clickhouse::constants::TIMESTAMP_PATTERN;
 use crate::records::main::format_timestamp::format_timestamp;
 use crate::records::main::parse_timestamp::parse_timestamp;
+use crate::records::main::timestamp_micros::timestamp_micros;
 use crate::records::models::RecallValue;
 use crate::schema::main::table_columns::table_columns;
 use crate::schema::models::{ColumnType, Table};
-
-/// Microseconds since the epoch; times before it count back.
-pub(crate) fn epoch_micros(time: SystemTime) -> i64 {
-    match time.duration_since(UNIX_EPOCH) {
-        Ok(after) => i64::try_from(after.as_micros()).unwrap_or(i64::MAX),
-        Err(before) => -i64::try_from(before.duration().as_micros()).unwrap_or(i64::MAX),
-    }
-}
-
-/// The microseconds of Recall timestamp text, `None` when it is not one.
-pub(crate) fn timestamp_micros(text: &str) -> Option<i64> {
-    parse_timestamp(text).map(epoch_micros)
-}
 
 /// A single-quoted ClickHouse string literal.
 pub(crate) fn string_literal(text: &str) -> String {

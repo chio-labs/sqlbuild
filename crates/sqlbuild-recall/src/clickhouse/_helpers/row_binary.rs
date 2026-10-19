@@ -1,10 +1,10 @@
 //! `RowBinary` encoding of one Recall value; each function takes the block and returns it extended.
 
-use crate::clickhouse::_helpers::literals::timestamp_micros;
 use crate::clickhouse::constants::{
     DECIMAL_SCALE, MICROS_DIGITS, VARINT_CONTINUE, VARINT_MASK, VARINT_PAYLOAD_BITS,
 };
 use crate::clickhouse::models::{ColumnEncoding, StoredColumn};
+use crate::records::main::timestamp_micros::timestamp_micros;
 use crate::records::models::RecallValue;
 
 fn varint(mut block: Vec<u8>, mut value: u64) -> Vec<u8> {
