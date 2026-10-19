@@ -1339,6 +1339,7 @@ version = "0.158.2"
 dependencies = [
  "blake3",
  "rusqlite",
+ "rustix",
  "serde_json",
  "sha2",
  "sqlbuild-config",

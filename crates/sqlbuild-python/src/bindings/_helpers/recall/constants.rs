@@ -87,3 +87,5 @@ pub(crate) const TIMESTAMP_PARTS: [&str; 7] = [
 pub(crate) const UTC_ZONE_NAME: &str = "UTC";
 /// How often closing checks for an interrupt while delivery finishes.
 pub(crate) const CLOSE_POLL_MS: u64 = 50;
+/// Longest wait at startup for another process moving a corrupt store aside; the writer thread retries within the shutdown budget.
+pub(crate) const QUARANTINE_START_WAIT_MS: u64 = 200;

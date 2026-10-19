@@ -3,7 +3,7 @@
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyStringMethods;
@@ -15,9 +15,10 @@ use sqlbuild_recall::schema::main::ddl_script::ddl_script;
 use sqlbuild_recall::schema::models::{DdlOptions, Dialect};
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
 use sqlbuild_recall::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
+use sqlbuild_recall::store::main::observe_store_file::observe_store_file;
 use sqlbuild_recall::store::main::quarantine_store::quarantine_store;
-use sqlbuild_recall::store::main::store_header_is_foreign::store_header_is_foreign;
 use sqlbuild_recall::store::main::store_location_problem::store_location_problem;
+use sqlbuild_recall::store::models::QuarantineOutcome;
 use sqlbuild_recall::writer::constants::DEFAULT_HEARTBEAT_INTERVAL_MS;
 use sqlbuild_recall::writer::main::start_recall_session::start_recall_session;
 use sqlbuild_recall::writer::models::{
@@ -30,7 +31,8 @@ use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::recall::constants::{
     CLOSE_POLL_MS, DDL_NOTICE_PREFIX, HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH,
-    MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS, STDOUT_STREAM_INDEX,
+    MINIMUM_HEARTBEAT_SECONDS, NOTICE_INTERVAL_SECONDS, QUARANTINE_START_WAIT_MS,
+    STDOUT_STREAM_INDEX,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::config_json::dumped_json;
@@ -258,18 +260,23 @@ fn notify(py: Python<'_>, text: Option<String>) {
 
 /// Move a store whose file is not a database aside before the command prints anything.
 fn quarantined_notice(path: &Path) -> Option<String> {
-    if !store_header_is_foreign(path) {
+    let Ok(Some(observed)) = observe_store_file(path) else {
+        return None;
+    };
+    if !observed.header_foreign {
         return None;
     }
-    Some(match quarantine_store(path, SystemTime::now()) {
-        Ok(moved) => format!(
+    let give_up: Instant = Instant::now() + Duration::from_millis(QUARANTINE_START_WAIT_MS);
+    match quarantine_store(path, &observed, (give_up, SystemTime::now())) {
+        Ok(QuarantineOutcome::Moved(moved)) => Some(format!(
             "Recall: {} was not a valid database; it was moved to {} and a fresh store was \
              started.\n",
             path.display(),
             moved.display()
-        ),
-        Err(error) => format!("Recall history is not being written: {error}.\n"),
-    })
+        )),
+        Ok(QuarantineOutcome::Kept | QuarantineOutcome::LockBusy) => None,
+        Err(error) => Some(format!("Recall history is not being written: {error}.\n")),
+    }
 }
 
 fn started_session(

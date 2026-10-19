@@ -5,13 +5,15 @@ use crate::store::main::describe_store::describe_store;
 use crate::store::main::query_store::query_store;
 use crate::store::main::read_output_transcript::read_output_transcript;
 use crate::store::main::resolve_invocation::resolve_invocation;
-#[cfg(unix)]
-use crate::store::tests::helpers::open_under_locked_directory;
 use crate::store::tests::helpers::{
     NOW, chunk, envelope, error_kind, new_store, newer_schema_store, rows, shifted, write,
 };
 #[cfg(unix)]
-use crate::store::tests::test_types::LockedDirectoryTestCase;
+use crate::store::tests::helpers::{
+    already_replaced, lock_held, nobody_else, open_under_locked_directory, quarantine_after,
+};
+#[cfg(unix)]
+use crate::store::tests::test_types::{LockedDirectoryTestCase, QuarantineTestCase};
 use crate::store::tests::test_types::{
     NewerSchemaTestCase, QueryTestCase, ResolveInvocationTestCase, TranscriptTestCase,
 };
@@ -204,6 +206,37 @@ fn given_a_read_only_directory_when_opened_then_the_error_is_a_permission_failur
         assert_eq!(
             open_under_locked_directory(test_case.relative_path),
             test_case.expected_kind,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn given_a_stale_observation_when_quarantining_then_only_the_observed_file_is_moved() {
+    let test_cases = [
+        QuarantineTestCase {
+            description: "the observed corrupt file is moved aside",
+            race: nobody_else,
+            expected_outcome: (true, 1, false),
+        },
+        QuarantineTestCase {
+            description: "a store another process already replaced is kept",
+            race: already_replaced,
+            expected_outcome: (false, 1, true),
+        },
+        QuarantineTestCase {
+            description: "a held quarantine lock moves nothing",
+            race: lock_held,
+            expected_outcome: (false, 0, false),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            quarantine_after(test_case.race),
+            test_case.expected_outcome,
             "{}",
             test_case.description
         );

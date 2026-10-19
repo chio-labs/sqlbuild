@@ -13,9 +13,12 @@ use crate::store::errors::{StoreError, StoreErrorKind};
 use crate::store::main::ensure_sqlite_schema::ensure_sqlite_schema;
 use crate::store::main::insert_rows::insert_rows;
 use crate::store::main::maintain_sqlite_store::maintain_sqlite_store;
+use crate::store::main::observe_store_file::observe_store_file;
 use crate::store::main::open_sqlite_store::open_sqlite_store;
 use crate::store::main::quarantine_store::quarantine_store;
-use crate::store::models::{InsertOutcome, MaintenanceRequest, OpenMode, SqliteStore};
+use crate::store::models::{
+    InsertOutcome, MaintenanceRequest, OpenMode, QuarantineOutcome, SqliteStore, StoreObservation,
+};
 use crate::writer::_helpers::materialize::{Built, Materializer};
 use crate::writer::_helpers::queue::{Queued, WriterState};
 use crate::writer::constants::{
@@ -68,6 +71,8 @@ fn open_and_setup(shared: &Shared, config: &SessionConfig) -> Result<SqliteStore
     let started = Instant::now();
     let mut quarantined: bool = false;
     loop {
+        let observed: Option<StoreObservation> =
+            observe_store_file(&config.store_path).unwrap_or(None);
         let attempt =
             open_sqlite_store(&config.store_path, OpenMode::ReadWrite).and_then(|store| {
                 bound_busy_wait(&store, retry_limit(shared, started));
@@ -83,13 +88,26 @@ fn open_and_setup(shared: &Shared, config: &SessionConfig) -> Result<SqliteStore
             }
             Err(error) if error.kind == StoreErrorKind::Corrupt && !quarantined => {
                 quarantined = true;
-                let moved = quarantine_store(&config.store_path, SystemTime::now())?;
-                locked(&shared.state).notices.push(format!(
-                    "the Recall store {} was not a valid database; it was moved to {} and a \
-                     fresh store was started",
-                    config.store_path.display(),
-                    moved.display()
-                ));
+                let Some(observed) = observed else {
+                    return Err(error);
+                };
+                let outcome = quarantine_store(
+                    &config.store_path,
+                    &observed,
+                    (retry_limit(shared, started), SystemTime::now()),
+                )?;
+                match outcome {
+                    QuarantineOutcome::Moved(moved) => {
+                        locked(&shared.state).notices.push(format!(
+                            "the Recall store {} was not a valid database; it was moved to {} \
+                             and a fresh store was started",
+                            config.store_path.display(),
+                            moved.display()
+                        ));
+                    }
+                    QuarantineOutcome::Kept => {}
+                    QuarantineOutcome::LockBusy => return Err(error),
+                }
             }
             other => return other,
         }

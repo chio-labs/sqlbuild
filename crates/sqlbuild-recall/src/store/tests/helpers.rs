@@ -14,9 +14,15 @@ use crate::store::errors::{StoreError, StoreErrorKind};
 use crate::store::main::ensure_sqlite_schema::ensure_sqlite_schema;
 use crate::store::main::insert_rows::insert_rows;
 use crate::store::main::maintain_sqlite_store::maintain_sqlite_store;
+use crate::store::main::observe_store_file::observe_store_file;
 use crate::store::main::open_sqlite_store::open_sqlite_store;
+use crate::store::main::quarantine_store::quarantine_store;
 use crate::store::main::query_store::query_store;
-use crate::store::models::{MaintenanceOutcome, MaintenanceRequest, OpenMode, SqliteStore};
+use crate::store::models::{
+    MaintenanceOutcome, MaintenanceRequest, OpenMode, QuarantineOutcome, SqliteStore,
+    StoreObservation,
+};
+use crate::store::tests::test_types::QuarantineRace;
 
 pub(crate) const NOW: &str = "2026-10-19T12:00:00.000000Z";
 
@@ -231,4 +237,80 @@ pub(crate) fn open_under_locked_directory(relative_path: &str) -> Result<(), Sto
     std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
         .expect("test directory permissions can change");
     error_kind(opened.map(drop))
+}
+
+#[cfg(unix)]
+fn corrupt_copies(directory: &std::path::Path) -> usize {
+    std::fs::read_dir(directory)
+        .expect("the directory lists")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            name.contains(".corrupt-") && !name.ends_with("-wal") && !name.ends_with("-shm")
+        })
+        .count()
+}
+
+#[cfg(unix)]
+/// Nobody else acts on the corrupt file.
+pub(crate) fn nobody_else(
+    _path: &std::path::Path,
+    _observed: &StoreObservation,
+    _lock: &std::fs::File,
+) {
+}
+
+#[cfg(unix)]
+/// Another process moves the corrupt file aside and starts a fresh store.
+pub(crate) fn already_replaced(
+    path: &std::path::Path,
+    observed: &StoreObservation,
+    _lock: &std::fs::File,
+) {
+    let give_up = std::time::Instant::now() + Duration::from_millis(100);
+    drop(
+        quarantine_store(path, observed, (give_up, SystemTime::now()))
+            .expect("the first move succeeds"),
+    );
+    let fresh = open_sqlite_store(path, OpenMode::ReadWrite).expect("a fresh store opens");
+    ensure_sqlite_schema(&fresh, &envelope("fresh", NOW), NOW).expect("the fresh store is set up");
+}
+
+#[cfg(unix)]
+/// Another process holds the quarantine lock.
+pub(crate) fn lock_held(
+    _path: &std::path::Path,
+    _observed: &StoreObservation,
+    lock: &std::fs::File,
+) {
+    rustix::fs::flock(lock, rustix::fs::FlockOperation::LockExclusive).expect("the lock is taken");
+}
+
+#[cfg(unix)]
+/// Observe a corrupt store, let `race` happen, then move it aside with the now possibly stale observation: whether it moved, how many copies were moved aside, and whether a SQLite store is at the path.
+pub(crate) fn quarantine_after(race: QuarantineRace) -> (bool, usize, bool) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("recall.sqlite3");
+    std::fs::write(&path, b"this is not a database").expect("test files can be written");
+    std::fs::write(directory.path().join("recall.sqlite3-wal"), b"stale")
+        .expect("test files can be written");
+    let observed = observe_store_file(&path)
+        .expect("the file can be read")
+        .expect("the corrupt file is observed");
+    let lock = std::fs::File::create(directory.path().join("recall.sqlite3.lock"))
+        .expect("the lock file can be created");
+    race(&path, &observed, &lock);
+    let give_up = std::time::Instant::now() + Duration::from_millis(100);
+    let outcome = quarantine_store(&path, &observed, (give_up, SystemTime::now()))
+        .expect("the move does not fail");
+    let live_store: bool = matches!(
+        observe_store_file(&path),
+        Ok(Some(current)) if !current.header_foreign
+    ) && open_sqlite_store(&path, OpenMode::ReadOnly).is_ok();
+    drop(lock);
+    (
+        matches!(outcome, QuarantineOutcome::Moved(_)),
+        corrupt_copies(directory.path()),
+        live_store,
+    )
 }

@@ -11,6 +11,7 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     CombinedOutputTestCase,
     ConcurrentBuildsTestCase,
     ConcurrentWritersTestCase,
+    CorruptStoreRaceTestCase,
     CorruptStoreTestCase,
     DisabledRecallTestCase,
     FailingStderrTestCase,
@@ -38,6 +39,7 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import (
     prepared_project,
     recall_rows,
     run,
+    simultaneous_builds,
     timed_build,
     write_corrupt_store,
     write_project,
@@ -658,3 +660,36 @@ def test_given_failing_stderr_when_recall_reports_then_the_exit_code_is_unchange
     exit_code: int = build_with_failing_recall_notices(project_dir, tmp_path / "site")
 
     assert exit_code == test_case.expected_exit_code
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CorruptStoreRaceTestCase(
+            description="builds starting together on a corrupt store move it aside exactly once",
+            targets=("dev", "dev_1"),
+            expected_exit_codes=[0, 0],
+            expected_moved=1,
+            expected_recorded=[["build", "completed", 2]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_corrupt_store_when_builds_race_then_one_moves_it_and_both_are_recorded(
+    test_case: CorruptStoreRaceTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop", targets=len(test_case.targets))
+    _ = run(project_dir, "compile")
+    write_corrupt_store(project_dir)
+
+    exit_codes: list[int] = simultaneous_builds(project_dir, test_case.targets)
+    moved: list[Path] = list((project_dir / "logs").glob("recall.sqlite3.corrupt-*[0-9Z]"))
+    recorded: list[list[object]] = recall_rows(
+        project_dir,
+        "SELECT command, status, COUNT(*) FROM invocations WHERE command = 'build' "
+        "GROUP BY command, status",
+    )
+
+    assert exit_codes == test_case.expected_exit_codes
+    assert len(moved) == test_case.expected_moved
+    assert recorded == test_case.expected_recorded

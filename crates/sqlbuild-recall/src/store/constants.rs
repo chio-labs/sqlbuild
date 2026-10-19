@@ -18,3 +18,7 @@ pub const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
 pub const CORRUPT_SUFFIX: &str = ".corrupt-";
 /// SQLite's companion files, moved along with a corrupt store.
 pub const COMPANION_SUFFIXES: [&str; 2] = ["-wal", "-shm"];
+/// Appended to the store path to name the lock file that serialises moving a corrupt store aside.
+pub const QUARANTINE_LOCK_SUFFIX: &str = ".lock";
+/// Pause between attempts to take the quarantine lock.
+pub const QUARANTINE_LOCK_RETRY_MS: u64 = 10;

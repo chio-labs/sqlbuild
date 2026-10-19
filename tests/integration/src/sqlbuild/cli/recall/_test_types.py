@@ -115,3 +115,12 @@ class CorruptStoreTestCase:
 class FailingStderrTestCase:
     description: str
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class CorruptStoreRaceTestCase:
+    description: str
+    targets: tuple[str, ...]
+    expected_exit_codes: list[int]
+    expected_moved: int
+    expected_recorded: list[list[object]]

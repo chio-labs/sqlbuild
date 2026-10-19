@@ -20,6 +20,32 @@ pub enum OpenMode {
     ReadOnly,
 }
 
+/// Which file a path named when it was observed: device and inode on Unix, else size and modification time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StoreFileIdentity {
+    pub(crate) volume: u64,
+    pub(crate) file: u64,
+}
+
+/// One look at the file at a store path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StoreObservation {
+    pub identity: StoreFileIdentity,
+    /// The file has content and does not start with the SQLite header.
+    pub header_foreign: bool,
+}
+
+/// What moving a corrupt store aside did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum QuarantineOutcome {
+    /// The observed file and its companions were renamed to this path.
+    Moved(PathBuf),
+    /// The path no longer holds the observed corrupt file, so the store there is used as it is.
+    Kept,
+    /// Another process held the quarantine lock past the wait; nothing was moved.
+    LockBusy,
+}
+
 /// A row whose key was already stored with different content; the first row is kept.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConflictEvidence {

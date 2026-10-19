@@ -1,6 +1,6 @@
 use crate::records::models::{RecallRow, RecallValue};
 use crate::store::errors::StoreErrorKind;
-use crate::store::models::MaintenanceOutcome;
+use crate::store::models::{MaintenanceOutcome, StoreObservation};
 
 pub(crate) struct ProjectionTestCase {
     pub(crate) description: &'static str,
@@ -49,4 +49,14 @@ pub(crate) struct MaintenanceTestCase {
     pub(crate) sql: &'static str,
     pub(crate) expected_outcomes: Vec<MaintenanceOutcome>,
     pub(crate) expected_rows: Vec<Vec<RecallValue>>,
+}
+
+/// What another process does between observing a corrupt store and moving it aside.
+pub(crate) type QuarantineRace = fn(&std::path::Path, &StoreObservation, &std::fs::File);
+
+pub(crate) struct QuarantineTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) race: QuarantineRace,
+    /// Whether the move was made, copies moved aside, and whether a SQLite store is at the path.
+    pub(crate) expected_outcome: (bool, usize, bool),
 }

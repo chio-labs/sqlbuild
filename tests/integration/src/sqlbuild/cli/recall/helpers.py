@@ -315,3 +315,12 @@ def numbered_lines(output: bytes) -> list[int]:
     """The leading numbers of the numbered lines in `output`, in order."""
 
     return [int(number) for number in NUMBERED_LINE.findall(output)]
+
+
+def simultaneous_builds(project_dir: Path, targets: tuple[str, ...]) -> list[int]:
+    """Exit codes of builds of `targets`, each with its own warehouse, started together."""
+
+    started: list[subprocess.Popen[bytes]] = [
+        start(project_dir, "build", "--target", target) for target in targets
+    ]
+    return [process.wait(timeout=600) for process in started]

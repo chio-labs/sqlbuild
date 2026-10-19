@@ -77,7 +77,8 @@ If the store location is not writable, the command still runs and prints a notic
 the SQL an administrator can use to create the store; the notice comes before the command's own
 output whenever the problem is visible from file permissions. The notice
 repeats at most once a day. If the store file is not a SQLite database, Recall moves it aside to
-`recall.sqlite3.corrupt-<UTC timestamp>`, starts a fresh store, and says so once.
+`recall.sqlite3.corrupt-<UTC timestamp>`, starts a fresh store, and says so once. Commands that
+find the same corrupt file coordinate through `recall.sqlite3.lock`, so only one of them moves it.
 
 A `connection` that does not use the `sqlite` adapter is not supported yet; Recall prints a notice
 and records nothing.
