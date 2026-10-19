@@ -77,3 +77,9 @@ schema = "dev"
 ```
 
 This lets you develop and test locally with zero MotherDuck compute cost, then deploy to MotherDuck in production. SQLBuild's [scenario replay](../scenarios.md) also runs locally in DuckDB regardless of the production adapter.
+
+## Functions in unit tests
+
+`sqb test` copies each SQL UDF and table function the selected tests call into a session
+`TEMP MACRO`, the same as [DuckDB](duckdb.md#functions-in-unit-tests), so the
+functions in your MotherDuck database are not replaced. See [Functions in `sqb test`](../testing.md#functions-in-sqb-test).

@@ -72,6 +72,7 @@ from sqlbuild.adapter.contract.models import (
     SnapshotChangeTarget,
     TableFreshnessMetadata,
     TableFreshnessRequest,
+    TemporaryFunction,
 )
 from sqlbuild.adapter.contract.types import (
     CursorKind,
@@ -1329,6 +1330,25 @@ class DuckDbBackedAdapter(UnkeyedDiffMixin, BaseAdapter):
         if return_columns:
             return (f"CREATE OR REPLACE MACRO {destination}({argument_sql}) AS TABLE\n{body_sql}",)
         return (f"CREATE OR REPLACE MACRO {destination}({argument_sql}) AS (\n{body_sql}\n)",)
+
+    def render_create_temporary_function(
+        self, *, name: str, definition: FunctionDefinition
+    ) -> TemporaryFunction | None:
+        """Copy a SQL function into a temporary macro; Python functions register per connection."""
+
+        if definition.language != FunctionLanguage.SQL:
+            return None
+        identifier: str = self.render_identifier(name)
+        argument_sql: str = ", ".join(str(arg.name) for arg in definition.arguments)
+        body: str = (
+            f"AS TABLE\n{definition.body_sql}"
+            if definition.return_columns
+            else f"AS (\n{definition.body_sql}\n)"
+        )
+        return TemporaryFunction(
+            target=f"temp.main.{identifier}",
+            statements=(f"CREATE OR REPLACE TEMP MACRO {identifier}({argument_sql}) {body}",),
+        )
 
     def supports_python_functions(self) -> bool:
         return True

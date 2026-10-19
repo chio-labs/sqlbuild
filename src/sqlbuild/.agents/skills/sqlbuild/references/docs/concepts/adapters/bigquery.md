@@ -65,3 +65,8 @@ NUMERIC '2.4700'
 BigQuery does not support arrays of arrays. A nested list or set requested with `render_as array` fails at compile time rather than producing invalid BigQuery SQL. Parenthesized `value_list` rendering remains available for ordinary scalar collections used with `IN`.
 
 See [Collections and Rendering](../constants/collections-and-rendering.md#native-array-rendering) for declarations, rendering precedence, and the cross-adapter matrix.
+
+## Functions in unit tests
+
+BigQuery temporary functions exist only inside one script, so `sqb test` calls the built function.
+Run `sqb build` before testing a new or changed function. See [Functions in `sqb test`](../testing.md#functions-in-sqb-test).

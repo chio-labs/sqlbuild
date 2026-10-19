@@ -60,3 +60,9 @@ DuckDB defaults to `staged` promotion: tables are materialized into a staging ta
 [settings]
 table_promotion_mode = "staged"
 ```
+
+## Functions in unit tests
+
+`sqb test` copies each SQL UDF and table function the selected tests call into a `CREATE TEMP
+MACRO` on every test connection, called as `temp.main.<name>`, so tests use the current project
+definition without a build. Python UDFs are registered on each test connection. See [Functions in `sqb test`](../testing.md#functions-in-sqb-test).

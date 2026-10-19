@@ -17,6 +17,7 @@ from sqlbuild._native import (
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapter.contract.models import FunctionDefinition, TemporaryFunction
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from sqlbuild.executor.pipeline._helpers.testing import run_test_pipeline
 from sqlbuild.executor.testing.models import SqlTestExecutionResult
@@ -84,8 +85,15 @@ def test_given_first_class_adapters_when_checking_contract_then_no_method_comes_
     [
         OptionalStrictMethodTestCase(
             description="unit-test output storage is optional and defaults to inline",
-            expected_optional_methods=frozenset({"create_sql_test_output", "drop_sql_test_output"}),
+            expected_optional_methods=frozenset(
+                {
+                    "create_sql_test_output",
+                    "drop_sql_test_output",
+                    "render_create_temporary_function",
+                }
+            ),
             expected_output_relation=None,
+            expected_temporary_function=None,
         )
     ],
     ids=lambda case: case.description,
@@ -100,10 +108,17 @@ def test_given_strict_adapter_when_reading_optional_methods_then_defaults_keep_i
         connection=None, sql="SELECT 1", name="orders_output"
     )
     adapter.drop_sql_test_output(connection=None, relation="orders_output")
+    temporary: TemporaryFunction | None = adapter.render_create_temporary_function(
+        name="is_completed_order",
+        definition=FunctionDefinition(
+            destination="main.is_completed_order", arguments=(), returns="BOOLEAN", body_sql="TRUE"
+        ),
+    )
 
     assert test_case.expected_optional_methods.isdisjoint(abstract_methods)
     assert test_case.expected_optional_methods <= frozenset(StrictAdapter.__dict__)
     assert relation is test_case.expected_output_relation
+    assert temporary is test_case.expected_temporary_function
 
 
 @pytest.mark.parametrize(

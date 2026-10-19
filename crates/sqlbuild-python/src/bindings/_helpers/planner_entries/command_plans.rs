@@ -23,7 +23,10 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PyString, PyTuple};
+use pyo3::types::{
+    PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PySet, PySetMethods, PyString,
+    PyTuple,
+};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::fingerprint_storage::constants::NODE_TYPE_SEED;
 use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
@@ -190,6 +193,37 @@ pub(crate) fn build_audit_command_plan<'py>(
     )
 }
 
+/// The tests' direct function dependencies and every project function those call.
+fn called_function_keys<'py>(
+    project: &Bound<'py, PyAny>,
+    direct: Vec<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PySet>> {
+    let py: Python<'py> = project.py();
+    let functions: Bound<'py, PyDict> = PyDict::new(py);
+    for function in native_field(project, "functions")?.try_iter()? {
+        let function = function?;
+        functions.set_item(native_field(&function, "key")?, function)?;
+    }
+    let called: Bound<'py, PySet> = PySet::empty(py)?;
+    let mut pending: Vec<Bound<'py, PyAny>> = direct;
+    while let Some(key) = pending.pop() {
+        if called.contains(&key)? {
+            continue;
+        }
+        called.add(&key)?;
+        let Some(function) = functions.get_item(&key)? else {
+            continue;
+        };
+        for dependency in native_field(&function, "deps")?.try_iter()? {
+            let dependency = dependency?;
+            if functions.contains(&dependency)? {
+                pending.push(dependency);
+            }
+        }
+    }
+    Ok(called)
+}
+
 /// Project selected SQL tests from canonical static state.
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -235,7 +269,7 @@ pub(crate) fn build_test_command_plan<'py>(
             function_keys.push(key?);
         }
     }
-    let function_keys = PyFrozenSet::new(py, function_keys)?;
+    let function_keys = called_function_keys(&project, function_keys)?;
     let mut functions: Vec<Bound<'py, PyAny>> = Vec::new();
     for function in native_field(&project, "functions")?.try_iter()? {
         let function = function?;
