@@ -447,13 +447,14 @@ impl ClickHouseReader {
             columns: HashMap::new(),
             notices: Vec::new(),
         };
-        if store.state(py)?.tables.is_empty() {
+        let state: StoreState = store.state(py)?;
+        if state.tables.len() < ALL_TABLES.len() || state.views.len() < VIEW_NAMES.len() {
             store.close();
             return Err(StoreError {
                 kind: StoreErrorKind::NotFound,
                 message: format!(
-                    "no Recall history is recorded yet in ClickHouse database `{}`; run a command \
-                     first",
+                    "no Recall history is recorded yet in ClickHouse database `{}`, or its tables \
+                     are still being created; run a command first",
                     location.database()
                 ),
             });
