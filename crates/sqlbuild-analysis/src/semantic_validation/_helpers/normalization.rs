@@ -9,6 +9,8 @@ use std::sync::LazyLock;
 
 const DBT_REF: &str = "dbt_ref";
 const UDF: &str = "udf";
+/// Snowflake's second line comment prefix; only Snowflake SQL reaches the variant scan.
+const SNOWFLAKE_LINE_COMMENT: &str = "//";
 type Edit = (usize, usize, MappedSql);
 static REFERENCES: LazyLock<Result<Regex, String>> = LazyLock::new(|| {
     Regex::new(r#"__(ref|seed|source|dbt_ref)\((?:"[^"]+"\s*,\s*)?"([^"]+)"\)"#)
@@ -199,6 +201,13 @@ fn skip_non_code(sql: &str, index: usize) -> Result<Option<usize>, String> {
             sql[index + 2..]
                 .find("$$")
                 .map_or(sql.len(), |end| index + 4 + end),
+        ));
+    }
+    if sql[index..].starts_with(SNOWFLAKE_LINE_COMMENT) {
+        return Ok(Some(
+            sql[index..]
+                .find('\n')
+                .map_or(sql.len(), |offset| index + offset + 1),
         ));
     }
     non_code_end(

@@ -1177,3 +1177,13 @@ class StarBesideCastConstantTestCase:
     description: str
     query_sql: str
     expected_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DialectLineCommentTestCase:
+    """A dialect's own line comment holding quotes and reference text, and the columns it keeps."""
+
+    description: str
+    project_toml: str
+    query_sql: str
+    expected_column_count: int
