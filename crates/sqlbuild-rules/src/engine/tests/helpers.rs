@@ -9,7 +9,8 @@ use std::sync::atomic::AtomicBool;
 use crate::engine::main::answer_speculative_rows::answer_speculative_rows;
 use crate::engine::main::discard_speculative_rows::discard_speculative_rows;
 use crate::models::{
-    EvaluateRequest, Fault, RowsEvaluation, RowsRequest, SpeculativeAnswer, SpeculativeRows,
+    EvaluateRequest, Fault, RetainedRows, RowsEvaluation, RowsRequest, SpeculativeAnswer,
+    SpeculativeRows,
 };
 
 use crate::engine::_helpers::evaluation::evaluate_json;
@@ -637,4 +638,15 @@ pub(crate) fn query_facts_faults(
             )
         })
         .collect())
+}
+
+/// The retained request with each row's digest restored, as a delta compile rebuilds it.
+pub(crate) fn restored_rows(retained: &RetainedRows) -> Result<EvaluateRequest, String> {
+    let mut request: EvaluateRequest = serde_json::from_slice(&retained.request_json)
+        .map_err(|error| format!("the retained request does not decode: {error}"))?;
+    for (model, digest) in request.models.iter_mut().zip(&retained.digests) {
+        model.payload_digest = Some(digest.clone());
+        model.stripped = true;
+    }
+    Ok(request)
 }

@@ -343,7 +343,10 @@ pub(crate) fn evaluate_request_with(
     });
     crate::rules::_helpers::sql_test_rules::with_fixture_memo(store.as_deref(), || {
         let evaluated: Result<String, String> = evaluated_request(request, control);
-        let keep: bool = evaluated.is_ok() && !control.cancelled();
+        let keep: bool = match &evaluated {
+            Ok(_) => !control.cancelled(),
+            Err(_failed) => false,
+        };
         (evaluated, keep)
     })
 }

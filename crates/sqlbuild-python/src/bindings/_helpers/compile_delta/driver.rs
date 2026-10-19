@@ -7,10 +7,10 @@ use std::path::PathBuf;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyString, PyStringMethods};
 use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
-use sqlbuild_cache::project_reuse::main::read_delta_base::{read_delta_base, read_delta_output};
-use sqlbuild_cache::project_reuse::models::{
-    DeltaBase, DeltaCandidate, ImageSections, ProjectFileChanges,
-};
+use sqlbuild_cache::project_reuse::main::read_delta_base::read_delta_base;
+use sqlbuild_cache::project_reuse::main::read_delta_output::read_delta_output;
+use sqlbuild_cache::project_reuse::models::{DeltaBase, DeltaCandidate, ProjectFileChanges};
+use sqlbuild_cache::project_reuse::types::ImageSections;
 
 use crate::bindings::_helpers::compile_command::reuse_recording::RecordedCompileOutput;
 use crate::bindings::_helpers::compile_delta::context::{

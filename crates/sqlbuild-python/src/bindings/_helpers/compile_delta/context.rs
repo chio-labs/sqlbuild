@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use sqlbuild_analysis::assembly::analysis_session::models::{RelationTables, SessionRequest};
-use sqlbuild_cache::project_reuse::models::ImageSections;
+use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_rules::models::RetainedRows;
 
 use crate::bindings::_helpers::compile_delta::image::PendingRules;

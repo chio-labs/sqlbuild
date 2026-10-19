@@ -27,6 +27,12 @@ use crate::project_snapshot::main::snapshot_project_files::snapshot_project_file
 use crate::project_snapshot::main::text_path::text_path;
 use crate::project_snapshot::models::PathStamp;
 
+const NO_STORED_COMPILE: &str = "no stored compile";
+const REUSE_BYPASSED: &str = "compile reuse is off";
+const OUTPUT_UNREADABLE: &str = "the stored output cannot be replayed";
+const IDENTITY_CHANGED: &str = "the invocation, runtime, environment or settings changed";
+const TARGET_CHANGED: &str = "the compiled target changed";
+
 fn now_ns() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -34,12 +40,6 @@ fn now_ns() -> i64 {
             i64::try_from(elapsed.as_nanos()).unwrap_or(i64::MAX)
         })
 }
-
-const NO_STORED_COMPILE: &str = "no stored compile";
-const REUSE_BYPASSED: &str = "compile reuse is off";
-const OUTPUT_UNREADABLE: &str = "the stored output cannot be replayed";
-const IDENTITY_CHANGED: &str = "the invocation, runtime, environment or settings changed";
-const TARGET_CHANGED: &str = "the compiled target changed";
 
 fn bypassed(check: &ReuseCheck<'_>) -> bool {
     check.bypass_requested

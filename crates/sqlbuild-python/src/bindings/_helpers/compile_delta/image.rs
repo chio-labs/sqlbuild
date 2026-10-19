@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
 use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
-use sqlbuild_cache::project_reuse::models::ImageSections;
+use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
 
 use crate::bindings::_helpers::compile_delta::context::{

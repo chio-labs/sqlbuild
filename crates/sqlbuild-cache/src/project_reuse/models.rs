@@ -1,5 +1,6 @@
 //! The stored compile, the facts it is checked against, and one invocation's reuse state.
 
+use crate::project_reuse::types::ImageSections;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -69,9 +70,6 @@ pub struct StoredInputs {
     pub settings_inputs: Vec<SettingsInputs>,
     pub settings_digest: String,
 }
-
-/// Named sections of one project image, in stored order.
-pub type ImageSections = Vec<(String, Vec<u8>)>;
 
 /// The stored compile a delta compile patches: its inputs and image, and which output it names.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -170,8 +168,7 @@ pub struct CompileRecord {
     pub json_output: bool,
     /// The project image to keep beside the stored compile, when one was built.
     pub image: Option<ImageSections>,
-    /// Stamps the caller verified for artifacts it kept; with them the compiled tree is not
-    /// walked again and only written artifacts are stamped.
+    /// Verified stamps of kept artifacts, which spare recording a walk of the compiled tree.
     pub vouched_target_stamps: Option<Vec<PathStamp>>,
 }
 

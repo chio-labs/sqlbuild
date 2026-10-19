@@ -201,3 +201,10 @@ pub(crate) struct ContractProofJsonTestCase {
     pub(crate) proof: ContractProof,
     pub(crate) expected_json: &'static str,
 }
+
+/// One model of a session analysed alone against the whole session's relation facts.
+pub(crate) struct DeltaSessionTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) model_index: usize,
+    pub(crate) expected_whole_session_outcome: bool,
+}

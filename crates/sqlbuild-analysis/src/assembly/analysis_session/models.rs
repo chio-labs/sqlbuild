@@ -181,8 +181,7 @@ pub struct SessionRequest {
     /// Python's `dynamic_families_by_table`, in dict order.
     pub dynamic_families_by_table: Vec<(String, Vec<DynamicFamily>)>,
     pub models: Vec<ModelRequest>,
-    /// `(dependency ordered, cyclic)` to analyse with instead of deriving them from `models`:
-    /// a delta compile analyses a few models as the whole project's session did.
+    /// The whole project's `(dependency ordered, cyclic)`, for a session of only some models.
     pub forced_order: Option<(bool, bool)>,
     /// Keep the relation facts the session ends with, for the project image.
     pub retain_relations: bool,

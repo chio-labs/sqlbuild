@@ -1,8 +1,8 @@
 use crate::assembly::analysis_session::models::{ModelRequest, RelationTables, SessionRequest};
 use crate::assembly::analysis_session::tests::helpers::{
-    completed, model_requests, orders_request, started,
+    completed, injected_relations, model_requests, orders_request, started,
 };
-use crate::assembly::analysis_session::tests::test_types::ModelSpec;
+use crate::assembly::analysis_session::tests::test_types::{DeltaSessionTestCase, ModelSpec};
 
 const ORDER_MODELS: [ModelSpec; 3] = [
     (
@@ -25,43 +25,36 @@ const ORDER_MODELS: [ModelSpec; 3] = [
     ),
 ];
 
-/// `request` with `relations`' facts added for every relation it does not analyse.
-fn injected(mut request: SessionRequest, relations: &RelationTables) -> SessionRequest {
-    let analysed: Vec<String> = request
-        .models
-        .iter()
-        .map(|model| model.name.clone())
-        .collect();
-    for (table, facts) in [
-        (&mut request.column_types, &relations.types),
-        (&mut request.column_nullability, &relations.nullability),
-        (&mut request.complete_schemas, &relations.complete),
-    ] {
-        let present: Vec<String> = table.iter().map(|(name, _)| name.clone()).collect();
-        table.extend(
-            facts
-                .iter()
-                .filter(|(name, _)| !analysed.contains(name) && !present.contains(name))
-                .cloned(),
-        );
-    }
-    request.forced_order = Some((relations.dependency_ordered, relations.cyclic));
-    request
-}
-
 #[test]
 fn given_whole_project_relations_when_analysing_one_model_then_it_matches_the_whole_session() {
+    let test_cases = [
+        DeltaSessionTestCase {
+            description: "a model reading another model's columns",
+            model_index: 1,
+            expected_whole_session_outcome: true,
+        },
+        DeltaSessionTestCase {
+            description: "a model selecting every column of another model",
+            model_index: 2,
+            expected_whole_session_outcome: true,
+        },
+    ];
     let mut whole: SessionRequest = orders_request(model_requests(&ORDER_MODELS));
     whole.retain_relations = true;
     let (_, whole_outcomes, finished) = completed(started(whole));
     let relations: RelationTables = finished.relation_tables().cloned().expect("relations kept");
-    assert!(relations.types.iter().any(|(name, _)| name == "stg_orders"));
-
-    for (index, spec) in ORDER_MODELS.iter().enumerate().skip(1) {
+    for test_case in test_cases {
+        let spec: &ModelSpec = &ORDER_MODELS[test_case.model_index];
         let one: Vec<ModelRequest> = model_requests(std::slice::from_ref(spec));
-        let request: SessionRequest = injected(orders_request(one), &relations);
+        let request: SessionRequest = injected_relations(orders_request(one), &relations);
+
         let (_, outcomes, _) = completed(started(request));
 
-        assert_eq!(outcomes, vec![whole_outcomes[index].clone()], "{}", spec.0);
+        assert_eq!(
+            outcomes == vec![whole_outcomes[test_case.model_index].clone()],
+            test_case.expected_whole_session_outcome,
+            "{}",
+            test_case.description
+        );
     }
 }

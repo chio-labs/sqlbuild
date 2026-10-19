@@ -203,10 +203,7 @@ pub(crate) fn pending_digest_bytes(
         .sum()
 }
 
-/// The project paths whose content, kind or presence differs from the stored compile's.
-///
-/// A file whose stamp still matches is unchanged; every file in `unverified` is compared by
-/// content, and one without a usable digest on either side counts as changed.
+/// Paths whose content, kind or presence differs; files in `unverified` compare by digest.
 pub(crate) fn project_file_changes(
     stored: &[StoredProjectFile],
     current: &[PathStamp],

@@ -81,7 +81,14 @@ pub(crate) struct ChangedFileTestCase {
     pub(crate) description: &'static str,
     pub(crate) stored_digest: Option<&'static str>,
     pub(crate) racy: bool,
-    pub(crate) moved_stamp: bool,
+    pub(crate) mtime_shift_ns: i64,
     pub(crate) current_digest: Option<&'static str>,
-    pub(crate) expected_changed: bool,
+    pub(crate) expected_changed: &'static [&'static str],
+}
+
+/// A stored compile with an image, stored again with or without one.
+pub(crate) struct ImageRestoreTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) stored_again: Option<fn() -> crate::project_reuse::types::ImageSections>,
+    pub(crate) expected_image_kept: bool,
 }

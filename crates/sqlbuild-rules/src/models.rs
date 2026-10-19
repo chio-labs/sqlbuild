@@ -933,8 +933,7 @@ pub struct RowsRequest {
     pub retain: bool,
 }
 
-/// A request kept for the project image, as the JSON an `EvaluateRequest` reads back: its
-/// models' SQL text and digests dropped and each model marked stripped.
+/// A request kept for the project image as `EvaluateRequest` JSON without its models' SQL text.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RetainedRows {
     pub request_json: Vec<u8>,

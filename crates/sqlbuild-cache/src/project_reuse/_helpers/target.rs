@@ -96,8 +96,7 @@ fn matches_recorded(
     }
 }
 
-/// Each expected artifact's stamp: the vouched one for an artifact kept as it was vouched for,
-/// read for any other.
+/// Each expected artifact's stamp: vouched when kept as vouched for, otherwise read.
 fn vouched_stamps(expected: &BTreeMap<&str, &RecordedArtifact>, vouched: &[PathStamp]) -> Stamps {
     let vouched: HashMap<&str, &PathStamp> = vouched
         .iter()

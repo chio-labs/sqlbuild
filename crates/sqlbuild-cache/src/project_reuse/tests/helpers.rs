@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::project_reuse::_helpers::entry::write_entry;
 use crate::project_reuse::_helpers::sections::{decode_sections, encode_sections};
 use crate::project_reuse::models::{SettingsInputs, StoredInputs, StoredOutput, StoredProjectFile};
+use crate::project_reuse::types::ImageSections;
 use crate::project_snapshot::models::PathStamp;
 
 pub(crate) fn stamp(relative_path: &str, kind: &'static str, link: Option<&str>) -> PathStamp {
@@ -168,4 +169,17 @@ pub(crate) fn damage(path: &Path) {
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
     std::fs::write(path, bytes).expect("damaged slot");
+}
+
+/// A small project image of two sections.
+pub(crate) fn image() -> ImageSections {
+    vec![
+        ("facts".to_owned(), b"{\"models\": [\"orders\"]}".to_vec()),
+        ("rules".to_owned(), b"{}".to_vec()),
+    ]
+}
+
+/// The image file beside the slot at `path`.
+pub(crate) fn image_file(path: &Path) -> PathBuf {
+    path.with_extension("image")
 }

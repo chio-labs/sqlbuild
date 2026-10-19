@@ -688,7 +688,6 @@ fn batch_member<'a>(model: &'a ModelRequest, schema: &'a Shapes) -> BatchMember<
     }
 }
 
-/// Python's `{column.name: column.type or "UNKNOWN"}`.
 /// A table's shapes in insertion order, owned.
 fn owned_rows(table: &ShapeTable) -> Shapes {
     table
@@ -698,6 +697,7 @@ fn owned_rows(table: &ShapeTable) -> Shapes {
         .collect()
 }
 
+/// Python's `{column.name: column.type or "UNKNOWN"}`.
 pub(crate) fn shape_columns(columns: &[ColumnFact]) -> Pairs {
     dict_from_pairs(columns.iter().map(shape_column))
 }

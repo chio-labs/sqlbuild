@@ -5,12 +5,12 @@ use std::time::SystemTime;
 
 use crate::digest::types::ContentDigest;
 use crate::project_reuse::_helpers::sections::{
-    SectionFile, decode_sections, encode_sections, write_atomically,
+    decode_sections, encode_sections, write_atomically,
 };
 use crate::project_reuse::constants::{
     REUSE_IMAGE_SUFFIX, REUSE_OUTPUT_SUFFIX, REUSE_STORE_SUFFIX,
 };
-use crate::project_reuse::models::ImageSections;
+use crate::project_reuse::types::ImageSections;
 
 const IMAGE_ROLE: &str = "project-reuse-image";
 
@@ -30,13 +30,16 @@ pub(crate) fn write_image(path: &Path, sections: &ImageSections) -> std::io::Res
     Ok(identity)
 }
 
-/// The image the slot names, or `None` when it is missing, damaged or another compile's.
-///
-/// Reading marks the image as used, so pruning keeps the images of recently used slots.
+/// The slot's image, marked as used, or `None` when it is missing, damaged or another compile's.
 pub(crate) fn read_image(path: &Path, identity: &ContentDigest) -> Option<ImageSections> {
     let file_path: PathBuf = image_path(path);
-    let bytes: Vec<u8> = std::fs::read(&file_path).ok()?;
-    let file: SectionFile<'_> = decode_sections(&bytes, IMAGE_ROLE).ok()?;
+    let bytes: Vec<u8> = match std::fs::read(&file_path) {
+        Ok(bytes) => bytes,
+        Err(_unreadable) => return None,
+    };
+    let Ok(file) = decode_sections(&bytes, IMAGE_ROLE) else {
+        return None;
+    };
     if file.identity != *identity {
         return None;
     }

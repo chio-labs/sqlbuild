@@ -12,6 +12,14 @@ use crate::engine::_helpers::evaluation::{EvaluationControl, evaluate_request_wi
 use crate::errors::RowsError;
 use crate::models::{EvaluateRequest, Model, RetainedRows, RowsEvaluation, RowsRequest};
 
+/// Where the model-free request's JSON holds its empty model list, which the rows fill.
+const EMPTY_MODELS: &[u8] = b",\"models\":[],\"sql_tests\":";
+const MODELS_KEY: &[u8] = b",\"models\":[";
+
+/// The shared key prefix of fields a request serializes but evaluation derives again.
+const DERIVED_FIELD_PREFIX: &str = ",\"empty_input_only";
+const DERIVED_FIELDS: [&str; 2] = ["_test_count\":", "\":"];
+
 /// A rows request whose models are digested, ready to evaluate once.
 #[derive(Debug)]
 pub(crate) struct PreparedRows {
@@ -85,13 +93,7 @@ pub(crate) fn prepare(rows: RowsRequest, keyed: bool) -> Result<PreparedRows, Ro
     })
 }
 
-const NO_SQL_KEYS: &str = "a retained model row has no SQL keys";
-/// Where the model-free request's JSON holds its empty model list, which the rows fill.
-const EMPTY_MODELS: &[u8] = b",\"models\":[],\"sql_tests\":";
-const MODELS_KEY: &[u8] = b",\"models\":[";
-
-/// `request` as JSON with each model's row as `prepare` serialized it for its digest, the SQL
-/// text dropped; and each model's payload digest. `None` when it cannot be assembled.
+/// `request` as JSON with each model's SQL-free row, and each model's payload digest.
 fn retained_rows(
     request: &EvaluateRequest,
     models: &[Model],
@@ -102,7 +104,10 @@ fn retained_rows(
     }
     let request_json: Vec<u8> = match request_json {
         Some(json) => json,
-        None => serde_json::to_vec(request).ok()?,
+        None => match serde_json::to_vec(request) {
+            Ok(json) => json,
+            Err(_unencodable) => return None,
+        },
     };
     let mut found = request_json
         .windows(EMPTY_MODELS.len())
@@ -133,50 +138,7 @@ fn retained_rows(
     })
 }
 
-/// A model row's JSON with its `query_sql` and `authored_sql` text emptied.
-///
-/// They are the first string-valued keys after `name` and `relative_path`, and compact JSON
-/// escapes every quote inside strings, so the first match of each key is that key.
-fn without_sql(json: &[u8]) -> Option<Vec<u8>> {
-    let mut kept: Vec<u8> = Vec::with_capacity(json.len());
-    let mut copied: usize = 0;
-    for key in [&b"\"query_sql\":\""[..], &b"\"authored_sql\":\""[..]] {
-        let start: usize = copied + find(&json[copied..], key)? + key.len();
-        let end: usize = start + string_end(&json[start..])?;
-        kept.extend_from_slice(&json[copied..start]);
-        copied = end;
-    }
-    kept.extend_from_slice(&json[copied..]);
-    Some(kept)
-}
-
-fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
-}
-
-/// The offset of the quote closing the JSON string whose text `bytes` starts with.
-fn string_end(bytes: &[u8]) -> Option<usize> {
-    let mut index: usize = 0;
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\\' => index += 2,
-            b'"' => return Some(index),
-            _ => index += 1,
-        }
-    }
-    None
-}
-
-/// The prefix the keys of fields a request serializes but never reads back share; evaluation
-/// derives them again.
-const DERIVED_FIELD_PREFIX: &str = ",\"empty_input_only";
-const DERIVED_FIELDS: [&str; 2] = ["_test_count\":", "\":"];
-
-/// `json` without the derived fields, each a bare number or boolean after its key.
-///
-/// Compact JSON escapes every quote inside strings, so these keys only match as keys.
+/// `json` without the derived fields; compact JSON escapes quotes, so keys only match as keys.
 fn without_derived_fields(json: Vec<u8>) -> Vec<u8> {
     let Ok(text) = std::str::from_utf8(&json) else {
         return json;
@@ -311,34 +273,25 @@ fn speculation_key(
     Ok(hasher.finalize().to_hex().to_string())
 }
 
-/// `model` with the BLAKE3 digest of its exact facts, which keys its cached findings; with
-/// `retain`, also its row as JSON without its SQL text.
+/// `model` with the BLAKE3 digest of its exact facts and, with `retain`, its JSON without SQL.
 fn digested(mut model: Model, retain: bool) -> Result<(Model, Option<Vec<u8>>), RowsError> {
-    if model.payload_digest.is_some() {
-        let json: Option<Vec<u8>> = if retain {
-            let json: Vec<u8> = serde_json::to_vec(&model).map_err(rules_error)?;
-            Some(without_sql(&json).ok_or_else(|| RowsError::Rules(NO_SQL_KEYS.to_owned()))?)
-        } else {
-            None
-        };
-        return Ok((model, json));
-    }
-    if !retain {
+    if model.payload_digest.is_none() {
         let mut hasher: blake3::Hasher = blake3::Hasher::new();
         serde_json::to_writer(&mut hasher, &model).map_err(rules_error)?;
         model.payload_digest = Some(hasher.finalize().to_hex().to_string());
+    }
+    if !retain {
         return Ok((model, None));
     }
-    let json: Vec<u8> = serde_json::to_vec(&model).map_err(rules_error)?;
-    model.payload_digest = Some(blake3::hash(&json).to_hex().to_string());
-    let stripped: Vec<u8> =
-        without_sql(&json).ok_or_else(|| RowsError::Rules(NO_SQL_KEYS.to_owned()))?;
-    Ok((model, Some(stripped)))
+    let query_sql: String = std::mem::take(&mut model.query_sql);
+    let authored_sql: String = std::mem::take(&mut model.authored_sql);
+    let stripped: Result<Vec<u8>, serde_json::Error> = serde_json::to_vec(&model);
+    model.query_sql = query_sql;
+    model.authored_sql = authored_sql;
+    Ok((model, Some(stripped.map_err(rules_error)?)))
 }
 
-/// The memo version, build, model-free request and every model's digest, in order.
-///
-/// With `kept`, the model-free request's JSON is kept there as well.
+/// The memo version, build, request and model digests, keeping the request's JSON in `kept`.
 fn identity(
     request: &EvaluateRequest,
     models: &[Model],

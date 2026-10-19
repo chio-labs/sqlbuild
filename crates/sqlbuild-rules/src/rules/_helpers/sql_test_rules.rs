@@ -784,6 +784,18 @@ thread_local! {
     static FIXTURE_MEMO: RefCell<Option<FixtureMemo>> = const { RefCell::new(None) };
 }
 
+/// The fixture summaries stored at `path`; missing or unreadable ones are summarised again.
+fn stored_summaries(path: &Path) -> Option<StoredSummaries> {
+    let bytes: Vec<u8> = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_unreadable) => return None,
+    };
+    match serde_json::from_slice::<StoredSummaries>(&bytes) {
+        Ok(stored) => Some(stored),
+        Err(_damaged) => None,
+    }
+}
+
 /// The stored fixture summaries, kept only for one native build.
 #[derive(Default, Serialize, Deserialize)]
 struct StoredSummaries {
@@ -791,12 +803,10 @@ struct StoredSummaries {
     summaries: BTreeMap<String, FixtureSummary>,
 }
 
-/// Run `body` with each fixture summarised at most once on this thread, starting from the
-/// summaries stored at `store` and saving them again when `body` says its result stands.
+/// Run `body` summarising each fixture once, from and, when `body` says so, back to `store`.
 pub(crate) fn with_fixture_memo<T>(store: Option<&Path>, body: impl FnOnce() -> (T, bool)) -> T {
     let loaded: BTreeMap<String, FixtureSummary> = store
-        .and_then(|path| std::fs::read(path).ok())
-        .and_then(|bytes| serde_json::from_slice::<StoredSummaries>(&bytes).ok())
+        .and_then(stored_summaries)
         .filter(|stored| stored.build == NATIVE_BUILD_IDENTITY)
         .map(|stored| stored.summaries)
         .unwrap_or_default();
