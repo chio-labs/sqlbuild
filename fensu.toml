@@ -157,6 +157,11 @@ reason = "The Snowflake backend intentionally owns behavior through its adapter 
 
 [[targets.python.rule_exceptions]]
 rule = "FFR309"
+path = "src/sqlbuild/adapters/sqlite/__init__.py"
+reason = "The SQLite backend intentionally owns behavior through its adapter class rather than function entrypoints."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR309"
 path = "src/sqlbuild/adapters/sqlserver/__init__.py"
 reason = "The SQL Server backend intentionally owns behavior through its adapter class rather than function entrypoints."
 
@@ -214,6 +219,11 @@ reason = "The Postgres adapter intentionally keeps overrideable backend behavior
 rule = "FFR601"
 path = "src/sqlbuild/adapters/snowflake/classes/snowflake_adapter.py"
 reason = "The Snowflake adapter intentionally keeps overrideable backend behavior on one class."
+
+[[targets.python.rule_exceptions]]
+rule = "FFR601"
+path = "src/sqlbuild/adapters/sqlite/classes/sqlite_adapter.py"
+reason = "The SQLite adapter intentionally keeps overrideable backend behavior on one class."
 
 [[targets.python.rule_exceptions]]
 rule = "FFR601"

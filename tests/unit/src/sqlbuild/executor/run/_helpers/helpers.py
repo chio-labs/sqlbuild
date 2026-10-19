@@ -146,6 +146,10 @@ class FakeCursorAdapter:
     def requires_derived_table_aliases(self) -> bool:
         return False
 
+    def render_cursor_operand(self, *, expression: str, cursor_type: str | None) -> str:
+        del cursor_type
+        return expression
+
 
 class RecordingCursorAdapter(FakeCursorAdapter):
     def __init__(self, *, target_relation_exists: bool) -> None:

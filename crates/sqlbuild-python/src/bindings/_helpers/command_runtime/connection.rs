@@ -6,8 +6,8 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_config::command_connection::constants::{
-    CONNECTION_DATABASE_KEY, CONNECTION_SOURCE_KEY, DBT_PROFILE_CONNECTION_SOURCE,
-    DBT_PROFILE_ROUTING_KEYS, DUCKDB_ADAPTER, DUCKDB_MEMORY_DATABASE,
+    CONNECTION_SOURCE_KEY, DBT_PROFILE_CONNECTION_SOURCE, DBT_PROFILE_ROUTING_KEYS,
+    DUCKDB_MEMORY_DATABASE, LOCAL_DATABASE_PATH_KEYS,
 };
 use sqlbuild_config::command_connection::main::missing_connection_error::missing_connection_error;
 use sqlbuild_config::command_connection::main::snowflake_key_warning::snowflake_key_warning;
@@ -105,16 +105,19 @@ pub(crate) fn with_dbt_profile<'py>(
     Ok(merged)
 }
 
-/// Make a relative DuckDB database path relative to the project directory.
-pub(crate) fn anchor_duckdb_database(
+/// Make a relative local database file path (DuckDB, SQLite) relative to the project directory.
+pub(crate) fn anchor_local_database_path(
     config: &Bound<'_, PyDict>,
     (project_dir, adapter_name): (&Bound<'_, PyAny>, &str),
 ) -> PyResult<()> {
     let py: Python<'_> = config.py();
-    if adapter_name != DUCKDB_ADAPTER {
+    let Some((_, path_key)) = LOCAL_DATABASE_PATH_KEYS
+        .iter()
+        .find(|(adapter, _)| *adapter == adapter_name)
+    else {
         return Ok(());
-    }
-    let Some(database) = config.get_item(CONNECTION_DATABASE_KEY)? else {
+    };
+    let Some(database) = config.get_item(*path_key)? else {
         return Ok(());
     };
     if !database.is_instance_of::<PyString>() {
@@ -128,7 +131,7 @@ pub(crate) fn anchor_duckdb_database(
         return Ok(());
     }
     let anchored: Bound<'_, PyAny> = path(py, project_dir)?.div(&database)?.str()?.into_any();
-    config.set_item(CONNECTION_DATABASE_KEY, anchored)
+    config.set_item(*path_key, anchored)
 }
 
 /// Resolve dbt profiles, relative DuckDB paths, and the command group's warehouse.
@@ -187,7 +190,7 @@ fn connection_config<'py>(
     if let Some(warning) = snowflake_key_warning(&adapter, &keys) {
         warn(py, &warning)?;
     }
-    anchor_duckdb_database(&config, (project_dir, &adapter))?;
+    anchor_local_database_path(&config, (project_dir, &adapter))?;
     apply_warehouse(
         config.as_any(),
         (adapter_name, project_dir),

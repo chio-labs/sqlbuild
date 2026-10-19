@@ -26,6 +26,7 @@ from sqlbuild.executor.run._helpers.execution.hook_phases import (
     run_post_hook_phase,
     run_pre_hook_phase,
 )
+from sqlbuild.executor.run._helpers.execution.inferred_types import inferred_column_types
 from sqlbuild.executor.run._helpers.execution.promotion import promote_relation_to_destination
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
@@ -421,7 +422,10 @@ def _immediate_lifecycle(
                 connection=connection,
                 destination=target_qualified,
                 sql=state.resolved_sql,
-                config={"table_type": entry.table_type},
+                config={
+                    "table_type": entry.table_type,
+                    "inferred_column_types": inferred_column_types(entry),
+                },
                 statement_recorder=statement_recorder,
             )
     except Exception as exc:

@@ -631,6 +631,7 @@ const R_MODEL_PLAN_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("on_schema_change", FieldDefault::None),
         FieldSpec::new("type_enforcement", FieldDefault::False),
         FieldSpec::new("declared_columns", FieldDefault::EmptyTuple),
+        FieldSpec::new("inferred_columns", FieldDefault::EmptyTuple),
         FieldSpec::new("contract_enforced", FieldDefault::False),
         FieldSpec::new("contract_columns", FieldDefault::EmptyTuple),
         FieldSpec::new("contract_dynamic_columns", FieldDefault::EmptyTuple),

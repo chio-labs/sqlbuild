@@ -91,7 +91,7 @@ materialized = "view"
 | Field | Description |
 |-------|-------------|
 | `name` | Project name. Used in fingerprint tracking and manifest generation. |
-| `adapter` | Database adapter: `duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, or `sqlserver`. See [Adapters](adapters.md). |
+| `adapter` | Database adapter: `duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlite`, or `sqlserver`. See [Adapters](adapters.md). |
 
 ### Optional fields
 
@@ -418,6 +418,7 @@ Every built-in adapter enforces the limit:
 | BigQuery | Job timeout (`job_timeout_ms`) on each query job | `jobs.cancel` (asynchronous) | about 24 days |
 | Databricks | `STATEMENT_TIMEOUT` session setting, capped at 48 hours | Cursor cancel (asynchronous) | about 24 days |
 | SQL Server | none | Driver cancel | about 24 days |
+| SQLite | none | Connection interrupt | about 24 days |
 
 BigQuery and Databricks stop cancelled work asynchronously, so SQLBuild reports their cancellation
 as requested but unconfirmed. SQL Server has no per-statement limit; the driver's query timeout is
@@ -454,6 +455,7 @@ finished. Where a warehouse reports queueing separately, queued time is excluded
 | BigQuery | `jobs.cancel` at the limit; no job timeout, because a job timeout counts from job creation | Excluded: the clock stops while a job is pending |
 | Databricks | `STATEMENT_TIMEOUT` session setting and cursor cancel | May count |
 | SQL Server | Driver cancel at the limit | Lock waits count |
+| SQLite | Connection interrupt at the limit | Waits for the write lock count |
 
 When a model contains unit tests or nested work with its own limit, the earliest limit applies and
 cancels whatever is running under it. After a timeout interrupted a statement, SQLBuild checks the

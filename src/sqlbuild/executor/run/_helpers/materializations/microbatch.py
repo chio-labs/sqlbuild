@@ -78,6 +78,7 @@ from sqlbuild.executor.run._helpers.execution.hook_phases import (
     run_post_hook_phase,
     run_pre_hook_phase,
 )
+from sqlbuild.executor.run._helpers.execution.inferred_types import inferred_column_types
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
@@ -2371,7 +2372,10 @@ def _physical_cursor_envelope(
     cursor_column: str | None = context.entry.cursor_column
     if cursor_column is None:
         return None
-    quoted_cursor: str = context.adapter.render_identifier(cursor_column)
+    quoted_cursor: str = context.adapter.render_cursor_operand(
+        expression=context.adapter.render_identifier(cursor_column),
+        cursor_type=context.entry.cursor_type,
+    )
     try:
         cursor: Any = context.adapter.execute(
             connection=context.connection,
@@ -2482,7 +2486,10 @@ def _count_unaccounted_intervals(
     targets: MicrobatchTargets,
     intervals: tuple[MicrobatchInterval, ...],
 ) -> dict[tuple[str, str], int] | ModelExecutionResult:
-    cursor_column: str = context.adapter.render_identifier(context.entry.cursor_column or "")
+    cursor_column: str = context.adapter.render_cursor_operand(
+        expression=context.adapter.render_identifier(context.entry.cursor_column or ""),
+        cursor_type=context.entry.cursor_type,
+    )
     counts: dict[tuple[str, str], int] = {}
     chunk_start: int
     for chunk_start in range(0, len(intervals), _UNACCOUNTED_COUNT_CHUNK_SIZE):
@@ -2805,6 +2812,7 @@ def _stage_microbatch_delta(
                     connection=context.connection,
                     destination=targets.delta_qualified,
                     sql=batch_sql,
+                    config={"inferred_column_types": inferred_column_types(context.entry)},
                     statement_recorder=state.statement_recorder,
                 )
                 lifecycle.completed(metadata={"changed_count": 1})

@@ -52,6 +52,7 @@ pub(super) fn cursor_wrap(
     };
     let start = literal("start")?;
     let end = literal("end")?;
+    let operand = cursor_operand(adapter, &column, cursor_type)?;
     let alias = inject_alias
         && adapter
             .call_method0("requires_derived_table_aliases")?
@@ -59,7 +60,7 @@ pub(super) fn cursor_wrap(
     Ok(cursor_subquery(
         &relation,
         &CursorFilter {
-            column: &column,
+            column: &operand,
             start: &start,
             end: &end,
             lower_inclusive: filtering.lower_bound_inclusive,
@@ -67,6 +68,27 @@ pub(super) fn cursor_wrap(
         },
         alias,
     ))
+}
+
+/// The adapter's expression for a cursor column compared with bounds, or the column itself.
+fn cursor_operand(
+    adapter: &Bound<'_, PyAny>,
+    column: &str,
+    cursor_type: &Bound<'_, PyAny>,
+) -> PyResult<String> {
+    let py = adapter.py();
+    if !adapter.hasattr("render_cursor_operand")? {
+        return Ok(column.to_owned());
+    }
+    method(
+        adapter,
+        "render_cursor_operand",
+        &[
+            ("expression", string(py, column)),
+            ("cursor_type", cursor_type.clone()),
+        ],
+    )?
+    .extract()
 }
 
 /// The cursor filtering of a keyword-argument resolution request.

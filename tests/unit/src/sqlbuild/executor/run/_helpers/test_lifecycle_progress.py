@@ -34,6 +34,7 @@ def test_given_staging_creation_when_adapter_blocks_then_start_is_already_dispat
     adapter: Mock = Mock()
     context: Mock = Mock(adapter=adapter, connection=object())
     context.entry.table_type = "transient"
+    context.entry.inferred_columns = ()
     adapter.drop.side_effect = lambda **_: barrier_events.append(events[-1])
 
     with dispatcher_scope(dispatcher):

@@ -122,6 +122,25 @@ fn schema_columns<'py>(
     PyTuple::new(py, columns)
 }
 
+/// The model's typed inferred output columns, which adapters without CTAS types declare.
+fn inferred_columns<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
+    let py: Python<'py> = model.py();
+    let class: Bound<'py, PyAny> = host::entry(py, AdapterHost::ColumnInfo)?;
+    let mut columns: Vec<Bound<'py, PyAny>> = Vec::new();
+    for (name, column_type, _) in model_reads::inferred_rows(model)?.unwrap_or_default() {
+        if let Some(column_type) = column_type {
+            columns.push(column_info(
+                &class,
+                (
+                    PyString::new(py, &name).into_any(),
+                    PyString::new(py, &column_type).into_any(),
+                ),
+            )?);
+        }
+    }
+    PyTuple::new(py, columns)
+}
+
 /// A string or list-of-strings config value as a tuple of strings.
 fn string_list<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyTuple>> {
     let py: Python<'py> = values.py();
@@ -471,6 +490,7 @@ fn contract_fields<'py>(
 ) -> PyResult<()> {
     let py: Python<'py> = model.py();
     entry.set_item("declared_columns", schema_columns(model, true)?)?;
+    entry.set_item("inferred_columns", inferred_columns(model)?)?;
     entry.set_item(
         "contract_enforced",
         mapping_get(values, "contract")?.eq(ENFORCED_CONTRACT)?,

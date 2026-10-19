@@ -15705,6 +15705,7 @@ class ModelPlanEntry(NativeRecord):
     on_schema_change: OnSchemaChange | None
     type_enforcement: bool
     declared_columns: tuple[ColumnInfo, ...]
+    inferred_columns: tuple[ColumnInfo, ...]
     contract_enforced: bool
     contract_columns: tuple[ColumnInfo, ...]
     contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...]
@@ -15788,6 +15789,7 @@ class ModelPlanEntry(NativeRecord):
         on_schema_change: OnSchemaChange | None = ...,
         type_enforcement: bool = ...,
         declared_columns: tuple[ColumnInfo, ...] = ...,
+        inferred_columns: tuple[ColumnInfo, ...] = ...,
         contract_enforced: bool = ...,
         contract_columns: tuple[ColumnInfo, ...] = ...,
         contract_dynamic_columns: tuple[SchemaDynamicColumnFamily, ...] = ...,

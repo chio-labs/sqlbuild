@@ -116,6 +116,12 @@ class StrictAdapter(
 
         del connection, relation
 
+    def render_cursor_operand(self, *, expression: str, cursor_type: str | None) -> str:
+        """Optional: the cursor-column expression compared with cursor bounds and aggregated."""
+
+        del cursor_type
+        return expression
+
     @abstractmethod
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:
         """Return whether ``list_relations`` reports every relation in this scope."""
