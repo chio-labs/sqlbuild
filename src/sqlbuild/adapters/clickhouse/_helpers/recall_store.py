@@ -59,11 +59,12 @@ def _number(*, summary: dict[str, Any], key: str) -> int | None:
 
 
 def connect_recall_store(
-    *, config: dict[str, object], quiet_thread_attribute: str
+    *, config: dict[str, object], quiet_thread_attribute: str | None
 ) -> tuple[RecallFailure, int]:
-    """Connect for Recall with a short connect timeout and return the connection's handle."""
+    """Connect for Recall and return the handle; only the delivery thread asks to stay quiet."""
 
-    setattr(threading.current_thread(), quiet_thread_attribute, True)
+    if quiet_thread_attribute is not None:
+        setattr(threading.current_thread(), quiet_thread_attribute, True)
     options: dict[str, object] = {_CONNECT_TIMEOUT_KEY: _DEFAULT_CONNECT_TIMEOUT_SECONDS, **config}
     try:
         adapter: ClickHouseAdapter = ClickHouseAdapter()

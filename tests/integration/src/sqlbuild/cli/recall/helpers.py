@@ -345,6 +345,12 @@ EVENT_LOG_SINK: str = (
     "    with (Path(__file__).parents[1] / 'events.log').open('a') as log:\n"
     "        log.write(event.event_type + '\\n')\n"
 )
+OUTPUT_LOG_SINK: str = (
+    "@command_output_sink\n"
+    "def output_log(record: CommandOutputRecord) -> None:\n"
+    "    with (Path(__file__).parents[1] / 'output.log').open('a') as log:\n"
+    "        log.write(record.message)\n"
+)
 FAILING_SINKS: str = (
     "@lifecycle_event_sink\n"
     "def recall_events(event: LifecycleEvent, writer: RecallWriter) -> None:\n"

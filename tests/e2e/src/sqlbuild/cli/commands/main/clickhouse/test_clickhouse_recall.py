@@ -17,6 +17,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallOutputTestCase,
     ClickHouseRecallPartialInsertTestCase,
     ClickHouseRecallPermissionTestCase,
+    ClickHouseRecallQueryOutputSinkTestCase,
     ClickHouseRecallRetentionConflictTestCase,
     ClickHouseRecallRetentionTestCase,
 )
@@ -35,10 +36,12 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     write_recall_project,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
+    OUTPUT_LOG_SINK,
     concurrent_builds,
     killed_build,
     recall_rows,
     run,
+    write_sinks,
 )
 
 
@@ -572,6 +575,36 @@ def test_given_sql_older_than_retention_when_still_referenced_then_artifacts_sho
         )
         == test_case.expected_availability
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallQueryOutputSinkTestCase(
+            description="query results reach a command-output sink",
+            sql="SELECT 'shipped_orders' AS answer",
+            expected_fragment="shipped_orders",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_an_output_sink_when_querying_clickhouse_recall_then_the_sink_sees_the_results(
+    test_case: ClickHouseRecallQueryOutputSinkTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+    assert run(project_dir, "build").returncode == 0
+    _ = write_sinks(project_dir, {"output_log": OUTPUT_LOG_SINK})
+
+    queried: subprocess.CompletedProcess[bytes] = run(project_dir, "recall", "query", test_case.sql)
+
+    assert queried.returncode == 0, queried.stderr
+    assert test_case.expected_fragment.encode() in queried.stdout
+    assert test_case.expected_fragment in (project_dir / "output.log").read_text(encoding="utf-8")
 
 
 if __name__ == "__main__":

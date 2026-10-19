@@ -85,10 +85,10 @@ fn reply<'py>(
     }
 }
 
-/// Connect with the store's connection options; the calling thread's output is never captured.
+/// Connect with the store's connection options; a `quiet` caller, Recall's delivery thread, never has its output captured.
 pub(crate) fn connect(
     py: Python<'_>,
-    config: &[(String, ConfigValue)],
+    (config, quiet): (&[(String, ConfigValue)], bool),
     action: &str,
 ) -> Result<StoreHandle, StoreError> {
     let options = PyDict::new(py);
@@ -104,7 +104,11 @@ pub(crate) fn connect(
             ("config", options.into_any()),
             (
                 "quiet_thread_attribute",
-                PyString::new(py, OUTPUT_SUPPRESSED_ATTRIBUTE).into_any(),
+                if quiet {
+                    PyString::new(py, OUTPUT_SUPPRESSED_ATTRIBUTE).into_any()
+                } else {
+                    py.None().into_bound(py)
+                },
             ),
         ],
         action,

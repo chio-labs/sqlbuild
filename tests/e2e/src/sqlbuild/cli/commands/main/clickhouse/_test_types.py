@@ -176,3 +176,10 @@ class ClickHouseRecallArtifactAgeTestCase:
     artifact_age_days: int
     reference_age_days: int
     expected_availability: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallQueryOutputSinkTestCase:
+    description: str
+    sql: str
+    expected_fragment: str

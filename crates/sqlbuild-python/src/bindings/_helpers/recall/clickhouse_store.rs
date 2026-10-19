@@ -427,7 +427,7 @@ impl RecallStoreOpener for ClickHouseStoreOpener {
                 location: self.location.clone(),
                 connection: Some(calls::connect(
                     py,
-                    &self.location.config,
+                    (&self.location.config, true),
                     &self.location.connect_action(),
                 )?),
                 columns: HashMap::new(),
@@ -473,7 +473,7 @@ impl ClickHouseReader {
             location: location.clone(),
             connection: Some(calls::connect(
                 py,
-                &location.config,
+                (&location.config, false),
                 &location.connect_action(),
             )?),
             columns: HashMap::new(),
