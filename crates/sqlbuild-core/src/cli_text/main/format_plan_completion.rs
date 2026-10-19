@@ -1,10 +1,10 @@
 //! The completion line that closes text plan output.
 
 use crate::cli_text::_helpers::plan_sections::{full_refresh_layout, ready_summary};
-use crate::cli_text::constants::{ERROR_SEVERITY_VALUE, PHASE_OK_GLYPH};
+use crate::cli_text::constants::{ERROR_SEVERITY_VALUE, PHASE_FAIL_GLYPH, PHASE_OK_GLYPH};
 use crate::cli_text::models::{CliStyle, PlanTextReport};
 
-/// `✓ Plan complete  <summary>`, warning-styled when the plan has errors.
+/// `✓ Plan complete  <summary>`, or `✗ Plan failed` when the plan has errors a build refuses.
 #[must_use]
 pub fn format_plan_completion(report: &PlanTextReport) -> String {
     let style: CliStyle = CliStyle {
@@ -16,8 +16,8 @@ pub fn format_plan_completion(report: &PlanTextReport) -> String {
         .any(|warning| warning.severity == ERROR_SEVERITY_VALUE);
     let (glyph, label) = if has_errors {
         (
-            style.warning(PHASE_OK_GLYPH),
-            style.warning_strong("Plan complete with errors"),
+            style.error(PHASE_FAIL_GLYPH),
+            style.error_strong("Plan failed with errors"),
         )
     } else {
         (style.success(PHASE_OK_GLYPH), "Plan complete".to_owned())

@@ -30,6 +30,8 @@ use crate::bindings::_helpers::records::ids::RecordId;
 
 const COMMAND_NAME: &str = "plan";
 const DEFAULT_SECTION_ENTRIES: i64 = 50;
+/// The `severity` value of a plan finding that blocks a build.
+const ERROR_SEVERITY: &str = "error";
 const CONNECTION_TIMING: [&str; 2] = ["connection_count", "elapsed_seconds"];
 /// Request fields passed to the compile pipeline under the same name.
 const PIPELINE_FIELDS: [&str; 11] = [
@@ -300,7 +302,22 @@ pub(crate) fn run_plan_command(request: &Bound<'_, PyAny>) -> PyResult<i32> {
     let pipeline: Bound<'_, PyAny> =
         with_verbose_inspection(py, verbose, || compile_pipeline(request, &invocation))?;
     write_output(request, &invocation, &pipeline)?;
-    Ok(0)
+    Ok(i32::from(plan_has_errors(&native_field(
+        &pipeline,
+        "plan_output",
+    )?)?))
+}
+
+/// Whether any plan finding has error severity, which `sqb build` refuses.
+fn plan_has_errors(plan: &Bound<'_, PyAny>) -> PyResult<bool> {
+    for warning in native_field(plan, "warnings")?.try_iter()? {
+        let severity: Bound<'_, PyAny> =
+            native_field(&native_field(&warning?, "severity")?, "value")?;
+        if severity.extract::<String>()? == ERROR_SEVERITY {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

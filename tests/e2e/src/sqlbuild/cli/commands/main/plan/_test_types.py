@@ -63,3 +63,12 @@ class MissingSourceTableE2ETestCase:
     expected_output_fragments: tuple[str, ...] = ()
     expected_recorded_source_names: tuple[str, ...] = ()
     expected_statuses: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PlanExitCodeE2ETestCase:
+    description: str
+    added_files: dict[str, str]
+    plan_args: tuple[str, ...]
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]
