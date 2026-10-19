@@ -16,7 +16,7 @@ fn given_lifecycle_event_when_validating_then_first_contract_violation_is_report
             description: "unexpected payload lists allowed fields",
             event: event("invocation_started", vec![("x", int(1))]),
             expected_result: Err(
-                "payload field(s) not allowed for known event 'invocation_started': x; allowed fields: command",
+                "payload field(s) not allowed for known event 'invocation_started': x; allowed fields: adapter, command, selection_count, target",
             ),
         },
         ValidateTestCase {

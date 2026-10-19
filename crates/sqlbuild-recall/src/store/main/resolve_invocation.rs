@@ -1,0 +1,62 @@
+//! `resolve_invocation`: the invocation an ID, unique prefix or `last` names.
+
+use crate::store::_helpers::sqlite::checked;
+use crate::store::constants::LAST_INVOCATION_SELECTOR as LAST;
+use crate::store::errors::{StoreError, StoreErrorKind};
+use crate::store::models::SqliteStore;
+
+/// The full invocation ID of `selector`; `last` is the most recently started invocation.
+pub fn resolve_invocation(store: &SqliteStore, selector: &str) -> Result<String, StoreError> {
+    let candidates: Vec<String> = if selector == LAST {
+        let mut statement = checked(
+            store.connection.prepare(
+                "SELECT invocation_id FROM invocations \
+                 ORDER BY invocation_started_at DESC, invocation_id DESC LIMIT 1",
+            ),
+            "find the last invocation",
+        )?;
+        checked(
+            statement
+                .query_map([], |row| row.get(0))
+                .and_then(Iterator::collect),
+            "find the last invocation",
+        )?
+    } else {
+        let mut statement = checked(
+            store.connection.prepare(
+                "SELECT invocation_id FROM invocations \
+                 WHERE substr(invocation_id, 1, length(?1)) = ?1 \
+                 ORDER BY invocation_id LIMIT 3",
+            ),
+            "find the invocation",
+        )?;
+        checked(
+            statement
+                .query_map([selector], |row| row.get(0))
+                .and_then(Iterator::collect),
+            "find the invocation",
+        )?
+    };
+    if let Some(exact) = candidates.iter().find(|candidate| *candidate == selector) {
+        return Ok(exact.clone());
+    }
+    match candidates.as_slice() {
+        [] => Err(StoreError::new(
+            StoreErrorKind::NotFound,
+            if selector == LAST {
+                "no invocations are recorded yet".to_owned()
+            } else {
+                format!("no recorded invocation matches '{selector}'")
+            },
+        )),
+        [only] => Ok(only.clone()),
+        several => Err(StoreError::new(
+            StoreErrorKind::Ambiguous,
+            format!(
+                "'{selector}' matches several invocations: {}{}",
+                several[..2].join(", "),
+                if several.len() > 2 { ", …" } else { "" }
+            ),
+        )),
+    }
+}

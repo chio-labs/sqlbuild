@@ -14,6 +14,7 @@ whether work started, completed, failed, skipped, or retried.
 | `LifecycleEvent` | Immutable invocation, run, resource-attempt, operation, statement, retry, and audit facts | Canonical lifecycle evidence once durably stored |
 | `DiagnosticLog` | Structured framework diagnostics | Explanatory only |
 | `stdout.log` / `stderr.log` | Exact host-local process output | Troubleshooting transcript |
+| [Recall](observability/recall.md) | Local queryable history of invocations, statements, SQL, and output | Troubleshooting history; best effort |
 | `CommandOutputRecord` | Bounded, ANSI-free remote stdout/stderr chunks | Potentially sensitive and lossy troubleshooting data |
 | Final JSON output | End-of-command aggregate | Result projection, not event history |
 
@@ -83,4 +84,5 @@ A start without a terminal fact is unknown or presumed lost. Consumers must not 
 or failure. Sink delivery is bounded and best effort; destination failure does not change successful
 warehouse work, and successful delivery does not prove the command succeeded.
 
-See [Typed Sinks](observability/sinks.md) to export lifecycle and command-output records.
+See [Recall](observability/recall.md) for the local history `sqb recall` queries, and
+[Typed Sinks](observability/sinks.md) to export lifecycle and command-output records.

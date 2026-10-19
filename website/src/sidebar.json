@@ -136,6 +136,7 @@
 				"collapsed": true,
 				"items": [
 					"docs/concepts/observability",
+					"docs/concepts/observability/recall",
 					"docs/concepts/observability/sinks",
 					"docs/concepts/observability/execution-history"
 				]
@@ -216,6 +217,7 @@
 			"docs/cli/lineage",
 			"docs/cli/dag",
 			"docs/cli/query",
+			"docs/cli/recall",
 			"docs/cli/debug",
 			"docs/cli/janitor",
 			"docs/cli/clean",

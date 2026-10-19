@@ -899,7 +899,11 @@ def child_processes() -> frozenset[int]:
 
     children: set[int] = set()
     for task in (Path("/proc") / str(os.getpid()) / "task").iterdir():
-        children.update(map(int, (task / "children").read_text().split()))
+        try:
+            listed: str = (task / "children").read_text()
+        except FileNotFoundError:
+            continue  # the thread exited after the task list was read
+        children.update(map(int, listed.split()))
     return frozenset(children)
 
 

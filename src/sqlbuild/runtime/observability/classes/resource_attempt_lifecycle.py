@@ -41,8 +41,12 @@ class ResourceAttemptLifecycle:
         attempt_number: int = 1,
         resource_attempt_id: str | None = None,
         run_id: str | None = None,
+        plan_action: str | None = None,
+        plan_reason_code: str | None = None,
     ) -> None:
         self._resource_id: str = resource_id
+        self._plan_action: str | None = plan_action
+        self._plan_reason_code: str | None = plan_reason_code
         self._resource_kind: str = resource_kind
         self._resource_name: str = resource_name
         self._attempt_number: int = attempt_number
@@ -140,11 +144,16 @@ class ResourceAttemptLifecycle:
             self._stack.close()
 
     def _base_payload(self) -> dict[str, JSONValue]:
-        return {
+        payload: dict[str, JSONValue] = {
             "resource_kind": self._resource_kind,
             "resource_name": self._resource_name,
             "attempt_number": self._attempt_number,
         }
+        if self._plan_action is not None:
+            payload["plan_action"] = self._plan_action
+        if self._plan_reason_code is not None:
+            payload["plan_reason_code"] = self._plan_reason_code
+        return payload
 
     def _terminal_payload(self) -> dict[str, JSONValue]:
         payload: dict[str, JSONValue] = self._base_payload()

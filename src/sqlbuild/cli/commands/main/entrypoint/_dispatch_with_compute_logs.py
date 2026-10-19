@@ -10,6 +10,7 @@ from sqlbuild._native import (
     COMPUTE_LOG_FORMAT_VERSION,
     CliNamespace,
     LocalFilesystemComputeLogStorage,
+    RecallLifecycleSink,
     supports_color,
 )
 from sqlbuild.cli.commands._helpers.entry.compute_log_diagnostics import (
@@ -31,6 +32,7 @@ def dispatch_with_compute_logs(
     identity: ExecutionIdentity,
     operation: Callable[[], int],
     creates_project: bool,
+    recall: RecallLifecycleSink | None = None,
 ) -> int:
     """Run one composed dispatch while retaining exact process streams best-effort."""
 
@@ -56,6 +58,8 @@ def dispatch_with_compute_logs(
     storage: LocalFilesystemComputeLogStorage | None = None
     try:
         storage = LocalFilesystemComputeLogStorage(project_dir=project_dir)
+        if recall is not None:
+            storage.attach_recall(recall)
         storage.start_capture(metadata)
     except Exception as error:
         failures: list[tuple[Exception, str]] = [(error, "capture_open")]

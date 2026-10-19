@@ -76,6 +76,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 ## Advanced Concepts
 
 - [Execution Observability](concepts/observability.md) (`concepts/observability`) - Choose authoritative lifecycle facts, readable logs, or command-output records.
+- [Recall](concepts/observability/recall.md) (`concepts/observability/recall`) - The local history of every command: what ran, what it executed, and what it printed.
 - [Typed Sinks](concepts/observability/sinks.md) (`concepts/observability/sinks`) - Export lifecycle facts and command output through project-owned providers.
 - [Execution history](concepts/observability/execution-history.md) (`concepts/observability/execution-history`) - Store and query lifecycle events and run history from Python, with SQLite locally or PostgreSQL when deployed.
 - [Overview](concepts/declaration-scopes.md) (`concepts/declaration-scopes`) - Limit enums, constants, macros, audits, schemas, and named hooks to the parts of a project that use them.
@@ -130,6 +131,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [lineage](cli/lineage.md) (`cli/lineage`) - Explore model and column-level dependency graphs from the command line.
 - [sqb dag](cli/dag.md) (`cli/dag`) - Generate the static DAG artifact for Dagster and other integrations.
 - [sqb query](cli/query.md) (`cli/query`) - Run ad hoc SQL queries against the project database.
+- [sqb recall](cli/recall.md) (`cli/recall`) - Query the recorded history of past invocations.
 - [debug](cli/debug.md) (`cli/debug`) - Validate project configuration and test the warehouse connection.
 - [sqb janitor](cli/janitor.md) (`cli/janitor`) - Archive and then delete stale warehouse relations.
 - [sqb clean](cli/clean.md) (`cli/clean`) - Remove compiled artifacts from the target directory.

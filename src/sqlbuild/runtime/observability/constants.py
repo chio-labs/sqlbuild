@@ -8,6 +8,8 @@ RESOURCE_ATTEMPT_SKIPPED_EVENT: str = "resource_attempt_skipped"
 RENAME_OPERATION_STRATEGY: str = "rename"
 RETRY_SCHEDULED_EVENT: str = "retry_scheduled"
 STATEMENT_HEARTBEAT_THRESHOLD_SECONDS: float = 30.0
+MODEL_BUILD_PURPOSE: str = "model_build"
+AUDIT_PURPOSE: str = "audit"
 LIFECYCLE_ENVELOPE_FIELDS_V1: frozenset[str] = frozenset(
     {
         "event_id",

@@ -13,6 +13,7 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 creates_project: false,
                 observed: true,
                 maintains_skills: true,
+                recalled: true,
             },
         },
         InvocationPolicyTestCase {
@@ -22,6 +23,7 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 creates_project: true,
                 observed: false,
                 maintains_skills: true,
+                recalled: false,
             },
         },
         InvocationPolicyTestCase {
@@ -31,10 +33,11 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 creates_project: true,
                 observed: false,
                 maintains_skills: false,
+                recalled: false,
             },
         },
         InvocationPolicyTestCase {
-            description: "a raw query diff is neither observed nor checks skills",
+            description: "a raw query diff is not observed, so it is not recorded either",
             facts: CommandFacts {
                 raw_query_diff: true,
                 ..facts("diff", None)
@@ -43,6 +46,17 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 creates_project: false,
                 observed: false,
                 maintains_skills: false,
+                recalled: false,
+            },
+        },
+        InvocationPolicyTestCase {
+            description: "recall reads history and is never recorded itself",
+            facts: facts("recall", Some("query")),
+            expected_policy: InvocationPolicy {
+                creates_project: false,
+                observed: true,
+                maintains_skills: true,
+                recalled: false,
             },
         },
     ];

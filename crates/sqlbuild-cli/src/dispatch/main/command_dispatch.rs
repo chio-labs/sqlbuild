@@ -6,8 +6,8 @@ use crate::dispatch::_helpers::subcommands::{
 use crate::dispatch::constants::{
     AUDIT_ROUTE, BUILD_ROUTE, CHECK_ROUTE, CLONE_ROUTE, COMPILE_ROUTE, CONTRACT_ROUTE, COST_ROUTE,
     DAG_ROUTE, DEBUG_ROUTE, DIFF_ROUTE, FORMAT_ROUTE, FRESHNESS_ROUTE, INIT_ROUTE, JANITOR_ROUTE,
-    LINEAGE_ROUTE, LOAD_ROUTE, PLAN_ROUTE, PLAYGROUND_ROUTE, QUERY_ROUTE, REFACTOR_ROUTE,
-    RULES_ROUTE, SCOPE_ROUTE, SEED_ROUTE, SKILLS_ROUTE, TEST_ROUTE,
+    LINEAGE_ROUTE, LOAD_ROUTE, PLAN_ROUTE, PLAYGROUND_ROUTE, QUERY_ROUTE, RECALL_COMMAND_NAME,
+    RECALL_ROUTE, REFACTOR_ROUTE, RULES_ROUTE, SCOPE_ROUTE, SEED_ROUTE, SKILLS_ROUTE, TEST_ROUTE,
 };
 use crate::dispatch::main::unavailable_handler::unavailable_handler;
 use crate::dispatch::models::{CommandFacts, Dispatch, DispatchFailure, Route};
@@ -54,6 +54,7 @@ pub fn command_dispatch(facts: &CommandFacts) -> Dispatch {
         ),
         "diff" => run(&DIFF_ROUTE),
         "query" => run(&QUERY_ROUTE),
+        RECALL_COMMAND_NAME => run(&RECALL_ROUTE),
         "cost" => run(&COST_ROUTE),
         "debug" => run(&DEBUG_ROUTE),
         "janitor" => run(&JANITOR_ROUTE),

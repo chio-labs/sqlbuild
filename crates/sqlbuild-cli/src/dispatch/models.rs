@@ -119,6 +119,8 @@ pub struct InvocationPolicy {
     pub observed: bool,
     /// Whether installed SQLBuild skills are checked for freshness first.
     pub maintains_skills: bool,
+    /// Whether Recall records the invocation; `sqb recall` never records itself.
+    pub recalled: bool,
 }
 
 /// What a failed command reports: its fallback error code and the debug log message.

@@ -1,0 +1,169 @@
+use crate::schema::constants::{ALL_TABLES, VIEW_NAMES};
+use crate::schema::main::add_column_statement::add_column_statement;
+use crate::schema::main::table_spec::table_spec;
+use crate::schema::main::table_statements::table_statements;
+use crate::schema::main::view_statements::view_statements;
+use crate::schema::models::{ColumnSpec, ColumnType, Dialect, Table};
+use crate::schema::tests::helpers::{clickhouse_table, contained, options, sqlite_schema_after};
+use crate::schema::tests::test_types::{
+    AddColumnTestCase, FragmentTestCase, SqliteScriptTestCase, StatementSetTestCase,
+};
+
+const NEW_COLUMN: ColumnSpec = ColumnSpec {
+    name: "new_field",
+    column_type: ColumnType::Integer,
+    nullable: false,
+};
+
+#[test]
+fn given_sqlite_script_when_run_then_every_table_view_and_retention_statement_prepares() {
+    let test_cases = [
+        SqliteScriptTestCase {
+            description: "a fresh database gets every object",
+            runs: 1,
+            expected_objects: ALL_TABLES.len() + VIEW_NAMES.len(),
+            expected_failures: Vec::new(),
+        },
+        SqliteScriptTestCase {
+            description: "rerunning the script is idempotent",
+            runs: 2,
+            expected_objects: ALL_TABLES.len() + VIEW_NAMES.len(),
+            expected_failures: Vec::new(),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            sqlite_schema_after(test_case.runs),
+            (test_case.expected_objects, test_case.expected_failures),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_clickhouse_tables_when_rendered_then_engines_ttl_and_partitions_follow_the_table() {
+    let test_cases = [
+        FragmentTestCase {
+            description: "output is a replacing table partitioned and expired by start time",
+            statement: clickhouse_table("recall_output", None),
+            expected_fragments: &[
+                "CREATE TABLE IF NOT EXISTS `observability`.`recall_output` (",
+                "`data` String",
+                "`priority` Nullable(String)",
+                "ENGINE = ReplacingMergeTree()",
+                "PARTITION BY toDate(invocation_started_at)",
+                "ORDER BY (invocation_id, sequence)",
+                "TTL invocation_started_at + INTERVAL 14 DAY",
+            ],
+        },
+        FragmentTestCase {
+            description: "artifacts keep the latest sighting for an extra week",
+            statement: clickhouse_table("recall_artifacts", None),
+            expected_fragments: &[
+                "ENGINE = ReplacingMergeTree(seen_at)",
+                "TTL seen_at + INTERVAL 21 DAY",
+            ],
+        },
+        FragmentTestCase {
+            description: "heartbeats are append-only",
+            statement: clickhouse_table("recall_heartbeats", None),
+            expected_fragments: &["ENGINE = MergeTree()"],
+        },
+        FragmentTestCase {
+            description: "clustered replacing tables are replicated",
+            statement: clickhouse_table("recall_output", Some("analytics")),
+            expected_fragments: &[
+                " ON CLUSTER `analytics` (",
+                "ReplicatedReplacingMergeTree('/clickhouse/tables/{uuid}/{shard}', '{replica}')",
+            ],
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            contained(&test_case.statement, test_case.expected_fragments),
+            test_case.expected_fragments.to_vec(),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_shared_shape() {
+    let views = |cluster: Option<&str>| -> Vec<String> {
+        view_statements(Dialect::ClickHouse, &options(cluster))
+            .into_iter()
+            .map(|(_, statement)| statement)
+            .collect()
+    };
+    let test_cases = [
+        StatementSetTestCase {
+            description: "every clustered table is created on the cluster",
+            statements: table_statements(Dialect::ClickHouse, &options(Some("analytics"))),
+            required_fragments: &[" ON CLUSTER `analytics` ("],
+            expected_count: ALL_TABLES.len(),
+        },
+        StatementSetTestCase {
+            description: "clustered views are replaced on the cluster",
+            statements: views(Some("analytics")),
+            required_fragments: &["CREATE OR REPLACE VIEW", "ON CLUSTER `analytics`"],
+            expected_count: VIEW_NAMES.len(),
+        },
+        StatementSetTestCase {
+            description: "views deduplicate rows and filter by retention",
+            statements: views(None),
+            required_fragments: &["now64(6) - INTERVAL 14 DAY", "LIMIT 1 BY"],
+            expected_count: VIEW_NAMES.len(),
+        },
+    ];
+
+    for test_case in test_cases {
+        let shaped: usize = test_case
+            .statements
+            .iter()
+            .filter(|statement| {
+                contained(statement, test_case.required_fragments).len()
+                    == test_case.required_fragments.len()
+            })
+            .count();
+        assert_eq!(
+            (test_case.statements.len(), shaped),
+            (test_case.expected_count, test_case.expected_count),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_new_column_when_upgraded_then_the_statement_is_additive_and_nullable() {
+    let spec = table_spec(Table::Events);
+    let test_cases = [
+        AddColumnTestCase {
+            description: "SQLite columns are nullable by default",
+            statement: add_column_statement(Dialect::Sqlite, &options(None), (spec, &NEW_COLUMN)),
+            expected_statement: "ALTER TABLE \"recall_events\" ADD COLUMN \"new_field\" INTEGER",
+        },
+        AddColumnTestCase {
+            description: "ClickHouse columns are added idempotently as Nullable",
+            statement: add_column_statement(
+                Dialect::ClickHouse,
+                &options(None),
+                (spec, &NEW_COLUMN),
+            ),
+            expected_statement: "ALTER TABLE `observability`.`recall_events` ADD COLUMN IF NOT \
+                                 EXISTS `new_field` Nullable(Int64)",
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            test_case.statement, test_case.expected_statement,
+            "{}",
+            test_case.description
+        );
+    }
+}

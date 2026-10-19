@@ -10,6 +10,7 @@ pub mod effective;
 pub mod errors;
 pub mod models;
 pub mod project;
+pub mod recall;
 pub mod toml;
 pub mod workspace;
 pub mod yaml;

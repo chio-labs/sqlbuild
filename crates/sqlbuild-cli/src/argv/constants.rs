@@ -63,7 +63,7 @@ pub(crate) const INT_CONVERTER: &str = "int";
 pub(crate) const PATH_CONVERTER: &str = "Path";
 
 /// Every `CliNamespace` attribute with a default, in declaration order.
-pub(crate) const CLI_NAMESPACE_DEFAULTS: [(&str, NamespaceDefault); 162] = [
+pub(crate) const CLI_NAMESPACE_DEFAULTS: [(&str, NamespaceDefault); 174] = [
     ("command", NamespaceDefault::None),
     ("project_dir", NamespaceDefault::None),
     ("dbt_project_dir", NamespaceDefault::None),
@@ -212,6 +212,18 @@ pub(crate) const CLI_NAMESPACE_DEFAULTS: [(&str, NamespaceDefault); 162] = [
     ("rules_command", NamespaceDefault::None),
     ("rules_rule_selector", NamespaceDefault::None),
     ("rules_skills_check", NamespaceDefault::Bool(false)),
+    ("recall_command", NamespaceDefault::None),
+    ("recall_sql", NamespaceDefault::None),
+    ("recall_backend", NamespaceDefault::Text("logs")),
+    ("recall_format", NamespaceDefault::Text("long")),
+    ("recall_limit", NamespaceDefault::Int(100)),
+    ("recall_no_limit", NamespaceDefault::Bool(false)),
+    ("recall_max_cell_bytes", NamespaceDefault::None),
+    ("recall_state", NamespaceDefault::Bool(false)),
+    ("recall_relation", NamespaceDefault::None),
+    ("recall_invocation", NamespaceDefault::Text("last")),
+    ("recall_stream", NamespaceDefault::Text("combined")),
+    ("recall_tail", NamespaceDefault::None),
     ("format_check", NamespaceDefault::Bool(false)),
     ("format_diff", NamespaceDefault::Bool(false)),
     ("format_fixtures_only", NamespaceDefault::Bool(false)),

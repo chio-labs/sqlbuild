@@ -79,7 +79,7 @@ pub(crate) const FORBIDDEN_STATEMENT_PAYLOAD_FIELDS: [&str; 8] = [
     "sql",
     "statement_sql",
 ];
-pub(crate) const STRING_PAYLOAD_FIELDS: [&str; 51] = [
+pub(crate) const STRING_PAYLOAD_FIELDS: [&str; 55] = [
     "adapter",
     "attached_column_name",
     "attached_target_kind",
@@ -115,8 +115,11 @@ pub(crate) const STRING_PAYLOAD_FIELDS: [&str; 51] = [
     "operation_kind",
     "operation_name",
     "outcome",
+    "plan_action",
+    "plan_reason_code",
     "planned_cursor_end_exclusive",
     "planned_cursor_start",
+    "purpose",
     "query_id",
     "resource_kind",
     "resource_name",
@@ -128,11 +131,12 @@ pub(crate) const STRING_PAYLOAD_FIELDS: [&str; 51] = [
     "severity",
     "sql_digest",
     "statement_kind",
+    "target",
     "target_database",
     "target_name",
     "target_schema",
 ];
-pub(crate) const NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: [&str; 25] = [
+pub(crate) const NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: [&str; 26] = [
     "affected_rows",
     "attempt_number",
     "batch_count",
@@ -152,6 +156,7 @@ pub(crate) const NONNEGATIVE_INTEGER_PAYLOAD_FIELDS: [&str; 25] = [
     "row_count",
     "sample_count",
     "selected_count",
+    "selection_count",
     "signal_number",
     "skipped_count",
     "succeeded_count",
@@ -628,7 +633,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
 ];
 /// The schema version 2 catalogue in declaration order.
 pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
-    ("invocation_started", &[], &[], &["command"], false),
+    (
+        "invocation_started",
+        &[],
+        &[],
+        &["adapter", "command", "selection_count", "target"],
+        false,
+    ),
     (
         "invocation_completed",
         &[],
@@ -699,7 +710,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
         "resource_attempt_started",
         &["resource_attempt_id", "resource_id", "run_id"],
         &[],
-        &["attempt_number", "resource_kind", "resource_name"],
+        &[
+            "attempt_number",
+            "plan_action",
+            "plan_reason_code",
+            "resource_kind",
+            "resource_name",
+        ],
         false,
     ),
     (
@@ -709,6 +726,8 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
         &[
             "attempt_number",
             "duration_ms",
+            "plan_action",
+            "plan_reason_code",
             "resource_kind",
             "resource_name",
         ],
@@ -723,6 +742,8 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "duration_ms",
             "error_code",
             "error_type",
+            "plan_action",
+            "plan_reason_code",
             "resource_kind",
             "resource_name",
         ],
@@ -740,6 +761,8 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
         &[
             "attempt_number",
             "duration_ms",
+            "plan_action",
+            "plan_reason_code",
             "resource_kind",
             "resource_name",
             "skip_code",
@@ -897,6 +920,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "intent",
             "job_id",
             "metadata",
+            "purpose",
             "query_id",
             "row_count",
             "sql_digest",
@@ -915,6 +939,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "intent",
             "job_id",
             "metadata",
+            "purpose",
             "query_id",
             "sql_digest",
             "statement_kind",
@@ -933,6 +958,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "intent",
             "job_id",
             "metadata",
+            "purpose",
             "query_id",
             "row_count",
             "sql_digest",
@@ -952,6 +978,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "intent",
             "job_id",
             "metadata",
+            "purpose",
             "query_id",
             "row_count",
             "sql_digest",
@@ -973,6 +1000,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "intent",
             "job_id",
             "metadata",
+            "purpose",
             "query_id",
             "row_count",
             "sql_digest",

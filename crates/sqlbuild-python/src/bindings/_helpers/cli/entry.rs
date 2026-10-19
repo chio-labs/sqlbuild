@@ -27,6 +27,10 @@ use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
+use crate::bindings::_helpers::recall::session::{
+    InvocationRecall, finish_invocation_recall, start_invocation_recall,
+};
+use crate::bindings::_helpers::recall::sinks::RecallLifecycleSink;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -58,6 +62,7 @@ struct Invocation<'py> {
     handlers: Option<Bound<'py, PyAny>>,
     use_color: bool,
     facts: CommandFacts,
+    recall: InvocationRecall,
 }
 
 impl<'py> Invocation<'py> {
@@ -392,6 +397,34 @@ fn lifecycle_event<'py>(
     )
 }
 
+/// Subscribe the invocation's Recall session to every lifecycle fact and SQL artifact.
+fn subscribe_recall(dispatcher: &Bound<'_, PyAny>, recall: &InvocationRecall) -> PyResult<()> {
+    let Some(session) = recall.session.clone() else {
+        return Ok(());
+    };
+    let sink = Bound::new(dispatcher.py(), RecallLifecycleSink { session })?;
+    dispatcher.call_method1("subscribe_history", (sink,))?;
+    Ok(())
+}
+
+/// `target`, `adapter` and `selection_count` of the started invocation, when known.
+fn add_invocation_context(
+    invocation: &Invocation<'_>,
+    payload: &Bound<'_, PyDict>,
+) -> PyResult<()> {
+    if let Some(target) = &invocation.recall.target {
+        payload.set_item("target", target)?;
+    }
+    if let Some(adapter) = &invocation.recall.adapter {
+        payload.set_item("adapter", adapter)?;
+    }
+    let select: Bound<'_, PyAny> = invocation.args.getattr("select")?;
+    if !select.is_none() {
+        payload.set_item("selection_count", select.len()?)?;
+    }
+    Ok(())
+}
+
 /// Dispatch once while publishing canonical invocation lifecycle facts.
 fn observed_dispatch<'py>(
     invocation: &Invocation<'py>,
@@ -421,8 +454,10 @@ fn observed_dispatch<'py>(
             dispatcher.call_method1("publish_lifecycle", (event,))?;
             Ok(())
         };
+        subscribe_recall(dispatcher, &invocation.recall)?;
         let payload: Bound<'py, PyDict> = PyDict::new(py);
         payload.set_item("command", &command)?;
+        add_invocation_context(invocation, &payload)?;
         publish(lifecycle_event(py, "invocation_started", payload)?)?;
         match dispatch_command(&invocation.args, invocation.handlers.clone()) {
             Ok(exit_code) => {
@@ -510,6 +545,16 @@ fn parsed_invocation<'py>(
     }
     let facts: CommandFacts = command_facts(&args)?;
     let policy: InvocationPolicy = invocation_policy(&facts);
+    let recall: InvocationRecall = if policy.recalled {
+        start_invocation_recall(py, &args, identity, &facts)?
+    } else {
+        InvocationRecall::default()
+    };
+    let recall_sink: Bound<'py, PyAny> = match recall.session.clone() {
+        Some(session) => Bound::new(py, RecallLifecycleSink { session })?.into_any(),
+        None => py.None().into_bound(py),
+    };
+    let closure_recall: InvocationRecall = recall.clone();
     let retained: (Py<PyAny>, Option<Py<PyAny>>) =
         (args.clone().unbind(), handlers.map(Bound::unbind));
     let operation: Bound<'py, PyCFunction> = PyCFunction::new_closure(
@@ -528,11 +573,12 @@ fn parsed_invocation<'py>(
                     .map(|handlers| handlers.bind(py).clone()),
                 use_color,
                 facts: facts.clone(),
+                recall: closure_recall.clone(),
             };
             Ok(handled_dispatch(&invocation)?.unbind())
         },
     )?;
-    call_with(
+    let dispatched: PyResult<Bound<'py, PyAny>> = call_with(
         &host::entry(py, FacadeHost::DispatchWithComputeLogs)?,
         &[
             ("args", args),
@@ -544,8 +590,17 @@ fn parsed_invocation<'py>(
                     .to_owned()
                     .into_any(),
             ),
+            ("recall", recall_sink),
         ],
-    )
+    );
+    let exit_status: Option<i64> = match &dispatched {
+        Ok(code) if code.is_instance_of::<PyInt>() => Some(code.extract().unwrap_or(1)),
+        Ok(_) | Err(_) => None,
+    };
+    let finished: PyResult<()> = finish_invocation_recall(py, &recall, exit_status);
+    let exit_code: Bound<'py, PyAny> = dispatched?;
+    finished?;
+    Ok(exit_code)
 }
 
 /// `argv` without a leading launch record option, after offering the record it names.

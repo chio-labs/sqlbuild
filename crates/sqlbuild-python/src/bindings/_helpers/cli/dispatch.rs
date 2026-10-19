@@ -27,6 +27,7 @@ use crate::bindings::_helpers::plan_command::plan::run_plan_command;
 use crate::bindings::_helpers::plan_command::rules::run_rules_command;
 use crate::bindings::_helpers::query_command::dag::run_dag_command;
 use crate::bindings::_helpers::query_command::query::run_query_command;
+use crate::bindings::_helpers::recall::command::run_recall_command;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::refactor::refactor_command::run_refactor_command;
 use crate::bindings::_helpers::scenario_command::capture_command::run_scenario_capture_command;
@@ -394,6 +395,7 @@ fn run_implementation<'py>(
         "run_plan_command" => run_plan_command(&request()?)?,
         "run_playground_command" => run_playground_command(py, &request()?)?,
         "run_query_command" => run_query_command(py, options())?,
+        "run_recall_command" => run_recall_command(py, options())?,
         "run_refactor_command" => run_refactor_command(py, &request()?)?,
         "run_rules_command" => run_rules_command(&request()?)?,
         "run_scenario_capture_command" => run_scenario_capture_command(py, &request()?)?,

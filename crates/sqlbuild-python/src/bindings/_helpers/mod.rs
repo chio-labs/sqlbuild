@@ -79,6 +79,7 @@ pub(crate) mod presentation_text;
 pub(crate) mod project_assembly;
 pub(crate) mod python_values;
 pub(crate) mod query_command;
+pub(crate) mod recall;
 pub(crate) mod record_behaviours;
 pub(crate) mod records;
 pub(crate) mod refactor;

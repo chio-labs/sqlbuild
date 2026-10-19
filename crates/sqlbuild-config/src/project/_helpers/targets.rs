@@ -21,6 +21,8 @@ use crate::project::constants::{
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
 use crate::project::types::{Entries, Fields, Loaded};
+use crate::recall::constants::RECALL_SECTION;
+use crate::recall::main::recall_section::recall_section;
 
 /// Policy fields of a target, with the enum each projects to.
 const TARGET_POLICIES: [(&str, &str); 3] = [
@@ -293,7 +295,12 @@ fn validate_target_keys(mapping: &Entries, target: TargetPlace<'_>) -> Result<()
         label: &label,
     };
     reject_removed_virtual_keys(mapping, &["state", "changes_only"], place)?;
-    validate_allowed_keys(mapping, &TARGET_KEYS, place)
+    validate_allowed_keys(mapping, &TARGET_KEYS, place)?;
+    if let Some(recall) = get(mapping, RECALL_SECTION) {
+        recall_section(recall, &format!("{label}.{RECALL_SECTION}"))
+            .map_err(|message| ConfigFailure::at(target.file, message))?;
+    }
+    Ok(())
 }
 
 fn clone_mapping<'a>(mapping: &'a Entries, target: TargetPlace<'_>) -> Loaded<&'a Entries> {

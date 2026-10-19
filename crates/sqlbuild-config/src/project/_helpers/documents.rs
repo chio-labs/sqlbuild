@@ -30,6 +30,8 @@ use crate::project::constants::{
 use crate::project::errors::{ConfigFailure, FailureClass, LoadFailure, MessagePiece};
 use crate::project::models::{Built, ConfigFile, ConfigPaths};
 use crate::project::types::{Entries, Fields, Loaded};
+use crate::recall::constants::RECALL_SECTION;
+use crate::recall::main::recall_section::recall_section;
 use crate::toml::main::load_toml::load_toml;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 use sqlbuild_core::constants::SETTINGS_SECTION;
@@ -270,6 +272,10 @@ fn project_fields(payload: &Entries) -> Loaded<Fields> {
             "event_exporters was replaced by sinks.lifecycle",
         ));
     }
+    if let Some(recall) = get(payload, RECALL_SECTION) {
+        recall_section(recall, RECALL_SECTION)
+            .map_err(|message| ConfigFailure::at(PROJECT_FILE, message))?;
+    }
     let mut fields = identity(payload)?;
     fields.extend(sections(payload)?);
     fields.push(("targets", targets(payload)?));
@@ -331,6 +337,10 @@ fn local_settings(payload: Option<&ConfigValue>) -> Loaded<Fields> {
 }
 
 fn local_fields(payload: &Entries) -> Loaded<Fields> {
+    if let Some(recall) = get(payload, RECALL_SECTION) {
+        recall_section(recall, RECALL_SECTION)
+            .map_err(|message| ConfigFailure::at(LOCAL_FILE, message))?;
+    }
     let mut fields: Fields = vec![
         ("target", text_or_none(optional_str(payload, "target")?)),
         ("adapter", text_or_none(optional_str(payload, "adapter")?)),

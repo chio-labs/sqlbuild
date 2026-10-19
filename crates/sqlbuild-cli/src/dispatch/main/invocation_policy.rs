@@ -2,11 +2,11 @@
 
 use crate::dispatch::constants::{
     DBT_COMMAND_NAME, DBT_INIT_SUBCOMMAND, DIFF_COMMAND_NAME, PROJECT_CREATING_COMMANDS,
-    SKILL_EXEMPT_COMMANDS,
+    RECALL_COMMAND_NAME, SKILL_EXEMPT_COMMANDS,
 };
 use crate::dispatch::models::{CommandFacts, InvocationPolicy};
 
-/// Whether the command creates a project, is observed, and checks skill freshness.
+/// Whether the command creates a project, is observed, checks skill freshness and is recorded; only observed commands are recorded, so every recorded invocation has terminal events.
 #[must_use]
 pub fn invocation_policy(facts: &CommandFacts) -> InvocationPolicy {
     let command: &str = facts.command.as_deref().unwrap_or_default();
@@ -14,9 +14,11 @@ pub fn invocation_policy(facts: &CommandFacts) -> InvocationPolicy {
         || (command == DBT_COMMAND_NAME
             && facts.subcommand.as_deref() == Some(DBT_INIT_SUBCOMMAND));
     let raw_query_diff: bool = command == DIFF_COMMAND_NAME && facts.raw_query_diff;
+    let observed: bool = !creates_project && !raw_query_diff;
     InvocationPolicy {
         creates_project,
-        observed: !creates_project && !raw_query_diff,
+        observed,
         maintains_skills: !SKILL_EXEMPT_COMMANDS.contains(&command) && !raw_query_diff,
+        recalled: observed && !command.is_empty() && command != RECALL_COMMAND_NAME,
     }
 }

@@ -7,6 +7,7 @@ members = [
     "crates/sqlbuild-cache",
     "crates/sqlbuild-sqltext",
     "crates/sqlbuild-config",
+    "crates/sqlbuild-recall",
     "crates/sqlbuild-discovery",
     "crates/sqlbuild-scopes",
     "crates/sqlbuild-model-config",
@@ -32,6 +33,7 @@ order = [
     "sqlbuild-cache",
     "sqlbuild-sqltext",
     "sqlbuild-config",
+    "sqlbuild-recall",
     "sqlbuild-model-config",
     "sqlbuild-discovery",
     "sqlbuild-render",
@@ -86,6 +88,8 @@ ruff_text_size = "=0.0.4"
 # Unix only: `sqb` shares the compute log prune lock with Python's `filelock` through `flock`.
 # Fast deterministic hasher for hot in-memory maps whose iteration order never reaches output.
 rustc-hash = "2"
+# Recall's local store: SQLite compiled in, so every build has the same engine version.
+rusqlite = { version = "0.37", features = ["bundled"] }
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "std"] }
 saphyr-parser = "0.1"
 regex = "1"
@@ -106,6 +110,7 @@ sqlbuild-refactor = { path = "crates/sqlbuild-refactor" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }
 sqlbuild-model-config = { path = "crates/sqlbuild-model-config" }
 sqlbuild-pysource = { path = "crates/sqlbuild-pysource" }
+sqlbuild-recall = { path = "crates/sqlbuild-recall" }
 sqlbuild-scopes = { path = "crates/sqlbuild-scopes" }
 sqlbuild-sqltext = { path = "crates/sqlbuild-sqltext" }
 sqlbuild-state = { path = "crates/sqlbuild-state" }

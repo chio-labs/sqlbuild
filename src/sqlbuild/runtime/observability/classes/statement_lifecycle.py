@@ -43,6 +43,7 @@ _ERROR_CODE_PATTERN: re.Pattern[str] = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _STATEMENT_LIFECYCLE_OWNER: ContextVar[StatementLifecycle | None] = ContextVar(
     "sqlbuild_statement_lifecycle_owner", default=None
 )
+_STATEMENT_PURPOSE: ContextVar[str | None] = ContextVar("sqlbuild_statement_purpose", default=None)
 type _ExecutionOwnerKey = tuple[int, int | None]
 
 
@@ -84,6 +85,7 @@ class StatementLifecycle:
         )
         self._pending_failure: tuple[BaseException, str | None, str | None] | None = None
         self._statement_facts: tuple[str, str] | None = None
+        self._purpose: str | None = _STATEMENT_PURPOSE.get()
         self._item_deadline: ItemDeadline | None = None
         self._terminal_query_id: str | None = None
 
@@ -94,6 +96,17 @@ class StatementLifecycle:
 
         with statement_listener_scope(listener):
             yield
+
+    @staticmethod
+    @contextmanager
+    def purpose_scope(purpose: str) -> Iterator[None]:
+        """Label statements run inside the block with why SQLBuild runs them, such as audit."""
+
+        token: Token[str | None] = _STATEMENT_PURPOSE.set(purpose)
+        try:
+            yield
+        finally:
+            _STATEMENT_PURPOSE.reset(token)
 
     @staticmethod
     def discard_failed_attempt() -> None:
@@ -124,6 +137,9 @@ class StatementLifecycle:
         self._started_monotonic = self._clock()
         self._execution_owner_key = execution_owner_key
         self._publish(event_type="statement_started", payload=self._base_payload())
+        dispatcher.publish_sql_artifact(
+            sql=self._sql, statement_id=self._statement_id, resource_id=identity.resource_id
+        )
         self._item_deadline = current_item_deadline()
         if self._item_deadline is not None:
             self._item_deadline.statement_started()
@@ -303,6 +319,8 @@ class StatementLifecycle:
         }
         if self._batch_size is not None:
             payload["batch_size"] = self._batch_size
+        if self._purpose is not None:
+            payload["purpose"] = self._purpose
         return payload
 
     def _terminal_payload(self) -> dict[str, JSONValue]:

@@ -18,6 +18,20 @@ type KnownLifecycleSubscriber = Callable[[LifecycleEvent], None]
 type OpaqueLifecycleSubscriber = Callable[[LifecycleEvent | OpaqueLifecycleEvent], None]
 type DiagnosticSubscriber = Callable[[DiagnosticLog], None]
 type HealthCallback = Callable[[DispatchFailure], None]
+
+
+class ArtifactSubscriber(Protocol):
+    def __call__(self, *, sql: str, statement_id: str | None, resource_id: str | None) -> None: ...
+
+
+class HistorySubscriber(Protocol):
+    def __call__(self, event: "LifecycleEvent") -> None: ...
+
+    def record_sql(
+        self, *, sql: str, statement_id: str | None, resource_id: str | None
+    ) -> None: ...
+
+
 type LifecycleRegistration = tuple[
     object, KnownLifecycleSubscriber | OpaqueLifecycleSubscriber, bool
 ]

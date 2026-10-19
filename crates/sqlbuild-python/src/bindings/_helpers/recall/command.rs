@@ -1,0 +1,327 @@
+//! `sqb recall query | schema | output`.
+
+use std::path::PathBuf;
+use std::time::Instant;
+
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::{PyDict, PyDictMethods, PyStringMethods};
+use sqlbuild_recall::records::models::OutputStream;
+use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
+use sqlbuild_recall::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
+use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
+use sqlbuild_recall::store::main::describe_store::describe_store;
+use sqlbuild_recall::store::main::open_sqlite_store::open_sqlite_store;
+use sqlbuild_recall::store::main::query_store::query_store;
+use sqlbuild_recall::store::main::read_output_transcript::read_output_transcript;
+use sqlbuild_recall::store::main::resolve_invocation::resolve_invocation;
+use sqlbuild_recall::store::models::{OpenMode, SqliteStore};
+
+use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::query_command::query::run_query_command;
+use crate::bindings::_helpers::recall::console::{write_stderr, write_stdout_bytes};
+use crate::bindings::_helpers::recall::constants::{
+    DEFAULT_MAX_CELL_BYTES, DEFAULT_QUERY_LIMIT, JSON_FORMAT, LAST_INVOCATION, LONG_FORMAT,
+    RECALL_AMBIGUOUS_CODE, RECALL_DISABLED_CODE, RECALL_NOT_FOUND_CODE, RECALL_OPTIONS,
+    RECALL_QUERY_CODE, RECALL_SETTINGS_CODE, RECALL_STORE_CODE, WAREHOUSE_BACKEND,
+};
+use crate::bindings::_helpers::recall::rendering::{QueryContext, render_result, render_schema};
+use crate::bindings::_helpers::records::construct::new_error;
+use crate::bindings::_helpers::records::ids::ErrorId;
+
+fn user_error(py: Python<'_>, message: &str, code: &str) -> PyErr {
+    new_error(py, ErrorId::CliUser, message.to_owned(), code)
+}
+
+fn store_failure(py: Python<'_>, error: &StoreError) -> PyErr {
+    let code = match error.kind {
+        StoreErrorKind::NotFound => RECALL_NOT_FOUND_CODE,
+        StoreErrorKind::Ambiguous => RECALL_AMBIGUOUS_CODE,
+        StoreErrorKind::Query => RECALL_QUERY_CODE,
+        _ => RECALL_STORE_CODE,
+    };
+    user_error(py, &error.message, code)
+}
+
+/// The options of one `sqb recall` invocation, as the dispatch route passes them.
+struct RecallRequest {
+    command: Option<String>,
+    project_dir: Option<PathBuf>,
+    selected_target: Option<String>,
+    sql: Option<String>,
+    backend: Option<String>,
+    format: String,
+    limit: Option<i64>,
+    no_limit: bool,
+    max_cell_bytes: Option<i64>,
+    relation: Option<String>,
+    invocation: Option<String>,
+    stream: Option<String>,
+    tail: Option<i64>,
+}
+
+fn optional_text(value: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
+    if value.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(value.str()?.to_string_lossy().into_owned()))
+}
+
+fn recall_request(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<RecallRequest> {
+    let arguments: KeywordArguments<'_> =
+        KeywordArguments::read(py, "run_recall_command", options, (&RECALL_OPTIONS, &[]))?;
+    let text = |name: &str| optional_text(&arguments.value(name)?);
+    let number = |name: &str| -> PyResult<Option<i64>> { arguments.value(name)?.extract() };
+    Ok(RecallRequest {
+        command: text("recall_command")?,
+        project_dir: text("project_dir")?.map(PathBuf::from),
+        selected_target: text("selected_target")?,
+        sql: text("sql")?,
+        backend: text("backend")?,
+        format: text("output_format")?.unwrap_or_else(|| LONG_FORMAT.to_owned()),
+        limit: number("limit")?,
+        no_limit: arguments.value("no_limit")?.is_truthy()?,
+        max_cell_bytes: number("max_cell_bytes")?,
+        relation: text("relation")?,
+        invocation: text("invocation")?,
+        stream: text("stream")?,
+        tail: number("tail")?,
+    })
+}
+
+/// The project directory, target and settings, or the coded failure.
+fn settings(py: Python<'_>, recall: &RecallRequest) -> PyResult<(PathBuf, RecallSettings)> {
+    let raw: PathBuf = match &recall.project_dir {
+        Some(directory) => directory.clone(),
+        None => std::env::current_dir()?,
+    };
+    let project_dir = std::fs::canonicalize(&raw).unwrap_or(raw);
+    let request = SettingsRequest {
+        project_dir: project_dir.clone(),
+        selected_target: recall.selected_target.clone(),
+    };
+    let settings = resolve_recall_settings(&request)
+        .map_err(|error| user_error(py, &error.message, RECALL_SETTINGS_CODE))?;
+    if !settings.enabled {
+        let target = settings
+            .target
+            .as_deref()
+            .map_or_else(String::new, |target| format!(" for target `{target}`"));
+        return Err(user_error(
+            py,
+            &format!("Recall is disabled{target}; set enabled = true in its recall settings"),
+            RECALL_DISABLED_CODE,
+        ));
+    }
+    Ok((project_dir, settings))
+}
+
+fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<(SqliteStore, String)> {
+    match &settings.store {
+        StoreLocation::Sqlite { path } => {
+            let store = open_sqlite_store(path, OpenMode::ReadOnly).map_err(|error| {
+                if error.kind == StoreErrorKind::NotFound {
+                    user_error(
+                        py,
+                        &format!(
+                            "no Recall history is recorded yet at {}; run a command first",
+                            path.display()
+                        ),
+                        RECALL_STORE_CODE,
+                    )
+                } else {
+                    store_failure(py, &error)
+                }
+            })?;
+            Ok((store, path.display().to_string()))
+        }
+        StoreLocation::Unsupported {
+            connection,
+            adapter,
+        } => Err(user_error(
+            py,
+            &format!(
+                "connection `{connection}` uses adapter `{adapter}`, which this version cannot \
+                 read Recall history from"
+            ),
+            RECALL_STORE_CODE,
+        )),
+    }
+}
+
+/// `sqb recall query --backend warehouse` and `schema --backend warehouse` run through `sqb query`.
+fn warehouse_query(
+    py: Python<'_>,
+    recall: &RecallRequest,
+    project_dir: &std::path::Path,
+    (sql, limit): (&str, Option<i64>),
+) -> PyResult<i32> {
+    let options = PyDict::new(py);
+    options.set_item("project_dir", project_dir)?;
+    options.set_item("sql", sql)?;
+    options.set_item("selected_target", recall.selected_target.as_deref())?;
+    options.set_item("output_format", &recall.format)?;
+    options.set_item("limit", limit)?;
+    run_query_command(py, Some(options))
+}
+
+fn limit(recall: &RecallRequest) -> Option<i64> {
+    if recall.no_limit {
+        return None;
+    }
+    recall.limit.or(Some(DEFAULT_QUERY_LIMIT))
+}
+
+fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
+    let (project_dir, settings) = settings(py, recall)?;
+    let sql: String = recall.sql.clone().unwrap_or_default();
+    if sql.trim().is_empty() {
+        return Err(user_error(
+            py,
+            "recall query SQL must not be empty",
+            RECALL_QUERY_CODE,
+        ));
+    }
+    let limit = limit(recall);
+    if limit.is_some_and(|limit| limit < 0) {
+        return Err(user_error(
+            py,
+            "--limit must not be negative",
+            RECALL_QUERY_CODE,
+        ));
+    }
+    if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
+        return warehouse_query(py, recall, &project_dir, (&sql, limit));
+    }
+    let (store, path) = open_store(py, &settings)?;
+    let started = Instant::now();
+    let limit = limit.map(|limit| usize::try_from(limit).unwrap_or(usize::MAX));
+    let result = query_store(&store, &sql, limit).map_err(|error| store_failure(py, &error))?;
+    let format: &str = &recall.format;
+    let max_bytes: Option<usize> = match recall.max_cell_bytes {
+        Some(bytes) if bytes <= 0 => None,
+        Some(bytes) => Some(usize::try_from(bytes).unwrap_or(usize::MAX)),
+        None if format == JSON_FORMAT => None,
+        None => Some(DEFAULT_MAX_CELL_BYTES),
+    };
+    let rendered = render_result(
+        &result,
+        format,
+        max_bytes,
+        &QueryContext {
+            target: settings.target.as_deref(),
+            store_path: &path,
+            limit,
+            elapsed_ms: started.elapsed().as_secs_f64() * 1000.0,
+        },
+    );
+    write_stdout_bytes(py, rendered.as_bytes())?;
+    Ok(0)
+}
+
+fn run_schema(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
+    let (project_dir, settings) = settings(py, recall)?;
+    if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
+        let sql = match &recall.relation {
+            Some(relation) => format!(
+                "SELECT table_schema, table_name, column_name, data_type, is_nullable \
+                 FROM information_schema.columns WHERE table_name = '{}' \
+                 ORDER BY table_schema, ordinal_position",
+                relation.replace('\'', "''")
+            ),
+            None => "SELECT table_schema, table_name, table_type FROM information_schema.tables \
+                     WHERE table_name LIKE '\\_sqlbuild\\_%' ESCAPE '\\' \
+                     ORDER BY table_schema, table_name"
+                .to_owned(),
+        };
+        return warehouse_query(py, recall, &project_dir, (&sql, None));
+    }
+    let (store, path) = open_store(py, &settings)?;
+    let relations = describe_store(&store).map_err(|error| store_failure(py, &error))?;
+    let json_output: bool = recall.format == JSON_FORMAT;
+    write_stdout_bytes(
+        py,
+        render_schema(&relations, json_output, (&path, settings.retention_days)).as_bytes(),
+    )?;
+    Ok(0)
+}
+
+fn tail_lines(data: &[u8], lines: usize) -> &[u8] {
+    let body = data.strip_suffix(b"\n").unwrap_or(data);
+    let start = body
+        .iter()
+        .enumerate()
+        .rev()
+        .filter(|(_, byte)| **byte == b'\n')
+        .nth(lines.saturating_sub(1))
+        .map_or(0, |(index, _)| index + 1);
+    if lines == 0 {
+        &data[data.len()..]
+    } else {
+        &data[start..]
+    }
+}
+
+fn run_output(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
+    let (_, settings) = settings(py, recall)?;
+    let (store, _) = open_store(py, &settings)?;
+    let selector: &str = recall.invocation.as_deref().unwrap_or(LAST_INVOCATION);
+    let invocation_id =
+        resolve_invocation(&store, selector).map_err(|error| store_failure(py, &error))?;
+    let stream = recall.stream.as_deref().and_then(OutputStream::from_name);
+    let transcript = read_output_transcript(&store, &invocation_id, stream)
+        .map_err(|error| store_failure(py, &error))?;
+    let data: &[u8] = match recall.tail {
+        Some(lines) => tail_lines(&transcript.data, usize::try_from(lines).unwrap_or(0)),
+        None => &transcript.data,
+    };
+    write_stdout_bytes(py, data)?;
+    let mut problems: Vec<String> = Vec::new();
+    if transcript.missing_sequences > 0 {
+        problems.push(format!(
+            "{} chunk(s) missing ({})",
+            transcript.missing_sequences,
+            transcript.gap_reason.as_deref().unwrap_or("unexplained")
+        ));
+    }
+    if transcript.reported_drops > 0 {
+        problems.push(format!("{} chunk(s) dropped", transcript.reported_drops));
+    }
+    if transcript.filtered > 0 {
+        problems.push(format!("{} chunk(s) filtered", transcript.filtered));
+    }
+    if !transcript.flush_complete {
+        problems.push("delivery did not report a complete flush".to_owned());
+    }
+    match transcript.status.as_deref() {
+        Some("completed" | "failed") | None => {}
+        Some(status) => problems.push(format!("the invocation is {status}")),
+    }
+    if !problems.is_empty() {
+        write_stderr(
+            py,
+            &format!(
+                "note: output of {invocation_id} may be incomplete: {}\n",
+                problems.join("; ")
+            ),
+        )?;
+    }
+    Ok(0)
+}
+
+/// Run one `sqb recall` subcommand and return its exit code.
+pub(crate) fn run_recall_command(
+    py: Python<'_>,
+    options: Option<Bound<'_, PyDict>>,
+) -> PyResult<i32> {
+    let recall: RecallRequest = recall_request(py, options)?;
+    match recall.command.as_deref() {
+        Some("query") => run_query(py, &recall),
+        Some("schema") => run_schema(py, &recall),
+        Some("output") => run_output(py, &recall),
+        _ => Err(user_error(
+            py,
+            "sqb recall requires a subcommand: query, schema or output",
+            RECALL_QUERY_CODE,
+        )),
+    }
+}
