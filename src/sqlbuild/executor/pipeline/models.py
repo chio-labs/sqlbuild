@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from sqlbuild._native import AuditPlanEntry, SqlTestPlanEntry
+from sqlbuild._native import AuditPlanEntry, CompiledObjectKey, SqlTestPlanEntry
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.build.models import (
     BuildCallbacks,
@@ -41,6 +41,17 @@ class TestPipelineCallbacks:
     on_progress: Callable[[str], None] | None = None
     on_test_start: Callable[[SqlTestPlanEntry], None] | None = None
     on_test_complete: Callable[[SqlTestExecutionResult], None] | None = None
+
+
+@dataclass(frozen=True)
+class TemporaryTestFunctions:
+    """Temporary function copies created for one test run and the functions left without one."""
+
+    statements: tuple[tuple[str, str], ...] = ()
+    """Each `(function name, statement)` that created a copy, in creation order."""
+    created_keys: frozenset[CompiledObjectKey] = frozenset()
+    replacements: dict[str, str] = field(default_factory=dict)
+    failures: dict[CompiledObjectKey, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

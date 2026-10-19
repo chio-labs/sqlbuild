@@ -271,6 +271,9 @@ from sqlbuild.executor.old_name_views._helpers.janitor import (
 )
 from sqlbuild.executor.pipeline.exceptions import AuditExecutionError as AuditExecutionError
 from sqlbuild.executor.pipeline.exceptions import (
+    TemporaryTestFunctionError as TemporaryTestFunctionError,
+)
+from sqlbuild.executor.pipeline.exceptions import (
     WarehouseConnectionError as WarehouseConnectionError,
 )
 from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (

@@ -79,6 +79,7 @@ from sqlbuild.adapter.contract.models import (
     SnapshotSqlDialect,
     TableFreshnessMetadata,
     TableFreshnessRequest,
+    TemporaryFunction,
 )
 from sqlbuild.adapter.contract.types import (
     BuiltinAdapter,
@@ -152,6 +153,7 @@ from sqlbuild.adapters.snowflake.constants import (
     SHOW_LIKE_ESCAPE_CHARACTER,
     STATUS_COLUMN_NAME,
     SUCCESS_STATUS_TOKENS,
+    TEMPORARY_FUNCTION_PREFIX,
     TRUE_METADATA_VALUE,
     VIEW_RELATION_TYPE_TOKEN,
 )
@@ -2827,6 +2829,33 @@ class SnowflakeAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"RETURNS {returns}\n"
             "LANGUAGE SQL\n"
             f"AS $$\n{body_sql}\n$$",
+        )
+
+    def render_create_temporary_function(
+        self, *, name: str, definition: FunctionDefinition
+    ) -> TemporaryFunction | None:
+        """Copy a function into a session TEMPORARY function in the session's current schema."""
+
+        target: str = self.render_identifier(f"{TEMPORARY_FUNCTION_PREFIX}{name}")
+        statements: tuple[str, ...] = self.render_create_function(
+            destination=target,
+            arguments=definition.arguments,
+            returns=definition.returns,
+            body_sql=definition.body_sql,
+            return_columns=definition.return_columns,
+            language=definition.language,
+            runtime_version=definition.runtime_version,
+            entry_point=definition.entry_point,
+            packages=definition.packages,
+        )
+        return TemporaryFunction(
+            target=target,
+            statements=tuple(
+                statement.replace(
+                    "CREATE OR REPLACE FUNCTION ", "CREATE OR REPLACE TEMPORARY FUNCTION ", 1
+                )
+                for statement in statements
+            ),
         )
 
     def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:

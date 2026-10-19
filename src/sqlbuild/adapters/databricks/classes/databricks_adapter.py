@@ -80,6 +80,7 @@ from sqlbuild.adapter.contract.models import (
     SnapshotSqlDialect,
     TableFreshnessMetadata,
     TableFreshnessRequest,
+    TemporaryFunction,
 )
 from sqlbuild.adapter.contract.types import (
     BuiltinAdapter,
@@ -128,6 +129,7 @@ from sqlbuild.adapters.databricks.constants import (
     NON_ROW_RESULT_COLUMN_NAMES,
     RELATION_NOT_FOUND_ERROR_CLASSES,
     TABLE_RELATION_METADATA_TYPES,
+    TEMPORARY_FUNCTION_PREFIX,
     UNDEFINED_TABLE_SQLSTATE,
 )
 from sqlbuild.compiler.compile.types import FunctionLanguage
@@ -1677,6 +1679,31 @@ class DatabricksAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"CREATE OR REPLACE FUNCTION {destination}({argument_sql})\n"
             f"RETURNS {returns}\n"
             f"RETURN {body_sql}",
+        )
+
+    def render_create_temporary_function(
+        self, *, name: str, definition: FunctionDefinition
+    ) -> TemporaryFunction | None:
+        """Copy a SQL function into a prefixed session TEMPORARY function, called unqualified."""
+
+        if definition.language != FunctionLanguage.SQL:
+            return None
+        target: str = self.render_identifier(f"{TEMPORARY_FUNCTION_PREFIX}{name}")
+        statements: tuple[str, ...] = self.render_create_function(
+            destination=target,
+            arguments=definition.arguments,
+            returns=definition.returns,
+            body_sql=definition.body_sql,
+            return_columns=definition.return_columns,
+        )
+        return TemporaryFunction(
+            target=target,
+            statements=tuple(
+                statement.replace(
+                    "CREATE OR REPLACE FUNCTION ", "CREATE OR REPLACE TEMPORARY FUNCTION ", 1
+                )
+                for statement in statements
+            ),
         )
 
     def _render_create_python_function(

@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, ClassVar
 from unittest.mock import MagicMock
 
 from sqlbuild._native import (
     AuditPlanEntry,
+    ChainStep,
     CompiledObjectKey,
     CompiledProject,
     CompiledRelationLocation,
@@ -17,6 +19,8 @@ from sqlbuild._native import (
     CompiledSqlScenario,
     CompilePipelineResult,
     DiscoveredSqlScenarioFile,
+    FunctionArgument,
+    FunctionPlanEntry,
     PlanOutput,
     ScenarioExecutionPlan,
     ScenarioGraphPlan,
@@ -25,6 +29,7 @@ from sqlbuild._native import (
     SeedCsvSettings,
     SeedPlanEntry,
     SqlLexicalSyntax,
+    SqlTestPlanEntry,
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
@@ -320,3 +325,87 @@ def local_snapshot_loader_for_test_case(
         True: load_snapshot_success,
         False: load_snapshot_failure,
     }[test_case.load_error_message is None]
+
+
+def order_status_function_test_plan(*, body_sql: str, test_count: int) -> PlanOutput:
+    """Plan of tests calling one unbuilt project function whose current body is `body_sql`."""
+
+    function_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.UDF, name="is_completed_order"
+    )
+    destination: CompiledRelationLocation = CompiledRelationLocation(
+        database=None,
+        schema="analytics",
+        name="is_completed_order",
+        qualified_name="analytics.is_completed_order",
+    )
+    return PlanOutput(
+        test_entries=tuple(
+            SqlTestPlanEntry(
+                key=CompiledObjectKey(
+                    resource_type=CompiledResourceType.SQL_TEST, name=f"test_orders_{index}"
+                ),
+                name=f"test_orders_{index}",
+                chain=(
+                    ChainStep(
+                        model_name="orders",
+                        resolved_sql=(
+                            "SELECT analytics.is_completed_order ('completed') AS is_completed"
+                        ),
+                        expected_cte_sql="SELECT TRUE AS is_completed",
+                    ),
+                ),
+                function_deps=(function_key,),
+            )
+            for index in range(test_count)
+        ),
+        function_entries=(
+            FunctionPlanEntry(
+                key=function_key,
+                name="is_completed_order",
+                relative_path=Path("functions/sql/is_completed_order.sql"),
+                destination=destination,
+                arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
+                returns="BOOLEAN",
+                body_sql=body_sql,
+                fingerprint_query_sql=body_sql,
+                fingerprint_destination=destination,
+            ),
+        ),
+        function_locations={"is_completed_order": destination},
+    )
+
+
+def order_status_callee_test_plan(*, callee_body_sql: str, test_count: int) -> PlanOutput:
+    """Plan of tests calling `is_completed_order`, which calls `status_matches` with this body."""
+
+    plan: PlanOutput = order_status_function_test_plan(
+        body_sql="analytics.status_matches(order_status)", test_count=test_count
+    )
+    callee_key: CompiledObjectKey = CompiledObjectKey(
+        resource_type=CompiledResourceType.UDF, name="status_matches"
+    )
+    callee_destination: CompiledRelationLocation = CompiledRelationLocation(
+        database=None,
+        schema="analytics",
+        name="status_matches",
+        qualified_name="analytics.status_matches",
+    )
+    return replace(
+        plan,
+        function_entries=(
+            *plan.function_entries,
+            FunctionPlanEntry(
+                key=callee_key,
+                name="status_matches",
+                relative_path=Path("functions/sql/status_matches.sql"),
+                destination=callee_destination,
+                arguments=(FunctionArgument(name="order_status", type="VARCHAR"),),
+                returns="BOOLEAN",
+                body_sql=callee_body_sql,
+                fingerprint_query_sql=callee_body_sql,
+                fingerprint_destination=callee_destination,
+            ),
+        ),
+        function_locations={**plan.function_locations, "status_matches": callee_destination},
+    )

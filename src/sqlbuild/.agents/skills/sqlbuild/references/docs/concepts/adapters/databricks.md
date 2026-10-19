@@ -45,3 +45,9 @@ The target's `database` selects the Unity Catalog catalog, and its `schema` sele
 
 On connect, SQLBuild runs `USE CATALOG` and `USE SCHEMA` statements from the active target to set
 the authoritative session namespace.
+
+## Functions in unit tests
+
+`sqb test` creates each SQL UDF and table function the selected tests call as a session
+`TEMPORARY FUNCTION __sqb_test__<name>`. Python UDFs cannot be temporary, so tests call the built
+Python function. See [Functions in `sqb test`](../testing.md#functions-in-sqb-test).

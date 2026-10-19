@@ -76,6 +76,7 @@ from sqlbuild.adapter.contract.models import (
     SnapshotSqlDialect,
     TableFreshnessMetadata,
     TableFreshnessRequest,
+    TemporaryFunction,
 )
 from sqlbuild.adapter.contract.types import (
     BuiltinAdapter,
@@ -534,6 +535,25 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"CREATE OR REPLACE FUNCTION {destination}({arg_sql})\n"
             f"{returns_clause}\n"
             f"LANGUAGE SQL AS $$\n{body_sql}\n$$",
+        )
+
+    def render_create_temporary_function(
+        self, *, name: str, definition: FunctionDefinition
+    ) -> TemporaryFunction | None:
+        """Copy a SQL function into the session's `pg_temp` schema, called schema-qualified."""
+
+        if definition.language != FunctionLanguage.SQL:
+            return None
+        target: str = f"pg_temp.{self.render_identifier(name)}"
+        return TemporaryFunction(
+            target=target,
+            statements=self.render_create_function(
+                destination=target,
+                arguments=definition.arguments,
+                returns=definition.returns,
+                body_sql=definition.body_sql,
+                return_columns=definition.return_columns,
+            ),
         )
 
     def render_append(

@@ -16,6 +16,7 @@ from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
+    FunctionDefinition,
     MigrationStagePlan,
     RelationGrant,
     RelationReadProbe,
@@ -24,6 +25,7 @@ from sqlbuild.adapter.contract.models import (
     SnapshotChangeTarget,
     TableFreshnessMetadata,
     TableFreshnessRequest,
+    TemporaryFunction,
 )
 from sqlbuild.adapter.contract.types import (
     FrameworkType,
@@ -115,6 +117,14 @@ class StrictAdapter(
         """Optional: remove a relation `create_sql_test_output` returned."""
 
         del connection, relation
+
+    def render_create_temporary_function(
+        self, *, name: str, definition: FunctionDefinition
+    ) -> TemporaryFunction | None:
+        """Optional: a session-scoped function copy for unit tests, or `None` if unsupported."""
+
+        del name, definition
+        return None
 
     @abstractmethod
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:

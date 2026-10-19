@@ -185,3 +185,20 @@ class ScenarioWorkerExitTestCase:
     description: str
     worker_count: int
     expected_returncode: int
+
+
+@dataclass(frozen=True)
+class TemporaryTestFunctionTestCase:
+    description: str
+    body_sql: str
+    test_count: int
+    max_concurrency: int
+    expected_outcomes: tuple[str, ...]
+    expected_error_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FunctionCallRewriteTestCase:
+    description: str
+    sql: str
+    expected_sql: str

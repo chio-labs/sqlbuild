@@ -385,6 +385,10 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.executor.pipeline.exceptions",
         "WarehouseConnectionError",
     ),
+    "TemporaryTestFunctionError": (
+        "sqlbuild.executor.pipeline.exceptions",
+        "TemporaryTestFunctionError",
+    ),
     "raise_warehouse_connection_failure": (
         "sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure",
         "raise_warehouse_connection_failure",
