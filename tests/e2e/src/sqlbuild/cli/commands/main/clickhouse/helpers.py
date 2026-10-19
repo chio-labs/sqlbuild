@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import re
 import uuid
+from pathlib import Path
 from textwrap import dedent
 from typing import Any, cast
 
 from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop
 
 CLICKHOUSE_IMAGE: str = "clickhouse/clickhouse-server:26.1"
 
@@ -246,3 +249,65 @@ def active_parts_by_partition(
         ),
     )
     return {str(row[0]): tuple(map(str, cast(list[object], row[1]))) for row in rows}
+
+
+def prepare_clickhouse_waffle_shop(
+    *, tmp_path: Path, config: dict[str, object]
+) -> tuple[Path, str]:
+    """Copy waffle shop to tmp dir and wire it to a unique ClickHouse database."""
+
+    schema_name: str = build_unique_schema_name(prefix="sqb_waffle")
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    (project_dir / "functions" / "sql" / "customer_orders.sql").unlink()
+    (project_dir / "tests" / "unit" / "test_customer_orders_table_fn.sql").unlink()
+    (project_dir / "functions" / "python" / "is_completed_order_py.py").unlink()
+    fact_orders_path: Path = project_dir / "models" / "marts" / "fact_orders.sql"
+    fact_orders_path.write_text(
+        fact_orders_path.read_text(encoding="utf-8").replace(
+            '__udf("is_completed_order_py")(o.status) AS is_completed_order_py,',
+            '__udf("is_completed_order")(o.status) AS is_completed_order_py,',
+        ),
+        encoding="utf-8",
+    )
+    for model_name in ("dim_customers", "fact_orders", "scenario_order_prices"):
+        _alias_qualified_columns(project_dir / "models" / "marts" / f"{model_name}.sql")
+    materialization_path: Path = project_dir / "materializations" / "partition_tracked.py"
+    materialization_path.write_text(
+        materialization_path.read_text(encoding="utf-8").replace(
+            "CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP()"
+        ),
+        encoding="utf-8",
+    )
+    time_macros_path: Path = project_dir / "models" / "marts" / "_macros" / "time.py"
+    time_macros_path.write_text(
+        time_macros_path.read_text(encoding="utf-8").replace(
+            "return f\"DATE_TRUNC('{grain}', {expression})\"",
+            "return f\"CAST(DATE_TRUNC('{grain}', {expression}) AS TIMESTAMP)\"",
+        ),
+        encoding="utf-8",
+    )
+    (project_dir / "sqlbuild_project.toml").write_text(
+        build_clickhouse_project_toml(
+            project_name="waffle_shop",
+            schema_name=schema_name,
+            config=config,
+            extra='\n[settings]\ndefault_audit_severity = "warn"\n\n'
+            '[path_defaults.staging]\nmaterialized = "view"\n',
+        ),
+        encoding="utf-8",
+    )
+    return project_dir, schema_name
+
+
+def _alias_qualified_columns(model_path: Path) -> None:
+    """Alias bare qualified columns; ClickHouse names them ``alias.column`` in multi-joins."""
+
+    model_path.write_text(
+        re.sub(
+            r"^(\s+)(\w+)\.(\w+),$",
+            r"\1\2.\3 AS \3,",
+            model_path.read_text(encoding="utf-8"),
+            flags=re.MULTILINE,
+        ),
+        encoding="utf-8",
+    )

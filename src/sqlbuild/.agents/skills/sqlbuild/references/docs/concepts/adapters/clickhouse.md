@@ -17,6 +17,7 @@ Online: https://sqlbuild.com/docs/concepts/adapters/clickhouse/
 - Clones
 - Nullable columns
 - Settings SQLBuild pins
+- SQL differences to watch
 - Limits
 
 The ClickHouse adapter is in beta and supports a single server. Clusters (`ON CLUSTER`, replicated and distributed tables) are not supported yet. Please [report issues](https://github.com/chio-labs/sqlbuild/issues).
@@ -168,6 +169,11 @@ Every query runs with these settings so SQL behaves the same as on other adapter
 The connection's `settings` may repeat these values but not change them: a different value fails to connect with `A710`, because SQLBuild's generated SQL depends on them.
 
 ClickHouse returns a type's default value (`0`, the epoch, an empty string) from `lag` and `lead` past the edge of a window frame unless the argument is `Nullable`. SQLBuild's generated snapshot SQL wraps those arguments in `toNullable` so they return `NULL` as on other adapters. Write the same in your own models when you rely on `NULL` there.
+
+## SQL differences to watch
+
+- In a query that joins three or more tables, ClickHouse names a selected column such as `c.customer_id` literally `c.customer_id` when another joined table also has a `customer_id`. Alias such columns (`c.customer_id AS customer_id`) so the table gets the column name other warehouses give it.
+- `CURRENT_TIMESTAMP` needs parentheses: write `CURRENT_TIMESTAMP()` or `now()`.
 
 ## Limits
 

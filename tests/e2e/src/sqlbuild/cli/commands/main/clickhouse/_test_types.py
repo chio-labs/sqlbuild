@@ -76,3 +76,11 @@ class ClickHouseNullabilityE2ETestCase:
     edited_select: str
     expected_rows: tuple[tuple[object, ...], ...]
     expected_types: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseWaffleShopE2ETestCase:
+    description: str
+    expected_return_codes: tuple[int, int, int]
+    expected_summary_fragments: tuple[str, str, str]
+    expected_row_counts: dict[str, int]

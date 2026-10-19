@@ -157,6 +157,11 @@ The connection's `settings` may repeat these values but not change them: a diffe
 
 ClickHouse returns a type's default value (`0`, the epoch, an empty string) from `lag` and `lead` past the edge of a window frame unless the argument is `Nullable`. SQLBuild's generated snapshot SQL wraps those arguments in `toNullable` so they return `NULL` as on other adapters. Write the same in your own models when you rely on `NULL` there.
 
+## SQL differences to watch
+
+- In a query that joins three or more tables, ClickHouse names a selected column such as `c.customer_id` literally `c.customer_id` when another joined table also has a `customer_id`. Alias such columns (`c.customer_id AS customer_id`) so the table gets the column name other warehouses give it.
+- `CURRENT_TIMESTAMP` needs parentheses: write `CURRENT_TIMESTAMP()` or `now()`.
+
 ## Limits
 
 - Single server only. `ON CLUSTER`, `ReplicatedMergeTree` and `Distributed` tables are not managed.
