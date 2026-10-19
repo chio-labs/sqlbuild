@@ -790,10 +790,10 @@ fn stored_summaries(path: &Path) -> Option<StoredSummaries> {
         Ok(bytes) => bytes,
         Err(_unreadable) => return None,
     };
-    match serde_json::from_slice::<StoredSummaries>(&bytes) {
-        Ok(stored) => Some(stored),
-        Err(_damaged) => None,
-    }
+    let Ok(stored) = serde_json::from_slice::<StoredSummaries>(&bytes) else {
+        return None;
+    };
+    Some(stored)
 }
 
 /// The stored fixture summaries, kept only for one native build.

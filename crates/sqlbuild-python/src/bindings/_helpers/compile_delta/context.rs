@@ -1,7 +1,4 @@
-//! What a full compile captures for its project image, and what a delta compile injects.
-//!
-//! Compiles run one at a time per process, but rules run on their own threads, so both the
-//! capture and the injection live in process-wide slots rather than thread-local ones.
+//! Process-wide slots for what a full compile captures and what a delta compile injects.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -131,6 +128,11 @@ pub(crate) struct DeltaInjection {
 static CAPTURE: Mutex<Option<ImageCapture>> = Mutex::new(None);
 static INJECTION: Mutex<Option<Arc<DeltaInjection>>> = Mutex::new(None);
 
+/// Why the running delta compile cannot continue, once something ruled it out.
+static UNSUPPORTED: Mutex<Option<String>> = Mutex::new(None);
+static PENDING_IMAGE: Mutex<Option<ImageSections>> = Mutex::new(None);
+static RECORD_MERGE: Mutex<Option<RecordMerge>> = Mutex::new(None);
+
 fn locked<T>(slot: &Mutex<T>) -> MutexGuard<'_, T> {
     slot.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -194,9 +196,7 @@ pub(crate) fn capture_unsupported(reason: &str) {
     });
 }
 
-/// Run `body` with `injection` visible to the stages a delta compile reruns.
-///
-/// Returns the injection back with the body's result, or `None` if something still holds it.
+/// Run `body` with `injection` visible to the rerun stages; returns it unless still held.
 pub(crate) fn with_injection<T>(
     injection: DeltaInjection,
     body: impl FnOnce() -> T,
@@ -206,7 +206,12 @@ pub(crate) fn with_injection<T>(
     let injection: Option<Arc<DeltaInjection>> = locked(&INJECTION).take();
     (
         result,
-        injection.and_then(|injection| Arc::try_unwrap(injection).ok()),
+        injection.and_then(|injection| {
+            let Ok(injection) = Arc::try_unwrap(injection) else {
+                return None;
+            };
+            Some(injection)
+        }),
     )
 }
 
@@ -214,9 +219,6 @@ pub(crate) fn with_injection<T>(
 pub(crate) fn injection() -> Option<Arc<DeltaInjection>> {
     locked(&INJECTION).clone()
 }
-
-/// Why the running delta compile cannot continue, once something ruled it out.
-static UNSUPPORTED: Mutex<Option<String>> = Mutex::new(None);
 
 /// Rule out the running delta compile: returns the error that unwinds to its fallback.
 pub(crate) fn delta_unsupported(reason: &str) -> pyo3::PyErr {
@@ -255,14 +257,13 @@ pub(crate) fn injected_fact_digest(key: &[String]) -> Option<String> {
     injection.fact_digests.get(key).cloned()
 }
 
-/// Give a delta compile's analysis session the whole project's facts for relations it does not
-/// analyse, and the whole project's analysis order.
-pub(crate) fn inject_relations(request: &mut SessionRequest) -> pyo3::PyResult<()> {
+/// Give a delta's analysis session the whole project's relation facts and analysis order.
+pub(crate) fn inject_relations(mut request: SessionRequest) -> pyo3::PyResult<SessionRequest> {
     if !request.dynamic_families_by_table.is_empty() {
         capture_unsupported("a model declares dynamic column families");
     }
     let Some(injection) = injection() else {
-        return Ok(());
+        return Ok(request);
     };
     if !request.dynamic_families_by_table.is_empty() {
         return Err(delta_unsupported(
@@ -290,7 +291,7 @@ pub(crate) fn inject_relations(request: &mut SessionRequest) -> pyo3::PyResult<(
                 .cloned(),
         );
     }
-    Ok(())
+    Ok(request)
 }
 
 /// What a delta compile's reuse record keeps of the stored compile it patched.
@@ -301,9 +302,6 @@ pub(crate) struct RecordMerge {
     /// The template environment names the stored compile read.
     pub(crate) environment_names: Vec<String>,
 }
-
-static PENDING_IMAGE: Mutex<Option<ImageSections>> = Mutex::new(None);
-static RECORD_MERGE: Mutex<Option<RecordMerge>> = Mutex::new(None);
 
 /// Hand the next reuse record the image to keep beside it.
 pub(crate) fn set_pending_image(image: Option<ImageSections>) {

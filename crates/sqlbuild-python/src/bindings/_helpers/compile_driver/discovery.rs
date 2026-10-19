@@ -244,9 +244,11 @@ fn assembled_inputs<'py>(
         } else {
             &project_config
         };
-    if !native_field(delta_settings, "settings")?
-        .getattr(DELTA_COMPILE_SETTING_KEY)?
-        .is_truthy()?
+    if !native_field(
+        &native_field(delta_settings, "settings")?,
+        DELTA_COMPILE_SETTING_KEY,
+    )?
+    .is_truthy()?
     {
         crate::bindings::_helpers::compile_delta::context::stop_capture();
     }

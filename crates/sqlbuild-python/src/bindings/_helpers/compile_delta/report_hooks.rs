@@ -12,10 +12,15 @@ use crate::bindings::_helpers::compile_delta::context::{
     capturing, injection,
 };
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
+use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
-/// The text report's model lines: captured for the image, and in a delta compile the whole
-/// project's lines with the rerun models' lines replaced.
+const SOURCES_KEY: &str = "sources";
+const NAME_KEY: &str = "name";
+/// The graph key kind of a model.
+const MODEL_KIND: &str = "model";
+
+/// The text report's model lines, captured or, in a delta, patched for the rerun models.
 pub(crate) fn text_model_lines(models: Vec<ModelLine>) -> Vec<ModelLine> {
     let models: Vec<ModelLine> = match injection() {
         None => models,
@@ -83,17 +88,13 @@ fn record_compile_facts_inner(
         return Ok(());
     }
     let native: Bound<'_, PyAny> = native_field(graph, "native")?;
+    let graph_native: &NativeProjectGraph = native.cast::<NativeProjectGraph>()?.get();
     let mut models: Vec<CapturedModel> = Vec::new();
     for model in native_field(&native_field(graph, "project")?, "models")?.try_iter()? {
         let model: Bound<'_, PyAny> = model?;
         let name: String = native_field(&model, "name")?.extract()?;
-        let mut upstream: Vec<(String, String)> = Vec::new();
-        for item in native
-            .call_method1("upstream", (("model", name.as_str()),))?
-            .try_iter()?
-        {
-            upstream.push(item?.extract()?);
-        }
+        let upstream: Vec<(String, String)> =
+            graph_native.upstream((MODEL_KIND.to_owned(), name.clone()));
         models.push(CapturedModel {
             name,
             relative_path: native_field(&model, "relative_path")?
@@ -124,7 +125,10 @@ fn record_compile_facts_inner(
 pub(crate) fn captured_diagnostic(diagnostic: &Bound<'_, PyAny>) -> PyResult<CapturedDiagnostic> {
     let item = diagnostic_item(diagnostic)?;
     let json: String = plain_json(item.as_any())?;
-    let value: serde_json::Value = serde_json::from_str(&json).unwrap_or_default();
+    let value: serde_json::Value = match serde_json::from_str(&json) {
+        Ok(value) => value,
+        Err(_malformed) => serde_json::Value::Null,
+    };
     let text = |value: Option<&serde_json::Value>| -> Option<String> {
         value.and_then(serde_json::Value::as_str).map(str::to_owned)
     };
@@ -243,8 +247,7 @@ pub(crate) fn record_model_shapes(
     guarded(|| record_model_shapes_inner(project, shapes))
 }
 
-/// In a delta compile, the authored text of each model or SQL test file a diagnostic points
-/// into but the delta did not compile, read from the project as the stored compile saw it.
+/// In a delta, add the text of files that stored diagnostics point into but were not rerun.
 pub(crate) fn complete_source_texts(
     project: &Bound<'_, PyAny>,
     diagnostics: &[Bound<'_, PyAny>],
@@ -278,8 +281,7 @@ pub(crate) fn complete_source_texts(
     Ok(())
 }
 
-/// In a delta compile that reads only some sources, drop every other source entry from loaded
-/// source YAML documents before they are built.
+/// In a delta reading only some sources, drop every other loaded source YAML entry.
 pub(crate) fn retain_read_sources(
     outcomes: &mut [sqlbuild_discovery::yaml_files::models::YamlFileOutcome],
 ) {
@@ -324,6 +326,3 @@ pub(crate) fn retain_read_sources(
         }
     }
 }
-
-const SOURCES_KEY: &str = "sources";
-const NAME_KEY: &str = "name";

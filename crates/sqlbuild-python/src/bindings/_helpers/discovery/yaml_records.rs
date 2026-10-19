@@ -172,8 +172,7 @@ fn load_files<'py>(
             let failure_kind: FailureKind = kind.failure_kind();
             match documents.as_mut() {
                 Some(documents) => py.detach(|| {
-                    crate::bindings::_helpers::compile_delta::yaml_cache::load_with(
-                        documents,
+                    documents.load_with(
                         &named,
                         |path| inner.absolute(path),
                         |missed| load_yaml(&root, inner, missed, failure_kind),

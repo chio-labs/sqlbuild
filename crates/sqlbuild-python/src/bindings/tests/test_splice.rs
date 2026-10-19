@@ -1,13 +1,10 @@
 use std::collections::BTreeSet;
 
 use crate::bindings::_helpers::compile_delta::splice::{SpliceScope, spliced_report};
-use crate::bindings::_helpers::compile_delta::tests::test_types::SpliceTestCase;
+use crate::bindings::tests::helpers::names;
+use crate::bindings::tests::test_types::SpliceTestCase;
 
 const BASE: &str = r#"{"has_errors": false, "summary": {"models": 2, "errors": 0, "warnings": 0}, "resources": {"models": [{"name": "orders", "columns": 1}, {"name": "customers", "columns": 2}], "sources": [{"name": "raw_orders", "column_count": 1}, {"name": "raw_customers", "column_count": 2}], "audits": [{"name": "not_null", "attached_to": {"resource_type": "model", "name": "orders"}}], "tests": [{"name": "orders_test", "status": "compiled"}]}, "diagnostics": [], "compile_timings": {"total_ms": 9}}"#;
-
-fn names(values: &[&str]) -> BTreeSet<String> {
-    values.iter().map(|value| (*value).to_owned()).collect()
-}
 
 #[test]
 fn given_stored_and_delta_reports_when_splicing_then_only_rerun_items_and_delta_sections_change() {
@@ -19,7 +16,7 @@ fn given_stored_and_delta_reports_when_splicing_then_only_rerun_items_and_delta_
             models: &["orders"],
             tests: &[],
             sources: None,
-            expected: Some(
+            expected_report: Some(
                 r#"{"has_errors": true, "summary": {"models": 2, "errors": 1, "warnings": 0}, "resources": {"models": [{"name": "orders", "columns": 3}, {"name": "customers", "columns": 2}], "sources": [{"name": "raw_orders", "column_count": 1}, {"name": "raw_customers", "column_count": 2}], "audits": [{"name": "unique", "attached_to": {"resource_type": "model", "name": "orders"}}], "tests": [{"name": "orders_test", "status": "compiled"}]}, "diagnostics": [{"code": "E1"}], "compile_timings": {"total_ms": 1}}"#,
             ),
         },
@@ -30,7 +27,7 @@ fn given_stored_and_delta_reports_when_splicing_then_only_rerun_items_and_delta_
             models: &[],
             tests: &["orders_test"],
             sources: Some(&["raw_customers"]),
-            expected: Some(
+            expected_report: Some(
                 r#"{"has_errors": false, "summary": {"models": 2, "errors": 0, "warnings": 0}, "resources": {"models": [{"name": "orders", "columns": 1}, {"name": "customers", "columns": 2}], "sources": [{"name": "raw_orders", "column_count": 1}, {"name": "raw_customers", "column_count": 5}], "audits": [{"name": "not_null", "attached_to": {"resource_type": "model", "name": "orders"}}], "tests": [{"name": "orders_test", "status": "changed"}]}, "diagnostics": [], "compile_timings": {"total_ms": 1}}"#,
             ),
         },
@@ -41,7 +38,7 @@ fn given_stored_and_delta_reports_when_splicing_then_only_rerun_items_and_delta_
             models: &["orders"],
             tests: &[],
             sources: None,
-            expected: None,
+            expected_report: None,
         },
         SpliceTestCase {
             description: "a whole-project section that differs cannot be spliced",
@@ -50,7 +47,7 @@ fn given_stored_and_delta_reports_when_splicing_then_only_rerun_items_and_delta_
             models: &[],
             tests: &[],
             sources: None,
-            expected: None,
+            expected_report: None,
         },
         SpliceTestCase {
             description: "reports with different sections cannot be spliced",
@@ -59,7 +56,7 @@ fn given_stored_and_delta_reports_when_splicing_then_only_rerun_items_and_delta_
             models: &[],
             tests: &[],
             sources: None,
-            expected: None,
+            expected_report: None,
         },
     ];
     for test_case in test_cases {
@@ -75,7 +72,7 @@ fn given_stored_and_delta_reports_when_splicing_then_only_rerun_items_and_delta_
             spliced_report(test_case.base, test_case.delta, &scope);
         assert_eq!(
             spliced.ok().as_deref(),
-            test_case.expected,
+            test_case.expected_report,
             "{}",
             test_case.description
         );

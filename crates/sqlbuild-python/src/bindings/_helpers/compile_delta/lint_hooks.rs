@@ -12,8 +12,7 @@ use sqlbuild_core::format_command::constants::LINT_DIRECTORY_NAMES;
 
 use crate::bindings::_helpers::rules::lint_pipeline::LintFile;
 
-/// Each model file's lint cache key: recorded for the image, and in a delta compile the whole
-/// project's keys with the recompiled models' keys fresh.
+/// Each model file's lint key, recorded for the image or, in a delta, patched for reruns.
 pub(crate) fn model_identities(fresh: Vec<(String, String)>) -> PyResult<Vec<(String, String)>> {
     let Some(injection) = injection() else {
         if capturing() {
@@ -44,8 +43,7 @@ pub(crate) fn model_identities(fresh: Vec<(String, String)>) -> PyResult<Vec<(St
     Ok(whole)
 }
 
-/// The changed files a delta compile lints, read from the project as a full lint walk reads
-/// them.
+/// The changed files a delta compile lints, read as a full lint walk reads them.
 pub(crate) fn changed_files(project_dir: &Path) -> PyResult<Vec<LintFile>> {
     let Some(injection) = injection() else {
         return Ok(Vec::new());
@@ -66,8 +64,7 @@ pub(crate) fn changed_files(project_dir: &Path) -> PyResult<Vec<LintFile>> {
     Ok(files)
 }
 
-/// Each non-model file's lint cache key, in walk order: recorded for the image, and in a delta
-/// compile the whole project's keys with the changed files' keys fresh.
+/// Each non-model file's lint key in walk order, recorded or, in a delta, patched.
 pub(crate) fn file_keys(
     project_dir: &Path,
     fresh: Vec<(PathBuf, String, Option<String>)>,

@@ -1,3 +1,5 @@
+#[path = "tests/helpers.rs"]
+mod helpers;
 #[path = "tests/test_image.rs"]
 mod image;
 #[path = "tests/test_splice.rs"]

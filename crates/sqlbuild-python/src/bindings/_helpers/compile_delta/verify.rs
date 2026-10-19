@@ -1,17 +1,17 @@
-//! The hidden differential check: run each delta compile, then the full compile it replaces,
-//! and fail when their reports, exit codes or compiled artifacts differ.
+//! The hidden check that each delta compile matches the full compile it replaces.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::types::PyStringMethods;
+use pyo3::prelude::{Bound, PyAny, PyResult};
 use sqlbuild_cache::digest::main::digest_files::digest_files;
 use sqlbuild_cache::digest::main::hex_digest::hex_digest;
 use sqlbuild_cache::project_reuse::constants::NATIVE_DIGEST_PREFIX;
 
-use crate::bindings::_helpers::compile_command::reuse_recording::CompileArtifactWrites;
+use crate::bindings::_helpers::compile_command::reuse_recording::{
+    CompileArtifactWrites, RecordedCompileOutput,
+};
 
 /// The exit code of a compile whose delta differed from its full compile.
 pub(crate) const MISMATCH_EXIT_CODE: i64 = 70;
@@ -45,30 +45,34 @@ fn locked<T>(slot: &Mutex<T>) -> MutexGuard<'_, T> {
     slot.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn files_under(directory: &Path, found: &mut Vec<PathBuf>) {
+/// Every file under `directory`, depth first.
+fn files_under(directory: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(directory) else {
-        return;
+        return Vec::new();
     };
+    let mut found: Vec<PathBuf> = Vec::new();
     for entry in entries.flatten() {
         let path: PathBuf = entry.path();
         match entry.file_type() {
-            Ok(kind) if kind.is_dir() => files_under(&path, found),
+            Ok(kind) if kind.is_dir() => found.extend(files_under(&path)),
             Ok(kind) if kind.is_file() => found.push(path),
             _ => {}
         }
     }
+    found
 }
 
 /// Every file under `root` with its native digest, keyed by absolute path text.
 pub(crate) fn compiled_digests(root: &Path) -> BTreeMap<String, String> {
-    let mut paths: Vec<PathBuf> = Vec::new();
-    files_under(root, &mut paths);
+    let paths: Vec<PathBuf> = files_under(root);
     let digests = digest_files(&paths);
     paths
         .into_iter()
         .zip(digests)
         .filter_map(|(path, digest)| {
-            let digest = digest.ok()?;
+            let Ok(digest) = digest else {
+                return None;
+            };
             Some((
                 path.to_string_lossy().into_owned(),
                 format!("{NATIVE_DIGEST_PREFIX}{}", hex_digest(&digest)),
@@ -78,7 +82,7 @@ pub(crate) fn compiled_digests(root: &Path) -> BTreeMap<String, String> {
 }
 
 /// Hold the delta's result for comparison once the full compile finishes.
-pub(crate) fn expect(expected: Expected) {
+pub(crate) fn hold_expected(expected: Expected) {
     *locked(&EXPECTED) = Some(expected);
     *locked(&ACTUAL) = None;
 }
@@ -92,17 +96,16 @@ pub(crate) fn full_compile_finished(
     if locked(&EXPECTED).is_none() {
         return Ok(());
     }
-    let stdout: Bound<'_, PyAny> = output.getattr("stdout")?;
+    let (_, stdout): (Vec<String>, Option<String>) = output
+        .cast::<RecordedCompileOutput>()?
+        .get()
+        .texts(output.py())?;
     let written: HashMap<String, Option<String>> = artifact_writes
         .cast::<CompileArtifactWrites>()
         .map(|writes| writes.get().written_digests())
         .unwrap_or_default();
     *locked(&ACTUAL) = Some(Actual {
-        stdout: if stdout.is_none() {
-            None
-        } else {
-            Some(stdout.str()?.to_str()?.to_owned())
-        },
+        stdout,
         exit_code: Some(exit_code),
         artifacts_written,
         written,

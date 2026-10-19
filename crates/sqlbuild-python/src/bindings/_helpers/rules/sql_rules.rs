@@ -346,6 +346,29 @@ fn prepared_result<'a>(
     Some(prepared.result(py))
 }
 
+/// The files a whole-project lint reads: prepared, walked, or in a delta only the changed ones.
+fn linted_files(
+    run: &SqlRun<'_, '_>,
+    prepared_files: Option<Vec<LintFile>>,
+) -> PyResult<Vec<LintFile>> {
+    let py: Python<'_> = run.project.py();
+    let project_dir: &Path = &run.project_dir;
+    let prepared = prepared_result(run, py);
+    if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+        return crate::bindings::_helpers::compile_delta::lint_hooks::changed_files(project_dir);
+    }
+    Ok(match prepared {
+        Some(Ok(result)) => result.outcome.files.clone(),
+        Some(Err(error)) if !error.is_instance_of::<PyException>(py) => {
+            return Err(error.clone_ref(py));
+        }
+        Some(Err(_)) | None => match prepared_files {
+            Some(files) => files,
+            None => lint_sources(project_dir, None, None)?,
+        },
+    })
+}
+
 /// Each analysed model's findings, cached or linted, then cache accounting.
 fn evaluated_sql_rules(
     run: &SqlRun<'_, '_>,
@@ -386,20 +409,7 @@ fn evaluated_sql_rules(
         for model in project_attribute(&run.project, "models")?.try_iter()? {
             model_paths.insert(project_dir.join(model_posix_path(&model?)?));
         }
-        let delta = crate::bindings::_helpers::compile_delta::context::injection();
-        let files: Vec<LintFile> = match prepared_result(run, py) {
-            _ if delta.is_some() => {
-                crate::bindings::_helpers::compile_delta::lint_hooks::changed_files(project_dir)?
-            }
-            Some(Ok(result)) => result.outcome.files.clone(),
-            Some(Err(error)) if !error.is_instance_of::<PyException>(py) => {
-                return Err(error.clone_ref(py));
-            }
-            Some(Err(_)) | None => match prepared_files {
-                Some(files) => files,
-                None => lint_sources(project_dir, None, None)?,
-            },
-        };
+        let files: Vec<LintFile> = linted_files(run, prepared_files)?;
         let mut file_keys: Vec<(PathBuf, String, Option<String>)> = Vec::new();
         for file in &files {
             if model_paths.contains(&file.path) {

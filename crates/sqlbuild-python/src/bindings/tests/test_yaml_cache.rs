@@ -1,11 +1,8 @@
 use sqlbuild_config::models::{ConfigDate, ConfigDateTime, ConfigTime, ConfigValue};
 
-use crate::bindings::_helpers::compile_delta::tests::test_types::DocumentTestCase;
 use crate::bindings::_helpers::compile_delta::yaml_cache::{decoded_document, encoded_document};
-
-fn text(value: &str) -> ConfigValue {
-    ConfigValue::String(value.to_owned())
-}
+use crate::bindings::tests::helpers::text;
+use crate::bindings::tests::test_types::DocumentTestCase;
 
 #[test]
 fn given_loaded_document_when_stored_and_read_back_then_it_is_unchanged() {
@@ -23,10 +20,12 @@ fn given_loaded_document_when_stored_and_read_back_then_it_is_unchanged() {
     let test_cases = [
         DocumentTestCase {
             description: "empty document",
+            expected_truncations_read: 0,
             document: ConfigValue::Null,
         },
         DocumentTestCase {
             description: "sources document with repeated strings",
+            expected_truncations_read: 0,
             document: ConfigValue::Map(vec![(
                 text("sources"),
                 ConfigValue::List(vec![
@@ -43,6 +42,7 @@ fn given_loaded_document_when_stored_and_read_back_then_it_is_unchanged() {
         },
         DocumentTestCase {
             description: "every scalar kind",
+            expected_truncations_read: 0,
             document: ConfigValue::List(vec![
                 ConfigValue::Bool(true),
                 ConfigValue::Bool(false),
@@ -67,6 +67,7 @@ fn given_loaded_document_when_stored_and_read_back_then_it_is_unchanged() {
         },
         DocumentTestCase {
             description: "mapping with non-string keys",
+            expected_truncations_read: 0,
             document: ConfigValue::Map(vec![
                 (ConfigValue::Integer(1), text("one")),
                 (ConfigValue::Null, ConfigValue::List(Vec::new())),
@@ -75,19 +76,24 @@ fn given_loaded_document_when_stored_and_read_back_then_it_is_unchanged() {
     ];
     for test_case in test_cases {
         let stored: Vec<u8> = encoded_document(&test_case.document);
+
+        let decoded: Option<ConfigValue> = decoded_document(&stored);
+        let truncations_read: usize = (0..stored.len())
+            .filter(|length| {
+                decoded_document(&stored[..*length]).as_ref() == Some(&test_case.document)
+            })
+            .count();
+
         assert_eq!(
-            decoded_document(&stored),
-            Some(test_case.document.clone()),
+            decoded.as_ref(),
+            Some(&test_case.document),
             "{}",
             test_case.description
         );
-        for length in 0..stored.len() {
-            assert_ne!(
-                decoded_document(&stored[..length]),
-                Some(test_case.document.clone()),
-                "{}: truncated to {length} bytes",
-                test_case.description
-            );
-        }
+        assert_eq!(
+            truncations_read, test_case.expected_truncations_read,
+            "{}",
+            test_case.description
+        );
     }
 }

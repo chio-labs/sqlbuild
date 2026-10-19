@@ -1,11 +1,27 @@
-//! The project image's binary sections: the native store's length-prefixed records, with each
-//! distinct string written once and referred to by its index.
+//! Image sections as length-prefixed records over a table of each distinct string.
 
 use rustc_hash::FxHashMap;
+use sqlbuild_cache::store::errors::StoreDecodeError;
 use sqlbuild_cache::store::models::{RecordReader, RecordWriter};
 
 /// The most items a list reserves room for before reading them, against corrupt counts.
 const MAX_RESERVED_ITEMS: usize = 1 << 16;
+
+/// A stored value, or `None` when the section is damaged.
+fn read<T>(value: Result<T, StoreDecodeError>) -> Option<T> {
+    let Ok(value) = value else {
+        return None;
+    };
+    Some(value)
+}
+
+/// A stored count or index, or `None` when it does not fit this platform.
+fn length(value: u64) -> Option<usize> {
+    let Ok(length) = usize::try_from(value) else {
+        return None;
+    };
+    Some(length)
+}
 
 /// Writes one section: its values refer to a table of the distinct strings they hold.
 #[derive(Default)]
@@ -80,13 +96,13 @@ pub(crate) struct Decoder<'a> {
 impl<'a> Decoder<'a> {
     pub(crate) fn new(section: &'a [u8]) -> Option<Self> {
         let mut reader: RecordReader<'a> = RecordReader::new(section);
-        let count: usize = usize::try_from(reader.u64().ok()?).ok()?;
+        let count: usize = length(read(reader.u64())?)?;
         let mut strings: Vec<String> = Vec::with_capacity(count.min(section.len()));
         for _ in 0..count {
-            strings.push(reader.string().ok()?);
+            strings.push(read(reader.string())?);
         }
-        let body: &'a [u8] = reader.bytes().ok()?;
-        reader.finish().ok()?;
+        let body: &'a [u8] = read(reader.bytes())?;
+        read(reader.finish())?;
         Some(Self {
             strings,
             body: RecordReader::new(body),
@@ -94,7 +110,7 @@ impl<'a> Decoder<'a> {
     }
 
     pub(crate) fn string(&mut self) -> Option<String> {
-        let id: usize = usize::try_from(self.body.u64().ok()?).ok()?;
+        let id: usize = length(read(self.body.u64())?)?;
         self.strings.get(id).cloned()
     }
 
@@ -107,11 +123,11 @@ impl<'a> Decoder<'a> {
     }
 
     pub(crate) fn count(&mut self) -> Option<usize> {
-        usize::try_from(self.body.u64().ok()?).ok()
+        length(read(self.body.u64())?)
     }
 
     pub(crate) fn flag(&mut self) -> Option<bool> {
-        match self.body.u64().ok()? {
+        match read(self.body.u64())? {
             0 => Some(false),
             1 => Some(true),
             _ => None,
@@ -119,7 +135,7 @@ impl<'a> Decoder<'a> {
     }
 
     pub(crate) fn bytes(&mut self) -> Option<&'a [u8]> {
-        self.body.bytes().ok()
+        read(self.body.bytes())
     }
 
     pub(crate) fn list<T>(
@@ -144,6 +160,6 @@ impl<'a> Decoder<'a> {
 
     /// Whether every value was read.
     pub(crate) fn finish(self) -> Option<()> {
-        self.body.finish().ok()
+        read(self.body.finish())
     }
 }

@@ -274,8 +274,10 @@ pub(crate) fn start_model_analysis_session(
     adapter_rules: Option<(Py<PyDict>, Py<PyAny>)>,
 ) -> PyResult<NativeModelAnalysisSession> {
     let py: Python<'_> = catalog.py();
-    let mut request: SessionRequest = session_request(request);
-    crate::bindings::_helpers::compile_delta::context::inject_relations(&mut request)?;
+    let mut request: SessionRequest =
+        crate::bindings::_helpers::compile_delta::context::inject_relations(session_request(
+            request,
+        ))?;
     let rule_failure: RuleFailure = RuleFailure::default();
     request.nullability_callback = adapter_rules
         .map(|(rules, nullability)| nullability_callback(rules, nullability, rule_failure.clone()));

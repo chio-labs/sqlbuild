@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::project_reuse::_helpers::entry::{read_delta_base, read_delta_output, write_entry};
 use crate::project_reuse::_helpers::files::{project_file_changes, unverified_paths};
-use crate::project_reuse::models::{ProjectFileChanges, StoredProjectFile};
+use crate::project_reuse::models::StoredProjectFile;
 use crate::project_reuse::tests::helpers::{
     image, image_file, stamp, stored_inputs, stored_output,
 };
@@ -250,15 +250,19 @@ fn given_project_file_when_computing_delta_changes_then_only_content_changes_cou
 
         let changes = project_file_changes(&stored, &current, (&digests, &unverified));
 
-        let expected = ProjectFileChanges {
-            changed: test_case
-                .expected_changed
-                .iter()
-                .map(|path| (*path).to_owned())
-                .collect(),
-            added: vec!["models/customers.sql".to_owned()],
-            removed: Vec::new(),
-        };
-        assert_eq!(changes, expected, "{}", test_case.description);
+        assert_eq!(
+            changes.changed, test_case.expected_changed,
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            (changes.added, changes.removed),
+            (
+                vec!["models/customers.sql".to_owned()],
+                Vec::<String>::new()
+            ),
+            "{}",
+            test_case.description
+        );
     }
 }

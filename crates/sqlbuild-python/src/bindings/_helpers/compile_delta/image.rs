@@ -15,10 +15,12 @@ use crate::bindings::_helpers::compile_delta::image_codec::{Decoder, Encoder};
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
 pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v6";
-const GATE_SECTION: &str = "gate";
-const FACTS_SECTION: &str = "facts";
+pub(crate) const GATE_SECTION: &str = "gate";
+/// The upstream kind of a model another model reads.
+const MODEL_KIND: &str = "model";
+pub(crate) const FACTS_SECTION: &str = "facts";
 const RULES_SECTION: &str = "rules";
-const RULE_DIGESTS_SECTION: &str = "rule-digests";
+pub(crate) const RULE_DIGESTS_SECTION: &str = "rule-digests";
 
 /// Everything a delta compile reads of the compile it patches.
 #[derive(Debug, Default)]
@@ -54,7 +56,7 @@ pub(crate) struct BaseRules {
 impl BaseRules {
     /// The rows a compile retained, decoded.
     pub(crate) fn decoded(retained: &RetainedRows) -> Option<Self> {
-        let request: EvaluateRequest = serde_json::from_slice(&retained.request_json).ok()?;
+        let request: EvaluateRequest = from_json(&retained.request_json)?;
         (request.models.len() == retained.digests.len()).then(|| Self {
             request,
             digests: retained.digests.clone(),
@@ -69,26 +71,56 @@ pub(crate) enum ImageRules {
     Retained(RetainedRows),
 }
 
-/// A stored rules request decoding on its own thread while the delta compile starts, or
-/// decoded already.
+/// A stored rules request, decoding on its own thread or decoded already.
 #[derive(Debug)]
 pub(crate) enum PendingRules {
     Decoding(std::thread::JoinHandle<Option<BaseRules>>),
     Ready(Box<BaseRules>),
 }
 
+impl ImageRules {
+    /// The rules request still decoding from a stored image, if this is one.
+    pub(crate) fn pending(self) -> Option<PendingRules> {
+        match self {
+            Self::Decoding(rules) => Some(rules),
+            Self::Retained(_) => None,
+        }
+    }
+
+    /// The rows a compile just retained, if this is them.
+    pub(crate) fn retained(self) -> Option<RetainedRows> {
+        match self {
+            Self::Retained(rules) => Some(rules),
+            Self::Decoding(_) => None,
+        }
+    }
+}
+
 impl PendingRules {
     /// The decoded request, or `None` when it could not be decoded.
     pub(crate) fn resolved(self) -> Option<BaseRules> {
         match self {
-            Self::Decoding(handle) => handle.join().ok().flatten(),
+            Self::Decoding(handle) => {
+                let Ok(rules) = handle.join() else {
+                    return None;
+                };
+                rules
+            }
             Self::Ready(rules) => Some(*rules),
         }
     }
 }
 
+/// The value `bytes` hold as JSON, or `None` when they are malformed.
+fn from_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Option<T> {
+    let Ok(value) = serde_json::from_slice(bytes) else {
+        return None;
+    };
+    Some(value)
+}
+
 fn decoded_rules(request: &[u8], digests: &[u8]) -> Option<BaseRules> {
-    let request: EvaluateRequest = serde_json::from_slice(request).ok()?;
+    let request: EvaluateRequest = from_json(request)?;
     let digests: Vec<String> = decoded_strings(digests)?;
     (digests.len() == request.models.len()).then_some(BaseRules { request, digests })
 }
@@ -418,7 +450,7 @@ impl StoredFacts {
             .into_iter()
             .collect();
         let (diagnostics, text_models, environment_names): StoredMisc =
-            serde_json::from_slice(decoder.bytes()?).ok()?;
+            from_json(decoder.bytes()?)?;
         decoder.finish()?;
         Some(Self {
             usages,
@@ -537,10 +569,7 @@ impl ProjectImage {
             lint_model_keys: self.lint_model_keys,
             lint_file_keys: self.lint_file_keys,
         };
-        let rules: Option<RetainedRows> = match self.rules {
-            Some(ImageRules::Retained(rules)) => Some(rules),
-            Some(ImageRules::Decoding(_)) | None => None,
-        };
+        let rules: Option<RetainedRows> = self.rules.and_then(ImageRules::retained);
         let (gate, facts) = rayon::join(|| gate.encode(), || facts.encode());
         let rules = rules.map(|rules| (rules.request_json, encoded_strings(&rules.digests)));
         let mut sections: ImageSections = vec![
@@ -554,11 +583,8 @@ impl ProjectImage {
         Ok(sections)
     }
 
-    /// The image stored in `sections` behind `gate`, or `None` when it is unreadable.
-    ///
-    /// The rules request, the largest section, is taken out of `sections` and decodes on its
-    /// own thread.
-    pub(crate) fn decode(sections: &mut ImageSections, gate: ImageGate) -> Option<Self> {
+    /// The image behind `gate`, its rules request decoding on its own thread; `None` if unreadable.
+    pub(crate) fn decode(mut sections: ImageSections, gate: ImageGate) -> Option<Self> {
         let mut taken = |name: &str| {
             sections
                 .iter_mut()
@@ -572,7 +598,7 @@ impl ProjectImage {
             (None, None) => None,
             _ => return None,
         };
-        let facts: StoredFacts = StoredFacts::decode(section(sections, FACTS_SECTION)?)?;
+        let facts: StoredFacts = StoredFacts::decode(section(&sections, FACTS_SECTION)?)?;
         let types: Shapes = facts.types;
         let relations: ImageRelations = ImageRelations {
             complete: restored(facts.complete, &types)?,
@@ -611,13 +637,16 @@ impl ProjectImage {
         self.models
             .iter()
             .filter(|model| !names.contains(&model.name))
-            .filter(|model| {
-                model
-                    .upstream
-                    .iter()
-                    .any(|(kind, name)| kind == "model" && names.contains(name))
-            })
+            .filter(|model| reads_any_model(model, names))
             .map(|model| model.name.clone())
             .collect()
     }
+}
+
+/// Whether `model` reads any of the models `names`.
+fn reads_any_model(model: &CapturedModel, names: &BTreeSet<String>) -> bool {
+    model
+        .upstream
+        .iter()
+        .any(|(kind, name)| kind == MODEL_KIND && names.contains(name))
 }

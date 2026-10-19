@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
+from scripts.delta_compile_series.types import SequenceEdit
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import PreparedCompile
 
 if TYPE_CHECKING:
@@ -1106,23 +1107,22 @@ class EarlyBuiltinRulesEditTestCase:
 
 
 @dataclass(frozen=True)
-class DeltaCompileEdit:
-    """One edit a seeded delta compile series can make, and whether it may compile as a delta."""
-
-    kind: str
-    pattern: str
-    replacement: str
-    on_test_file: bool = False
-    # A fallback reason fragment when the edit must compile in full; `None` when it is a delta.
-    fallback_reason: str | None = None
-
-
-@dataclass(frozen=True)
 class DeltaCompileSeriesTestCase:
     description: str
     seed: int
     json_output: bool
     steps: int
+    expected_unexpected_outcomes: tuple[str, ...] = ()
+    expected_minimum_deltas: int = 3
+
+
+@dataclass(frozen=True)
+class DeltaCompileSequenceTestCase:
+    description: str
+    edits: tuple[SequenceEdit, ...]
+    expected_delta_lines: tuple[bool, ...]
+    expected_replayed_last: bool
+    expected_same_as_full: bool
 
 
 @dataclass(frozen=True)
@@ -1130,3 +1130,5 @@ class DeltaCompileOptOutTestCase:
     description: str
     settings: str
     env: dict[str, str]
+    expected_delta_line: bool = False
+    expected_images: tuple[str, ...] = ()

@@ -62,22 +62,22 @@ fn given_retained_rows_when_evaluating_without_sql_then_only_cached_findings_sta
             "{}",
             test_case.description
         );
-        let findings: Option<Vec<Fault>> = match &evaluated {
-            Ok(evaluation) => Some(evaluation_summary(evaluation).0),
-            Err(_refused) => None,
-        };
+        let findings: Option<Vec<Fault>> = evaluated
+            .as_ref()
+            .ok()
+            .map(|evaluation| evaluation_summary(evaluation).0);
         assert_eq!(
             findings == Some(evaluation_summary(&first).0),
             test_case.expected_same_findings,
             "{}",
             test_case.description
         );
-        let missed: Option<&str> = match &evaluated {
-            Err(RowsError::Rules(message)) => Some(message.as_str()),
-            _ => None,
-        };
+        let missed: Option<String> = evaluated.as_ref().err().map(|error| format!("{error:?}"));
         assert_eq!(
-            missed, test_case.expected_missed,
+            missed,
+            test_case
+                .expected_missed
+                .map(|message| format!("{:?}", RowsError::Rules(message.to_owned()))),
             "{}",
             test_case.description
         );

@@ -1,17 +1,17 @@
-//! Compile only the changed models and SQL tests, patching the stored compile's image and
-//! report; anything this cannot reproduce exactly falls back to a full compile.
+//! Compile only changed models and SQL tests against the stored compile, or fall back.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
-use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
-use pyo3::types::{PyString, PyStringMethods};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::types::PyStringMethods;
 use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
 use sqlbuild_cache::project_reuse::main::read_delta_base::read_delta_base;
 use sqlbuild_cache::project_reuse::main::read_delta_output::read_delta_output;
 use sqlbuild_cache::project_reuse::models::{DeltaBase, DeltaCandidate, ProjectFileChanges};
 use sqlbuild_cache::project_reuse::types::ImageSections;
 
+use crate::bindings::_helpers::compile_command::reuse_attempt::reuse_debug;
 use crate::bindings::_helpers::compile_command::reuse_recording::RecordedCompileOutput;
 use crate::bindings::_helpers::compile_delta::context::{
     CapturedDiagnostic, CapturedModel, CapturedTest, DeltaInjection, ImageCapture, RecordMerge,
@@ -24,7 +24,9 @@ use crate::bindings::_helpers::compile_delta::image::{
     BaseRules, ImageGate, ImageRelations, ImageRules, PendingRules, ProjectImage,
 };
 use crate::bindings::_helpers::compile_delta::splice::{SpliceScope, spliced_report};
-use crate::bindings::_helpers::compile_driver::command::{PhasesOutcome, unrecorded_compile};
+use crate::bindings::_helpers::compile_driver::command::{
+    PhasesOutcome, resolved_request, unrecorded_compile,
+};
 use crate::bindings::_helpers::compile_outputs::reuse::NativeReuseAttempt;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
@@ -49,6 +51,14 @@ const UNKNOWN_SOURCE: &str = "unknown source";
 const SOURCE_KIND: &str = "source";
 const TESTS_ROOT: &str = "tests/";
 const SQL_SUFFIX: &str = ".sql";
+/// How many changed, added and removed paths the candidates debug line names.
+const CANDIDATES_LOGGED: usize = 5;
+const UNREADABLE_IMAGE: &str = "the project image cannot be read";
+const TOO_MANY_MODELS: &str = "too many models would compile again";
+/// The attribute holding a Python enum member's value.
+const ENUM_VALUE: &str = "value";
+/// The lineage mode a delta compile reproduces; richer modes compile in full.
+const FAST_LINEAGE: &str = "fast";
 /// Under verification, the delta's own report is kept here for inspection.
 const VERIFY_REPORT_DIRECTORY: &str = "target/cache/compiler-native-v1";
 const VERIFY_REPORT_FILE: &str = "delta-report.out";
@@ -65,9 +75,8 @@ pub(crate) fn delta_enabled() -> bool {
 
 /// A delta compile that finished, ready to be stored and printed or compared.
 pub(crate) struct Finished<'py> {
-    pub(crate) request: Bound<'py, PyAny>,
     pub(crate) stdout: String,
-    pub(crate) stderr_lines: Vec<Py<PyString>>,
+    pub(crate) stderr_lines: Vec<String>,
     pub(crate) phases: PhasesOutcome<'py>,
     pub(crate) image: Option<ImageSections>,
     pub(crate) merge: RecordMerge,
@@ -107,7 +116,7 @@ fn ineligible(request: &Bound<'_, PyAny>) -> PyResult<Option<&'static str>> {
         }
     }
     let lineage: Bound<'_, PyAny> = native_field(request, "lineage_mode")?;
-    if !lineage.is_none() && lineage.getattr("value")?.str()?.to_str()? != "fast" {
+    if !lineage.is_none() && native_field(&lineage, ENUM_VALUE)?.str()?.to_str()? != FAST_LINEAGE {
         return Ok(Some("rich lineage was requested"));
     }
     let flags: Bound<'_, PyAny> = native_field(request, "profile_flags")?;
@@ -131,12 +140,12 @@ fn resource_sql(path: &str, root: &str) -> bool {
         && !path.split('/').any(|part| part.starts_with('_'))
 }
 
-/// The stored compile's inputs and image, read from the attempt's slot; its report is read
-/// only once the delta has run.
+/// The stored compile's inputs and image; its report is read only after the delta runs.
 struct Base {
     store_path: PathBuf,
     stored: DeltaBase,
     image: ProjectImage,
+    project_dir: PathBuf,
 }
 
 /// The project files the reuse check found changed, and the slot it checked.
@@ -197,6 +206,21 @@ impl Rerun {
         self
     }
 
+    fn with_models(mut self, image: &ProjectImage, added: Vec<String>) -> Self {
+        let paths: HashMap<&str, &str> = image
+            .models
+            .iter()
+            .map(|model| (model.name.as_str(), model.relative_path.as_str()))
+            .collect();
+        for name in added {
+            if let Some(path) = paths.get(name.as_str()) {
+                self.model_paths.insert((*path).to_owned());
+            }
+            self.models.insert(name);
+        }
+        self
+    }
+
     fn names(&self) -> BTreeSet<String> {
         let mut names: BTreeSet<String> = self.models.clone();
         names.extend(self.model_paths.iter().cloned());
@@ -219,11 +243,11 @@ impl Rerun {
 
 /// The injection of the image's whole-project facts, moved out of `image` while the delta runs.
 fn lent_injection(
-    image: &mut ProjectImage,
+    mut image: ProjectImage,
     project_dir: PathBuf,
     store_path: &std::path::Path,
-) -> DeltaInjection {
-    DeltaInjection {
+) -> (ProjectImage, DeltaInjection) {
+    let injection: DeltaInjection = DeltaInjection {
         yaml_store: store_path
             .parent()
             .and_then(std::path::Path::parent)
@@ -241,10 +265,7 @@ fn lent_injection(
             .map(|model| model.name.clone())
             .collect(),
         relations: std::mem::take(&mut image.relations).into(),
-        rules: std::sync::Mutex::new(match image.rules.take() {
-            Some(ImageRules::Decoding(rules)) => Some(rules),
-            Some(ImageRules::Retained(_)) | None => None,
-        }),
+        rules: std::sync::Mutex::new(image.rules.take().and_then(ImageRules::pending)),
         fact_digests: std::mem::take(&mut image.fact_digests)
             .into_iter()
             .collect(),
@@ -254,17 +275,19 @@ fn lent_injection(
         lint_model_keys: image.lint_model_keys.take(),
         lint_file_keys: image.lint_file_keys.take(),
         ..DeltaInjection::default()
-    }
+    };
+    (image, injection)
 }
 
 /// Return the facts `lent_injection` moved out of `image`.
-fn returned(image: &mut ProjectImage, injection: DeltaInjection) {
+fn returned(mut image: ProjectImage, injection: DeltaInjection) -> ProjectImage {
     image.relations = injection.relations.into();
     image.fact_digests = injection.fact_digests.into_iter().collect();
     image.model_subjects = injection.model_subjects;
     image.model_shapes = injection.model_shapes;
     image.lint_model_keys = injection.lint_model_keys;
     image.lint_file_keys = injection.lint_file_keys;
+    image
 }
 
 /// `injection` set up to rerun `rerun`.
@@ -298,9 +321,9 @@ fn shape_of(relations: &RelationTables, name: &str) -> [Option<Vec<(String, Stri
 
 /// `base`'s rows with each of `fresh`'s rows replacing the one of its name, new names appended.
 fn merged_rows(
-    base: &mut Vec<(String, Vec<(String, String)>)>,
+    mut base: Vec<(String, Vec<(String, String)>)>,
     fresh: Vec<(String, Vec<(String, String)>)>,
-) {
+) -> Vec<(String, Vec<(String, String)>)> {
     let mut positions: HashMap<String, usize> = base
         .iter()
         .enumerate()
@@ -315,12 +338,13 @@ fn merged_rows(
             }
         }
     }
+    base
 }
 
 /// One restricted compile of `rerun`, with what it captured.
 struct Round<'py> {
-    request: Bound<'py, PyAny>,
-    output: Bound<'py, PyAny>,
+    stdout: Option<String>,
+    stderr_lines: Vec<String>,
     phases: PhasesOutcome<'py>,
     capture: ImageCapture,
 }
@@ -353,7 +377,7 @@ fn ran_round<'py>(
     if let Some(reason) = unsupported {
         return Ok(RoundOutcome::Stop(DeltaOutcome::Fallback(reason)));
     }
-    let (request, output, phases) = match ran {
+    let (_, output, phases) = match ran {
         Ok(ran) => ran,
         Err(error) => {
             return Ok(RoundOutcome::Stop(DeltaOutcome::Fallback(format!(
@@ -361,6 +385,10 @@ fn ran_round<'py>(
             ))));
         }
     };
+    let (stderr_lines, stdout): (Vec<String>, Option<String>) = output
+        .cast::<RecordedCompileOutput>()?
+        .get()
+        .texts(output.py())?;
     let phases: PhasesOutcome<'py> = match phases {
         Ok(phases) => phases,
         Err(error) => {
@@ -391,14 +419,23 @@ fn ran_round<'py>(
         return Ok(RoundOutcome::Stop(DeltaOutcome::Fallback(reason.clone())));
     }
     Ok(RoundOutcome::Ran(Box::new(Round {
-        request,
-        output,
+        stdout,
+        stderr_lines,
         phases,
         capture,
     })))
 }
 
-/// Compile the changed files against the stored compile, or say why that is not possible.
+/// A delta compile ready to run its rounds: the stored compile, the changes and the first rerun.
+struct Prepared {
+    base: Base,
+    changed_files: usize,
+    rerun: Rerun,
+    changed_tests: BTreeSet<String>,
+    limit: usize,
+}
+
+/// Compile only the changed files against the stored compile, or say why it cannot.
 pub(crate) fn run<'py>(
     request: &Bound<'py, PyAny>,
     attempt: &Bound<'py, PyAny>,
@@ -409,85 +446,134 @@ pub(crate) fn run<'py>(
     if let Some(reason) = ineligible(request)? {
         return fallback(reason);
     }
+    let py: Python<'py> = request.py();
     let started: std::time::Instant = std::time::Instant::now();
-    let (changes, store_path): (ProjectFileChanges, PathBuf) = match changes_of(attempt)? {
-        Ok(found) => found,
+    let prepared: Prepared = match prepared(request, attempt)? {
+        Ok(prepared) => prepared,
         Err(reason) => return fallback(reason),
     };
-    request
-        .py()
-        .import("logging")?
-        .getattr("getLogger")?
-        .call1(("sqlbuild.compile.delta",))?
-        .call_method1(
-            "debug",
-            (
-                "Delta compile candidates: changed %s, added %s, removed %s",
-                changes
-                    .changed
-                    .iter()
-                    .take(5)
-                    .cloned()
-                    .collect::<Vec<String>>(),
-                changes
-                    .added
-                    .iter()
-                    .take(5)
-                    .cloned()
-                    .collect::<Vec<String>>(),
-                changes
-                    .removed
-                    .iter()
-                    .take(5)
-                    .cloned()
-                    .collect::<Vec<String>>(),
-            ),
-        )?;
+    trace(py, "delta base read", started)?;
+    let changed_files: usize = prepared.changed_files;
+    let (ran, rerun, base): (Round, Rerun, Base) = match rounds(request, attempt, prepared)? {
+        Ok(found) => found,
+        Err(outcome) => return Ok(outcome),
+    };
+    trace(py, "delta rounds", started)?;
+    let outcome: PyResult<DeltaOutcome<'py>> = finished(ran, base, &rerun, (py, changed_files));
+    trace(py, "delta report", started)?;
+    outcome
+}
+
+/// The first `CANDIDATES_LOGGED` of `paths`.
+fn first_paths(paths: &[String]) -> &[String] {
+    &paths[..paths.len().min(CANDIDATES_LOGGED)]
+}
+
+/// Why `changes` rule a delta out before anything is read, if they do.
+fn changes_ruled_out(changes: &ProjectFileChanges) -> Option<String> {
     if !changes.added.is_empty() || !changes.removed.is_empty() {
-        return fallback("files were added or removed");
+        return Some("files were added or removed".to_owned());
     }
     if changes.changed.is_empty() {
-        return fallback("no project file changed");
+        return Some("no project file changed".to_owned());
     }
-    if let Some(path) = changes
+    changes
         .changed
         .iter()
         .find(|path| !resource_sql(path, MODELS_ROOT) && !resource_sql(path, TESTS_ROOT))
-    {
-        return fallback(format!("{path} is not a model or SQL test file"));
+        .map(|path| format!("{path} is not a model or SQL test file"))
+}
+
+/// The stored compile, its image and the first rerun set, or why the gate rules a delta out.
+fn prepared(
+    request: &Bound<'_, PyAny>,
+    attempt: &Bound<'_, PyAny>,
+) -> PyResult<Result<Prepared, String>> {
+    let (changes, store_path): (ProjectFileChanges, PathBuf) = match changes_of(attempt)? {
+        Ok(found) => found,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    reuse_debug(
+        request.py(),
+        &format!(
+            "Delta compile candidates: changed {:?}, added {:?}, removed {:?}",
+            first_paths(&changes.changed),
+            first_paths(&changes.added),
+            first_paths(&changes.removed),
+        ),
+    )?;
+    if let Some(reason) = changes_ruled_out(&changes) {
+        return Ok(Err(reason));
     }
     let Some(mut stored) = read_delta_base(&store_path) else {
-        return fallback("the stored compile has no project image");
+        return Ok(Err("the stored compile has no project image".to_owned()));
     };
     let Some(gate) = ImageGate::decode(&stored.image) else {
-        return fallback("the project image cannot be read");
+        return Ok(Err(UNREADABLE_IMAGE.to_owned()));
     };
     if !ERRORS_ON_DELTA_PATH && gate.has_errors {
-        return fallback("the stored compile reported errors");
+        return Ok(Err("the stored compile reported errors".to_owned()));
     }
-    let json_output: bool = native_field(request, "json_output")?.is_truthy()?;
-    if gate.json_output != json_output {
-        return fallback("the stored compile has the other output format");
+    if gate.json_output != native_field(request, "json_output")?.is_truthy()? {
+        return Ok(Err(
+            "the stored compile has the other output format".to_owned()
+        ));
     }
     let project_dir: PathBuf = native_field(attempt, "project_dir")?.extract()?;
-    let (mut rerun, changed_tests) = match first_rerun(&gate, &changes, &project_dir) {
+    let (rerun, changed_tests) = match first_rerun(&gate, &changes, &project_dir) {
         Ok(found) => found,
-        Err(reason) => return fallback(reason),
+        Err(reason) => return Ok(Err(reason)),
     };
     let limit: usize = MAX_RERUN_MODELS.max(gate.models.len() * MAX_RERUN_PERCENT / 100);
     if rerun.models.len() > limit {
-        return fallback("too many models would compile again");
+        return Ok(Err(TOO_MANY_MODELS.to_owned()));
     }
-    let Some(mut image) = ProjectImage::decode(&mut stored.image, gate) else {
-        return fallback("the project image cannot be read");
+    let Some(image) = ProjectImage::decode(std::mem::take(&mut stored.image), gate) else {
+        return Ok(Err(UNREADABLE_IMAGE.to_owned()));
     };
-    stored.image = ImageSections::new();
-    trace(request.py(), "delta base read", started)?;
-    let mut injection: DeltaInjection = lent_injection(&mut image, project_dir, &store_path);
-    let mut last: Option<Round<'py>> = None;
+    Ok(Ok(Prepared {
+        base: Base {
+            store_path,
+            stored,
+            image,
+            project_dir,
+        },
+        changed_files: changes.changed.len(),
+        rerun,
+        changed_tests,
+        limit,
+    }))
+}
+
+/// A fallback that stops the rounds.
+fn stopped<'py, T>(reason: impl Into<String>) -> PyResult<Result<T, DeltaOutcome<'py>>> {
+    Ok(Err(DeltaOutcome::Fallback(reason.into())))
+}
+
+/// Run rounds until no rerun model changes the shape a model outside the rerun set reads.
+fn rounds<'py>(
+    request: &Bound<'py, PyAny>,
+    attempt: &Bound<'py, PyAny>,
+    prepared: Prepared,
+) -> PyResult<Result<(Round<'py>, Rerun, Base), DeltaOutcome<'py>>> {
+    let Prepared {
+        base,
+        mut rerun,
+        changed_tests,
+        limit,
+        ..
+    } = prepared;
+    let Base {
+        store_path,
+        stored,
+        image,
+        project_dir,
+    } = base;
+    let (image, mut injection): (ProjectImage, DeltaInjection) =
+        lent_injection(image, project_dir.clone(), &store_path);
     for _ in 0..MAX_ROUNDS {
         if rerun.models.len() > limit {
-            return fallback("too many models would compile again");
+            return stopped(TOO_MANY_MODELS);
         }
         rerun = rerun.with_tests(&image, &changed_tests);
         if image
@@ -495,81 +581,32 @@ pub(crate) fn run<'py>(
             .iter()
             .any(|diagnostic| kept_only_by_full_compiles(&rerun, diagnostic))
         {
-            return fallback("the stored compile reports problems in files the edit leaves alone");
+            return stopped("the stored compile reports problems in files the edit leaves alone");
         }
-        let sources_read: Option<BTreeSet<String>> =
-            (!image.diagnostics.iter().any(outside_resources)).then(|| {
-                image
-                    .models
-                    .iter()
-                    .filter(|model| rerun.models.contains(&model.name))
-                    .flat_map(|model| &model.upstream)
-                    .filter(|(kind, _)| kind == SOURCE_KIND)
-                    .map(|(_, name)| name.clone())
-                    .chain(image.pinned_sources.iter().cloned())
-                    .chain(
-                        rerun
-                            .test_paths
-                            .iter()
-                            .filter_map(|path| image.test_sources.get(path))
-                            .flatten()
-                            .cloned(),
-                    )
-                    .collect()
-            });
-        rerun.sources = sources_read.clone();
-        let injection_for_round: DeltaInjection = for_rerun(injection, &rerun, sources_read);
+        rerun.sources = sources_read(&image, &rerun);
+        let injection_for_round: DeltaInjection =
+            for_rerun(injection, &rerun, rerun.sources.clone());
         let (outcome, back) = round(request, attempt, (injection_for_round, &rerun))?;
         let ran: Round<'py> = match outcome {
             RoundOutcome::Ran(ran) => *ran,
-            RoundOutcome::Stop(outcome) => return Ok(outcome),
+            RoundOutcome::Stop(outcome) => return Ok(Err(outcome)),
         };
         let Some(back) = back else {
-            return fallback("the delta compile's injection is still in use");
+            return stopped("the delta compile's injection is still in use");
         };
         injection = back;
-        if rerun.models.is_empty() {
-            last = Some(ran);
-            break;
-        }
-        let Some(relations) = ran.capture.relations.as_ref() else {
-            return fallback("the delta compile analysed no models");
+        let added: Vec<String> = match reshaped_dependents(&ran, &image, &injection, &rerun) {
+            Ok(added) => added,
+            Err(reason) => return stopped(reason),
         };
-        let stored_relations: &RelationTables = &injection.relations;
-        if relations.cyclic != stored_relations.cyclic
-            || relations.dependency_ordered != stored_relations.dependency_ordered
-        {
-            return fallback("the project's analysis order changed");
-        }
-        let stored_models: HashMap<&str, &CapturedModel> = image
-            .models
-            .iter()
-            .map(|model| (model.name.as_str(), model))
-            .collect();
-        for model in &ran.capture.models {
-            if stored_models.get(model.name.as_str()) != Some(&model) {
-                return fallback(format!("{} changed its references", model.name));
-            }
-        }
-        for path in &rerun.model_paths {
-            if ran.capture.usages.get(path) != image.usages.get(path) {
-                return fallback(format!("{path} changed the declarations it uses"));
-            }
-        }
-        let reshaped: BTreeSet<String> = rerun
-            .models
-            .iter()
-            .filter(|name| shape_of(relations, name) != shape_of(stored_relations, name))
-            .cloned()
-            .collect();
-        let added: Vec<String> = image
-            .dependents(&reshaped)
-            .into_iter()
-            .filter(|name| !rerun.models.contains(name))
-            .collect();
         if added.is_empty() {
-            last = Some(ran);
-            break;
+            let base: Base = Base {
+                store_path,
+                stored,
+                image: returned(image, injection),
+                project_dir,
+            };
+            return Ok(Ok((ran, rerun, base)));
         }
         let rules: Option<BaseRules> = ran
             .capture
@@ -577,34 +614,93 @@ pub(crate) fn run<'py>(
             .as_ref()
             .and_then(|rules| BaseRules::decoded(&rules.retained));
         let Some(rules) = rules else {
-            return fallback("the delta compile retained no rules request");
+            return stopped("the delta compile retained no rules request");
         };
         injection.rules = std::sync::Mutex::new(Some(PendingRules::Ready(Box::new(rules))));
-        for name in added {
-            if let Some(model) = stored_models.get(name.as_str()) {
-                rerun.model_paths.insert(model.relative_path.clone());
-            }
-            rerun.models.insert(name);
-        }
-        last = None;
+        rerun = rerun.with_models(&image, added);
     }
-    returned(&mut image, injection);
-    let base: Base = Base {
-        store_path,
-        stored,
-        image,
-    };
-    let Some(ran) = last else {
-        return fallback("changed shapes reach too far");
-    };
-    trace(request.py(), "delta rounds", started)?;
-    let outcome = finished(ran, base, &rerun, changes.changed.len());
-    trace(request.py(), "delta report", started)?;
-    outcome
+    stopped("changed shapes reach too far")
 }
 
-/// The models and SQL tests the changed files rerun, and the changed tests; or why the gate
-/// rules a delta out.
+/// The sources the rerun models, functions, audits and rerun SQL tests read; `None` for all.
+fn sources_read(image: &ProjectImage, rerun: &Rerun) -> Option<BTreeSet<String>> {
+    if image.diagnostics.iter().any(outside_resources) {
+        return None;
+    }
+    Some(
+        image
+            .models
+            .iter()
+            .filter(|model| rerun.models.contains(&model.name))
+            .flat_map(|model| &model.upstream)
+            .filter(|(kind, _)| kind == SOURCE_KIND)
+            .map(|(_, name)| name.clone())
+            .chain(image.pinned_sources.iter().cloned())
+            .chain(
+                rerun
+                    .test_paths
+                    .iter()
+                    .filter_map(|path| image.test_sources.get(path))
+                    .flatten()
+                    .cloned(),
+            )
+            .collect(),
+    )
+}
+
+/// The models outside `rerun` whose inputs' shapes the round changed, or why it cannot go on.
+fn reshaped_dependents(
+    ran: &Round<'_>,
+    image: &ProjectImage,
+    injection: &DeltaInjection,
+    rerun: &Rerun,
+) -> Result<Vec<String>, String> {
+    if rerun.models.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(relations) = ran.capture.relations.as_ref() else {
+        return Err("the delta compile analysed no models".to_owned());
+    };
+    let stored_relations: &RelationTables = &injection.relations;
+    if relations.cyclic != stored_relations.cyclic
+        || relations.dependency_ordered != stored_relations.dependency_ordered
+    {
+        return Err("the project's analysis order changed".to_owned());
+    }
+    let stored_models: HashMap<&str, &CapturedModel> = image
+        .models
+        .iter()
+        .map(|model| (model.name.as_str(), model))
+        .collect();
+    if let Some(model) = ran
+        .capture
+        .models
+        .iter()
+        .find(|model| stored_models.get(model.name.as_str()) != Some(model))
+    {
+        return Err(format!("{} changed its references", model.name));
+    }
+    if let Some(path) = rerun
+        .model_paths
+        .iter()
+        .find(|path| ran.capture.usages.get(*path) != image.usages.get(*path))
+    {
+        return Err(format!("{path} changed the declarations it uses"));
+    }
+    let reshaped: BTreeSet<String> = rerun
+        .models
+        .iter()
+        .filter(|name| shape_of(relations, name) != shape_of(stored_relations, name))
+        .cloned()
+        .collect();
+    Ok(image
+        .dependents(&reshaped)
+        .into_iter()
+        .filter(|name| !rerun.models.contains(name))
+        .collect())
+}
+
+/// The models and SQL tests the changed files rerun, or why the gate rules a delta out.
 fn first_rerun(
     gate: &ImageGate,
     changes: &ProjectFileChanges,
@@ -687,8 +783,7 @@ fn first_rerun(
     Ok((rerun, changed_tests))
 }
 
-/// Whether a stored diagnostic concerns a model or SQL test the delta does not compile again
-/// and comes from a phase other than rules, which only a full compile reports again.
+/// Whether only a full compile would repeat a stored non-rule diagnostic outside the rerun.
 fn kept_only_by_full_compiles(rerun: &Rerun, diagnostic: &CapturedDiagnostic) -> bool {
     !rerun.owns(diagnostic)
         && !diagnostic.json.contains(RULE_PHASE)
@@ -698,8 +793,7 @@ fn kept_only_by_full_compiles(rerun: &Rerun, diagnostic: &CapturedDiagnostic) ->
             .any(|path| path.starts_with(MODELS_ROOT) || path.starts_with(TESTS_ROOT))
 }
 
-/// Whether a stored diagnostic concerns a file other than a model or SQL test, which a delta
-/// compile then reads in full.
+/// Whether a stored diagnostic concerns a file other than a model or SQL test.
 fn outside_resources(diagnostic: &CapturedDiagnostic) -> bool {
     diagnostic
         .paths
@@ -711,11 +805,10 @@ fn outside_resources(diagnostic: &CapturedDiagnostic) -> bool {
 /// Log how long the delta has run, for profiling.
 pub(crate) fn trace(py: Python<'_>, phase: &str, started: std::time::Instant) -> PyResult<()> {
     let milliseconds: u128 = started.elapsed().as_millis();
-    py.import("logging")?
-        .getattr("getLogger")?
-        .call1(("sqlbuild.compile.delta",))?
-        .call_method1("debug", ("%s after %d ms", phase, milliseconds))?;
-    Ok(())
+    reuse_debug(
+        py,
+        &format!("Delta compile {phase} after {milliseconds} ms"),
+    )
 }
 
 /// Every diagnostic not owned by the rerun set, which the delta must leave as it was.
@@ -731,10 +824,9 @@ fn finished<'py>(
     ran: Round<'py>,
     base: Base,
     rerun: &Rerun,
-    changed_files: usize,
+    (py, changed_files): (Python<'py>, usize),
 ) -> PyResult<DeltaOutcome<'py>> {
-    let py: Python<'py> = ran.request.py();
-    if !ERRORS_ON_DELTA_PATH && ran.phases.outcome.exit_code != 0 {
+    if !ERRORS_ON_DELTA_PATH && ran.phases.0.exit_code != 0 {
         let first: &str = ran
             .capture
             .diagnostics
@@ -768,28 +860,35 @@ fn finished<'py>(
             only(&fresh, &stored)
         ));
     }
-    let recorded: Bound<'py, PyAny> = ran.output.getattr("stdout")?;
-    if recorded.is_none() {
+    let Some(delta_stdout) = ran.stdout else {
         return fallback("the delta compile recorded no report");
-    }
-    let delta_stdout: String = recorded.extract()?;
+    };
     if env_enabled(DELTA_VERIFY_ENV_VAR) {
-        let project_dir: PathBuf = native_field(&ran.request, "project_dir")?.extract()?;
-        let directory: PathBuf = project_dir.join(VERIFY_REPORT_DIRECTORY);
+        let directory: PathBuf = base.project_dir.join(VERIFY_REPORT_DIRECTORY);
         let _ = std::fs::create_dir_all(&directory);
         let _ = std::fs::write(directory.join(VERIFY_REPORT_FILE), &delta_stdout);
     }
-    let stderr_lines: Vec<Py<PyString>> = ran.output.getattr("stderr_lines")?.extract()?;
+    let stderr_lines: Vec<String> = ran.stderr_lines;
     let merge: RecordMerge = RecordMerge {
         kept: base.stored.inputs.target_files.clone(),
         environment_names: base.image.environment_names.clone(),
     };
     let json_output: bool = base.image.json_output;
-    let (store_path, stored, image) = (base.store_path, base.stored, base.image);
+    let Base {
+        store_path,
+        stored,
+        image,
+        ..
+    } = base;
     let capture: ImageCapture = ran.capture;
     let (image, stdout): (Option<ImageSections>, Result<String, String>) = py.detach(|| {
         rayon::join(
-            || patched_image(image, rerun, capture).encode().ok(),
+            || {
+                let Ok(sections) = patched_image(image, rerun, capture).encode() else {
+                    return None;
+                };
+                Some(sections)
+            },
             || {
                 if !json_output {
                     return Ok(delta_stdout);
@@ -812,7 +911,6 @@ fn finished<'py>(
     };
     let _ = py;
     Ok(DeltaOutcome::Finished(Box::new(Finished {
-        request: ran.request,
         stdout,
         stderr_lines,
         phases: ran.phases,
@@ -851,10 +949,18 @@ fn patched_image(base: ProjectImage, rerun: &Rerun, capture: ImageCapture) -> Pr
     }
     if let Some(relations) = capture.relations {
         let fresh: ImageRelations = relations.into();
-        merged_rows(&mut image.relations.types, fresh.types);
-        merged_rows(&mut image.relations.nullability, fresh.nullability);
-        merged_rows(&mut image.relations.complete, fresh.complete);
-        merged_rows(&mut image.relations.schemas, fresh.schemas);
+        image.relations.types =
+            merged_rows(std::mem::take(&mut image.relations.types), fresh.types);
+        image.relations.nullability = merged_rows(
+            std::mem::take(&mut image.relations.nullability),
+            fresh.nullability,
+        );
+        image.relations.complete = merged_rows(
+            std::mem::take(&mut image.relations.complete),
+            fresh.complete,
+        );
+        image.relations.schemas =
+            merged_rows(std::mem::take(&mut image.relations.schemas), fresh.schemas);
         let mut legacy: BTreeSet<String> = image.relations.legacy_models.iter().cloned().collect();
         for name in &rerun.models {
             legacy.remove(name);
@@ -890,10 +996,13 @@ fn patched_image(base: ProjectImage, rerun: &Rerun, capture: ImageCapture) -> Pr
 }
 
 /// Store and print a finished delta compile; returns its exit code.
-pub(crate) fn commit(finished: Finished<'_>, attempt: &Bound<'_, PyAny>) -> PyResult<i64> {
+pub(crate) fn commit(
+    finished: Finished<'_>,
+    (request, attempt): (&Bound<'_, PyAny>, &Bound<'_, PyAny>),
+) -> PyResult<i64> {
     let py: Python<'_> = attempt.py();
+    let request: Bound<'_, PyAny> = resolved_request(request)?;
     let Finished {
-        request,
         stdout,
         stderr_lines,
         phases,
@@ -904,10 +1013,7 @@ pub(crate) fn commit(finished: Finished<'_>, attempt: &Bound<'_, PyAny>) -> PyRe
     let report: &str = stdout.strip_suffix('\n').unwrap_or(&stdout);
     let output: Bound<'_, PyAny> = Bound::new(
         py,
-        RecordedCompileOutput::recorded(
-            stderr_lines,
-            PyString::new(py, &format!("{report}\n")).unbind(),
-        ),
+        RecordedCompileOutput::recorded(py, &stderr_lines, &format!("{report}\n")),
     )?
     .into_any();
     crate::bindings::_helpers::compile_delta::context::set_pending_image(image);

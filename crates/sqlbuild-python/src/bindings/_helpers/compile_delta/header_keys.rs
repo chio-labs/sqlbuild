@@ -42,46 +42,59 @@ const SEED_KIND: &str = "seed";
 const KEPT_DIGEST_BYTES: usize = 16;
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
-/// Append an unambiguous encoding of `value`: a tag byte, then length-prefixed parts.
-fn encode_value(value: &AuthoredValue, out: &mut Vec<u8>) {
-    let text = |tag: u8, text: &str, out: &mut Vec<u8>| {
-        out.push(tag);
-        out.extend_from_slice(&(text.len() as u64).to_le_bytes());
-        out.extend_from_slice(text.as_bytes());
-    };
-    let list = |tag: u8, items: &[AuthoredValue], out: &mut Vec<u8>| {
-        out.push(tag);
-        out.extend_from_slice(&(items.len() as u64).to_le_bytes());
+/// An unambiguous encoding of header values: a tag byte, then length-prefixed parts.
+#[derive(Default)]
+struct ValueEncoding {
+    bytes: Vec<u8>,
+}
+
+impl ValueEncoding {
+    fn text(&mut self, tag: u8, text: &str) {
+        self.bytes.push(tag);
+        self.bytes
+            .extend_from_slice(&(text.len() as u64).to_le_bytes());
+        self.bytes.extend_from_slice(text.as_bytes());
+    }
+
+    fn list(&mut self, tag: u8, items: &[AuthoredValue]) {
+        self.bytes.push(tag);
+        self.bytes
+            .extend_from_slice(&(items.len() as u64).to_le_bytes());
         for item in items {
-            encode_value(item, out);
+            self.value(item);
         }
-    };
-    let pairs = |tag: u8, items: &[(String, AuthoredValue)], out: &mut Vec<u8>| {
-        out.push(tag);
-        out.extend_from_slice(&(items.len() as u64).to_le_bytes());
+    }
+
+    fn pairs(&mut self, tag: u8, items: &[(String, AuthoredValue)]) {
+        self.bytes.push(tag);
+        self.bytes
+            .extend_from_slice(&(items.len() as u64).to_le_bytes());
         for (key, item) in items {
-            text(b'k', key, out);
-            encode_value(item, out);
+            self.text(b'k', key);
+            self.value(item);
         }
-    };
-    match value {
-        AuthoredValue::Null => out.push(b'n'),
-        AuthoredValue::Boolean(flag) => out.extend_from_slice(&[b'b', u8::from(*flag)]),
-        AuthoredValue::BareWord(word) => text(b'w', word, out),
-        AuthoredValue::String(string) => text(b's', string, out),
-        AuthoredValue::List(items) => list(b'l', items, out),
-        AuthoredValue::Map(items) => pairs(b'm', items, out),
-        AuthoredValue::Set(items) => list(b'e', items, out),
-        AuthoredValue::Tuple(items) => list(b't', items, out),
-        AuthoredValue::TypedConstant(items) => pairs(b'c', items, out),
-        AuthoredValue::InlineSqlHook(sql) => text(b'i', sql, out),
-        AuthoredValue::NamedSqlHook(name, items) => {
-            text(b'h', name, out);
-            pairs(b'a', items, out);
-        }
-        AuthoredValue::PythonHook(name, items) => {
-            text(b'p', name, out);
-            pairs(b'a', items, out);
+    }
+
+    fn value(&mut self, value: &AuthoredValue) {
+        match value {
+            AuthoredValue::Null => self.bytes.push(b'n'),
+            AuthoredValue::Boolean(flag) => self.bytes.extend_from_slice(&[b'b', u8::from(*flag)]),
+            AuthoredValue::BareWord(word) => self.text(b'w', word),
+            AuthoredValue::String(string) => self.text(b's', string),
+            AuthoredValue::List(items) => self.list(b'l', items),
+            AuthoredValue::Map(items) => self.pairs(b'm', items),
+            AuthoredValue::Set(items) => self.list(b'e', items),
+            AuthoredValue::Tuple(items) => self.list(b't', items),
+            AuthoredValue::TypedConstant(items) => self.pairs(b'c', items),
+            AuthoredValue::InlineSqlHook(sql) => self.text(b'i', sql),
+            AuthoredValue::NamedSqlHook(name, items) => {
+                self.text(b'h', name);
+                self.pairs(b'a', items);
+            }
+            AuthoredValue::PythonHook(name, items) => {
+                self.text(b'p', name);
+                self.pairs(b'a', items);
+            }
         }
     }
 }
@@ -103,12 +116,17 @@ fn references_read(query_sql: &str, upstream: &[(String, String)]) -> bool {
             _ => None,
         };
         match (kind, &reference.package) {
-            (Some(kind), None) => upstream
-                .iter()
-                .any(|(stored_kind, name)| stored_kind == kind && *name == reference.name),
+            (Some(kind), None) => stored_upstream(upstream, kind, &reference.name),
             _ => true,
         }
     })
+}
+
+/// Whether `upstream` holds the `kind` resource `name`.
+fn stored_upstream(upstream: &[(String, String)], kind: &str, name: &str) -> bool {
+    upstream
+        .iter()
+        .any(|(stored_kind, stored_name)| stored_kind == kind && stored_name == name)
 }
 
 fn short_hex(digest: &[u8]) -> String {
@@ -121,13 +139,12 @@ fn short_hex(digest: &[u8]) -> String {
 }
 
 fn header_keys(values: &[(String, AuthoredValue)]) -> HeaderKeys {
-    let mut buffer: Vec<u8> = Vec::new();
     let mut keys: HeaderKeys = values
         .iter()
         .map(|(key, value)| {
-            buffer.clear();
-            encode_value(value, &mut buffer);
-            let hex: String = short_hex(&bytes_digest(&buffer));
+            let mut encoding: ValueEncoding = ValueEncoding::default();
+            encoding.value(value);
+            let hex: String = short_hex(&bytes_digest(&encoding.bytes));
             (key.clone(), hex)
         })
         .collect();

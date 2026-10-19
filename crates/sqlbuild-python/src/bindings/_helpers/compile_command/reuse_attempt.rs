@@ -53,6 +53,8 @@ const HIT: &str = "hit";
 const CHECKED_HIT: &str = "hit";
 const CHECKED_BYPASS: &str = "bypass";
 const MISS: &str = "miss";
+/// The logging format that prints its one argument as given.
+const LOG_TEXT: &str = "%s";
 const BYPASS: &str = "bypass";
 
 fn listed<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -61,6 +63,12 @@ fn listed<'py>(value: Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
 
 fn reuse_logger(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     imported(py, "logging", "getLogger")?.call1((REUSE_LOGGER_NAME,))
+}
+
+/// Log one message at debug level on the compile reuse logger.
+pub(crate) fn reuse_debug(py: Python<'_>, message: &str) -> PyResult<()> {
+    let _ = reuse_logger(py)?.call_method1("debug", (LOG_TEXT, message))?;
+    Ok(())
 }
 
 /// The reuse constants the native check, the stored compile and the launch record share.
@@ -407,12 +415,10 @@ fn attempt_compile_reuse<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         base.push(("outcome", outcome(py, BYPASS)?));
         return reuse_attempt(py, &base);
     }
-    reuse_logger(py)?.call_method1(
-        "debug",
-        (
-            "Compile reuse check digested %d project files",
-            native.call_method0("digested_files")?,
-        ),
+    let digested: usize = native.call_method0("digested_files")?.extract()?;
+    reuse_debug(
+        py,
+        &format!("Compile reuse check digested {digested} project files"),
     )?;
     let check_ms: i64 = if native.call_method0("replay_failed")?.is_truthy()? {
         0
@@ -499,8 +505,7 @@ pub(crate) fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     code.and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
 
-/// Compile the changed files when the delta can; otherwise, or under verification as well,
-/// compile the whole project, capturing its image.
+/// Compile the changed files as a delta when it can, otherwise (or to verify it) in full.
 fn compiled_with_delta<'py>(
     request: &Bound<'py, PyAny>,
     attempt: &Bound<'py, PyAny>,
@@ -515,16 +520,17 @@ fn compiled_with_delta<'py>(
     context::reset();
     let project_dir: Bound<'py, PyAny> = native_field(attempt, "project_dir")?;
     let cache: Bound<'py, PyAny> = cache_directory(&project_dir)?;
-    let compiled_root: PathBuf = project_dir
-        .call_method1("__truediv__", (TARGET_DIRECTORY_NAME,))?
-        .call_method1("__truediv__", (COMPILED_DIRECTORY_NAME,))?
-        .call_method0("absolute")?
-        .extract()?;
+    let compiled_root: PathBuf = std::path::absolute(
+        project_dir
+            .extract::<PathBuf>()?
+            .join(TARGET_DIRECTORY_NAME)
+            .join(COMPILED_DIRECTORY_NAME),
+    )?;
     match delta {
         DeltaOutcome::Finished(finished) if !verifying => {
             let (files, models) = (finished.changed_files, finished.rerun_models);
             let committing: std::time::Instant = std::time::Instant::now();
-            let code: i64 = driver::commit(*finished, attempt)?;
+            let code: i64 = driver::commit(*finished, (request, attempt))?;
             driver::trace(py, "delta record and print", committing)?;
             let seconds: f64 = elapsed_ms(py, started)? as f64 / MILLISECONDS_PER_SECOND;
             print_stderr(
@@ -538,7 +544,7 @@ fn compiled_with_delta<'py>(
         }
         DeltaOutcome::Raised(error) if !verifying => return Err(error),
         DeltaOutcome::Fallback(reason) => {
-            reuse_logger(py)?.call_method1("debug", ("Delta compile fell back: %s", &reason))?;
+            reuse_debug(py, &format!("Delta compile fell back: {reason}"))?;
             if verifying {
                 print_stderr(
                     py,
@@ -548,15 +554,15 @@ fn compiled_with_delta<'py>(
             context::start_capture();
             return run_compile_command(py, request.clone(), Some(attempt.clone()));
         }
-        DeltaOutcome::Finished(finished) => verify::expect(verify::Expected {
+        DeltaOutcome::Finished(finished) => verify::hold_expected(verify::Expected {
             stdout: Some(finished.stdout.clone()),
-            exit_code: Some(finished.phases.outcome.exit_code),
-            artifacts_written: finished.phases.outcome.artifacts_written,
+            exit_code: Some(finished.phases.0.exit_code),
+            artifacts_written: finished.phases.0.artifacts_written,
             raised: None,
             compiled: verify::compiled_digests(&compiled_root),
             compiled_root: compiled_root.to_string_lossy().into_owned(),
         }),
-        DeltaOutcome::Raised(error) => verify::expect(verify::Expected {
+        DeltaOutcome::Raised(error) => verify::hold_expected(verify::Expected {
             raised: Some(error.to_string()),
             compiled_root: compiled_root.to_string_lossy().into_owned(),
             ..verify::Expected::default()

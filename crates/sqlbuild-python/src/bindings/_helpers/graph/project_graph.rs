@@ -214,7 +214,7 @@ impl NativeProjectGraph {
     }
 
     /// The key's direct upstream lineage keys, in authored dependency order.
-    fn upstream(&self, key: ObjectKey) -> Vec<ObjectKey> {
+    pub(crate) fn upstream(&self, key: ObjectKey) -> Vec<ObjectKey> {
         edge_keys(&self.graph, &key, EdgeDirection::Upstream).to_vec()
     }
 

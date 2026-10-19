@@ -1,31 +1,35 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use sqlbuild_cache::project_reuse::types::ImageSections;
+use sqlbuild_config::models::ConfigValue;
 use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
 
 use crate::bindings::_helpers::compile_delta::context::{
     CapturedDiagnostic, CapturedModel, CapturedTest,
 };
 use crate::bindings::_helpers::compile_delta::image::{
-    BaseRules, IMAGE_FORMAT, ImageGate, ImageRelations, ImageRules, PendingRules, ProjectImage,
+    BaseRules, FACTS_SECTION, GATE_SECTION, IMAGE_FORMAT, ImageRelations, ImageRules, PendingRules,
+    ProjectImage, RULE_DIGESTS_SECTION,
 };
-use crate::bindings::_helpers::compile_delta::tests::test_types::DamagedImageTestCase;
 
-fn pairs(values: &[(&str, &str)]) -> Vec<(String, String)> {
+const OTHER_FORMAT: &str = "sqlbuild-project-image-v0";
+
+pub(crate) fn pairs(values: &[(&str, &str)]) -> Vec<(String, String)> {
     values
         .iter()
         .map(|(left, right)| ((*left).to_owned(), (*right).to_owned()))
         .collect()
 }
 
-fn strings(values: &[&str]) -> Vec<String> {
+pub(crate) fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
 
 /// An image holding at least one value of every kind it stores.
-fn image() -> ProjectImage {
+pub(crate) fn image() -> ProjectImage {
     let order_types: Vec<(String, String)> = pairs(&[("order_id", "BIGINT"), ("amount", "DOUBLE")]);
     let customer_types: Vec<(String, String)> = pairs(&[("customer_id", "BIGINT")]);
-    let request: Vec<u8> = serde_json::to_vec(&EvaluateRequest::default()).expect("request");
+    let request: Vec<u8> = serde_json::to_vec(&EvaluateRequest::default()).unwrap_or_default();
     ProjectImage {
         format: String::new(),
         json_output: true,
@@ -106,7 +110,7 @@ fn image() -> ProjectImage {
 }
 
 /// Every stored fact of `image` but its rules, in a comparable form.
-fn facts(image: &ProjectImage) -> String {
+pub(crate) fn facts(image: &ProjectImage) -> String {
     format!(
         "{:?}",
         (
@@ -134,103 +138,76 @@ fn facts(image: &ProjectImage) -> String {
     )
 }
 
-fn current_format() -> String {
+pub(crate) fn current_format() -> String {
     IMAGE_FORMAT.to_owned()
 }
 
-fn encoded() -> Vec<(String, Vec<u8>)> {
-    let mut stored: ProjectImage = image();
-    stored.format = current_format();
-    stored.encode().expect("encoded")
-}
-
-#[test]
-fn given_project_image_when_encoded_and_decoded_then_every_fact_and_the_rules_survive() {
-    let mut sections = encoded();
-    let gate: ImageGate = ImageGate::decode(&sections).expect("gate");
-    assert!(gate.json_output);
-    assert!(!gate.has_errors);
-    assert!(gate.has_model_subjects);
-    let decoded: ProjectImage = ProjectImage::decode(&mut sections, gate).expect("image");
-    let mut expected: ProjectImage = image();
-    expected.format = current_format();
-    assert_eq!(decoded.format, expected.format);
-    assert_eq!(facts(&decoded), facts(&expected));
-    let Some(ImageRules::Decoding(rules)) = decoded.rules else {
-        panic!("the rules request was not decoding");
+pub(crate) fn encoded(image: ProjectImage) -> ImageSections {
+    let stored: ProjectImage = ProjectImage {
+        format: current_format(),
+        ..image
     };
-    let rules: BaseRules = PendingRules::resolved(rules).expect("rules");
-    assert!(rules.request.models.is_empty());
-    assert!(rules.digests.is_empty());
+    stored.encode().unwrap_or_default()
 }
 
-#[test]
-fn given_damaged_image_when_decoded_then_it_is_never_read() {
-    let test_cases = [
-        DamagedImageTestCase {
-            description: "intact",
-            damage: |_| {},
-            expected_gate: true,
-            expected_image: true,
-        },
-        DamagedImageTestCase {
-            description: "truncated facts",
-            damage: |sections| {
-                let facts = sections
-                    .iter_mut()
-                    .find(|(name, _)| name == "facts")
-                    .expect("facts");
-                facts.1.truncate(facts.1.len() / 2);
-            },
-            expected_gate: true,
-            expected_image: false,
-        },
-        DamagedImageTestCase {
-            description: "rules request without its digests",
-            damage: |sections| sections.retain(|(name, _)| name != "rule-digests"),
-            expected_gate: true,
-            expected_image: false,
-        },
-        DamagedImageTestCase {
-            description: "gate of another format",
-            damage: |sections| {
-                let other: ProjectImage = ProjectImage {
-                    format: "sqlbuild-project-image-v0".to_owned(),
-                    ..ProjectImage::default()
-                };
-                let gate = other
-                    .encode()
-                    .expect("encoded")
-                    .into_iter()
-                    .find(|(name, _)| name == "gate")
-                    .expect("gate");
-                for section in sections.iter_mut() {
-                    if section.0 == "gate" {
-                        section.1 = gate.1.clone();
-                    }
-                }
-            },
-            expected_gate: false,
-            expected_image: false,
-        },
-    ];
-    for test_case in test_cases {
-        let mut sections = encoded();
-        (test_case.damage)(&mut sections);
-        let gate: Option<ImageGate> = ImageGate::decode(&sections);
-        assert_eq!(
-            gate.is_some(),
-            test_case.expected_gate,
-            "{}",
-            test_case.description
-        );
-        let decoded: Option<ProjectImage> =
-            gate.and_then(|gate| ProjectImage::decode(&mut sections, gate));
-        assert_eq!(
-            decoded.is_some(),
-            test_case.expected_image,
-            "{}",
-            test_case.description
-        );
+/// The image `image()` without any of its optional facts.
+pub(crate) fn sparse_image() -> ProjectImage {
+    ProjectImage {
+        model_subjects: None,
+        text_models: None,
+        lint_model_keys: None,
+        lint_file_keys: None,
+        rules: None,
+        ..image()
     }
+}
+
+/// The rules request a decoded image holds, resolved.
+pub(crate) fn decoded_rules(image: ProjectImage) -> Option<BaseRules> {
+    image
+        .rules
+        .and_then(ImageRules::pending)
+        .and_then(PendingRules::resolved)
+}
+
+/// `sections` with the gate of an image of another format.
+pub(crate) fn with_other_format(sections: &mut ImageSections) {
+    let other: ProjectImage = ProjectImage {
+        format: OTHER_FORMAT.to_owned(),
+        ..ProjectImage::default()
+    };
+    let gate: Vec<u8> = other
+        .encode()
+        .unwrap_or_default()
+        .into_iter()
+        .find(|(name, _)| name == GATE_SECTION)
+        .map(|(_, bytes)| bytes)
+        .unwrap_or_default();
+    sections
+        .iter_mut()
+        .filter(|(name, _)| name == GATE_SECTION)
+        .for_each(|section| section.1 = gate.clone());
+}
+
+/// `sections` with their facts cut in half.
+pub(crate) fn with_truncated_facts(sections: &mut ImageSections) {
+    sections
+        .iter_mut()
+        .filter(|(name, _)| name == FACTS_SECTION)
+        .for_each(|(_, bytes)| bytes.truncate(bytes.len() / 2));
+}
+
+/// `sections` without the rules request's digests.
+pub(crate) fn without_rule_digests(sections: &mut ImageSections) {
+    sections.retain(|(name, _)| name != RULE_DIGESTS_SECTION);
+}
+
+/// The names in `values`, as a set.
+pub(crate) fn names(values: &[&str]) -> BTreeSet<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+
+/// A YAML string value.
+pub(crate) fn text(value: &str) -> ConfigValue {
+    ConfigValue::String(value.to_owned())
 }

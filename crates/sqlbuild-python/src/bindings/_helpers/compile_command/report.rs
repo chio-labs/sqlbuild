@@ -458,12 +458,12 @@ fn location_json<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
     Ok(payload)
 }
 
-/// `_diagnostic_to_json`: one diagnostic's JSON fields, omitting the unset ones.
 /// One diagnostic as the report's JSON item.
 pub(crate) fn diagnostic_item<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     diagnostic_json(diagnostic)
 }
 
+/// `_diagnostic_to_json`: one diagnostic's JSON fields, omitting the unset ones.
 fn diagnostic_json<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
     let py: Python<'py> = diagnostic.py();
     let payload: Bound<'py, PyDict> = dict(
