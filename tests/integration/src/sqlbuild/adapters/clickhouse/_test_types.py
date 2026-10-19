@@ -45,7 +45,8 @@ class ClickHouseRewriteTestCase:
 class ClickHouseRewriteFaultTestCase:
     description: str
     fail_statement_number: int
-    expected_target_unchanged: bool
+    expected_states_after_crash: tuple[tuple[tuple[object, ...], ...], ...]
+    expected_rows_after_rerun: tuple[tuple[object, ...], ...]
 
 
 @dataclass(frozen=True)
@@ -147,3 +148,10 @@ class ClickHouseSchemaDiffTestCase:
     left_ddl_columns: str
     right_ddl_columns: str
     expected_type_changes: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseGenerationTestCase:
+    description: str
+    incoming_rows: tuple[tuple[int, str, int, str], ...]
+    expected_generation_kept: bool

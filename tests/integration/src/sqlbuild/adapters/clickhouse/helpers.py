@@ -175,6 +175,34 @@ def apply_write(
     )
 
 
+def cursor_delta_sql(
+    *, adapter: ClickHouseAdapter, connection: Any, relation: str, source: str
+) -> str:
+    """The source rows past the target's highest amount, as a cursor-driven run reads them."""
+
+    cursor: object = fetch_rows(
+        adapter=adapter, connection=connection, sql=f"SELECT max(amount) FROM {relation}"
+    )[0][0]
+    return f"SELECT order_id, customer, amount, order_date FROM {source} WHERE amount > {cursor}"
+
+
+def incoming_rows_sql(rows: tuple[tuple[int, str, int, str], ...]) -> str:
+    return _incoming_sql(rows)
+
+
+def write_cursor_delta(
+    *, adapter: ClickHouseAdapter, connection: Any, relation: str, sql: str
+) -> None:
+    adapter.delete_insert(
+        connection=connection,
+        destination=relation,
+        sql=sql,
+        unique_key=("order_id",),
+        columns=ORDER_COLUMN_NAMES,
+        statement_recorder=StatementRecorder(),
+    )
+
+
 def run_concurrent_cursor_windows(
     *,
     adapter: ClickHouseAdapter,

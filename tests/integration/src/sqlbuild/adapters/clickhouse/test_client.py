@@ -26,6 +26,7 @@ from tests.integration.src.sqlbuild.adapters.clickhouse._test_types import (
     ClickHouseConcurrentWindowTestCase,
     ClickHouseCursorFilterTestCase,
     ClickHouseFunctionTestCase,
+    ClickHouseGenerationTestCase,
     ClickHouseInspectionTestCase,
     ClickHouseInterruptTestCase,
     ClickHouseQualifiedNameTestCase,
@@ -45,28 +46,51 @@ from tests.integration.src.sqlbuild.adapters.clickhouse.helpers import (
     InjectedFailure,
     apply_write,
     create_orders,
+    cursor_delta_sql,
     execute_all,
     fetch_rows,
+    incoming_rows_sql,
     interrupt_running_query,
     microbatch_completion,
     oracle_rows,
     order_rows_as_dates,
     recorded_statements,
     run_concurrent_cursor_windows,
+    write_cursor_delta,
 )
 
 _PARTITIONED: str = "toYYYYMM(order_date)"
 _UNPARTITIONED: str = "tuple()"
-_FAULT_WRITE: ClickHouseRewriteTestCase = ClickHouseRewriteTestCase(
-    description="three partitions",
+_CURSOR_SKIP_WRITE: ClickHouseRewriteTestCase = ClickHouseRewriteTestCase(
+    description="an old partition's update outruns a new partition's insert",
     strategy="delete_insert",
     partition_by=_PARTITIONED,
     initial_rows=INITIAL_ORDERS,
-    incoming_rows=(
-        (1, "ada", 11, "2026-01-05"),
-        (3, "cy", 31, "2026-02-03"),
-        (5, "ed", 51, "2026-03-01"),
-    ),
+    incoming_rows=((1, "ada", 61, "2026-01-05"), (6, "fa", 55, "2026-03-09")),
+)
+_CURSOR_SKIP_SOURCE: tuple[tuple[int, str, int, str], ...] = (
+    *INITIAL_ORDERS[1:],
+    *_CURSOR_SKIP_WRITE.incoming_rows,
+)
+
+
+_EXCHANGE_REWRITE_STEPS: tuple[str, ...] = (
+    "drop stale delta",
+    "create delta",
+    "stage delta rows",
+    "count delta rows",
+    "find touched partitions",
+    "read the table generation",
+    "drop stale replacement",
+    "create replacement",
+    "attach every partition",
+    "drop rewritten partitions",
+    "insert kept rows",
+    "insert delta rows",
+    "carry the generation",
+    "exchange tables",
+    "drop replacement",
+    "drop delta",
 )
 
 
@@ -492,29 +516,19 @@ def test_given_incremental_write_when_rewriting_partitions_then_rows_match_duckd
     "test_case",
     [
         ClickHouseRewriteFaultTestCase(
-            description="crash while staging the delta",
-            fail_statement_number=3,
-            expected_target_unchanged=True,
-        ),
-        ClickHouseRewriteFaultTestCase(
-            description="crash while building the partition staging",
-            fail_statement_number=9,
-            expected_target_unchanged=True,
-        ),
-        ClickHouseRewriteFaultTestCase(
-            description="crash before the first partition swap",
-            fail_statement_number=10,
-            expected_target_unchanged=True,
-        ),
-        ClickHouseRewriteFaultTestCase(
-            description="crash between partition swaps",
-            fail_statement_number=11,
-            expected_target_unchanged=False,
-        ),
+            description=step,
+            fail_statement_number=number,
+            expected_states_after_crash=(
+                order_rows_as_dates(_CURSOR_SKIP_WRITE.initial_rows),
+                oracle_rows(_CURSOR_SKIP_WRITE),
+            ),
+            expected_rows_after_rerun=oracle_rows(_CURSOR_SKIP_WRITE),
+        )
+        for number, step in enumerate(_EXCHANGE_REWRITE_STEPS, start=1)
     ],
     ids=lambda case: case.description,
 )
-def test_given_failure_at_rewrite_step_when_rerunning_then_target_converges(
+def test_given_interruption_at_any_rewrite_step_when_next_cursor_run_then_no_row_is_skipped(
     test_case: ClickHouseRewriteFaultTestCase,
     adapter: ClickHouseAdapter,
     connection: Any,
@@ -522,12 +536,23 @@ def test_given_failure_at_rewrite_step_when_rerunning_then_target_converges(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     relation: str = f"{clickhouse_schema}.orders"
+    source: str = f"{clickhouse_schema}.source_orders"
     create_orders(
         adapter=adapter,
         connection=connection,
         relation=relation,
-        partition_by=_FAULT_WRITE.partition_by,
-        rows=_FAULT_WRITE.initial_rows,
+        partition_by=_CURSOR_SKIP_WRITE.partition_by,
+        rows=_CURSOR_SKIP_WRITE.initial_rows,
+    )
+    create_orders(
+        adapter=adapter,
+        connection=connection,
+        relation=source,
+        partition_by=_UNPARTITIONED,
+        rows=_CURSOR_SKIP_SOURCE,
+    )
+    first_delta: str = cursor_delta_sql(
+        adapter=adapter, connection=connection, relation=relation, source=source
     )
     monkeypatch.setattr(
         adapter,
@@ -537,22 +562,30 @@ def test_given_failure_at_rewrite_step_when_rerunning_then_target_converges(
         ),
     )
     with pytest.raises(InjectedFailure):
-        apply_write(
-            adapter=adapter, connection=connection, test_case=_FAULT_WRITE, relation=relation
+        write_cursor_delta(
+            adapter=adapter, connection=connection, relation=relation, sql=first_delta
         )
+    monkeypatch.undo()
     select_sql: str = (
-        f"SELECT order_id, customer, amount, order_date FROM {relation} ORDER BY order_id"
+        f"SELECT order_id, customer, amount, order_date FROM {relation} "
+        "ORDER BY order_id, customer, amount"
     )
     after_crash: tuple[tuple[object, ...], ...] = fetch_rows(
         adapter=adapter, connection=connection, sql=select_sql
     )
-    initial: tuple[tuple[object, ...], ...] = order_rows_as_dates(_FAULT_WRITE.initial_rows)
-    assert (after_crash == initial) is test_case.expected_target_unchanged
 
-    apply_write(adapter=adapter, connection=connection, test_case=_FAULT_WRITE, relation=relation)
+    write_cursor_delta(
+        adapter=adapter,
+        connection=connection,
+        relation=relation,
+        sql=cursor_delta_sql(
+            adapter=adapter, connection=connection, relation=relation, source=source
+        ),
+    )
 
-    assert fetch_rows(adapter=adapter, connection=connection, sql=select_sql) == oracle_rows(
-        _FAULT_WRITE
+    assert after_crash in test_case.expected_states_after_crash
+    assert fetch_rows(adapter=adapter, connection=connection, sql=select_sql) == (
+        test_case.expected_rows_after_rerun
     )
 
 
@@ -942,3 +975,50 @@ def test_given_relations_differing_in_nullability_when_diffing_schema_then_chang
     assert tuple(
         (before.name, before.type, after.type) for before, after in result.type_changed_columns
     ) == (test_case.expected_type_changes)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseGenerationTestCase(
+            description="one partition is replaced in place",
+            incoming_rows=((1, "ada", 11, "2026-01-05"),),
+            expected_generation_kept=True,
+        ),
+        ClickHouseGenerationTestCase(
+            description="an exchanged copy keeps the generation",
+            incoming_rows=((1, "ada", 11, "2026-01-05"), (6, "fa", 60, "2026-03-09")),
+            expected_generation_kept=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_partition_rewrite_when_reading_generation_then_microbatch_scope_is_kept(
+    test_case: ClickHouseGenerationTestCase,
+    adapter: ClickHouseAdapter,
+    connection: Any,
+    clickhouse_schema: str,
+) -> None:
+    relation: str = f"{clickhouse_schema}.orders"
+    create_orders(
+        adapter=adapter,
+        connection=connection,
+        relation=relation,
+        partition_by=_PARTITIONED,
+        rows=INITIAL_ORDERS,
+    )
+    before: str | None = adapter.physical_relation_generation(
+        connection=connection, database=None, schema=clickhouse_schema, name="orders"
+    )
+
+    write_cursor_delta(
+        adapter=adapter,
+        connection=connection,
+        relation=relation,
+        sql=incoming_rows_sql(test_case.incoming_rows),
+    )
+
+    after: str | None = adapter.physical_relation_generation(
+        connection=connection, database=None, schema=clickhouse_schema, name="orders"
+    )
+    assert (before is not None and before == after) is test_case.expected_generation_kept

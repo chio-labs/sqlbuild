@@ -88,6 +88,7 @@ from sqlbuild.adapter.type_system.main.normalize_numeric_family import normalize
 from sqlbuild.adapter.type_system.main.types_equal import types_equal
 from sqlbuild.adapters.clickhouse._helpers.partition_rewrite import (
     artifact_relation,
+    generation_comment,
     rewrite_partitions,
 )
 from sqlbuild.adapters.clickhouse._helpers.snapshot_rewrite import (
@@ -103,6 +104,7 @@ from sqlbuild.adapters.clickhouse._helpers.type_text import (
 )
 from sqlbuild.adapters.clickhouse.classes.clickhouse_connection import _ClickHouseConnection
 from sqlbuild.adapters.clickhouse.classes.partition_locks import PartitionLocks
+from sqlbuild.adapters.clickhouse.classes.relation_write_locks import RelationWriteLocks
 from sqlbuild.adapters.clickhouse.constants import (
     CONNECTION_OPTION_KEYS,
     DEFAULT_COLUMN_DEFAULT_KIND,
@@ -111,6 +113,7 @@ from sqlbuild.adapters.clickhouse.constants import (
     DEFAULT_HTTPS_PORT,
     DSN_OPTION,
     EXCHANGE_UNSUPPORTED_CODES,
+    GENERATION_COMMENT_PREFIX,
     MAX_IDENTIFIER_LENGTH,
     MAX_QUERY_SIZE_BYTES,
     MINIMUM_SERVER_VERSION,
@@ -164,6 +167,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         historical_insert=HistoricalSnapshotInsertStyle.INSERT_WITH,
     )
     _partition_locks: ClassVar[PartitionLocks] = PartitionLocks()
+    _relation_locks: ClassVar[RelationWriteLocks] = RelationWriteLocks()
 
     def connect(self, config: dict[str, Any]) -> _ClickHouseConnection:
         try:
@@ -464,16 +468,16 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def physical_relation_generation(
         self, *, connection: Any, database: str | None, schema: str | None, name: str
     ) -> str | None:
-        """The table UUID, which changes whenever the table is recreated or exchanged."""
+        """The table UUID, kept in the comment of copies a partition rewrite exchanges in."""
 
         del database
         row: Any = self.execute(
             connection=connection,
-            sql="SELECT toString(uuid) FROM system.tables WHERE "
-            + _database_filter(schema)
-            + f" AND name = {quote_string(name)}",
+            sql=_table_generation_query(schema=schema, name=name),
         ).fetchone()
-        return None if row is None else str(row[0])
+        if row is None:
+            return None
+        return generation_comment(tuple(row)).removeprefix(GENERATION_COMMENT_PREFIX)
 
     def estimate_relation_row_count(
         self, *, connection: Any, database: str | None, schema: str | None, name: str
@@ -1062,6 +1066,8 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
                 execute=lambda sql: self.execute(connection=connection, sql=sql),
                 statement_recorder=statement_recorder,
                 partition_locks=self._partition_locks,
+                relation_locks=self._relation_locks,
+                generation_query=_generation_query(request.destination),
             ),
         )
 
@@ -2634,6 +2640,18 @@ def _split_relation(relation: str) -> tuple[str | None, str]:
     if len(parts) == 1:
         return None, name
     return parts[0].strip().strip('"`'), name
+
+
+def _generation_query(relation: str) -> str:
+    schema, name = _split_relation(relation)
+    return _table_generation_query(schema=schema, name=name)
+
+
+def _table_generation_query(*, schema: str | None, name: str) -> str:
+    return (
+        "SELECT toString(uuid), comment FROM system.tables WHERE "
+        f"{_database_filter(schema)} AND name = {quote_string(name)}"
+    )
 
 
 def _qualify_like(*, destination: str, origin: str) -> str:
