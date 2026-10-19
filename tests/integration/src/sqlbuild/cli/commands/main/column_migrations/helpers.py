@@ -246,11 +246,18 @@ def plan_text(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> str:
 
 
 def plan_json(*, project_dir: Path, capsys: pytest.CaptureFixture[str]) -> dict[str, Any]:
-    """Run sqb plan --json and parse stdout."""
+    """Run sqb plan --json, check its exit code against its findings, and parse stdout."""
 
     result: CliRun = run_sqb(project_dir=project_dir, args=("plan", "--json"), capsys=capsys)
-    assert result.exit_code == 0, result.output
-    return json.loads(result.stdout)
+    payload: dict[str, Any] = json.loads(result.stdout)
+    assert result.exit_code == plan_exit_code(payload), result.output
+    return payload
+
+
+def plan_exit_code(plan: dict[str, Any]) -> int:
+    """Return the exit code of a plan: 1 when any finding has error severity, else 0."""
+
+    return int(any(warning["severity"] == "error" for warning in plan["warnings"]))
 
 
 def planned_column_migrations(plan: dict[str, Any]) -> tuple[tuple[str, str, str, str], ...]:

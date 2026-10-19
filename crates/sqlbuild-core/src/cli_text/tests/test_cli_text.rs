@@ -178,6 +178,19 @@ fn given_plan_report_when_rendering_then_groups_models_by_reason() {
             expected_completion: "\u{2713} Plan complete  2 selected",
         },
         PlanTextTestCase {
+            description: "an error finding makes the final line state failure",
+            report: PlanTextReport {
+                warnings: vec![PlanWarningText {
+                    severity: "error".to_owned(),
+                    message: "would replace analytics.orders".to_owned(),
+                    model_name: None,
+                }],
+                ..plan_report(vec![table_model("orders", "no_change")])
+            },
+            expected_text: "Plan ready  1 selected\n\nModels (1)\n\u{2514}\u{2500}\u{2500} orders               table\n\nErrors (1)\n\u{2514}\u{2500}\u{2500} would replace analytics.orders",
+            expected_completion: "\u{2717} Plan failed with errors  1 selected",
+        },
+        PlanTextTestCase {
             description: "every active model is a full refresh",
             report: plan_report(vec![
                 table_model("orders", "full_refresh"),
