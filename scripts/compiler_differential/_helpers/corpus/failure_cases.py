@@ -819,6 +819,24 @@ def engine_error_cases() -> tuple[FailureCase, ...]:
             ),
         ),
         failure_case(
+            name="engine-error-macro-argument-unhashable-key",
+            expected_code="P001",
+            files={
+                _ENGINE_ERROR_MACROS: _ENGINE_ERROR_CENTS,
+                **mart_body_files(
+                    'SELECT customer_id, @cents({[1]: 2}) AS cents\nFROM __ref("stg_orders")\n'
+                ),
+            },
+            expected_message=(
+                f"Macro arguments of '@cents' in '<project>/{FAILURE_MART_PATH}' "
+                "use a list or dict as a dict key at line 5, column 29"
+            ),
+            expected_location=(5, 29),
+            expected_help=(
+                "Use a string, number, True, False, None, or a tuple of them as a dict key"
+            ),
+        ),
+        failure_case(
             name="engine-error-macro-argument-complex",
             expected_code="P001",
             files={

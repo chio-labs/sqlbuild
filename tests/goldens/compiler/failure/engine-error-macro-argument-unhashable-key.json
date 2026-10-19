@@ -1,0 +1,27 @@
+{
+ "commands": [
+  {
+   "label": "compile",
+   "exit_code": 1,
+   "diagnostics": [
+    {
+     "phase": "compile",
+     "severity": "error",
+     "code": "P001",
+     "message": "Macro arguments of '@cents' in '<project>/models/marts/customer_totals.sql' use a list or dict as a dict key at line 5, column 29",
+     "path": "models/marts/customer_totals.sql",
+     "line": 5,
+     "column": 29,
+     "location": {
+      "path": "models/marts/customer_totals.sql",
+      "line": 5,
+      "column": 29
+     },
+     "help": "Use a string, number, True, False, None, or a tuple of them as a dict key"
+    }
+   ]
+  }
+ ],
+ "compiled": {},
+ "manifest": null
+}
