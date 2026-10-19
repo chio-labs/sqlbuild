@@ -579,7 +579,7 @@ pub(crate) fn run<'py>(
         let Some(rules) = rules else {
             return fallback("the delta compile retained no rules request");
         };
-        injection.rules = std::sync::Mutex::new(Some(PendingRules::Ready(rules)));
+        injection.rules = std::sync::Mutex::new(Some(PendingRules::Ready(Box::new(rules))));
         for name in added {
             if let Some(model) = stored_models.get(name.as_str()) {
                 rerun.model_paths.insert(model.relative_path.clone());

@@ -74,7 +74,7 @@ pub(crate) enum ImageRules {
 #[derive(Debug)]
 pub(crate) enum PendingRules {
     Decoding(std::thread::JoinHandle<Option<BaseRules>>),
-    Ready(BaseRules),
+    Ready(Box<BaseRules>),
 }
 
 impl PendingRules {
@@ -82,7 +82,7 @@ impl PendingRules {
     pub(crate) fn resolved(self) -> Option<BaseRules> {
         match self {
             Self::Decoding(handle) => handle.join().ok().flatten(),
-            Self::Ready(rules) => Some(rules),
+            Self::Ready(rules) => Some(*rules),
         }
     }
 }
@@ -134,7 +134,7 @@ impl From<ImageRelations> for RelationTables {
 }
 
 /// Rows of `table` that differ from the same relation's `types` row; `None` where equal.
-fn differing(table: &Shapes, types: &Shapes) -> Vec<(String, Option<Vec<(String, String)>>)> {
+fn differing(table: &Shapes, types: &Shapes) -> StoredShapes {
     let types: std::collections::HashMap<&str, &Vec<(String, String)>> = types
         .iter()
         .map(|(name, shape)| (name.as_str(), shape))
@@ -151,7 +151,7 @@ fn differing(table: &Shapes, types: &Shapes) -> Vec<(String, Option<Vec<(String,
 }
 
 /// `differing`'s rows restored against `types`.
-fn restored(rows: Vec<(String, Option<Vec<(String, String)>>)>, types: &Shapes) -> Option<Shapes> {
+fn restored(rows: StoredShapes, types: &Shapes) -> Option<Shapes> {
     let types: std::collections::HashMap<&str, &Vec<(String, String)>> = types
         .iter()
         .map(|(name, shape)| (name.as_str(), shape))

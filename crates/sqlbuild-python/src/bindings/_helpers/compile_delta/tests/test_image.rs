@@ -194,8 +194,10 @@ fn given_damaged_image_when_decoded_then_it_is_never_read() {
         DamagedImageTestCase {
             description: "gate of another format",
             damage: |sections| {
-                let mut other: ProjectImage = ProjectImage::default();
-                other.format = "sqlbuild-project-image-v0".to_owned();
+                let other: ProjectImage = ProjectImage {
+                    format: "sqlbuild-project-image-v0".to_owned(),
+                    ..ProjectImage::default()
+                };
                 let gate = other
                     .encode()
                     .expect("encoded")
