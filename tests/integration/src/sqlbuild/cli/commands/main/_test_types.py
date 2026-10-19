@@ -1068,6 +1068,7 @@ class StartupImportFootprintTestCase:
     argv: tuple[str, ...]
     expected_exit_code: int
     forbidden_modules: tuple[str, ...]
+    local_config: str = ""
 
 
 @dataclass(frozen=True)

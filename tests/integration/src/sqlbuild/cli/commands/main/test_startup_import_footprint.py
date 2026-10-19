@@ -62,6 +62,26 @@ FULL_COMPILE_MODULES: tuple[str, ...] = (
     "sqlbuild.adapter.contract.classes.base_adapter",
     "sqlbuild.compiler.pipeline",
 )
+INSPECTION_FORBIDDEN: tuple[str, ...] = (
+    *WAREHOUSE_AND_INTEGRATION_MODULES,
+    "filelock",
+    "polyglot_sql",
+    "pydantic",
+    "yaml",
+    "sqlbuild.lint",
+    "sqlbuild.rule_engine",
+    *PRESENTATION_AND_PROVIDER_MODULES,
+)
+PROJECT_DISCOVERY_MODULES: tuple[str, ...] = (
+    "sqlbuild.compiler.discovery._helpers.validation",
+    "sqlbuild.compiler.macro_bridge",
+    "sqlbuild.compiler.python_nodes",
+)
+QUERY_FORBIDDEN: tuple[str, ...] = (
+    *(module for module in INSPECTION_FORBIDDEN if module != "duckdb"),
+    *PROJECT_DISCOVERY_MODULES,
+)
+MEMORY_CONNECTION: str = '[connection]\ndatabase = ":memory:"\n'
 REUSED_COMPILE_FORBIDDEN: tuple[str, ...] = (
     *WAREHOUSE_AND_INTEGRATION_MODULES,
     *FULL_COMPILE_MODULES,
@@ -118,6 +138,31 @@ print(json.dumps({"code": code, "loaded": loaded, "stderr": stderr.getvalue()}))
             expected_exit_code=0,
             forbidden_modules=COMPILE_FORBIDDEN,
         ),
+        StartupImportFootprintTestCase(
+            description="scope",
+            argv=("scope", "orders"),
+            expected_exit_code=0,
+            forbidden_modules=INSPECTION_FORBIDDEN,
+        ),
+        StartupImportFootprintTestCase(
+            description="lineage",
+            argv=("lineage", "orders", "--json"),
+            expected_exit_code=0,
+            forbidden_modules=INSPECTION_FORBIDDEN,
+        ),
+        StartupImportFootprintTestCase(
+            description="dag",
+            argv=("dag", "--json"),
+            expected_exit_code=0,
+            forbidden_modules=INSPECTION_FORBIDDEN,
+        ),
+        StartupImportFootprintTestCase(
+            description="ad hoc query",
+            argv=("query", "SELECT 1 AS order_id"),
+            expected_exit_code=0,
+            forbidden_modules=QUERY_FORBIDDEN,
+            local_config=MEMORY_CONNECTION,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -125,6 +170,7 @@ def test_given_fresh_interpreter_when_running_cli_then_heavy_modules_stay_unload
     test_case: StartupImportFootprintTestCase, tmp_path: Path
 ) -> None:
     write_compile_startup_project(tmp_path)
+    _ = (tmp_path / "sqlbuild_local.toml").write_text(test_case.local_config, encoding="utf-8")
     argv: list[str] = ["--project-dir", str(tmp_path), *test_case.argv]
 
     result: subprocess.CompletedProcess[str] = subprocess.run(
