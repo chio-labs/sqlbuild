@@ -37,7 +37,7 @@ use crate::bindings::_helpers::recall::constants::{
     STDOUT_STREAM_INDEX,
 };
 use crate::bindings::_helpers::recall::events::escaped_text;
-use crate::bindings::_helpers::recall::replacements::{RecallReplacements, in_output_replacement};
+use crate::bindings::_helpers::recall::replacements::{RecallReplacements, in_replacement_sink};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::config_json::dumped_json;
 
@@ -462,7 +462,7 @@ pub(crate) fn forward_output(
     let Some(session) = session.filter(|session| session.invocation_id() == invocation_id) else {
         return;
     };
-    if in_output_replacement() {
+    if in_replacement_sink() {
         return;
     }
     let stream = if stream == STDOUT_STREAM_INDEX {

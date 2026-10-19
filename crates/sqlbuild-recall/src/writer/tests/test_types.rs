@@ -5,8 +5,10 @@ use crate::schema::models::Table;
 use crate::store::errors::StoreError;
 use crate::store::models::InsertOutcome;
 use crate::store::types::{RecallStore, RecallStoreOpener};
-use crate::writer::models::{DeliveryStream, Priority, ReplacedOutput, SetupOutcome};
-use crate::writer::types::OutputReplacement;
+use crate::writer::models::{
+    DeliveryStream, Priority, ReplacedEvents, ReplacedOutput, SetupOutcome,
+};
+use crate::writer::types::{OutputReplacement, PendingLifecycleEvent};
 
 /// What one recorded session left in the store.
 #[derive(Debug, PartialEq)]
@@ -168,4 +170,41 @@ pub(crate) struct DiscoveryTestCase {
     pub(crate) description: &'static str,
     pub(crate) wait: Duration,
     pub(crate) expected_rows: Vec<Vec<RecallValue>>,
+}
+
+pub(crate) struct PendingEventTestCase {
+    pub(crate) description: &'static str,
+    /// How many copies of the event each replacement publishes; `None` when it fails.
+    pub(crate) copies: Vec<Option<usize>>,
+    /// `(accepted, delivered, filtered, failed)` of the events stream.
+    pub(crate) expected_counts: (u64, u64, u64, u64),
+}
+
+/// A lifecycle event whose replacement publishes `copies` distinct copies of it, or fails.
+#[derive(Debug)]
+pub(crate) struct CopyingReplacement {
+    pub(crate) index: usize,
+    pub(crate) copies: Option<usize>,
+}
+
+impl PendingLifecycleEvent for CopyingReplacement {
+    fn replace(self: Box<Self>) -> ReplacedEvents {
+        let Some(copies) = self.copies else {
+            return ReplacedEvents::Failed;
+        };
+        ReplacedEvents::Published(
+            (0..copies)
+                .map(|copy| {
+                    serde_json::from_str(&format!(
+                        r#"{{"event_id":"e{}-{copy}","event_type":"run_started","schema_version":2,
+                        "producer":"sqlbuild","producer_version":"1",
+                        "occurred_at":"2026-10-19T00:00:01.000000Z","invocation_id":"pending",
+                        "payload":{{}}}}"#,
+                        self.index
+                    ))
+                    .expect("the fixture is a JSON object")
+                })
+                .collect(),
+        )
+    }
 }

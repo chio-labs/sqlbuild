@@ -1,5 +1,6 @@
 """Synthetic DuckDB projects and process helpers for local Recall tests."""
 
+import contextlib
 import itertools
 import json
 import operator
@@ -231,6 +232,29 @@ def killed_during_discovery(
     return recorded, run(project_dir, "recall", "output", "last")
 
 
+def interrupted_build(project_dir: Path, **env: str) -> tuple[int | None, float]:
+    """Exit code of a build sent SIGINT after its first logged event, and seconds to stop."""
+
+    log: Path = project_dir / "events.log"
+    process: subprocess.Popen[bytes] = start(project_dir, "build", **env)
+    try:
+        deadline: float = time.monotonic() + 120
+        while not log.exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        time.sleep(1)
+        interrupted: float = time.monotonic()
+        os.killpg(process.pid, signal.SIGINT)
+        try:
+            _ = process.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            return None, time.monotonic() - interrupted
+        return process.returncode, time.monotonic() - interrupted
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        _ = process.wait(timeout=30)
+
+
 def concurrent_builds(project_dir: Path, targets: tuple[str, ...]) -> tuple[list[int], int, int]:
     """Exit codes of concurrent builds, reads made meanwhile and unexpected read failures."""
 
@@ -382,6 +406,14 @@ OUTPUT_LOG_SINK: str = (
     "def output_log(record: CommandOutputRecord) -> None:\n"
     "    with (Path(__file__).parents[1] / 'output.log').open('a') as log:\n"
     "        log.write(record.message)\n"
+)
+SLOW_LIFECYCLE_SINK: str = (
+    "@lifecycle_event_sink\n"
+    "def recall_events(event: LifecycleEvent, writer: RecallWriter) -> None:\n"
+    "    import os\n"
+    "    import time\n\n"
+    "    time.sleep(float(os.environ.get('ORDERS_SINK_SLEEP_SECONDS', '0')))\n"
+    "    writer.publish_lifecycle(event)\n"
 )
 FAILING_SINKS: str = (
     "@lifecycle_event_sink\n"

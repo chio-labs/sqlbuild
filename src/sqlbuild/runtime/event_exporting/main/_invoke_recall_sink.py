@@ -4,10 +4,10 @@ from collections.abc import Callable, Mapping
 
 
 def invoke_recall_sink(*, function: Callable[..., object], arguments: Mapping[str, object]) -> bool:
-    """Call a user replacement sink and report whether it raised."""
+    """Call a user replacement sink and report whether it raised; interrupts and exits propagate."""
 
     try:
         _ = function(**arguments)
-    except BaseException:
+    except Exception:
         return True
     return False

@@ -8,15 +8,15 @@ use crate::writer::models::SetupOutcome;
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
     artifact_counts, close_under_held_lock, event_counts, invocation_during_discovery,
-    output_stored_while_running, partially_inserted, recorded_session, replaced_session,
-    session_on_corrupt_store,
+    output_stored_while_running, partially_inserted, pending_event_counts, recorded_session,
+    replaced_session, session_on_corrupt_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
     ArtifactSizeTestCase, CorruptStoreTestCase, DiscoveryTestCase, EventBuildTestCase,
-    HeldLockTestCase, PartialInsertTestCase, RecordedSession, ReplacementTestCase, SessionTestCase,
-    StoredWhileRunningTestCase,
+    HeldLockTestCase, PartialInsertTestCase, PendingEventTestCase, RecordedSession,
+    ReplacementTestCase, SessionTestCase, StoredWhileRunningTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -296,6 +296,24 @@ fn given_a_held_context_row_when_discovery_runs_then_the_first_heartbeat_names_t
         assert_eq!(
             invocation_during_discovery(test_case.wait),
             test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_pending_events_when_replaced_on_the_delivery_thread_then_each_outcome_is_accounted() {
+    let test_cases = [PendingEventTestCase {
+        description: "one kept, one split in two, one filtered, one failed",
+        copies: vec![Some(1), Some(2), Some(0), None],
+        expected_counts: (5, 3, 1, 1),
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            pending_event_counts(&test_case.copies),
+            test_case.expected_counts,
             "{}",
             test_case.description
         );

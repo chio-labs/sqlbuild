@@ -342,9 +342,13 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
         let (batch, closing) = next_batch(shared, next_heartbeat, batching);
         let built: Built =
             materializer.build(batch, shared.output_replacement.get().map(Arc::as_ref));
-        if !built.settled.is_empty() || !built.unbuildable.is_empty() || !built.filtered.is_empty()
+        if !built.settled.is_empty()
+            || !built.unbuildable.is_empty()
+            || !built.filtered.is_empty()
+            || built.extra_events > 0
         {
             let mut state = locked(&shared.state);
+            state.counts_mut(DeliveryStream::Events).accepted += built.extra_events;
             state.account(&built.settled, Ok(&InsertOutcome::default()));
             state.account_unbuildable(&built.unbuildable);
             state.account_filtered(&built.filtered);

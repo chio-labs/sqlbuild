@@ -183,3 +183,11 @@ class ReplacementLaunchRecordTestCase:
     description: str
     sinks: dict[str, str]
     expected_records: int
+
+
+@dataclass(frozen=True)
+class SlowReplacementTestCase:
+    description: str
+    shutdown_seconds: float
+    sink_sleep_seconds: str
+    expected_max_seconds: float

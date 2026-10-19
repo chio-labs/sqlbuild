@@ -16,7 +16,9 @@ use crate::writer::main::start_recall_session::start_recall_session;
 use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, SessionConfig, SessionStore, SetupOutcome,
 };
-use crate::writer::tests::test_types::{PartialStore, PrefixReplacement, RecordedSession};
+use crate::writer::tests::test_types::{
+    CopyingReplacement, PartialStore, PrefixReplacement, RecordedSession,
+};
 
 /// The envelope of invocation `invocation_id`.
 pub(crate) fn envelope(invocation_id: &str) -> RowEnvelope {
@@ -416,4 +418,26 @@ pub(crate) fn invocation_during_discovery(wait: Duration) -> Vec<Vec<RecallValue
     .expect("the query is valid");
     drop(session.close());
     shown.rows
+}
+
+/// `(accepted, delivered, filtered, failed)` of events whose replacements publish `copies` each.
+pub(crate) fn pending_event_counts(copies: &[Option<usize>]) -> (u64, u64, u64, u64) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let session = start_recall_session(config(directory.path().join("recall.sqlite3"), "pending"));
+    for (index, copies) in copies.iter().enumerate() {
+        session.publish_pending_event(
+            Box::new(CopyingReplacement {
+                index,
+                copies: *copies,
+            }),
+            ("run_started", 2),
+        );
+    }
+    let counts = stream_counts(&session.close(), DeliveryStream::Events);
+    (
+        counts.accepted,
+        counts.delivered,
+        counts.filtered,
+        counts.failed,
+    )
 }

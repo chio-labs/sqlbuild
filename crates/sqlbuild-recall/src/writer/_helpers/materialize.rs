@@ -13,7 +13,7 @@ use crate::records::main::sha256_hex::sha256_hex;
 use crate::records::models::{ArtifactInput, OutputChunk, OutputStream, RecallRow, RowEnvelope};
 use crate::writer::_helpers::output_chunk::output_chunk;
 use crate::writer::_helpers::queue::{Payload, Queued, SqlInput};
-use crate::writer::models::{DeliveryStream, ReplacedOutput};
+use crate::writer::models::{DeliveryStream, ReplacedEvents, ReplacedOutput};
 use crate::writer::types::OutputReplacement;
 
 /// A batch ready to write: its rows, the streams of the records they came from, and records already settled.
@@ -28,6 +28,8 @@ pub(crate) struct Built {
     pub(crate) unbuildable: Vec<DeliveryStream>,
     /// Records a replacement sink chose not to store.
     pub(crate) filtered: Vec<DeliveryStream>,
+    /// Events a lifecycle replacement published beyond the one it was handed, accepted as they are built.
+    pub(crate) extra_events: u64,
 }
 
 /// Builds rows for one session; remembers which SQL it has stored.
@@ -142,6 +144,24 @@ impl Materializer {
                         built.written.push(stream);
                     }
                     Err(_) => built.unbuildable.push(stream),
+                },
+                Payload::Pending(pending) => match pending.replace() {
+                    ReplacedEvents::Published(events) if events.is_empty() => {
+                        built.filtered.push(stream);
+                    }
+                    ReplacedEvents::Published(events) => {
+                        built.extra_events += events.len() as u64 - 1;
+                        for event in events {
+                            match event_object_row(&self.envelope, &event) {
+                                Ok(row) => {
+                                    built.rows.push(row);
+                                    built.written.push(stream);
+                                }
+                                Err(_) => built.unbuildable.push(stream),
+                            }
+                        }
+                    }
+                    ReplacedEvents::Failed => built.unbuildable.push(stream),
                 },
                 Payload::Sql(input) => match self.sql_rows(input) {
                     Some(rows) => {

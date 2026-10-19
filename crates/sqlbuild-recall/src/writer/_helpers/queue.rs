@@ -18,6 +18,7 @@ use crate::writer::_helpers::delivery::{record_stream, stream_of};
 use crate::writer::_helpers::tail::{TailRing, TailSegment};
 use crate::writer::constants::{QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
 use crate::writer::models::{DeliveryStream, Priority};
+use crate::writer::types::PendingLifecycleEvent;
 
 /// SQL a statement executed, hashed and turned into rows on the delivery thread.
 #[derive(Debug)]
@@ -33,6 +34,8 @@ pub(crate) struct SqlInput {
 pub(crate) enum Payload {
     Rows(Vec<RecallRow>),
     Event(Map<String, Value>),
+    /// An event the lifecycle replacement sink decides on when its batch is built.
+    Pending(Box<dyn PendingLifecycleEvent>),
     Sql(SqlInput),
 }
 
@@ -49,14 +52,14 @@ impl Queued {
     pub(crate) fn rows(&self) -> &[RecallRow] {
         match &self.payload {
             Payload::Rows(rows) => rows,
-            Payload::Event(_) | Payload::Sql(_) => &[],
+            Payload::Event(_) | Payload::Pending(_) | Payload::Sql(_) => &[],
         }
     }
 
     fn row_count(&self) -> usize {
         match &self.payload {
             Payload::Rows(rows) => rows.len(),
-            Payload::Event(_) => 1,
+            Payload::Event(_) | Payload::Pending(_) => 1,
             Payload::Sql(_) => 2,
         }
     }

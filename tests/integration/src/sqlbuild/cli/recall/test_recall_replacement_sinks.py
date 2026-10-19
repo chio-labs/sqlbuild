@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -11,13 +12,16 @@ from tests.integration.src.sqlbuild.cli.recall._test_types import (
     ReplacementLaunchRecordTestCase,
     ReplacementLifecycleTestCase,
     ReplacementOutputTestCase,
+    SlowReplacementTestCase,
 )
 from tests.integration.src.sqlbuild.cli.recall.helpers import (
     EVENT_LOG_SINK,
     FAILING_SINKS,
     NATIVE_SQB,
+    SLOW_LIFECYCLE_SINK,
     environment,
     filtering_lifecycle_sink,
+    interrupted_build,
     logged_event_types,
     recall_rows,
     rewriting_output_sink,
@@ -181,6 +185,71 @@ def test_given_only_replacement_sinks_when_compiling_through_sqb_then_no_launch_
     assert compiled.returncode == 0, compiled.stderr
     records: list[Path] = list((project_dir / "target" / "cache" / "launcher-v1").glob("*.json"))
     assert len(records) == test_case.expected_records
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SlowReplacementTestCase(
+            description="a sink sleeping past the budget costs the command at most the budget",
+            shutdown_seconds=1.0,
+            sink_sleep_seconds="30",
+            expected_max_seconds=12.0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_lifecycle_sink_slower_than_the_budget_when_building_then_nothing_else_waits(
+    test_case: SlowReplacementTestCase, tmp_path: Path
+) -> None:
+    budget: str = f'\n[recall]\nshutdown_timeout = "{int(test_case.shutdown_seconds * 1000)}ms"\n'
+    project_dir: Path = write_sinks(
+        write_project(tmp_path / "orders_shop", extra_toml=budget),
+        {"recall_events": SLOW_LIFECYCLE_SINK, "event_log": EVENT_LOG_SINK},
+    )
+
+    started: float = time.monotonic()
+    built: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "build", ORDERS_SINK_SLEEP_SECONDS=test_case.sink_sleep_seconds
+    )
+    elapsed: float = time.monotonic() - started
+
+    logged: list[str] = (project_dir / "events.log").read_text(encoding="utf-8").splitlines()
+    assert built.returncode == 0, built.stderr
+    assert elapsed < test_case.expected_max_seconds
+    assert logged[-1] == "invocation_completed"
+    assert b"Recall history for this run is incomplete" in built.stderr
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SlowReplacementTestCase(
+            description="Ctrl-C stops the build while the sink sleeps",
+            shutdown_seconds=1.0,
+            sink_sleep_seconds="30",
+            expected_max_seconds=10.0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_slow_lifecycle_sink_when_interrupted_then_the_build_stops(
+    test_case: SlowReplacementTestCase, tmp_path: Path
+) -> None:
+    budget: str = f'\n[recall]\nshutdown_timeout = "{int(test_case.shutdown_seconds * 1000)}ms"\n'
+    project_dir: Path = write_sinks(
+        write_project(tmp_path / "orders_shop", extra_toml=budget),
+        {"recall_events": SLOW_LIFECYCLE_SINK, "event_log": EVENT_LOG_SINK},
+    )
+
+    exit_code, stopped_after = interrupted_build(
+        project_dir,
+        ORDERS_SINK_SLEEP_SECONDS=test_case.sink_sleep_seconds,
+        ORDERS_TASK_SLEEP_SECONDS="60",
+    )
+
+    assert exit_code not in (None, 0)
+    assert stopped_after < test_case.expected_max_seconds
 
 
 if __name__ == "__main__":

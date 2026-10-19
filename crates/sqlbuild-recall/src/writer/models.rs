@@ -79,6 +79,15 @@ pub enum ReplacedOutput {
     Failed,
 }
 
+/// What a Recall replacement made of one lifecycle event.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ReplacedEvents {
+    /// Store these events, each as `lifecycle_event_to_json` encodes it; none is counted as filtered.
+    Published(Vec<serde_json::Map<String, serde_json::Value>>),
+    /// Store nothing; counted as failed.
+    Failed,
+}
+
 /// Where a session writes.
 #[derive(Clone, Debug)]
 pub enum SessionStore {

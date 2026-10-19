@@ -11,8 +11,10 @@ use sqlbuild_core::command_output::main::ansi_free_text::ansi_free_text;
 use sqlbuild_core::event_export::main::route_lifecycle_event::route_lifecycle_event;
 use sqlbuild_core::event_export::models::{ExporterCounts, ExporterFilter};
 use sqlbuild_recall::records::models::{OutputChunk, OutputStream};
-use sqlbuild_recall::writer::models::{DeliveryStream, RecallSession, ReplacedOutput};
-use sqlbuild_recall::writer::types::OutputReplacement;
+use sqlbuild_recall::writer::models::{
+    DeliveryStream, RecallSession, ReplacedEvents, ReplacedOutput,
+};
+use sqlbuild_recall::writer::types::{OutputReplacement, PendingLifecycleEvent};
 
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::event_exporting::models::BoundEventExporter;
@@ -29,16 +31,33 @@ use crate::bindings::_helpers::recall::writer::RecallWriter;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 thread_local! {
-    /// Set while this thread runs the output replacement sink, whose own writes Recall never records.
-    static IN_OUTPUT_REPLACEMENT: Cell<bool> = const { Cell::new(false) };
+    /// Set while this thread runs a replacement sink, whose own writes Recall never records.
+    static IN_REPLACEMENT_SINK: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Whether the current thread is running the output replacement sink.
-pub(crate) fn in_output_replacement() -> bool {
-    IN_OUTPUT_REPLACEMENT.with(Cell::get)
+/// Whether the current thread is running a replacement sink.
+pub(crate) fn in_replacement_sink() -> bool {
+    IN_REPLACEMENT_SINK.with(Cell::get)
+}
+
+/// Run `call` as a replacement sink on the delivery thread: its writes are neither recorded nor handed to command-output sinks.
+fn as_replacement_sink<T>(call: impl FnOnce(Python<'_>) -> PyResult<T>, failed: T) -> T {
+    IN_REPLACEMENT_SINK.with(|flag| flag.set(true));
+    let result = Python::attach(|py| {
+        if let Ok(thread) =
+            imported(py, "threading", "current_thread").and_then(|current| current.call0())
+        {
+            drop(thread.setattr(OUTPUT_SUPPRESSED_ATTRIBUTE, true));
+        }
+        call(py)
+    })
+    .unwrap_or(failed);
+    IN_REPLACEMENT_SINK.with(|flag| flag.set(false));
+    result
 }
 
 /// The lifecycle replacement: the sink function, the parameter its writer goes in, and its event filter.
+#[derive(Debug)]
 struct LifecycleReplacement {
     function: Py<PyAny>,
     writer_parameter: String,
@@ -48,7 +67,7 @@ struct LifecycleReplacement {
 /// The replacement sinks of one invocation, configured once discovery has run.
 #[derive(Default)]
 pub(crate) struct RecallReplacements {
-    lifecycle: OnceLock<LifecycleReplacement>,
+    lifecycle: OnceLock<Arc<LifecycleReplacement>>,
 }
 
 impl std::fmt::Debug for RecallReplacements {
@@ -109,11 +128,11 @@ impl RecallReplacements {
                     Some(&native_field(&sink, "min_severity")?),
                 ),
             )?;
-            drop(self.lifecycle.set(LifecycleReplacement {
+            drop(self.lifecycle.set(Arc::new(LifecycleReplacement {
                 function: bound.function,
                 writer_parameter,
                 filter: bound.filter,
-            }));
+            })));
             active = true;
         }
         if let Some((sink, writer_parameter)) = discovered(output)? {
@@ -135,7 +154,7 @@ impl RecallReplacements {
         Ok(active)
     }
 
-    /// Hand `event` to the lifecycle replacement and account for what it kept; `false` when there is none.
+    /// Queue `event` for the lifecycle replacement, which runs on the delivery thread; `false` when there is none.
     pub(crate) fn deliver_lifecycle(
         &self,
         py: Python<'_>,
@@ -158,20 +177,49 @@ impl RecallReplacements {
             session.record_filtered(DeliveryStream::Events, 1);
             return Ok(true);
         }
-        let writer = Bound::new(py, RecallWriter::lifecycle(Arc::clone(session)))?;
-        let raised: PyResult<bool> = invoke(
-            py,
-            &replacement.function,
-            (EVENT_PARAMETER, event),
-            (&replacement.writer_parameter, writer.clone().into_any()),
+        let schema_version: i64 = native_field(event, "schema_version")?.extract()?;
+        session.publish_pending_event(
+            Box::new(PendingEvent {
+                replacement: Arc::clone(replacement),
+                event: event.clone().unbind(),
+            }),
+            (&event_type, schema_version),
         );
-        let (published, _) = writer.get().finish();
-        match raised {
-            Ok(false) if published == 0 => session.record_filtered(DeliveryStream::Events, 1),
-            Ok(false) => {}
-            Ok(true) | Err(_) => session.record_failed(DeliveryStream::Events, 1),
-        }
         Ok(true)
+    }
+}
+
+/// One lifecycle event queued for the lifecycle replacement.
+#[derive(Debug)]
+struct PendingEvent {
+    replacement: Arc<LifecycleReplacement>,
+    event: Py<PyAny>,
+}
+
+impl PendingEvent {
+    fn call(&self, py: Python<'_>) -> PyResult<ReplacedEvents> {
+        let writer = Bound::new(py, RecallWriter::lifecycle())?;
+        let raised: bool = invoke(
+            py,
+            &self.replacement.function,
+            (EVENT_PARAMETER, self.event.bind(py)),
+            (
+                &self.replacement.writer_parameter,
+                writer.clone().into_any(),
+            ),
+        )?;
+        let (events, _) = writer.get().finish();
+        Ok(if raised {
+            ReplacedEvents::Failed
+        } else {
+            ReplacedEvents::Published(events)
+        })
+    }
+}
+
+impl PendingLifecycleEvent for PendingEvent {
+    fn replace(self: Box<Self>) -> ReplacedEvents {
+        as_replacement_sink(|py| self.call(py), ReplacedEvents::Failed)
     }
 }
 
@@ -232,11 +280,6 @@ impl OutputSink {
     }
 
     fn call(&self, py: Python<'_>, chunk: &OutputChunk) -> PyResult<ReplacedOutput> {
-        if let Ok(thread) =
-            imported(py, "threading", "current_thread").and_then(|current| current.call0())
-        {
-            thread.setattr(OUTPUT_SUPPRESSED_ATTRIBUTE, true)?;
-        }
         let record = self.record(py, chunk)?;
         let writer = Bound::new(py, RecallWriter::output(chunk.sequence))?;
         let raised: bool = invoke(
@@ -259,9 +302,6 @@ impl OutputReplacement for OutputSink {
         if !self.streams[usize::from(chunk.stream == OutputStream::Stderr)] {
             return ReplacedOutput::Filtered;
         }
-        IN_OUTPUT_REPLACEMENT.with(|flag| flag.set(true));
-        let replaced = Python::attach(|py| self.call(py, chunk)).unwrap_or(ReplacedOutput::Failed);
-        IN_OUTPUT_REPLACEMENT.with(|flag| flag.set(false));
-        replaced
+        as_replacement_sink(|py| self.call(py, chunk), ReplacedOutput::Failed)
     }
 }

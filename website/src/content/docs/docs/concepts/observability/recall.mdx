@@ -169,9 +169,12 @@ def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:
   keeps the record ID and sequence; publish at most one record per call.
 - A `@lifecycle_event_sink` replacement receives each event its `event_kinds` and `min_severity`
   accept and keeps it with `writer.publish_lifecycle(event)`.
-- A record the sink does not publish is counted as `filtered`; a sink that raises has its record
-  counted as `failed`, and Recall never falls back to storing the unfiltered record. The command's
-  exit code and output are unaffected. `output_invocations.filter_active` is `1` for invocations
+- Both replacements run on Recall's background thread, so a slow one never delays the command or
+  other sinks by more than `shutdown_timeout`; what it has not handled by then is counted as
+  `dropped`. Output written before discovery finishes is held until the replacement can see it.
+- A record the sink does not publish is counted as `filtered`; a sink that raises an exception has
+  its record counted as `failed`, and Recall never falls back to storing the unfiltered record. The
+  command's exit code and output are unaffected. `output_invocations.filter_active` is `1` for invocations
   that ran a replacement.
 - There is at most one replacement per stream; discovery fails with `D015` naming each
   `path:function` otherwise. A replacement takes only its record and the writer, not providers, and

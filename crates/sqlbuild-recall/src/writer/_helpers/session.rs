@@ -14,11 +14,11 @@ use crate::records::main::parse_event::parse_event;
 use crate::records::models::OutputStream;
 use crate::writer::_helpers::delivery::locked;
 use crate::writer::_helpers::queue::{Payload, Queued, SqlInput};
-use crate::writer::constants::{JSON_SCALAR_BYTES, MAX_ARTIFACT_BYTES};
+use crate::writer::constants::{JSON_SCALAR_BYTES, MAX_ARTIFACT_BYTES, PENDING_EVENT_BYTES};
 use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, RecallSession, SetupOutcome,
 };
-use crate::writer::types::OutputReplacement;
+use crate::writer::types::{OutputReplacement, PendingLifecycleEvent};
 
 pub(crate) fn severity_rank(severity: &str) -> usize {
     SEVERITY_ORDER
@@ -103,6 +103,27 @@ impl RecallSession {
             payload: Payload::Event(event),
             stream: DeliveryStream::Events,
             bytes,
+        };
+        let mut state = locked(&self.shared.state);
+        state.push_record(record, priority);
+        self.shared.wake.notify_one();
+    }
+
+    /// Queue one lifecycle event of `event_type` for the replacement sink, which runs on the delivery thread within the shutdown budget.
+    pub fn publish_pending_event(
+        &self,
+        event: Box<dyn PendingLifecycleEvent>,
+        (event_type, schema_version): (&str, i64),
+    ) {
+        let mut identity: Map<String, Value> = Map::new();
+        identity.insert("event_type".to_owned(), Value::from(event_type));
+        identity.insert("schema_version".to_owned(), Value::from(schema_version));
+        let priority: Priority =
+            event_severity(&identity).map_or(Priority::Lifecycle, event_priority);
+        let record = Queued {
+            payload: Payload::Pending(event),
+            stream: DeliveryStream::Events,
+            bytes: PENDING_EVENT_BYTES,
         };
         let mut state = locked(&self.shared.state);
         state.push_record(record, priority);
