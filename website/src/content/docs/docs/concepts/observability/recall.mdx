@@ -16,7 +16,8 @@ For every recorded invocation, Recall keeps:
   retries, and audit results;
 - the SQL text of every executed statement, stored once per distinct statement and shared across
   invocations;
-- its stdout and stderr, byte for byte, in the order they were written;
+- its stdout and stderr, byte for byte, in the order they were written, up to 1 MiB of each
+  stream; later output is not recorded and shows as a `filtered` gap in `output_invocations`;
 - framework diagnostics at or above `diagnostics_min_severity`.
 
 Writes happen on a background thread and never fail the command. A command that cannot record all

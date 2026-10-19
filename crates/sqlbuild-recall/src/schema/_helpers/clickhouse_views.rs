@@ -247,7 +247,10 @@ counted AS (
         coalesce(received.stdout_bytes, 0) AS stdout_bytes,
         coalesce(received.stderr_bytes, 0) AS stderr_bytes,
         received.max_sequence AS max_sequence,
-        coalesce(received.max_sequence + 1 - received.chunks, 0) AS missing_sequences,
+        greatest(
+            coalesce(received.max_sequence + 1 - received.chunks, 0),
+            coalesce(toInt64(delivery.accepted), 0) - coalesce(toInt64(received.chunks), 0)
+        ) AS missing_sequences,
         greatest(coalesce(received.queue_drops, 0), coalesce(delivery.dropped, 0)) AS reported_drops,
         coalesce(delivery.filtered, 0) AS filtered,
         coalesce(delivery.failed, 0) AS failed,

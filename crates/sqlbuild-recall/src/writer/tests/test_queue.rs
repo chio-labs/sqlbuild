@@ -1,8 +1,8 @@
 use crate::records::models::{OutputStream, RecallValue};
 use crate::writer::models::{DeliveryStream, Priority};
-use crate::writer::tests::helpers::{chunked, output_drops, pushed};
+use crate::writer::tests::helpers::{capped, chunk_facts, chunked, output_drops, pushed};
 use crate::writer::tests::test_types::{
-    ChunkingTestCase, DisplacementTestCase, OutputDropTestCase,
+    CaptureLimitTestCase, ChunkingTestCase, DisplacementTestCase, OutputDropTestCase,
 };
 
 #[test]
@@ -108,6 +108,42 @@ fn given_a_full_queue_when_output_is_dropped_then_each_drop_is_counted_once() {
         assert_eq!(
             output_drops(test_case.capacity, test_case.chunks),
             test_case.expected_drops,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_output_past_the_capture_limit_when_appended_then_each_skipped_run_is_one_filtered_sequence()
+ {
+    let test_cases = [
+        CaptureLimitTestCase {
+            description: "output within the limit is recorded whole",
+            limit: 10,
+            writes: vec![(OutputStream::Stdout, 4), (OutputStream::Stdout, 6)],
+            expected_outcome: (vec![chunk_facts(0, "stdout", 10)], 0),
+        },
+        CaptureLimitTestCase {
+            description: "each run past a stream's limit leaves one filtered sequence",
+            limit: 10,
+            writes: vec![
+                (OutputStream::Stdout, 25),
+                (OutputStream::Stdout, 3),
+                (OutputStream::Stderr, 5),
+                (OutputStream::Stdout, 5),
+            ],
+            expected_outcome: (
+                vec![chunk_facts(0, "stdout", 10), chunk_facts(2, "stderr", 5)],
+                2,
+            ),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            capped(test_case.limit, &test_case.writes),
+            test_case.expected_outcome,
             "{}",
             test_case.description
         );

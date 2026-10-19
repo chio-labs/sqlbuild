@@ -130,8 +130,7 @@ pub(crate) fn recorded_session(output: &[(OutputStream, Vec<u8>)]) -> RecordedSe
     let facts = query_store(
         &store,
         "SELECT (SELECT status FROM invocations), (SELECT COUNT(*) FROM recall_diagnostics), \
-         (SELECT COUNT(*) FROM recall_artifacts), (SELECT COUNT(*) FROM recall_heartbeats), \
-         (SELECT COUNT(*) FROM recall_delivery), (SELECT command FROM recall_invocations)",
+         (SELECT COUNT(*) FROM recall_artifacts), (SELECT COUNT(*) FROM recall_delivery), (SELECT command FROM recall_invocations)",
         None,
     )
     .expect("the query is valid");
@@ -272,4 +271,35 @@ pub(crate) fn output_drops(capacity: usize, chunks: usize) -> (u64, Vec<Option<R
         state.counts[DeliveryStream::Output.index()].dropped,
         reported,
     )
+}
+
+/// Each emitted chunk's sequence, stream and size, and the filtered count, with an output limit of `limit` bytes per stream.
+pub(crate) fn capped(
+    limit: usize,
+    writes: &[(OutputStream, usize)],
+) -> (Vec<[Option<RecallValue>; 3]>, u64) {
+    let mut state = WriterState::new(envelope("inv")).with_output_limit(limit);
+    for (stream, length) in writes {
+        state.append_output(*stream, &vec![b'x'; *length], SystemTime::now());
+    }
+    state.flush_output();
+    let chunks = state
+        .take_batch(usize::MAX)
+        .iter()
+        .flat_map(|record| record.rows().iter())
+        .map(|row| ["sequence", "stream", "byte_count"].map(|name| row.value(name).cloned()))
+        .collect();
+    (
+        chunks,
+        state.counts[DeliveryStream::Output.index()].filtered,
+    )
+}
+
+/// A chunk's sequence, stream and byte count, as `capped` reports them.
+pub(crate) fn chunk_facts(sequence: i64, stream: &str, bytes: i64) -> [Option<RecallValue>; 3] {
+    [
+        Some(RecallValue::Integer(sequence)),
+        Some(RecallValue::Text(stream.to_owned())),
+        Some(RecallValue::Integer(bytes)),
+    ]
 }

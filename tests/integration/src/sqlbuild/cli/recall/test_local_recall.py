@@ -8,6 +8,7 @@ import pytest
 
 from tests.integration.src.sqlbuild.cli.recall._test_types import (
     AbandonedRunTestCase,
+    CaptureLimitTestCase,
     CombinedOutputTestCase,
     ConcurrentBuildsTestCase,
     ConcurrentWritersTestCase,
@@ -692,4 +693,35 @@ def test_given_a_corrupt_store_when_builds_race_then_one_moves_it_and_both_are_r
 
     assert exit_codes == test_case.expected_exit_codes
     assert len(moved) == test_case.expected_moved
+    assert recorded == test_case.expected_recorded
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        CaptureLimitTestCase(
+            description="stdout past the capture limit is a filtered gap; stderr stays whole",
+            stdout_bytes=3 * 1024 * 1024,
+            expected_recorded=[[1024 * 1024, 1, "filtered", 0]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_output_past_the_capture_limit_when_recorded_then_the_rest_is_a_filtered_gap(
+    test_case: CaptureLimitTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = write_project(tmp_path / "orders_shop")
+
+    built: subprocess.CompletedProcess[bytes] = run(
+        project_dir, "build", ORDERS_TASK_STDOUT_BYTES=str(test_case.stdout_bytes)
+    )
+    recorded: list[list[object]] = recall_rows(
+        project_dir,
+        "SELECT o.stdout_bytes, instr(CAST(t.stderr AS TEXT), 'from the task') > 0, "
+        "o.gap_reason, o.complete "
+        "FROM output_invocations o JOIN output_transcripts t USING (invocation_id)",
+    )
+
+    assert built.returncode == 0, built.stderr.decode(errors="replace")
+    assert len(built.stdout) > test_case.stdout_bytes
     assert recorded == test_case.expected_recorded

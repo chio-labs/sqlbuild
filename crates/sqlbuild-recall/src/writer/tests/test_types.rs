@@ -69,3 +69,10 @@ pub(crate) struct OutputDropTestCase {
     pub(crate) chunks: usize,
     pub(crate) expected_drops: (u64, Vec<Option<RecallValue>>),
 }
+
+pub(crate) struct CaptureLimitTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) limit: usize,
+    pub(crate) writes: Vec<(OutputStream, usize)>,
+    pub(crate) expected_outcome: (Vec<[Option<RecallValue>; 3]>, u64),
+}

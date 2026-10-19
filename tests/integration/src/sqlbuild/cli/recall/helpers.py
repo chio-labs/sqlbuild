@@ -52,6 +52,8 @@ EMIT_TASK: str = (
     "    sys.stdout.flush()\n"
     '    time.sleep(float(os.environ.get("ORDERS_TASK_SLEEP_SECONDS", "0")))\n'
     '    _write_concurrently(int(os.environ.get("ORDERS_TASK_THREAD_LINES", "0")))\n'
+    '    sys.stdout.write("y" * int(os.environ.get("ORDERS_TASK_STDOUT_BYTES", "0")))\n'
+    "    sys.stdout.flush()\n"
     "    return ctx.result()\n\n\n"
     "def _write_concurrently(lines):\n"
     '    """Two threads write numbered lines; the number gives the true global order."""\n\n'

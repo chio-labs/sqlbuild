@@ -13,7 +13,9 @@ use crate::records::models::{
 };
 use crate::store::models::InsertOutcome;
 use crate::writer::_helpers::delivery::stream_of;
-use crate::writer::constants::{QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
+use crate::writer::constants::{
+    OUTPUT_STREAM_CAPTURE_BYTES, QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY,
+};
 use crate::writer::models::{DeliveryStream, Priority};
 
 /// SQL a statement executed, hashed and turned into rows on the delivery thread.
@@ -79,6 +81,11 @@ pub(crate) struct WriterState {
     pending: Option<Pending>,
     next_sequence: u64,
     offsets: [u64; 2],
+    /// Bytes of each stream accepted for recording, pending or emitted.
+    captured: [usize; 2],
+    /// The stream whose output past the capture limit the latest sequence stands for.
+    skipping: Option<OutputStream>,
+    output_limit: usize,
     unreported_output_drops: u64,
     pub(crate) diagnostic_sequence: u64,
     pub(crate) closing: bool,
@@ -120,6 +127,9 @@ impl WriterState {
             pending: None,
             next_sequence: 0,
             offsets: [0; 2],
+            captured: [0; 2],
+            skipping: None,
+            output_limit: OUTPUT_STREAM_CAPTURE_BYTES,
             unreported_output_drops: 0,
             diagnostic_sequence: 0,
             closing: false,
@@ -130,6 +140,13 @@ impl WriterState {
             notices: Vec::new(),
             capacity,
         }
+    }
+
+    /// The same state recording at most `limit` bytes of each output stream.
+    #[cfg(test)]
+    pub(crate) fn with_output_limit(mut self, limit: usize) -> Self {
+        self.output_limit = limit;
+        self
     }
 
     pub(crate) fn counts_mut(&mut self, stream: DeliveryStream) -> &mut DeliveryCounts {
@@ -245,6 +262,7 @@ impl WriterState {
             data,
         };
         self.next_sequence += 1;
+        self.skipping = None;
         self.offsets[index] += chunk.data.len() as u64;
         let row = output_row(&self.envelope, &chunk);
         self.push(vec![row], DeliveryStream::Output, Priority::Output);
@@ -262,29 +280,59 @@ impl WriterState {
         {
             self.flush_output();
         }
-        let pending = self.pending.get_or_insert_with(|| Pending {
-            stream,
-            data: Vec::new(),
-            since: Instant::now(),
-            occurred_at: format_timestamp(now),
-        });
-        pending.data.extend_from_slice(data);
-        while self
-            .pending
-            .as_ref()
-            .is_some_and(|pending| pending.data.len() >= MAX_OUTPUT_CHUNK_BYTES)
-        {
-            let Some(mut pending) = self.pending.take() else {
-                break;
-            };
-            let rest: Vec<u8> = pending.data.split_off(MAX_OUTPUT_CHUNK_BYTES);
-            let occurred_at = pending.occurred_at.clone();
-            self.emit(pending.stream, pending.data, &occurred_at);
-            if !rest.is_empty() {
-                pending.data = rest;
-                pending.since = Instant::now();
-                self.pending = Some(pending);
+        let index = usize::from(stream == OutputStream::Stderr);
+        let room: usize = self.output_limit.saturating_sub(self.captured[index]);
+        let (kept, skipped) = data.split_at(room.min(data.len()));
+        self.captured[index] += kept.len();
+        self.record_output(stream, kept, now);
+        if !skipped.is_empty() {
+            self.skip_output(stream);
+        }
+    }
+
+    /// Output past the stream's capture limit is not recorded: one sequence stands for each contiguous run of it and is counted as filtered, so readers see a filtered gap.
+    fn skip_output(&mut self, stream: OutputStream) {
+        if self.skipping == Some(stream) {
+            return;
+        }
+        self.flush_output();
+        self.next_sequence += 1;
+        self.skipping = Some(stream);
+        let counts = self.counts_mut(DeliveryStream::Output);
+        counts.accepted += 1;
+        counts.filtered += 1;
+    }
+
+    /// Chunk `data` without copying it more than once: fill the pending chunk, emit full chunks straight from `data`, keep the remainder pending.
+    fn record_output(&mut self, stream: OutputStream, data: &[u8], now: SystemTime) {
+        if data.is_empty() {
+            return;
+        }
+        let mut rest: &[u8] = data;
+        if let Some(pending) = self.pending.as_mut() {
+            let room: usize = MAX_OUTPUT_CHUNK_BYTES.saturating_sub(pending.data.len());
+            let (head, tail) = rest.split_at(room.min(rest.len()));
+            pending.data.extend_from_slice(head);
+            rest = tail;
+            if pending.data.len() >= MAX_OUTPUT_CHUNK_BYTES {
+                self.flush_output();
             }
+        }
+        if rest.is_empty() {
+            return;
+        }
+        let occurred_at: String = format_timestamp(now);
+        let (full, remainder) = rest.as_chunks::<MAX_OUTPUT_CHUNK_BYTES>();
+        for chunk in full {
+            self.emit(stream, chunk.to_vec(), &occurred_at);
+        }
+        if !remainder.is_empty() {
+            self.pending = Some(Pending {
+                stream,
+                data: remainder.to_vec(),
+                since: Instant::now(),
+                occurred_at,
+            });
         }
     }
 

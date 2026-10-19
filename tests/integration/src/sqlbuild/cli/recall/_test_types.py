@@ -124,3 +124,10 @@ class CorruptStoreRaceTestCase:
     expected_exit_codes: list[int]
     expected_moved: int
     expected_recorded: list[list[object]]
+
+
+@dataclass(frozen=True)
+class CaptureLimitTestCase:
+    description: str
+    stdout_bytes: int
+    expected_recorded: list[list[object]]

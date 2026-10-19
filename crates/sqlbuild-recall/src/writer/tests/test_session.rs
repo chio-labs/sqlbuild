@@ -43,7 +43,6 @@ fn given_a_session_when_closed_then_every_record_and_the_delivery_rows_are_writt
                 RecallValue::Text("completed".to_owned()),
                 RecallValue::Integer(1),
                 RecallValue::Integer(1),
-                RecallValue::Integer(1),
                 RecallValue::Integer(5),
                 RecallValue::Text("build".to_owned()),
             ]],
