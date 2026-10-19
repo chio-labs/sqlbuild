@@ -124,7 +124,7 @@ fn render_insert_source_freshness_records_sql<'py>(
         let row: Vec<String> = SOURCE_FRESHNESS_COLUMN_TYPES
             .iter()
             .map(|(column, declared)| {
-                render_state_sql_literal(py, &native_field(&record, column)?, declared)
+                render_state_sql_literal(py, &native_field(&record, column)?, declared, None)
             })
             .collect::<PyResult<_>>()?;
         rows.push(row);

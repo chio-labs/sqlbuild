@@ -302,8 +302,11 @@ def plan_json(
         ["--project-dir", str(project_dir), "--no-color", "plan", "--json", *args]
     )
     captured: CaptureResult[str] = capsys.readouterr()
-    assert exit_code == 0, captured.out + captured.err
-    return json.loads(captured.out)
+    payload: dict[str, Any] = json.loads(captured.out)
+    assert exit_code == int(
+        any(warning["severity"] == "error" for warning in payload["warnings"])
+    ), captured.out + captured.err
+    return payload
 
 
 def model_entry(*, plan: dict[str, Any], name: str) -> dict[str, Any]:

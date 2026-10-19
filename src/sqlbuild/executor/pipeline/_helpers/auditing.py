@@ -22,6 +22,9 @@ from sqlbuild.diagnostics.classes.diagnostic_record_redactor import DiagnosticRe
 from sqlbuild.diagnostics.main.diagnostics_context import diagnostics_context
 from sqlbuild.executor.auditing.main._execute import execute_audit
 from sqlbuild.executor.auditing.main._project_results import project_audit_result_batch
+from sqlbuild.executor.auditing.main._record_audit_progress_outcome import (
+    record_audit_progress_outcome,
+)
 from sqlbuild.executor.auditing.main.audit_result_publication_scope import (
     audit_result_publication_scope,
 )
@@ -38,6 +41,9 @@ from sqlbuild.executor.pipeline.exceptions import (
     AuditCoordinatorError,
     AuditExecutionError,
     AuditOutcomeError,
+)
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure,
 )
 from sqlbuild.executor.pipeline.models import AuditExecutionFailure, AuditPipelineCallbacks
 from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
@@ -289,7 +295,7 @@ def _run_audits(
             connection_config=connection_config,
             connection_count=worker_count,
         )
-    except BaseException:
+    except BaseException as error:
         if callbacks.on_connection_error is not None:
             try:
                 callbacks.on_connection_error(
@@ -297,7 +303,7 @@ def _run_audits(
                 )
             except BaseException:
                 pass
-        raise
+        raise_warehouse_connection_failure(adapter=adapter, error=error)
     active_error: BaseException | None = None
     try:
         if callbacks.on_connection_complete is not None:
@@ -576,6 +582,9 @@ def _execute_entry(
             relation_overrides=None,
             run_scope_phase=AuditRunScope.FINAL,
             quality_scope="standalone",
+        )
+        record_audit_progress_outcome(
+            resource_attempt_id=lifecycle.resource_attempt_id, result=result
         )
         if result.outcome == AuditOutcome.ERROR:
             lifecycle.failed()

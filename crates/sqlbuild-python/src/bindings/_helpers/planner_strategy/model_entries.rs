@@ -5,12 +5,15 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction};
 
+use sqlbuild_analysis::planner_strategy::main::materialization_type::materialization_type;
 use sqlbuild_analysis::planner_strategy::main::microbatch_lookback::microbatch_lookback;
+use sqlbuild_analysis::planner_strategy::main::physical_layout_warning::physical_layout_warning;
 use sqlbuild_analysis::planner_strategy::main::table_type_ddl::table_type_ddl;
 use sqlbuild_analysis::planner_strategy::models::{CursorTypeCheck, LookbackConfig};
 use sqlbuild_model_config::execution_limits::constants::MODEL_MAX_DURATION_KEY;
 use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
 use sqlbuild_model_config::execution_limits::models::ExecutionLimit;
+use sqlbuild_model_config::model_validation::constants::PHYSICAL_STORAGE_KEYS;
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
@@ -23,6 +26,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_strategy::constants::{
     CUSTOM_MATERIALIZATION, DDL_SEPARATOR, ENFORCED_CONTRACT, MICROBATCH_MODE,
+    PHYSICAL_STORAGE_DIALECT, PHYSICAL_STORAGE_UNSUPPORTED_CODE, TABLE_RECREATING_ACTIONS,
 };
 use crate::bindings::_helpers::planner_strategy::cursor_inputs::model_values;
 use crate::bindings::_helpers::planner_strategy::cursor_types::{
@@ -34,7 +38,9 @@ use crate::bindings::_helpers::planner_strategy::models::ModelEntryDecisions;
 use crate::bindings::_helpers::planner_strategy::strategy::{
     model_warning_records, resolve_schema_actions, warning_inputs,
 };
-use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
+use crate::bindings::_helpers::planner_strategy::values::{
+    input_error, optional_string, plan_warning, text,
+};
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
@@ -302,6 +308,56 @@ fn logical_ddl<'py>(
     Ok(statements.join(DDL_SEPARATOR))
 }
 
+/// The output column names SQL analysis inferred for the model, when it inferred them.
+fn expected_output_columns<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = model.py();
+    let inferred: Bound<'py, PyAny> = native_field(model, "inferred_columns")?;
+    if inferred.is_none() {
+        return Ok(none(py));
+    }
+    let mut names: Vec<Bound<'py, PyAny>> = Vec::new();
+    for column in inferred.try_iter()? {
+        names.push(native_field(&column?, "name")?);
+    }
+    Ok(PyTuple::new(py, names)?.into_any())
+}
+
+/// The model's physical table layout, refused on adapters whose tables have none.
+fn storage_fields<'py>(
+    request: &ModelEntryDecisions<'py>,
+    values: &Bound<'py, PyAny>,
+    entry: &Bound<'py, PyDict>,
+) -> PyResult<()> {
+    let py: Python<'py> = values.py();
+    let storage: Bound<'py, PyDict> = PyDict::new(py);
+    let mut keys: Vec<&str> = Vec::new();
+    for key in PHYSICAL_STORAGE_KEYS {
+        let value: Bound<'py, PyAny> = mapping_get(values, key)?;
+        if !value.is_none() {
+            storage.set_item(key, value)?;
+            keys.push(key);
+        }
+    }
+    if !keys.is_empty() {
+        let dialect: Option<String> =
+            native_field(&request.adapter, "sql_analysis_dialect_name")?.extract()?;
+        if dialect.as_deref() != Some(PHYSICAL_STORAGE_DIALECT) {
+            return Err(input_error(
+                py,
+                ErrorId::CompileInput,
+                &format!(
+                    "model '{}' sets {}, but adapter '{}' has no physical table layout settings",
+                    model_reads::model_name(&request.model)?,
+                    keys.join(", "),
+                    native_field(&request.adapter, "adapter_name")?.str()?
+                ),
+                Some(PHYSICAL_STORAGE_UNSUPPORTED_CODE),
+            ));
+        }
+    }
+    entry.set_item("physical_storage", storage)
+}
+
 /// The custom materialization name, config and placeholders of a custom model.
 fn custom_fields<'py>(
     values: &Bound<'py, PyAny>,
@@ -362,7 +418,35 @@ fn model_warnings<'py>(
     if let Some(cursor_warning) = cursor_type_warning_record(&name, &check)? {
         warnings.push(cursor_warning);
     }
+    if let Some(layout_warning) = layout_warning(request, &name)? {
+        warnings.push(layout_warning);
+    }
     PyTuple::new(py, warnings)
+}
+
+/// The warning of an incremental model whose table keeps a physical layout it no longer declares.
+fn layout_warning<'py>(
+    request: &ModelEntryDecisions<'py>,
+    name: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let action: String = text(&native_field(&request.action, "value")?)?;
+    let metadata = |field: &str| -> PyResult<Option<String>> {
+        optional_string(&native_field(&request.change_result, field)?)
+    };
+    let (previous, current) = (
+        metadata("previous_metadata_json")?,
+        metadata("fingerprint_metadata_json")?,
+    );
+    physical_layout_warning(
+        &text(name)?,
+        (
+            materialization_type(Some(&text(&request.materialization_type)?)),
+            TABLE_RECREATING_ACTIONS.contains(&action.as_str()),
+        ),
+        (previous.as_deref(), current.as_deref()),
+    )
+    .map(|row| plan_warning(name, row))
+    .transpose()
 }
 
 /// The cursor bounds the logical DDL renders: placeholders for runtime-owned windows, else the batch range or cursor bounds.
@@ -597,6 +681,8 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     entry.set_item("unique_key", unique_key)?;
     entry.set_item("merge_exclude_columns", merge_exclude)?;
     entry.set_item("table_type", table_type)?;
+    storage_fields(request, &values, &entry)?;
+    entry.set_item("expected_output_columns", expected_output_columns(model)?)?;
     entry.set_item("on_schema_change", policy)?;
     entry.set_item("type_enforcement", enforcement)?;
     contract_fields(model, &values, &entry)?;

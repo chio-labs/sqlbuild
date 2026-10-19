@@ -43,9 +43,11 @@ const DIFF_PUBLICATION_CODE: &str = "C257";
 const DIFF_EXECUTION_STATUS: &str = "execution_failed";
 const DIFF_OUTCOME_PREFIX: &str = "Query diff outcome  ";
 /// Expected staying-Python command failures, loaded only once a command raised.
-const EXPECTED_COMMAND_FAILURES: [ExecutorHost; 2] = [
+const EXPECTED_COMMAND_FAILURES: [ExecutorHost; 4] = [
     ExecutorHost::AuditExecutionError,
     ExecutorHost::ExecutionDurationLimitError,
+    ExecutorHost::WarehouseConnectionError,
+    ExecutorHost::TemporaryTestFunctionError,
 ];
 /// Expected native command failures.
 const EXPECTED_NATIVE_FAILURES: [ErrorId; 2] = [ErrorId::Discovery, ErrorId::SpecConfig];

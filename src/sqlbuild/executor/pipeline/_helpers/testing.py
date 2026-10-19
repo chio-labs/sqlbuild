@@ -30,7 +30,16 @@ from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,
     open_worker_connections,
 )
-from sqlbuild.executor.pipeline.models import TestPipelineCallbacks
+from sqlbuild.executor.pipeline._helpers.temporary_functions import (
+    called_function_keys,
+    create_temporary_test_functions,
+    install_temporary_test_functions,
+    rewrite_test_entry,
+)
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure,
+)
+from sqlbuild.executor.pipeline.models import TemporaryTestFunctions, TestPipelineCallbacks
 from sqlbuild.executor.scheduling.classes.recovering_connection_pool import RecoveringConnectionPool
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.testing.constants import SQL_TEST_EXECUTION_ERROR_CODE
@@ -85,19 +94,25 @@ def run_test_pipeline(
             connection_config=connection_config,
             connection_count=worker_count,
         )
-    except BaseException:
+    except BaseException as error:
         if resolved_callbacks.on_connection_error is not None:
             resolved_callbacks.on_connection_error(
                 worker_count, elapsed_seconds=time.monotonic() - start
             )
-        raise
+        raise_warehouse_connection_failure(adapter=adapter, error=error)
     if resolved_callbacks.on_connection_complete is not None:
         resolved_callbacks.on_connection_complete(
             worker_count, elapsed_seconds=time.monotonic() - start
         )
     active_error: BaseException | None = None
+    installed_functions: list[TemporaryTestFunctions] = []
     recovery: ConnectionRecovery = ConnectionRecovery(
-        adapter=adapter, connect=lambda: adapter.connect(dict(connection_config))
+        adapter=adapter,
+        connect=lambda: _connect_test_connection(
+            adapter=adapter,
+            connection_config=connection_config,
+            installed_functions=installed_functions,
+        ),
     )
     try:
         preflight_start: float = time.monotonic()
@@ -111,10 +126,26 @@ def run_test_pipeline(
                 metadata={"item_count": len(plan.test_entries)},
                 attributes=OperationAttributes(phase="setup", target_kind="sql_test"),
             ):
-                missing_functions_by_test = _prepare_test_functions(
+                missing_functions_by_test, temporary_functions = _prepare_test_functions(
                     plan=plan,
                     adapter=adapter,
                     connection=connections[0],
+                )
+                for ordinal, connection in enumerate(connections[1:], start=2):
+                    install_temporary_test_functions(
+                        adapter=adapter,
+                        connection=connection,
+                        functions=temporary_functions,
+                        connection_label=f"test connection {ordinal} of {len(connections)}",
+                    )
+                installed_functions.append(temporary_functions)
+                entries = tuple(
+                    rewrite_test_entry(
+                        entry=entry,
+                        replacements=temporary_functions.replacements,
+                        syntax=adapter.sql_lexical_syntax.native_mapping,
+                    )
+                    for entry in entries
                 )
         if resolved_callbacks.on_progress is not None:
             resolved_callbacks.on_progress(
@@ -283,25 +314,67 @@ def _test_resource_name(entry: SqlTestPlanEntry) -> str:
     return entry.name
 
 
+def _connect_test_connection(
+    *,
+    adapter: BaseAdapter,
+    connection_config: dict[str, object],
+    installed_functions: list[TemporaryTestFunctions],
+) -> Any:
+    connection: Any = adapter.connect(dict(connection_config))
+    try:
+        functions: TemporaryTestFunctions
+        for functions in installed_functions:
+            install_temporary_test_functions(
+                adapter=adapter,
+                connection=connection,
+                functions=functions,
+                connection_label="a replacement test connection",
+            )
+    except BaseException:
+        adapter.close(connection)
+        raise
+    return connection
+
+
 def _prepare_test_functions(
     *,
     plan: PlanOutput,
     adapter: BaseAdapter,
     connection: Any,
-) -> dict[CompiledObjectKey, tuple[str, ...]]:
+) -> tuple[dict[CompiledObjectKey, tuple[str, ...]], TemporaryTestFunctions]:
     function_entries: dict[CompiledObjectKey, FunctionPlanEntry] = {
         entry.key: entry for entry in plan.function_entries
+    }
+    distinct_deps: set[tuple[CompiledObjectKey, ...]] = {
+        test_entry.function_deps for test_entry in plan.test_entries
+    }
+    closures: dict[tuple[CompiledObjectKey, ...], tuple[CompiledObjectKey, ...]] = {
+        deps: _function_closure(plan=plan, keys=deps, adapter=adapter) for deps in distinct_deps
+    }
+    deps_by_test: dict[CompiledObjectKey, tuple[CompiledObjectKey, ...]] = {
+        test_entry.key: closures[test_entry.function_deps] for test_entry in plan.test_entries
     }
     required_targets_by_key: dict[CompiledObjectKey, CompiledRelationLocation] = {}
     test_entry: SqlTestPlanEntry
     for test_entry in plan.test_entries:
         dep: CompiledObjectKey
-        for dep in test_entry.function_deps:
+        for dep in deps_by_test[test_entry.key]:
             function_target: CompiledRelationLocation | None = plan.function_locations.get(dep.name)
             if function_target is not None:
                 required_targets_by_key[dep] = function_target
     if not required_targets_by_key:
-        return {}
+        return {}, TemporaryTestFunctions()
+    temporary_functions: TemporaryTestFunctions = create_temporary_test_functions(
+        function_entries=plan.function_entries,
+        required_keys=tuple(required_targets_by_key),
+        adapter=adapter,
+        connection=connection,
+    )
+    created_key: CompiledObjectKey
+    for created_key in temporary_functions.created_keys:
+        _ = required_targets_by_key.pop(created_key, None)
+    if not required_targets_by_key:
+        return {}, temporary_functions
 
     existing_function_names: set[tuple[str | None, str | None, str]] = set()
     for database, schema, names in _group_function_names(required_targets_by_key.values()):
@@ -330,7 +403,9 @@ def _prepare_test_functions(
             _normalize_required_name(target.name),
         )
         if function_key not in existing_function_names:
-            missing_by_key[key] = key.name
+            missing_by_key[key] = _missing_function_label(
+                name=key.name, reason=temporary_functions.failures.get(key)
+            )
 
     _register_connection_scoped_python_functions(
         missing_by_key=missing_by_key,
@@ -342,11 +417,26 @@ def _prepare_test_functions(
     missing_by_test: dict[CompiledObjectKey, tuple[str, ...]] = {}
     for test_entry in plan.test_entries:
         missing_names: tuple[str, ...] = tuple(
-            missing_by_key[dep] for dep in test_entry.function_deps if dep in missing_by_key
+            missing_by_key[dep] for dep in deps_by_test[test_entry.key] if dep in missing_by_key
         )
         if missing_names:
             missing_by_test[test_entry.key] = missing_names
-    return missing_by_test
+    return missing_by_test, temporary_functions
+
+
+def _function_closure(
+    *, plan: PlanOutput, keys: tuple[CompiledObjectKey, ...], adapter: BaseAdapter
+) -> tuple[CompiledObjectKey, ...]:
+    called: tuple[CompiledObjectKey, ...] = called_function_keys(
+        function_entries=plan.function_entries, keys=keys, adapter=adapter
+    )
+    return tuple(dict.fromkeys((*keys, *called)))
+
+
+def _missing_function_label(*, name: str, reason: str | None) -> str:
+    if reason is None:
+        return name
+    return f"{name} ({reason})"
 
 
 def _register_connection_scoped_python_functions(

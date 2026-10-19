@@ -132,3 +132,10 @@ pub(super) fn column_migration_message(
     .err()
     .map(|error| error.message)
 }
+
+/// A table config with `extra` keys.
+pub(super) fn table(extra: Vec<(&'static str, Value)>) -> Vec<(&'static str, Value)> {
+    let mut config: Vec<(&'static str, Value)> = vec![("materialized", Value::Str("table"))];
+    config.extend(extra);
+    config
+}

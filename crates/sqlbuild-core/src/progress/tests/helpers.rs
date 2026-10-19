@@ -4,7 +4,7 @@ use crate::progress::main::consume_progress_event::consume_progress_event;
 use crate::progress::models::{
     ProgressEvent, ProgressPayload, ProgressProjection, ProgressSettings,
 };
-use crate::progress::tests::test_types::ProjectionTestCase;
+use crate::progress::tests::test_types::{AuditRowTestCase, ProjectionTestCase};
 use crate::terminal_events::models::TerminalRequest;
 
 /// One `orders` resource attempt event.
@@ -83,4 +83,35 @@ pub(super) fn orders_claim() -> TerminalRequest {
 /// Settings of a plain, non-terminal, non-debug stream.
 pub(super) fn plain() -> ProgressSettings {
     ProgressSettings::default()
+}
+
+/// The start and terminal rows of one standalone `not_null` audit attempt.
+pub(super) fn audit_rows(test_case: &AuditRowTestCase) -> Vec<String> {
+    let mut projection: ProgressProjection = ProgressProjection::new(plain());
+    for (attempt_id, outcome) in &test_case.recorded_outcomes {
+        projection.record_audit_outcome(attempt_id, outcome);
+    }
+    let mut lines: Vec<String> = Vec::new();
+    for (event_id, event_type) in [
+        ("e1", "resource_attempt_started"),
+        ("e2", test_case.terminal_event),
+    ] {
+        let event: ProgressEvent = ProgressEvent {
+            event_id: event_id.to_owned(),
+            event_type: event_type.to_owned(),
+            resource_id: Some(test_case.resource_id.to_owned()),
+            resource_attempt_id: Some("a1".to_owned()),
+            payload: ProgressPayload {
+                resource_name: Some("not_null".to_owned()),
+                resource_kind: Some("audit".to_owned()),
+                duration_ms: Some(10.0),
+                ..ProgressPayload::default()
+            },
+            ..ProgressEvent::default()
+        };
+        let (consumed, event_lines) = consume_progress_event(projection, &event);
+        projection = consumed;
+        lines.extend(event_lines);
+    }
+    lines
 }

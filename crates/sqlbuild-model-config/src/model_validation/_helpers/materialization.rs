@@ -9,7 +9,7 @@ use sqlbuild_core::text::main::is_word_char::is_word_char;
 use crate::errors::ConfigError;
 use crate::model_validation::_helpers::config::python_lower;
 use crate::model_validation::_helpers::config::{
-    ConfigView, one_of, sorted_values, text_if_string,
+    ConfigView, model_header_help, non_blank_string_check, one_of, sorted_values, text_if_string,
 };
 use crate::model_validation::constants::{
     BUILTIN_MATERIALIZATIONS, CONTRACT_POLICIES, CUSTOM_MATERIALIZATION_DISALLOWED_KEYS,
@@ -20,6 +20,11 @@ use crate::model_validation::constants::{
 use crate::model_validation::constants::{
     CHAINED_HELP, CLAIMED_HELP, MATERIALIZATION_HELP, MIGRATABLE_MATERIALIZATIONS, ORIGIN_HELP,
     QUALIFIED_NAME_SEPARATOR,
+};
+use crate::model_validation::constants::{
+    ENGINE_FAMILY_SUFFIX, ENGINE_KEY, ORDER_BY_KEY, PARTITION_BY_KEY, PHYSICAL_STORAGE_KEYS,
+    PHYSICAL_STORAGE_MATERIALIZATIONS, PRIMARY_KEY_KEY, TABLE_SETTINGS_KEY,
+    UNSUPPORTED_ENGINE_PREFIXES,
 };
 use crate::model_validation::models::{
     ModelValidationFacts, ProjectValidationFacts, ValidationStop,
@@ -380,4 +385,217 @@ pub(crate) fn chained_problem(
         }
     }
     Ok(())
+}
+
+/// Check the physical layout keys a table-backed model may set.
+pub(crate) fn check_physical_storage<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
+    let Some(first) = config.first_present(&PHYSICAL_STORAGE_KEYS) else {
+        return Ok(());
+    };
+    let materialized: Option<String> = config.string("materialized")?;
+    if !materialized
+        .as_deref()
+        .is_some_and(|value| one_of(value, &PHYSICAL_STORAGE_MATERIALIZATIONS))
+    {
+        return Err(config.error(format!(
+            "{first} is only valid for table and incremental models"
+        )));
+    }
+    check_engine(config)?;
+    let order_by: Option<Vec<String>> = expressions(config, ORDER_BY_KEY)?;
+    if let Some(value) = config.get(PARTITION_BY_KEY)
+        && !non_blank_string_check(value)
+    {
+        return Err(config.error(format!(
+            "{PARTITION_BY_KEY} must be a non-empty SQL expression string"
+        )));
+    }
+    check_primary_key(config, order_by.as_deref())?;
+    check_table_settings(config)
+}
+
+fn check_engine<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
+    let Some(value) = config.get(ENGINE_KEY) else {
+        return Ok(());
+    };
+    let engine: Option<String> = text_if_string(value).map(|text| text.trim().to_owned());
+    let name: Option<&str> = engine
+        .as_deref()
+        .and_then(|engine| engine_name(engine))
+        .filter(|name| name.ends_with(ENGINE_FAMILY_SUFFIX));
+    match name {
+        Some(name)
+            if !UNSUPPORTED_ENGINE_PREFIXES
+                .iter()
+                .any(|prefix| name.starts_with(prefix)) =>
+        {
+            Ok(())
+        }
+        _ => Err(ValidationStop::Error(
+            config
+                .config_error(format!(
+                    "{ENGINE_KEY} '{}' must be a single-server MergeTree-family table engine",
+                    value.python_str()
+                ))
+                .with_help(model_header_help(
+                    "to name a MergeTree-family engine",
+                    "engine 'ReplacingMergeTree(updated_at)'",
+                )),
+        )),
+    }
+}
+
+/// The engine name before its parenthesized arguments, when the text is shaped like one.
+fn engine_name(engine: &str) -> Option<&str> {
+    let (name, rest) = match engine.find('(') {
+        Some(open) => (&engine[..open], &engine[open..]),
+        None => (engine, ""),
+    };
+    let named: bool = !name.is_empty()
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_');
+    let arguments: bool = rest.is_empty() || rest.ends_with(')');
+    (named && arguments).then_some(name)
+}
+
+/// The expressions of a string or a list of strings, failing for anything else.
+fn expressions<N: AuthoredNode>(
+    config: &ConfigView<'_, N>,
+    key: &str,
+) -> Result<Option<Vec<String>>, ValidationStop> {
+    let Some(value) = config.get(key) else {
+        return Ok(None);
+    };
+    let items: Vec<N> = match value.kind() {
+        NodeKind::Str => vec![value.clone()],
+        NodeKind::List | NodeKind::Tuple => value.items(),
+        _ => Vec::new(),
+    };
+    let texts: Vec<String> = items
+        .iter()
+        .filter(|item| non_blank_string_check(*item))
+        .filter_map(text_if_string)
+        .map(|text| text.trim().to_owned())
+        .collect();
+    if texts.is_empty() || texts.len() != items.len() {
+        return Err(config.error(format!(
+            "{key} must be a SQL expression string or a list of them"
+        )));
+    }
+    Ok(Some(texts))
+}
+
+fn check_primary_key<N: AuthoredNode>(
+    config: &ConfigView<'_, N>,
+    order_by: Option<&[String]>,
+) -> Check {
+    let Some(primary_key) = expressions(config, PRIMARY_KEY_KEY)? else {
+        return Ok(());
+    };
+    let primary_key: Vec<String> = key_elements(&primary_key);
+    let prefix: bool =
+        order_by.is_some_and(|order_by| key_elements(order_by).starts_with(&primary_key));
+    if prefix {
+        return Ok(());
+    }
+    Err(config.error(format!(
+        "{PRIMARY_KEY_KEY} must be a prefix of {ORDER_BY_KEY}"
+    )))
+}
+
+/// The key's element expressions: each text unwrapped and split at its top-level commas.
+fn key_elements(texts: &[String]) -> Vec<String> {
+    texts
+        .iter()
+        .flat_map(|text| top_level_items(unwrapped(text.trim())))
+        .collect()
+}
+
+/// `text` without one pair of parentheses enclosing all of it.
+fn unwrapped(text: &str) -> &str {
+    let inner: Option<&str> = text
+        .strip_prefix('(')
+        .and_then(|rest| rest.strip_suffix(')'));
+    match inner {
+        Some(inner) if balanced(inner) => inner,
+        _ => text,
+    }
+}
+
+/// Whether every bracket in `text` outside quotes closes within it.
+fn balanced(text: &str) -> bool {
+    let mut depth: i64 = 0;
+    let mut quote: Option<char> = None;
+    for character in text.chars() {
+        match (quote, character) {
+            (Some(open), _) if character == open => quote = None,
+            (Some(_), _) => {}
+            (None, '\'' | '"' | '`') => quote = Some(character),
+            (None, '(' | '[') => depth += 1,
+            (None, ')' | ']') => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            (None, _) => {}
+        }
+    }
+    depth == 0 && quote.is_none()
+}
+
+/// `text` split at commas outside quotes and brackets, each item trimmed.
+fn top_level_items(text: &str) -> Vec<String> {
+    let mut items: Vec<String> = Vec::new();
+    let mut current: String = String::new();
+    let mut depth: i64 = 0;
+    let mut quote: Option<char> = None;
+    for character in text.chars() {
+        match (quote, character) {
+            (Some(open), _) if character == open => quote = None,
+            (Some(_), _) => {}
+            (None, '\'' | '"' | '`') => quote = Some(character),
+            (None, '(' | '[') => depth += 1,
+            (None, ')' | ']') => depth -= 1,
+            (None, ',') if depth == 0 => {
+                items.push(current.trim().to_owned());
+                current.clear();
+                continue;
+            }
+            (None, _) => {}
+        }
+        current.push(character);
+    }
+    items.push(current.trim().to_owned());
+    items
+}
+
+fn check_table_settings<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
+    let Some(value) = config.get(TABLE_SETTINGS_KEY) else {
+        return Ok(());
+    };
+    let valid: bool = value.kind() == NodeKind::Map
+        && value.entries().iter().all(|(key, setting)| {
+            key.with_text(setting_name).unwrap_or(false)
+                && matches!(
+                    setting.kind(),
+                    NodeKind::Str | NodeKind::Bool(_) | NodeKind::Int { .. }
+                )
+        });
+    if valid {
+        return Ok(());
+    }
+    Err(config.error(format!(
+        "{TABLE_SETTINGS_KEY} must map setting names to strings, integers or booleans"
+    )))
+}
+
+fn setting_name(name: &str) -> bool {
+    name.chars()
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
 }

@@ -2,6 +2,7 @@
 
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
@@ -172,7 +173,7 @@ pub(crate) fn connect_janitor_warehouse<'py>(
         }
         Err(error) => {
             connection_timing(&progress, "on_connection_error", started)?;
-            Err(error)
+            Err(connection_failure(&compiled.adapter, &error))
         }
     }
 }

@@ -3045,6 +3045,7 @@ class NativeProgressProjector:
     def restore(self, token: Token[NativeProgressProjector | None]) -> None: ...
     def configure_resources(self, *, ordinals: Mapping[str, int], total: int) -> None: ...
     def expect_resource_enrichment(self, *, resource_name: str) -> None: ...
+    def record_audit_outcome(self, *, resource_attempt_id: str, outcome: str) -> None: ...
     def is_operation_active(self, *, operation_name: str) -> bool: ...
     def consume(self, event: LifecycleEvent) -> None: ...
     def consume_resource_terminal(
@@ -4720,7 +4721,9 @@ def normalize_sql_value(
     explicit_type: str | None = None,
     limits: SqlValueLimits | None = None,
 ) -> SqlValue: ...
-def render_state_sql_literal(*, value: object | None, declared_type: StateSqlValueType) -> str: ...
+def render_state_sql_literal(
+    *, value: object | None, declared_type: StateSqlValueType, timestamp_type: str | None = None
+) -> str: ...
 def format_diagnostics_console_record(record: logging.LogRecord, *, use_color: bool) -> str: ...
 def interpreter_identity() -> tuple[str, str, str, str]: ...
 def project_microbatch_coverage(
@@ -4749,7 +4752,10 @@ def deterministic_microbatch_event_id(
     completion_reason: str,
 ) -> str: ...
 def build_microbatch_insert_many_sql(
-    *, events: tuple[MicrobatchEvent, ...], render_qualified_name: Callable[..., str | None]
+    *,
+    events: tuple[MicrobatchEvent, ...],
+    render_qualified_name: Callable[..., str | None],
+    timestamp_type: str | None = None,
 ) -> str: ...
 def build_microbatch_existing_event_ids_sql(
     *, events: tuple[MicrobatchEvent, ...], render_qualified_name: Callable[..., str | None]
@@ -14398,6 +14404,7 @@ class SourceEntry(NativeRecord):
     database: str | None
     schema: str | None
     table: str | None
+    final: bool
     loader: str | None
     managed: bool
     integration_loader: IntegrationLoaderConfig | None
@@ -14419,6 +14426,7 @@ class SourceEntry(NativeRecord):
         database: str | None = ...,
         schema: str | None = ...,
         table: str | None = ...,
+        final: bool = ...,
         loader: str | None = ...,
         managed: bool = ...,
         integration_loader: IntegrationLoaderConfig | None = ...,
@@ -15702,6 +15710,8 @@ class ModelPlanEntry(NativeRecord):
     snapshot_full_refresh: str | None
     snapshot_schema_change: str | None
     table_type: str
+    physical_storage: dict[str, object]
+    expected_output_columns: tuple[str, ...] | None
     on_schema_change: OnSchemaChange | None
     type_enforcement: bool
     declared_columns: tuple[ColumnInfo, ...]
@@ -15786,6 +15796,8 @@ class ModelPlanEntry(NativeRecord):
         snapshot_full_refresh: str | None = ...,
         snapshot_schema_change: str | None = ...,
         table_type: str = ...,
+        physical_storage: dict[str, object] = ...,
+        expected_output_columns: tuple[str, ...] | None = ...,
         on_schema_change: OnSchemaChange | None = ...,
         type_enforcement: bool = ...,
         declared_columns: tuple[ColumnInfo, ...] = ...,

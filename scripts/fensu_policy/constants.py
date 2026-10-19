@@ -201,6 +201,7 @@ APPROVED_RAW_STATEMENT_MODULES: frozenset[str] = frozenset(
         "src/sqlbuild/adapter/contract/classes/observed_connection.py",
         "src/sqlbuild/adapter/contract/classes/observed_cursor.py",
         "src/sqlbuild/adapters/bigquery/classes/bigquery_connection.py",
+        "src/sqlbuild/adapters/clickhouse/classes/clickhouse_connection.py",
         "src/sqlbuild/adapters/databricks/classes/databricks_connection.py",
         "src/sqlbuild/adapters/postgres/classes/postgres_connection.py",
         "src/sqlbuild/adapters/snowflake/classes/snowflake_connection.py",

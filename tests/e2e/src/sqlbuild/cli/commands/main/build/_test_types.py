@@ -717,6 +717,7 @@ class SchemaBackfillBuildE2ETestCase:
     schema_after_text: str
     command: tuple[str, ...]
     expected_exit_code: int
+    expected_plan_exit_code: int
     expected_reason: str
     expected_backfill_action: str | None = None
     expected_backfill_duration: str | None = None
@@ -1336,3 +1337,20 @@ class ModelConfigEnginesBuildE2ETestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
     expected_relations: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class WarehouseConnectionFailureE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stderr_fragments: tuple[str, ...]
+    extra_files: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StandaloneAuditRowE2ETestCase:
+    description: str
+    status_values: tuple[str, ...]
+    expected_exit_code: int
+    expected_rows: tuple[str, ...]

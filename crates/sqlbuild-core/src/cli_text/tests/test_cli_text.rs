@@ -79,6 +79,13 @@ fn given_partial_reasons_when_building_notice_then_groups_by_reason() {
             ),
         },
         NoticeTestCase {
+            description: "one partial model is counted in the singular",
+            reasons: vec![("alpha".to_owned(), vec!["SQL analysis disabled".to_owned()])],
+            expected_notice: Some(
+                "Semantic checks were partial for 1 model:\n  alpha: SQL analysis disabled; enable sql_analysis, then run `sqb compile --no-cache`.",
+            ),
+        },
+        NoticeTestCase {
             description: "complete checks print no notice",
             reasons: Vec::new(),
             expected_notice: None,
@@ -157,6 +164,31 @@ fn given_plan_report_when_rendering_then_groups_models_by_reason() {
             },
             expected_text: "Plan ready  3 selected\n\nQuery changed (1)\n\u{2514}\u{2500}\u{2500} orders               full rebuild\n    \u{251c}\u{2500}\u{2500} policy  replay_on_change=full\n    \u{2514}\u{2500}\u{2500} query diff:\n      -SELECT 1\n      +SELECT 2\n\nModels (1)\n\u{2514}\u{2500}\u{2500} customers            table\n\nWarnings (1)\n\u{2514}\u{2500}\u{2500} orders\n    \u{251c}\u{2500}\u{2500} orders lag\n    \u{2514}\u{2500}\u{2500} second line",
             expected_completion: "\u{2713} Plan complete  3 selected",
+        },
+        PlanTextTestCase {
+            description: "detail rows under a non-last entry keep the tree's vertical bar",
+            report: plan_report(vec![
+                ModelPlanText {
+                    query_diff: Some(vec!["      -SELECT 1".to_owned()]),
+                    ..table_model("orders", "query_changed")
+                },
+                table_model("customers", "query_changed"),
+            ]),
+            expected_text: "Plan ready  2 selected\n\nQuery changed (2)\n\u{251c}\u{2500}\u{2500} orders               full rebuild\n\u{2502}   \u{251c}\u{2500}\u{2500} policy  replay_on_change=full\n\u{2502}   \u{2514}\u{2500}\u{2500} query diff:\n\u{2502}     -SELECT 1\n\u{2514}\u{2500}\u{2500} customers            full rebuild\n    \u{2514}\u{2500}\u{2500} policy  replay_on_change=full",
+            expected_completion: "\u{2713} Plan complete  2 selected",
+        },
+        PlanTextTestCase {
+            description: "an error finding makes the final line state failure",
+            report: PlanTextReport {
+                warnings: vec![PlanWarningText {
+                    severity: "error".to_owned(),
+                    message: "would replace analytics.orders".to_owned(),
+                    model_name: None,
+                }],
+                ..plan_report(vec![table_model("orders", "no_change")])
+            },
+            expected_text: "Plan ready  1 selected\n\nModels (1)\n\u{2514}\u{2500}\u{2500} orders               table\n\nErrors (1)\n\u{2514}\u{2500}\u{2500} would replace analytics.orders",
+            expected_completion: "\u{2717} Plan failed with errors  1 selected",
         },
         PlanTextTestCase {
             description: "every active model is a full refresh",

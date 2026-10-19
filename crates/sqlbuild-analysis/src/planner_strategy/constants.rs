@@ -86,3 +86,15 @@ pub const PERMANENT_TABLE_TYPE: &str = "permanent";
 pub const TRANSIENT_TABLE_DDL: &str = "TRANSIENT TABLE";
 /// The permanent table DDL replacing the transient keyword.
 pub const PERMANENT_TABLE_DDL: &str = "TABLE";
+/// The warning code of an incremental model whose table keeps an outdated physical layout.
+pub const PHYSICAL_LAYOUT_PENDING_WARNING_CODE: &str = "PHYSICAL_LAYOUT_PENDING";
+/// Model config keys of a table's physical layout, in the order warnings name them.
+pub const PHYSICAL_LAYOUT_CONFIG_KEYS: [&str; 5] = [
+    "engine",
+    "order_by",
+    "partition_by",
+    "primary_key",
+    "table_settings",
+];
+/// The version metadata member holding the model config.
+pub const METADATA_CONFIG_MEMBER: &str = "config";

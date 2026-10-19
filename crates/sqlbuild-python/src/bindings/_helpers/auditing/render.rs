@@ -8,7 +8,9 @@ use sqlbuild_analysis::auditing::main::replace_reference_calls::replace_referenc
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
-use crate::bindings::_helpers::references::source_relations::render_source_relation;
+use crate::bindings::_helpers::references::source_relations::{
+    render_source_read, render_source_relation,
+};
 
 const REF_FUNCTION: &str = "__ref";
 const SEED_FUNCTION: &str = "__seed";
@@ -65,7 +67,10 @@ pub(crate) fn render_audit_sql(request: Option<&Bound<'_, PyDict>>) -> PyResult<
         let Some(entry) = lookup(&sources, name)? else {
             return Ok(None);
         };
-        render_source_relation(&entry, adapter.as_ref()).map(Some)
+        match adapter.as_ref() {
+            Some(adapter) => render_source_read(&entry, adapter).map(Some),
+            None => render_source_relation(&entry, None).map(Some),
+        }
     })
 }
 

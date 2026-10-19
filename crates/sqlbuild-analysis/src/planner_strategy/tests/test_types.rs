@@ -103,3 +103,12 @@ pub(super) struct TableTypeDdlTestCase {
     pub(super) table_type: &'static str,
     pub(super) expected_ddl: &'static str,
 }
+
+pub(super) struct PhysicalLayoutWarningTestCase {
+    pub(super) description: &'static str,
+    pub(super) materialization: MaterializationType,
+    pub(super) table_recreated: bool,
+    pub(super) previous_metadata_json: Option<&'static str>,
+    pub(super) current_metadata_json: &'static str,
+    pub(super) expected_message: Option<&'static str>,
+}

@@ -16,6 +16,7 @@ from sqlbuild.adapter.contract.models import (
     ColumnInfo,
     CursorValue,
     ExpressionInferenceProfile,
+    FunctionDefinition,
     MigrationStagePlan,
     RelationGrant,
     RelationReadProbe,
@@ -24,6 +25,7 @@ from sqlbuild.adapter.contract.models import (
     SnapshotChangeTarget,
     TableFreshnessMetadata,
     TableFreshnessRequest,
+    TemporaryFunction,
 )
 from sqlbuild.adapter.contract.types import (
     FrameworkType,
@@ -44,6 +46,19 @@ class StrictAdapter(
     """All-abstract adapter interface."""
 
     adapter_name: ClassVar[str]
+
+    @abstractmethod
+    def widen_target_nullability(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        target_columns: tuple[ColumnInfo, ...],
+        incoming_columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> tuple[ColumnInfo, ...]:
+        """Let target columns admit NULL where incoming ones do; return the target columns."""
+        ...
 
     @abstractmethod
     def supports_zero_copy_clone(self) -> bool:
@@ -121,6 +136,14 @@ class StrictAdapter(
 
         del cursor_type
         return expression
+
+    def render_create_temporary_function(
+        self, *, name: str, definition: FunctionDefinition
+    ) -> TemporaryFunction | None:
+        """Optional: a session-scoped function copy for unit tests, or `None` if unsupported."""
+
+        del name, definition
+        return None
 
     @abstractmethod
     def lists_relations_authoritatively(self, *, database: str | None, schema: str) -> bool:

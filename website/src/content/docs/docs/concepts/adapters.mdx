@@ -18,7 +18,7 @@ SQLBuild uses adapters to connect to different database engines. Snowflake is th
 | [Databricks](/docs/concepts/adapters/databricks) | Beta | `sqlbuild[databricks]` |
 | [SQL Server](/docs/concepts/adapters/sqlserver) | Beta | `sqlbuild[sqlserver]` |
 | [SQLite](/docs/concepts/adapters/sqlite) | Beta | included by default |
-| ClickHouse | Planned | |
+| [ClickHouse](/docs/concepts/adapters/clickhouse) | Beta | `sqlbuild[clickhouse]` |
 | Redshift | Planned | |
 | Trino | Planned | |
 | Spark | Planned | |
@@ -95,14 +95,14 @@ Set `sql_analysis_dialect_name` to the SQL dialect name that matches your engine
 
 For full control with no inherited defaults, subclass `StrictAdapter` instead. Every method is abstract and must be implemented explicitly. SQLBuild raises a clear error listing any unimplemented methods.
 
-A few `StrictAdapter` methods are optional and have a documented default. `create_sql_test_output` and `drop_sql_test_output` let an adapter store a unit test's actual output once so every comparison reads it (see [Single-read comparison](/docs/concepts/testing#single-read-comparison)). By default `create_sql_test_output` returns `None`, and SQLBuild runs the test's inline comparison query instead, so adapters that do not implement them keep working unchanged.
+A few `StrictAdapter` methods are optional and have a documented default. `create_sql_test_output` and `drop_sql_test_output` let an adapter store a unit test's actual output once so every comparison reads it (see [Single-read comparison](/docs/concepts/testing#single-read-comparison)). By default `create_sql_test_output` returns `None`, and SQLBuild runs the test's inline comparison query instead, so adapters that do not implement them keep working unchanged. `render_create_temporary_function` returns the call target and DDL for a session-scoped copy of a project function, which `sqb test` calls instead of the built function (see [Functions in `sqb test`](/docs/concepts/testing#functions-in-sqb-test)). By default it returns `None`, and tests call the built function.
 
 ### Discovery rules
 
 - SQLBuild discovers all `.py` files under `adapters/` recursively (excluding `__init__.py` and files starting with `_`)
 - Each file is scanned for classes that define a string `adapter_name` and subclass `StrictAdapter` (or any of its subclasses like `BaseAdapter` or a built-in adapter)
 - Adapter names must be unique across all adapter files - duplicates raise an error
-- Custom adapter names cannot shadow built-in names (`duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlite`, `sqlserver`)
+- Custom adapter names cannot shadow built-in names (`duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlite`, `sqlserver`, `clickhouse`)
 
 ### Adapter class hierarchy
 
@@ -115,7 +115,8 @@ StrictAdapter          (fully abstract - all methods must be implemented)
         ├── BigQueryAdapter
         ├── DatabricksAdapter
         ├── PostgresAdapter
-        └── SqlServerAdapter
+        ├── SqlServerAdapter
+        └── ClickHouseAdapter
 ```
 
 `StrictAdapter` composes four mixins that define the full adapter contract:

@@ -1,6 +1,7 @@
 //! The one Python module native code imports by path, and the staying-Python entries it names.
 
 pub(crate) mod adapter;
+pub(crate) mod connections;
 pub(crate) mod constants;
 pub(crate) mod executor;
 pub(crate) mod facade;

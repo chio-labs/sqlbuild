@@ -133,6 +133,8 @@ pub struct ParsedSourceEntry<N> {
     pub database: Option<N>,
     pub schema: Option<N>,
     pub table: Option<N>,
+    /// Whether reads of the source add `FINAL`, so replacing engines return one row per key.
+    pub read_final: bool,
     pub loader: Option<String>,
     pub managed: bool,
     pub integration_loader: Option<ParsedIntegrationLoader<N>>,
@@ -160,6 +162,7 @@ impl<N> ParsedSourceEntry<N> {
             database: None,
             schema: None,
             table: None,
+            read_final: false,
             loader: None,
             managed: false,
             integration_loader: None,

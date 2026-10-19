@@ -1,5 +1,9 @@
 from dataclasses import dataclass
 
+from sqlbuild.adapter.contract.classes.strict_adapter import StrictAdapter
+from sqlbuild.adapter.contract.models import TemporaryFunction
+from sqlbuild.compiler.compile.types import FunctionLanguage
+
 
 @dataclass(frozen=True)
 class StrictAdapterContractTestCase:
@@ -25,6 +29,7 @@ class OptionalStrictMethodTestCase:
     description: str
     expected_optional_methods: frozenset[str]
     expected_output_relation: None
+    expected_temporary_function: None
 
 
 @dataclass(frozen=True)
@@ -33,3 +38,12 @@ class StrictAdapterInlineSqlTestTestCase:
     expected_total: int
     expected_outcome: str
     expected_statement_count: int
+
+
+@dataclass(frozen=True)
+class TemporaryFunctionRenderingTestCase:
+    description: str
+    adapter: StrictAdapter
+    language: FunctionLanguage
+    return_columns: tuple[tuple[str, str], ...]
+    expected_temporary_function: TemporaryFunction | None

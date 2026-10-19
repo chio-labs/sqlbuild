@@ -590,6 +590,41 @@ __udf_expected__ AS (
 
 UDFs are warehouse objects, so the function is created before the test runs. During `sqb build`, UDF tests run after the function is created but before any model that uses it.
 
+### Functions in `sqb test`
+
+`sqb test` does not need a build to test the current version of a function. Before the tests run,
+SQLBuild creates a session-scoped temporary copy of every project UDF and table function the
+selected tests call, including functions those functions call, from the definitions in your
+project. The tests call the copies, so an edited function is tested without `sqb build`, and the
+built function in the target schema is never created, replaced or dropped. The copies disappear
+when the test connections close.
+
+| Adapter | Temporary copy |
+|---|---|
+| DuckDB, MotherDuck | `CREATE TEMP MACRO`, called as `temp.main.<name>`. Python UDFs are registered on each test connection. |
+| PostgreSQL | SQL function in the session's `pg_temp` schema, called as `pg_temp.<name>` |
+| Snowflake | `CREATE TEMPORARY FUNCTION __sqb_test__<name>` in the session's current schema, for SQL and Python UDFs and table functions |
+| Databricks | `CREATE TEMPORARY FUNCTION __sqb_test__<name>` for SQL functions |
+| BigQuery, SQL Server, ClickHouse | Not supported; tests call the built function (ClickHouse functions are server-wide) |
+| SQLite | Not applicable; SQLite has no SQL functions |
+
+When an adapter cannot create a copy (a Databricks Python UDF, for example), or the warehouse
+refuses to create it (the role lacks permission, or the Snowflake session has no current schema),
+the test calls the built function instead. If that function has not been built either, the test
+fails with an error that names the function and the reason no copy was created, and asks you to run
+`sqb build` first.
+A function whose callee has no copy calls the built functions too, so one test never mixes copies
+and built functions.
+
+SQLBuild decides which copies exist on the first test connection and then creates the same copies
+on every other test connection, including a connection that replaces one a timeout left unusable.
+If one of those connections cannot create a copy, `sqb test` stops with error `T006`, which names
+the function and the connection.
+
+PostgreSQL temporary functions belong to one server session. Behind a transaction-mode connection
+pooler, a test's statements can reach a different server session that does not hold the copies, so
+run `sqb test` for projects with functions through a direct connection or a session-mode pool.
+
 ### Table function tests
 
 Test table functions by calling them in `__table_fn_actual__` and comparing against `__table_fn_expected__`:

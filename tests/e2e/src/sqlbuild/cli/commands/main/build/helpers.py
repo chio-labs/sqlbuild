@@ -1115,3 +1115,30 @@ def dynamic_category_project(*, tmp_path: Path, name_pattern_entry: str) -> Path
             ),
         },
     )
+
+
+def seed_audit_files(status_values: tuple[str, ...]) -> dict[str, str]:
+    """A seed with a not_null audit and a warn-severity accepted_values audit."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "seed_audit_rows"\nadapter = "duckdb"\ndefault_target = "dev"\n\n'
+            '[connection]\ndatabase = "seed_audits.duckdb"\n\n[targets.dev]\nschema = "dev"\n'
+        ),
+        "seeds/order_statuses.csv": "status_id,status\n1,placed\n2,shipped\n",
+        "seeds/order_statuses.yml": (
+            "seeds:\n"
+            "  - name: order_statuses\n"
+            "    description: Order statuses.\n"
+            "    columns:\n"
+            "      - name: status_id\n"
+            "        type: INTEGER\n"
+            "        audits: [not_null]\n"
+            "      - name: status\n"
+            "        type: VARCHAR\n"
+            "        audits:\n"
+            "          - accepted_values:\n"
+            f"              values: [{', '.join(status_values)}]\n"
+            "              severity: warn\n"
+        ),
+    }

@@ -683,6 +683,7 @@ const R_SOURCE_ENTRY: RecordSpec = RecordSpec {
         FieldSpec::new("database", FieldDefault::None),
         FieldSpec::new("schema", FieldDefault::None),
         FieldSpec::new("table", FieldDefault::None),
+        FieldSpec::new("final", FieldDefault::False),
         FieldSpec::new("loader", FieldDefault::None),
         FieldSpec::new("managed", FieldDefault::False),
         FieldSpec::new("integration_loader", FieldDefault::None),

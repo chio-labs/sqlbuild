@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check check-native-layering check-python-boundary check-release-gate \
+.PHONY: verify verify-quick verify-pg coverage cli-preview rust-check check-native-layering check-python-boundary check-release-gate check-docs-skill \
 	check-e2e-shards test-e2e-duckdb test-e2e-duckdb-build-core \
 	test-e2e-duckdb-build-incremental \
 	test-e2e-duckdb-cli-data test-e2e-duckdb-cli test-e2e-duckdb-inspection \
@@ -153,6 +153,7 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/audit \
 	tests/e2e/src/sqlbuild/cli/commands/main/bigquery \
 	tests/e2e/src/sqlbuild/cli/commands/main/check \
+	tests/e2e/src/sqlbuild/cli/commands/main/clickhouse \
 	tests/e2e/src/sqlbuild/cli/commands/main/compile \
 	tests/e2e/src/sqlbuild/cli/commands/main/databricks \
 	tests/e2e/src/sqlbuild/cli/commands/main/dbt \
@@ -459,6 +460,16 @@ test-real-postgres:
 	exit $$status
 
 
+test-real-clickhouse:
+	@mkdir -p /tmp/opencode
+	@log="/tmp/opencode/test-real-clickhouse-$$(date +%Y%m%d-%H%M%S).log"; \
+	echo "Logging to $$log"; \
+	env PYTHONUNBUFFERED=1 TESTCONTAINERS_RYUK_DISABLED=true SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests -m "real_warehouse and clickhouse" -vv --color=yes -n auto --dist loadfile 2>&1 | tee "$$log"; \
+	status=$${PIPESTATUS[0]}; \
+	echo "TEST_REAL_CLICKHOUSE_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
+	exit $$status
+
+
 test-real-sqlserver:
 	@mkdir -p /tmp/opencode
 	@log="/tmp/opencode/test-real-sqlserver-$$(date +%Y%m%d-%H%M%S).log"; \
@@ -626,7 +637,7 @@ verify-quick:
 	exit $$status
 
 
-check-ci: check-e2e-shards check-native-layering check-python-boundary check-release-gate rust-lint
+check-ci: check-e2e-shards check-native-layering check-python-boundary check-release-gate check-docs-skill rust-lint
 	uv run ruff format --check .
 	uv run ruff check .
 	uv run ty check src tests
@@ -644,6 +655,10 @@ check-python-boundary:
 
 check-release-gate:
 	uv run python -m scripts.check_release_gate
+
+
+check-docs-skill:
+	uv run python -m scripts.check_docs_skill
 
 
 check-pr-metadata:

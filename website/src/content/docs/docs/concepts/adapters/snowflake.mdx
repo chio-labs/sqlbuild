@@ -124,3 +124,10 @@ not reconstruct invisible concurrent work, warehouse resume or idle tail, the 60
 cloud-services credits, contract adjustments, or multi-cluster billing. Run metadata and query IDs
 are stored under `target/executions/<run_id>/`; that statement ledger stores only an SQL digest,
 not SQL text. Executed SQL artifacts are stored separately under the sensitive `target/run/` tree.
+
+## Functions in unit tests
+
+`sqb test` creates each UDF and table function the selected tests call, SQL or Python, as a
+`TEMPORARY FUNCTION __SQB_TEST__<NAME>` in the session's current schema. The session needs a current
+schema and permission to create functions there; otherwise tests call the built function. See
+[Functions in `sqb test`](/docs/concepts/testing#functions-in-sqb-test).

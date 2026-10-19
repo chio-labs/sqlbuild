@@ -251,7 +251,8 @@ class HistoricalSnapshotSql:
             f"SELECT {self._key_sql(alias=None)}, MIN({SNAPSHOT_VERSION_START_COLUMN}) "
             f"AS __first_version_start FROM __changed_or_new GROUP BY {self._key_sql(alias=None)}"
             "), __reappearances AS ("
-            f"SELECT {classified_key_sql}, MIN(__classified.{observed_at}) AS __reappeared_at "
+            f"SELECT {self._key_projection_sql(alias='__classified')}, "
+            f"MIN(__classified.{observed_at}) AS __reappeared_at "
             "FROM __classified "
             f"JOIN __latest ON {self._key_condition(left='__classified', right='__latest')} "
             "LEFT JOIN __observed_group_sequence AS __closing_group "
@@ -280,7 +281,8 @@ class HistoricalSnapshotSql:
         present_condition: str = self._key_condition(left="__present", right="__target")
         observed_at: str = self.observed_at_column
         return (
-            f"SELECT {target_key_sql}, MIN(__observed_groups.__observed_at) AS __close_at "
+            f"SELECT {self._key_projection_sql(alias='__target')}, "
+            "MIN(__observed_groups.__observed_at) AS __close_at "
             f"FROM {destination} AS __target "
             "JOIN __observed_group_sequence AS __observed_groups "
             f"ON __observed_groups.__observed_at > __target.{observed_at} "
@@ -295,6 +297,9 @@ class HistoricalSnapshotSql:
     def _key_sql(self, *, alias: str | None) -> str:
         prefix: str = f"{alias}." if alias is not None else ""
         return ", ".join(f"{prefix}{column}" for column in self.unique_key)
+
+    def _key_projection_sql(self, *, alias: str) -> str:
+        return ", ".join(f"{alias}.{column} AS {column}" for column in self.unique_key)
 
     def _key_condition(self, *, left: str, right: str) -> str:
         return " AND ".join(f"{left}.{column} = {right}.{column}" for column in self.unique_key)

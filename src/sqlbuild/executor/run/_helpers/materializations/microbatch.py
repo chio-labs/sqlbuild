@@ -78,12 +78,12 @@ from sqlbuild.executor.run._helpers.execution.hook_phases import (
     run_post_hook_phase,
     run_pre_hook_phase,
 )
-from sqlbuild.executor.run._helpers.execution.inferred_types import inferred_column_types
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
 )
 from sqlbuild.executor.run._helpers.execution.schema import inspect_runtime_relation_schema
+from sqlbuild.executor.run._helpers.execution.table_config import model_output_config
 from sqlbuild.executor.run._helpers.materializations.full_refresh import (
     promote_full_refresh_rebuild,
     relation_exists,
@@ -92,6 +92,7 @@ from sqlbuild.executor.run._helpers.materializations.full_refresh import (
 from sqlbuild.executor.run._helpers.materializations.incremental import (
     _apply_schema_change,
     _execute_dml,
+    _widenable_columns,
 )
 from sqlbuild.executor.run._helpers.reuse.fingerprinting import try_write_fingerprint
 from sqlbuild.executor.run._helpers.validation.cursor_bounds import (
@@ -2812,7 +2813,7 @@ def _stage_microbatch_delta(
                     connection=context.connection,
                     destination=targets.delta_qualified,
                     sql=batch_sql,
-                    config={"inferred_column_types": inferred_column_types(context.entry)},
+                    config=model_output_config(context.entry),
                     statement_recorder=state.statement_recorder,
                 )
                 lifecycle.completed(metadata={"changed_count": 1})
@@ -2860,6 +2861,16 @@ def _apply_microbatch_schema_change(
                 database=targets.target_database,
                 schema=targets.target_schema,
                 name=targets.target_table,
+            )
+            target_columns = context.adapter.widen_target_nullability(
+                connection=context.connection,
+                destination=targets.target_qualified,
+                target_columns=target_columns,
+                incoming_columns=_widenable_columns(
+                    on_schema_change=context.entry.on_schema_change or _DEFAULT_ON_SCHEMA_CHANGE,
+                    incoming_columns=delta_columns,
+                ),
+                statement_recorder=state.statement_recorder,
             )
             schema_warnings: tuple[str, ...] = _apply_schema_change(
                 adapter=context.adapter,
@@ -3008,7 +3019,10 @@ def _apply_microbatch_dml(
                     connection=context.connection,
                     destination=targets.target_qualified,
                     sql=f"SELECT * FROM {targets.delta_qualified}",
-                    config={"table_type": context.entry.table_type},
+                    config={
+                        "table_type": context.entry.table_type,
+                        "physical_storage": context.entry.physical_storage,
+                    },
                     statement_recorder=state.statement_recorder,
                 )
             else:

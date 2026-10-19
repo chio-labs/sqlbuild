@@ -277,3 +277,28 @@ pub(crate) const CLAIMED_HELP: &str =
 pub(crate) const CHAINED_HELP: &str = "a chain or swap cannot be renamed in place safely; give the new column \
                             a name no other renamed column uses, or rebuild the model with \
                             --full-refresh";
+
+/// The table engine key.
+pub const ENGINE_KEY: &str = "engine";
+/// The sorting key.
+pub const ORDER_BY_KEY: &str = "order_by";
+/// The partitioning key.
+pub const PARTITION_BY_KEY: &str = "partition_by";
+/// The primary key, a prefix of the sorting key.
+pub const PRIMARY_KEY_KEY: &str = "primary_key";
+/// The table settings key.
+pub const TABLE_SETTINGS_KEY: &str = "table_settings";
+/// Physical table layout keys, in the order their errors are checked.
+pub const PHYSICAL_STORAGE_KEYS: [&str; 5] = [
+    ENGINE_KEY,
+    ORDER_BY_KEY,
+    PARTITION_BY_KEY,
+    PRIMARY_KEY_KEY,
+    TABLE_SETTINGS_KEY,
+];
+/// Materializations whose tables SQLBuild creates with the model's physical layout.
+pub const PHYSICAL_STORAGE_MATERIALIZATIONS: [&str; 2] = ["table", "incremental"];
+/// The name suffix every supported table engine shares.
+pub const ENGINE_FAMILY_SUFFIX: &str = "MergeTree";
+/// Engine name prefixes of replicated and shared engines, which need a cluster.
+pub const UNSUPPORTED_ENGINE_PREFIXES: [&str; 2] = ["Replicated", "Shared"];

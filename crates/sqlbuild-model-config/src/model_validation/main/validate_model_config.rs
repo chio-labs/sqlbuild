@@ -4,7 +4,8 @@ use crate::model_validation::_helpers::config::ConfigView;
 use crate::model_validation::_helpers::incremental::check_incremental;
 use crate::model_validation::_helpers::materialization::{
     check_contract, check_custom_materialization, check_execution_limit, check_migration,
-    check_non_incremental, check_placeholders, check_project_capability, check_storage_policies,
+    check_non_incremental, check_physical_storage, check_placeholders, check_project_capability,
+    check_storage_policies,
 };
 use crate::model_validation::_helpers::references::check_references;
 use crate::model_validation::_helpers::snapshot::check_snapshot;
@@ -29,6 +30,7 @@ pub fn validate_model_config<N: AuthoredNode>(
     check_snapshot(&config, facts)?;
     check_custom_materialization(&config, project)?;
     check_storage_policies(&config, facts)?;
+    check_physical_storage(&config)?;
     check_migration(&config, facts)?;
     check_placeholders(&config, project, facts)
 }

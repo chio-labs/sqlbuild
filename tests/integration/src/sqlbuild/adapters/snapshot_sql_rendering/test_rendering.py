@@ -31,7 +31,7 @@ _REAPPEARANCE_INITIAL_FRAGMENTS: tuple[str, ...] = (
 )
 _REAPPEARANCE_APPLY_FRAGMENTS: tuple[str, ...] = (
     "AS __latest_rn FROM target_table) AS __latest_ranked WHERE __latest_rn = 1",
-    "__reappearances AS (SELECT __classified.customer_id, "
+    "__reappearances AS (SELECT __classified.customer_id AS customer_id, "
     "MIN(__classified.observed_at) AS __reappeared_at",
     "WHERE __latest.valid_to IS NOT NULL AND __closing_group.__observed_at IS NULL",
     "OR __classified.observed_at < __first_new_starts.__first_version_start",

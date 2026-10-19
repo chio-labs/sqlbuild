@@ -17,6 +17,7 @@ use crate::bindings::_helpers::command_runtime::connection::resolve_project_conn
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::query_command::project::{ProjectAdapter, project_adapter};
 use crate::bindings::_helpers::query_command::query_values::{
@@ -164,7 +165,8 @@ fn run_sql<'py>(
     )?;
     let connection: Bound<'py, PyAny> = project
         .adapter
-        .call_method1("connect", (connection_config,))?;
+        .call_method1("connect", (connection_config,))
+        .map_err(|error| connection_failure(&project.adapter, &error))?;
     let limit_value: Bound<'py, PyAny> = match limit {
         Some(limit) => PyInt::new(py, limit).into_any(),
         None => py.None().into_bound(py),

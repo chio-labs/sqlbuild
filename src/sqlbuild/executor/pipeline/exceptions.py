@@ -32,3 +32,33 @@ class AuditConcurrencyError(RuntimeError):
 
 class AuditOutcomeError(RuntimeError):
     """Raised when audit execution returns an unknown quality outcome."""
+
+
+class WarehouseConnectionError(Exception):
+    """Raised when a command cannot open its warehouse connection."""
+
+    code: str = "C115"
+
+    def __init__(self, *, adapter_name: str, reason: str) -> None:
+        self.message: str = f"could not connect to the {adapter_name} warehouse: {reason}"
+        self.help: str = (
+            "Check the connection settings of the target; `sqb debug` tests the connection."
+        )
+        super().__init__(self.message)
+
+
+class TemporaryTestFunctionError(Exception):
+    """Raised when a test connection cannot create the temporary function copies tests call."""
+
+    code: str = "T006"
+
+    def __init__(self, *, function_name: str, connection: str, reason: str) -> None:
+        self.message: str = (
+            f"could not create the temporary copy of function {function_name} on {connection}: "
+            f"{reason}"
+        )
+        self.help: str = (
+            "The tests call the temporary copies, which the first test connection created; "
+            "check that every connection of the target may create temporary functions."
+        )
+        super().__init__(self.message)

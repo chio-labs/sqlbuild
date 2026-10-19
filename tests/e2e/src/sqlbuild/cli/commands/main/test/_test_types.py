@@ -438,3 +438,35 @@ class TransactionTimeoutE2ETestCase:
     expected_output_fragments: tuple[str, ...]
     expected_published_rows: tuple[tuple[int, int], ...]
     expected_later_model_rows: tuple[tuple[int], ...]
+
+
+@dataclass(frozen=True)
+class TemporaryFunctionE2ETestCase:
+    """Test case for unit tests that call an edited project function."""
+
+    description: str
+    built_body: str
+    edited_body: str
+    expected_exit_code: int
+    expected_stdout_fragment: str
+    expected_built_result: bool
+
+
+@dataclass(frozen=True)
+class TemporaryCalleeE2ETestCase:
+    """Test case for unit tests whose function calls another project function."""
+
+    description: str
+    build_first: bool
+    callee_body: str
+    expected_exit_code: int
+    expected_stdout_fragment: str
+
+
+@dataclass(frozen=True)
+class TemporaryFunctionConnectionE2ETestCase:
+    """Test case for a test connection that cannot create the temporary copies."""
+
+    description: str
+    expected_exit_code: int
+    expected_stderr_fragment: str

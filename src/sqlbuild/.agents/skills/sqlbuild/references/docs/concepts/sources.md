@@ -281,6 +281,7 @@ Use [`sqb freshness`](../cli/freshness.md) to observe source freshness on demand
 | `schema` | Physical source schema (optional). For managed sources, overrides target `loader_schema`; otherwise managed loaders fall back to `loader_schema`, then target `schema`. |
 | `table` | Target table name (defaults to `name` if omitted) |
 | `expression` | Inline SQL expression (alternative to table reference) |
+| `final` | ClickHouse only. Set to `true` to read the source with `FINAL`, so a `ReplacingMergeTree` table returns one row per key (see [ClickHouse](adapters/clickhouse.md#reading-replacingmergetree-sources)). Other adapters reject it with `A010`. |
 | `managed` | Set to `true` to bind the source to the `@loader` function of the same name (see [Loaders](python-nodes/loaders.md)) |
 | `write_strategy` | How the loader writes data: `table`, `append`, `delete_insert`, or `merge` (requires `managed: true`) |
 | `cursor_column` | Column for incremental cursor tracking (required for `delete_insert` and `merge`) |

@@ -175,3 +175,14 @@ class JanitorTargetErrorE2ETestCase:
     janitor_command: tuple[str, ...]
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JanitorNonInteractiveE2ETestCase:
+    """Test case for a janitor confirmation that stdin cannot answer."""
+
+    description: str
+    janitor_command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stderr_fragments: tuple[str, ...]
+    expected_existing_tables: tuple[str, ...]

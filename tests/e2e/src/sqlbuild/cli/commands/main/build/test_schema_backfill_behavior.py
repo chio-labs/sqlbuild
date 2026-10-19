@@ -35,6 +35,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             command=("plan", "--json", "--select", "order_status_index"),
             expected_exit_code=0,
+            expected_plan_exit_code=0,
             expected_reason="schema_changed",
             expected_backfill_action="bounded",
             expected_backfill_duration="7d",
@@ -55,6 +56,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             command=("plan", "--json", "--select", "order_status_index"),
             expected_exit_code=0,
+            expected_plan_exit_code=1,
             expected_reason="schema_changed",
             expected_backfill_action="bounded",
             expected_backfill_duration="7d",
@@ -77,6 +79,7 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
             ),
             command=("plan", "--json", "--select", "order_status_index"),
             expected_exit_code=0,
+            expected_plan_exit_code=0,
             expected_reason="schema_changed",
             expected_backfill_action="bounded",
             expected_backfill_duration="7d",
@@ -119,7 +122,7 @@ def test_given_schema_backfill_mutation_when_planning_then_expected_metadata_is_
             command=test_case.command,
             project_dir=project_dir,
         )
-        assert plan_result.returncode == test_case.expected_exit_code, (
+        assert plan_result.returncode == test_case.expected_plan_exit_code, (
             plan_result.stdout + plan_result.stderr
         )
         payload: dict[str, object] = json.loads(plan_result.stdout)

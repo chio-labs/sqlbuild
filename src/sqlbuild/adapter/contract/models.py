@@ -285,6 +285,14 @@ class FunctionDefinition:
 
 
 @dataclass(frozen=True)
+class TemporaryFunction:
+    """A session-scoped copy of a project function: its call target and creating DDL."""
+
+    target: str
+    statements: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class QueryResult:
     """Rows returned by an ad hoc warehouse query."""
 

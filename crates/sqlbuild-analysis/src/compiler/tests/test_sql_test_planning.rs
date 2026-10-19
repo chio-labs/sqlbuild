@@ -17,9 +17,10 @@ use crate::compiler::tests::helpers::{
     unicode_cte_after_leading_with_preserves_identifier,
     unresolved_reference_fast_rejection_preserves_warning, upstream_fallback_resolves,
 };
+use crate::compiler::tests::planning_helpers::projected_udf_call_sql;
 use crate::compiler::tests::test_types::{
     GlueErrorProjectionTestCase, GluePlanParityTestCase, GluePlannerErrorTestCase,
-    SqlTestPlanningTestCase,
+    ProjectedUdfTestCase, SqlTestPlanningTestCase,
 };
 
 /// A mocked model test, a test missing its source mock and a UDF test over two models.
@@ -320,6 +321,36 @@ fn given_plan_warnings_when_projecting_errors_then_each_distinct_error_message_i
             sql_test_plan_error_messages(&plan),
             test_case.expected_messages.to_vec(),
             "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_real_model_calling_udf_in_projection_when_planning_then_call_targets_the_function() {
+    let test_cases = [
+        ProjectedUdfTestCase {
+            description: "DuckDB falls back to textual resolution",
+            dialect: "duckdb",
+            expected_call: "analytics__is_open(o.status)",
+        },
+        ProjectedUdfTestCase {
+            description: "ClickHouse parses the marker as a parametric call",
+            dialect: "clickhouse",
+            expected_call: "analytics__is_open(o.status)",
+        },
+    ];
+
+    for test_case in test_cases {
+        let sql = projected_udf_call_sql(test_case.dialect);
+
+        assert_eq!(
+            (
+                sql.contains(test_case.expected_call),
+                sql.contains("__udf(")
+            ),
+            (true, false),
+            "{}: {sql}",
             test_case.description
         );
     }

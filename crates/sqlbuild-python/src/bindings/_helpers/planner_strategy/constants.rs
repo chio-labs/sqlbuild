@@ -21,3 +21,9 @@ pub(crate) const DIRECT_TRANSFORM: &str = "direct";
 pub(crate) const MODEL_REFERENCE_KIND: &str = "model";
 pub(crate) const SOURCE_REFERENCE_KIND: &str = "source";
 pub(crate) const SEED_REFERENCE_KIND: &str = "seed";
+/// The SQL analysis dialect whose adapter lays tables out by the physical storage keys.
+pub(crate) const PHYSICAL_STORAGE_DIALECT: &str = "clickhouse";
+/// The error code for physical storage keys on an adapter without them.
+pub(crate) const PHYSICAL_STORAGE_UNSUPPORTED_CODE: &str = "A011";
+/// Plan action values that create the model's table anew or leave it untouched.
+pub(crate) const TABLE_RECREATING_ACTIONS: [&str; 2] = ["create_table", "skip"];

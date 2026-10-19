@@ -12,6 +12,9 @@ use crate::refactoring::_helpers::edits::header_edits::{
 use crate::refactoring::_helpers::edits::text_edits::{apply_text_edits, file_changes, text_edit};
 use crate::refactoring::_helpers::edits::yaml_edits::{yaml_column_edits, yaml_model_edits};
 use crate::refactoring::_helpers::files::workspace::commit_changes;
+use crate::refactoring::_helpers::planning::column_planning::{
+    column_rename_context, header_parts,
+};
 use crate::refactoring::_helpers::planning::column_references::{
     BodyContext, BodyMapping, ColumnQuery, ResourceColumns, analyze_column, consumer_edits,
 };
@@ -22,9 +25,9 @@ use crate::refactoring::_helpers::scanning::scan_context::ScanContext;
 use crate::refactoring::_helpers::scanning::sql_sites::{ModelBody, analysis_sql, resource_sites};
 use crate::refactoring::errors::{RefactorError, RefactorErrorKind};
 use crate::refactoring::models::{
-    DeclarationMoves, DeclarationPlacement, DestinationFacts, DiscoveredFile, EditKind,
-    ExpansionSpan, FileChange, ModelFacts, PlacedDeclaration, RefactorFacts, RefactorOperation,
-    RefactorRequest, RelocatedDeclaration, TextEdit,
+    AuthoredFile, DeclarationMoves, DeclarationPlacement, DestinationFacts, DiscoveredFile,
+    EditKind, ExpansionSpan, FileChange, ModelFacts, PlacedDeclaration, RefactorFacts,
+    RefactorOperation, RefactorRequest, RelocatedDeclaration, SqlFileRole, TextEdit,
 };
 use crate::refactoring::tests::test_types::{ExpectedSpans, PlannedMoves, Spans};
 
@@ -586,4 +589,60 @@ pub(crate) fn physical_columns(columns: &[(&str, &str)]) -> Vec<(String, String)
         .iter()
         .map(|(name, column_type)| ((*name).to_owned(), (*column_type).to_owned()))
         .collect()
+}
+
+/// Header edits and manual locations of renaming `orders.is_flagged` to `is_marked`.
+pub(super) fn owner_header_parts(
+    contents: &str,
+) -> Result<(Vec<String>, Vec<String>), RefactorError> {
+    let mut orders = model("orders", Some("table"), "analytics");
+    orders.inferred_columns = vec!["order_id".to_owned(), "is_flagged".to_owned()];
+    let mut vip_flags = model("vip_flags", Some("table"), "analytics");
+    vip_flags.inferred_columns = vec!["is_flagged".to_owned()];
+    let unknown_flags = model("unknown_flags", Some("table"), "analytics");
+    let mut project_facts = facts(
+        "/nonexistent/project",
+        vec![orders.clone(), vip_flags, unknown_flags],
+    );
+    project_facts.model_files = vec![DiscoveredFile {
+        path: orders.path.clone(),
+        contents: contents.to_owned(),
+    }];
+    project_facts.authored_files = [
+        (
+            "flag_check",
+            "SELECT * FROM @relation WHERE NOT (@where_condition)",
+        ),
+        (
+            "prefix_check",
+            "SELECT * FROM @relation WHERE @'prefix' = ''",
+        ),
+    ]
+    .into_iter()
+    .map(|(name, body)| AuthoredFile {
+        role: SqlFileRole::Audit,
+        path: format!("audits/generic/{name}.sql"),
+        contents: format!("AUDIT ();\n{body}\n"),
+        texts: vec![body.to_owned()],
+    })
+    .collect();
+    let mut rename = request(RefactorOperation::RenameColumn, "is_marked", None);
+    rename.column_name = Some("is_flagged".to_owned());
+    let scan = context("duckdb");
+    let rename_context = column_rename_context(&project_facts, &rename, &scan)?;
+    let parts = header_parts(&rename_context, &orders)?;
+    let edits: Vec<TextEdit> = parts.edits.into_iter().map(|(_, edit)| edit).collect();
+    let manual = parts
+        .manual
+        .into_iter()
+        .map(|item| {
+            format!(
+                "{}:{} {}",
+                item.line.unwrap_or_default(),
+                item.column.unwrap_or_default(),
+                item.reason
+            )
+        })
+        .collect();
+    Ok((described(&edits), manual))
 }

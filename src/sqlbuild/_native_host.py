@@ -381,6 +381,18 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "is_compatibility_view",
     ),
     "AuditExecutionError": ("sqlbuild.executor.pipeline.exceptions", "AuditExecutionError"),
+    "WarehouseConnectionError": (
+        "sqlbuild.executor.pipeline.exceptions",
+        "WarehouseConnectionError",
+    ),
+    "TemporaryTestFunctionError": (
+        "sqlbuild.executor.pipeline.exceptions",
+        "TemporaryTestFunctionError",
+    ),
+    "raise_warehouse_connection_failure": (
+        "sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure",
+        "raise_warehouse_connection_failure",
+    ),
     "AuditPipelineCallbacks": ("sqlbuild.executor.pipeline.main.run", "AuditPipelineCallbacks"),
     "run_audit_pipeline_with_callbacks": (
         "sqlbuild.executor.pipeline.main.run",

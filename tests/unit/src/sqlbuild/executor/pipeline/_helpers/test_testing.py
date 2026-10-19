@@ -32,9 +32,12 @@ from tests.unit.src.sqlbuild.executor.pipeline._helpers._test_types import (
     SqlTestConcurrencyTestCase,
     SqlTestFunctionPreflightTestCase,
     SqlTestOperationLifecycleTestCase,
+    TemporaryTestFunctionTestCase,
 )
 from tests.unit.src.sqlbuild.executor.pipeline._helpers.helpers import (
     lifecycle_events_with_prefix,
+    order_status_callee_test_plan,
+    order_status_function_test_plan,
 )
 
 
@@ -129,6 +132,129 @@ def test_given_sql_test_with_missing_function_when_running_pipeline_then_returns
     assert tuple(event.resource_id for event in resource_events) == (
         "sql_test:test_missing_function",
         "sql_test:test_missing_function",
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TemporaryTestFunctionTestCase(
+            description="unbuilt function runs from its temporary copy",
+            body_sql="order_status = 'completed'",
+            test_count=1,
+            max_concurrency=1,
+            expected_outcomes=("pass",),
+            expected_error_fragments=(),
+        ),
+        TemporaryTestFunctionTestCase(
+            description="every worker connection holds the temporary copy",
+            body_sql="order_status = 'completed'",
+            test_count=2,
+            max_concurrency=2,
+            expected_outcomes=("pass", "pass"),
+            expected_error_fragments=(),
+        ),
+        TemporaryTestFunctionTestCase(
+            description="current definition decides the outcome",
+            body_sql="order_status = 'cancelled'",
+            test_count=1,
+            max_concurrency=1,
+            expected_outcomes=("fail",),
+            expected_error_fragments=(),
+        ),
+        TemporaryTestFunctionTestCase(
+            description="uncreatable copy reports why and asks for a build",
+            body_sql="order_status = = 'completed'",
+            test_count=1,
+            max_concurrency=1,
+            expected_outcomes=("error",),
+            expected_error_fragments=(
+                "its temporary copy for the test run could not be created",
+                "Run `sqb build` first",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unbuilt_function_when_running_tests_then_temporary_copy_holds_current_definition(
+    test_case: TemporaryTestFunctionTestCase,
+    tmp_path: Path,
+) -> None:
+    results: tuple[SqlTestExecutionResult, ...] = run_test_pipeline(
+        plan=order_status_function_test_plan(
+            body_sql=test_case.body_sql, test_count=test_case.test_count
+        ),
+        connection_config={"database": str(tmp_path / "orders.duckdb")},
+        adapter=DuckDbAdapter(),
+        max_concurrency=test_case.max_concurrency,
+    )
+
+    messages: str = " ".join(str(result.error_message) for result in results)
+    assert tuple(str(result.outcome) for result in results) == test_case.expected_outcomes, (
+        test_case.description,
+        messages,
+    )
+    assert all(fragment in messages for fragment in test_case.expected_error_fragments), (
+        test_case.description,
+        messages,
+    )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TemporaryTestFunctionTestCase(
+            description="callee's current definition decides the caller's test",
+            body_sql="order_status = 'cancelled'",
+            test_count=1,
+            max_concurrency=1,
+            expected_outcomes=("fail",),
+            expected_error_fragments=(),
+        ),
+        TemporaryTestFunctionTestCase(
+            description="callee copied on every worker connection",
+            body_sql="order_status = 'completed'",
+            test_count=2,
+            max_concurrency=2,
+            expected_outcomes=("pass", "pass"),
+            expected_error_fragments=(),
+        ),
+        TemporaryTestFunctionTestCase(
+            description="caller without a copyable callee reports the callee",
+            body_sql="order_status = = 'completed'",
+            test_count=1,
+            max_concurrency=1,
+            expected_outcomes=("error",),
+            expected_error_fragments=(
+                "function status_matches, which it calls, has no temporary copy",
+                "status_matches (its temporary copy for the test run could not be created",
+                "Run `sqb build` first",
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_unbuilt_callee_when_running_tests_then_callee_copy_holds_current_definition(
+    test_case: TemporaryTestFunctionTestCase,
+    tmp_path: Path,
+) -> None:
+    results: tuple[SqlTestExecutionResult, ...] = run_test_pipeline(
+        plan=order_status_callee_test_plan(
+            callee_body_sql=test_case.body_sql, test_count=test_case.test_count
+        ),
+        connection_config={"database": str(tmp_path / "orders.duckdb")},
+        adapter=DuckDbAdapter(),
+        max_concurrency=test_case.max_concurrency,
+    )
+
+    messages: str = " ".join(str(result.error_message) for result in results)
+    assert tuple(str(result.outcome) for result in results) == test_case.expected_outcomes, (
+        test_case.description,
+        messages,
+    )
+    assert all(fragment in messages for fragment in test_case.expected_error_fragments), (
+        test_case.description,
+        messages,
     )
 
 

@@ -27,6 +27,34 @@ fn given_sources_documents_when_parsing_then_matches_python_sources_and_errors()
             expected_sources: lines(&["orders loader=orders managed=true schema=raw table=orders"]),
         },
         SourcesDocumentTestCase {
+            description: "final reads a table through its deduplicating form",
+            document: sources(vec![
+                ("name", text("customers")),
+                ("schema", text("raw")),
+                ("final", Node::Bool(true)),
+            ]),
+            expected_sources: lines(&["customers loader=- managed=false schema=raw table=- final"]),
+        },
+        SourcesDocumentTestCase {
+            description: "final false is a plain read",
+            document: sources(vec![
+                ("name", text("customers")),
+                ("final", Node::Bool(false)),
+            ]),
+            expected_sources: lines(&["customers loader=- managed=false schema=- table=-"]),
+        },
+        SourcesDocumentTestCase {
+            description: "final on an expression source",
+            document: sources(vec![
+                ("name", text("customers")),
+                ("expression", text("SELECT 1 AS id")),
+                ("final", Node::Bool(true)),
+            ]),
+            expected_sources: parse_error(
+                "/project/sources/shop.yml source 'customers' cannot define final with expression",
+            ),
+        },
+        SourcesDocumentTestCase {
             description: "merge without a unique key",
             document: sources(vec![
                 ("name", text("orders")),

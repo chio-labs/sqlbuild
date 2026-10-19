@@ -18,6 +18,10 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
     CENTS_MACRO,
     CUSTOMER_DECLARATIONS,
+    FLAGGED_AUDITS,
+    FLAGGED_CONTRACT,
+    FLAGGED_LITERAL_AUDIT,
+    FLAGGED_SUBQUERY_AUDITS,
     ORDER_AMOUNT_CHECK,
     ORDER_EXPORT,
     ORDER_SHAPE,
@@ -127,6 +131,53 @@ from tests.e2e.src.sqlbuild.cli.commands.main.refactor.helpers import (
                 "order_export": ("order_id", "customer_id", "revenue", "order_date"),
             },
         ),
+        ColumnRenameE2ETestCase(
+            description="a column declared in the model's own contract renames in one step",
+            command=("rename", "column:flagged_orders.is_flagged", "is_marked", "--cascade"),
+            extra_files=FLAGGED_CONTRACT,
+            expected_fragments={
+                "models/marts/flagged_orders.sql": (
+                    "    is_marked (type BOOLEAN)\n",
+                    "CAST(TRUE AS BOOLEAN) AS is_marked\n",
+                ),
+                "models/marts/flagged_order_summary.sql": ("  is_marked\nFROM orders",),
+            },
+            expected_columns={
+                "flagged_orders": ("order_id", "is_marked"),
+                "flagged_order_summary": ("order_id", "is_marked"),
+            },
+        ),
+        ColumnRenameE2ETestCase(
+            description="audit where_condition arguments rename the column as SQL",
+            command=("rename", "column:flagged_orders.is_flagged", "is_marked", "--cascade"),
+            extra_files=FLAGGED_AUDITS,
+            expected_fragments={
+                "models/marts/flagged_orders.sql": (
+                    "where_condition \"is_marked = TRUE AND 'is_flagged' <> ''\"",
+                    'where_condition "NOT is_marked"',
+                ),
+                "models/marts/flagged_order_summary.sql": ('where_condition "is_marked IS NULL"',),
+            },
+            expected_columns={
+                "flagged_orders": ("order_id", "is_marked"),
+                "flagged_order_summary": ("order_id", "is_marked"),
+            },
+        ),
+        ColumnRenameE2ETestCase(
+            description="audit subqueries rename only columns of the audited model",
+            command=("rename", "column:flagged_orders.is_flagged", "is_marked"),
+            extra_files=FLAGGED_SUBQUERY_AUDITS,
+            expected_fragments={
+                "models/marts/flagged_orders.sql": (
+                    "'is_marked IN (SELECT is_flagged FROM __ref(\"vip_flags\"))'",
+                    "'is_marked IN (SELECT is_marked FROM __ref(\"flagged_orders\"))'",
+                ),
+            },
+            expected_columns={
+                "flagged_orders": ("order_id", "is_marked"),
+                "vip_flags": ("is_flagged",),
+            },
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -206,6 +257,14 @@ def test_given_column_rename_when_applied_then_project_tests_and_builds(
             expected_status="refused",
             expected_reason="reference to stg_orders produced by a macro",
             expected_paths=("models/staging/stg_order_count.sql",),
+        ),
+        RefusedRefactorE2ETestCase(
+            description="audit argument the audit quotes as a string needs a manual check",
+            command=("rename", "column:flagged_orders.is_flagged", "is_marked"),
+            extra_files=FLAGGED_LITERAL_AUDIT,
+            expected_status="refused",
+            expected_reason="audit prefix_check quotes argument prefix as a string",
+            expected_paths=("models/marts/flagged_orders.sql",),
         ),
     ],
     ids=lambda case: case.description,

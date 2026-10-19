@@ -77,6 +77,7 @@ from sqlbuild.adapter.contract.models import (
     SnapshotSqlDialect,
     TableFreshnessMetadata,
     TableFreshnessRequest,
+    TemporaryFunction,
 )
 from sqlbuild.adapter.contract.types import (
     BuiltinAdapter,
@@ -535,6 +536,25 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             f"CREATE OR REPLACE FUNCTION {destination}({arg_sql})\n"
             f"{returns_clause}\n"
             f"LANGUAGE SQL AS $$\n{body_sql}\n$$",
+        )
+
+    def render_create_temporary_function(
+        self, *, name: str, definition: FunctionDefinition
+    ) -> TemporaryFunction | None:
+        """Copy a SQL function into the session's `pg_temp` schema, called schema-qualified."""
+
+        if definition.language != FunctionLanguage.SQL:
+            return None
+        target: str = f"pg_temp.{self.render_identifier(name)}"
+        return TemporaryFunction(
+            target=target,
+            statements=self.render_create_function(
+                destination=target,
+                arguments=definition.arguments,
+                returns=definition.returns,
+                body_sql=definition.body_sql,
+                return_columns=definition.return_columns,
+            ),
         )
 
     def render_append(
@@ -2250,6 +2270,20 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def column_rename_unavailable_reason(self, *, connection: Any, destination: str) -> str | None:
         del connection, destination
         return None
+
+    def widen_target_nullability(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        target_columns: tuple[ColumnInfo, ...],
+        incoming_columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> tuple[ColumnInfo, ...]:
+        """Return the target columns unchanged; this warehouse never stores NULL as a default."""
+
+        del connection, destination, incoming_columns, statement_recorder
+        return target_columns
 
     def alter_column_types(
         self,

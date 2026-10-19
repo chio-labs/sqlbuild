@@ -21,4 +21,8 @@ BUILTIN_ADAPTER_IMPORTS: dict[str, tuple[str, str]] = {
         "sqlbuild.adapters.sqlserver.classes.sqlserver_adapter",
         "SqlServerAdapter",
     ),
+    "clickhouse": (
+        "sqlbuild.adapters.clickhouse.classes.clickhouse_adapter",
+        "ClickHouseAdapter",
+    ),
 }

@@ -42,7 +42,11 @@ from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.cost.models import CostResourceContext
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.executor.pipeline._helpers import auditing
-from sqlbuild.executor.pipeline.exceptions import AuditExecutionError, AuditOutcomeError
+from sqlbuild.executor.pipeline.exceptions import (
+    AuditExecutionError,
+    AuditOutcomeError,
+    WarehouseConnectionError,
+)
 from sqlbuild.executor.pipeline.main.run import (
     AuditPipelineCallbacks,
     run_audit_pipeline,
@@ -907,10 +911,13 @@ def test_given_partial_connection_open_when_later_open_fails_then_opened_connect
     test_case: AuditConcurrencyTestCase,
 ) -> None:
     adapter: Mock = Mock(spec=BaseAdapter)
+    adapter.adapter_name = "duckdb"
     opened: object = object()
     adapter.connect.side_effect = (opened, LookupError("open failure"))
 
-    with pytest.raises(LookupError, match="open failure"):
+    with pytest.raises(
+        WarehouseConnectionError, match="could not connect to the duckdb warehouse: open failure"
+    ):
         run_audit_pipeline(
             plan=PlanOutput(audit_entries=(audit_entry("first"), audit_entry("second"))),
             connection_config={},

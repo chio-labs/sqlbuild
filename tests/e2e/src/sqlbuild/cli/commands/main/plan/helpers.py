@@ -173,3 +173,46 @@ def prepare_missing_source_tables_project(*, tmp_path: Path) -> Path:
     ):
         execute_duckdb(db_path=db_path, sql=statement)
     return project_dir
+
+
+_EXIT_CODE_PROJECT_TOML: str = (
+    'name = "plan_exit_codes"\n'
+    'adapter = "duckdb"\n'
+    'default_target = "dev"\n\n'
+    "[connection]\n"
+    'database = "plan.duckdb"\n\n'
+    "[targets.dev]\n"
+    'schema = "analytics"\n'
+)
+_REVENUE_MODEL: str = "MODEL (description 'Revenue.', materialized table);\n\nSELECT 1 AS amount\n"
+_DAILY_REVENUE_MODEL: str = (
+    "MODEL (description 'Daily revenue.', materialized table, migrate_from revenue);\n\n"
+    "SELECT 1 AS amount\n"
+)
+RECLAIMED_NAME: dict[str, str] = {"models/revenue.sql": _REVENUE_MODEL}
+REMOVABLE_MIGRATION_WARNING: str = "migrate_from can be removed from 'daily_revenue'"
+NAME_CLAIM_ERROR: str = "model 'revenue' would replace analytics.revenue"
+
+
+def migrated_project(tmp_path: Path) -> Path:
+    """A project whose `revenue` table was migrated to `daily_revenue` and built."""
+
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="plan_exit_codes",
+        repo_files={
+            "sqlbuild_project.toml": _EXIT_CODE_PROJECT_TOML,
+            "models/revenue.sql": _REVENUE_MODEL,
+        },
+    )
+    first: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert first.returncode == 0, first.stdout + first.stderr
+    (project_dir / "models/revenue.sql").unlink()
+    (project_dir / "models/daily_revenue.sql").write_text(_DAILY_REVENUE_MODEL, encoding="utf-8")
+    migrated: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "build"), project_dir=project_dir
+    )
+    assert migrated.returncode == 0, migrated.stdout + migrated.stderr
+    return project_dir

@@ -140,7 +140,7 @@ def promote_staged_relation(
             statement_recorder=statement_recorder,
         )
         return
-    if adapter.adapter_name == BuiltinAdapter.SNOWFLAKE:
+    if adapter.adapter_name in (BuiltinAdapter.SNOWFLAKE, BuiltinAdapter.CLICKHOUSE):
         adapter.swap(
             connection=connection,
             left=target_qualified,

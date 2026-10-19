@@ -11,6 +11,7 @@ Online: https://sqlbuild.com/docs/cli/plan/
 - Usage
 - Flags
 - Output
+- Exit codes
 - Missing upstream dependencies
 - Missing source tables
 
@@ -60,7 +61,7 @@ Sources to load (2)
 
 Changed functions (2)
 ├── table_fn__customer_orders          table function
-    └── reason  first run
+│   └── reason  first run
 └── udf__is_completed_order            sql udf
     └── reason  first run
 
@@ -73,11 +74,11 @@ First run (12)
 ├── dim_customers                      table
 ├── fact_orders                        table
 ├── customer_status_snapshot           merge (timestamp)
-    ├── cursor  last_ordered_at (timestamp)
-    └── bounds  computed at run time, once model fact_orders is up to date
+│   ├── cursor  last_ordered_at (timestamp)
+│   └── bounds  computed at run time, once model fact_orders is up to date
 ├── hourly_order_activity              delete_insert (timestamp, microbatch)
-    ├── cursor  activity_hour (timestamp)
-    ├── mode  microbatch
+│   ├── cursor  activity_hour (timestamp)
+│   ├── mode  microbatch
     ...
 └── order_status_index                 delete_insert (integer)
     ├── cursor  order_id (integer)
@@ -131,6 +132,15 @@ Column migrations (1)
 ```
 
 When a removed column and an added column look related but are not an exact rename, the schema diff shows a hint such as `similar to amount; if this is a rename, add revenue (migrate_from amount)` until the change is built.
+
+## Exit codes
+
+`sqb plan` exits `0` when the plan is ready, including plans that only have warnings. It exits `1`
+when the plan has an error-severity finding that `sqb build` would refuse, such as an `M114` name
+claim; the final line then reads `✗ Plan failed with errors`. `sqb plan --json` uses the same exit
+codes, so CI can gate on either form.
+
+Release note: earlier versions printed `Plan complete with errors` and exited `0` for such plans.
 
 ## Missing upstream dependencies
 

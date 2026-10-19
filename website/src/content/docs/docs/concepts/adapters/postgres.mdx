@@ -61,3 +61,10 @@ connection = "postgres"
 database = "analytics"
 schema = "dev"
 ```
+
+## Functions in unit tests
+
+`sqb test` creates each SQL function the selected tests call in the session's `pg_temp` schema and
+calls it as `pg_temp.<name>`, so tests use the current project definition without a build. Temporary
+functions belong to one server session: behind a transaction-mode pooler, run `sqb test` through a
+direct connection or a session-mode pool. See [Functions in `sqb test`](/docs/concepts/testing#functions-in-sqb-test).

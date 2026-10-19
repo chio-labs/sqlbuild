@@ -1455,8 +1455,21 @@ fn analyze_and_resolve_sql(
             replacements.insert((function_name.as_str(), referenced_name.as_str()), target);
         }
     }
+    let relations_resolved =
+        replace_relation_markers(request.query_sql, &replacements, request.patterns);
+    let functions_resolved = resolve_function_calls(
+        &resolve_function_calls(
+            &relations_resolved,
+            request.functions,
+            false,
+            request.patterns,
+        )?,
+        request.functions,
+        true,
+        request.patterns,
+    )?;
     let cte_body_sql = strip_statement_terminators(
-        &replace_relation_markers(request.query_sql, &replacements, request.patterns),
+        &functions_resolved,
         SliceDialect::new(Some(request.dialect_name)),
     )
     .to_string();

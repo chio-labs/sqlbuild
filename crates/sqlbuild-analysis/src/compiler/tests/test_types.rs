@@ -227,3 +227,9 @@ pub(crate) struct ScenarioHelperShadowTestCase {
     pub(crate) check_sql: &'static str,
     pub(crate) expected_rejected: bool,
 }
+
+pub(super) struct ProjectedUdfTestCase {
+    pub(super) description: &'static str,
+    pub(super) dialect: &'static str,
+    pub(super) expected_call: &'static str,
+}

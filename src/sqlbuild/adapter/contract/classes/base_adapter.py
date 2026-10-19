@@ -115,6 +115,7 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
     statement_limit_excludes_queueing: ClassVar[bool] = False
     metadata_inspection_concurrency: ClassVar[int] = 1
     supports_session_warehouse: ClassVar[bool] = False
+    state_timestamp_type: ClassVar[str | None] = None
     _snapshot_sql_dialect: ClassVar[SnapshotSqlDialect] = SnapshotSqlDialect(
         timestamp_type="TIMESTAMP",
         distinct_condition=render_is_distinct_from,
@@ -1463,6 +1464,20 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
         exclude_columns: tuple[str, ...] = (),
     ) -> int | None:
         raise AdapterUserError(message="merge requires an engine-specific implementation")
+
+    def widen_target_nullability(
+        self,
+        *,
+        connection: Any,
+        destination: str,
+        target_columns: tuple[ColumnInfo, ...],
+        incoming_columns: tuple[ColumnInfo, ...],
+        statement_recorder: StatementRecorder,
+    ) -> tuple[ColumnInfo, ...]:
+        """Let target columns admit NULL where incoming ones do; return the target columns."""
+
+        del connection, destination, incoming_columns, statement_recorder
+        return target_columns
 
     def add_columns(
         self,

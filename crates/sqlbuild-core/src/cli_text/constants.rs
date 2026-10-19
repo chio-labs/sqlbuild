@@ -16,6 +16,11 @@ pub(crate) const PHASE_OK_GLYPH: &str = "\u{2713}";
 pub(crate) const PHASE_FAIL_GLYPH: &str = "\u{2717}";
 pub(crate) const TREE_BRANCH_GLYPH: &str = "\u{251c}\u{2500}\u{2500}";
 pub(crate) const TREE_LAST_GLYPH: &str = "\u{2514}\u{2500}\u{2500}";
+/// The bar a non-last entry's detail rows carry under its connector.
+pub(crate) const TREE_CONTINUATION_GLYPH: &str = "\u{2502}   ";
+/// The start of a terminal style escape and the character that ends it.
+pub(crate) const STYLE_ESCAPE_START: char = '\u{1b}';
+pub(crate) const STYLE_ESCAPE_END: char = 'm';
 /// The human report lists at most this many models.
 pub(crate) const HUMAN_MODEL_LIMIT: usize = 100;
 pub(crate) const MIN_MODEL_NAME_WIDTH: usize = 24;

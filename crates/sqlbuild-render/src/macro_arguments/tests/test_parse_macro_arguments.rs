@@ -71,6 +71,24 @@ fn given_argument_text_when_parsing_then_values_match_python_literals() {
             expected_plan: "Err(ArgumentError { detail: \"use \'...\' (Ellipsis)\", help: \"Pass None, or a string the macro understands, instead of \'...\'\", line: 1, column: 1 })",
         },
         ParseMacroArgumentsTestCase {
+            description: "a list dict key is rejected at the key",
+            text: "{'a': 1, [1]: 2}",
+            nested: &[],
+            expected_plan: "Err(ArgumentError { detail: \"use a list or dict as a dict key\", help: \"Use a string, number, True, False, None, or a tuple of them as a dict key\", line: 1, column: 10 })",
+        },
+        ParseMacroArgumentsTestCase {
+            description: "a tuple dict key holding a list is rejected",
+            text: "{(1, [2]): 2}",
+            nested: &[],
+            expected_plan: "Err(ArgumentError { detail: \"use a list or dict as a dict key\", help: \"Use a string, number, True, False, None, or a tuple of them as a dict key\", line: 1, column: 2 })",
+        },
+        ParseMacroArgumentsTestCase {
+            description: "tuple, number and reference dict keys are accepted",
+            text: "{(1, 'a'): 2, -1: 3, __ref('a'): 4}",
+            nested: &[],
+            expected_plan: "Ok(MacroArguments { positional: [Dict([(Tuple([Int { radix: 10, digits: \"1\" }, Str(\"a\")]), Int { radix: 10, digits: \"2\" }), (Negative(Int { radix: 10, digits: \"1\" }), Int { radix: 10, digits: \"3\" }), (TypedReference { function: \"__ref\", name: \"a\" }, Int { radix: 10, digits: \"4\" })])], keywords: [], typed_references: [(\"__ref\", \"a\")] })",
+        },
+        ParseMacroArgumentsTestCase {
             description: "an f-string is rejected",
             text: "f'{x}'",
             nested: &[],

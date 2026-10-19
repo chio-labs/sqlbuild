@@ -11,6 +11,8 @@ const ELLIPSIS_HELP: &str = "Pass None, or a string the macro understands, inste
 const FORMATTED_HELP: &str = "Pass the parts as separate arguments and format them in the macro";
 const REFERENCE_HELP: &str = "Write one quoted resource name, for example __ref(\"orders\")";
 const UNPACKING_HELP: &str = "Write each argument or key out explicitly";
+const HASHABLE_KEY_HELP: &str = "Use a string, number, True, False, None, or a tuple of them as \
+    a dict key";
 const KEYWORD_HELP: &str = "Pass each keyword argument once, after every positional argument";
 const SURROGATE_HELP: &str = "Lone surrogates are not valid Unicode text and cannot be sent to a \
     warehouse; write the character itself or the escape of a valid code point";
@@ -106,6 +108,15 @@ pub(crate) fn keyword_expansion(position: usize) -> Failure {
 
 pub(crate) fn dict_unpacking(position: usize) -> Failure {
     failure("must not use dict unpacking", UNPACKING_HELP, position)
+}
+
+/// A dict key Python cannot hash: a list or dict, or a tuple containing one.
+pub(crate) fn unhashable_key(position: usize) -> Failure {
+    failure(
+        "use a list or dict as a dict key",
+        HASHABLE_KEY_HELP,
+        position,
+    )
 }
 
 pub(crate) fn keyword_order(detail: &str, position: usize) -> Failure {

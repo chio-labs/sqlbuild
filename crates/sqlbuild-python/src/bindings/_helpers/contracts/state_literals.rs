@@ -18,15 +18,18 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_state::freshness::constants::TEXT_TIMESTAMP_STATE_VALUE_TYPE as TEXT_TIMESTAMP_TYPE;
 const DATE_TYPE: &str = "date";
+/// The portable SQL type state timestamps cast to unless the warehouse names a finer one.
+const SQL_TIMESTAMP_TYPE: &str = "TIMESTAMP";
 const JSON_TYPE: &str = "json";
 
-/// `render_state_sql_literal(*, value, declared_type)`: `value` as its state column's literal.
+/// `value` as its state column's literal, timestamps cast to `timestamp_type` when given.
 #[pyfunction]
-#[pyo3(signature = (*, value, declared_type))]
+#[pyo3(signature = (*, value, declared_type, timestamp_type = None))]
 pub(crate) fn render_state_sql_literal(
     py: Python<'_>,
     value: &Bound<'_, PyAny>,
     declared_type: &str,
+    timestamp_type: Option<&str>,
 ) -> PyResult<String> {
     if value.is_none() {
         return Ok(typed_null(declared_type).to_owned());
@@ -60,7 +63,9 @@ pub(crate) fn render_state_sql_literal(
             }
             Ok(if value.is_truthy()? { "TRUE" } else { "FALSE" }.to_owned())
         }
-        TIMESTAMP_TYPE | TEXT_TIMESTAMP_TYPE => timestamp_literal(value, declared_type),
+        TIMESTAMP_TYPE | TEXT_TIMESTAMP_TYPE => {
+            timestamp_literal(value, declared_type, timestamp_type)
+        }
         DATE_TYPE => {
             let datetime = py.import(DATETIME_MODULE)?;
             if value.is_instance(&native_field(&datetime, "datetime")?)?
@@ -81,7 +86,11 @@ pub(crate) fn render_state_sql_literal(
     }
 }
 
-fn timestamp_literal(value: &Bound<'_, PyAny>, declared_type: &str) -> PyResult<String> {
+fn timestamp_literal(
+    value: &Bound<'_, PyAny>,
+    declared_type: &str,
+    timestamp_type: Option<&str>,
+) -> PyResult<String> {
     let py: Python<'_> = value.py();
     let datetime = py.import(DATETIME_MODULE)?;
     if !value.is_instance(&native_field(&datetime, "datetime")?)? {
@@ -103,7 +112,10 @@ fn timestamp_literal(value: &Bound<'_, PyAny>, declared_type: &str) -> PyResult<
     if declared_type == TEXT_TIMESTAMP_TYPE {
         return Ok(rendered);
     }
-    Ok(format!("CAST({rendered} AS TIMESTAMP)"))
+    Ok(format!(
+        "CAST({rendered} AS {})",
+        timestamp_type.unwrap_or(SQL_TIMESTAMP_TYPE)
+    ))
 }
 
 fn json_literal(value: &Bound<'_, PyAny>) -> PyResult<String> {

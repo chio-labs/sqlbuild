@@ -14,7 +14,7 @@ use crate::yaml_entries::_helpers::integrations::source_integration_loader;
 use crate::yaml_entries::main::integration_loader_name::integration_loader_name;
 use crate::yaml_entries::models::{ParsedIntegrationLoader, ParsedSourceEntry, ParsedYamlColumn};
 
-const ENTRY_KEYS: [&str; 18] = [
+const ENTRY_KEYS: [&str; 19] = [
     "audits",
     "columns",
     "contract",
@@ -22,6 +22,7 @@ const ENTRY_KEYS: [&str; 18] = [
     "database",
     "description",
     "expression",
+    "final",
     "freshness",
     "ingestr",
     "load_batch_size",
@@ -137,6 +138,8 @@ fn with_settings<N: AuthoredNode>(
     parsed.database = optional_text(entry, "database", site)?;
     parsed.schema = optional_text(entry, "schema", site)?;
     parsed.table = optional_text(entry, "table", site)?;
+    parsed.read_final = optional_bool(entry, "final", site)?
+        .is_some_and(|node| node.kind() == NodeKind::Bool(true));
     parsed.freshness = freshness(entry, &shape.columns, path)?;
     parsed.write_strategy = write_strategy(entry, site)?;
     parsed.load_batch_size = positive_int(entry, "load_batch_size", path)?;
@@ -225,6 +228,9 @@ fn validate_source<N: AuthoredNode>(
             "cannot define expression with {}",
             relation_keys.join(", ")
         )));
+    }
+    if entry.expression.is_some() && entry.read_final {
+        return Err(error("cannot define final with expression"));
     }
     if entry.expression.is_some()
         && entry.type_enforcement == Some(true)

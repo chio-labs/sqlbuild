@@ -111,3 +111,13 @@ pub(crate) const JSON_FORMAT: &str = "json";
 pub(crate) const CSV_FORMAT: &str = "csv";
 /// What replaces the cut tail of a transient status message.
 pub(crate) const STATUS_ELLIPSIS: &str = "...";
+/// The resource kind of audits and the prefix of their resource identifiers.
+pub(crate) const AUDIT_RESOURCE_KIND: &str = "audit";
+pub(crate) const AUDIT_RESOURCE_PREFIX: &str = "audit:";
+/// Audit outcomes and the status words their rows show.
+pub(crate) const AUDIT_OUTCOME_STATUSES: [(&str, &str); 4] = [
+    ("pass", "PASS"),
+    ("warn", "WARN"),
+    ("error", "FAIL"),
+    ("insufficient", "INSUFFICIENT"),
+];

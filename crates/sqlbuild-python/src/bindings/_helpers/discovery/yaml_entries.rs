@@ -296,6 +296,7 @@ fn source_entry<'py>(
     fields.set_item("database", optional(py, source.database.as_ref()))?;
     fields.set_item("schema", optional(py, source.schema.as_ref()))?;
     fields.set_item("table", optional(py, source.table.as_ref()))?;
+    fields.set_item("final", source.read_final)?;
     fields.set_item("loader", source.loader.as_deref())?;
     fields.set_item("managed", source.managed)?;
     fields.set_item("integration_loader", integration)?;

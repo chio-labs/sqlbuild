@@ -91,7 +91,7 @@ materialized = "view"
 | Field | Description |
 |-------|-------------|
 | `name` | Project name. Used in fingerprint tracking and manifest generation. |
-| `adapter` | Database adapter: `duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlite`, or `sqlserver`. See [Adapters](adapters.md). |
+| `adapter` | Database adapter: `duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlite`, `sqlserver`, or `clickhouse`. See [Adapters](adapters.md). |
 
 ### Optional fields
 

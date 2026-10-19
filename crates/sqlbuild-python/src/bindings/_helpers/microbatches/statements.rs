@@ -53,20 +53,26 @@ impl Layout {
             .map_or("", |index| self.declared[index].as_str())
     }
 
-    /// One event's column literals in column order.
-    fn literals(&self, event: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    /// One event's column literals in column order, timestamps cast to `timestamp_type`.
+    fn literals(
+        &self,
+        event: &Bound<'_, PyAny>,
+        timestamp_type: Option<&str>,
+    ) -> PyResult<Vec<String>> {
         let py: Python<'_> = event.py();
         let values: Bound<'_, PyAny> = host::entry(py, ExecutorHost::MicrobatchEventCodec)?
             .call_method1("values", (event,))?;
         values
             .try_iter()?
             .zip(&self.declared)
-            .map(|(value, declared)| render_state_sql_literal(py, &value?, declared))
+            .map(|(value, declared)| {
+                render_state_sql_literal(py, &value?, declared, timestamp_type)
+            })
             .collect()
     }
 
     fn literal(&self, column: &str, value: &Bound<'_, PyAny>) -> PyResult<String> {
-        render_state_sql_literal(value.py(), value, self.declared(column))
+        render_state_sql_literal(value.py(), value, self.declared(column), None)
     }
 }
 
@@ -120,16 +126,17 @@ fn events_table<'py>(
 
 /// Build one guarded set-based insert for events in the same state table.
 #[pyfunction(name = "build_microbatch_insert_many_sql")]
-#[pyo3(signature = (*, events, render_qualified_name))]
+#[pyo3(signature = (*, events, render_qualified_name, timestamp_type = None))]
 fn insert_many(
     events: &Bound<'_, PyAny>,
     render_qualified_name: &Bound<'_, PyAny>,
+    timestamp_type: Option<&str>,
 ) -> PyResult<String> {
     let (listed, table) = events_table(events, render_qualified_name, EMPTY_INSERT)?;
     let layout: Layout = Layout::new(events.py())?;
     let rows: Vec<Vec<String>> = listed
         .iter()
-        .map(|event| layout.literals(event))
+        .map(|event| layout.literals(event, timestamp_type))
         .collect::<PyResult<_>>()?;
     Ok(insert_many_sql(&table, &layout.columns, &rows))
 }
