@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.162.0](https://github.com/chio-labs/sqlbuild/compare/v0.161.0...v0.162.0) (2026-10-19)
+
+
+### Features
+
+* store Recall history in ClickHouse and add replacement sinks ([#1163](https://github.com/chio-labs/sqlbuild/issues/1163)) ([41e183e](https://github.com/chio-labs/sqlbuild/commit/41e183e8203c5685e0ff668e42fadb3e046402af))
+
 ## [0.161.0](https://github.com/chio-labs/sqlbuild/compare/v0.160.2...v0.161.0) (2026-10-19)
 
 
