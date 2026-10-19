@@ -5235,6 +5235,8 @@ def json_diagnostic_codes(stdout: str) -> tuple[str, ...]:
 
     document: dict[str, Any] = json.loads(stdout or "{}")
     return tuple(str(diagnostic["code"]) for diagnostic in document.get("diagnostics", ()))
+
+
 def run_delta_compile(
     *, project_dir: Path, args: tuple[str, ...], env: dict[str, str]
 ) -> DeltaCompileOutcome:

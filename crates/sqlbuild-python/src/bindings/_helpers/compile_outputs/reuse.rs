@@ -236,6 +236,7 @@ impl NativeReuseAttempt {
                     .extend(merge.environment_names);
                 compile.template_environment_names.sort();
                 compile.template_environment_names.dedup();
+                compile.module_paths.extend(merge.module_paths);
             }
             let attempt = self.attempt.lock().map_err(poisoned)?;
             let result: RecordResult = py

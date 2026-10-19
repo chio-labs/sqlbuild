@@ -351,6 +351,9 @@ pub(crate) fn parse_sources_document<'py>(
     let referenced: Option<std::collections::BTreeSet<String>> =
         crate::bindings::_helpers::compile_delta::context::injection()
             .and_then(|injection| injection.source_names.clone());
+    crate::bindings::_helpers::compile_delta::context::record_source_reads(
+        loaded_sources(&sources).iter().map(String::as_str),
+    );
     let mut built: Vec<Bound<'py, PyAny>> = Vec::with_capacity(sources.len());
     for source in &sources {
         if let Some(referenced) = &referenced
@@ -362,6 +365,22 @@ pub(crate) fn parse_sources_document<'py>(
         built.push(source_entry(py, &classes, source)?);
     }
     PyTuple::new(py, built)
+}
+
+/// The sources a loader fills, which own that loader wherever the project is compiled.
+fn loaded_sources(sources: &[ParsedSourceEntry<PyNode<'_>>]) -> Vec<String> {
+    sources
+        .iter()
+        .filter(|source| {
+            source.managed || source.loader.is_some() || source.integration_loader.is_some()
+        })
+        .filter_map(|source| {
+            let Ok(name) = source.name.0.extract::<String>() else {
+                return None;
+            };
+            Some(name)
+        })
+        .collect()
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

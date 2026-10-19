@@ -190,6 +190,7 @@ struct Rerun {
 }
 
 impl Rerun {
+    /// The rerun set grown by every SQL test it touches and every model those tests run.
     fn with_tests(mut self, image: &ProjectImage, changed_tests: &BTreeSet<String>) -> Self {
         self.test_paths = changed_tests.clone();
         let test_files: BTreeSet<&str> = image
@@ -204,9 +205,29 @@ impl Rerun {
                 }
             }
         }
-        for test in &image.tests {
-            if test.chain.iter().any(|name| self.models.contains(name)) {
+        let model_paths: HashMap<&str, &str> = image
+            .models
+            .iter()
+            .map(|model| (model.name.as_str(), model.relative_path.as_str()))
+            .collect();
+        let mut growing: bool = true;
+        while growing {
+            growing = false;
+            for test in &image.tests {
+                if !self.test_paths.contains(&test.relative_path)
+                    && !test.chain.iter().any(|name| self.models.contains(name))
+                {
+                    continue;
+                }
                 self.test_paths.insert(test.relative_path.clone());
+                for name in &test.chain {
+                    if let Some(path) = model_paths.get(name.as_str())
+                        && self.models.insert(name.clone())
+                    {
+                        self.model_paths.insert((*path).to_owned());
+                        growing = true;
+                    }
+                }
             }
         }
         self.tests = image
@@ -1013,6 +1034,13 @@ fn finished<'py>(
     let merge: RecordMerge = RecordMerge {
         kept: base.stored.inputs.target_files.clone(),
         environment_names: base.image.environment_names.clone(),
+        module_paths: base
+            .stored
+            .inputs
+            .modules
+            .iter()
+            .map(|(path, _, _)| path.clone())
+            .collect(),
     };
     let json_output: bool = base.image.json_output;
     let Base {

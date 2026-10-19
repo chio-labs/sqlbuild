@@ -41,6 +41,7 @@ use crate::bindings::_helpers::compile_driver::python_calls::{call_with, importe
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::compile_outputs::reuse::{ReuseCheckPy, check_compile_reuse};
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
+use crate::bindings::_helpers::macro_bridge::first_compile::keep_delta_claim;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
@@ -553,6 +554,7 @@ fn compiled_with_delta<'py>(
     )?;
     match delta {
         DeltaOutcome::Finished(finished) if !verifying => {
+            keep_delta_claim();
             write_held()?;
             let (files, models) = (finished.changed_files, finished.rerun_models);
             let committing: std::time::Instant = std::time::Instant::now();
@@ -569,6 +571,7 @@ fn compiled_with_delta<'py>(
             return Ok(code);
         }
         DeltaOutcome::Raised(error) if !verifying => {
+            keep_delta_claim();
             write_held()?;
             return Err(error);
         }

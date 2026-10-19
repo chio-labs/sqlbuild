@@ -818,6 +818,17 @@ class BrokenEditInvalidationTestCase:
 
 
 @dataclass(frozen=True)
+class StoredMacroDeltaFallbackTestCase:
+    """A project edit whose delta compile falls back after compiling its round."""
+
+    description: str
+    edited_path: str
+    old: str
+    new: str
+    expected_outcome: tuple[int, int, bool, int]
+
+
+@dataclass(frozen=True)
 class StoredMacroModuleEditTestCase:
     """An outside module behind a stored macro call, edited after a compile that reused the call."""
 

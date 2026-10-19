@@ -308,6 +308,8 @@ pub(crate) struct RecordMerge {
     pub(crate) kept: Vec<sqlbuild_cache::project_snapshot::models::PathStamp>,
     /// The template environment names the stored compile read.
     pub(crate) environment_names: Vec<String>,
+    /// The module files the stored compile depended on, such as those behind stored macro calls.
+    pub(crate) module_paths: Vec<String>,
 }
 
 /// Hand the next reuse record the image to keep beside it.
