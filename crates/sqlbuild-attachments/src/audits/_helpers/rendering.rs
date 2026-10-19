@@ -2,6 +2,7 @@
 
 use crate::audits::_helpers::parameters::{RenderStop, render_parameterized_sql};
 use crate::audits::_helpers::policies::{resolve_run_scope, resolve_severity};
+use crate::audits::constants::{MODEL_RESOURCE, SEED_RESOURCE, SOURCE_RESOURCE};
 use crate::audits::models::{ArgumentValue, AuditAttachment, PolicySource};
 
 /// Severity first, then run scope, as Python resolves them after expanding the SQL.
@@ -39,14 +40,35 @@ pub(crate) fn rendered(
 ) -> Result<String, String> {
     render_parameterized_sql(sql, arguments).map_err(|stop| match stop {
         RenderStop::MissingArgument(name) => format!(
-            "{} is missing argument '{name}' for generic audit '{}'",
-            attachment.owner_label, attachment.definition_name
+            "{} is missing argument '{name}' for generic audit '{}'{}",
+            attachment.owner_label,
+            attachment.definition_name,
+            owner_argument_hint(attachment, &name)
         ),
         RenderStop::UnsupportedValue(name) => format!(
             "{} generic audit '{}' argument '{name}' uses an unsupported value",
             attachment.owner_label, attachment.definition_name
         ),
     })
+}
+
+/// Why `@model` is missing on a seed or source: each owner passes its own kind's name argument.
+fn owner_argument_hint(attachment: &AuditAttachment, missing: &str) -> String {
+    let owner_arguments: [&str; 3] = [MODEL_RESOURCE, SOURCE_RESOURCE, SEED_RESOURCE];
+    if !owner_arguments.contains(&missing) {
+        return String::new();
+    }
+    let Some((owner_kind, _)) = attachment
+        .implicit_arguments
+        .iter()
+        .find(|(argument, _)| owner_arguments.contains(&argument.as_str()))
+    else {
+        return String::new();
+    };
+    format!(
+        "; a {owner_kind} audit receives '{owner_kind}' and 'relation', not '{missing}', so read \
+         the attached relation with @relation"
+    )
 }
 
 /// `merge_audit_arguments`: an explicit argument may repeat an implicit one only as equal text.

@@ -230,7 +230,8 @@ Generic audit SQL uses `@name` for parameter placeholders. These are resolved by
 | Parameter | Description |
 |-----------|-------------|
 | `@column` | The column name (auto-populated for column-level audits) |
-| `@relation` | The target relation (auto-populated from the attached model or source) |
+| `@relation` | The target relation (auto-populated from the attached model, source or seed) |
+| `@model`, `@source`, `@seed` | The attached resource's name. Each is set only for its own kind, so an audit that attaches to more than one kind reads `@relation` |
 | `@'name'` | A quoted parameter passed from the audit declaration (e.g. `@'values'`) |
 | `@name` | An unquoted parameter passed from the audit declaration (e.g. `@expression`) |
 
