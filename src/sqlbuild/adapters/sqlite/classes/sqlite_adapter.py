@@ -17,6 +17,8 @@ from types import MappingProxyType
 from typing import Any, ClassVar
 
 from sqlbuild._native import (
+    MICROBATCH_END_SENTINEL,
+    MICROBATCH_START_SENTINEL,
     SeedCsvSettings,
     SourceFreshnessRecord,
     SqlValue,
@@ -114,10 +116,12 @@ from sqlbuild.adapters.sqlite._helpers.tables import (
     decimal_scale,
     split_create_table_as,
 )
+from sqlbuild.adapters.sqlite._helpers.timestamps import canonical_timestamp_text
 from sqlbuild.adapters.sqlite.classes.sqlite_connection import SqliteConnection
 from sqlbuild.adapters.sqlite.constants import (
     BOOLEAN_TYPE_MARKER,
     CONNECTION_KEYS,
+    CURSOR_TEXT_FUNCTION_NAME,
     DEFAULT_BUSY_TIMEOUT_SECONDS,
     HASH_FUNCTION_NAME,
     INSERT_KEYWORD,
@@ -195,6 +199,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             uri=read_only,
         )
         raw_connection.create_function(HASH_FUNCTION_NAME, 1, _sqb_hash, deterministic=True)
+        raw_connection.create_function(
+            CURSOR_TEXT_FUNCTION_NAME, 1, _cursor_text, deterministic=True
+        )
         connection: SqliteConnection = SqliteConnection(
             raw_connection=raw_connection, path=path, busy_timeout_seconds=busy_timeout
         )
@@ -352,9 +359,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> str:
         if cursor_column is None or start_cursor is None:
             return ""
-        clauses: list[str] = [f"{cursor_column} >= '{start_cursor.value}'"]
+        clauses: list[str] = [f"{cursor_column} >= {self._cursor_value_literal(start_cursor)}"]
         if end_cursor is not None:
-            clauses.append(f"{cursor_column} < '{end_cursor.value}'")
+            clauses.append(f"{cursor_column} < {self._cursor_value_literal(end_cursor)}")
         return " AND ".join(clauses)
 
     def schema_exists(
@@ -555,7 +562,7 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         raise AdapterUserError(
             message=(
                 f"SQLite cannot create function '{destination}': SQLite has no CREATE FUNCTION, "
-                f"so {language.value} functions and table functions are not supported"
+                f"so {language.value.upper()} functions and table functions are not supported"
             ),
             code=UNSUPPORTED_FEATURE_CODE,
             help="Inline the expression in the model, or use a macro.",
@@ -2573,17 +2580,24 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return ExpressionInferenceProfile(sql_analysis_dialect=self.sql_analysis_dialect())
 
     def render_cursor_bound_literal(self, *, value: str, cursor_type: str | None) -> str:
-        """Render cursor bounds as plain literals; SQLite timestamps are ISO-8601 text."""
+        """Render bounds as literals; timestamps in the text form SQLite stores and compares."""
 
-        if cursor_type == CursorKind.INTEGER:
+        if str(cursor_type).lower() == CursorKind.INTEGER:
             return value
-        return _quote_sql_string(value)
+        if value in {MICROBATCH_START_SENTINEL, MICROBATCH_END_SENTINEL}:
+            return f"{CURSOR_TEXT_FUNCTION_NAME}({_quote_sql_string(value)})"
+        return _quote_sql_string(canonical_timestamp_text(value))
 
     def default_table_promotion_mode(self) -> TablePromotionMode:
         return TablePromotionMode.STAGED
 
     def default_promotion_strategy(self) -> PromotionStrategy:
         return PromotionStrategy.ATOMIC_SWAP
+
+    def _cursor_value_literal(self, cursor: CursorValue) -> str:
+        value: datetime | int = cursor.value
+        text: str = value.isoformat() if isinstance(value, datetime) else str(value)
+        return self.render_cursor_bound_literal(value=text, cursor_type=cursor.kind)
 
     def _index_sqls(
         self,
@@ -2625,6 +2639,10 @@ def _lowered(types: object) -> Mapping[str, str]:
     if not isinstance(types, Mapping):
         return MappingProxyType({})
     return MappingProxyType({str(name).lower(): str(kind) for name, kind in types.items()})
+
+
+def _cursor_text(value: str | int | float | None) -> str | int | float | None:
+    return canonical_timestamp_text(value) if isinstance(value, str) else value
 
 
 def _sqb_hash(value: object) -> str | None:
