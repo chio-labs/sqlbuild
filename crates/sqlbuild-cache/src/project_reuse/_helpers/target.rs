@@ -96,7 +96,8 @@ fn matches_recorded(
     }
 }
 
-/// Each expected artifact's stamp: the vouched one for a kept artifact, read for a written one.
+/// Each expected artifact's stamp: the vouched one for an artifact kept as it was vouched for,
+/// read for any other.
 fn vouched_stamps(expected: &BTreeMap<&str, &RecordedArtifact>, vouched: &[PathStamp]) -> Stamps {
     let vouched: HashMap<&str, &PathStamp> = vouched
         .iter()
@@ -105,9 +106,12 @@ fn vouched_stamps(expected: &BTreeMap<&str, &RecordedArtifact>, vouched: &[PathS
     expected
         .iter()
         .filter_map(|(path, artifact)| match artifact {
-            RecordedArtifact::Kept { .. } => vouched
-                .get(path)
-                .map(|stamp| ((*path).to_owned(), (*stamp).clone())),
+            RecordedArtifact::Kept { size, mtime_ns } => match vouched.get(path) {
+                Some(stamp) if stamp.size == *size && stamp.mtime_ns == *mtime_ns => {
+                    Some(((*path).to_owned(), (*stamp).clone()))
+                }
+                _ => keyed_stamp(path),
+            },
             RecordedArtifact::Written { .. } => keyed_stamp(path),
         })
         .collect()

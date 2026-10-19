@@ -13756,6 +13756,7 @@ class SettingsConfig(NativeRecord):
     test_timeout_seconds: int | None
     scenario_timeout: str | None
     scenario_timeout_seconds: int | None
+    delta_compile: bool
     def __init__(
         self,
         sql_analysis: bool = ...,
@@ -13774,6 +13775,7 @@ class SettingsConfig(NativeRecord):
         test_timeout_seconds: int | None = ...,
         scenario_timeout: str | None = ...,
         scenario_timeout_seconds: int | None = ...,
+        delta_compile: bool = ...,
     ) -> None: ...
     @property
     def sql_validation(self) -> bool: ...

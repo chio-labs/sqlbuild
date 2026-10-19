@@ -140,6 +140,11 @@ pub(crate) fn start_capture() {
     *locked(&CAPTURE) = Some(ImageCapture::default());
 }
 
+/// Stop capturing without keeping anything, for a project that turns delta compiles off.
+pub(crate) fn stop_capture() {
+    *locked(&CAPTURE) = None;
+}
+
 /// Stop capturing and take what was captured.
 pub(crate) fn take_capture() -> Option<ImageCapture> {
     locked(&CAPTURE).take()

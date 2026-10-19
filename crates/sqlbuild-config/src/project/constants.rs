@@ -40,9 +40,10 @@ pub(crate) const ADDITIONAL_HELP_SEPARATOR: &str = "\n  = help: ";
 pub(crate) const UNIT_TEST_MAX_REAL_MODELS_KEY: &str = "unit_test_max_real_models";
 pub(crate) const DEFAULT_UNIT_TEST_MAX_REAL_MODELS: i64 = 10;
 pub(crate) const TEST_TIMEOUT_KEY: &str = "test_timeout";
+pub(crate) const DELTA_COMPILE_KEY: &str = "delta_compile";
 pub(crate) const SCENARIO_TIMEOUT_KEY: &str = "scenario_timeout";
 pub(crate) const DEFAULT_TEST_TIMEOUT: &str = "30s";
-pub(crate) const SETTINGS_KEYS: [&str; 14] = [
+pub(crate) const SETTINGS_KEYS: [&str; 15] = [
     "sql_analysis",
     "require_sql_analysis",
     "query_change_tracking",
@@ -57,6 +58,7 @@ pub(crate) const SETTINGS_KEYS: [&str; 14] = [
     "unit_test_max_real_models",
     "test_timeout",
     "scenario_timeout",
+    "delta_compile",
 ];
 pub(crate) const DEFAULTS_KEYS: [&str; 33] = [
     "append_cursor_inclusive",

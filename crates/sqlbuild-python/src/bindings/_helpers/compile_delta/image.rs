@@ -14,7 +14,7 @@ use crate::bindings::_helpers::compile_delta::header_keys::HeaderKeys;
 use crate::bindings::_helpers::compile_delta::image_codec::{Decoder, Encoder};
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
-const IMAGE_FORMAT: &str = "sqlbuild-project-image-v5";
+pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v5";
 const GATE_SECTION: &str = "gate";
 const FACTS_SECTION: &str = "facts";
 const RULES_SECTION: &str = "rules";

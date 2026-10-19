@@ -77,12 +77,11 @@ fn encode_value(value: &AuthoredValue, out: &mut Vec<u8>) {
     }
 }
 
-/// The pseudo header key holding a digest of the sources a model's authored query names.
-const REFERENCES_KEY: &str = "\u{0}sources";
-const SOURCE_KIND: &str = "source";
+/// The pseudo header key holding a digest of the references a model's authored query names.
+const REFERENCES_KEY: &str = "\u{0}references";
 
-/// A digest of the source calls `query_sql` names, scanned with plain `--` comments. A delta
-/// compile discovers only the sources its models read before, so an edit changing it falls back.
+/// A digest of the reference calls `query_sql` names, scanned with plain `--` comments. An edit
+/// that changes them changes what the model reads, which a delta compile does not patch.
 fn references_digest(query_sql: &str) -> String {
     let syntax: LexicalSyntax = LexicalSyntax {
         line_comment_prefixes: vec![LINE_COMMENT.to_owned()],
@@ -91,11 +90,7 @@ fn references_digest(query_sql: &str) -> String {
     let mut buffer: Vec<u8> = Vec::new();
     match extract_sql_references(query_sql, &syntax) {
         ReferenceExtraction::Extracted(scan) => {
-            for reference in scan
-                .references
-                .iter()
-                .filter(|reference| reference.kind == SOURCE_KIND)
-            {
+            for reference in &scan.references {
                 for part in [
                     reference.kind,
                     &reference.name,
@@ -205,9 +200,7 @@ pub(crate) fn header_change(
         return HeaderChange::Unchanged;
     }
     if changed.contains(REFERENCES_KEY) {
-        return HeaderChange::Unsupported(format!(
-            "{relative_path} changed which sources it reads"
-        ));
+        return HeaderChange::Unsupported(format!("{relative_path} changed what it references"));
     }
     for key in &changed {
         if key == MATERIALIZED_KEY {
