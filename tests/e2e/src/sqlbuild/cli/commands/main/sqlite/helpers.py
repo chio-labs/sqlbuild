@@ -10,7 +10,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb, run_sqb
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    prepare_waffle_shop,
+    query_duckdb,
+    run_sqb,
+)
 
 SQLITE_FILE: str = "warehouse.sqlite"
 DUCKDB_FILE: str = "warehouse.duckdb"
@@ -722,3 +726,188 @@ def run_sqb_commands(
     return tuple(
         run_sqb(command=("--no-color", *command), project_dir=project_dir) for command in commands
     )
+
+
+WAFFLE_SQLITE_FILE: str = "waffle_shop.sqlite"
+_WAFFLE_SQLITE_TOML: str = (
+    'name = "waffle_shop"\n'
+    'adapter = "sqlite"\n'
+    'default_target = "dev"\n\n'
+    "[connection]\n"
+    f'path = "{WAFFLE_SQLITE_FILE}"\n\n'
+    "[settings]\n"
+    'default_audit_severity = "warn"\n\n'
+    "[defaults]\n"
+    'materialized = "table"\n\n'
+    "[targets.dev]\n"
+    f'schema = "{SCHEMA}"\n\n'
+    "[path_defaults.staging]\n"
+    'materialized = "view"\n'
+)
+_WAFFLE_SQLITE_UNSUPPORTED_FILES: tuple[str, ...] = (
+    "functions/sql/customer_orders.sql",
+    "functions/sql/is_completed_order.sql",
+    "functions/python/is_completed_order_py.py",
+    "tests/unit/test_customer_orders_table_fn.sql",
+    "tests/unit/test_is_completed_order_udf.sql",
+    "models/marts/daily_order_partitioned.sql",
+)
+_WAFFLE_SQLITE_REWRITES: tuple[tuple[str, str, str], ...] = (
+    (
+        "models/marts/fact_orders.sql",
+        '__udf("is_completed_order")(o.status) AS is_completed_order,',
+        "o.status = 'completed' AS is_completed_order,",
+    ),
+    (
+        "models/marts/fact_orders.sql",
+        '__udf("is_completed_order_py")(o.status) AS is_completed_order_py,',
+        "o.status = 'completed' AS is_completed_order_py,",
+    ),
+    (
+        "models/marts/_macros/time.py",
+        "    return f\"DATE_TRUNC('{grain}', {expression})\"",
+        '    if ctx.adapter_name == "sqlite" and grain == "day":\n'
+        "        return f\"datetime({expression}, 'start of day')\"\n"
+        '    if ctx.adapter_name == "sqlite":\n'
+        "        return f\"datetime({expression}, 'start of day', "
+        "strftime('+%H hours', {expression}))\"\n"
+        "    return f\"DATE_TRUNC('{grain}', {expression})\"",
+    ),
+    ("models/marts/daily_revenue.sql", "CAST(o.ordered_at AS DATE)", "date(o.ordered_at)"),
+)
+_TIMESTAMP_LITERAL_CAST: re.Pattern[str] = re.compile(r"CAST\(('[^']*') AS TIMESTAMP\)")
+WAFFLE_ROW_COUNT_RELATIONS: tuple[str, ...] = (
+    "raw_customers",
+    "raw_orders",
+    "waffle_types",
+    "stg_customers",
+    "stg_orders",
+    "stg_payments",
+    "fact_orders",
+    "dim_customers",
+    "daily_revenue",
+    "scenario_order_prices",
+    "customer_status_snapshot",
+    "order_status_index",
+    "hourly_order_activity",
+    "daily_activity_rollup",
+    "hourly_activity_with_daily_context",
+)
+
+
+def prepare_sqlite_waffle_shop(*, tmp_path: Path) -> Path:
+    """Copy the waffle shop and adapt it to SQLite's documented platform limits.
+
+    SQLite has no CREATE FUNCTION, so SQL and Python functions and their unit tests are removed and
+    the completed-order check is inlined. SQLite has no DATE_TRUNC, so the truncation macro uses
+    SQLite date functions. `CAST(x AS DATE)` and `CAST(x AS TIMESTAMP)` keep only the leading number
+    in SQLite, so the daily revenue model uses `date(...)`, the payments source writes timestamps
+    as text, and the partition-tracked model, whose materialization deletes by `CAST(... AS DATE)`,
+    is removed.
+    """
+
+    project_dir: Path = prepare_waffle_shop(tmp_path)
+    (project_dir / "sqlbuild_project.toml").write_text(_WAFFLE_SQLITE_TOML, encoding="utf-8")
+    relative_path: str
+    for relative_path in _WAFFLE_SQLITE_UNSUPPORTED_FILES:
+        (project_dir / relative_path).unlink()
+    old: str
+    new: str
+    for relative_path, old, new in _WAFFLE_SQLITE_REWRITES:
+        _replace_in_file(path=project_dir / relative_path, old=old, new=new)
+    sources_path: Path = project_dir / "sources" / "raw.yml"
+    sources_path.write_text(
+        _TIMESTAMP_LITERAL_CAST.sub(r"\1", sources_path.read_text(encoding="utf-8")),
+        encoding="utf-8",
+    )
+    return project_dir
+
+
+def _replace_in_file(*, path: Path, old: str, new: str) -> None:
+    contents: str = path.read_text(encoding="utf-8")
+    assert old in contents, f"{path} no longer contains {old!r}"
+    path.write_text(contents.replace(old, new), encoding="utf-8")
+
+
+def waffle_row_counts(*, adapter: str, project_dir: Path) -> dict[str, int]:
+    """Count the rows of every compared waffle shop relation in either engine."""
+
+    return {
+        relation: _WAFFLE_ROW_COUNTERS[adapter](project_dir, relation)
+        for relation in WAFFLE_ROW_COUNT_RELATIONS
+    }
+
+
+def _sqlite_waffle_row_count(project_dir: Path, relation: str) -> int:
+    rows: tuple[tuple[object, ...], ...] = sqlite_rows(
+        db_path=project_dir / WAFFLE_SQLITE_FILE,
+        sql=f'SELECT COUNT(*) FROM "{SCHEMA}__{relation}"',
+    )
+    return int(str(rows[0][0]))
+
+
+def _duckdb_waffle_row_count(project_dir: Path, relation: str) -> int:
+    rows: list[tuple[Any, ...]] = query_duckdb(
+        db_path=project_dir / "waffle_shop.duckdb", sql=f"SELECT COUNT(*) FROM main.{relation}"
+    )
+    return int(rows[0][0])
+
+
+_WAFFLE_ROW_COUNTERS: MappingProxyType[str, Callable[[Path, str], int]] = MappingProxyType(
+    {"sqlite": _sqlite_waffle_row_count, "duckdb": _duckdb_waffle_row_count}
+)
+
+
+LOADER_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SQLITE_TOML,
+    "sources/raw.yml": """sources:
+  - name: raw_events
+    description: Order events from a loader.
+    managed: true
+    write_strategy: delete_insert
+    cursor_column: happened_at
+    columns:
+      - name: event_id
+        type: INTEGER
+      - name: happened_at
+        type: TIMESTAMP
+      - name: event_day
+        type: DATE
+      - name: logged_at
+        type: TIMESTAMP
+""",
+    "python/loaders/events.py": '''from datetime import date, datetime, timedelta, timezone
+
+from sqlbuild.loaders import loader
+
+
+@loader
+def raw_events(ctx: object) -> list[dict[str, object]]:
+    """Order events with naive, zoned and date values."""
+    _ = ctx
+    return [
+        {
+            "event_id": 1,
+            "happened_at": datetime(2026, 4, 1, 9, 15),
+            "event_day": date(2026, 4, 1),
+            "logged_at": datetime(2026, 4, 1, 11, 30, tzinfo=timezone(timedelta(hours=2))),
+        },
+        {
+            "event_id": 2,
+            "happened_at": datetime(2026, 4, 2, 8, 45, 30, 250000),
+            "event_day": date(2026, 4, 2),
+            "logged_at": None,
+        },
+    ]
+''',
+    "models/events.sql": """MODEL (description "Events from the source.", materialized table);
+
+SELECT event_id, happened_at, event_day, logged_at FROM __source("raw_events")
+""",
+}
+LOADED_EVENT_ROWS_SQL: str = (
+    "SELECT event_id, happened_at, event_day, logged_at FROM analytics__{relation} ORDER BY 1"
+)
+LOADED_EVENT_TYPES_SQL: str = (
+    "SELECT name, type FROM pragma_table_info('analytics__raw_events') ORDER BY cid"
+)

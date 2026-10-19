@@ -136,29 +136,45 @@ def build_rows_sql(
     )
     if not resolved_column_names:
         raise ExecutorInputError("Source loader returned no rows and source declares no columns")
-    declared_types: dict[str, str] = _declared_types(columns=columns)
     resolved_inferred_types: dict[str, LoaderLogicalType] = inferred_types or _infer_column_types(
         rows=rows
     )
-    column_sql_types: dict[str, str] = {
+    return adapter.render_loader_rows_select(
+        rows=rows,
+        column_names=resolved_column_names,
+        column_sql_types=loader_column_sql_types(
+            adapter=adapter,
+            columns=columns,
+            column_names=resolved_column_names,
+            inferred_types=resolved_inferred_types,
+        ),
+        inferred_types=resolved_inferred_types,
+    )
+
+
+def loader_column_sql_types(
+    *,
+    adapter: BaseAdapter,
+    columns: tuple[SourceColumnEntry, ...],
+    column_names: tuple[str, ...],
+    inferred_types: dict[str, LoaderLogicalType],
+) -> dict[str, str]:
+    """Return each loader column's declared or inferred warehouse type, when known."""
+
+    declared_types: dict[str, str] = _declared_types(columns=columns)
+    return {
         column_name: sql_type
-        for column_name in resolved_column_names
+        for column_name in column_names
         if (
             sql_type := _column_sql_type(
                 adapter=adapter,
                 column_name=column_name,
                 declared_types=declared_types,
-                inferred_types=resolved_inferred_types,
+                inferred_types=inferred_types,
             )
         )
         is not None
     }
-    return adapter.render_loader_rows_select(
-        rows=rows,
-        column_names=resolved_column_names,
-        column_sql_types=column_sql_types,
-        inferred_types=resolved_inferred_types,
-    )
 
 
 def _declared_types(*, columns: tuple[SourceColumnEntry, ...]) -> dict[str, str]:

@@ -143,6 +143,7 @@ from sqlbuild.adapters.sqlite.constants import (
     MISSING_RELATION_ERROR_FRAGMENT,
     SCHEMA_REGISTRY_TABLE,
     SQLITE_TABLE_TYPE,
+    TEMPORAL_TYPE_PATTERN,
     UNSUPPORTED_FEATURE_CODE,
     VERSION_TOO_OLD_CODE,
 )
@@ -156,6 +157,7 @@ _ENFORCED_COLUMN_TYPES: ContextVar[Mapping[str, str]] = ContextVar(
 _INFERRED_COLUMN_TYPES: ContextVar[Mapping[str, str]] = ContextVar(
     "sqlite_inferred_column_types", default=MappingProxyType({})
 )
+_TEMPORAL_TYPE: re.Pattern[str] = re.compile(TEMPORAL_TYPE_PATTERN, re.IGNORECASE)
 _TRUE_SEED_VALUES: frozenset[str] = frozenset({"true", "t", "yes", "y", "1"})
 _FALSE_SEED_VALUES: frozenset[str] = frozenset({"false", "f", "no", "n", "0"})
 
@@ -2237,7 +2239,9 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             return "1" if value else "0"
         if isinstance(value, int | float | Decimal):
             return str(value)
-        if isinstance(value, datetime | date):
+        if isinstance(value, datetime):
+            return _quote_sql_string(canonical_timestamp_text(value.isoformat()))
+        if isinstance(value, date):
             return _quote_sql_string(value.isoformat())
         return _quote_sql_string(str(value))
 
@@ -2249,13 +2253,12 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         column_sql_types: dict[str, str],
         inferred_types: dict[str, LoaderLogicalType],
     ) -> str:
-        """Render rows as one multi-row VALUES; SQLite names VALUES columns column1, column2."""
+        """Render uncast rows as one VALUES; staging declares the types and affinity converts."""
 
+        del column_sql_types
         if not rows:
             projections: str = ", ".join(
-                f"CAST(NULL AS {column_sql_types.get(column_name, 'TEXT')}) AS "
-                f"{self.render_identifier(column_name)}"
-                for column_name in column_names
+                f"NULL AS {self.render_identifier(column_name)}" for column_name in column_names
             )
             return f"SELECT {projections} WHERE 1 = 0"
         value_rows: list[str] = []
@@ -2270,12 +2273,7 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             value_rows.append(f"({literals})")
         values_sql: str = ", ".join(value_rows)
         select_sql: str = ", ".join(
-            (
-                f"column{index} AS {self.render_identifier(column_name)}"
-                if column_name not in column_sql_types
-                else f"CAST(column{index} AS {column_sql_types[column_name]}) "
-                f"AS {self.render_identifier(column_name)}"
-            )
+            f"column{index} AS {self.render_identifier(column_name)}"
             for index, column_name in enumerate(column_names, start=1)
         )
         return f"SELECT {select_sql} FROM (VALUES {values_sql}) AS __loader_rows"
@@ -2283,8 +2281,10 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def render_source_expression_cast(
         self, *, expression: str, target_type: str, alias: str
     ) -> str:
-        """Cast, rendering exact decimals as canonical fixed-scale text."""
+        """Cast, keeping date and time text and rendering exact decimals as fixed-scale text."""
 
+        if _TEMPORAL_TYPE.match(target_type) is not None:
+            return f"{expression} AS {alias}"
         scale: int | None = decimal_scale(target_type)
         if scale is None:
             return f"CAST({expression} AS {target_type}) AS {alias}"

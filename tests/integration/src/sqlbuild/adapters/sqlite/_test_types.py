@@ -40,6 +40,7 @@ class SqliteTypedTableTestCase:
     config: dict[str, object]
     expected_columns: tuple[ColumnInfo, ...]
     expected_rows: tuple[tuple[object, ...], ...]
+    setup_statements: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

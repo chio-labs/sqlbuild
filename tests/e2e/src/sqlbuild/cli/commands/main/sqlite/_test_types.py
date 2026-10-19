@@ -85,3 +85,21 @@ class SqliteCursorWindowE2ETestCase:
     events_csv: str
     commands: tuple[tuple[str, ...], ...]
     expected_order_ids: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class SqliteWaffleShopE2ETestCase:
+    description: str
+    commands: tuple[tuple[str, ...], ...]
+    expected_fragments: tuple[str, ...]
+    expected_row_counts: dict[str, int]
+    expected_return_code: int = 0
+
+
+@dataclass(frozen=True)
+class SqliteLoaderE2ETestCase:
+    description: str
+    builds: int
+    relations: tuple[str, ...]
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_declared_types: tuple[tuple[object, ...], ...]

@@ -14,6 +14,7 @@ from sqlbuild.adapter.relations.main.resolve_qualified_name_parts import (
 from sqlbuild.executor.load._helpers.rows import (
     build_rows_sql,
     iter_loader_row_batches,
+    loader_column_sql_types,
     update_loader_rows_schema,
 )
 from sqlbuild.executor.load.models import LoaderRowsSchema
@@ -83,6 +84,12 @@ def write_loader_rows_to_staging(
                 connection=connection,
                 destination=staging,
                 sql=sql,
+                config=_staging_config(
+                    adapter=adapter,
+                    source_entry=source_entry,
+                    column_names=column_names,
+                    inferred_types=inferred_types,
+                ),
                 statement_recorder=statement_recorder,
             )
             staging_created = True
@@ -99,9 +106,34 @@ def write_loader_rows_to_staging(
             connection=connection,
             destination=staging,
             sql=sql,
+            config=_staging_config(
+                adapter=adapter,
+                source_entry=source_entry,
+                column_names=column_names,
+                inferred_types=inferred_types,
+            ),
             statement_recorder=statement_recorder,
         )
     return rows_loaded
+
+
+def _staging_config(
+    *,
+    adapter: BaseAdapter,
+    source_entry: SourceEntry,
+    column_names: tuple[str, ...],
+    inferred_types: dict[str, LoaderLogicalType],
+) -> dict[str, Any]:
+    """Hand loader column types to adapters whose CTAS cannot keep them."""
+
+    return {
+        "inferred_column_types": loader_column_sql_types(
+            adapter=adapter,
+            columns=source_entry.columns,
+            column_names=column_names,
+            inferred_types=inferred_types,
+        )
+    }
 
 
 def resolve_loader_relations(

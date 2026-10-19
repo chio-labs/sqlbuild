@@ -267,6 +267,17 @@ def test_given_schemas_when_listing_relations_then_sqlite_reports_logical_names(
             ),
             expected_rows=((1, "12.50"), (2, "7.25"), (3, "30.00")),
         ),
+        SqliteTypedTableTestCase(
+            description="untyped columns stay untyped instead of becoming BLOB",
+            setup_statements=(
+                "CREATE TABLE order_notes (order_id INTEGER, note)",
+                "INSERT INTO order_notes VALUES (1, 'gift')",
+            ),
+            select_sql="SELECT order_id, note FROM order_notes",
+            config={},
+            expected_columns=(ColumnInfo("order_id", "INTEGER"), ColumnInfo("note", "TEXT")),
+            expected_rows=((1, "gift"),),
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -274,6 +285,7 @@ def test_given_query_when_creating_table_then_sqlite_keeps_column_types(
     test_case: SqliteTypedTableTestCase, adapter: SqliteAdapter, connection: Any
 ) -> None:
     create_orders(adapter=adapter, connection=connection, relation="orders")
+    run_sql(adapter=adapter, connection=connection, statements=test_case.setup_statements)
 
     adapter.create_table_as(
         connection=connection,
@@ -303,6 +315,11 @@ def test_given_query_when_creating_table_then_sqlite_keeps_column_types(
                 'CASE WHEN "amount" IS NULL THEN NULL '
                 'ELSE printf(\'%.2f\', "amount") END AS "amount"'
             ),
+        ),
+        SqliteCastTestCase(
+            description="date and time targets keep their ISO text unchanged",
+            target_type="TIMESTAMP",
+            expected_sql='"amount" AS "amount"',
         ),
         SqliteCastTestCase(
             description="other targets render a plain cast",
