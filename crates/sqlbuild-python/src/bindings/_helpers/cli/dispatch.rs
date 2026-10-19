@@ -38,7 +38,7 @@ use crate::bindings::_helpers::workspace_commands::commands::{
     run_playground_command, run_skills_command,
 };
 use pyo3::IntoPyObjectExt;
-use pyo3::exceptions::{PyAttributeError, PyTypeError};
+use pyo3::exceptions::{PyAttributeError, PyOSError, PyTypeError, PyUnicodeError};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 use sqlbuild_cli::diff_report::errors::DiffUserError;
@@ -60,6 +60,10 @@ use crate::bindings::_helpers::records::registry;
 const PATHLIB_MODULE: &str = "pathlib";
 const COMMENT_PREFIX: &str = "#";
 const UTF8: &str = "utf-8";
+/// The code of a `--select-file` that cannot be read.
+const SELECTOR_FILE_CODE: &str = "C114";
+const SELECTOR_FILE_HELP: &str =
+    "Pass the path of a readable UTF-8 file, relative to the current directory or absolute.";
 /// The `diff` arguments that compare raw queries instead of project models.
 const RAW_QUERY_ATTRIBUTES: [&str; 4] = [
     "left_query",
@@ -255,10 +259,11 @@ fn selector_inputs<'py>(
         let path: Bound<'py, PyAny> = path_class(py)?.call1((raw_path?,))?;
         let keywords: Bound<'py, PyDict> = PyDict::new(py);
         keywords.set_item("encoding", UTF8)?;
-        let lines: Vec<String> = path
-            .call_method("read_text", (), Some(&keywords))?
-            .call_method0("splitlines")?
-            .extract()?;
+        let text: Bound<'py, PyAny> = match path.call_method("read_text", (), Some(&keywords)) {
+            Ok(text) => text,
+            Err(error) => return Err(selector_file_error(py, &path, &error)?),
+        };
+        let lines: Vec<String> = text.call_method0("splitlines")?.extract()?;
         let mut count: usize = 0;
         for line in &lines {
             let stripped: &str = python_strip(line);
@@ -278,6 +283,32 @@ fn selector_inputs<'py>(
         )?);
     }
     Ok((PyTuple::new(py, selectors)?, PyTuple::new(py, files)?))
+}
+
+/// The user error for a `--select-file` that cannot be read, or `error` when it is unexpected.
+fn selector_file_error(py: Python<'_>, path: &Bound<'_, PyAny>, error: &PyErr) -> PyResult<PyErr> {
+    let readable =
+        error.is_instance_of::<PyOSError>(py) || error.is_instance_of::<PyUnicodeError>(py);
+    if !readable {
+        return Ok(error.clone_ref(py));
+    }
+    let value: Bound<'_, PyAny> = error.value(py).clone().into_any();
+    let reason: Bound<'_, PyAny> = value
+        .getattr_opt("strerror")?
+        .unwrap_or_else(|| value.clone());
+    let reason: String = if reason.is_none() {
+        value.str()?.to_string()
+    } else {
+        reason.str()?.to_string()
+    };
+    Ok(user_error(
+        py,
+        DispatchFailure {
+            message: format!("cannot read selector file {}: {reason}", path.str()?),
+            code: SELECTOR_FILE_CODE,
+            help: Some(SELECTOR_FILE_HELP),
+        },
+    ))
 }
 
 /// Call the route's command implementation, or the handler a test injected for its slot.
