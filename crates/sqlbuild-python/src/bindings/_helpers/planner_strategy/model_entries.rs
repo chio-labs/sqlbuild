@@ -11,6 +11,7 @@ use sqlbuild_analysis::planner_strategy::models::{CursorTypeCheck, LookbackConfi
 use sqlbuild_model_config::execution_limits::constants::MODEL_MAX_DURATION_KEY;
 use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
 use sqlbuild_model_config::execution_limits::models::ExecutionLimit;
+use sqlbuild_model_config::model_validation::constants::PHYSICAL_STORAGE_KEYS;
 
 use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
@@ -23,6 +24,7 @@ use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_strategy::constants::{
     CUSTOM_MATERIALIZATION, DDL_SEPARATOR, ENFORCED_CONTRACT, MICROBATCH_MODE,
+    PHYSICAL_STORAGE_DIALECT, PHYSICAL_STORAGE_UNSUPPORTED_CODE,
 };
 use crate::bindings::_helpers::planner_strategy::cursor_inputs::model_values;
 use crate::bindings::_helpers::planner_strategy::cursor_types::{
@@ -300,6 +302,42 @@ fn logical_ddl<'py>(
         .map(|statement| statement?.extract())
         .collect::<PyResult<_>>()?;
     Ok(statements.join(DDL_SEPARATOR))
+}
+
+/// The model's physical table layout, refused on adapters whose tables have none.
+fn storage_fields<'py>(
+    request: &ModelEntryDecisions<'py>,
+    values: &Bound<'py, PyAny>,
+    entry: &Bound<'py, PyDict>,
+) -> PyResult<()> {
+    let py: Python<'py> = values.py();
+    let storage: Bound<'py, PyDict> = PyDict::new(py);
+    let mut keys: Vec<&str> = Vec::new();
+    for key in PHYSICAL_STORAGE_KEYS {
+        let value: Bound<'py, PyAny> = mapping_get(values, key)?;
+        if !value.is_none() {
+            storage.set_item(key, value)?;
+            keys.push(key);
+        }
+    }
+    if !keys.is_empty() {
+        let dialect: Option<String> =
+            native_field(&request.adapter, "sql_analysis_dialect_name")?.extract()?;
+        if dialect.as_deref() != Some(PHYSICAL_STORAGE_DIALECT) {
+            return Err(input_error(
+                py,
+                ErrorId::CompileInput,
+                &format!(
+                    "model '{}' sets {}, but adapter '{}' has no physical table layout settings",
+                    model_reads::model_name(&request.model)?,
+                    keys.join(", "),
+                    native_field(&request.adapter, "adapter_name")?.str()?
+                ),
+                Some(PHYSICAL_STORAGE_UNSUPPORTED_CODE),
+            ));
+        }
+    }
+    entry.set_item("physical_storage", storage)
 }
 
 /// The custom materialization name, config and placeholders of a custom model.
@@ -597,6 +635,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     entry.set_item("unique_key", unique_key)?;
     entry.set_item("merge_exclude_columns", merge_exclude)?;
     entry.set_item("table_type", table_type)?;
+    storage_fields(request, &values, &entry)?;
     entry.set_item("on_schema_change", policy)?;
     entry.set_item("type_enforcement", enforcement)?;
     contract_fields(model, &values, &entry)?;

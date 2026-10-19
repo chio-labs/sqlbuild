@@ -94,6 +94,7 @@ from sqlbuild.adapters.clickhouse._helpers.snapshot_rewrite import (
     nullable_offset_windows,
     rewrite_snapshot_statements,
 )
+from sqlbuild.adapters.clickhouse._helpers.table_layout import render_table_layout
 from sqlbuild.adapters.clickhouse._helpers.type_text import (
     canonical_type,
     nullable_type,
@@ -112,6 +113,7 @@ from sqlbuild.adapters.clickhouse.constants import (
     MAX_IDENTIFIER_LENGTH,
     MAX_QUERY_SIZE_BYTES,
     MINIMUM_SERVER_VERSION,
+    PHYSICAL_STORAGE_CONFIG_KEY,
     RELATION_NOT_FOUND_CODES,
     RELATION_SEPARATOR,
     SESSION_SETTINGS,
@@ -700,9 +702,14 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             self.execute(connection=connection, sql=statement)
 
     def render_create_table_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
+        return self._render_create_table_with_layout(destination=destination, sql=sql, layout={})
+
+    def _render_create_table_with_layout(
+        self, *, destination: str, sql: str, layout: dict[str, Any]
+    ) -> tuple[str, ...]:
         return (
             f"DROP TABLE IF EXISTS {destination}",
-            f"CREATE TABLE {destination} ENGINE = MergeTree ORDER BY tuple() AS {sql}",
+            f"CREATE TABLE {destination} {render_table_layout(layout)} AS {sql}",
         )
 
     def render_create_view_as(self, *, destination: str, sql: str) -> tuple[str, ...]:
@@ -2095,7 +2102,11 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         config: dict[str, Any] | None = None,
         statement_recorder: StatementRecorder,
     ) -> None:
-        statements: tuple[str, ...] = self.render_create_table_as(destination=destination, sql=sql)
+        statements: tuple[str, ...] = self._render_create_table_with_layout(
+            destination=destination,
+            sql=sql,
+            layout=dict((config or {}).get(PHYSICAL_STORAGE_CONFIG_KEY) or {}),
+        )
         statement_recorder.record_many(statements)
         stmt: str
         for stmt in statements:

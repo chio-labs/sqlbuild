@@ -51,6 +51,7 @@ def create_staging_relation(
             config={
                 "table_type": context.entry.table_type,
                 "inferred_column_types": inferred_column_types(context.entry),
+                "physical_storage": context.entry.physical_storage,
             },
             statement_recorder=statement_recorder,
         )

@@ -150,6 +150,7 @@ When the parser cannot read a model, the `P001` syntax error shows the exact MOD
 |-------|-------------|
 | `table_type` | Snowflake table type: `permanent`, `transient`, or `inherit` |
 | `time_travel_retention` | Managed time travel retention such as `7d`, `inherit`, or `disabled` |
+| `engine`, `order_by`, `partition_by`, `primary_key`, `table_settings` | ClickHouse physical layout of table and incremental models; see [ClickHouse](../adapters/clickhouse.md#physical-layout) |
 | `run_despite_unchanged` | Removed with virtual environments. It is rejected in MODEL headers, project defaults, and path defaults. |
 
 Table promotion mode is a project setting rather than a `MODEL()` field. Staged promotion is the default. Immediate promotion is incompatible with model type enforcement and exact contracts; see [Materializations](materializations.md#table).

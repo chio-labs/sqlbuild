@@ -1,6 +1,6 @@
 //! Header keys native discovery accepts, sorted by code point as Python sorts them.
 
-pub(crate) const SQL_MODEL_HEADER_KEYS: [&str; 68] = [
+pub(crate) const SQL_MODEL_HEADER_KEYS: [&str; 73] = [
     "alias",
     "append_cursor_inclusive",
     "audit_factories",
@@ -27,6 +27,7 @@ pub(crate) const SQL_MODEL_HEADER_KEYS: [&str; 68] = [
     "description",
     "dynamic_columns",
     "enabled",
+    "engine",
     "enums",
     "full_refresh",
     "historical_input",
@@ -47,9 +48,12 @@ pub(crate) const SQL_MODEL_HEADER_KEYS: [&str; 68] = [
     "observed_at",
     "old_name_view",
     "on_schema_change",
+    "order_by",
+    "partition_by",
     "placeholders",
     "post_hooks",
     "pre_hooks",
+    "primary_key",
     "replay_on_change",
     "row_diff_exclude_columns",
     "row_diff_sample_rows",
@@ -61,6 +65,7 @@ pub(crate) const SQL_MODEL_HEADER_KEYS: [&str; 68] = [
     "snapshot_strategy",
     "sql_analysis",
     "sql_validation",
+    "table_settings",
     "table_type",
     "tags",
     "time_travel_retention",

@@ -94,3 +94,6 @@ EXCHANGE_UNSUPPORTED_CODES: frozenset[int] = frozenset({1, 48})
 STATE_TABLE_ENGINE_KEYWORD: str = "ENGINE"
 RELATION_SEPARATOR: str = "."
 STATE_TIMESTAMP_TYPE: str = "DateTime64(6, 'UTC')"
+PHYSICAL_STORAGE_CONFIG_KEY: str = "physical_storage"
+DEFAULT_TABLE_ENGINE: str = "MergeTree"
+EMPTY_SORTING_KEY: str = "tuple()"

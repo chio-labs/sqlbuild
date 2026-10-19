@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from textwrap import dedent
-from typing import Any
+from typing import Any, cast
 
 from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
 
@@ -192,3 +192,57 @@ def build_orders_project_files(*, schema_name: str, config: dict[str, object]) -
             "WHERE event_time >= __cursor_start() AND event_time < __cursor_end()\n"
         ),
     }
+
+
+def build_partitioned_events_project_files(
+    *, schema_name: str, config: dict[str, object]
+) -> dict[str, str]:
+    return {
+        "sqlbuild_project.toml": build_clickhouse_project_toml(
+            project_name="clickhouse_layout", schema_name=schema_name, config=config
+        ),
+        "sources/raw.yml": dedent(
+            f"""
+            sources:
+              - name: raw_events
+                description: Synthetic order events.
+                schema: {schema_name}
+                table: raw_events
+            """
+        ).lstrip(),
+        "models/events.sql": (
+            "MODEL (description 'One row per event.',\n"
+            "  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n"
+            "  unique_key [event_id],\n"
+            "  cursor event_time,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain hour,\n"
+            "  cursor_inputs (\n"
+            "    raw_events event_time,\n"
+            "  ),\n"
+            "  engine 'ReplacingMergeTree(version)',\n"
+            "  order_by [event_id, event_time],\n"
+            "  partition_by 'toYYYYMM(event_time)',\n"
+            "  primary_key [event_id],\n"
+            "  table_settings (index_granularity 4096),\n"
+            ");\n\n"
+            "SELECT event_id, amount, event_time, toInt64(1) AS version\n"
+            'FROM __source("raw_events")\n'
+            "WHERE event_time >= __cursor_start() AND event_time < __cursor_end()\n"
+        ),
+    }
+
+
+def active_parts_by_partition(
+    *, config: dict[str, object], schema_name: str, table: str
+) -> dict[str, tuple[str, ...]]:
+    rows: tuple[tuple[object, ...], ...] = fetch_clickhouse_rows(
+        config=config,
+        sql=(
+            "SELECT partition, arraySort(groupArray(name)) FROM system.parts "
+            f"WHERE active AND database = '{schema_name}' AND table = '{table}' "
+            "GROUP BY partition ORDER BY partition"
+        ),
+    )
+    return {str(row[0]): tuple(map(str, cast(list[object], row[1]))) for row in rows}

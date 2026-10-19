@@ -57,3 +57,10 @@ class FinalSourceReadTestCase:
     adapter_name: str
     expected_relation: str | None
     expected_code: str | None
+
+
+@dataclass(frozen=True)
+class TableLayoutTestCase:
+    description: str
+    layout: dict[str, object]
+    expected_clauses: str

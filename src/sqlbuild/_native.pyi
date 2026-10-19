@@ -15710,6 +15710,7 @@ class ModelPlanEntry(NativeRecord):
     snapshot_full_refresh: str | None
     snapshot_schema_change: str | None
     table_type: str
+    physical_storage: dict[str, object]
     on_schema_change: OnSchemaChange | None
     type_enforcement: bool
     declared_columns: tuple[ColumnInfo, ...]
@@ -15794,6 +15795,7 @@ class ModelPlanEntry(NativeRecord):
         snapshot_full_refresh: str | None = ...,
         snapshot_schema_change: str | None = ...,
         table_type: str = ...,
+        physical_storage: dict[str, object] = ...,
         on_schema_change: OnSchemaChange | None = ...,
         type_enforcement: bool = ...,
         declared_columns: tuple[ColumnInfo, ...] = ...,

@@ -11,6 +11,7 @@ Online: https://sqlbuild.com/docs/concepts/adapters/clickhouse/
 - Connection config
 - Schemas are databases
 - How SQLBuild writes
+- Physical layout
 - Reading ReplacingMergeTree sources
 - Functions
 - Clones
@@ -83,9 +84,44 @@ A partition rewrite reads the partition, rebuilds it and swaps it in. ClickHouse
 Run each model from one process at a time: one scheduled job per model or per project, with no overlapping runs. Concurrency within a run (`--concurrency`, `batch_concurrency`) is safe.
 - **Snapshots** apply their changes to a private copy of the snapshot table and exchange it in. Closing a version rebuilds the copy rather than updating rows, so the live snapshot changes only at the final exchange.
 
-Tables SQLBuild creates use `ENGINE = MergeTree ORDER BY tuple()` with no partitioning, so on a normal incremental run a partition rewrite rewrites the whole table. The cost of a rewrite is proportional to the partitions it touches.
+The cost of a rewrite is proportional to the partitions it touches. Without a `partition_by`, a table is one partition, so every incremental run rewrites the whole table; partition large incremental models by the column their new rows arrive on.
 
 `merge` matches rows on `unique_key` exactly as other adapters do: incoming rows replace matched rows, `merge_exclude_columns` keep their stored values, and unmatched rows are inserted.
+
+## Physical layout
+
+Table and incremental models set their table engine, sorting key, partitioning, primary key and table settings in the MODEL header:
+
+```sql
+MODEL (
+  description 'One row per order event.',
+  materialized incremental,
+  incremental_strategy delete_insert,
+  unique_key [event_id],
+  cursor event_time,
+  cursor_type timestamp,
+  cursor_inputs (raw_events event_time),
+  engine 'ReplacingMergeTree(version)',
+  order_by [event_id, event_time],
+  partition_by 'toYYYYMM(event_time)',
+  primary_key [event_id],
+  table_settings (index_granularity 4096),
+);
+```
+
+| Field | Value | Default |
+|-------|-------|---------|
+| `engine` | A single-server MergeTree-family engine, with its arguments | `MergeTree` |
+| `order_by` | A sorting expression, or a list of them | `tuple()` (unsorted) |
+| `partition_by` | A partitioning expression | No partitioning |
+| `primary_key` | A prefix of `order_by` | The sorting key |
+| `table_settings` | Setting names mapped to strings, integers or booleans | None |
+
+Quote expressions that are not plain column names. Compile rejects malformed values, replicated and shared engines, and these fields on views and snapshots; other adapters reject them with `A011` when planning.
+
+The fields are part of the model's version, so `sqb plan` reports a changed layout as a config change. A table model is rebuilt with the new layout. An incremental model keeps writing into its existing table, whose layout only changes on `--full-refresh`.
+
+ClickHouse rejects nullable sorting and partitioning keys by default. Wrap the column in `assumeNotNull()` or `coalesce()` in the expression, or set `table_settings (allow_nullable_key true)`.
 
 ## Reading ReplacingMergeTree sources
 
@@ -132,6 +168,6 @@ ClickHouse returns a type's default value (`0`, the epoch, an empty string) from
 - Single server only. `ON CLUSTER`, `ReplicatedMergeTree` and `Distributed` tables are not managed.
 - No transactions. Each step above is designed so a rerun converges instead.
 - Concurrent `sqb` processes writing the same model can lose rows; see [One writer per model](#one-writer-per-model).
-- Model physical settings (`ENGINE`, `ORDER BY`, `PARTITION BY`) are not configurable yet.
+- Snapshots always use an unsorted `MergeTree` table.
 - Seeds load through the HTTP insert interface as CSV, so large seeds never hit the `max_query_size` limit.
 - Retention and time travel are not available.

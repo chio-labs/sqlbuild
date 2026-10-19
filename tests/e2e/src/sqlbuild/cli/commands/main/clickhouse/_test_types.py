@@ -46,3 +46,13 @@ class ClickHouseCloneE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]
     expected_rows: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHousePhysicalLayoutE2ETestCase:
+    description: str
+    first_events: str
+    later_events: str
+    expected_create_fragments: tuple[str, ...]
+    expected_partition_rewrites: dict[str, bool]
+    expected_totals: tuple[tuple[object, ...], ...]
