@@ -2,6 +2,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -199,3 +200,94 @@ def compiled_files(project_dir: Path) -> dict[str, bytes]:
         path.relative_to(compiled).as_posix(): path.read_bytes()
         for path in sorted(compiled.rglob("*.sql"))
     }
+
+
+def counting_environment(directory: Path, marker: Path) -> Path:
+    """Install `sqb` in an environment whose `sqlbuild-python` logs each start; return `sqb`."""
+
+    program: Path = counting_install(directory / "bin", marker)
+    site_packages: Path = (
+        directory / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}"
+    ) / "site-packages"
+    site_packages.mkdir(parents=True)
+    _ = (site_packages / "sqlbuild_source.pth").write_text(
+        str(Path(sqlbuild.__file__).resolve().parent.parent) + "\n", encoding="utf-8"
+    )
+    return program
+
+
+def reset_directory(directory: Path) -> Path:
+    """An empty `directory`, removing whatever an earlier run left."""
+
+    shutil.rmtree(directory, ignore_errors=True)
+    directory.mkdir(parents=True)
+    return directory
+
+
+def _capture_files(capture: Path) -> dict[str, object]:
+    metadata: dict[str, object] = capture_metadata(capture)
+    for volatile in ("invocation_id", "started_at", "completed_at", "capture_date"):
+        _ = metadata.pop(volatile)
+    streams: dict[str, bytes] = {
+        name: (capture / name).read_bytes()
+        for name in ("stdout.log", "stderr.log", "diagnostics.jsonl")
+    }
+    return {"complete": (capture / "complete").exists(), "metadata": metadata, **streams}
+
+
+def compute_log_files(project_dir: Path) -> list[dict[str, object]]:
+    """Each capture's streams and metadata, without per-run identity and times."""
+
+    return [
+        _capture_files(metadata.parent)
+        for metadata in sorted((project_dir / "logs").glob("*/*/metadata.json"))
+    ]
+
+
+def prepare_nothing(directory: Path) -> None:
+    """Leave the directory empty."""
+
+    _ = directory
+
+
+def prepare_project(directory: Path) -> None:
+    """Write the one-model project."""
+
+    _ = write_project(directory)
+
+
+def prepare_custom_skill(directory: Path) -> None:
+    """Write a hand-written skill where `sqb init` installs the packaged one."""
+
+    custom: Path = directory / ".claude" / "skills" / "sqlbuild" / "SKILL.md"
+    custom.parent.mkdir(parents=True)
+    _ = custom.write_text("my own skill\n", encoding="utf-8")
+
+
+def prepare_stale_skills(directory: Path) -> None:
+    """Write the project configured for Claude skills that are not installed yet."""
+
+    _ = write_project(directory)
+    _ = (directory / "sqlbuild_project.toml").write_text(
+        PROJECT_FILES["sqlbuild_project.toml"] + '\n[skills]\ntargets = ["claude"]\n',
+        encoding="utf-8",
+    )
+
+
+def prepare_custom_rules(directory: Path) -> None:
+    """Write the project with a custom rules directory."""
+
+    _ = write_project(directory)
+    (directory / "rules").mkdir()
+
+
+def prepare_named_pipe_project(directory: Path) -> None:
+    """Make the project file a named pipe that blocks its reader."""
+
+    os.mkfifo(directory / "sqlbuild_project.toml")
+
+
+def restore_default_interrupt() -> None:
+    """Give a spawned command default Ctrl-C handling even when its parent ignores SIGINT."""
+
+    _ = signal.signal(signal.SIGINT, signal.SIG_DFL)

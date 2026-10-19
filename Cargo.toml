@@ -90,7 +90,7 @@ ruff_text_size = "=0.0.4"
 rustc-hash = "2"
 # Recall's local store: SQLite compiled in, so every build has the same engine version.
 rusqlite = { version = "0.37", features = ["bundled"] }
-rustix = { version = "1.1.4", default-features = false, features = ["fs", "std"] }
+rustix = { version = "1.1.4", default-features = false, features = ["fs", "std", "termios"] }
 saphyr-parser = "0.1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }

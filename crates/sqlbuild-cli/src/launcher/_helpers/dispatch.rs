@@ -1,4 +1,4 @@
-//! Decide how one invocation runs: natively, from a launch record, or in the Python CLI.
+//! Decide how one invocation runs: from a launch record, natively, or in the Python CLI.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -10,6 +10,7 @@ use crate::launcher::_helpers::messages::{print_version, report_missing_python_c
 use crate::launcher::constants::{
     HANDOFF_FAILURE_EXIT_CODE, LAUNCH_RECORD_OPTION, VERSION_OPTIONS,
 };
+use crate::native_commands::main::run_native_invocation::run_native_invocation;
 use crate::replay::main::serve_reused_compile::serve_reused_compile;
 
 /// The launch record path and key for these arguments, when the directory is known.
@@ -43,10 +44,16 @@ pub(crate) fn launch(arguments: Vec<OsString>, started: (Instant, SystemTime)) -
         return HANDOFF_FAILURE_EXIT_CODE;
     };
     let mut handed: Vec<OsString> = Vec::with_capacity(arguments.len() + 1);
-    if let Some((path, key)) = launch_record(&program, &script, &arguments) {
-        if let Some(code) = serve_reused_compile(&path, &key, started) {
-            return exit_code(code);
-        }
+    let record: Option<(PathBuf, String)> = launch_record(&program, &script, &arguments);
+    if let Some((path, key)) = &record
+        && let Some(code) = serve_reused_compile(path, key, started)
+    {
+        return exit_code(code);
+    }
+    if let Ok(code) = run_native_invocation(&arguments, &script) {
+        return code;
+    }
+    if let Some((path, _)) = record {
         let mut option = OsString::from(LAUNCH_RECORD_OPTION);
         option.push(path.as_os_str());
         handed.push(option);

@@ -82,3 +82,34 @@ class LaunchedTeardownTestCase:
     description: str
     args: tuple[str, ...]
     expected_hits: int
+
+
+@dataclass(frozen=True)
+class PythonFreeTestCase:
+    """One command line `sqb` serves without Python, in a directory `prepare` sets up."""
+
+    description: str
+    args: tuple[str, ...]
+    prepare: Callable[[Path], None]
+    expected_exit_code: int
+    expected_captures: int
+
+
+@dataclass(frozen=True)
+class PythonStartTestCase:
+    """One command line `sqb` hands to Python because of the project `prepare` writes."""
+
+    description: str
+    args: tuple[str, ...]
+    prepare: Callable[[Path], None]
+    expected_python_starts: int
+
+
+@dataclass(frozen=True)
+class InterruptTestCase:
+    """One Python-free command line interrupted while it waits on the project `prepare` writes."""
+
+    description: str
+    args: tuple[str, ...]
+    prepare: Callable[[Path], None]
+    expected_exit_code: int
