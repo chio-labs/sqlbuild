@@ -14,6 +14,8 @@ from sqlbuild._native import (
 )
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.adapter.contract.types import RelationType
+from sqlbuild.adapter.relations.main.cached_relation_type import cached_relation_type
 from sqlbuild.adapter.relations.main.resolve_relation_location_qualified_name import (
     resolve_relation_location_qualified_name,
 )
@@ -111,10 +113,11 @@ def execute_view_entry(
                 statement_recorder=statement_recorder,
             )
         with diagnostics_context(sqlbuild_phase="materialize", sqlbuild_action_name="create_view"):
-            adapter.create_view_as(
+            _create_view_replacing_table(
+                adapter=adapter,
                 connection=connection,
-                destination=target_qualified,
-                sql=entry.resolved_sql,
+                entry=entry,
+                target_qualified=target_qualified,
                 statement_recorder=statement_recorder,
             )
     except Exception as exc:
@@ -222,3 +225,50 @@ def execute_view_entry(
         lifecycle_events=statement_recorder.snapshot(),
         hook_results=tuple(hook_results),
     )
+
+
+def _create_view_replacing_table(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    entry: ModelPlanEntry,
+    target_qualified: str,
+    statement_recorder: StatementRecorder,
+) -> None:
+    """Create the view; a table the model built before it became a view is dropped first."""
+
+    try:
+        adapter.create_view_as(
+            connection=connection,
+            destination=target_qualified,
+            sql=entry.resolved_sql,
+            statement_recorder=statement_recorder,
+        )
+    except Exception as error:
+        if not _holds_table(adapter=adapter, connection=connection, entry=entry):
+            raise error
+        adapter.drop(
+            connection=connection,
+            destination=target_qualified,
+            if_exists=True,
+            statement_recorder=statement_recorder,
+        )
+        adapter.create_view_as(
+            connection=connection,
+            destination=target_qualified,
+            sql=entry.resolved_sql,
+            statement_recorder=statement_recorder,
+        )
+
+
+def _holds_table(*, adapter: BaseAdapter, connection: Any, entry: ModelPlanEntry) -> bool:
+    """Whether the view's destination holds a relation other than a view."""
+
+    existing: RelationType | None = cached_relation_type(
+        adapter=adapter,
+        connection=connection,
+        database=entry.destination.database,
+        schema=entry.destination.schema,
+        name=entry.destination.name,
+    )
+    return existing is not None and existing != RelationType.VIEW

@@ -1363,3 +1363,12 @@ class SnapshotValidityColumnsTestCase:
     description: str
     validity_config: str
     expected_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MaterializationTypeChangeTestCase:
+    """A built model's materialization change and the relation type each build leaves."""
+
+    description: str
+    materializations: tuple[str, ...]
+    expected_table_types: tuple[str, ...]
