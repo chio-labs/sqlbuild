@@ -19,6 +19,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.sqlite._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.sqlite.helpers import (
     CHANGED_EVENTS_CSV,
     COMPARED_MODELS,
+    CONCURRENT_MICROBATCH_PROJECT_FILES,
     CONTRACT_PROJECT_FILES,
     FUNCTION_PROJECT_FILES,
     LOCK_PROJECT_FILES,
@@ -278,6 +279,11 @@ def test_given_strategy_project_when_building_twice_then_sqlite_writes_expected_
             description="SQL functions fail with a coded error naming the limit",
             files=FUNCTION_PROJECT_FILES,
             expected_fragments=("error[A705]", "SQLite has no CREATE FUNCTION"),
+        ),
+        SqliteFailureE2ETestCase(
+            description="concurrent microbatch DML is refused at plan time",
+            files=CONCURRENT_MICROBATCH_PROJECT_FILES,
+            expected_fragments=("does not support concurrent microbatch", "batch_concurrency = 1"),
         ),
     ],
     ids=lambda case: case.description,

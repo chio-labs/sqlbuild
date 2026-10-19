@@ -350,6 +350,15 @@ SELECT 1 AS order_id
 """,
 }
 
+CONCURRENT_MICROBATCH_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SQLITE_TOML + "\n[settings]\nmicrobatch_concurrency = true\n",
+    "seeds/order_events.csv": FIRST_EVENTS_CSV,
+    "seeds/seeds.yml": STRATEGY_PROJECT_FILES["seeds/seeds.yml"],
+    "models/daily_revenue.sql": STRATEGY_PROJECT_FILES["models/daily_revenue.sql"].replace(
+        "  batch_size 1d,\n", "  batch_size 1d,\n  batch_concurrency 4,\n"
+    ),
+}
+
 LOCK_PROJECT_FILES: dict[str, str] = {
     "sqlbuild_project.toml": _SQLITE_TOML.replace(
         f'path = "{SQLITE_FILE}"\n', f'path = "{SQLITE_FILE}"\nbusy_timeout = 0.5\n'

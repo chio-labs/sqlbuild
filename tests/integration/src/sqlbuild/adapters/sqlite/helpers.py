@@ -58,6 +58,22 @@ def hold_write_lock(*, database_path: str, ready_path: str, hold_seconds: float)
     adapter.close(connection)
 
 
+def replace_orders_then_hang(*, database_path: str, ready_path: str) -> None:
+    """Child process: rewrite orders inside an open transaction, signal, then wait to be killed."""
+
+    import time
+    from pathlib import Path
+
+    adapter: SqliteAdapter = SqliteAdapter()
+    connection: Any = adapter.connect({"path": database_path})
+    adapter.begin(connection)
+    adapter.execute(connection=connection, sql="DELETE FROM orders")
+    adapter.execute(connection=connection, sql="INSERT INTO orders VALUES (999)")
+    adapter.execute(connection=connection, sql="CREATE TABLE orders_rebuilt (order_id INTEGER)")
+    Path(ready_path).write_text("ready", encoding="utf-8")
+    time.sleep(60)
+
+
 def attempt_write(*, database_path: str, busy_timeout: float, result_path: str) -> None:
     """Child process: try one insert and record the outcome code and how long it waited."""
 

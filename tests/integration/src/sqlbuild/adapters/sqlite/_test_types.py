@@ -123,6 +123,13 @@ class SqliteInProcessWritersTestCase:
 
 
 @dataclass(frozen=True)
+class SqliteKilledWriterTestCase:
+    description: str
+    expected_rows: tuple[tuple[object, ...], ...]
+    expected_tables: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
 class SqliteVersionTestCase:
     description: str
     linked_version: tuple[int, int, int]
