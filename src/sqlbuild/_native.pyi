@@ -5101,7 +5101,11 @@ def describe_missing_expected_columns(
     *, model_name: str, expected_columns: Sequence[str], available_columns: Iterable[str]
 ) -> str | None: ...
 def build_scenario_expected_comparison_sql(
-    *, actual_sql: str, expected_sql: str, set_difference_operator: str
+    *,
+    actual_sql: str,
+    expected_sql: str,
+    set_difference_operator: str,
+    compared_columns: tuple[str, ...] | None = None,
 ) -> str: ...
 def sql_test_resource_id(
     *, test_name: str, source_path: PurePath | None, block_index: int | None, case_name: str | None
@@ -16113,11 +16117,13 @@ class ScenarioExpectedExpectationPlan(NativeRecord):
     model_name: str
     actual_destination: CompiledRelationLocation
     expected_sql: str
+    compared_columns: tuple[str, ...] | None
     def __init__(
         self,
         model_name: str,
         actual_destination: CompiledRelationLocation,
         expected_sql: str,
+        compared_columns: tuple[str, ...] | None = ...,
     ) -> None: ...
 
 class ScenarioAssertionExpectationPlan(NativeRecord):

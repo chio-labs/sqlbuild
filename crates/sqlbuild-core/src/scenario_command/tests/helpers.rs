@@ -76,15 +76,16 @@ pub(super) fn failing_result_row() -> ScenarioResultRow {
             ExpectedRow {
                 model_name: "fact_orders".to_owned(),
                 failed: true,
-                actual_row_count: 3,
-                expected_row_count: 2,
-                mismatched_row_count: 2,
+                actual_row_count: Some(3),
+                expected_row_count: Some(2),
+                mismatched_row_count: Some(2),
+                missing_row_count: Some(1),
                 error: coded(Some("X506"), "mismatch", Some("look")),
             },
             ExpectedRow {
                 model_name: "dim_customers".to_owned(),
-                actual_row_count: 1,
-                expected_row_count: 1,
+                actual_row_count: Some(1),
+                expected_row_count: Some(1),
                 ..ExpectedRow::default()
             },
         ],
@@ -92,14 +93,14 @@ pub(super) fn failing_result_row() -> ScenarioResultRow {
             AssertionRow {
                 name: "no_negative".to_owned(),
                 failed: true,
-                failing_row_count: 1,
+                failing_row_count: Some(1),
                 first_sample: Some("(1, 'a', None)".to_owned()),
                 error: None,
             },
             AssertionRow {
                 name: "few".to_owned(),
                 failed: true,
-                failing_row_count: 3,
+                failing_row_count: Some(3),
                 first_sample: None,
                 error: coded(None, "plain error", None),
             },

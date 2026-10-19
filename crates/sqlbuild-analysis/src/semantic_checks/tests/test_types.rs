@@ -101,3 +101,11 @@ pub(crate) struct PreparedTestSqlTestCase {
     pub(crate) expected_sql: &'static str,
     pub(crate) expected_relations: &'static [&'static str],
 }
+
+pub(crate) struct MissingColumnAuditTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) column: &'static str,
+    pub(crate) definition: &'static str,
+    pub(crate) built_in: bool,
+    pub(crate) expected_finding: Option<(&'static str, i64, i64, i64)>,
+}

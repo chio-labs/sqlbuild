@@ -859,6 +859,7 @@ const R_SCENARIO_EXPECTED_EXPECTATION_PLAN: RecordSpec = RecordSpec {
         FieldSpec::required("model_name"),
         FieldSpec::required("actual_destination"),
         FieldSpec::required("expected_sql"),
+        FieldSpec::new("compared_columns", FieldDefault::None),
     ],
 };
 const R_SCENARIO_ASSERTION_EXPECTATION_PLAN: RecordSpec = RecordSpec {

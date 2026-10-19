@@ -2,8 +2,12 @@
 
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use sqlbuild_analysis::compiler::main::scenario_helper_scope::scenario_helper_scope;
+use sqlbuild_analysis::compiler::main::scenario_reader_ctes::scenario_reader_ctes;
 use sqlbuild_analysis::compiler::main::sql_scenario_classification::extract_scenario;
-use sqlbuild_analysis::compiler::models::{SqlScenarioCtes, SqlTestCteText};
+use sqlbuild_analysis::compiler::models::{
+    ScenarioHelperScope, ScenarioScopeInput, SqlScenarioCtes, SqlTestCteText,
+};
 use sqlbuild_attachments::test_targets::main::scenario_source_violation::scenario_source_violation;
 use sqlbuild_attachments::test_targets::models::ScenarioCteSources;
 use sqlbuild_sqltext::sql_references::models::SqlReference;
@@ -53,7 +57,7 @@ impl<'py> TestScope<'_, 'py> {
             .map_err(|message| compile_error(self.context.classes, &message, None))?;
         let origin: FileOrigin<'_> = (file_path, relative_path, contents);
         self.checked_scenario_sources(&ctes, origin)?;
-        let assertions: Vec<SqlTestCteText> = texts(&ctes.assertions);
+        let assertions: Vec<SqlTestCteText> = self.assertion_reads(&ctes, relative_path)?;
         let targets: Vec<String> =
             assertion_targets(self.context, self.model_loop, &assertions, origin)?;
         let fields: Bound<'py, PyDict> = PyDict::new(py);
@@ -92,6 +96,33 @@ impl<'py> TestScope<'_, 'py> {
             .bind(py)
             .call((), Some(&fields))?
             .unbind())
+    }
+
+    /// Each assertion with the helper CTEs it reads, whose model references are assertion targets.
+    fn assertion_reads(
+        &self,
+        ctes: &SqlScenarioCtes,
+        relative_path: &str,
+    ) -> PyResult<Vec<SqlTestCteText>> {
+        let checks: Vec<(String, String)> = ctes
+            .expected
+            .iter()
+            .chain(&ctes.assertions)
+            .cloned()
+            .collect();
+        let scope: ScenarioHelperScope = scenario_helper_scope(&ScenarioScopeInput {
+            ctes: &ctes.authored,
+            checks: &checks,
+            lexical: self.model_loop.syntax.clone(),
+            dialect: None,
+            file_label: relative_path,
+        })
+        .map_err(|message| compile_error(self.context.classes, &message, None))?;
+        let mut reads: Vec<SqlTestCteText> = texts(&ctes.assertions);
+        for (_, sql) in &ctes.assertions {
+            reads.extend(texts(&scenario_reader_ctes(&scope, sql, false)));
+        }
+        Ok(reads)
     }
 
     /// `_validate_scenario_source_references`: disallowed source reads, then a scan's error.

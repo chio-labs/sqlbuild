@@ -5,13 +5,19 @@ use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compiled_project::loop_classes::by_attribute;
 use crate::bindings::_helpers::compiled_project::records::compiled_model_record;
+use crate::bindings::_helpers::discovery::constants::{
+    SCENARIO_EXPECTED_COLUMNS_ALL, SCENARIO_EXPECTED_COLUMNS_KEY,
+};
 use crate::bindings::_helpers::planner_entries::model_entries::plan_model;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
 use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream_deps;
 use crate::bindings::_helpers::planner_identity::graph::topologically_order_keys;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_resolution::locations::build_function_locations;
-use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_INVALID_FIXTURE;
+use crate::bindings::_helpers::planner_scenario::constants::{
+    SCENARIO_EXPECTED_COLUMNS_HELP, SCENARIO_PLAN_EXPECTED_COLUMNS, SCENARIO_PLAN_INVALID_FIXTURE,
+};
+use crate::bindings::_helpers::planner_scenario::helper_scope::scenario_helper_scope;
 use crate::bindings::_helpers::planner_scenario::{
     entries::{function_entry, seed_entries},
     fixtures::{extract_fixtures, fixture_plans},
@@ -23,10 +29,14 @@ use crate::bindings::_helpers::planner_strategy::fixture_completion::complete_fi
 use crate::bindings::_helpers::planner_strategy::fixture_context::planning_context;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyfunction};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyTuple};
+use sqlbuild_analysis::compiler::main::scenario_expected_column_message::scenario_expected_column_message;
+use sqlbuild_analysis::compiler::main::scenario_expected_columns::scenario_expected_columns;
+use sqlbuild_analysis::compiler::main::scenario_reader_sql::scenario_reader_sql;
 
 #[pyfunction]
 #[pyo3(signature = (**kwargs))]
@@ -166,7 +176,7 @@ pub(crate) fn build_scenario_execution_plan<'py>(
             warnings.push(warning?);
         }
     }
-    let (expected, assertions) = expectations(&scenario, &context)?;
+    let (expected, assertions) = expectations(&scenario, &context, &models)?;
     let plan = new_record_with(
         py,
         RecordId::ScenarioExecutionPlan,
@@ -279,20 +289,64 @@ fn model_context<'py>(
     .into_any())
 }
 
+/// Whether the scenario requires its expected CTEs to list every model output column.
+fn requires_all_columns(scenario: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let header: Bound<'_, PyAny> =
+        native_field(&native_field(scenario, "scenario_file")?, "header_values")?;
+    let value: Bound<'_, PyAny> = mapping_get(&header, SCENARIO_EXPECTED_COLUMNS_KEY)?;
+    Ok(!value.is_none() && value.extract::<String>()? == SCENARIO_EXPECTED_COLUMNS_ALL)
+}
+
+/// The columns compared by name, after rejecting an expected CTE that cannot be compared.
+fn compared_columns(
+    scenario: &Bound<'_, PyAny>,
+    context: &SqlContext<'_>,
+    (model, model_name): (Option<Bound<'_, PyAny>>, &str),
+    authored_sql: &str,
+) -> PyResult<Option<Vec<String>>> {
+    let py = scenario.py();
+    let model_columns: Option<Vec<String>> = match model {
+        Some(model) => model_reads::inferred_names(&model)?,
+        None => None,
+    };
+    let dialect: Option<String> =
+        native_field(&context.adapter, "sql_analysis_dialect_name")?.extract()?;
+    let columns =
+        scenario_expected_columns(authored_sql, dialect.as_deref(), model_columns.as_deref());
+    let scenario_name: String = native_field(scenario, "name")?.extract()?;
+    let all_columns: bool = requires_all_columns(scenario)?;
+    let Some(message) =
+        scenario_expected_column_message(&scenario_name, model_name, &columns, all_columns)
+    else {
+        return Ok(columns.listed);
+    };
+    Err(error(
+        py,
+        &format!("{message} in {}", context.label),
+        SCENARIO_PLAN_EXPECTED_COLUMNS,
+        Some(SCENARIO_EXPECTED_COLUMNS_HELP),
+    )?)
+}
+
 fn expectations<'py>(
     scenario: &Bound<'py, PyAny>,
     context: &SqlContext<'py>,
+    models: &Bound<'py, PyDict>,
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
     let py = scenario.py();
+    let scope = scenario_helper_scope(scenario, context)?;
     let mut expected: Vec<Bound<'py, PyAny>> = Vec::new();
     for cte in native_field(scenario, "expected_ctes")?.try_iter()? {
         let cte = cte?;
         let name: String = native_field(&cte, "name")?.extract()?;
         let name = name.strip_prefix("__expected__").unwrap_or(&name);
         let target = required_target(&context.relations, "model_locations", name, "model")?;
+        let authored: String = native_field(&cte, "sql_body")?.extract()?;
+        let compared =
+            compared_columns(scenario, context, (models.get_item(name)?, name), &authored)?;
         let sql = resolve_sql(
             context,
-            &native_field(&cte, "sql_body")?.extract::<String>()?,
+            &scenario_reader_sql(&scope, &authored, true),
             false,
         )?;
         expected.push(new_record_with(
@@ -302,6 +356,13 @@ fn expectations<'py>(
                 ("model_name", string(py, name)),
                 ("actual_destination", target),
                 ("expected_sql", string(py, &sql)),
+                (
+                    "compared_columns",
+                    match compared {
+                        Some(columns) => PyTuple::new(py, columns)?.into_any(),
+                        None => py.None().into_bound(py),
+                    },
+                ),
             ],
         )?);
     }
@@ -309,9 +370,10 @@ fn expectations<'py>(
     for cte in native_field(scenario, "assertion_ctes")?.try_iter()? {
         let cte = cte?;
         let name: String = native_field(&cte, "name")?.extract()?;
+        let authored: String = native_field(&cte, "sql_body")?.extract()?;
         let sql = resolve_sql(
             context,
-            &native_field(&cte, "sql_body")?.extract::<String>()?,
+            &scenario_reader_sql(&scope, &authored, true),
             false,
         )?;
         assertions.push(new_record_with(

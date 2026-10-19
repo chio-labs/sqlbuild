@@ -53,6 +53,13 @@ _INDEX: ProjectRelationIndex = ProjectRelationIndex(
             expected_temporary=frozenset({"staged"}),
         ),
         ExtractRelationNamesTestCase(
+            description="temporary table names are casefolded, not lowercased",
+            sql='CREATE TEMP TABLE "Straße" AS SELECT 1 AS id',
+            dialect="duckdb",
+            expected_relations=(RelationName(name="Straße"),),
+            expected_temporary=frozenset({"strasse"}),
+        ),
+        ExtractRelationNamesTestCase(
             description="quoted dotted path splits into qualifier parts",
             sql="SELECT * FROM `warehouse.analytics.customers`",
             dialect="bigquery",

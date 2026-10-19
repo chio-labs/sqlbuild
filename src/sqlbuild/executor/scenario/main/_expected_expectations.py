@@ -34,6 +34,7 @@ def execute_scenario_expected_expectation(
         actual_sql=f"SELECT * FROM {actual_relation}",
         expected_sql=expectation.expected_sql,
         set_difference_operator=adapter.render_set_difference_operator(),
+        compared_columns=expectation.compared_columns,
     )
     try:
         cursor: Any = adapter.execute(connection=connection, sql=comparison_sql)
@@ -70,9 +71,10 @@ def execute_scenario_expected_expectation(
     actual_count: int = int(row[0])
     expected_count: int = int(row[1])
     mismatched_count: int = int(row[2])
+    missing_count: int = int(row[3])
     status: ExecutionStatus = (
         ExecutionStatus.SUCCESS
-        if mismatched_count == 0 and actual_count == expected_count
+        if mismatched_count == 0 and missing_count == 0 and actual_count == expected_count
         else ExecutionStatus.FAILED
     )
     error_message = None
@@ -80,7 +82,8 @@ def execute_scenario_expected_expectation(
         error_message = (
             f"scenario '{scenario_name}' expected comparison for model "
             f"'{expectation.model_name}' failed: "
-            f"actual={actual_count} expected={expected_count} mismatched={mismatched_count}"
+            f"actual={actual_count} expected={expected_count} mismatched={mismatched_count} "
+            f"missing={missing_count}"
         )
     return ScenarioExpectedExpectationExecutionResult(
         scenario_name=scenario_name,
@@ -89,6 +92,7 @@ def execute_scenario_expected_expectation(
         actual_row_count=actual_count,
         expected_row_count=expected_count,
         mismatched_row_count=mismatched_count,
+        missing_row_count=missing_count,
         error_code=SCENARIO_EXEC_EXPECTED_FAILED if status == ExecutionStatus.FAILED else None,
         error_help=(
             "Compare the expected CTE with the retained scenario model relation. "

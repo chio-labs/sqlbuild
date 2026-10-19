@@ -4,4 +4,5 @@ pub mod function_names;
 pub mod identifiers;
 pub mod normalization;
 pub mod positions;
+pub mod truth_tests;
 pub mod type_locations;

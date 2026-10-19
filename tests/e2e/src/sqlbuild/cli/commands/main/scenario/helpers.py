@@ -12,7 +12,7 @@ import time
 from collections import defaultdict
 from itertools import takewhile
 from pathlib import Path
-from typing import IO, NamedTuple, cast
+from typing import IO, Any, NamedTuple, cast
 
 from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR
 from sqlbuild._native import ScenarioArtifactKind
@@ -880,3 +880,60 @@ def run_reusable_compile(*, project_dir: Path) -> subprocess.CompletedProcess[st
         env={**os.environ, REUSE_DISABLE_ENV_VAR: "0"},
         check=False,
     )
+
+
+_EXPECTED_COLUMNS_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "scenario_expected_columns"\nadapter = "duckdb"\n\n'
+        '[connection]\ndatabase = "warehouse.duckdb"\n'
+    ),
+    "models/orders.sql": (
+        'MODEL (description "Orders", materialized table);\n\n'
+        "SELECT order_id, status\n"
+        "FROM (VALUES ('o1', 'placed')) AS t(order_id, status)\n"
+    ),
+    "models/order_flags.sql": (
+        'MODEL (description "Orders with a flag", materialized table);\n\n'
+        'WITH orders AS (SELECT * FROM __ref("orders"))\n\n'
+        "SELECT order_id, status, status = 'cancelled' AS is_cancelled\n"
+        "FROM orders\n"
+    ),
+}
+_EXPECTED_COLUMNS_SCENARIO_PATH: str = "tests/scenarios/order_flags__expected.sql"
+_EXPECTED_COLUMNS_DESCRIPTION: str = 'description "Order flags keep their status"'
+_EXPECTED_COLUMNS_FIXTURE: str = (
+    "WITH __ref__orders AS (\n  SELECT 'o1' AS order_id, 'placed' AS status\n),\n\n"
+)
+
+
+def build_expected_columns_scenario_project_files(
+    *, expected_sql: str, header_options: str
+) -> dict[str, str]:
+    """Build an order-flags project whose scenario expects `expected_sql` for the model."""
+
+    return {
+        **_EXPECTED_COLUMNS_PROJECT_FILES,
+        _EXPECTED_COLUMNS_SCENARIO_PATH: (
+            f"SCENARIO ({_EXPECTED_COLUMNS_DESCRIPTION}{header_options});\n\n"
+            f"{_EXPECTED_COLUMNS_FIXTURE}"
+            f"__expected__order_flags AS (\n  {expected_sql}\n)\n"
+        ),
+    }
+
+
+def selected_fields(result: dict[str, Any], expected: dict[str, object]) -> dict[str, object]:
+    """Return the fields of `result` that `expected` names."""
+
+    return {key: result.get(key) for key in expected}
+
+
+def build_helper_scenario_project_files(*, helper_ctes: str, check_ctes: str) -> dict[str, str]:
+    """Build an order-flags project whose scenario declares helpers ahead of its checks."""
+
+    return {
+        **_EXPECTED_COLUMNS_PROJECT_FILES,
+        _EXPECTED_COLUMNS_SCENARIO_PATH: (
+            f"SCENARIO ({_EXPECTED_COLUMNS_DESCRIPTION});\n\n"
+            f"{_EXPECTED_COLUMNS_FIXTURE}{helper_ctes},\n\n{check_ctes}\n\nSELECT 1\n"
+        ),
+    }

@@ -23,6 +23,7 @@ pub(crate) const BINARY_UNIT_SIZE: f64 = 1024.0;
 
 pub(crate) const PASS_STATUS: &str = "PASS";
 pub(crate) const FAIL_STATUS: &str = "FAIL";
+pub(crate) const ERROR_STATUS: &str = "ERROR";
 
 pub(crate) const DEFAULT_MAX_SNAPSHOT_ROWS_PER_RELATION: i64 = 10_000;
 pub(crate) const DEFAULT_MAX_SNAPSHOT_TOTAL_ROWS: i64 = 50_000;

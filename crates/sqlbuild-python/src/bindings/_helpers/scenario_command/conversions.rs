@@ -73,6 +73,7 @@ fn expected_row(expected: &Bound<'_, PyAny>) -> PyResult<ExpectedRow> {
         actual_row_count: native_field(expected, "actual_row_count")?.extract()?,
         expected_row_count: native_field(expected, "expected_row_count")?.extract()?,
         mismatched_row_count: native_field(expected, "mismatched_row_count")?.extract()?,
+        missing_row_count: native_field(expected, "missing_row_count")?.extract()?,
         error: coded_error(expected)?,
     })
 }
@@ -263,9 +264,12 @@ fn expectation_sql(
             ],
         )?
         .extract()?;
+        let compared: Option<Vec<String>> =
+            native_field(&expected, "compared_columns")?.extract()?;
         let sql: String = scenario_expected_comparison_sql(
             &format!("SELECT * FROM {actual_relation}"),
             &native_field(&expected, "expected_sql")?.extract::<String>()?,
+            compared.as_deref(),
             &adapter
                 .call_method0("render_set_difference_operator")?
                 .extract::<String>()?,

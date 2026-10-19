@@ -50,6 +50,13 @@ fn match_start(
     Ok(offset)
 }
 
+/// The code-point start of the first whole-word `name` at or after `offset`, else `offset`.
+pub(crate) fn word_start(text: &str, name: &str, offset: usize) -> Result<usize, SemanticFailure> {
+    let characters: Vec<char> = text.chars().collect();
+    let name: Vec<char> = name.chars().collect();
+    match_start(&characters, &name, offset)
+}
+
 /// Python's `_text_position`: the 1-based line and column of `name` at or after `offset`.
 pub(crate) fn text_position(
     text: &str,

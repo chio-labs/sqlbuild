@@ -51,7 +51,7 @@ test:
 	@mkdir -p /tmp/opencode
 	@log="/tmp/opencode/test-$$(date +%Y%m%d-%H%M%S).log"; \
 	echo "Logging to $$log"; \
-	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv --color=yes -n auto --dist loadfile 2>&1 | tee "$$log"; \
+	env PYTHONUNBUFFERED=1 SQLBUILD_CONCURRENCY=$(SQLBUILD_CONCURRENCY) uv run pytest tests/unit tests/integration -m "not real_warehouse and not dbt" -vv --color=yes -n auto --dist loadfile --max-worker-restart=0 2>&1 | tee "$$log"; \
 	status=$${PIPESTATUS[0]}; \
 	echo "TEST_EXIT=$$status (log: $$log)" | tee -a "$$log"; \
 	exit $$status
@@ -139,7 +139,9 @@ E2E_DUCKDB_CLI_DATA_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_promotion.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_concurrency.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_interrupts.py \
-	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_empty_fixture.py
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_empty_fixture.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_expected_columns.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/scenario/test_helper_ctes.py
 
 E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/scripts/cli_preview \

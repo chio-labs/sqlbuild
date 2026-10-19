@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 use polyglot_sql::{DialectType, ExpressionWalk, SchemaValidationOptions};
 
@@ -10,11 +11,11 @@ use crate::semantic_checks::main::complete_semantic_diagnostics::complete_semant
 use crate::semantic_checks::main::finish_type_recovery::finish_type_recovery;
 use crate::semantic_checks::main::plan_type_recovery::plan_type_recovery;
 use crate::semantic_checks::models::{
-    CompletedDiagnostic, CompletionModel, CompletionRequest, DiagnosticOwner, FinalDiagnostic,
-    LineageOutput, MetadataFinding, MetadataFunction, MetadataModel, MetadataOutcome,
-    MetadataRequest, MetadataSource, MetadataSqlTest, ModelBinding, ModelMetadataFindings,
-    RawBinding, RecoveryModel, SemanticDiagnostic, SemanticFailure, SemanticLocation,
-    TypeRecoveryPlan, TypeRecoveryRequest, TypeRecoveryStep,
+    AuditSqlInput, CompletedDiagnostic, CompletionModel, CompletionRequest, DiagnosticOwner,
+    FinalDiagnostic, HookModelInput, LineageOutput, MetadataFinding, MetadataFunction,
+    MetadataModel, MetadataOutcome, MetadataRequest, MetadataSource, MetadataSqlTest, ModelBinding,
+    ModelMetadataFindings, RawBinding, RecoveryModel, ResourceSqlRequest, SemanticDiagnostic,
+    SemanticFailure, SemanticLocation, TypeRecoveryPlan, TypeRecoveryRequest, TypeRecoveryStep,
 };
 use crate::semantic_checks::tests::test_types::{
     CompletionTestCase, DescribedDiagnostic, MetadataTestCase, OperandTypeTestCase,
@@ -700,5 +701,31 @@ pub(crate) fn expected_checked_outcome() -> MetadataOutcome {
             54,
         )],
         fallback_types: Vec::new(),
+    }
+}
+
+/// A request whose `orders` model outputs only `order_id` and declares audits in its header.
+pub(crate) fn missing_column_request(audit: AuditSqlInput) -> ResourceSqlRequest {
+    ResourceSqlRequest {
+        dialect: Some("duckdb".to_owned()),
+        quoted_ignore_case: false,
+        require_sql_analysis: false,
+        shapes: vec![(
+            "orders".to_owned(),
+            vec![("order_id".to_owned(), "INTEGER".to_owned())],
+        )],
+        audits: vec![audit],
+        sql_tests: Vec::new(),
+        models: vec![HookModelInput {
+            name: "orders".to_owned(),
+            path: "models/orders.sql".to_owned(),
+            authored_sql: Arc::from(
+                "MODEL (description \"Orders not_null\", columns (order_id (audits [unique]), \
+                 shipped_at (audits [not_null, unique])));\nSELECT 1 AS order_id\n",
+            ),
+            analysis_disabled: false,
+            hooks: Vec::new(),
+        }],
+        hook_files: Vec::new(),
     }
 }

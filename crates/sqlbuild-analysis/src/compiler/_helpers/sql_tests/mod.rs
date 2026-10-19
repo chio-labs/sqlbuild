@@ -21,4 +21,5 @@ pub mod reference_calls;
 pub mod relation_markers;
 pub mod rendering;
 pub mod scenario_extraction;
+pub(crate) mod scenario_scope;
 pub(crate) mod simple_template;

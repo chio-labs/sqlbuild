@@ -18,12 +18,20 @@ from sqlbuild._native import (
     build_selected_test_entries,
     discover_project_inputs,
 )
+from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
+from sqlbuild.adapters.snowflake.classes.snowflake_adapter import SnowflakeAdapter
 from sqlbuild.compiler.compile.types import CompiledProjectView
 from tests.integration.src.sqlbuild.compiler.planner._helpers._test_types import (
+    CaseFoldedFixtureFillTestCase,
     FixturePlanningIntegrationTestCase,
     FixtureSchemaIntegrationTestCase,
 )
+
+_ADAPTERS: dict[str, Callable[[], BaseAdapter]] = {
+    "duckdb": DuckDbAdapter,
+    "snowflake": SnowflakeAdapter,
+}
 
 
 @pytest.mark.parametrize(
@@ -105,6 +113,81 @@ def test_given_partial_fixture_when_compiling_and_planning_then_completes_requir
     assert len(entries) == 1
     entry: SqlTestPlanEntry = entries[0]
     assert test_case.expected_sql_fragment in entry.chain[0].resolved_sql
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        CaseFoldedFixtureFillTestCase(
+            description="duckdb fills each omitted column once",
+            adapter_name="duckdb",
+            project_toml='adapter = "duckdb"\n\n[connection]\ndatabase = ":memory:"\n',
+            expected_single_fragments=('CAST(NULL AS VARCHAR) AS "status"',),
+        ),
+        CaseFoldedFixtureFillTestCase(
+            description="snowflake fills each omitted column once",
+            adapter_name="snowflake",
+            project_toml='adapter = "snowflake"\n',
+            expected_single_fragments=('CAST(NULL AS VARCHAR) AS "STATUS"',),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_upper_case_reads_through_star_import_when_planning_then_fills_each_column_once(
+    test_case: CaseFoldedFixtureFillTestCase,
+    tmp_path: Path,
+    write_repo_files: Callable[[Path, dict[str, str]], None],
+) -> None:
+    write_repo_files(
+        tmp_path,
+        {
+            "sqlbuild_project.toml": f'name = "fixture_fill_demo"\n{test_case.project_toml}',
+            "sources/raw.yml": (
+                "sources:\n"
+                "  - name: raw__orders\n    description: Raw order records\n"
+                "    database: example_db\n"
+                "    schema: raw\n"
+                "    table: orders\n"
+                "    columns:\n"
+                "      - name: order_id\n        type: VARCHAR\n"
+                "      - name: customer_id\n        type: VARCHAR\n"
+                "      - name: status\n        type: VARCHAR\n"
+            ),
+            "models/orders.sql": (
+                'MODEL (description "Orders with their status.", database example_db, '
+                "schema analytics);\n\n"
+                'WITH raw__orders AS (SELECT * FROM __source("raw__orders")),\n'
+                "orders AS (SELECT ORDER_ID, STATUS FROM raw__orders)\n"
+                "SELECT ORDER_ID AS order_id, STATUS AS status FROM orders\n"
+            ),
+            "tests/unit/test_orders.sql": (
+                "TEST();\n\n"
+                "WITH\n"
+                "__source__raw__orders AS (SELECT CAST('o1' AS VARCHAR) AS order_id),\n"
+                "__expected__orders AS (SELECT CAST('o1' AS VARCHAR) AS order_id)\n"
+                "SELECT 1\n"
+            ),
+        },
+    )
+    discovered_inputs: DiscoveredProjectInputs = discover_project_inputs(project_dir=tmp_path)
+    adapter: BaseAdapter = _ADAPTERS[test_case.adapter_name]()
+
+    project: CompiledProjectView = build_compiled_project(
+        discovered_inputs=discovered_inputs,
+        adapter=adapter,
+    )
+    entries, warnings = build_selected_test_entries(
+        sql_test_selection=SqlTestSelection(),
+        project=project,
+        adapter=adapter,
+        selected_keys=frozenset((project.models[0].key,)),
+    )
+
+    assert warnings == []
+    assert len(entries) == 1
+    resolved_sql: str = entries[0].chain[0].resolved_sql
+    for fragment in test_case.expected_single_fragments:
+        assert resolved_sql.count(fragment) == 1, resolved_sql
 
 
 @pytest.mark.parametrize(

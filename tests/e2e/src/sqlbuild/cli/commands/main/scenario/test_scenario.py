@@ -1954,7 +1954,7 @@ def test_given_waffle_shop_fixture_when_running_with_retain_then_keeps_scenario_
             expected_artifact_fragments=(
                 "WITH __actual AS",
                 "__expected AS",
-                "mismatched_count",
+                "unexpected_count",
             ),
         ),
         ScenarioRuntimeArtifactTestCase(
@@ -2034,7 +2034,7 @@ def test_given_scenario_project_when_running_scenario_test_then_writes_runtime_a
             expected_artifact_fragments=(
                 "WITH __actual AS",
                 "__sqb_local__model__order_totals",
-                "mismatched_count",
+                "unexpected_count",
             ),
         ),
         ScenarioLocalRuntimeArtifactTestCase(

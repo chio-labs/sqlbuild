@@ -16,6 +16,7 @@ use crate::semantic_checks::models::{
 };
 
 const COLUMN_ONLY_BUILT_IN_AUDITS: [&str; 2] = ["not_null", "unique"];
+const MODEL_TARGET_KIND: &str = "model";
 const SQL_ANALYSIS_KEY: &str = "sql_analysis";
 
 /// One authored SQL body owned by a non-model resource, Python's `_ResourceSql`.
@@ -60,7 +61,7 @@ fn text_byte_end(contents: &str, body: &str) -> usize {
     contents.find(body).unwrap_or(contents.len())
 }
 
-fn audit_label(audit: &AuditSqlInput) -> String {
+pub(crate) fn audit_label(audit: &AuditSqlInput) -> String {
     let mut label = format!("audit '{}'", audit.definition_name);
     if let Some((kind, target)) = &audit.attached_target {
         label.push_str(&format!(" on {kind} '{target}'"));
@@ -104,6 +105,66 @@ fn binds_cleanly(
         .is_some()
 }
 
+/// A built-in audit attached to a model column its closed shape lacks: its model and column.
+fn missing_model_column<'a>(
+    audit: &'a AuditSqlInput,
+    request: &ResourceSqlRequest,
+    shapes: &HashMap<&str, &[(String, String)]>,
+) -> Option<(&'a str, &'a str)> {
+    let (Some((kind, target)), Some(column)) = (&audit.attached_target, &audit.attached_column)
+    else {
+        return None;
+    };
+    if !audit.built_in || kind != MODEL_TARGET_KIND {
+        return None;
+    }
+    let columns: &[(String, String)] = shapes.get(target.as_str()).copied().unwrap_or(&[]);
+    (!columns.is_empty()
+        && resolve_binding_column(
+            column,
+            columns,
+            request.dialect.as_deref(),
+            request.quoted_ignore_case,
+        )
+        .is_none())
+    .then_some((target.as_str(), column.as_str()))
+}
+
+/// One built-in audit on a missing model column, reported once at its MODEL header declaration.
+pub(crate) struct MissingColumnAudit<'a> {
+    pub(crate) audit: &'a AuditSqlInput,
+    pub(crate) model: &'a HookModelInput,
+    pub(crate) column: &'a str,
+}
+
+/// Built-in audits attached to model columns the model's closed shape lacks.
+pub(crate) fn missing_column_audits(request: &ResourceSqlRequest) -> Vec<MissingColumnAudit<'_>> {
+    let shapes: HashMap<&str, &[(String, String)]> = shapes_by_name(request);
+    let models: HashMap<&str, &HookModelInput> = request
+        .models
+        .iter()
+        .map(|model| (model.name.as_str(), model))
+        .collect();
+    let mut found: Vec<MissingColumnAudit<'_>> = Vec::new();
+    for audit in &request.audits {
+        let Some((target, column)) = missing_model_column(audit, request, &shapes) else {
+            continue;
+        };
+        let Some(model) = models.get(target).copied() else {
+            continue;
+        };
+        if model.analysis_disabled {
+            continue;
+        }
+        found.push(MissingColumnAudit {
+            audit,
+            model,
+            column,
+        });
+    }
+    found
+}
+
 fn disabled_models(request: &ResourceSqlRequest) -> HashSet<&str> {
     request
         .models
@@ -121,7 +182,10 @@ fn audit_resources(request: &ResourceSqlRequest, disabled: &HashSet<&str>) -> Ve
             .attached_target
             .as_ref()
             .is_some_and(|(_, target)| disabled.contains(&target.as_str()));
-        if target_disabled || binds_cleanly(audit, request, &shapes) {
+        if target_disabled
+            || binds_cleanly(audit, request, &shapes)
+            || missing_model_column(audit, request, &shapes).is_some()
+        {
             continue;
         }
         for (sql, authored) in &audit.bodies {

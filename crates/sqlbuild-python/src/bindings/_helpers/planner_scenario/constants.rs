@@ -13,4 +13,6 @@ pub(super) const SCENARIO_PLAN_MISSING_FIXTURE_SQL: &str = "S508";
 pub(super) const SCENARIO_PLAN_MISSING_RELATION_TARGET: &str = "S509";
 pub(super) const SCENARIO_PLAN_INVALID_FIXTURE: &str = "S510";
 pub(super) const SCENARIO_PLAN_UNRESOLVED_RELATION_MARKER: &str = "S511";
+pub(super) const SCENARIO_PLAN_EXPECTED_COLUMNS: &str = "S512";
+pub(super) const SCENARIO_EXPECTED_COLUMNS_HELP: &str = "list every column the model outputs in the expected CTE, and remove columns it does not output";
 pub(super) const SCENARIO_PLAN_INTERNAL: &str = "S599";

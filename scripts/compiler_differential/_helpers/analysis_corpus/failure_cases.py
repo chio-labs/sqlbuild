@@ -144,6 +144,19 @@ def _binding_cases() -> tuple[FailureCase, ...]:
                 ),
             },
         ),
+        failure_case(
+            name="analysis-unsupported-truth-test",
+            expected_code="B103",
+            expected_message="'IS NOT TRUE' is not supported for dialect Snowflake",
+            files={
+                FAILURE_CONFIG_PATH: _SNOWFLAKE_CONFIG
+                + '\n[defaults]\ndatabase = "ANALYTICS"\nschema = "ANALYTICS"\n',
+                **_mart(
+                    f"SELECT customer_id, amount AS total_amount\nFROM {_ORDERS}\n"
+                    "WHERE (amount > 1) IS NOT TRUE\n"
+                ),
+            },
+        ),
     )
 
 

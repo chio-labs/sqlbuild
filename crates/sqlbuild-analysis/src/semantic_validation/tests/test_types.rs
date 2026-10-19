@@ -52,3 +52,24 @@ pub(crate) struct NormalizationBatchTestCase {
     pub(crate) requests: &'static [(&'static str, &'static [(&'static str, &'static str)])],
     pub(crate) expected_failures: &'static [usize],
 }
+
+pub(crate) struct TruthTestScanTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_tests: &'static [(usize, usize, bool, bool)],
+}
+
+pub(crate) struct TruthTestDialectTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: polyglot_sql::DialectType,
+    pub(crate) expected_rejected: bool,
+}
+
+pub(crate) struct LocatedTruthTestDiagnosticTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) dialect: polyglot_sql::DialectType,
+    pub(crate) sql: &'static str,
+    pub(crate) expected_message: &'static str,
+    pub(crate) expected_location: (Option<usize>, Option<usize>),
+    pub(crate) expected_span: (Option<usize>, Option<usize>),
+}

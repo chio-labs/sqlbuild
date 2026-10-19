@@ -52,6 +52,7 @@ pub fn align_columns(label: &str, input: AlignmentInput<'_>) -> Alignment {
         };
     }
     completed.sort_unstable();
+    completed.dedup();
     Alignment {
         diagnostics,
         completed: Some(completed),

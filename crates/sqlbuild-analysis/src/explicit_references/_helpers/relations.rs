@@ -2,6 +2,8 @@
 
 use std::collections::HashSet;
 
+use sqlbuild_core::text::main::python_casefold::python_casefold;
+
 use crate::explicit_references::constants::{
     MIGRATE_FROM_QUOTES, MODEL_TYPE, SCHEMA_QUALIFIED_PARTS, SEED_TYPE, SOURCE_TYPE,
 };
@@ -59,7 +61,7 @@ pub(crate) fn matched<'a>(
 }
 
 fn folded(text: &str) -> String {
-    str::to_lowercase(text)
+    python_casefold(text)
 }
 
 /// `_parts_compatible`: either part missing, or equal casefolded.

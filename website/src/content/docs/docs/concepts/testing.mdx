@@ -112,6 +112,7 @@ and `//` line comments on Snowflake.
 An `__expected__<model>` CTE compares only the columns it lists, matched by name, so column order
 does not matter and unlisted model columns are ignored. Row counts are always compared. Listing a
 column the model does not output is a test error.
+[Scenario](/docs/concepts/scenarios#scenario-format) expected output is compared the same way.
 
 SQLBuild reads test CTEs strictly and rejects other forms with a compile error that names the CTE:
 

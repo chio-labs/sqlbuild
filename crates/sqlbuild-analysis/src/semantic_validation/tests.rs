@@ -8,5 +8,7 @@ mod positions;
 mod semantic_validation;
 #[path = "tests/test_types.rs"]
 mod test_types;
+#[path = "tests/test_truth_tests.rs"]
+mod truth_tests;
 #[path = "tests/test_type_locations.rs"]
 mod type_locations;

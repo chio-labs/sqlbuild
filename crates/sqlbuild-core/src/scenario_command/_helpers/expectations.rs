@@ -3,14 +3,14 @@
 use crate::cli_text::models::CliStyle;
 use crate::scenario_command::_helpers::rows::{result_error, rows_label};
 use crate::scenario_command::constants::{
-    EXPECTATION_ERROR_INDENT, EXPECTATION_LABEL_WIDTH, EXPECTATION_NAME_WIDTH, FAIL_STATUS,
-    PASS_STATUS,
+    ERROR_STATUS, EXPECTATION_ERROR_INDENT, EXPECTATION_LABEL_WIDTH, EXPECTATION_NAME_WIDTH,
+    FAIL_STATUS, PASS_STATUS,
 };
 use crate::scenario_command::models::{CodedText, ScenarioResultRow};
 
-/// One `expect` row.
-fn expectation_line(item: &str, (failed, detail): (bool, String), style: CliStyle) -> String {
-    let status: String = style.status(if failed { FAIL_STATUS } else { PASS_STATUS });
+/// One `expect` row under `status`.
+fn expectation_line(item: &str, (status, detail): (&str, String), style: CliStyle) -> String {
+    let status: String = style.status(status);
     format!(
         "    {:<EXPECTATION_LABEL_WIDTH$}{item:<EXPECTATION_NAME_WIDTH$} {status}{detail}\n",
         "expect"
@@ -32,31 +32,35 @@ fn expectation_error(error: Option<&CodedText>, style: CliStyle) -> String {
 pub(crate) fn expectation_rows(row: &ScenarioResultRow, style: CliStyle) -> String {
     let mut text: String = String::new();
     for expected in &row.expected {
-        let detail: String = if expected.failed {
-            format!("  {} mismatched", expected.mismatched_row_count)
-        } else {
-            String::new()
-        };
+        let (status, detail): (&str, String) =
+            match (expected.failed, expected.mismatched_row_count) {
+                (false, _) => (PASS_STATUS, String::new()),
+                (true, Some(mismatched)) => (
+                    FAIL_STATUS,
+                    format!(
+                        "  {mismatched} mismatched, {} missing",
+                        expected.missing_row_count.unwrap_or_default()
+                    ),
+                ),
+                (true, None) => (ERROR_STATUS, String::new()),
+            };
         text.push_str(&expectation_line(
             &format!("expected {}", expected.model_name),
-            (expected.failed, detail),
+            (status, detail),
             style,
         ));
         text.push_str(&expectation_error(expected.error.as_ref(), style));
     }
     for assertion in &row.assertions {
-        let detail: String = if assertion.failed {
-            format!(
-                "  {} {}",
-                assertion.failing_row_count,
-                rows_label(assertion.failing_row_count)
-            )
-        } else {
-            String::new()
+        let (status, detail): (&str, String) = match (assertion.failed, assertion.failing_row_count)
+        {
+            (false, _) => (PASS_STATUS, String::new()),
+            (true, Some(count)) => (FAIL_STATUS, format!("  {count} {}", rows_label(count))),
+            (true, None) => (ERROR_STATUS, String::new()),
         };
         text.push_str(&expectation_line(
             &format!("assertion {}", assertion.name),
-            (assertion.failed, detail),
+            (status, detail),
             style,
         ));
         text.push_str(&expectation_error(assertion.error.as_ref(), style));
@@ -68,18 +72,27 @@ pub(crate) fn expectation_rows(row: &ScenarioResultRow, style: CliStyle) -> Stri
 pub(crate) fn expectation_failures(row: &ScenarioResultRow) -> String {
     let mut text: String = String::new();
     for expected in row.expected.iter().filter(|expected| expected.failed) {
-        text.push_str(&format!(
-            "    expected {}: actual={} expected={} mismatched={}\n",
-            expected.model_name,
+        let (Some(actual), Some(expected_count), Some(mismatched)) = (
             expected.actual_row_count,
             expected.expected_row_count,
-            expected.mismatched_row_count
+            expected.mismatched_row_count,
+        ) else {
+            continue;
+        };
+        text.push_str(&format!(
+            "    expected {}: actual={actual} expected={expected_count} mismatched={mismatched} \
+             missing={}\n",
+            expected.model_name,
+            expected.missing_row_count.unwrap_or_default()
         ));
     }
     for assertion in row.assertions.iter().filter(|assertion| assertion.failed) {
+        let Some(failing) = assertion.failing_row_count else {
+            continue;
+        };
         text.push_str(&format!(
-            "    assertion {}: failing_rows={}\n",
-            assertion.name, assertion.failing_row_count
+            "    assertion {}: failing_rows={failing}\n",
+            assertion.name
         ));
         if let Some(sample) = &assertion.first_sample {
             text.push_str(&format!("    sample: {sample}\n"));

@@ -395,3 +395,33 @@ pub struct SqlScenarioCtes {
     pub expected_models: Vec<String>,
     pub assertion_names: Vec<String>,
 }
+
+/// A scenario expected CTE's authored columns and how they differ from its model's output.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ScenarioExpectedColumns {
+    /// The columns the CTE lists as authored, or `None` when they are not explicit.
+    pub listed: Option<Vec<String>>,
+    /// Model output columns the CTE does not list.
+    pub unlisted: Vec<String>,
+    /// Listed columns the model does not output.
+    pub unknown: Vec<String>,
+}
+
+/// The CTEs a scenario's checks may read: helpers as authored, fixtures by their stand-in bodies.
+#[derive(Debug)]
+pub struct ScenarioScopeInput<'a> {
+    /// Every non-check CTE by authored name; a fixture body is what a check reading it sees.
+    pub ctes: &'a [(String, String)],
+    /// The scenario's `__expected__` and `__assert__` CTEs, checked against helper names.
+    pub checks: &'a [(String, String)],
+    pub lexical: LexicalSyntax,
+    pub dialect: Option<&'a str>,
+    pub file_label: &'a str,
+}
+
+/// One scenario file's helper and fixture CTEs, indexed once for its fixtures and checks.
+#[derive(Debug)]
+pub struct ScenarioHelperScope {
+    pub(crate) graph: crate::compiler::_helpers::sql_tests::helper_scope::ScopeGraph,
+    pub(crate) patterns: crate::compiler::_helpers::sql_tests::planning::SqlTestPatterns,
+}

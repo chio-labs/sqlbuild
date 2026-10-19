@@ -249,3 +249,50 @@ class PromotionConflictReuseE2ETestCase:
     settings_steps: tuple[str, ...]
     expected_exit_codes: tuple[int, ...]
     expected_reused: tuple[bool, ...]
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedColumnsE2ETestCase:
+    """Test case for comparing a scenario's expected CTE with its model's output columns."""
+
+    description: str
+    expected_sql: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    header_options: str = ""
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_json_results: tuple[dict[str, object], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioExpectedColumnsHeaderE2ETestCase:
+    """Test case for validating the SCENARIO() expected_columns option."""
+
+    description: str
+    header_options: str
+    expected_exit_code: int
+    expected_stderr_fragment: str
+
+
+@dataclass(frozen=True)
+class ScenarioHelperCteE2ETestCase:
+    """Test case for scenario checks that read helper CTEs declared in the same file."""
+
+    description: str
+    helper_ctes: str
+    check_ctes: str
+    expected_exit_code: int
+    expected_stdout_fragments: tuple[str, ...]
+    unexpected_stdout_fragments: tuple[str, ...] = field(default_factory=tuple)
+    expected_json_expected_results: tuple[dict[str, object], ...] = field(default_factory=tuple)
+    expected_json_assertion_results: tuple[dict[str, object], ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ScenarioHelperShadowingE2ETestCase:
+    """Test case for a scenario check that redefines a helper CTE name."""
+
+    description: str
+    check_ctes: str
+    expected_output_fragment: str
+    unexpected_output_fragment: str

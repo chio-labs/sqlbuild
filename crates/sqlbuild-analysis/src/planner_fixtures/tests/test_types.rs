@@ -65,3 +65,12 @@ pub(crate) struct CollectionMismatchTestCase {
     pub(crate) inferred_type: Option<&'static str>,
     pub(crate) expected_mismatch: bool,
 }
+
+#[derive(Debug)]
+pub(crate) struct RequiredColumnsTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) reads: &'static [&'static str],
+    pub(crate) star: bool,
+    pub(crate) expected_required: &'static [&'static str],
+    pub(crate) expected_completed: &'static [usize],
+}

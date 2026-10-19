@@ -88,6 +88,7 @@ class PartialFixtureE2ETestCase:
     expected_artifact_fragments: tuple[str, ...]
     unexpected_artifact_fragments: tuple[str, ...] = field(default_factory=tuple)
     artifact_filename: str = "test_orders.sql"
+    single_artifact_fragments: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

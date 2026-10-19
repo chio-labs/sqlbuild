@@ -191,6 +191,16 @@ fn scenario_file<'py>(
             ));
         }
     }
+    if let Some(columns) = header_values.get_item(constants::SCENARIO_EXPECTED_COLUMNS_KEY)? {
+        let valid: bool = columns.extract::<String>().is_ok_and(|value| {
+            constants::SCENARIO_EXPECTED_COLUMNS_VALUES.contains(&value.as_str())
+        });
+        if !valid {
+            return failure(format!(
+                "SCENARIO() expected_columns in '{shown}' must be \"listed\" or \"all\""
+            ));
+        }
+    }
     if file.sql_body.is_empty() {
         return failure(format!(
             "SQL scenario '{shown}' must define SQL after SCENARIO(...)"

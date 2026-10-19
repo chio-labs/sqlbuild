@@ -111,11 +111,11 @@ struct CatalogNames {
 }
 
 /// Incremental byte-to-character position, so locating every call stays linear in the SQL.
-struct Cursor {
+pub(crate) struct Cursor {
     byte: usize,
-    characters: usize,
-    line: usize,
-    column: usize,
+    pub(crate) characters: usize,
+    pub(crate) line: usize,
+    pub(crate) column: usize,
 }
 
 impl CatalogSink for CatalogNames {
@@ -142,7 +142,7 @@ impl CatalogSink for CatalogNames {
 }
 
 impl Cursor {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             byte: 0,
             characters: 0,
@@ -151,7 +151,7 @@ impl Cursor {
         }
     }
 
-    fn advance(&mut self, sql: &str, byte: usize) {
+    pub(crate) fn advance(&mut self, sql: &str, byte: usize) {
         for character in sql[self.byte..byte].chars() {
             self.characters += 1;
             if character == '\n' {
@@ -412,7 +412,7 @@ fn keyword_end(sql: &[u8], index: usize, keyword: &str) -> Option<usize> {
     .then_some(end)
 }
 
-fn is_word_byte(byte: u8) -> bool {
+pub(crate) fn is_word_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
 }
 
