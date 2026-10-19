@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
+from typing import Any
 
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import query_duckdb
 
@@ -368,6 +370,131 @@ LOCK_PROJECT_FILES: dict[str, str] = {
 SELECT 1 AS order_id
 """,
 }
+
+
+SCENARIO_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": _SQLITE_TOML,
+    "sources/raw.yml": """sources:
+  - name: raw_orders
+    description: Raw orders.
+    schema: main
+    table: raw_orders
+    columns:
+      - name: id
+        type: INTEGER
+      - name: customer_id
+        type: INTEGER
+      - name: amount
+        type: INTEGER
+      - name: ordered_at
+        type: TIMESTAMP
+""",
+    "models/orders.sql": """MODEL (description 'Orders.', materialized table);
+
+SELECT id AS order_id, customer_id, amount, ordered_at FROM __source("raw_orders")
+""",
+    "models/customer_totals.sql": """MODEL (description 'Totals per customer.', materialized table);
+
+SELECT customer_id, SUM(amount) AS total_amount, COUNT(*) AS order_count
+FROM __ref("orders")
+GROUP BY customer_id
+""",
+    "models/daily_orders.sql": """MODEL (
+  description 'Orders by day, incremental.',
+  materialized incremental,
+  incremental_strategy delete_insert,
+  unique_key order_day,
+  cursor order_day,
+  cursor_type timestamp,
+  cursor_grain day,
+  cursor_start "2026-01-01",
+);
+
+SELECT date(ordered_at) AS order_day, COUNT(*) AS order_count
+FROM __ref("orders")
+GROUP BY 1
+""",
+    "tests/scenarios/customer_totals_pass.sql": """SCENARIO (description "Customer totals.");
+
+WITH
+__source__raw_orders AS (
+  SELECT 1 AS id, 10 AS customer_id, 10 AS amount, '2026-01-01 10:00:00' AS ordered_at
+  UNION ALL
+  SELECT 2, 10, 5, '2026-01-02 10:00:00'
+  UNION ALL
+  SELECT 3, 20, 7, '2026-01-02 11:00:00'
+),
+__expected__customer_totals AS (
+  SELECT 10 AS customer_id, 15 AS total_amount, 2 AS order_count
+  UNION ALL
+  SELECT 20, 7, 1
+),
+__expected__daily_orders AS (
+  SELECT '2026-01-01' AS order_day, 1 AS order_count
+  UNION ALL
+  SELECT '2026-01-02', 2
+)
+SELECT 1
+""",
+    "tests/scenarios/customer_totals_fail.sql": """SCENARIO (description 'Wrong totals.');
+
+WITH
+__source__raw_orders AS (
+  SELECT 1 AS id, 10 AS customer_id, 10 AS amount, '2026-01-01 10:00:00' AS ordered_at
+),
+__expected__customer_totals AS (
+  SELECT 10 AS customer_id, 11 AS total_amount, 1 AS order_count
+)
+SELECT 1
+""",
+    "tests/scenarios/nested/orders_assert_pass.sql": """SCENARIO (description 'No negatives.');
+
+WITH
+__source__raw_orders AS (
+  SELECT 1 AS id, 10 AS customer_id, 10 AS amount, '2026-01-01 10:00:00' AS ordered_at
+),
+__assert__no_negative_orders AS (
+  SELECT * FROM __ref("orders") WHERE amount < 0
+)
+SELECT 1
+""",
+    "tests/scenarios/orders_assert_fail.sql": """SCENARIO (description 'Every order is large.');
+
+WITH
+__source__raw_orders AS (
+  SELECT 1 AS id, 10 AS customer_id, 3 AS amount, '2026-01-01 10:00:00' AS ordered_at
+),
+__assert__small_orders AS (
+  SELECT * FROM __ref("orders") WHERE amount < 5
+)
+SELECT 1
+""",
+}
+
+SCENARIO_OUTCOMES: dict[str, tuple[str, str | None]] = {
+    "customer_totals_pass": ("success", None),
+    "customer_totals_fail": ("failed", "X506"),
+    "orders_assert_pass": ("success", None),
+    "orders_assert_fail": ("failed", "X508"),
+}
+
+
+def scenario_outcomes(payload: dict[str, Any]) -> dict[str, tuple[str, str | None]]:
+    return {
+        str(scenario["name"]): (str(scenario["status"]), scenario.get("error_code"))
+        for scenario in payload["scenarios"]
+    }
+
+
+def scenario_table_shapes(*, db_path: Path) -> tuple[str, ...]:
+    """Table names with each scenario run identifier replaced, sorted."""
+
+    return tuple(
+        sorted(
+            re.sub(r"__sqb_[0-9a-f]+__", "__sqb_<run>__", name)
+            for name in table_names(db_path=db_path)
+        )
+    )
 
 
 def table_names(*, db_path: Path) -> tuple[str, ...]:

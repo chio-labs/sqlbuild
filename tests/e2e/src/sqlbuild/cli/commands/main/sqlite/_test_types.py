@@ -48,3 +48,12 @@ class SqliteLockE2ETestCase:
     busy_timeout: float
     hold_seconds: float
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SqliteScenarioE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_outcomes: dict[str, tuple[str, str | None]]
+    expected_tables: tuple[str, ...]
+    expected_return_code: int = 1
