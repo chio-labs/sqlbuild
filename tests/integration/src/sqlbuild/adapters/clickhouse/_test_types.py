@@ -155,3 +155,10 @@ class ClickHouseGenerationTestCase:
     description: str
     incoming_rows: tuple[tuple[int, str, int, str], ...]
     expected_generation_kept: bool
+
+
+@dataclass(frozen=True)
+class ClickHouseCopyGenerationTestCase:
+    description: str
+    copy_kind: str
+    expected_copy_shares_generation: bool

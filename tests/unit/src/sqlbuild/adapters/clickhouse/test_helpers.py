@@ -158,7 +158,7 @@ def test_given_snapshot_close_when_rewriting_then_working_copy_is_rebuilt_and_ex
     assert statements[:5] == (
         "DROP TABLE IF EXISTS sales.customers__w",
         "DROP TABLE IF EXISTS sales.customers__r",
-        "CREATE TABLE sales.customers__w AS sales.customers",
+        "CREATE TABLE sales.customers__w AS sales.customers COMMENT ''",
         "INSERT INTO sales.customers__w SELECT * FROM sales.customers",
         "INSERT INTO sales.customers__w SELECT 1",
     )

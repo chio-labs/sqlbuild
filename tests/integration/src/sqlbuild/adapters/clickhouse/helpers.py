@@ -422,3 +422,31 @@ _WRITERS: dict[str, Callable[..., None]] = {
     "cursor": _write_cursor,
     "merge": _write_merge,
 }
+
+
+def copy_relation(
+    *, adapter: ClickHouseAdapter, connection: Any, kind: str, origin: str, destination: str
+) -> None:
+    """Copy ``origin`` to ``destination`` through one of the adapter's copy statements."""
+
+    execute_all(
+        adapter=adapter,
+        connection=connection,
+        statements=_COPY_STATEMENTS[kind](adapter, origin, destination),
+    )
+
+
+_COPY_STATEMENTS: dict[str, Callable[[ClickHouseAdapter, str, str], tuple[str, ...]]] = {
+    "clone": lambda adapter, origin, destination: adapter.render_clone(
+        origin=origin, destination=destination
+    ),
+    "hard copy": lambda adapter, origin, destination: adapter.render_clone(
+        origin=origin, destination=destination, hard_copy=True
+    ),
+    "replace from relation": lambda adapter, origin, destination: (
+        adapter.render_replace_table_from_relation(destination=destination, origin=origin)
+    ),
+    "migration stage": lambda adapter, origin, destination: (
+        adapter.render_migration_stage(origin=origin, stage=destination).statements
+    ),
+}

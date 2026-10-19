@@ -112,3 +112,4 @@ KEY_IDENTIFIER_PATTERN: re.Pattern[str] = re.compile(r"`([^`]+)`|([A-Za-z_][A-Za
 NULL_IN_ORDINARY_COLUMN_SERVER_CODE: int = 349
 NULL_IN_ORDINARY_COLUMN_CODE: str = "A713"
 NULL_TARGET_COLUMN_PATTERN: re.Pattern[str] = re.compile(r"to destination column (\S+?):")
+FRESH_GENERATION_CLAUSE: str = " COMMENT ''"

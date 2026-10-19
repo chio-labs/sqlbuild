@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
+from sqlbuild.adapters.clickhouse.constants import FRESH_GENERATION_CLAUSE
 from sqlbuild.adapters.clickhouse.models import SnapshotWorkspace
 
 _UPDATE_PREFIX: str = "UPDATE "
@@ -34,7 +35,7 @@ def rewrite_snapshot_statements(
     rewritten: list[str] = [
         f"DROP TABLE IF EXISTS {workspace.work}",
         f"DROP TABLE IF EXISTS {workspace.rebuild}",
-        f"CREATE TABLE {workspace.work} AS {workspace.destination}",
+        f"CREATE TABLE {workspace.work} AS {workspace.destination}{FRESH_GENERATION_CLAUSE}",
         f"INSERT INTO {workspace.work} SELECT * FROM {workspace.destination}",
     ]
     statement: str
@@ -77,7 +78,7 @@ def _close_statements(*, workspace: SnapshotWorkspace, statement: str) -> tuple[
         "GROUP BY __sqb_row"
     )
     return (
-        f"CREATE TABLE {workspace.rebuild} AS {workspace.work}",
+        f"CREATE TABLE {workspace.rebuild} AS {workspace.work}{FRESH_GENERATION_CLAUSE}",
         f"INSERT INTO {workspace.rebuild} SELECT __target.* REPLACE ("
         f"if(__closed.__sqb_closed = 1 AND __target.{valid_to} IS NULL, "
         f"CAST(__closed.__sqb_valid_to, toTypeName(__target.{valid_to})), "

@@ -24,6 +24,7 @@ from tests.integration.src.sqlbuild.adapters.clickhouse._test_types import (
     ClickHouseCloneTestCase,
     ClickHouseColumnMigrationTestCase,
     ClickHouseConcurrentWindowTestCase,
+    ClickHouseCopyGenerationTestCase,
     ClickHouseCursorFilterTestCase,
     ClickHouseFunctionTestCase,
     ClickHouseGenerationTestCase,
@@ -45,6 +46,7 @@ from tests.integration.src.sqlbuild.adapters.clickhouse.helpers import (
     FailingExecute,
     InjectedFailure,
     apply_write,
+    copy_relation,
     create_orders,
     cursor_delta_sql,
     execute_all,
@@ -1022,3 +1024,51 @@ def test_given_partition_rewrite_when_reading_generation_then_microbatch_scope_i
         connection=connection, database=None, schema=clickhouse_schema, name="orders"
     )
     assert (before is not None and before == after) is test_case.expected_generation_kept
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseCopyGenerationTestCase(
+            description=kind, copy_kind=kind, expected_copy_shares_generation=False
+        )
+        for kind in ("clone", "hard copy", "replace from relation", "migration stage")
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_exchanged_table_when_copying_then_copy_gets_its_own_generation(
+    test_case: ClickHouseCopyGenerationTestCase,
+    adapter: ClickHouseAdapter,
+    connection: Any,
+    clickhouse_schema: str,
+) -> None:
+    relation: str = f"{clickhouse_schema}.orders"
+    create_orders(
+        adapter=adapter,
+        connection=connection,
+        relation=relation,
+        partition_by=_PARTITIONED,
+        rows=INITIAL_ORDERS,
+    )
+    write_cursor_delta(
+        adapter=adapter,
+        connection=connection,
+        relation=relation,
+        sql=incoming_rows_sql(((1, "ada", 11, "2026-01-05"), (6, "fa", 60, "2026-03-09"))),
+    )
+    origin_generation: str | None = adapter.physical_relation_generation(
+        connection=connection, database=None, schema=clickhouse_schema, name="orders"
+    )
+
+    copy_relation(
+        adapter=adapter,
+        connection=connection,
+        kind=test_case.copy_kind,
+        origin=relation,
+        destination=f"{clickhouse_schema}.orders_copy",
+    )
+
+    copy_generation: str | None = adapter.physical_relation_generation(
+        connection=connection, database=None, schema=clickhouse_schema, name="orders_copy"
+    )
+    assert (copy_generation == origin_generation) is test_case.expected_copy_shares_generation

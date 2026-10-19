@@ -118,6 +118,7 @@ from sqlbuild.adapters.clickhouse.constants import (
     DSN_OPTION,
     EXCHANGE_UNSUPPORTED_CODES,
     EXPECTED_OUTPUT_COLUMNS_CONFIG_KEY,
+    FRESH_GENERATION_CLAUSE,
     GENERATION_COMMENT_PREFIX,
     MAX_IDENTIFIER_LENGTH,
     MAX_QUERY_SIZE_BYTES,
@@ -799,7 +800,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> tuple[str, ...]:
         return (
             f"DROP TABLE IF EXISTS {destination}",
-            f"CREATE TABLE {destination} AS {origin}",
+            f"CREATE TABLE {destination} AS {origin}{FRESH_GENERATION_CLAUSE}",
             f"INSERT INTO {destination} SELECT * FROM {origin}",
         )
 
@@ -818,7 +819,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
             return self.render_replace_table_from_relation(destination=destination, origin=origin)
         return (
             f"DROP TABLE IF EXISTS {destination}",
-            f"CREATE TABLE {destination} AS {origin}",
+            f"CREATE TABLE {destination} AS {origin}{FRESH_GENERATION_CLAUSE}",
             f"ALTER TABLE {destination} ATTACH PARTITION ALL FROM {origin}",
         )
 
@@ -841,7 +842,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
         return MigrationStagePlan(
             transfer=MigrationTransfer.COPY,
             statements=(
-                f"CREATE TABLE {stage} AS {origin}",
+                f"CREATE TABLE {stage} AS {origin}{FRESH_GENERATION_CLAUSE}",
                 f"INSERT INTO {stage} SELECT * FROM {origin}",
             ),
         )
