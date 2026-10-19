@@ -92,6 +92,44 @@ fn given_physical_layout_keys_when_validating_then_shapes_and_materializations_a
             expected_outcome: "model 'orders_daily': primary_key must be a prefix of order_by",
         },
         ValidateTestCase {
+            description: "a primary key prefix of a single sorting tuple string",
+            config: table(vec![
+                ("order_by", Value::Str("customer_id, ordered_at")),
+                ("primary_key", Value::Str("customer_id")),
+            ]),
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "accepted",
+        },
+        ValidateTestCase {
+            description: "a parenthesized sorting tuple with nested calls and quotes",
+            config: table(vec![
+                (
+                    "order_by",
+                    Value::Str(
+                        "(customer_id, toStartOfInterval(ordered_at, INTERVAL 1 day), 'a,b')",
+                    ),
+                ),
+                (
+                    "primary_key",
+                    Value::Str("(customer_id, toStartOfInterval(ordered_at, INTERVAL 1 day))"),
+                ),
+            ]),
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "accepted",
+        },
+        ValidateTestCase {
+            description: "a primary key string that is not a sorting prefix",
+            config: table(vec![
+                ("order_by", Value::Str("(customer_id, ordered_at)")),
+                ("primary_key", Value::Str("ordered_at")),
+            ]),
+            references: &[],
+            query_sql: "select 1",
+            expected_outcome: "model 'orders_daily': primary_key must be a prefix of order_by",
+        },
+        ValidateTestCase {
             description: "a setting with a list value",
             config: table(vec![(
                 "table_settings",

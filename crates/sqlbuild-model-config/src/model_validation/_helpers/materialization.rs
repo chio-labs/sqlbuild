@@ -493,13 +493,82 @@ fn check_primary_key<N: AuthoredNode>(
     let Some(primary_key) = expressions(config, PRIMARY_KEY_KEY)? else {
         return Ok(());
     };
-    let prefix: bool = order_by.is_some_and(|order_by| order_by.starts_with(&primary_key));
+    let primary_key: Vec<String> = key_elements(&primary_key);
+    let prefix: bool =
+        order_by.is_some_and(|order_by| key_elements(order_by).starts_with(&primary_key));
     if prefix {
         return Ok(());
     }
     Err(config.error(format!(
         "{PRIMARY_KEY_KEY} must be a prefix of {ORDER_BY_KEY}"
     )))
+}
+
+/// The key's element expressions: each text unwrapped and split at its top-level commas.
+fn key_elements(texts: &[String]) -> Vec<String> {
+    texts
+        .iter()
+        .flat_map(|text| top_level_items(unwrapped(text.trim())))
+        .collect()
+}
+
+/// `text` without one pair of parentheses enclosing all of it.
+fn unwrapped(text: &str) -> &str {
+    let inner: Option<&str> = text
+        .strip_prefix('(')
+        .and_then(|rest| rest.strip_suffix(')'));
+    match inner {
+        Some(inner) if balanced(inner) => inner,
+        _ => text,
+    }
+}
+
+/// Whether every bracket in `text` outside quotes closes within it.
+fn balanced(text: &str) -> bool {
+    let mut depth: i64 = 0;
+    let mut quote: Option<char> = None;
+    for character in text.chars() {
+        match (quote, character) {
+            (Some(open), _) if character == open => quote = None,
+            (Some(_), _) => {}
+            (None, '\'' | '"' | '`') => quote = Some(character),
+            (None, '(' | '[') => depth += 1,
+            (None, ')' | ']') => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            (None, _) => {}
+        }
+    }
+    depth == 0 && quote.is_none()
+}
+
+/// `text` split at commas outside quotes and brackets, each item trimmed.
+fn top_level_items(text: &str) -> Vec<String> {
+    let mut items: Vec<String> = Vec::new();
+    let mut current: String = String::new();
+    let mut depth: i64 = 0;
+    let mut quote: Option<char> = None;
+    for character in text.chars() {
+        match (quote, character) {
+            (Some(open), _) if character == open => quote = None,
+            (Some(_), _) => {}
+            (None, '\'' | '"' | '`') => quote = Some(character),
+            (None, '(' | '[') => depth += 1,
+            (None, ')' | ']') => depth -= 1,
+            (None, ',') if depth == 0 => {
+                items.push(current.trim().to_owned());
+                current.clear();
+                continue;
+            }
+            (None, _) => {}
+        }
+        current.push(character);
+    }
+    items.push(current.trim().to_owned());
+    items
 }
 
 fn check_table_settings<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
