@@ -9,3 +9,4 @@ pub(crate) mod report_hooks;
 pub(crate) mod rules_rows;
 pub(crate) mod splice;
 pub(crate) mod verify;
+pub(crate) mod yaml_cache;

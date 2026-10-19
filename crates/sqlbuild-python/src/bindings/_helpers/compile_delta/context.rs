@@ -111,6 +111,8 @@ pub(crate) struct DeltaInjection {
     pub(crate) model_subjects: Option<Vec<(String, String, Option<String>)>>,
     /// The files that changed since the stored compile, as project-relative POSIX paths.
     pub(crate) changed_paths: BTreeSet<String>,
+    /// Where loaded YAML documents are kept for later delta compiles.
+    pub(crate) yaml_store: Option<std::path::PathBuf>,
     /// The only sources discovery keeps, those the rerun models read; `None` keeps every one.
     pub(crate) source_names: Option<BTreeSet<String>>,
     /// The whole project's SQL lint cache keys, as the image recorded them.

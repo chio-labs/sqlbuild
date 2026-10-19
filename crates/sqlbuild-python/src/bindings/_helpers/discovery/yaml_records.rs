@@ -155,6 +155,12 @@ fn load_files<'py>(
     let py: Python<'py> = project_dir.py();
     let tree: Bound<'py, NativeProjectTree> = project_tree(project_dir)?;
     let root: ProjectRoot = project_root(project_dir)?;
+    let mut documents: Option<crate::bindings::_helpers::compile_delta::yaml_cache::DocumentStore> =
+        if matches!(kind, YamlKind::Source) {
+            crate::bindings::_helpers::compile_delta::yaml_cache::open_documents(py)
+        } else {
+            None
+        };
     for batch in batches(&tree.get().inner, paths, YAML_BATCH_BYTES) {
         let named: Vec<String> = batch
             .iter()
@@ -164,7 +170,17 @@ fn load_files<'py>(
         let outcomes: Result<Vec<YamlFileOutcome>, StageFailure> = {
             let inner = &tree.get().inner;
             let failure_kind: FailureKind = kind.failure_kind();
-            py.detach(|| load_yaml(&root, inner, &named, failure_kind))
+            match documents.as_mut() {
+                Some(documents) => py.detach(|| {
+                    crate::bindings::_helpers::compile_delta::yaml_cache::load_with(
+                        documents,
+                        &named,
+                        |path| inner.absolute(path),
+                        |missed| load_yaml(&root, inner, missed, failure_kind),
+                    )
+                }),
+                None => py.detach(|| load_yaml(&root, inner, &named, failure_kind)),
+            }
         };
         let mut outcomes: Vec<YamlFileOutcome> =
             outcomes.map_err(|failure| stage_error(&tree.get().inner, project_dir, failure))?;
@@ -194,6 +210,9 @@ fn load_files<'py>(
                 };
             on_file((relative_path, file_path), built)?;
         }
+    }
+    if let Some(documents) = &documents {
+        crate::bindings::_helpers::compile_delta::yaml_cache::save_documents(py, documents);
     }
     Ok(())
 }

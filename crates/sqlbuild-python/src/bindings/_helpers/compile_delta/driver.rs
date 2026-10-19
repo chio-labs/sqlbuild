@@ -214,8 +214,16 @@ impl Rerun {
 }
 
 /// The injection of the image's whole-project facts, moved out of `image` while the delta runs.
-fn lent_injection(image: &mut ProjectImage, project_dir: PathBuf) -> DeltaInjection {
+fn lent_injection(
+    image: &mut ProjectImage,
+    project_dir: PathBuf,
+    store_path: &std::path::Path,
+) -> DeltaInjection {
     DeltaInjection {
+        yaml_store: store_path
+            .parent()
+            .and_then(std::path::Path::parent)
+            .map(crate::bindings::_helpers::compile_delta::yaml_cache::yaml_store_path),
         project_dir,
         source_paths: image
             .models
@@ -466,7 +474,7 @@ pub(crate) fn run<'py>(
     };
     stored.image = ImageSections::new();
     trace(request.py(), "delta base read", started)?;
-    let mut injection: DeltaInjection = lent_injection(&mut image, project_dir);
+    let mut injection: DeltaInjection = lent_injection(&mut image, project_dir, &store_path);
     let mut last: Option<Round<'py>> = None;
     for _ in 0..MAX_ROUNDS {
         if rerun.models.len() > limit {
