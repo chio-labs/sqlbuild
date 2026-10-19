@@ -159,6 +159,18 @@ fn given_plan_report_when_rendering_then_groups_models_by_reason() {
             expected_completion: "\u{2713} Plan complete  3 selected",
         },
         PlanTextTestCase {
+            description: "detail rows under a non-last entry keep the tree's vertical bar",
+            report: plan_report(vec![
+                ModelPlanText {
+                    query_diff: Some(vec!["      -SELECT 1".to_owned()]),
+                    ..table_model("orders", "query_changed")
+                },
+                table_model("customers", "query_changed"),
+            ]),
+            expected_text: "Plan ready  2 selected\n\nQuery changed (2)\n\u{251c}\u{2500}\u{2500} orders               full rebuild\n\u{2502}   \u{251c}\u{2500}\u{2500} policy  replay_on_change=full\n\u{2502}   \u{2514}\u{2500}\u{2500} query diff:\n\u{2502}     -SELECT 1\n\u{2514}\u{2500}\u{2500} customers            full rebuild\n    \u{2514}\u{2500}\u{2500} policy  replay_on_change=full",
+            expected_completion: "\u{2713} Plan complete  2 selected",
+        },
+        PlanTextTestCase {
             description: "every active model is a full refresh",
             report: plan_report(vec![
                 table_model("orders", "full_refresh"),

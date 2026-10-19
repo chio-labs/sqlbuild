@@ -51,7 +51,7 @@ Sources to load (2)
 
 Changed functions (2)
 ├── table_fn__customer_orders          table function
-    └── reason  first run
+│   └── reason  first run
 └── udf__is_completed_order            sql udf
     └── reason  first run
 
@@ -64,11 +64,11 @@ First run (12)
 ├── dim_customers                      table
 ├── fact_orders                        table
 ├── customer_status_snapshot           merge (timestamp)
-    ├── cursor  last_ordered_at (timestamp)
-    └── bounds  computed at run time, once model fact_orders is up to date
+│   ├── cursor  last_ordered_at (timestamp)
+│   └── bounds  computed at run time, once model fact_orders is up to date
 ├── hourly_order_activity              delete_insert (timestamp, microbatch)
-    ├── cursor  activity_hour (timestamp)
-    ├── mode  microbatch
+│   ├── cursor  activity_hour (timestamp)
+│   ├── mode  microbatch
     ...
 └── order_status_index                 delete_insert (integer)
     ├── cursor  order_id (integer)

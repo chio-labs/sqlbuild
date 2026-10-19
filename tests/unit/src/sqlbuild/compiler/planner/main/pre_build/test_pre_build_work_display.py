@@ -207,8 +207,8 @@ def test_given_colour_off_when_formatting_plan_then_migration_text_is_plain(
             expected_text=(
                 "Column migrations (3)\n"
                 "├── fact_orders  migrate columns\n"
-                "    ├── amount -> revenue  rename in place  (automatic)\n"
-                "    └── tax -> tax_amount  already renamed, record\n"
+                "│   ├── amount -> revenue  rename in place  (automatic)\n"
+                "│   └── tax -> tax_amount  already renamed, record\n"
                 "└── order_history  migrate columns\n"
                 "    └── status -> order_status  rename in place"
             ),
