@@ -1,6 +1,6 @@
 //! Stat identity of the artifacts a compile leaves in target/.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use crate::project_reuse::_helpers::files::file_digest;
@@ -96,6 +96,26 @@ fn matches_recorded(
     }
 }
 
+/// Each expected artifact's stamp: vouched when kept as vouched for, otherwise read.
+fn vouched_stamps(expected: &BTreeMap<&str, &RecordedArtifact>, vouched: &[PathStamp]) -> Stamps {
+    let vouched: HashMap<&str, &PathStamp> = vouched
+        .iter()
+        .map(|stamp| (stamp.relative_path.as_str(), stamp))
+        .collect();
+    expected
+        .iter()
+        .filter_map(|(path, artifact)| match artifact {
+            RecordedArtifact::Kept { size, mtime_ns } => match vouched.get(path) {
+                Some(stamp) if stamp.size == *size && stamp.mtime_ns == *mtime_ns => {
+                    Some(((*path).to_owned(), (*stamp).clone()))
+                }
+                _ => keyed_stamp(path),
+            },
+            RecordedArtifact::Written { .. } => keyed_stamp(path),
+        })
+        .collect()
+}
+
 /// Stamp this compile's artifacts, or `None` when any changed since it wrote them.
 pub(crate) fn verified_target_files(
     project_dir: &Path,
@@ -113,7 +133,10 @@ pub(crate) fn verified_target_files(
         .map(|(path, artifact)| (path.as_str(), artifact))
         .collect();
     let paths: Vec<&str> = expected.keys().copied().collect();
-    let stamps: Stamps = target_stamps(project_dir, &paths, written, rules);
+    let stamps: Stamps = match &record.vouched_target_stamps {
+        Some(vouched) => vouched_stamps(&expected, vouched),
+        None => target_stamps(project_dir, &paths, written, rules),
+    };
     let keys_match: bool = stamps.len() == expected.len()
         && stamps
             .keys()

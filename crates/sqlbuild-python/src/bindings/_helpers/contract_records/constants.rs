@@ -212,6 +212,7 @@ const R_SETTINGS_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("test_timeout_seconds", FieldDefault::Int(30)),
         FieldSpec::new("scenario_timeout", FieldDefault::None),
         FieldSpec::new("scenario_timeout_seconds", FieldDefault::None),
+        FieldSpec::new("delta_compile", FieldDefault::True),
     ],
 };
 const R_SCOPES_CONFIG: RecordSpec = RecordSpec {

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
+from scripts.delta_compile_series.types import SequenceEdit
 from tests.integration.src.sqlbuild.compiler.pipeline._test_types import PreparedCompile
 
 if TYPE_CHECKING:
@@ -273,6 +274,19 @@ class DenseWarmEditCompileGuardTestCase:
     expected_cold_fingerprint: str
     expected_edit_fingerprint: str
     expected_edit_rule_cache_misses: int
+
+
+@dataclass(frozen=True)
+class DenseDeltaEditLoopGuardTestCase:
+    description: str
+    model_count: int
+    edited_model_index: int
+    full_pairs: int
+    expected_max_full_seconds: float
+    expected_max_delta_seconds: float
+    expected_max_delta_cpu_ratio: float
+    expected_max_fallback_cpu_ratio: float
+    expected_max_rss_bytes: int
 
 
 @dataclass(frozen=True)
@@ -804,6 +818,17 @@ class BrokenEditInvalidationTestCase:
 
 
 @dataclass(frozen=True)
+class StoredMacroDeltaFallbackTestCase:
+    """A project edit whose delta compile falls back after compiling its round."""
+
+    description: str
+    edited_path: str
+    old: str
+    new: str
+    expected_outcome: tuple[int, int, bool, int]
+
+
+@dataclass(frozen=True)
 class StoredMacroModuleEditTestCase:
     """An outside module behind a stored macro call, edited after a compile that reused the call."""
 
@@ -1103,3 +1128,43 @@ class EarlyBuiltinRulesEditTestCase:
     expected_diagnostics: tuple[tuple[str, str, int, int], ...]
     expected_early_outcomes: tuple[tuple[int, int], ...]
     expected_rule_cache_outcomes: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True)
+class DeltaCompileSeriesTestCase:
+    description: str
+    seed: int
+    json_output: bool
+    steps: int
+    adapter: str = "duckdb"
+    expected_unexpected_outcomes: tuple[str, ...] = ()
+    expected_minimum_deltas: int = 3
+
+
+@dataclass(frozen=True)
+class DeltaCompileFullCopyTestCase:
+    description: str
+    edits: tuple[tuple[str, str, str], ...]
+    expected_delta_line: bool
+    stored_edits: tuple[tuple[str, str, str], ...] = ()
+    json_output: bool = False
+    adapter: str = "duckdb"
+    expected_difference: None = None
+
+
+@dataclass(frozen=True)
+class DeltaCompileSequenceTestCase:
+    description: str
+    edits: tuple[SequenceEdit, ...]
+    expected_delta_lines: tuple[bool, ...]
+    expected_replayed_last: bool
+    expected_same_as_full: bool
+
+
+@dataclass(frozen=True)
+class DeltaCompileOptOutTestCase:
+    description: str
+    settings: str
+    env: dict[str, str]
+    expected_delta_line: bool = False
+    expected_images: tuple[str, ...] = ()

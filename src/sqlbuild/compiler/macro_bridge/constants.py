@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import itertools
 from contextvars import ContextVar
 
 ACTIVE_MACRO_BRIDGE: ContextVar[object | None] = ContextVar(
     "sqlbuild_active_macro_bridge", default=None
 )
-COMPILES_STARTED: itertools.count[int] = itertools.count()
 STORE_MODULE_PATHS: set[str] = set()
 MACRO_CALL_STORE_FILE_NAME: str = "macro-calls.bin"
 MACRO_CALL_STORE_ENVIRONMENT_VERSION: str = "macro-call-store-v2"

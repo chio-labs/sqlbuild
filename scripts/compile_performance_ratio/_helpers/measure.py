@@ -17,6 +17,7 @@ from pathlib import Path
 from scripts.cold_compile_performance._helpers.dense_project import write_dense_compile_project
 from scripts.compile_performance_ratio._helpers.edit import apply_one_model_edit
 from scripts.compile_performance_ratio.constants import (
+    ANALYSED_MODEL_COUNTERS,
     ANALYSIS_CACHE_BYPASSES,
     ANALYSIS_CACHE_MISSES,
     BASE_GENERATOR_ENTRY,
@@ -166,7 +167,7 @@ def compare_builds(
                     mode=mode,
                     compile_args=compile_args,
                 )
-                check_cache_use(run=run, mode=mode)
+                check_cache_use(run=run, mode=mode, models=models)
                 results[label].append(run)
         if mode != COLD_MODE:
             _, head_python, head_dir = builds[1]
@@ -213,13 +214,21 @@ def _comparison(
     )
 
 
-def check_cache_use(*, run: CompileRun, mode: str) -> None:
-    """Fail a bypassing run, a warm run with misses, or an edit run that analysed nothing."""
+def check_cache_use(*, run: CompileRun, mode: str, models: int) -> None:
+    """Fail a bypassing full compile, a warm run with misses, or an edit that analysed nothing."""
 
     misses: int | None = run.analysis_cache_misses
     if misses is None or mode == COLD_MODE:
         return
     bypasses: int = run.analysis_cache_bypasses or 0
+    delta: bool = run.analysed_models is not None and run.analysed_models < models
+    if mode == EDIT_MODE and delta:
+        if misses + bypasses == 0:
+            raise CompileComparisonError(
+                f"{run.label} one-model edit delta compile analysed no model afresh, so the "
+                "edit did not invalidate the edited model"
+            )
+        return
     if bypasses != 0:
         raise CompileComparisonError(
             f"{run.label} {mode} compile bypassed the analysis cache for {bypasses} models, so "
@@ -328,6 +337,11 @@ def _compile_once(
         timings_ms={name: value for name, value in numeric.items() if name in REPORTED_PHASES},
         analysis_cache_misses=numeric.get(ANALYSIS_CACHE_MISSES),
         analysis_cache_bypasses=numeric.get(ANALYSIS_CACHE_BYPASSES),
+        analysed_models=(
+            sum(numeric[name] for name in ANALYSED_MODEL_COUNTERS)
+            if all(name in numeric for name in ANALYSED_MODEL_COUNTERS)
+            else None
+        ),
         report=json.dumps(payload, sort_keys=True),
     )
 

@@ -8,7 +8,8 @@ from typing import cast
 import pytest
 
 from scripts.cold_compile_performance._helpers.dense_project import (
-    dense_model_name,
+    dense_model_path,
+    dense_test_path,
     write_dense_compile_project,
 )
 from scripts.cold_compile_performance.main.assert_required_cgroup_memory_limit import (
@@ -23,18 +24,25 @@ from sqlbuild._native import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     DenseCompileGuardTestCase,
+    DenseDeltaEditLoopGuardTestCase,
     DenseWarmEditCompileGuardTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
+    DeltaEditLoopMeasurements,
     FreshProcessCompileBenchmarkResult,
     _run_fresh_process_compile_benchmark,
+    analysed_model_count,
     fresh_process_compile_cache_metrics,
     measure_model_sql_bytes,
+    median_cpu_seconds,
+    run_dense_delta_edit_loop_benchmark,
     run_dense_warm_edit_benchmark,
 )
 
 _MIB: int = 1024 * 1024
 _GIB: int = 1024 * _MIB
+# A delta reruns the edited model or the edited SQL test's few models; a full compile all of them.
+_MAX_DELTA_ANALYSED_MODELS: int = 10
 
 
 @pytest.mark.performance
@@ -45,28 +53,28 @@ _GIB: int = 1024 * _MIB
         DenseCompileGuardTestCase(
             "dense_models_1000_all_rules",
             1000,
-            13.0,
+            7.5,
             800 * _MIB,
             "de23b14d87e954a65c2da91918fce062d158419edd63cc8cf3dc938b3e47cd44",
         ),
         DenseCompileGuardTestCase(
             "dense_models_3000_all_rules",
             3000,
-            25.0,
+            16.5,
             3 * _GIB // 2,
             "196fca3e87989eb3e89e443b7ca93bb094198538d5bde32b9d6fcca58ffc8eed",
         ),
         DenseCompileGuardTestCase(
             "dense_models_5000_all_rules",
             5000,
-            42.0,
+            26.0,
             9 * _GIB // 4,
             "3477a472fa76d6236ebd0c9758d79c18f67f1bf55e9bbec05b002ba3744cfd22",
         ),
         DenseCompileGuardTestCase(
             "dense_models_10000_all_rules",
             10000,
-            77.0,
+            51.0,
             15 * _GIB // 4,
             "f2a574af6e8068a0634fa3c078b168dff9a475ada5d71502482ad2926c90e1c3",
         ),
@@ -146,8 +154,8 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             "dense_models_3000_warm_and_one_edit",
             3000,
             1521,
-            11.0,
-            12.0,
+            8.0,
+            8.5,
             3 * _GIB // 2,
             "196fca3e87989eb3e89e443b7ca93bb094198538d5bde32b9d6fcca58ffc8eed",
             "1afe754dd8c66bc36e38a40c66e9183ecbaf365fd8d87a784069cd615c3ce64a",
@@ -157,8 +165,8 @@ def test_given_dense_project_when_compiling_cold_then_preserves_rules_semantics_
             "dense_models_5000_warm_and_one_edit",
             5000,
             2521,
-            19.0,
-            21.0,
+            13.0,
+            13.5,
             9 * _GIB // 4,
             "3477a472fa76d6236ebd0c9758d79c18f67f1bf55e9bbec05b002ba3744cfd22",
             "dfbada4c59a3ab8ec7733784890d74c7b64e9b0adcb03364baaabef5bdba5574",
@@ -174,15 +182,8 @@ def test_given_dense_project_when_compiling_warm_and_after_one_edit_then_matches
     assert_required_cgroup_memory_limit()
     project_dir: Path = tmp_path / "dense_orders"
     write_dense_compile_project(project_dir=project_dir, model_count=test_case.model_count)
-    index: int = test_case.edited_model_index
-    edited_model_path: Path = (
-        project_dir
-        / "models"
-        / f"sales{index // 1000:03d}"
-        / "intermediate"
-        / "clean"
-        / f"batch{index // 5:05d}"
-        / f"{dense_model_name(index)}.sql"
+    edited_model_path: Path = dense_model_path(
+        project_dir=project_dir, index=test_case.edited_model_index
     )
     measurements: dict[str, FreshProcessCompileBenchmarkResult] = run_dense_warm_edit_benchmark(
         project_dir=project_dir,
@@ -227,3 +228,81 @@ def test_given_dense_project_when_compiling_warm_and_after_one_edit_then_matches
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-n", "auto", "--dist", "loadfile"]))
+
+
+@pytest.mark.performance
+@pytest.mark.cold_compile_performance
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        DenseDeltaEditLoopGuardTestCase(
+            description="dense_models_3000_delta_edit_loop",
+            model_count=3000,
+            edited_model_index=1521,
+            full_pairs=4,
+            expected_max_full_seconds=15.0,
+            expected_max_delta_seconds=4.5,
+            expected_max_delta_cpu_ratio=0.375,
+            expected_max_fallback_cpu_ratio=1.05,
+            expected_max_rss_bytes=3 * _GIB // 2,
+        ),
+        DenseDeltaEditLoopGuardTestCase(
+            description="dense_models_10000_delta_edit_loop",
+            model_count=10000,
+            edited_model_index=5021,
+            full_pairs=3,
+            expected_max_full_seconds=60.0,
+            expected_max_delta_seconds=9.0,
+            expected_max_delta_cpu_ratio=0.30,
+            expected_max_fallback_cpu_ratio=1.05,
+            expected_max_rss_bytes=15 * _GIB // 4,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_dense_project_when_editing_one_file_then_delta_compiles_stay_cheap(
+    test_case: DenseDeltaEditLoopGuardTestCase,
+    tmp_path: Path,
+) -> None:
+    assert_required_cgroup_memory_limit()
+    project_dir: Path = tmp_path / "dense_orders"
+    write_dense_compile_project(project_dir=project_dir, model_count=test_case.model_count)
+    index: int = test_case.edited_model_index
+
+    loop: DeltaEditLoopMeasurements = run_dense_delta_edit_loop_benchmark(
+        project_dir=project_dir,
+        edited_files=(
+            dense_model_path(project_dir=project_dir, index=index),
+            dense_model_path(project_dir=project_dir, index=index + 1),
+            dense_test_path(project_dir=project_dir, index=index + 2),
+        ),
+        full_pairs=test_case.full_pairs,
+        expected_max_full_seconds=test_case.expected_max_full_seconds,
+        expected_max_delta_seconds=test_case.expected_max_delta_seconds,
+    )
+
+    full_cpu: float = median_cpu_seconds(loop.full)
+    fallback_cpu: float = median_cpu_seconds(loop.fallbacks)
+    for label, result in loop.deltas.items():
+        print(
+            f"delta {label} models={test_case.model_count} wall={result.elapsed_seconds:.2f}s "
+            f"cpu={result.cpu_seconds:.2f}s cpu_ratio={result.cpu_seconds / full_cpu:.3f} "
+            f"analysed={analysed_model_count(result)}",
+            flush=True,
+        )
+    print(
+        f"delta loop models={test_case.model_count} full_cpu={full_cpu:.2f}s "
+        f"fallback_cpu={fallback_cpu:.2f}s fallback_ratio={fallback_cpu / full_cpu:.3f}",
+        flush=True,
+    )
+    for result in (*loop.deltas.values(), *loop.fallbacks, *loop.full):
+        assert result.payload["has_errors"] is False
+        assert result.payload["diagnostics"] == []
+        assert result.peak_rss_bytes < test_case.expected_max_rss_bytes
+    for result in loop.deltas.values():
+        assert 0 < analysed_model_count(result) <= _MAX_DELTA_ANALYSED_MODELS, result
+        assert result.elapsed_seconds < test_case.expected_max_delta_seconds, result
+        assert result.cpu_seconds <= test_case.expected_max_delta_cpu_ratio * full_cpu, result
+    for result in (*loop.fallbacks, *loop.full):
+        assert analysed_model_count(result) == test_case.model_count, result
+    assert fallback_cpu <= test_case.expected_max_fallback_cpu_ratio * full_cpu

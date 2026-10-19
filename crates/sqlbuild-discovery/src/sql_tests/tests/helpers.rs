@@ -13,6 +13,7 @@ fn keys(test_keys: &[&str]) -> Vec<String> {
 
 fn options() -> SqlTestFileOptions {
     SqlTestFileOptions {
+        path_filter: None,
         test_keys: keys(&["name", "mode", "parameters", "cases"]),
         scenario_keys: keys(&["description", "tags"]),
     }

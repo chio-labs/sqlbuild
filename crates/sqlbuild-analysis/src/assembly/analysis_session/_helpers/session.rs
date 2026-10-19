@@ -33,7 +33,7 @@ use crate::assembly::analysis_session::constants::{UNKNOWN_NULLABILITY, UNKNOWN_
 use crate::assembly::analysis_session::models::{
     AnalysisSession, ColumnFact, ContractProof, DeferredCleaning, FinishedSession, LineageFacts,
     LineageRow, ModelAnalysis, ModelOutcome, ModelRequest, Phase, PivotOutcome, PivotTables,
-    SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
+    RelationTables, SessionModelFacts, SessionOutcome, SessionRequest, SessionStep,
 };
 use crate::assembly::analysis_session::types::{Pairs, Shapes};
 use crate::semantic_validation::models::ProjectCatalog;
@@ -49,13 +49,18 @@ impl AnalysisSession {
             .ok_or_else(|| native_failure(SESSION_CONTEXT, "two analysed models share a name"))?;
         let scheduled: Option<Vec<Vec<usize>>> = waves(&producers);
         let complete_shapes: ShapeTable = ShapeTable::from_shapes(&request.complete_schemas);
-        let dependency_ordered: bool = scheduled.is_some()
-            && request
-                .models
-                .iter()
-                .flat_map(|model| model.required_names.iter())
-                .any(|name| complete_shapes.get(name).is_none_or(Vec::is_empty));
-        let cyclic: bool = scheduled.is_none();
+        let (dependency_ordered, cyclic): (bool, bool) = match request.forced_order {
+            Some(order) => order,
+            None => (
+                scheduled.is_some()
+                    && request
+                        .models
+                        .iter()
+                        .flat_map(|model| model.required_names.iter())
+                        .any(|name| complete_shapes.get(name).is_none_or(Vec::is_empty)),
+                scheduled.is_none(),
+            ),
+        };
         let waves: Vec<Vec<usize>> = scheduled.unwrap_or_default();
         Ok(Self {
             catalog: SessionCatalog::new(catalog, &request.catalog_schemas),
@@ -76,6 +81,7 @@ impl AnalysisSession {
             publications: Vec::new(),
             failures: Vec::new(),
             cache: None,
+            legacy_models: Vec::new(),
             request,
         })
     }
@@ -118,6 +124,16 @@ impl AnalysisSession {
             .into_iter()
             .collect::<Option<_>>()
             .ok_or("the session left a model unanalysed")?;
+        let relations: Option<RelationTables> =
+            self.request.retain_relations.then(|| RelationTables {
+                types: owned_rows(&self.available_types),
+                nullability: owned_rows(&self.available_nullability),
+                complete: owned_rows(&self.complete_shapes),
+                schemas: self.catalog.schema_rows(),
+                dependency_ordered: self.dependency_ordered,
+                cyclic: self.cyclic,
+                legacy_models: self.legacy_models.clone(),
+            });
         let (schema_additions, analysis_names) = self.catalog.into_changes();
         let mut request: SessionRequest = self.request;
         for ((outcome, model), pending) in models
@@ -155,6 +171,7 @@ impl AnalysisSession {
             pool,
             models: model_facts,
             dynamic_proofs,
+            relations,
         };
         let outcome = SessionOutcome {
             models,
@@ -254,7 +271,9 @@ impl AnalysisSession {
                     let legacy: LegacyAnalysis =
                         self.native_legacy(request, &result.cleaned_sql)
                             .map_err(|reason| native_failure(&model_context(request), &reason))?;
+                    let name: String = request.name.clone();
                     self.record_legacy_tables(*model, &mut tables);
+                    self.legacy_models.push(name);
                     legacy_outcome(legacy, lineage, diagnostics)
                 }
             };
@@ -667,6 +686,15 @@ fn batch_member<'a>(model: &'a ModelRequest, schema: &'a Shapes) -> BatchMember<
         recover_cte_facts: model.recover_cte_facts,
         binding_schema: Some(schema),
     }
+}
+
+/// A table's shapes in insertion order, owned.
+fn owned_rows(table: &ShapeTable) -> Shapes {
+    table
+        .ordered()
+        .into_iter()
+        .map(|(name, shape)| (name.to_owned(), shape.clone()))
+        .collect()
 }
 
 /// Python's `{column.name: column.type or "UNKNOWN"}`.

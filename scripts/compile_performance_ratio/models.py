@@ -13,6 +13,8 @@ class CompileRun:
     timings_ms: dict[str, int]
     analysis_cache_misses: int | None = None
     analysis_cache_bypasses: int | None = None
+    analysed_models: int | None = None
+    """How many models the compile analysed; a delta compile analyses only the models it reran."""
     report: str = ""
     """The JSON report without its timings, which an uncached compile must reproduce."""
 

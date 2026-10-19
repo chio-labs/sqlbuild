@@ -25,6 +25,12 @@ pub fn discover_model_files(
         Ok(paths
             .into_par_iter()
             .filter(|relative_path| !is_in_scoped_declaration_tree(relative_path))
+            .filter(|relative_path| {
+                options
+                    .path_filter
+                    .as_ref()
+                    .is_none_or(|paths| paths.contains(relative_path))
+            })
             .map(|relative_path| DiscoveredFile {
                 outcome: discover_one(root, tree, &relative_path, options),
                 relative_path,

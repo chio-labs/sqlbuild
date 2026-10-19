@@ -21,8 +21,8 @@ use crate::project::constants::{
     USD_PER_CREDIT_KEY, ZERO_FIXED_DURATION, ZERO_FLOAT,
 };
 use crate::project::constants::{
-    DEFAULT_TEST_TIMEOUT, DEFAULT_UNIT_TEST_MAX_REAL_MODELS, DISABLED_VALUE, SCENARIO_TIMEOUT_KEY,
-    TEST_TIMEOUT_KEY, UNIT_TEST_MAX_REAL_MODELS_KEY,
+    DEFAULT_TEST_TIMEOUT, DEFAULT_UNIT_TEST_MAX_REAL_MODELS, DELTA_COMPILE_KEY, DISABLED_VALUE,
+    SCENARIO_TIMEOUT_KEY, TEST_TIMEOUT_KEY, UNIT_TEST_MAX_REAL_MODELS_KEY,
 };
 use crate::project::errors::ConfigFailure;
 use crate::project::models::{Built, ConfigFile};
@@ -241,6 +241,14 @@ pub(crate) fn load_settings(payload: Option<&ConfigValue>, file: ConfigFile) -> 
         (
             UNIT_TEST_MAX_REAL_MODELS_KEY,
             Built::Value(real_model_limit(mapping)?),
+        ),
+        (
+            DELTA_COMPILE_KEY,
+            Built::Value(ConfigValue::Bool(optional_bool(
+                mapping,
+                DELTA_COMPILE_KEY,
+                true,
+            )?)),
         ),
     ];
     let mut fields = fields;

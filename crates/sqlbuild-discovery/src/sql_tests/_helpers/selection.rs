@@ -13,7 +13,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 pub(crate) fn discover_sql_files<T: Send>(
     root: &ProjectRoot,
     tree: &ProjectTree,
-    directory: &str,
+    (directory, path_filter): (&str, Option<&std::collections::BTreeSet<String>>),
     parse: impl Fn(&str, String) -> Result<T, DiscoveryFailure> + Sync,
 ) -> Result<Vec<DiscoveredFile<T>>, StageFailure> {
     let pool = discovery_pool().map_err(StageFailure::Internal)?;
@@ -24,6 +24,7 @@ pub(crate) fn discover_sql_files<T: Send>(
         Ok(paths
             .into_par_iter()
             .filter(|relative_path| !is_in_scoped_declaration_tree(relative_path))
+            .filter(|relative_path| path_filter.is_none_or(|paths| paths.contains(relative_path)))
             .map(|relative_path| DiscoveredFile {
                 outcome: read_and_parse(root, tree, &relative_path, &parse),
                 relative_path,

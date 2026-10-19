@@ -1,12 +1,13 @@
 //! What one full compile printed and left in each artifact, and storing it for compile reuse.
 
+use sqlbuild_cache::project_reuse::types::ImageSections;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
 use pyo3::exceptions::{PyException, PyOSError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString};
+use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStringMethods};
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use sqlbuild_core::posix_path::main::posix_abspath::posix_abspath;
@@ -78,6 +79,22 @@ impl CompileArtifactWrites {
             .collect();
         artifacts.retain(|path, _| !path.starts_with(&prefix));
         artifacts.extend(moved);
+    }
+}
+
+impl CompileArtifactWrites {
+    /// Every recorded artifact's absolute path, with its digest when this compile wrote it.
+    pub(crate) fn written_digests(&self) -> HashMap<String, Option<String>> {
+        self.locked()
+            .iter()
+            .map(|(path, artifact)| {
+                let digest: Option<String> = match artifact {
+                    RecordedArtifact::Written(digest) => Some(digest.clone()),
+                    RecordedArtifact::Kept { .. } => None,
+                };
+                (path.clone(), digest)
+            })
+            .collect()
     }
 }
 
@@ -235,6 +252,32 @@ impl RecordedCompileOutput {
     fn locked(&self) -> std::sync::MutexGuard<'_, PrintedOutput> {
         self.output.lock().unwrap_or_else(PoisonError::into_inner)
     }
+
+    /// Output already printed or recorded elsewhere: its stderr lines and its report.
+    pub(crate) fn recorded(py: Python<'_>, stderr_lines: &[String], stdout: &str) -> Self {
+        let lines: Vec<Py<PyString>> = stderr_lines
+            .iter()
+            .map(|line| PyString::new(py, line).unbind())
+            .collect();
+        Self {
+            output: Mutex::new((lines, Some(PyString::new(py, stdout).unbind()))),
+        }
+    }
+
+    /// The recorded stderr lines and report, as text.
+    pub(crate) fn texts(&self, py: Python<'_>) -> PyResult<(Vec<String>, Option<String>)> {
+        let output = self.locked();
+        let lines: Vec<String> = output
+            .0
+            .iter()
+            .map(|line| Ok(line.bind(py).to_str()?.to_owned()))
+            .collect::<PyResult<_>>()?;
+        let stdout: Option<String> = match &output.1 {
+            Some(text) => Some(text.bind(py).to_str()?.to_owned()),
+            None => None,
+        };
+        Ok((lines, stdout))
+    }
 }
 
 /// `print(*values, file=sys.<stream>)`.
@@ -254,9 +297,11 @@ pub(crate) fn print_to<'py>(
 
 #[pymethods]
 impl RecordedCompileOutput {
-    /// Print one stderr result line, such as a note, and record it.
+    /// Print one stderr result line, such as a note, and record it; a delta only records it.
     pub(crate) fn print_stderr_line(&self, line: Bound<'_, PyString>) -> PyResult<()> {
-        print_to(line.py(), "stderr", &line)?;
+        if crate::bindings::_helpers::compile_delta::context::injection().is_none() {
+            print_to(line.py(), "stderr", &line)?;
+        }
         self.locked().0.push(line.unbind());
         Ok(())
     }
@@ -480,6 +525,29 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
             ("rules", reuse_rules(py, true)?.into_any()),
         ],
     )?;
+    if let Some(mut capture) = crate::bindings::_helpers::compile_delta::context::take_capture() {
+        capture.environment_names =
+            native_field(&facts.input_reads, "environment_names")?.extract()?;
+        let json_output: bool = facts.json_output.is_truthy()?;
+        match crate::bindings::_helpers::compile_delta::image::ProjectImage::from_capture(
+            capture,
+            json_output,
+        ) {
+            Ok(image) => {
+                let mut pending: Option<ImageSections> = None;
+                if let Ok(sections) = image.encode() {
+                    pending = Some(sections);
+                }
+                crate::bindings::_helpers::compile_delta::context::set_pending_image(pending);
+            }
+            Err(reason) => {
+                crate::bindings::_helpers::compile_command::reuse_attempt::reuse_debug(
+                    py,
+                    &format!("Compile reuse kept no project image: {reason}"),
+                )?;
+            }
+        }
+    }
     let (outcome, digested): (String, Bound<'_, PyAny>) =
         facts.native.call_method1("record", (payload,))?.extract()?;
     let _ = reuse_logger(py)?.call_method1(

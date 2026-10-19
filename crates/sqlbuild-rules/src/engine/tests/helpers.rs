@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -8,8 +9,10 @@ use std::sync::atomic::AtomicBool;
 
 use crate::engine::main::answer_speculative_rows::answer_speculative_rows;
 use crate::engine::main::discard_speculative_rows::discard_speculative_rows;
+use crate::engine::main::retained_request::retained_request;
 use crate::models::{
-    EvaluateRequest, Fault, RowsEvaluation, RowsRequest, SpeculativeAnswer, SpeculativeRows,
+    Column, Declaration, DeclarationMember, DynamicColumnFamily, EvaluateRequest, Fault, Model,
+    Reference, RetainedRows, RowsEvaluation, RowsRequest, SpeculativeAnswer, SpeculativeRows,
 };
 
 use crate::engine::_helpers::evaluation::evaluate_json;
@@ -531,6 +534,7 @@ pub(crate) fn speculative_rows_request(
                 project_dir.join(SPECULATIVE_MEMO_FILE),
             )
         }),
+        retain: false,
     })
 }
 
@@ -636,4 +640,98 @@ pub(crate) fn query_facts_faults(
             )
         })
         .collect())
+}
+
+/// The retained request with each row's digest restored, as a delta compile rebuilds it.
+pub(crate) fn restored_rows(retained: &RetainedRows) -> Result<EvaluateRequest, String> {
+    let mut request: EvaluateRequest =
+        retained_request(retained).ok_or("the retained request does not decode")?;
+    for (model, digest) in request.models.iter_mut().zip(&retained.digests) {
+        model.payload_digest = Some(digest.clone());
+        model.stripped = true;
+    }
+    Ok(request)
+}
+
+/// A model with a value in every field the retained rows keep, and SQL text they drop.
+pub(crate) fn every_field_model() -> Model {
+    let declaration: Declaration = Declaration {
+        name: "status".to_owned(),
+        relative_path: "enums/status.sql".to_owned(),
+        members: vec![DeclarationMember {
+            name: "open".to_owned(),
+            value: json!({"code": 1, "ratio": -0.25, "tags": ["a", null, true]}),
+        }],
+        value: Some(json!(12345678901234567890_u64)),
+        value_type: Some("BIGINT".to_owned()),
+        render_as: None,
+    };
+    Model {
+        sql_analysis_disabled: true,
+        name: "orders".to_owned(),
+        relative_path: "models/orders.sql".to_owned(),
+        query_sql: "SELECT 1".to_owned(),
+        authored_sql: "SELECT 1 -- authored".to_owned(),
+        config: BTreeMap::from([
+            ("materialized".to_owned(), json!("table")),
+            ("tags".to_owned(), json!(["finance", "daily"])),
+        ]),
+        authored_config_keys: vec!["materialized".to_owned()],
+        logical_schema: Some("analytics".to_owned()),
+        references: vec![Reference {
+            ref_kind: "source".to_owned(),
+            ref_name: "raw_orders".to_owned(),
+            ref_package: Some("shop".to_owned()),
+        }],
+        columns: vec![Column {
+            name: "amount ✓".to_owned(),
+            data_type: "DOUBLE".to_owned(),
+            nullable: Some(false),
+            audit_count: 2,
+            type_proven: true,
+        }],
+        dynamic_columns: vec![DynamicColumnFamily {
+            name: "amounts".to_owned(),
+            pivot_column: "region".to_owned(),
+            value_column: "amount".to_owned(),
+            aggregate: "sum".to_owned(),
+            data_type: "DOUBLE".to_owned(),
+            name_pattern: Some("amount_{region}".to_owned()),
+            type_proven: false,
+        }],
+        dynamic_columns_proven: true,
+        bare_dynamic_pivot: true,
+        enum_columns: vec!["status".to_owned()],
+        enum_declarations: vec![declaration.clone()],
+        constant_declarations: vec![declaration],
+        declared_audit_count: 3,
+        targeting_test_count: 4,
+        empty_input_only_test_count: 0,
+        payload_digest: Some("digest".to_owned()),
+        stripped: false,
+    }
+}
+
+/// Two models: one with every field set, one with none.
+pub(crate) fn coded_models() -> Vec<Model> {
+    vec![every_field_model(), Model::default()]
+}
+
+/// No models.
+pub(crate) fn no_models() -> Vec<Model> {
+    Vec::new()
+}
+
+/// `models` as retained rows read back would hold them: SQL text and digests dropped.
+pub(crate) fn without_sql(models: Vec<Model>) -> Value {
+    let stripped: Vec<Model> = models
+        .into_iter()
+        .map(|model| Model {
+            query_sql: String::new(),
+            authored_sql: String::new(),
+            payload_digest: None,
+            ..model
+        })
+        .collect();
+    serde_json::to_value(stripped).unwrap_or_default()
 }

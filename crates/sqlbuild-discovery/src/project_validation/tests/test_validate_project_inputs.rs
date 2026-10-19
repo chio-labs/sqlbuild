@@ -119,6 +119,19 @@ fn given_discovered_facts_when_validating_then_reports_python_first_conflict() {
             ),
         },
         ValidationTestCase {
+            description: "a path default matching only undiscovered project models passes",
+            facts: ProjectFacts {
+                models: vec![model_at("orders", "models/marts/orders.sql")],
+                path_default_keys: vec!["staging".to_owned()],
+                project_model_paths: Some(vec![
+                    "models/marts/orders.sql".to_owned(),
+                    "models/staging/customers.sql".to_owned(),
+                ]),
+                ..ProjectFacts::default()
+            },
+            expected_failure: Ok(()),
+        },
+        ValidationTestCase {
             description: "accepts Windows-style model paths that match path defaults",
             facts: path_default_facts(&["models\\staging\\orders.sql"], &["staging"]),
             expected_failure: Ok(()),

@@ -15,6 +15,18 @@ pub(crate) struct RuleCacheEntry {
     pub faults: Vec<Fault>,
 }
 
+const FIXTURE_SUMMARIES_FILE: &str = "sql-test-fixtures.json";
+
+/// Where the SQL-test fixture summaries sit, beside the bulk native rules cache.
+pub(crate) fn fixture_summaries_path(project_dir: &Path, rules_cache_path: &str) -> PathBuf {
+    let native: PathBuf = if rules_cache_path.is_empty() {
+        project_dir.join("target/rules-cache/bulk/native.json")
+    } else {
+        PathBuf::from(rules_cache_path)
+    };
+    native.with_file_name(FIXTURE_SUMMARIES_FILE)
+}
+
 pub(crate) struct Cache {
     native_rules_path: PathBuf,
 }

@@ -107,6 +107,8 @@ pub struct FinishedSession {
     pub(crate) models: HashMap<String, SessionModelFacts>,
     /// Each model's dynamic pivot proof from the session's own relation facts, by model name.
     pub(crate) dynamic_proofs: HashMap<String, ContractProof>,
+    /// The relation facts the session ended with, when the request asked to keep them.
+    pub(crate) relations: Option<RelationTables>,
 }
 
 /// The session's typed result for one compiled model, borrowed from the finished session.
@@ -121,6 +123,12 @@ pub struct SessionModelAnalysis<'a> {
 }
 
 impl FinishedSession {
+    /// The relation facts the session ended with, when its request asked to keep them.
+    #[must_use]
+    pub fn relation_tables(&self) -> Option<&RelationTables> {
+        self.relations.as_ref()
+    }
+
     /// The session's typed columns and dynamic proof for model `name`, without re-analysis.
     #[must_use]
     pub fn model_analysis(&self, name: &str) -> SessionModelAnalysis<'_> {
@@ -173,6 +181,24 @@ pub struct SessionRequest {
     /// Python's `dynamic_families_by_table`, in dict order.
     pub dynamic_families_by_table: Vec<(String, Vec<DynamicFamily>)>,
     pub models: Vec<ModelRequest>,
+    /// The whole project's `(dependency ordered, cyclic)`, for a session of only some models.
+    pub forced_order: Option<(bool, bool)>,
+    /// Keep the relation facts the session ends with, for the project image.
+    pub retain_relations: bool,
+}
+
+/// The relation facts a finished session ends with, and how it ordered its analysis.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RelationTables {
+    pub types: Shapes,
+    pub nullability: Shapes,
+    pub complete: Shapes,
+    /// The binding catalog's closed shapes, sorted by name.
+    pub schemas: Shapes,
+    pub dependency_ordered: bool,
+    pub cyclic: bool,
+    /// Models whose analysis took the legacy path, which reads every relation's facts.
+    pub legacy_models: Vec<String>,
 }
 
 /// One inferred output column; nullability is Python's `InferredNullability` value.
@@ -323,6 +349,8 @@ pub struct AnalysisSession {
     pub(crate) publications: Shapes,
     pub(crate) failures: Vec<String>,
     pub(crate) cache: Option<AnalysisCache>,
+    /// Models whose analysis took the legacy path.
+    pub(crate) legacy_models: Vec<String>,
 }
 
 /// Which of Python's column analyses one query outside the session takes.

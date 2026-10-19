@@ -1,11 +1,11 @@
-"""Count the compiles this process has started, so only its first one uses the macro call store."""
+"""Ask whether this compile is the process's first, so only that one uses the macro call store."""
 
 from __future__ import annotations
 
-from sqlbuild.compiler.macro_bridge.constants import COMPILES_STARTED
+from sqlbuild._native import claim_first_compile as claim_native_first_compile
 
 
 def claim_first_compile() -> bool:
-    """Record that a compile started; True only for the first compile of this process."""
+    """Record that a compile started; True only for the first compile invocation of this process."""
 
-    return next(COMPILES_STARTED) == 0
+    return claim_native_first_compile()

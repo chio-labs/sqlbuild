@@ -26,6 +26,27 @@ def dense_model_name(index: int) -> str:
     return f"sales{index // 1000:03d}__int_clean__orders_{index:05d}"
 
 
+def dense_model_path(*, project_dir: Path, index: int) -> Path:
+    """The file of the generated dense model at `index`."""
+
+    return (
+        project_dir
+        / "models"
+        / f"sales{index // 1000:03d}"
+        / "intermediate"
+        / "clean"
+        / f"batch{index // 5:05d}"
+        / f"{dense_model_name(index)}.sql"
+    )
+
+
+def dense_test_path(*, project_dir: Path, index: int) -> Path:
+    """The SQL test file of the generated dense model at `index`."""
+
+    name: str = dense_model_name(index).replace("__", "_")
+    return next((project_dir / "tests").rglob(f"test_{name}__*.sql"))
+
+
 def dense_column_count(index: int) -> int:
     rank: int = (index * 17) % 1000
     for upper, width in (

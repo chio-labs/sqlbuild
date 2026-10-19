@@ -20,6 +20,12 @@ MODE_TITLES: dict[str, str] = {
 }
 ANALYSIS_CACHE_MISSES: str = "analysis_cache_misses"
 ANALYSIS_CACHE_BYPASSES: str = "analysis_cache_bypasses"
+ANALYSED_MODEL_COUNTERS: tuple[str, ...] = (
+    "analysis_batch_cache_hits",
+    "analysis_entry_cache_hits",
+    ANALYSIS_CACHE_MISSES,
+    ANALYSIS_CACHE_BYPASSES,
+)
 MODELS_DIRECTORY: str = "models"
 MODEL_FILE_PATTERN: str = "*.sql"
 EDIT_COMMENT: str = "-- Benchmark edit {revision}.\n"

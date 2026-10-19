@@ -10,9 +10,14 @@ use crate::rules::_helpers::evaluation::path_fault;
 use crate::rules::models::ProjectEvaluationRequest;
 use polyglot_sql::Expression;
 use polyglot_sql::expressions::{Literal, Select};
+use serde::{Deserialize, Serialize};
 use sqlbuild_analysis::compiler::main::sql_test_fixture_facts::fixture_facts;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::rc::Rc;
+
+use crate::constants::NATIVE_BUILD_IDENTITY;
 
 const UNIT_ROOT: &str = "tests/unit";
 const SCENARIO_ROOT: &str = "tests/scenarios";
@@ -23,6 +28,11 @@ use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_CONFIG_PATH;
 pub(crate) fn evaluate_project(
     evaluation: ProjectEvaluationRequest<'_>,
 ) -> Result<Vec<Fault>, String> {
+    let resources: &[ScopeResource] = &evaluation.request.scope_index.resources;
+    with_scope_lookup(resources, || evaluated_project(evaluation))
+}
+
+fn evaluated_project(evaluation: ProjectEvaluationRequest<'_>) -> Result<Vec<Fault>, String> {
     let mut faults: Vec<Fault> = Vec::new();
     let mut tests: Vec<&SqlTestFact> = evaluation.request.sql_tests.iter().collect();
     tests.sort_by(|left, right| {
@@ -56,7 +66,13 @@ pub(crate) fn evaluate_project(
                     continue;
                 }
                 if let Err(reason) = fixture_eligibility.entry(&cte.sql).or_insert_with(|| {
-                    fixture_query(&cte.sql, &evaluation.request.dialect).map(|_| ())
+                    match fixture_summary(&cte.sql, &evaluation.request.dialect)
+                        .error
+                        .clone()
+                    {
+                        Some(error) => Err(error),
+                        None => Ok(()),
+                    }
                 }) {
                     let mut fault = path_fault(
                         rule,
@@ -381,17 +397,57 @@ fn allowed_subjects(evaluation: &ProjectEvaluationRequest<'_>, test: &SqlTestFac
     Vec::new()
 }
 
+/// Each `(is a model, name)`'s first scope resource index, for the resources it was built from.
+type ScopeLookup = (usize, HashMap<(bool, String), usize>);
+
+thread_local! {
+    static SCOPE_LOOKUP: RefCell<Option<ScopeLookup>> = const { RefCell::new(None) };
+}
+
+/// Run `body` with the scope resources indexed by kind and name on this thread.
+fn with_scope_lookup<T>(resources: &[ScopeResource], body: impl FnOnce() -> T) -> T {
+    let mut index: HashMap<(bool, String), usize> = HashMap::new();
+    for (position, item) in resources.iter().enumerate() {
+        let key: Option<bool> = match item.kind {
+            ResourceKind::Model => Some(true),
+            ResourceKind::Function => Some(false),
+            _ => None,
+        };
+        if let Some(model) = key {
+            index.entry((model, item.name.clone())).or_insert(position);
+        }
+    }
+    let outer = SCOPE_LOOKUP.with(|slot| slot.borrow_mut().replace((resources.len(), index)));
+    let result: T = body();
+    SCOPE_LOOKUP.with(|slot| *slot.borrow_mut() = outer);
+    result
+}
+
 fn scope_resource<'a>(
     evaluation: &'a ProjectEvaluationRequest<'_>,
     kind: ResourceKind,
     name: &str,
 ) -> Option<&'a ScopeResource> {
-    evaluation
-        .request
-        .scope_index
-        .resources
-        .iter()
-        .find(|item| same_resource_kind(&item.kind, &kind) && item.name == name)
+    let resources: &'a [ScopeResource] = &evaluation.request.scope_index.resources;
+    let model: Option<bool> = match kind {
+        ResourceKind::Model => Some(true),
+        ResourceKind::Function => Some(false),
+        _ => None,
+    };
+    let indexed: Option<Option<usize>> = SCOPE_LOOKUP.with(|slot| {
+        let slot = slot.borrow();
+        let (count, index) = slot.as_ref()?;
+        if *count != resources.len() {
+            return None;
+        }
+        Some(model.and_then(|model| index.get(&(model, name.to_owned())).copied()))
+    });
+    match indexed {
+        Some(position) => position.map(|position| &resources[position]),
+        None => resources
+            .iter()
+            .find(|item| same_resource_kind(&item.kind, &kind) && item.name == name),
+    }
 }
 
 fn same_resource_kind(left: &ResourceKind, right: &ResourceKind) -> bool {
@@ -690,21 +746,156 @@ fn empty_relation(cte: &SqlTestCteFact, dialect: &str) -> bool {
     if fixture_facts(&cte.name, &cte.sql).empty_fixture_marker {
         return true;
     }
-    let Ok(fixture) = fixture_query(&cte.sql, dialect) else {
-        return false;
-    };
+    fixture_summary(&cte.sql, dialect).empty
+}
+
+/// Whether a parsed fixture selects no rows.
+fn selects_no_rows(fixture: &ParsedFixture) -> bool {
     let Expression::Select(select) = &fixture.statement else {
         return false;
     };
     select.with.is_none()
         && (limited_to_zero_rows(select)
-            || (filtered_to_zero_rows(select, &fixture) && !fixture.order_by_calls_function()))
+            || (filtered_to_zero_rows(select, fixture) && !fixture.order_by_calls_function()))
 }
 
-fn fixture_query(sql: &str, dialect: &str) -> Result<ParsedFixture, String> {
-    model_shape(sql, dialect)
+/// What the SQL-test rules read of one parsed fixture.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct FixtureSummary {
+    /// Why the fixture does not parse, when it does not.
+    error: Option<String>,
+    /// Whether it selects no rows.
+    empty: bool,
+    /// The model a bare row-existence assertion reads, when the fixture is one.
+    row_existence_target: Option<String>,
+}
+
+/// Fixture summaries by digest of `(dialect, SQL)`, shared by the rules of one evaluation.
+#[derive(Default)]
+struct FixtureMemo {
+    summaries: HashMap<String, Rc<FixtureSummary>>,
+    /// The digests this evaluation read, which are the ones saved again.
+    used: std::collections::HashSet<String>,
+    /// Whether any summary was computed rather than loaded.
+    computed: bool,
+}
+
+thread_local! {
+    static FIXTURE_MEMO: RefCell<Option<FixtureMemo>> = const { RefCell::new(None) };
+}
+
+/// The fixture summaries stored at `path`; missing or unreadable ones are summarised again.
+fn stored_summaries(path: &Path) -> Option<StoredSummaries> {
+    let bytes: Vec<u8> = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(_unreadable) => return None,
+    };
+    let Ok(stored) = serde_json::from_slice::<StoredSummaries>(&bytes) else {
+        return None;
+    };
+    Some(stored)
+}
+
+/// The stored fixture summaries, kept only for one native build.
+#[derive(Default, Serialize, Deserialize)]
+struct StoredSummaries {
+    build: String,
+    summaries: BTreeMap<String, FixtureSummary>,
+}
+
+/// Run `body` summarising each fixture once, from and, when `body` says so, back to `store`.
+pub(crate) fn with_fixture_memo<T>(store: Option<&Path>, body: impl FnOnce() -> (T, bool)) -> T {
+    let loaded: BTreeMap<String, FixtureSummary> = store
+        .and_then(stored_summaries)
+        .filter(|stored| stored.build == NATIVE_BUILD_IDENTITY)
+        .map(|stored| stored.summaries)
+        .unwrap_or_default();
+    let loaded_count: usize = loaded.len();
+    let memo: FixtureMemo = FixtureMemo {
+        summaries: loaded
+            .into_iter()
+            .map(|(key, summary)| (key, Rc::new(summary)))
+            .collect(),
+        used: std::collections::HashSet::new(),
+        computed: false,
+    };
+    let outer: Option<FixtureMemo> = FIXTURE_MEMO.with(|slot| slot.borrow_mut().replace(memo));
+    let (result, write): (T, bool) = body();
+    let memo: Option<FixtureMemo> = FIXTURE_MEMO.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let memo = slot.take();
+        *slot = outer;
+        memo
+    });
+    if let (Some(path), Some(memo), true) = (store, memo, write)
+        && !memo.used.is_empty()
+        && (memo.computed || memo.used.len() != loaded_count)
+    {
+        let FixtureMemo {
+            summaries, used, ..
+        } = memo;
+        let stored: StoredSummaries = StoredSummaries {
+            build: NATIVE_BUILD_IDENTITY.to_owned(),
+            summaries: summaries
+                .into_iter()
+                .filter(|(key, _)| used.contains(key))
+                .map(|(key, summary)| (key, summary.as_ref().clone()))
+                .collect(),
+        };
+        let _ = write_summaries(path, &stored);
+    }
+    result
+}
+
+fn write_summaries(path: &Path, stored: &StoredSummaries) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
+    std::fs::write(&temporary, serde_json::to_vec(stored)?)?;
+    std::fs::rename(&temporary, path)
+}
+
+fn summarised(sql: &str, dialect: &str) -> FixtureSummary {
+    let parsed: Result<ParsedFixture, String> = model_shape(sql, dialect)
         .and_then(|shape| parse_fixture(shape, dialect))
-        .map_err(|error| format!("could not parse SQL-test fixture: {error}"))
+        .map_err(|error| format!("could not parse SQL-test fixture: {error}"));
+    match parsed {
+        Err(error) => FixtureSummary {
+            error: Some(error),
+            empty: false,
+            row_existence_target: None,
+        },
+        Ok(fixture) => FixtureSummary {
+            error: None,
+            empty: selects_no_rows(&fixture),
+            row_existence_target: row_existence_target(&fixture),
+        },
+    }
+}
+
+fn fixture_summary(sql: &str, dialect: &str) -> Rc<FixtureSummary> {
+    FIXTURE_MEMO.with(|memo| {
+        let mut memo = memo.borrow_mut();
+        let Some(memo) = memo.as_mut() else {
+            return Rc::new(summarised(sql, dialect));
+        };
+        let mut hasher: blake3::Hasher = blake3::Hasher::new();
+        hasher.update(dialect.as_bytes());
+        hasher.update(b"\0");
+        hasher.update(sql.as_bytes());
+        let key: String = hasher.finalize().to_hex().to_string();
+        if let Some(summary) = memo.summaries.get(&key) {
+            let summary: Rc<FixtureSummary> = Rc::clone(summary);
+            memo.used.insert(key);
+            return summary;
+        }
+        let summary: Rc<FixtureSummary> = Rc::new(summarised(sql, dialect));
+        memo.summaries.insert(key.clone(), Rc::clone(&summary));
+        memo.used.insert(key);
+        memo.computed = true;
+        summary
+    })
 }
 
 fn limited_to_zero_rows(select: &Select) -> bool {
@@ -755,18 +946,23 @@ fn numeric_literal(expression: &Expression) -> Option<f64> {
 }
 
 fn bare_row_existence(sql: &str, targets: &[String], dialect: &str) -> bool {
-    let Ok(fixture) = fixture_query(sql, dialect) else {
-        return false;
-    };
+    fixture_summary(sql, dialect)
+        .row_existence_target
+        .as_ref()
+        .is_some_and(|target| targets.contains(target))
+}
+
+/// The model a fixture reads when it is a bare existence check of one model's rows.
+fn row_existence_target(fixture: &ParsedFixture) -> Option<String> {
     let Expression::Select(select) = &fixture.statement else {
-        return false;
+        return None;
     };
     let [source] = select
         .from
         .as_ref()
         .map_or(&[][..], |from| from.expressions.as_slice())
     else {
-        return false;
+        return None;
     };
     let unfiltered = select.where_clause.is_none()
         && select.prewhere.is_none()
@@ -775,16 +971,19 @@ fn bare_row_existence(sql: &str, targets: &[String], dialect: &str) -> bool {
         && select.connect.is_none()
         && select.lateral_views.is_empty()
         && select.group_by.is_none();
-    select.with.is_none()
+    let bare: bool = select.with.is_none()
         && unfiltered
         && select.joins.is_empty()
-        && reference_target(source, &fixture).is_some_and(|target| targets.contains(&target))
         && !fixture.projection_calls_function()
         && !fixture.order_by_calls_function()
         && select.limit.is_none()
         && select.offset.is_none()
         && select.fetch.is_none()
-        && fixture.query_count() == 1
+        && fixture.query_count() == 1;
+    if !bare {
+        return None;
+    }
+    reference_target(source, fixture)
 }
 
 fn reference_target(source: &Expression, fixture: &ParsedFixture) -> Option<String> {

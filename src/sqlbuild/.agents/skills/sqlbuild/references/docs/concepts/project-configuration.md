@@ -652,6 +652,7 @@ default_audit_run_scope = "delta_and_final"
 unit_test_max_real_models = 10
 test_timeout = "30s"
 scenario_timeout = "15m"
+delta_compile = true
 ```
 
 | Field | Default | Description |
@@ -669,6 +670,7 @@ scenario_timeout = "15m"
 | `unit_test_max_real_models` | `10` | Most real (unmocked) models one SQL unit test may execute; a larger test fails compilation. See [Unit test and scenario limits](#unit-test-and-scenario-limits). |
 | `test_timeout` | `30s` | Time limit for each SQL unit test, or `"disabled"` |
 | `scenario_timeout` | none | Time limit for each scenario, or `"disabled"` |
+| `delta_compile` | `true` | After an edit to model SQL or SQL test files only, compile just the changed files against the previous compile. See [Compiling after an edit](../cli/compile.md#compiling-after-an-edit). |
 
 ### Unit test and scenario limits
 

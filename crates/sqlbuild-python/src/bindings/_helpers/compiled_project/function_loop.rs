@@ -1,5 +1,6 @@
 //! `build_sql_function_inputs`: every SQL and Python function attached natively.
 
+use crate::bindings::_helpers::compile_delta::context::record_source_reads;
 use std::collections::{HashMap, HashSet};
 
 use pyo3::exceptions::PyValueError;
@@ -50,6 +51,9 @@ const GENERIC_DIALECT: &str = "generic";
 const TABLE_RETURNS: &str = "TABLE";
 const DATABASE_KEY: &str = "database";
 const SCHEMA_KEY: &str = "schema";
+
+/// The reference kind of a source.
+const SOURCE_KIND: &str = "source";
 
 /// A function's paths, stem, discovered file, header values, body and SQL file contents.
 pub(crate) type FunctionRow = (
@@ -518,6 +522,12 @@ fn function_references(
         .iter()
         .map(|(kind, name, _, _)| (kind.as_str(), name.as_str()))
         .collect();
+    record_source_reads(
+        calls
+            .iter()
+            .filter(|(kind, _)| *kind == SOURCE_KIND)
+            .map(|(_, name)| *name),
+    );
     if let Some(message) = function_reference_error(relative_path, &calls, &known) {
         return Err(compile_error(context.classes, &message, None));
     }

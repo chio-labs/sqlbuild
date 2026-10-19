@@ -148,12 +148,15 @@ pub(crate) fn run_planned_sql_rules<'py>(
     };
     let lint_key: String = settings_lint_key(&run.settings);
     let identities: Vec<(String, String)> = model_rule_identities(&run, &lint_key)?;
-    let project_files: Option<Vec<LintFile>> =
-        if !identities.is_empty() && run.prepared().is_none() && !run.model_selection {
-            Some(lint_sources(&run.project_dir, None, None)?)
-        } else {
-            None
-        };
+    let project_files: Option<Vec<LintFile>> = if !identities.is_empty()
+        && run.prepared().is_none()
+        && !run.model_selection
+        && crate::bindings::_helpers::compile_delta::context::injection().is_none()
+    {
+        Some(lint_sources(&run.project_dir, None, None)?)
+    } else {
+        None
+    };
     let started: Instant = Instant::now();
     let (findings, hits, misses) =
         evaluated_sql_rules(&run, (&lint_key, identities), project_files)?;
@@ -298,13 +301,14 @@ fn model_rule_identities(run: &SqlRun<'_, '_>, lint_key: &str) -> PyResult<Vec<(
     }
     let keys: BTreeMap<String, String> =
         model_rule_keys(run.project.py(), lint_key, run.codes, &models);
-    Ok(models
+    let fresh: Vec<(String, String)> = models
         .into_iter()
         .map(|(path, ..)| {
             let key: String = keys[&path].clone();
             (path, key)
         })
-        .collect())
+        .collect();
+    crate::bindings::_helpers::compile_delta::lint_hooks::model_identities(fresh)
 }
 
 /// Canonical text of a hand-built model's dynamic column contract that SQL rule findings depend on.
@@ -340,6 +344,29 @@ fn prepared_result<'a>(
         return None;
     }
     Some(prepared.result(py))
+}
+
+/// The files a whole-project lint reads: prepared, walked, or in a delta only the changed ones.
+fn linted_files(
+    run: &SqlRun<'_, '_>,
+    prepared_files: Option<Vec<LintFile>>,
+) -> PyResult<Vec<LintFile>> {
+    let py: Python<'_> = run.project.py();
+    let project_dir: &Path = &run.project_dir;
+    let prepared = prepared_result(run, py);
+    if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+        return crate::bindings::_helpers::compile_delta::lint_hooks::changed_files(project_dir);
+    }
+    Ok(match prepared {
+        Some(Ok(result)) => result.outcome.files.clone(),
+        Some(Err(error)) if !error.is_instance_of::<PyException>(py) => {
+            return Err(error.clone_ref(py));
+        }
+        Some(Err(_)) | None => match prepared_files {
+            Some(files) => files,
+            None => lint_sources(project_dir, None, None)?,
+        },
+    })
 }
 
 /// Each analysed model's findings, cached or linted, then cache accounting.
@@ -382,16 +409,7 @@ fn evaluated_sql_rules(
         for model in project_attribute(&run.project, "models")?.try_iter()? {
             model_paths.insert(project_dir.join(model_posix_path(&model?)?));
         }
-        let files: Vec<LintFile> = match prepared_result(run, py) {
-            Some(Ok(result)) => result.outcome.files.clone(),
-            Some(Err(error)) if !error.is_instance_of::<PyException>(py) => {
-                return Err(error.clone_ref(py));
-            }
-            Some(Err(_)) | None => match prepared_files {
-                Some(files) => files,
-                None => lint_sources(project_dir, None, None)?,
-            },
-        };
+        let files: Vec<LintFile> = linted_files(run, prepared_files)?;
         let mut file_keys: Vec<(PathBuf, String, Option<String>)> = Vec::new();
         for file in &files {
             if model_paths.contains(&file.path) {
@@ -409,6 +427,11 @@ fn evaluated_sql_rules(
             );
             file_keys.push((file.path.clone(), relative_path, key));
         }
+        let file_keys: Vec<(PathBuf, String, Option<String>)> =
+            crate::bindings::_helpers::compile_delta::lint_hooks::file_keys(
+                project_dir,
+                file_keys,
+            )?;
         let mut keyed: Vec<(String, String)> = Vec::new();
         for (_, path, key) in &file_keys {
             if let Some(key) = key {

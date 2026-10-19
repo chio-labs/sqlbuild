@@ -1,5 +1,6 @@
 //! The facts cross-file validation reads, taken from Python's `DiscoveredProjectInputs`.
 
+use crate::bindings::_helpers::compile_delta::context::injection;
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::records::fields::{field as native_field, path_stem};
 use pyo3::FromPyObject;
@@ -69,6 +70,7 @@ pub(crate) fn project_facts(
             .try_iter()?
             .map(|key| key?.extract())
             .collect::<PyResult<_>>()?,
+        project_model_paths: injection().map(|injection| injection.project_model_paths.clone()),
         csv_field_limit: Some(csv_field_limit(py)?),
     })
 }

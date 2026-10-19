@@ -108,7 +108,9 @@ pub(crate) fn assembled_project<'py>(
     let native: Bound<'py, PyAny> = native_project_facts(inputs, &context, names, &native_session)?;
     let resources: Bound<'py, PyAny> = native_field(&native, "resources")?;
     let scope_index: Bound<'py, PyAny> = scope_index_with_compile_usages(inputs)?;
-    report_scope_index_errors(&scope_index)?;
+    if crate::bindings::_helpers::compile_delta::context::injection().is_none() {
+        report_scope_index_errors(&scope_index)?;
+    }
     let target_values: Bound<'py, PyAny> = effective_target_values(inputs)?;
     let models: Bound<'py, PyTuple> =
         compiled_models(inputs, &context, (&native_field(&native, "models")?, names))?;

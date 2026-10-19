@@ -10,6 +10,8 @@ mod helpers;
 mod incremental_rules;
 #[path = "tests/test_query_facts.rs"]
 mod query_facts;
+#[path = "tests/test_retained_rows.rs"]
+mod retained_rows;
 #[path = "tests/test_scope_facts.rs"]
 mod scope_facts;
 #[path = "tests/test_speculative_rows.rs"]

@@ -163,6 +163,9 @@ impl<'py> ReportInputs<'py> {
             return Ok(PyDict::new(py));
         }
         let reasons: Bound<'py, PyDict> = semantic_coverage(&self.project)?;
+        if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+            return Ok(reasons);
+        }
         let Some(names) = self.selected_names(MODEL_TYPE)? else {
             return Ok(reasons);
         };
@@ -296,6 +299,11 @@ fn shown_diagnostics(
         return Ok(Vec::new());
     }
     let texts: Bound<'_, PyDict> = source_texts(&inputs.project)?;
+    crate::bindings::_helpers::compile_delta::report_hooks::complete_source_texts(
+        &inputs.project,
+        &inputs.diagnostics,
+        &texts,
+    )?;
     let warning_counts: Bound<'_, PyDict> = PyDict::new(py);
     for diagnostic in &inputs.diagnostics {
         if native_field(diagnostic, "severity")?.eq(WARNING_SEVERITY)? {
@@ -358,6 +366,8 @@ pub(crate) fn format_compile_text<'py>(
             column_count: native_field(&model, "output_column_count")?.extract()?,
         });
     }
+    let models: Vec<ModelLine> =
+        crate::bindings::_helpers::compile_delta::report_hooks::text_model_lines(models);
     let lineage: LineageNote = if !inputs.lineage.is_none() && inputs.lineage_mode == RICH_LINEAGE {
         LineageNote::Rich
     } else if inputs.lineage.is_none()
@@ -449,6 +459,11 @@ fn location_json<'py>(location: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDic
         }
     }
     Ok(payload)
+}
+
+/// One diagnostic as the report's JSON item.
+pub(crate) fn diagnostic_item<'py>(diagnostic: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyDict>> {
+    diagnostic_json(diagnostic)
 }
 
 /// `_diagnostic_to_json`: one diagnostic's JSON fields, omitting the unset ones.
