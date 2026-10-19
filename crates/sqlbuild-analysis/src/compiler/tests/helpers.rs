@@ -1559,7 +1559,7 @@ pub(super) fn snowflake_function_synonyms_stay_as_authored() -> bool {
         && !sql.contains("SUBSTRING")
 }
 
-fn generic_lexical_syntax() -> Value {
+pub(crate) fn generic_lexical_syntax() -> Value {
     json!({
         "backslashEscapeQuotes": [],
         "escapeStringPrefix": false,
