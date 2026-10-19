@@ -8,6 +8,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::janitor_planning::main::resolve_retention_days::resolve_retention_days;
+use sqlbuild_cli::diff_report::errors::DiffUserError;
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::janitor_text::errors::JanitorSettingsError;
 use sqlbuild_core::janitor_text::main::janitor_completion_text::janitor_completion_text;
@@ -24,6 +25,7 @@ use sqlbuild_core::janitor_text::models::JanitorPlanText;
 use crate::bindings::_helpers::command_runtime::preview_target::validate_preview_target;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
+use crate::bindings::_helpers::diff_report::support::cli_error;
 use crate::bindings::_helpers::janitor::janitor_phases::{
     JanitorCompiled, build_janitor_execution_plan, close_janitor_warehouse,
     compile_janitor_project, connect_janitor_warehouse, execute_janitor_cleanup,
@@ -35,8 +37,15 @@ use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
+use crate::bindings::_helpers::scenario_command::setup::stream_isatty;
 
 const COMMAND_NAME: &str = "janitor";
+/// The code of a cleanup that needs a confirmation stdin cannot give.
+const CONFIRMATION_CODE: &str = "C503";
+const CONFIRMATION_REFUSAL: &str =
+    "janitor cleanup requires confirmation, but stdin is not a terminal";
+const CONFIRMATION_HELP: &str = "Run sqb janitor in a terminal to confirm, or pass --auto-approve.";
+const LINE_ENDINGS: [char; 2] = ['\n', '\r'];
 
 fn imported<'py>(py: Python<'py>, module: &str, name: &str) -> PyResult<Bound<'py, PyAny>> {
     py.import(module)?.getattr(name)
@@ -157,12 +166,25 @@ fn settings<'py>(
     new_record(py, RecordId::JanitorSettings, (), Some(&options))
 }
 
-/// Ask for the exact confirmation phrase; an interrupt cancels.
+/// Ask for the exact confirmation phrase; an interrupt cancels, and a non-interactive stdin refuses.
 fn confirmed(py: Python<'_>, plan: &JanitorPlanText) -> PyResult<bool> {
+    let stdin: Bound<'_, PyAny> = imported(py, "sys", "stdin")?;
+    if stdin.is_none() || !stream_isatty(&stdin)? {
+        return Err(cli_error(
+            py,
+            ErrorId::CliUser,
+            &DiffUserError {
+                message: CONFIRMATION_REFUSAL.to_owned(),
+                code: CONFIRMATION_CODE.to_owned(),
+                help: Some(CONFIRMATION_HELP.to_owned()),
+            },
+        ));
+    }
     write(py, &janitor_confirmation_prompt(plan))?;
     flush(py)?;
-    match imported(py, "builtins", "input")?.call0() {
-        Ok(response) => Ok(response.extract::<String>()? == janitor_confirmation_phrase(plan)),
+    match stdin.call_method0("readline") {
+        Ok(response) => Ok(response.extract::<String>()?.trim_end_matches(LINE_ENDINGS)
+            == janitor_confirmation_phrase(plan)),
         Err(error) if error.is_instance_of::<PyKeyboardInterrupt>(py) => {
             write(py, "\n")?;
             Ok(false)
