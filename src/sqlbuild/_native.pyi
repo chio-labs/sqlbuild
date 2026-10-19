@@ -3331,6 +3331,12 @@ class RecallLifecycleSink:
         self, *, sql: str, statement_id: str | None = None, resource_id: str | None = None
     ) -> None: ...
 
+class RecallWriter:
+    """Publishes the records a Recall replacement sink keeps; valid only during the sink call."""
+
+    def publish_lifecycle(self, event: LifecycleEvent) -> None: ...
+    def publish_command_output(self, record: CommandOutputRecord) -> None: ...
+
 class LocalFilesystemComputeLogStorage:
     """Ordered fsync capture storage subject to underlying filesystem and hardware guarantees."""
 
@@ -16925,12 +16931,16 @@ class DiscoveredRuntimeExtensions(NativeRecord):
     event_exporters: tuple[DiscoveredEventExporter, ...]
     command_output_sinks: tuple[DiscoveredCommandOutputSink, ...]
     lifecycle_shutdown_timeout_seconds: int | None
+    recall_lifecycle_sink: tuple[DiscoveredEventExporter, str] | None
+    recall_output_sink: tuple[DiscoveredCommandOutputSink, str] | None
     def __init__(
         self,
         providers: tuple[DiscoveredProvider, ...] = ...,
         event_exporters: tuple[DiscoveredEventExporter, ...] = ...,
         command_output_sinks: tuple[DiscoveredCommandOutputSink, ...] = ...,
         lifecycle_shutdown_timeout_seconds: int | None = ...,
+        recall_lifecycle_sink: tuple[DiscoveredEventExporter, str] | None = ...,
+        recall_output_sink: tuple[DiscoveredCommandOutputSink, str] | None = ...,
     ) -> None: ...
 
 class ProjectGraph:

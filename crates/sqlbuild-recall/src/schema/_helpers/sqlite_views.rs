@@ -259,7 +259,8 @@ terminals AS (
     WHERE event_type IN ('invocation_completed', 'invocation_failed')
 ),
 beats AS (
-    SELECT invocation_id, MAX(beat_at) AS last_heartbeat_at, MAX(stale_at) AS stale_at
+    SELECT invocation_id, MAX(beat_at) AS last_heartbeat_at, MAX(stale_at) AS stale_at,
+        MIN(command) AS command, MIN(subcommand) AS subcommand
     FROM recall_heartbeats
     GROUP BY invocation_id
 ),
@@ -281,8 +282,8 @@ projected AS (
         terminals.exit_code,
         terminals.error_type,
         terminals.error_code,
-        COALESCE(context.command, started.command) AS command,
-        context.subcommand,
+        COALESCE(context.command, started.command, beats.command) AS command,
+        COALESCE(context.subcommand, beats.subcommand) AS subcommand,
         context.target,
         context.adapter,
         context.project_name,

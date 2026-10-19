@@ -8,6 +8,7 @@ use sqlbuild_config::recall::models::RecallSection;
 
 use crate::settings::_helpers::documents::{expand_environment, lookup};
 use crate::settings::constants::{
+    CLICKHOUSE_ADAPTER, CLICKHOUSE_DATABASE_KEY, CLICKHOUSE_DEFAULT_DATABASE,
     CONNECTION_ADAPTER_KEY, DEFAULT_STORE_DIRECTORY, DEFAULT_STORE_FILE_NAME, SQLITE_ADAPTER,
     SQLITE_PATH_KEY,
 };
@@ -61,6 +62,61 @@ fn connection_entries(
     merged
 }
 
+/// `value` with `${env:...}` expanded in every string it holds.
+fn expanded(value: ConfigValue, label: &str) -> Result<ConfigValue, SettingsError> {
+    Ok(match value {
+        ConfigValue::String(text) => ConfigValue::String(expand_environment(&text, label)?),
+        ConfigValue::List(items) => ConfigValue::List(
+            items
+                .into_iter()
+                .map(|item| expanded(item, label))
+                .collect::<Result<_, _>>()?,
+        ),
+        ConfigValue::Map(entries) => ConfigValue::Map(
+            entries
+                .into_iter()
+                .map(|(key, item)| Ok((key, expanded(item, label)?)))
+                .collect::<Result<_, SettingsError>>()?,
+        ),
+        other => other,
+    })
+}
+
+fn clickhouse_location(
+    name: &str,
+    entries: Vec<(String, ConfigValue)>,
+) -> Result<StoreLocation, SettingsError> {
+    let mut config: Vec<(String, ConfigValue)> = Vec::with_capacity(entries.len());
+    for (key, value) in entries {
+        if key == CONNECTION_ADAPTER_KEY {
+            continue;
+        }
+        let label = format!("connections.{name}.{key}");
+        config.push((key, expanded(value, &label)?));
+    }
+    let database: String = match config
+        .iter()
+        .find(|(key, _)| key == CLICKHOUSE_DATABASE_KEY)
+        .map(|(_, value)| value)
+    {
+        None => CLICKHOUSE_DEFAULT_DATABASE.to_owned(),
+        Some(ConfigValue::String(database)) if !database.trim().is_empty() => {
+            database.trim().to_owned()
+        }
+        Some(_) => {
+            return Err(SettingsError::new(format!(
+                "connections.{name}.database must name the existing ClickHouse database Recall \
+                 writes to"
+            )));
+        }
+    };
+    Ok(StoreLocation::ClickHouse {
+        connection: name.to_owned(),
+        config,
+        database,
+    })
+}
+
 pub(crate) fn store_location(
     project_dir: &Path,
     documents: [Option<&ConfigValue>; 2],
@@ -93,6 +149,9 @@ pub(crate) fn store_location(
         }
         None => project_adapter.unwrap_or_default().to_owned(),
     };
+    if adapter == CLICKHOUSE_ADAPTER {
+        return clickhouse_location(name, entries);
+    }
     if adapter != SQLITE_ADAPTER {
         return Ok(StoreLocation::Unsupported {
             connection: name.to_owned(),

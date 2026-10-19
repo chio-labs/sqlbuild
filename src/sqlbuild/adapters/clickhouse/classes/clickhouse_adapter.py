@@ -108,6 +108,7 @@ from sqlbuild.adapters.clickhouse._helpers.type_text import (
 )
 from sqlbuild.adapters.clickhouse.classes.clickhouse_connection import _ClickHouseConnection
 from sqlbuild.adapters.clickhouse.classes.partition_locks import PartitionLocks
+from sqlbuild.adapters.clickhouse.classes.recall_connections import RecallConnections
 from sqlbuild.adapters.clickhouse.classes.relation_write_locks import RelationWriteLocks
 from sqlbuild.adapters.clickhouse.constants import (
     CONNECTION_OPTION_KEYS,
@@ -181,6 +182,7 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     )
     _partition_locks: ClassVar[PartitionLocks] = PartitionLocks()
     _relation_locks: ClassVar[RelationWriteLocks] = RelationWriteLocks()
+    recall_connections: ClassVar[RecallConnections] = RecallConnections()
 
     def connect(self, config: dict[str, Any]) -> _ClickHouseConnection:
         try:

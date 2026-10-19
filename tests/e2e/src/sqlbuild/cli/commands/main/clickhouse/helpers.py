@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, cast
 
 from sqlbuild.adapters.clickhouse.classes.clickhouse_adapter import ClickHouseAdapter
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_waffle_shop
+from tests.integration.src.sqlbuild.cli.recall.helpers import write_project
 
 CLICKHOUSE_IMAGE: str = "clickhouse/clickhouse-server:26.1"
 
@@ -310,4 +314,237 @@ def _alias_qualified_columns(model_path: Path) -> None:
             flags=re.MULTILINE,
         ),
         encoding="utf-8",
+    )
+
+
+RECALL_TABLES: tuple[str, ...] = (
+    "recall_meta",
+    "recall_invocations",
+    "recall_output",
+    "recall_events",
+    "recall_diagnostics",
+    "recall_artifacts",
+    "recall_artifact_refs",
+    "recall_heartbeats",
+    "recall_delivery",
+    "recall_conflicts",
+)
+_TTL_DAYS: re.Pattern[str] = re.compile(r" TTL \w+ \+ toIntervalDay\((\d+)\)")
+_AGED_TABLES: tuple[tuple[str, str], ...] = (
+    ("recall_invocations", ""),
+    ("recall_output", ""),
+    ("recall_events", ", concat('aged-', event_id) AS event_id"),
+    ("recall_diagnostics", ""),
+    ("recall_artifact_refs", ""),
+    ("recall_heartbeats", ""),
+    ("recall_delivery", ""),
+    ("recall_conflicts", ""),
+)
+
+
+def recall_store_toml(
+    *,
+    config: dict[str, object],
+    database: str,
+    recall_settings: str = "",
+    connection_settings: str = "",
+) -> str:
+    """Project configuration sending Recall history to a ClickHouse database."""
+
+    return (
+        "\n[connections.history]\n"
+        'adapter = "clickhouse"\n'
+        f'host = "{config["host"]}"\n'
+        f"port = {config['port']}\n"
+        f'user = "{config["user"]}"\n'
+        f'password = "{config["password"]}"\n'
+        f'database = "{database}"\n'
+        f"{connection_settings}"
+        "\n[recall]\n"
+        'connection = "history"\n'
+        f"{recall_settings}"
+    )
+
+
+def stored_ttl_days(*, config: dict[str, object], database: str) -> tuple[tuple[str, int], ...]:
+    """Each Recall table's TTL in days, by table name."""
+
+    rows: tuple[tuple[object, ...], ...] = fetch_clickhouse_rows(
+        config=config,
+        sql=(
+            "SELECT name, create_table_query FROM system.tables "
+            f"WHERE database = '{database}' AND startsWith(name, 'recall_') ORDER BY name"
+        ),
+    )
+    return tuple(
+        (str(name), int(next(iter(_TTL_DAYS.findall(str(query))), -1))) for name, query in rows
+    )
+
+
+def physical_rows(*, config: dict[str, object], database: str, where: str = "1") -> int:
+    """Rows stored across every Recall table, before any deduplication or retention filter."""
+
+    total: int = 0
+    for table in RECALL_TABLES:
+        rows: tuple[tuple[object, ...], ...] = fetch_clickhouse_rows(
+            config=config, sql=f"SELECT count() FROM {database}.{table} WHERE {where}"
+        )
+        total += int(cast(int, rows[0][0]))
+    return total
+
+
+def age_recorded_invocations(*, config: dict[str, object], database: str, days: int) -> None:
+    """Store a copy of every invocation's rows started `days` earlier, under `aged-` IDs."""
+
+    statements: list[str] = []
+    for table, extra in _AGED_TABLES:
+        replaced: str = (
+            "concat('aged-', invocation_id) AS invocation_id, "
+            f"invocation_started_at - INTERVAL {days} DAY AS invocation_started_at{extra}"
+        )
+        statements.append(
+            f"INSERT INTO {database}.{table} SELECT * REPLACE ({replaced}) FROM "
+            f"(SELECT * FROM {database}.{table} WHERE NOT startsWith(invocation_id, 'aged-'))"
+        )
+    execute_clickhouse_sql(config=config, statements=tuple(statements))
+
+
+def age_stored_artifacts(*, config: dict[str, object], database: str, days: int) -> None:
+    """Move every stored SQL text's `seen_at` `days` earlier, as if not refreshed since."""
+
+    table: str = f"{database}.recall_artifacts"
+    execute_clickhouse_sql(
+        config=config,
+        statements=(
+            f"INSERT INTO {table} SELECT * REPLACE (seen_at - INTERVAL {days} DAY AS seen_at) "
+            f"FROM {table}",
+            f"ALTER TABLE {table} DELETE WHERE seen_at > now64(6) - INTERVAL {days - 1} DAY "
+            "SETTINGS mutations_sync = 2",
+        ),
+    )
+
+
+def expire_recall_parts(*, config: dict[str, object], database: str) -> None:
+    """Apply every Recall table's TTL now, as background TTL merges eventually would."""
+
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(
+            f"ALTER TABLE {database}.{table} MATERIALIZE TTL SETTINGS mutations_sync = 2"
+            for table in RECALL_TABLES
+        ),
+    )
+
+
+def apply_printed_retention_fix(*, config: dict[str, object], stderr: str) -> int:
+    """Run the statements a retention notice printed without expiring stored parts."""
+
+    script: str = stderr.split("configured retention with:\n\n", 1)[1].split("\nsqb ", 1)[0]
+    statements: list[str] = [
+        statement.strip().removesuffix(";") for statement in script.split(";\n\n")
+    ]
+    import clickhouse_connect
+
+    client: Any = clickhouse_connect.get_client(
+        host=str(config["host"]),
+        port=int(cast(int, config["port"])),
+        username=str(config["user"]),
+        password=str(config["password"]),
+    )
+    try:
+        for statement in statements:
+            client.command(statement, settings={"materialize_ttl_after_modify": 0})
+    finally:
+        client.close()
+    return len(statements)
+
+
+FIRST_RELEASE_EDITS: tuple[tuple[str, str], ...] = (
+    (
+        "    `pid` Nullable(Int64),\n    `command` Nullable(String),\n"
+        "    `subcommand` Nullable(String),",
+        "    `pid` Nullable(Int64),",
+    ),
+    (",\n        min(command) AS command, min(subcommand) AS subcommand", ""),
+    (
+        "coalesce(context.command, started.command, beats.command)",
+        "coalesce(context.command, started.command)",
+    ),
+    (
+        "coalesce(context.subcommand, beats.subcommand) AS subcommand",
+        "context.subcommand AS subcommand",
+    ),
+)
+
+
+def apply_printed_ddl(
+    *, config: dict[str, object], stderr: str, edits: tuple[tuple[str, str], ...] = ()
+) -> None:
+    """Run, as an administrator, the script a permission notice printed, with `edits` applied."""
+
+    printed: str = stderr.split(" with:\n\n", 1)[1].split("\nsqb ", 1)[0].strip()
+    script: str = functools.reduce(lambda text, edit: text.replace(*edit), edits, printed)
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(
+            statement.strip().removesuffix(";") for statement in script.split(";\n\n")
+        ),
+    )
+
+
+@contextmanager
+def limited_user(
+    *, config: dict[str, object], database: str, revoked_inserts: tuple[str, ...] = ()
+) -> Iterator[dict[str, object]]:
+    """A user with only `SELECT` and `INSERT` on `database`, less `revoked_inserts`."""
+
+    name: str = build_unique_schema_name(prefix="recall_writer")
+    password: str = uuid.uuid4().hex
+    execute_clickhouse_sql(
+        config=config,
+        statements=(
+            f"CREATE USER {name} IDENTIFIED BY '{password}'",
+            f"GRANT SELECT, INSERT ON {database}.* TO {name}",
+            *(f"REVOKE INSERT ON {database}.{table} FROM {name}" for table in revoked_inserts),
+        ),
+    )
+    try:
+        yield {**config, "user": name, "password": password}
+    finally:
+        execute_clickhouse_sql(config=config, statements=(f"DROP USER IF EXISTS {name}",))
+
+
+def duplicate_recall_rows(*, config: dict[str, object], database: str) -> None:
+    """Deliver every stored Recall row a second time, as a retried insert would."""
+
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(
+            f"INSERT INTO {database}.{table} SETTINGS insert_deduplicate = 0 "
+            f"SELECT * FROM {database}.{table}"
+            for table in RECALL_TABLES
+        ),
+    )
+
+
+def write_recall_project(
+    *,
+    parent: Path,
+    config: dict[str, object],
+    database: str,
+    settings: tuple[str, str] = ("", ""),
+    targets: int = 1,
+) -> Path:
+    """Write the local Recall test project, sending its history to `database`."""
+
+    recall_settings, connection_settings = settings
+    return write_project(
+        parent / "orders_shop",
+        extra_toml=recall_store_toml(
+            config=config,
+            database=database,
+            recall_settings=recall_settings,
+            connection_settings=connection_settings,
+        ),
+        targets=targets,
     )

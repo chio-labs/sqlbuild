@@ -23,10 +23,11 @@ from sqlbuild.compiler.discovery._helpers.filesystem.command_output_sinks import
     bind_command_output_sink_declarations,
     discover_command_output_sink_declarations,
 )
+from sqlbuild.compiler.discovery._helpers.filesystem.recall_sinks import split_recall_sinks
 
 
 def discover_runtime_extensions(*, project_dir: Path) -> DiscoveredRuntimeExtensions:
-    """Discover providers, typed sinks, and lifecycle delivery settings at command startup."""
+    """Discover providers, typed sinks, Recall replacement sinks and lifecycle delivery settings."""
 
     declarations: tuple[DiscoveredEventExporterDeclaration, ...] = (
         discover_event_exporter_declarations(project_dir=project_dir)
@@ -62,13 +63,22 @@ def discover_runtime_extensions(*, project_dir: Path) -> DiscoveredRuntimeExtens
         project_dir=project_dir,
         providers=providers,
     )
-    return DiscoveredRuntimeExtensions(
-        providers=providers,
-        event_exporters=tuple(
+    recall_lifecycle_sink, lifecycle_sinks = split_recall_sinks(
+        sinks=tuple(
             _apply_runtime_filter(exporter=exporter, config=config) for exporter in exporters
         ),
-        command_output_sinks=output_sinks,
+        history="lifecycle",
+    )
+    recall_output_sink, ordinary_output_sinks = split_recall_sinks(
+        sinks=output_sinks, history="command-output"
+    )
+    return DiscoveredRuntimeExtensions(
+        providers=providers,
+        event_exporters=lifecycle_sinks,
+        command_output_sinks=ordinary_output_sinks,
         lifecycle_shutdown_timeout_seconds=config.shutdown_timeout_seconds,
+        recall_lifecycle_sink=recall_lifecycle_sink,
+        recall_output_sink=recall_output_sink,
     )
 
 

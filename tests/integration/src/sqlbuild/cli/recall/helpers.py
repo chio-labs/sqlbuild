@@ -1,6 +1,9 @@
 """Synthetic DuckDB projects and process helpers for local Recall tests."""
 
+import contextlib
+import itertools
 import json
+import operator
 import os
 import re
 import signal
@@ -13,6 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 PYTHON_CLI: Path = Path(sys.executable).with_name("sqlbuild-python")
+NATIVE_SQB: Path = Path(sys.executable).with_name("sqb")
 EMITTED_STDOUT: bytes = b"binary \x00\xff\xfe chunk\n"
 EMITTED_STDERR: bytes = "warning \u2713 from the task\n".encode()
 EMITTED_TAIL: bytes = b"after the warning\n"
@@ -196,6 +200,61 @@ def killed_build(project_dir: Path, *, heartbeat_seconds: str) -> tuple[str, lis
     return str(running[0][0]), recorded
 
 
+def killed_during_discovery(
+    project_dir: Path, *, heartbeat_seconds: str
+) -> tuple[list[list[object]], subprocess.CompletedProcess[bytes]]:
+    """Rows left by a build SIGKILLed while importing a slow sink, and `recall output last`."""
+
+    sink: Path = project_dir / "sinks" / "slow_import.py"
+    sink.parent.mkdir(parents=True, exist_ok=True)
+    _ = sink.write_text(
+        "import os\nimport time\n\n"
+        "time.sleep(float(os.environ.get('ORDERS_IMPORT_SECONDS', '0')))\n",
+        encoding="utf-8",
+    )
+    process: subprocess.Popen[bytes] = start(
+        project_dir,
+        "build",
+        SQLBUILD_RECALL_HEARTBEAT_SECONDS=heartbeat_seconds,
+        ORDERS_IMPORT_SECONDS="60",
+    )
+    _ = wait_for(
+        "SELECT invocation_id FROM invocations WHERE status = 'running'",
+        project_dir,
+        timeout=120,
+    )
+    os.killpg(process.pid, signal.SIGKILL)
+    _ = process.wait(timeout=30)
+    time.sleep(5 * float(heartbeat_seconds))
+    recorded: list[list[object]] = recall_rows(
+        project_dir, "SELECT command, status, started_at IS NOT NULL FROM invocations"
+    )
+    return recorded, run(project_dir, "recall", "output", "last")
+
+
+def interrupted_build(project_dir: Path, **env: str) -> tuple[int | None, float]:
+    """Exit code of a build sent SIGINT after its first logged event, and seconds to stop."""
+
+    log: Path = project_dir / "events.log"
+    process: subprocess.Popen[bytes] = start(project_dir, "build", **env)
+    try:
+        deadline: float = time.monotonic() + 120
+        while not log.exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        time.sleep(1)
+        interrupted: float = time.monotonic()
+        os.killpg(process.pid, signal.SIGINT)
+        try:
+            _ = process.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            return None, time.monotonic() - interrupted
+        return process.returncode, time.monotonic() - interrupted
+    finally:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+        _ = process.wait(timeout=30)
+
+
 def concurrent_builds(project_dir: Path, targets: tuple[str, ...]) -> tuple[list[int], int, int]:
     """Exit codes of concurrent builds, reads made meanwhile and unexpected read failures."""
 
@@ -327,3 +386,83 @@ def simultaneous_builds(project_dir: Path, targets: tuple[str, ...]) -> list[int
         start(project_dir, "build", "--target", target) for target in targets
     ]
     return [process.wait(timeout=600) for process in started]
+
+
+RECALL_SINK_IMPORTS: str = (
+    "from pathlib import Path\n\n"
+    "from sqlbuild.recall import RecallWriter\n"
+    "from sqlbuild.sinks import (\n"
+    "    CommandOutputRecord, LifecycleEvent, command_output_sink, lifecycle_event_sink,\n"
+    ")\n\n"
+)
+EVENT_LOG_SINK: str = (
+    "@lifecycle_event_sink\n"
+    "def event_log(event: LifecycleEvent) -> None:\n"
+    "    with (Path(__file__).parents[1] / 'events.log').open('a') as log:\n"
+    "        log.write(event.event_type + '\\n')\n"
+)
+OUTPUT_LOG_SINK: str = (
+    "@command_output_sink\n"
+    "def output_log(record: CommandOutputRecord) -> None:\n"
+    "    with (Path(__file__).parents[1] / 'output.log').open('a') as log:\n"
+    "        log.write(record.message)\n"
+)
+SLOW_LIFECYCLE_SINK: str = (
+    "@lifecycle_event_sink\n"
+    "def recall_events(event: LifecycleEvent, writer: RecallWriter) -> None:\n"
+    "    import os\n"
+    "    import time\n\n"
+    "    time.sleep(float(os.environ.get('ORDERS_SINK_SLEEP_SECONDS', '0')))\n"
+    "    writer.publish_lifecycle(event)\n"
+)
+FAILING_SINKS: str = (
+    "@lifecycle_event_sink\n"
+    "def recall_events(event: LifecycleEvent, writer: RecallWriter) -> None:\n"
+    "    raise RuntimeError('lifecycle sink failed')\n\n"
+    "@command_output_sink\n"
+    "def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:\n"
+    "    raise RuntimeError('output sink failed')\n"
+)
+
+
+def filtering_lifecycle_sink(dropped_prefix: str) -> str:
+    """A Recall lifecycle replacement keeping every event whose type lacks `dropped_prefix`."""
+
+    return (
+        "@lifecycle_event_sink\n"
+        "def recall_events(event: LifecycleEvent, writer: RecallWriter) -> None:\n"
+        f"    if not event.event_type.startswith({dropped_prefix!r}):\n"
+        "        writer.publish_lifecycle(event)\n"
+    )
+
+
+def rewriting_output_sink(replaced: tuple[bytes, bytes]) -> str:
+    """A Recall output replacement storing each chunk with `replaced[0]` as `replaced[1]`."""
+
+    old, new = replaced
+    return (
+        "@command_output_sink\n"
+        "def recall_output(record: CommandOutputRecord, writer: RecallWriter) -> None:\n"
+        f"    data = record.data.replace({old!r}, {new!r})\n"
+        "    writer.publish_command_output(record.replace(data=data))\n"
+    )
+
+
+def write_sinks(project_dir: Path, sinks: dict[str, str]) -> Path:
+    """Add `sinks/<name>.py` modules holding the given sink definitions."""
+
+    for name, source in sinks.items():
+        path: Path = project_dir / "sinks" / f"{name}.py"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _ = path.write_text(RECALL_SINK_IMPORTS + source, encoding="utf-8")
+    return project_dir
+
+
+def logged_event_types(project_dir: Path, dropped_prefix: str) -> tuple[list[str], list[str]]:
+    """The sorted event types `event_log` wrote, then those not starting with `dropped_prefix`."""
+
+    logged: list[str] = sorted(
+        (project_dir / "events.log").read_text(encoding="utf-8").splitlines()
+    )
+    dropped: operator.methodcaller = operator.methodcaller("startswith", dropped_prefix)
+    return logged, list(itertools.filterfalse(dropped, logged))

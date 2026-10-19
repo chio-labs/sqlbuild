@@ -1,19 +1,26 @@
 //! The bodies of the supported views in ClickHouse: rows deduplicated by key, within retention.
 
 use crate::schema::_helpers::rendering::clickhouse_table;
-use crate::schema::constants::OUTPUT_TAIL_RECORDS;
+use crate::schema::constants::{OUTPUT_TAIL_RECORDS, REPLACING_ENGINE};
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::{DdlOptions, Table};
 
-/// `table`'s rows within retention, first ingested copy per key.
+/// `table`'s rows within its TTL, one copy per key: `FINAL` for replacing tables, so filters on the sorting key reach the read, else the first ingested copy. SQL text outlives retention like its TTL, so every reference still within retention finds it.
 fn deduplicated(table: Table, options: &DdlOptions) -> String {
     let spec = table_spec(table);
+    let days: u32 = options.retention_days.saturating_add(spec.ttl_extra_days);
+    if spec.clickhouse_engine == REPLACING_ENGINE {
+        return format!(
+            "(SELECT * FROM {name} FINAL WHERE {expiry} >= now64(6) - INTERVAL {days} DAY)",
+            name = clickhouse_table(spec.name, options),
+            expiry = spec.expiry_column,
+        );
+    }
     format!(
         "(SELECT * FROM {name} WHERE {expiry} >= now64(6) - INTERVAL {days} DAY \
          ORDER BY ingested_at ASC LIMIT 1 BY {key})",
         name = clickhouse_table(spec.name, options),
         expiry = spec.expiry_column,
-        days = options.retention_days,
         key = spec.key.join(", "),
     )
 }
@@ -40,18 +47,19 @@ started AS (
 ),
 terminals AS (
     SELECT invocation_id,
-        argMax(event_type, tuple(invocation_sequence, occurred_at)) AS event_type,
-        argMax(occurred_at, tuple(invocation_sequence, occurred_at)) AS occurred_at,
-        argMax(exit_code, tuple(invocation_sequence, occurred_at)) AS exit_code,
-        argMax(duration_ms, tuple(invocation_sequence, occurred_at)) AS duration_ms,
-        argMax(error_type, tuple(invocation_sequence, occurred_at)) AS error_type,
-        argMax(error_code, tuple(invocation_sequence, occurred_at)) AS error_code
+        argMax(event_type, tuple(invocation_sequence, occurred_at)) AS terminal_type,
+        argMax(occurred_at, tuple(invocation_sequence, occurred_at)) AS terminal_at,
+        argMax(exit_code, tuple(invocation_sequence, occurred_at)) AS terminal_exit_code,
+        argMax(duration_ms, tuple(invocation_sequence, occurred_at)) AS terminal_duration_ms,
+        argMax(error_type, tuple(invocation_sequence, occurred_at)) AS terminal_error_type,
+        argMax(error_code, tuple(invocation_sequence, occurred_at)) AS terminal_error_code
     FROM {events}
     WHERE event_type IN ('invocation_completed', 'invocation_failed')
     GROUP BY invocation_id
 ),
 beats AS (
-    SELECT invocation_id, max(beat_at) AS last_heartbeat_at, max(stale_at) AS stale_at
+    SELECT invocation_id, max(beat_at) AS last_heartbeat_at, max(stale_at) AS stale_at,
+        min(command) AS command, min(subcommand) AS subcommand
     FROM {beats} GROUP BY invocation_id
 )
 SELECT
@@ -59,23 +67,23 @@ SELECT
     ids.invocation_started_at AS invocation_started_at,
     coalesce(started.started_at, ids.invocation_started_at) AS started_at,
     multiIf(
-        terminals.event_type = 'invocation_completed', 'completed',
-        terminals.event_type = 'invocation_failed', 'failed',
+        terminals.terminal_type = 'invocation_completed', 'completed',
+        terminals.terminal_type = 'invocation_failed', 'failed',
         beats.stale_at IS NULL, 'unknown',
         beats.stale_at >= now64(6), 'running',
         'abandoned'
     ) AS status,
-    if(terminals.event_type IS NOT NULL, terminals.occurred_at,
+    if(terminals.terminal_type IS NOT NULL, terminals.terminal_at,
         if(beats.stale_at < now64(6), beats.last_heartbeat_at, NULL)) AS ended_at,
-    if(terminals.event_type IS NOT NULL, terminals.duration_ms,
+    if(terminals.terminal_type IS NOT NULL, terminals.terminal_duration_ms,
         if(beats.stale_at < now64(6),
             toFloat64(dateDiff('millisecond', started_at, beats.last_heartbeat_at)), NULL))
         AS duration_ms,
-    terminals.exit_code AS exit_code,
-    terminals.error_type AS error_type,
-    terminals.error_code AS error_code,
-    coalesce(context.command, started.command) AS command,
-    context.subcommand AS subcommand,
+    terminals.terminal_exit_code AS exit_code,
+    terminals.terminal_error_type AS error_type,
+    terminals.terminal_error_code AS error_code,
+    coalesce(context.command, started.command, beats.command) AS command,
+    coalesce(context.subcommand, beats.subcommand) AS subcommand,
     context.target AS target,
     context.adapter AS adapter,
     context.project_name AS project_name,
@@ -108,15 +116,15 @@ facts AS (
 ),
 firsts AS (
     SELECT statement_id,
-        argMin(invocation_id, tuple(invocation_sequence, occurred_at)) AS invocation_id,
-        argMin(run_id, tuple(invocation_sequence, occurred_at)) AS run_id,
-        argMin(resource_id, tuple(invocation_sequence, occurred_at)) AS resource_id,
-        argMin(resource_attempt_id, tuple(invocation_sequence, occurred_at)) AS resource_attempt_id,
-        argMin(operation_id, tuple(invocation_sequence, occurred_at)) AS operation_id,
-        argMin(intent, tuple(invocation_sequence, occurred_at)) AS intent,
-        argMin(statement_kind, tuple(invocation_sequence, occurred_at)) AS statement_kind,
-        argMin(purpose, tuple(invocation_sequence, occurred_at)) AS purpose,
-        argMin(sql_digest, tuple(invocation_sequence, occurred_at)) AS sql_digest,
+        argMin(invocation_id, tuple(invocation_sequence, occurred_at)) AS first_invocation_id,
+        argMin(run_id, tuple(invocation_sequence, occurred_at)) AS first_run_id,
+        argMin(resource_id, tuple(invocation_sequence, occurred_at)) AS first_resource_id,
+        argMin(resource_attempt_id, tuple(invocation_sequence, occurred_at)) AS first_resource_attempt_id,
+        argMin(operation_id, tuple(invocation_sequence, occurred_at)) AS first_operation_id,
+        argMin(intent, tuple(invocation_sequence, occurred_at)) AS first_intent,
+        argMin(statement_kind, tuple(invocation_sequence, occurred_at)) AS first_statement_kind,
+        argMin(purpose, tuple(invocation_sequence, occurred_at)) AS first_purpose,
+        argMin(sql_digest, tuple(invocation_sequence, occurred_at)) AS first_sql_digest,
         minIf(occurred_at, event_type = 'statement_started') AS started_at,
         minIf(occurred_at, event_type = 'statement_submitted') AS submitted_at,
         max(query_id) AS any_query_id
@@ -124,58 +132,58 @@ firsts AS (
 ),
 terminals AS (
     SELECT statement_id,
-        argMax(event_type, tuple(invocation_sequence, occurred_at)) AS event_type,
+        argMax(event_type, tuple(invocation_sequence, occurred_at)) AS last_event_type,
         argMax(occurred_at, tuple(invocation_sequence, occurred_at)) AS ended_at,
-        argMax(query_id, tuple(invocation_sequence, occurred_at)) AS query_id,
-        argMax(error_type, tuple(invocation_sequence, occurred_at)) AS error_type,
-        argMax(error_code, tuple(invocation_sequence, occurred_at)) AS error_code,
-        argMax(duration_ms, tuple(invocation_sequence, occurred_at)) AS duration_ms,
-        argMax(row_count, tuple(invocation_sequence, occurred_at)) AS row_count,
-        argMax(affected_rows, tuple(invocation_sequence, occurred_at)) AS affected_rows
+        argMax(query_id, tuple(invocation_sequence, occurred_at)) AS last_query_id,
+        argMax(error_type, tuple(invocation_sequence, occurred_at)) AS last_error_type,
+        argMax(error_code, tuple(invocation_sequence, occurred_at)) AS last_error_code,
+        argMax(duration_ms, tuple(invocation_sequence, occurred_at)) AS last_duration_ms,
+        argMax(row_count, tuple(invocation_sequence, occurred_at)) AS last_row_count,
+        argMax(affected_rows, tuple(invocation_sequence, occurred_at)) AS last_affected_rows
     FROM facts
     WHERE event_type IN ('statement_completed', 'statement_failed')
     GROUP BY statement_id
 ),
 resources AS (
-    SELECT invocation_id, resource_id, min(resource_name) AS resource_name,
-        min(resource_kind) AS resource_kind
+    SELECT invocation_id, resource_id, min(resource_name) AS first_resource_name,
+        min(resource_kind) AS first_resource_kind
     FROM {events}
     WHERE resource_id IS NOT NULL AND resource_name IS NOT NULL
     GROUP BY invocation_id, resource_id
 )
 SELECT
-    firsts.invocation_id AS invocation_id,
+    firsts.first_invocation_id AS invocation_id,
     firsts.statement_id AS statement_id,
-    firsts.run_id AS run_id,
-    firsts.resource_id AS resource_id,
-    resources.resource_name AS resource_name,
-    resources.resource_kind AS resource_kind,
-    firsts.resource_attempt_id AS resource_attempt_id,
-    firsts.operation_id AS operation_id,
-    firsts.intent AS intent,
-    firsts.statement_kind AS statement_kind,
-    firsts.purpose AS purpose,
-    coalesce(terminals.query_id, firsts.any_query_id) AS query_id,
+    firsts.first_run_id AS run_id,
+    firsts.first_resource_id AS resource_id,
+    resources.first_resource_name AS resource_name,
+    resources.first_resource_kind AS resource_kind,
+    firsts.first_resource_attempt_id AS resource_attempt_id,
+    firsts.first_operation_id AS operation_id,
+    firsts.first_intent AS intent,
+    firsts.first_statement_kind AS statement_kind,
+    firsts.first_purpose AS purpose,
+    coalesce(terminals.last_query_id, firsts.any_query_id) AS query_id,
     firsts.started_at AS started_at,
     firsts.submitted_at AS submitted_at,
     terminals.ended_at AS ended_at,
     multiIf(
-        terminals.event_type = 'statement_completed', 'completed',
-        terminals.event_type = 'statement_failed', 'failed',
+        terminals.last_event_type = 'statement_completed', 'completed',
+        terminals.last_event_type = 'statement_failed', 'failed',
         'no_terminal'
     ) AS outcome,
-    terminals.error_type AS error_type,
-    terminals.error_code AS error_code,
-    terminals.duration_ms AS duration_ms,
-    terminals.row_count AS row_count,
-    terminals.affected_rows AS affected_rows,
-    firsts.sql_digest AS sql_digest,
-    concat('sha256:', firsts.sql_digest) IN (SELECT digest FROM {artifacts}) AS sql_available
+    terminals.last_error_type AS error_type,
+    terminals.last_error_code AS error_code,
+    terminals.last_duration_ms AS duration_ms,
+    terminals.last_row_count AS row_count,
+    terminals.last_affected_rows AS affected_rows,
+    firsts.first_sql_digest AS sql_digest,
+    concat('sha256:', firsts.first_sql_digest) IN (SELECT digest FROM {artifacts}) AS sql_available
 FROM firsts
 LEFT JOIN terminals ON terminals.statement_id = firsts.statement_id
 LEFT JOIN resources
-    ON resources.invocation_id = firsts.invocation_id
-    AND resources.resource_id = firsts.resource_id
+    ON resources.invocation_id = firsts.first_invocation_id
+    AND resources.resource_id = firsts.first_resource_id
 SETTINGS join_use_nulls = 1"
     )
 }

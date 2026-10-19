@@ -1,19 +1,24 @@
 use std::time::Duration;
 
 use crate::records::models::{OutputStream, RecallValue};
-use crate::writer::models::SetupOutcome;
+use crate::schema::models::Table;
+use crate::writer::models::{Priority, SetupOutcome};
 
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
-    artifact_counts, close_under_held_lock, event_counts, recorded_session,
-    session_on_corrupt_store,
+    artifact_counts, close_under_held_lock, event_counts, insert_heartbeat,
+    invocation_during_discovery, output_stored_while_running, partially_inserted,
+    pending_event_counts, record_run, recorded_session, replaced_session, replacement_order,
+    session_on_corrupt_store, written_to_core_release_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
-    ArtifactSizeTestCase, CorruptStoreTestCase, EventBuildTestCase, HeldLockTestCase,
-    RecordedSession, SessionTestCase,
+    ArtifactSizeTestCase, CoreReleaseStoreTestCase, CorruptStoreTestCase, DiscoveryTestCase,
+    EventBuildTestCase, HeldLockTestCase, PartialInsertTestCase, PendingEventTestCase,
+    RecordedSession, ReplacementOrderTestCase, ReplacementTestCase, SessionTestCase,
+    StoredWhileRunningTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -180,6 +185,194 @@ fn given_events_when_built_on_the_delivery_thread_then_unbuildable_ones_count_as
         assert_eq!(
             event_counts(&test_case.events),
             test_case.expected_counts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_heartbeats_due_faster_than_batches_fill_when_running_then_queued_records_are_still_written()
+ {
+    let test_cases = [StoredWhileRunningTestCase {
+        description: "a 50 ms heartbeat still lets queued output reach the store",
+        heartbeat: Duration::from_millis(50),
+        wait: Duration::from_millis(1_500),
+        expected_rows: vec![vec![RecallValue::Integer(1)]],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            output_stored_while_running(test_case.heartbeat, test_case.wait),
+            test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_an_output_replacement_when_closed_then_published_filtered_and_failed_chunks_are_accounted()
+{
+    let accounting = vec![vec![
+        RecallValue::Integer(1),
+        RecallValue::Integer(1),
+        RecallValue::Integer(2),
+        RecallValue::Integer(1),
+        RecallValue::Text("dropped".to_owned()),
+    ]];
+    let output: &[(OutputStream, &[u8])] = &[
+        (OutputStream::Stderr, b"drop that\n"),
+        (OutputStream::Stdout, b"boom\n"),
+        (OutputStream::Stderr, b"keep this\n"),
+    ];
+    let test_cases = [
+        ReplacementTestCase {
+            description: "one chunk published changed, one filtered, one failed",
+            output,
+            discovery: Duration::ZERO,
+            expected_transcript: b"KEEP THIS\n",
+            expected_accounting: accounting.clone(),
+        },
+        ReplacementTestCase {
+            description: "output written during a slow discovery waits for the replacement",
+            output,
+            discovery: Duration::from_millis(900),
+            expected_transcript: b"KEEP THIS\n",
+            expected_accounting: accounting,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            replaced_session(test_case.output, test_case.discovery),
+            (
+                test_case.expected_transcript.to_vec(),
+                test_case.expected_accounting
+            ),
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_one_table_of_a_batch_failing_when_written_then_only_its_records_count_as_failed() {
+    let test_cases = [
+        PartialInsertTestCase {
+            description: "a refused output insert fails the output, not the events",
+            failing: Table::Output,
+            expected_counts: [(1, 1, 0), (1, 0, 1)],
+        },
+        PartialInsertTestCase {
+            description: "a refused heartbeat insert fails no record",
+            failing: Table::Heartbeats,
+            expected_counts: [(1, 1, 0), (1, 1, 0)],
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            partially_inserted(test_case.failing),
+            test_case.expected_counts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_held_context_row_when_discovery_runs_then_the_first_heartbeat_names_the_command() {
+    let test_cases = [DiscoveryTestCase {
+        description: "a run killed during discovery is still listed with its command",
+        wait: Duration::from_millis(600),
+        expected_rows: vec![vec![
+            RecallValue::Text("build".to_owned()),
+            RecallValue::Text("running".to_owned()),
+            RecallValue::Integer(1),
+            RecallValue::Integer(0),
+        ]],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            invocation_during_discovery(test_case.wait),
+            test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_pending_events_when_replaced_on_the_delivery_thread_then_each_outcome_is_accounted() {
+    let test_cases = [PendingEventTestCase {
+        description: "one kept, one split in two, one filtered, one failed",
+        copies: vec![Some(1), Some(2), Some(0), None],
+        expected_counts: (5, 3, 1, 1),
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            pending_event_counts(&test_case.copies),
+            test_case.expected_counts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_store_from_the_first_release_when_written_then_rows_land_and_columns_are_added() {
+    let test_cases = [
+        CoreReleaseStoreTestCase {
+            description: "a session adds the heartbeat columns and records the run",
+            write: record_run,
+            expected_rows: vec![vec![
+                RecallValue::Integer(1),
+                RecallValue::Text("build".to_owned()),
+                RecallValue::Integer(2),
+            ]],
+        },
+        CoreReleaseStoreTestCase {
+            description: "a write before any upgrade stores only the columns the table has",
+            write: insert_heartbeat,
+            expected_rows: vec![vec![
+                RecallValue::Integer(1),
+                RecallValue::Null,
+                RecallValue::Integer(0),
+            ]],
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            written_to_core_release_store(test_case.write),
+            test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_events_of_mixed_priority_in_one_batch_when_replaced_then_the_sink_sees_publication_order()
+{
+    let test_cases = [ReplacementOrderTestCase {
+        description: "a failure and a terminal event do not overtake earlier lifecycle events",
+        priorities: vec![
+            Priority::Lifecycle,
+            Priority::FailedTerminal,
+            Priority::Terminal,
+            Priority::Lifecycle,
+        ],
+        expected_order: vec![0, 1, 2, 3],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            replacement_order(&test_case.priorities),
+            test_case.expected_order,
             "{}",
             test_case.description
         );

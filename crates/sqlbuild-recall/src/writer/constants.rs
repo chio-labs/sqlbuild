@@ -27,3 +27,5 @@ pub const MINIMUM_MAINTENANCE_MS: u64 = 200;
 pub const MAX_ARTIFACT_BYTES: usize = 4 * 1024 * 1024;
 /// What a JSON scalar counts toward the queue's byte capacity.
 pub const JSON_SCALAR_BYTES: usize = 8;
+/// What a lifecycle event awaiting its replacement sink counts toward the queue's byte capacity.
+pub const PENDING_EVENT_BYTES: usize = 1024;

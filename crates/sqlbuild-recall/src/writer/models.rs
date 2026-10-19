@@ -6,6 +6,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::records::models::{DeliveryCounts, InvocationContext, RowEnvelope};
+use crate::store::types::RecallStoreOpener;
 use crate::writer::_helpers::delivery::Shared;
 
 /// The datasets whose delivery is accounted separately.
@@ -67,10 +68,39 @@ impl Priority {
     pub const COUNT: usize = 8;
 }
 
-/// What one writer session needs.
+/// What a Recall replacement made of one output chunk.
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReplacedOutput {
+    /// Store these bytes under the chunk's sequence.
+    Published(Vec<u8>),
+    /// Store nothing; counted as filtered.
+    Filtered,
+    /// Store nothing; counted as failed.
+    Failed,
+}
+
+/// What a Recall replacement made of one lifecycle event.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ReplacedEvents {
+    /// Store these events, each as `lifecycle_event_to_json` encodes it; none is counted as filtered.
+    Published(Vec<serde_json::Map<String, serde_json::Value>>),
+    /// Store nothing; counted as failed.
+    Failed,
+}
+
+/// Where a session writes.
+#[derive(Clone, Debug)]
+pub enum SessionStore {
+    /// The native SQLite store at this path.
+    Sqlite(PathBuf),
+    /// A store opened through `RecallStoreOpener`.
+    Hosted(Arc<dyn RecallStoreOpener>),
+}
+
+/// What one writer session needs.
+#[derive(Clone, Debug)]
 pub struct SessionConfig {
-    pub store_path: PathBuf,
+    pub store: SessionStore,
     pub envelope: RowEnvelope,
     pub context: InvocationContext,
     pub retention_days: u32,
@@ -82,6 +112,8 @@ pub struct SessionConfig {
     pub setup_budget: Duration,
     /// Whether this session runs retention maintenance after delivery.
     pub maintenance: bool,
+    /// Hold the context row until `RecallSession::publish_context` says whether a replacement filters history.
+    pub defer_context: bool,
     pub maintenance_owner: String,
 }
 

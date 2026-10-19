@@ -9,6 +9,8 @@ pub const MIN_SHUTDOWN_TIMEOUT_SECONDS: f64 = 0.0;
 pub const COMMAND_OUTPUT_RECORD_TYPE: &str = "command_output";
 pub const COMMAND_OUTPUT_LOSS_RECORD_TYPE: &str = "command_output_loss";
 pub const CURRENT_SCHEMA_VERSION: i64 = 1;
+/// The schema of records a Recall replacement sink receives: version 1 plus the exact `data` bytes.
+pub const RECALL_REPLACEMENT_SCHEMA_VERSION: i64 = 2;
 pub const MAX_INVOCATION_CONTEXT_BYTES: usize = 16 * 1024;
 pub const MAX_INVOCATION_CONTEXT_DEPTH: usize = 8;
 pub const INVOCATION_CONTEXT_ENV: &str = "SQLBUILD_INVOCATION_CONTEXT_JSON";

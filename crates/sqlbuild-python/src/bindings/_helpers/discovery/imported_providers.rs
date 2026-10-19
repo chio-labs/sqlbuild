@@ -15,12 +15,15 @@ use crate::bindings::_helpers::discovery::imported_modules::{
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::recall::writer::RecallWriter;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 const PROVIDER_ERROR: ErrorId = ErrorId::ProviderDiscovery;
 const SINK_ERROR: ErrorId = ErrorId::EventExporterDiscovery;
+/// The provider name kept free so a sink's `RecallWriter` parameter can never be mistaken for a provider.
+const RESERVED_PROVIDER_NAME: &str = "recall_writer";
 const PROVIDER_INPUT_ERROR: UserCodeHost = UserCodeHost::ProviderInputError;
 const VALIDATION_ERROR: (&str, &str) = ("pydantic", "ValidationError");
 const SINK_DEFINITION: UserCodeHost = UserCodeHost::GetLifecycleEventSinkDefinition;
@@ -157,6 +160,17 @@ pub(crate) fn discover_provider_classes<'py>(
             let relative_path: Bound<'py, PyAny> = project.relative(&file_path)?;
             let name: Bound<'py, PyAny> = provider_name(&provider_class, &relative_path)?;
             let name_text: String = name.extract()?;
+            if name_text == RESERVED_PROVIDER_NAME {
+                return Err(discovery_error(
+                    py,
+                    PROVIDER_ERROR,
+                    format!(
+                        "Provider name '{RESERVED_PROVIDER_NAME}' in {} is reserved for the \
+                         RecallWriter of Recall replacement sinks; rename the provider",
+                        project.relative_to(&file_path)?
+                    ),
+                ));
+            }
             if let Some((_, existing)) = seen.iter().find(|(listed, _)| *listed == name_text) {
                 return Err(discovery_error(
                     py,
@@ -267,6 +281,33 @@ pub(crate) fn discover_event_exporter_declarations<'py>(
     tuple_of(py, declarations)
 }
 
+/// Each parameter of `function` with its annotation, and whether that annotation is `RecallWriter`.
+fn annotated_parameters<'py>(
+    function: &Bound<'py, PyAny>,
+) -> PyResult<Vec<(String, Bound<'py, PyAny>, bool)>> {
+    let py: Python<'py> = function.py();
+    let writer = py.get_type::<RecallWriter>();
+    let mut parameters: Vec<(String, Bound<'py, PyAny>, bool)> = Vec::new();
+    for pair in shim(py, UserCodeHost::ParameterAnnotations)?
+        .call1((function,))?
+        .try_iter()?
+    {
+        let (parameter, annotation): (String, Bound<'py, PyAny>) = pair?.extract()?;
+        let is_writer: bool = annotation.is(writer.as_any());
+        parameters.push((parameter, annotation, is_writer));
+    }
+    Ok(parameters)
+}
+
+/// Whether `declaration`'s function takes a `RecallWriter`, making it a Recall replacement sink.
+fn takes_recall_writer(declaration: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(
+        annotated_parameters(&native_field(declaration, "function")?)?
+            .iter()
+            .any(|(_, _, is_writer)| *is_writer),
+    )
+}
+
 /// Provider parameters after the event, each naming a known provider of the right class.
 fn exporter_provider_usages<'py>(
     declaration: &Bound<'py, PyAny>,
@@ -280,13 +321,10 @@ fn exporter_provider_usages<'py>(
         .str()?
         .extract()?;
     let empty: Bound<'py, PyAny> = imported(py, "inspect", "Parameter")?.getattr("empty")?;
-    let annotations: Bound<'py, PyAny> =
-        shim(py, UserCodeHost::ParameterAnnotations)?.call1((&function,))?;
-    for (index, pair) in annotations.try_iter()?.enumerate() {
-        if index == 0 {
+    for (parameter, annotation, is_writer) in annotated_parameters(&function)?.into_iter().skip(1) {
+        if is_writer {
             continue;
         }
-        let (parameter, annotation): (String, Bound<'py, PyAny>) = pair?.extract()?;
         let Some(provider) = providers.get_item(&parameter)? else {
             return Err(discovery_error(
                 py,
@@ -344,7 +382,7 @@ pub(crate) fn bind_event_exporter_declarations<'py>(
     tuple_of(py, bound)
 }
 
-/// Validated lifecycle-event sink declarations under sinks/, bound to providers.
+/// Validated lifecycle-event sink declarations under sinks/, bound to providers; Recall replacement sinks are left out.
 #[pyfunction]
 #[pyo3(signature = (*, project_dir, providers = None))]
 pub(crate) fn discover_event_exporter_functions<'py>(
@@ -358,10 +396,15 @@ pub(crate) fn discover_event_exporter_functions<'py>(
     if let Some(cached) = project.cached_extensions()? {
         return cached.get_item(1);
     }
-    let declarations: Bound<'py, PyAny> =
-        discover_event_exporter_declarations(project_dir.clone())?;
+    let mut ordinary: Vec<Bound<'py, PyAny>> = Vec::new();
+    for declaration in discover_event_exporter_declarations(project_dir.clone())?.try_iter()? {
+        let declaration: Bound<'py, PyAny> = declaration?;
+        if !takes_recall_writer(&declaration)? {
+            ordinary.push(declaration);
+        }
+    }
     bind_event_exporter_declarations(
-        declarations,
+        tuple_of(py, ordinary)?,
         providers.map_or_else(|| tuple_of(py, Vec::new()), Ok)?,
         project_dir,
     )

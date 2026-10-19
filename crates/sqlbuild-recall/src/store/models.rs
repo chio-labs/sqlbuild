@@ -61,6 +61,9 @@ pub struct InsertOutcome {
     /// Rows written or already present with equal content, by table.
     pub delivered: Vec<(Table, u64)>,
     pub conflicts: Vec<ConflictEvidence>,
+    /// Tables whose insert failed, so their rows were not written, and the first failure.
+    pub failed: Vec<Table>,
+    pub failure: Option<String>,
 }
 
 /// What a maintenance run is allowed to do.

@@ -1,5 +1,6 @@
 use crate::schema::constants::{ALL_TABLES, VIEW_NAMES};
 use crate::schema::main::add_column_statement::add_column_statement;
+use crate::schema::main::ddl_script::ddl_script;
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::main::table_statements::table_statements;
 use crate::schema::main::view_statements::view_statements;
@@ -67,8 +68,16 @@ fn given_clickhouse_tables_when_rendered_then_engines_ttl_and_partitions_follow_
             ],
         },
         FragmentTestCase {
-            description: "heartbeats are append-only",
+            description: "heartbeats collapse repeated deliveries of a beat",
             statement: clickhouse_table("recall_heartbeats", None),
+            expected_fragments: &[
+                "ENGINE = ReplacingMergeTree()",
+                "ORDER BY (invocation_id, beat_at)",
+            ],
+        },
+        FragmentTestCase {
+            description: "schema records are append-only",
+            statement: clickhouse_table("recall_meta", None),
             expected_fragments: &["ENGINE = MergeTree()"],
         },
         FragmentTestCase {
@@ -113,9 +122,33 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
             expected_count: VIEW_NAMES.len(),
         },
         StatementSetTestCase {
+            description: "the administrator's script ends by recording the schema version",
+            statements: ddl_script(Dialect::ClickHouse, &options(None))
+                .rsplit(";\n\n")
+                .take(1)
+                .map(str::to_owned)
+                .collect(),
+            required_fragments: &[
+                "INSERT INTO `observability`.`recall_meta`",
+                "SELECT 'schema', 'schema_version', '1'",
+            ],
+            expected_count: 1,
+        },
+        StatementSetTestCase {
+            description: "SQL text stays visible as long as its TTL keeps it",
+            statements: views(None)
+                .into_iter()
+                .filter(|statement| statement.contains("`recall_artifacts` FINAL"))
+                .collect(),
+            required_fragments: &[
+                "`recall_artifacts` FINAL WHERE seen_at >= now64(6) - INTERVAL 21 DAY",
+            ],
+            expected_count: 1,
+        },
+        StatementSetTestCase {
             description: "views deduplicate rows and filter by retention",
             statements: views(None),
-            required_fragments: &["now64(6) - INTERVAL 14 DAY", "LIMIT 1 BY"],
+            required_fragments: &["now64(6) - INTERVAL 14 DAY", " FINAL WHERE "],
             expected_count: VIEW_NAMES.len(),
         },
     ];

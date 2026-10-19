@@ -57,6 +57,7 @@ pub(crate) enum UserCodeHost {
     InvokeLifecycleEventSink,
     RunCommandOutputSinks,
     GetLifecycleEventSinkDefinition,
+    InvokeRecallSink,
 }
 
 /// Every user-code entry, in `UserCodeHost` order.
@@ -318,6 +319,11 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
     },
     HostEntry {
         name: "get_lifecycle_event_sink_definition",
+        kind: HostKind::Function,
+        edge: HostEdge::UserCode,
+    },
+    HostEntry {
+        name: "invoke_recall_sink",
         kind: HostKind::Function,
         edge: HostEdge::UserCode,
     },

@@ -44,6 +44,11 @@ pub(crate) enum AdapterHost {
     NormalizeRelationType,
     NormalizeType,
     SafeCastNullability,
+    ConnectRecallStore,
+    RunRecallQuery,
+    RunRecallCommand,
+    InsertRecallRows,
+    CloseRecallStore,
 }
 
 /// Every adapter entry, in `AdapterHost` order.
@@ -240,6 +245,31 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
     },
     HostEntry {
         name: "safe_cast_nullability",
+        kind: HostKind::Function,
+        edge: HostEdge::Adapter,
+    },
+    HostEntry {
+        name: "connect_recall_store",
+        kind: HostKind::Function,
+        edge: HostEdge::Adapter,
+    },
+    HostEntry {
+        name: "run_recall_query",
+        kind: HostKind::Function,
+        edge: HostEdge::Adapter,
+    },
+    HostEntry {
+        name: "run_recall_command",
+        kind: HostKind::Function,
+        edge: HostEdge::Adapter,
+    },
+    HostEntry {
+        name: "insert_recall_rows",
+        kind: HostKind::Function,
+        edge: HostEdge::Adapter,
+    },
+    HostEntry {
+        name: "close_recall_store",
         kind: HostKind::Function,
         edge: HostEdge::Adapter,
     },

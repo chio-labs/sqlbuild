@@ -1,3 +1,4 @@
+pub mod ansi_free_text;
 pub mod append_output;
 pub mod chunk_output_text;
 pub mod close_output;

@@ -89,3 +89,12 @@ pub(crate) const UTC_ZONE_NAME: &str = "UTC";
 pub(crate) const CLOSE_POLL_MS: u64 = 50;
 /// Longest wait at startup for another process moving a corrupt store aside; the writer thread retries within the shutdown budget.
 pub(crate) const QUARANTINE_START_WAIT_MS: u64 = 200;
+/// Seconds in a day, for the artifact refresh cutoff.
+pub(crate) const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
+/// The parameter a lifecycle-event sink takes its event in.
+pub(crate) const EVENT_PARAMETER: &str = "event";
+/// The parameter a command-output sink takes its record in.
+pub(crate) const RECORD_PARAMETER: &str = "record";
+/// How Recall timestamps mark UTC, and the offset `datetime.fromisoformat` reads.
+pub(crate) const UTC_SUFFIX: &str = "Z";
+pub(crate) const UTC_OFFSET: &str = "+00:00";

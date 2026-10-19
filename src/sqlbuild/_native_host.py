@@ -98,6 +98,23 @@ _TARGETS: dict[str, tuple[str, str]] = {
         "sqlbuild.adapter.type_system.main.safe_cast_nullability",
         "safe_cast_nullability",
     ),
+    "connect_recall_store": (
+        "sqlbuild.adapters.clickhouse._helpers.recall_store",
+        "connect_recall_store",
+    ),
+    "run_recall_query": ("sqlbuild.adapters.clickhouse._helpers.recall_store", "run_recall_query"),
+    "run_recall_command": (
+        "sqlbuild.adapters.clickhouse._helpers.recall_store",
+        "run_recall_command",
+    ),
+    "insert_recall_rows": (
+        "sqlbuild.adapters.clickhouse._helpers.recall_store",
+        "insert_recall_rows",
+    ),
+    "close_recall_store": (
+        "sqlbuild.adapters.clickhouse._helpers.recall_store",
+        "close_recall_store",
+    ),
     "python_resource_rows": (
         "sqlbuild.compiler.compile._helpers.diagnostics.python_resources",
         "python_resource_rows",
@@ -270,6 +287,10 @@ _TARGETS: dict[str, tuple[str, str]] = {
     "invoke_lifecycle_event_sink": (
         "sqlbuild.runtime.event_exporting.main._invoke_lifecycle_event_sink",
         "invoke_lifecycle_event_sink",
+    ),
+    "invoke_recall_sink": (
+        "sqlbuild.runtime.event_exporting.main._invoke_recall_sink",
+        "invoke_recall_sink",
     ),
     "run_command_output_sinks": (
         "sqlbuild.runtime.event_exporting.main._run_command_output_sinks",

@@ -303,6 +303,11 @@ rule = 2
 note = "Rule 2 shim: target of each dispatcher's single command-output sink thread; waits on a Python queue and calls user sinks in order on that one thread (provider thread affinity), reporting each outcome through a Python queue, so no native frame is on that thread when finalization can end it (event_exporting/dispatcher.rs)."
 
 [[stays]]
+path = "runtime/event_exporting/main/_invoke_recall_sink.py"
+rule = 2
+note = "Thin shim that calls a user Recall replacement sink with its record and RecallWriter and reports whether it raised."
+
+[[stays]]
 path = "runtime/event_exporting/models.py"
 rule = 3
 note = "Rule 3 shape: LifecycleEventSinkDefinition re-exported by sqlbuild.sinks."
@@ -483,6 +488,11 @@ rule = 2
 note = "Inspects loaded user sink functions."
 
 [[stays]]
+path = "compiler/discovery/_helpers/filesystem/recall_sinks.py"
+rule = 2
+note = "Inspects loaded user sink functions for a RecallWriter parameter."
+
+[[stays]]
 path = "compiler/pipeline/_helpers/materializations.py"
 rule = 2
 note = "Imports user materialization modules."
@@ -619,6 +629,11 @@ note = "Public facade: re-exports plus one-line delegating wrappers (model, sour
 
 [[stays]]
 path = "retries.py"
+rule = 3
+note = "Public facade: re-exports only."
+
+[[stays]]
+path = "recall.py"
 rule = 3
 note = "Public facade: re-exports only."
 

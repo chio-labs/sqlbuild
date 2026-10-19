@@ -9,6 +9,8 @@ pub const MINIMUM_SQLITE_VERSION: (u32, u32) = (3, 44);
 /// The `recall_meta` component of schema rows.
 pub const META_SCHEMA_COMPONENT: &str = "schema";
 pub const META_SCHEMA_VERSION_KEY: &str = "schema_version";
+/// The invocation ID of the schema version row an administrator's DDL script inserts.
+pub const DDL_SCRIPT_INVOCATION: &str = "ddl-script";
 /// The `recall_meta` component of maintenance claims.
 pub const META_MAINTENANCE_COMPONENT: &str = "maintenance";
 pub const META_MAINTENANCE_CLAIM_KEY: &str = "claim";
@@ -138,11 +140,13 @@ const ARTIFACT_REF_COLUMNS: [ColumnSpec; 6] = [
     ColumnSpec::required("referenced_at", ColumnType::Timestamp),
 ];
 
-const HEARTBEAT_COLUMNS: [ColumnSpec; 4] = [
+const HEARTBEAT_COLUMNS: [ColumnSpec; 6] = [
     ColumnSpec::required("beat_at", ColumnType::Timestamp),
     ColumnSpec::required("stale_at", ColumnType::Timestamp),
     ColumnSpec::optional("host_token", ColumnType::Text),
     ColumnSpec::optional("pid", ColumnType::Integer),
+    ColumnSpec::optional("command", ColumnType::Text),
+    ColumnSpec::optional("subcommand", ColumnType::Text),
 ];
 
 const DELIVERY_COLUMNS: [ColumnSpec; 9] = [
@@ -178,7 +182,7 @@ pub(crate) const INVOCATIONS_TABLE: TableSpec = TableSpec {
     columns: &INVOCATION_COLUMNS,
     key: &["invocation_id"],
     sqlite_indexes: &[("started", &["invocation_started_at"])],
-    clickhouse_engine: "ReplacingMergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["invocation_started_at", "invocation_id"],
     ttl_extra_days: 0,
     expiry_column: "invocation_started_at",
@@ -189,7 +193,7 @@ pub(crate) const OUTPUT_TABLE: TableSpec = TableSpec {
     columns: &OUTPUT_COLUMNS,
     key: &["invocation_id", "sequence"],
     sqlite_indexes: &[("expiry", &["invocation_started_at"])],
-    clickhouse_engine: "ReplacingMergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["invocation_id", "sequence"],
     ttl_extra_days: 0,
     expiry_column: "invocation_started_at",
@@ -205,7 +209,7 @@ pub(crate) const EVENTS_TABLE: TableSpec = TableSpec {
         ("statement", &["statement_id"]),
         ("expiry", &["invocation_started_at"]),
     ],
-    clickhouse_engine: "ReplacingMergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["invocation_id", "event_id"],
     ttl_extra_days: 0,
     expiry_column: "invocation_started_at",
@@ -219,7 +223,7 @@ pub(crate) const DIAGNOSTICS_TABLE: TableSpec = TableSpec {
         ("severity", &["severity"]),
         ("expiry", &["invocation_started_at"]),
     ],
-    clickhouse_engine: "ReplacingMergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["invocation_id", "sequence"],
     ttl_extra_days: 0,
     expiry_column: "invocation_started_at",
@@ -230,7 +234,7 @@ pub(crate) const ARTIFACTS_TABLE: TableSpec = TableSpec {
     columns: &ARTIFACT_COLUMNS,
     key: &["digest"],
     sqlite_indexes: &[("seen", &["seen_at"])],
-    clickhouse_engine: "ReplacingMergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["digest"],
     ttl_extra_days: ARTIFACT_REFRESH_DAYS,
     expiry_column: "seen_at",
@@ -241,7 +245,7 @@ pub(crate) const ARTIFACT_REFS_TABLE: TableSpec = TableSpec {
     columns: &ARTIFACT_REF_COLUMNS,
     key: &["invocation_id", "digest", "ref_id"],
     sqlite_indexes: &[("digest", &["digest"])],
-    clickhouse_engine: "MergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["invocation_id", "digest", "ref_id"],
     ttl_extra_days: 0,
     expiry_column: "invocation_started_at",
@@ -252,7 +256,7 @@ pub(crate) const HEARTBEATS_TABLE: TableSpec = TableSpec {
     columns: &HEARTBEAT_COLUMNS,
     key: &["invocation_id", "beat_at"],
     sqlite_indexes: &[],
-    clickhouse_engine: "MergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["invocation_id", "beat_at"],
     ttl_extra_days: 0,
     expiry_column: "invocation_started_at",
@@ -263,7 +267,7 @@ pub(crate) const DELIVERY_TABLE: TableSpec = TableSpec {
     columns: &DELIVERY_COLUMNS,
     key: &["invocation_id", "stream"],
     sqlite_indexes: &[],
-    clickhouse_engine: "MergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["invocation_id", "stream"],
     ttl_extra_days: 0,
     expiry_column: "invocation_started_at",
@@ -285,7 +289,7 @@ pub(crate) const CONFLICTS_TABLE: TableSpec = TableSpec {
     columns: &CONFLICT_COLUMNS,
     key: &["dataset", "record_key", "rejected_sha256"],
     sqlite_indexes: &[("invocation", &["invocation_id"])],
-    clickhouse_engine: "MergeTree",
+    clickhouse_engine: REPLACING_ENGINE,
     clickhouse_order_by: &["dataset", "record_key", "rejected_sha256"],
     ttl_extra_days: 0,
     expiry_column: "invocation_started_at",
@@ -328,6 +332,8 @@ pub const VIEW_NAMES: [&str; 10] = [
     "artifacts",
     "conflicts",
 ];
+/// The ClickHouse engine that collapses copies of a key; views read it with `FINAL`.
+pub(crate) const REPLACING_ENGINE: &str = "ReplacingMergeTree";
 /// The number of records `output_tail` keeps per invocation.
 pub const OUTPUT_TAIL_RECORDS: u32 = 200;
 /// Invocations deleted per maintenance transaction.

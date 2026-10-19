@@ -155,3 +155,39 @@ class UndecodableArgumentTestCase:
     selector: str
     expected_error: bytes
     expected_recorded: list[list[object]]
+
+
+@dataclass(frozen=True)
+class ReplacementLifecycleTestCase:
+    description: str
+    dropped_prefix: str
+    expected_filter_active: int
+
+
+@dataclass(frozen=True)
+class ReplacementOutputTestCase:
+    description: str
+    replaced: tuple[bytes, bytes]
+    expected_complete: int
+
+
+@dataclass(frozen=True)
+class FailingReplacementTestCase:
+    description: str
+    expected_failed_streams: list[list[object]]
+    expected_notice: bytes
+
+
+@dataclass(frozen=True)
+class ReplacementLaunchRecordTestCase:
+    description: str
+    sinks: dict[str, str]
+    expected_records: int
+
+
+@dataclass(frozen=True)
+class SlowReplacementTestCase:
+    description: str
+    shutdown_seconds: float
+    sink_sleep_seconds: str
+    expected_max_seconds: float

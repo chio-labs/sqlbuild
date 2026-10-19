@@ -1,10 +1,12 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use crate::records::main::invocation_row::invocation_row;
 use crate::records::models::{
     DeliveryCounts, InvocationContext, OutputStream, RecallValue, RowEnvelope,
 };
+use crate::schema::models::Table;
 use crate::store::main::open_sqlite_store::open_sqlite_store;
 use crate::store::main::query_store::query_store;
 use crate::store::main::read_output_transcript::read_output_transcript;
@@ -12,9 +14,11 @@ use crate::store::models::OpenMode;
 use crate::writer::_helpers::queue::WriterState;
 use crate::writer::main::start_recall_session::start_recall_session;
 use crate::writer::models::{
-    DeliveryStream, DeliverySummary, Priority, SessionConfig, SetupOutcome,
+    DeliveryStream, DeliverySummary, Priority, SessionConfig, SessionStore, SetupOutcome,
 };
-use crate::writer::tests::test_types::RecordedSession;
+use crate::writer::tests::test_types::{
+    CopyingReplacement, PartialStore, PrefixReplacement, RecordedSession, RecordingReplacement,
+};
 
 /// The envelope of invocation `invocation_id`.
 pub(crate) fn envelope(invocation_id: &str) -> RowEnvelope {
@@ -73,7 +77,7 @@ pub(crate) fn chunked(writes: &[(OutputStream, Vec<u8>)]) -> Vec<[Option<RecallV
 /// A session configuration writing invocation `invocation_id` to `path`.
 pub(crate) fn config(path: PathBuf, invocation_id: &str) -> SessionConfig {
     SessionConfig {
-        store_path: path,
+        store: SessionStore::Sqlite(path),
         envelope: envelope(invocation_id),
         context: InvocationContext {
             command: Some("build".to_owned()),
@@ -88,6 +92,7 @@ pub(crate) fn config(path: PathBuf, invocation_id: &str) -> SessionConfig {
         setup_budget: Duration::from_secs(2),
         maintenance: true,
         maintenance_owner: "test:42".to_owned(),
+        defer_context: false,
     }
 }
 
@@ -320,4 +325,240 @@ pub(crate) fn chunk_facts(
             RecallValue::Integer(sequences)
         })),
     ]
+}
+
+/// Output chunks stored while a session still runs, when heartbeats fall due faster than batches fill.
+pub(crate) fn output_stored_while_running(
+    heartbeat: Duration,
+    wait: Duration,
+) -> Vec<Vec<RecallValue>> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    let session = start_recall_session(SessionConfig {
+        heartbeat_interval: heartbeat,
+        ..config(path.clone(), "beating")
+    });
+    session.append_output(OutputStream::Stdout, b"progress\n");
+    std::thread::sleep(wait);
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    let stored = query_store(&store, "SELECT COUNT(*) FROM recall_output", None)
+        .expect("the query is valid");
+    drop(session.close());
+    stored.rows
+}
+
+/// The transcript and output accounting a session with a deferred context and `PrefixReplacement` stored for `output`, written `discovery` before the replacement is set.
+pub(crate) fn replaced_session(
+    output: &[(OutputStream, &[u8])],
+    discovery: Duration,
+) -> (Vec<u8>, Vec<Vec<RecallValue>>) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    let session = start_recall_session(SessionConfig {
+        defer_context: true,
+        ..config(path.clone(), "replaced")
+    });
+    for (stream, data) in output {
+        session.append_output(*stream, data);
+    }
+    std::thread::sleep(discovery);
+    session.set_output_replacement(Arc::new(PrefixReplacement));
+    session.publish_context(true);
+    drop(session.close());
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    let transcript =
+        read_output_transcript(&store, "replaced", None).expect("the transcript can be read");
+    let facts = query_store(
+        &store,
+        "SELECT filtered, failed, missing_sequences, filter_active, gap_reason \
+         FROM output_invocations",
+        None,
+    )
+    .expect("the query is valid");
+    (transcript.data, facts.rows)
+}
+
+/// `(accepted, delivered, failed)` of events and output after one batch whose insert into `failing` fails.
+pub(crate) fn partially_inserted(failing: Table) -> [(u64, u64, u64); 2] {
+    let session = start_recall_session(SessionConfig {
+        store: SessionStore::Hosted(Arc::new(PartialStore { failing })),
+        ..config(PathBuf::from("unused"), "partial")
+    });
+    session.append_output(OutputStream::Stdout, b"printed\n");
+    session
+        .publish_event(
+            r#"{"event_id":"e1","event_type":"invocation_completed","schema_version":2,
+            "producer":"sqlbuild","producer_version":"1","occurred_at":"2026-10-19T00:00:01.000000Z",
+            "invocation_id":"partial","invocation_sequence":1,"payload":{"command":"build"}}"#,
+        )
+        .expect("the event is valid");
+    let summary = session.close();
+    [DeliveryStream::Events, DeliveryStream::Output].map(|stream| {
+        let counts = stream_counts(&summary, stream);
+        (counts.accepted, counts.delivered, counts.failed)
+    })
+}
+
+/// What `invocations` shows for a session still waiting on discovery, its context row held, after `wait`.
+pub(crate) fn invocation_during_discovery(wait: Duration) -> Vec<Vec<RecallValue>> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    let session = start_recall_session(SessionConfig {
+        defer_context: true,
+        ..config(path.clone(), "discovering")
+    });
+    std::thread::sleep(wait);
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    let shown = query_store(
+        &store,
+        "SELECT command, status, started_at IS NOT NULL, \
+         (SELECT COUNT(*) FROM recall_invocations) FROM invocations",
+        None,
+    )
+    .expect("the query is valid");
+    drop(session.close());
+    shown.rows
+}
+
+/// `(accepted, delivered, filtered, failed)` of events whose replacements publish `copies` each.
+pub(crate) fn pending_event_counts(copies: &[Option<usize>]) -> (u64, u64, u64, u64) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let session = start_recall_session(config(directory.path().join("recall.sqlite3"), "pending"));
+    for (index, copies) in copies.iter().enumerate() {
+        session.publish_pending_event(
+            Box::new(CopyingReplacement {
+                index,
+                copies: *copies,
+            }),
+            ("run_started", 2),
+        );
+    }
+    let counts = stream_counts(&session.close(), DeliveryStream::Events);
+    (
+        counts.accepted,
+        counts.delivered,
+        counts.filtered,
+        counts.failed,
+    )
+}
+
+/// The heartbeat columns the first Recall release lacks, and the view text that reads them.
+const CORE_RELEASE_EDITS: [(&str, &str); 3] = [
+    (
+        ",\n        MIN(command) AS command, MIN(subcommand) AS subcommand",
+        "",
+    ),
+    (
+        "COALESCE(context.command, started.command, beats.command)",
+        "COALESCE(context.command, started.command)",
+    ),
+    (
+        "COALESCE(context.subcommand, beats.subcommand) AS subcommand",
+        "context.subcommand",
+    ),
+];
+
+/// A store at schema version 1 as the first Recall release creates it: heartbeats without `command` or `subcommand`.
+pub(crate) fn core_release_store(path: &std::path::Path) {
+    use crate::schema::main::ddl_script::ddl_script;
+    use crate::schema::main::view_statements::view_statements;
+    use crate::schema::models::{DdlOptions, Dialect};
+
+    let options = DdlOptions {
+        database: None,
+        retention_days: 30,
+        cluster: None,
+    };
+    std::fs::create_dir_all(path.parent().expect("the store has a directory"))
+        .expect("the store directory can be created");
+    let connection = rusqlite::Connection::open(path).expect("the store opens");
+    connection
+        .execute_batch(&ddl_script(Dialect::Sqlite, &options))
+        .expect("the script runs");
+    let views = view_statements(Dialect::Sqlite, &options);
+    for (name, _) in &views {
+        connection
+            .execute_batch(&format!("DROP VIEW \"{name}\""))
+            .expect("the view drops");
+    }
+    connection
+        .execute_batch(
+            "ALTER TABLE recall_heartbeats DROP COLUMN command; \
+             ALTER TABLE recall_heartbeats DROP COLUMN subcommand; \
+             INSERT INTO recall_meta (component, key, value, recorded_at, invocation_id, \
+             invocation_started_at, schema_version, producer_version, ingested_at, content_hash) \
+             VALUES ('schema', 'schema_version', '1', '2026-10-01T00:00:00.000000Z', 'core', \
+             '2026-10-01T00:00:00.000000Z', 1, 'core', '2026-10-01T00:00:00.000000Z', '')",
+        )
+        .expect("the release schema is restored");
+    for (_, statement) in views {
+        let released: String = CORE_RELEASE_EDITS
+            .iter()
+            .fold(statement, |text, (new, old)| text.replace(new, old));
+        connection
+            .execute_batch(&released)
+            .expect("the release view is created");
+    }
+}
+
+/// Write a heartbeat naming the command straight into the store, before any upgrade.
+pub(crate) fn insert_heartbeat(path: &std::path::Path) {
+    use crate::records::main::heartbeat_row::heartbeat_row;
+    use crate::store::main::insert_rows::insert_rows;
+
+    let store = open_sqlite_store(path, OpenMode::ReadWrite).expect("the store opens");
+    let beat = heartbeat_row(
+        &envelope("core"),
+        ("2026-10-19T00:00:01.000000Z", "2026-10-19T00:01:31.000000Z"),
+        (None, Some(1)),
+        (Some("build"), None),
+    );
+    insert_rows(&store, &[beat], "2026-10-19T00:00:01.000000Z").expect("the row is written");
+}
+
+/// Record a short run through a session.
+pub(crate) fn record_run(path: &std::path::Path) {
+    let session = start_recall_session(config(path.to_path_buf(), "core"));
+    session.append_output(OutputStream::Stdout, b"built\n");
+    drop(session.wait_for_setup(Duration::from_secs(10)));
+    std::thread::sleep(Duration::from_millis(300));
+    drop(session.close());
+}
+
+/// What `write` leaves in a store the first Recall release created.
+pub(crate) fn written_to_core_release_store(write: fn(&std::path::Path)) -> Vec<Vec<RecallValue>> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    core_release_store(&path);
+    write(&path);
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    query_store(
+        &store,
+        "SELECT (SELECT COUNT(*) FROM recall_heartbeats), (SELECT command FROM invocations), \
+         (SELECT COUNT(*) FROM pragma_table_xinfo('recall_heartbeats') \
+          WHERE name IN ('command', 'subcommand'))",
+        None,
+    )
+    .expect("the query is valid")
+    .rows
+}
+
+/// The order a lifecycle replacement sees events published with `priorities` and taken in one batch.
+pub(crate) fn replacement_order(priorities: &[Priority]) -> Vec<usize> {
+    use crate::writer::_helpers::materialize::Materializer;
+
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut state = WriterState::new(envelope("ordered"));
+    for (index, priority) in priorities.iter().enumerate() {
+        state.push_pending(
+            Box::new(RecordingReplacement {
+                index,
+                seen: Arc::clone(&seen),
+            }),
+            *priority,
+        );
+    }
+    let batch = state.take_batch(usize::MAX);
+    drop(Materializer::new(envelope("ordered")).build(batch, None));
+    std::mem::take(&mut *seen.lock().expect("the record is not poisoned"))
 }

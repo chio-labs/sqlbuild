@@ -6,6 +6,7 @@ use std::time::Instant;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods};
 use sqlbuild_recall::records::models::OutputStream;
+use sqlbuild_recall::schema::models::Dialect;
 use sqlbuild_recall::settings::main::resolve_recall_settings::resolve_recall_settings;
 use sqlbuild_recall::settings::models::{RecallSettings, SettingsRequest, StoreLocation};
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
@@ -18,6 +19,7 @@ use sqlbuild_recall::store::models::{OpenMode, SqliteStore};
 
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::query_command::query::run_query_command;
+use crate::bindings::_helpers::recall::clickhouse_store::{ClickHouseLocation, ClickHouseReader};
 use crate::bindings::_helpers::recall::console::{write_stderr, write_stdout_bytes};
 use crate::bindings::_helpers::recall::constants::{
     DEFAULT_MAX_CELL_BYTES, DEFAULT_QUERY_LIMIT, JSON_FORMAT, LAST_INVOCATION, LONG_FORMAT,
@@ -115,7 +117,49 @@ fn settings(py: Python<'_>, recall: &RecallRequest) -> PyResult<(PathBuf, Recall
     Ok((project_dir, settings))
 }
 
-fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<(SqliteStore, String)> {
+/// An open store for reading: the native SQLite file or a ClickHouse database.
+enum ReadStore {
+    Sqlite { store: SqliteStore, path: String },
+    ClickHouse(ClickHouseReader),
+}
+
+impl ReadStore {
+    fn dialect(&self) -> Dialect {
+        match self {
+            Self::Sqlite { .. } => Dialect::Sqlite,
+            Self::ClickHouse(_) => Dialect::ClickHouse,
+        }
+    }
+
+    fn adapter(&self) -> &'static str {
+        match self.dialect() {
+            Dialect::Sqlite => "sqlite",
+            Dialect::ClickHouse => "clickhouse",
+        }
+    }
+
+    fn label(&self) -> String {
+        match self {
+            Self::Sqlite { path, .. } => path.clone(),
+            Self::ClickHouse(reader) => reader.database().to_owned(),
+        }
+    }
+
+    fn resolve_invocation(&self, py: Python<'_>, selector: &str) -> Result<String, StoreError> {
+        match self {
+            Self::Sqlite { store, .. } => resolve_invocation(store, selector),
+            Self::ClickHouse(reader) => reader.resolve_invocation(py, selector),
+        }
+    }
+
+    fn close(self) {
+        if let Self::ClickHouse(reader) = self {
+            reader.close();
+        }
+    }
+}
+
+fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<ReadStore> {
     match &settings.store {
         StoreLocation::Sqlite { path } => {
             let store = open_sqlite_store(path, OpenMode::ReadOnly).map_err(|error| {
@@ -132,8 +176,29 @@ fn open_store(py: Python<'_>, settings: &RecallSettings) -> PyResult<(SqliteStor
                     store_failure(py, &error)
                 }
             })?;
-            Ok((store, path.display().to_string()))
+            Ok(ReadStore::Sqlite {
+                store,
+                path: path.display().to_string(),
+            })
         }
+        StoreLocation::ClickHouse {
+            config, database, ..
+        } => ClickHouseReader::open(
+            py,
+            &ClickHouseLocation::new(config, database, settings.retention_days),
+        )
+        .map(ReadStore::ClickHouse)
+        .map_err(|error| {
+            let error = if error.kind == StoreErrorKind::NotFound {
+                error
+            } else {
+                StoreError {
+                    kind: StoreErrorKind::Other,
+                    ..error
+                }
+            };
+            user_error(py, &error.message, RECALL_STORE_CODE)
+        }),
         StoreLocation::Unsupported {
             connection,
             adapter,
@@ -192,10 +257,20 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     if recall.backend.as_deref() == Some(WAREHOUSE_BACKEND) {
         return warehouse_query(py, recall, &project_dir, (&sql, limit));
     }
-    let (store, path) = open_store(py, &settings)?;
+    let store = open_store(py, &settings)?;
     let started = Instant::now();
     let limit = limit.map(|limit| usize::try_from(limit).unwrap_or(usize::MAX));
-    let result = query_store(&store, &sql, limit).map_err(|error| store_failure(py, &error))?;
+    let queried = match &store {
+        ReadStore::Sqlite { store, .. } => {
+            query_store(store, &sql, limit).map(|result| (result, None))
+        }
+        ReadStore::ClickHouse(reader) => reader
+            .query(py, &sql, limit)
+            .map(|(result, statistics)| (result, Some(statistics))),
+    };
+    let (adapter, label) = (store.adapter(), store.label());
+    store.close();
+    let (result, statistics) = queried.map_err(|error| store_failure(py, &error))?;
     let format: &str = &recall.format;
     let max_bytes: Option<usize> = match recall.max_cell_bytes {
         Some(bytes) if bytes <= 0 => None,
@@ -209,9 +284,11 @@ fn run_query(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
         max_bytes,
         &QueryContext {
             target: settings.target.as_deref(),
-            store_path: &path,
+            store_path: &label,
+            adapter,
             limit,
             elapsed_ms: started.elapsed().as_secs_f64() * 1000.0,
+            statistics: statistics.as_ref(),
         },
     );
     write_stdout_bytes(py, rendered.as_bytes())?;
@@ -235,12 +312,23 @@ fn run_schema(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
         };
         return warehouse_query(py, recall, &project_dir, (&sql, None));
     }
-    let (store, path) = open_store(py, &settings)?;
-    let relations = describe_store(&store).map_err(|error| store_failure(py, &error))?;
+    let store = open_store(py, &settings)?;
+    let described = match &store {
+        ReadStore::Sqlite { store, .. } => describe_store(store),
+        ReadStore::ClickHouse(reader) => reader.describe(py),
+    };
+    let (dialect, label) = (store.dialect(), store.label());
+    store.close();
+    let relations = described.map_err(|error| store_failure(py, &error))?;
     let json_output: bool = recall.format == JSON_FORMAT;
     write_stdout_bytes(
         py,
-        render_schema(&relations, json_output, (&path, settings.retention_days)).as_bytes(),
+        render_schema(
+            &relations,
+            json_output,
+            (&label, dialect, settings.retention_days),
+        )
+        .as_bytes(),
     )?;
     Ok(0)
 }
@@ -263,13 +351,22 @@ fn tail_lines(data: &[u8], lines: usize) -> &[u8] {
 
 fn run_output(py: Python<'_>, recall: &RecallRequest) -> PyResult<i32> {
     let (_, settings) = settings(py, recall)?;
-    let (store, _) = open_store(py, &settings)?;
+    let store = open_store(py, &settings)?;
     let selector: &str = recall.invocation.as_deref().unwrap_or(LAST_INVOCATION);
-    let invocation_id =
-        resolve_invocation(&store, selector).map_err(|error| store_failure(py, &error))?;
     let stream = recall.stream.as_deref().and_then(OutputStream::from_name);
-    let transcript = read_output_transcript(&store, &invocation_id, stream)
-        .map_err(|error| store_failure(py, &error))?;
+    let read = store
+        .resolve_invocation(py, selector)
+        .and_then(|invocation_id| match &store {
+            ReadStore::Sqlite { store, .. } => {
+                read_output_transcript(store, &invocation_id, stream)
+            }
+            ReadStore::ClickHouse(reader) => {
+                reader.read_output_transcript(py, &invocation_id, stream)
+            }
+        });
+    store.close();
+    let transcript = read.map_err(|error| store_failure(py, &error))?;
+    let invocation_id: &str = &transcript.invocation_id;
     let data: &[u8] = match recall.tail {
         Some(lines) => tail_lines(&transcript.data, usize::try_from(lines).unwrap_or(0)),
         None => &transcript.data,

@@ -16,11 +16,13 @@ from sqlbuild._native import (
     DiscoveredProvider,
     DiscoveredProviderUsage,
     EventExporterDiscoveryError,
+    RecallWriter,
 )
 from sqlbuild.compiler.discovery._helpers.filesystem.project_modules import (
     load_sink_module,
     provider_usages,
 )
+from sqlbuild.compiler.discovery._helpers.filesystem.recall_sinks import split_recall_sinks
 from sqlbuild.runtime.event_exporting.main.get_command_output_sink_definition import (
     get_command_output_sink_definition,
 )
@@ -31,7 +33,7 @@ from sqlbuild.runtime.output_capture.models import CommandOutputRecord, CommandO
 def discover_command_output_sink_functions(
     *, project_dir: Path, providers: tuple[DiscoveredProvider, ...] = ()
 ) -> tuple[DiscoveredCommandOutputSink, ...]:
-    """Discover validated command-output sink declarations under sinks/."""
+    """Discover validated command-output sink declarations under sinks/, without Recall's."""
 
     cached: (
         tuple[
@@ -46,11 +48,15 @@ def discover_command_output_sink_functions(
     declarations: tuple[DiscoveredCommandOutputSinkDeclaration, ...] = (
         discover_command_output_sink_declarations(project_dir=project_dir)
     )
-    return bind_command_output_sink_declarations(
-        declarations=declarations,
-        providers=providers,
-        project_dir=project_dir,
+    _, ordinary = split_recall_sinks(
+        sinks=bind_command_output_sink_declarations(
+            declarations=declarations,
+            providers=providers,
+            project_dir=project_dir,
+        ),
+        history="command-output",
     )
+    return ordinary
 
 
 def discover_command_output_sink_declarations(
@@ -243,6 +249,8 @@ def _bind_sink_provider_usages(
     )
     type_hints: dict[str, object] = get_type_hints(function)
     for parameter in parameters[1:]:
+        if type_hints.get(parameter.name, parameter.annotation) is RecallWriter:
+            continue
         provider: DiscoveredProvider | None = provider_by_name.get(parameter.name)
         if provider is None:
             raise EventExporterDiscoveryError(

@@ -1191,6 +1191,8 @@ const R_DISCOVERED_RUNTIME_EXTENSIONS: RecordSpec = RecordSpec {
         FieldSpec::new("event_exporters", FieldDefault::EmptyTuple),
         FieldSpec::new("command_output_sinks", FieldDefault::EmptyTuple),
         FieldSpec::new("lifecycle_shutdown_timeout_seconds", FieldDefault::None),
+        FieldSpec::new("recall_lifecycle_sink", FieldDefault::None),
+        FieldSpec::new("recall_output_sink", FieldDefault::None),
     ],
 };
 const R_COMPILER_DIAGNOSTIC: RecordSpec = RecordSpec {

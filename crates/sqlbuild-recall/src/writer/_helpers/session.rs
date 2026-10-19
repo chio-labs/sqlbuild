@@ -1,5 +1,6 @@
 //! The session handle: producers queue records; `close` flushes within the shutdown budget.
 
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::{Map, Value};
@@ -17,6 +18,7 @@ use crate::writer::constants::{JSON_SCALAR_BYTES, MAX_ARTIFACT_BYTES};
 use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, RecallSession, SetupOutcome,
 };
+use crate::writer::types::{OutputReplacement, PendingLifecycleEvent};
 
 pub(crate) fn severity_rank(severity: &str) -> usize {
     SEVERITY_ORDER
@@ -107,6 +109,22 @@ impl RecallSession {
         self.shared.wake.notify_one();
     }
 
+    /// Queue one lifecycle event of `event_type` for the replacement sink, which runs on the delivery thread within the shutdown budget.
+    pub fn publish_pending_event(
+        &self,
+        event: Box<dyn PendingLifecycleEvent>,
+        (event_type, schema_version): (&str, i64),
+    ) {
+        let mut identity: Map<String, Value> = Map::new();
+        identity.insert("event_type".to_owned(), Value::from(event_type));
+        identity.insert("schema_version".to_owned(), Value::from(schema_version));
+        let priority: Priority =
+            event_severity(&identity).map_or(Priority::Lifecycle, event_priority);
+        let mut state = locked(&self.shared.state);
+        state.push_pending(event, priority);
+        self.shared.wake.notify_one();
+    }
+
     /// Queue one diagnostic from its canonical JSON, when at or above the minimum severity.
     pub fn publish_diagnostic(&self, diagnostic_json: &str) -> Result<(), RecordError> {
         let mut state = locked(&self.shared.state);
@@ -152,6 +170,18 @@ impl RecallSession {
         self.shared.wake.notify_one();
     }
 
+    /// Queue the context row held by `SessionConfig::defer_context`, with whether a Recall replacement sink filters this invocation; later calls do nothing.
+    pub fn publish_context(&self, filter_active: bool) {
+        let mut state = locked(&self.shared.state);
+        state.release_context(filter_active);
+        self.shared.wake.notify_one();
+    }
+
+    /// Pass every output chunk produced from now on through `replacement` before it is stored; only the first replacement is kept.
+    pub fn set_output_replacement(&self, replacement: Arc<dyn OutputReplacement>) {
+        drop(self.shared.output_replacement.set(replacement));
+    }
+
     /// Count records a replacement sink filtered out of `stream`.
     pub fn record_filtered(&self, stream: DeliveryStream, count: u64) {
         let mut state = locked(&self.shared.state);
@@ -186,6 +216,7 @@ impl RecallSession {
     pub fn begin_close(&self) {
         let mut state = locked(&self.shared.state);
         if !state.closing {
+            state.release_context(false);
             state.closing = true;
             state.deadline = Some(Instant::now() + self.shutdown_timeout);
             state.flush_tails();

@@ -150,6 +150,8 @@ struct Observed {
     exporter_scope: Option<Py<PyAny>>,
     unsubscribe_exporters: Option<Py<PyAny>>,
     unsubscribe_outcome: Option<Py<PyAny>>,
+    /// The discovered Recall lifecycle and command-output replacement sinks, each `(sink, writer_parameter)` or `None`.
+    recall_sinks: Option<(Py<PyAny>, Py<PyAny>)>,
     /// Context managers entered, innermost last.
     entered: Vec<Py<PyAny>>,
 }
@@ -332,6 +334,14 @@ impl Observed {
                 &host::entry(py, UserCodeHost::DiscoverRuntimeExtensions)?,
                 &[("project_dir", project_dir.clone())],
             )?;
+            let lifecycle_replacement: Bound<'_, PyAny> =
+                native_field(&extensions, "recall_lifecycle_sink")?;
+            let output_replacement: Bound<'_, PyAny> =
+                native_field(&extensions, "recall_output_sink")?;
+            if !lifecycle_replacement.is_none() || !output_replacement.is_none() {
+                withhold_launch_record(py)?;
+            }
+            self.recall_sinks = Some((lifecycle_replacement.unbind(), output_replacement.unbind()));
             let event_exporters: Bound<'_, PyAny> = native_field(&extensions, "event_exporters")?;
             let sinks: Bound<'_, PyAny> = native_field(&extensions, "command_output_sinks")?;
             command_output_sinks = sinks.is_truthy()?;
@@ -432,6 +442,23 @@ pub(crate) struct CliObservabilityScope {
 }
 
 impl CliObservabilityScope {
+    /// The Recall lifecycle and command-output replacement sinks discovery found, each `(sink, writer_parameter)` or `None`.
+    pub(crate) fn recall_sinks<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
+        let observed = self.locked()?;
+        Ok(
+            match observed
+                .as_ref()
+                .and_then(|observed| observed.recall_sinks.as_ref())
+            {
+                Some((lifecycle, output)) => (lifecycle.bind(py).clone(), output.bind(py).clone()),
+                None => (py.None().into_bound(py), py.None().into_bound(py)),
+            },
+        )
+    }
+
     fn locked(&self) -> PyResult<MutexGuard<'_, Option<Observed>>> {
         self.observed
             .lock()
@@ -510,6 +537,7 @@ impl CliObservabilityScope {
             exporter_scope: None,
             unsubscribe_exporters: None,
             unsubscribe_outcome: None,
+            recall_sinks: None,
             entered: Vec::new(),
         };
         if let Err(error) = observed.install(py, (args, self.project_dir.bind(py)), &terminal_index)

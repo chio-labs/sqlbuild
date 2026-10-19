@@ -7,15 +7,18 @@ use serde_json::{Map, Value};
 
 use crate::records::constants::{DROPPED_BEFORE_COLUMN, MAX_OUTPUT_CHUNK_BYTES};
 use crate::records::main::format_timestamp::format_timestamp;
+use crate::records::main::invocation_row::invocation_row;
 use crate::records::main::output_row::output_row;
 use crate::records::models::{
-    DeliveryCounts, OutputChunk, OutputStream, RecallRow, RecallValue, RowEnvelope,
+    DeliveryCounts, InvocationContext, OutputChunk, OutputStream, RecallRow, RecallValue,
+    RowEnvelope,
 };
 use crate::store::models::InsertOutcome;
-use crate::writer::_helpers::delivery::stream_of;
+use crate::writer::_helpers::delivery::{record_stream, stream_of};
 use crate::writer::_helpers::tail::{TailRing, TailSegment};
-use crate::writer::constants::{QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
+use crate::writer::constants::{PENDING_EVENT_BYTES, QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
 use crate::writer::models::{DeliveryStream, Priority};
+use crate::writer::types::PendingLifecycleEvent;
 
 /// SQL a statement executed, hashed and turned into rows on the delivery thread.
 #[derive(Debug)]
@@ -31,6 +34,8 @@ pub(crate) struct SqlInput {
 pub(crate) enum Payload {
     Rows(Vec<RecallRow>),
     Event(Map<String, Value>),
+    /// An event the lifecycle replacement sink decides on when its batch is built, by publication sequence.
+    Pending(u64, Box<dyn PendingLifecycleEvent>),
     Sql(SqlInput),
 }
 
@@ -47,14 +52,14 @@ impl Queued {
     pub(crate) fn rows(&self) -> &[RecallRow] {
         match &self.payload {
             Payload::Rows(rows) => rows,
-            Payload::Event(_) | Payload::Sql(_) => &[],
+            Payload::Event(_) | Payload::Pending(..) | Payload::Sql(_) => &[],
         }
     }
 
     fn row_count(&self) -> usize {
         match &self.payload {
             Payload::Rows(rows) => rows.len(),
-            Payload::Event(_) => 1,
+            Payload::Event(_) | Payload::Pending(..) => 1,
             Payload::Sql(_) => 2,
         }
     }
@@ -90,6 +95,8 @@ pub(crate) struct WriterState {
     tail_open: Option<OutputStream>,
     unreported_output_drops: u64,
     pub(crate) diagnostic_sequence: u64,
+    /// The publication sequence of the next event for the lifecycle replacement.
+    pending_sequence: u64,
     pub(crate) closing: bool,
     pub(crate) deadline: Option<Instant>,
     pub(crate) finished: bool,
@@ -97,6 +104,8 @@ pub(crate) struct WriterState {
     pub(crate) degraded: Option<String>,
     /// Store notices the user should see, such as a corrupt store moved aside.
     pub(crate) notices: Vec<String>,
+    /// The context row's content while its replacement-filter flag is still unknown.
+    pub(crate) held_context: Option<InvocationContext>,
     capacity: (usize, usize),
 }
 
@@ -135,12 +144,14 @@ impl WriterState {
             tail_open: None,
             unreported_output_drops: 0,
             diagnostic_sequence: 0,
+            pending_sequence: 0,
             closing: false,
             deadline: None,
             finished: false,
             rejecting: false,
             degraded: None,
             notices: Vec::new(),
+            held_context: None,
             capacity,
         }
     }
@@ -227,15 +238,51 @@ impl WriterState {
         self.buckets[priority as usize].push_back(record);
     }
 
+    /// Queue an event for the lifecycle replacement, numbered in publication order.
+    pub(crate) fn push_pending(
+        &mut self,
+        event: Box<dyn PendingLifecycleEvent>,
+        priority: Priority,
+    ) {
+        let sequence: u64 = self.pending_sequence;
+        self.pending_sequence += 1;
+        self.push_record(
+            Queued {
+                payload: Payload::Pending(sequence, event),
+                stream: DeliveryStream::Events,
+                bytes: PENDING_EVENT_BYTES,
+            },
+            priority,
+        );
+    }
+
     pub(crate) fn queued(&self) -> usize {
         self.records
     }
 
-    /// Up to `limit` rows, highest priority first.
+    /// Whether output waits in the queue until discovery decides whether a replacement sink filters it.
+    fn holding_output(&self) -> bool {
+        self.held_context.is_some()
+    }
+
+    /// Records a batch may take now: output is held while the context row is.
+    pub(crate) fn ready(&self) -> usize {
+        if self.holding_output() {
+            self.records - self.buckets[Priority::Output as usize].len()
+        } else {
+            self.records
+        }
+    }
+
+    /// Up to `limit` rows, highest priority first; held output stays queued.
     pub(crate) fn take_batch(&mut self, limit: usize) -> Vec<Queued> {
         let mut batch: Vec<Queued> = Vec::new();
         let mut rows = 0;
-        for bucket in self.buckets.iter_mut().rev() {
+        let held: Option<usize> = self.holding_output().then_some(Priority::Output as usize);
+        for (index, bucket) in self.buckets.iter_mut().enumerate().rev() {
+            if held == Some(index) {
+                continue;
+            }
             while rows < limit {
                 let Some(record) = bucket.pop_front() else {
                     break;
@@ -421,6 +468,22 @@ impl WriterState {
         self.pending.is_some()
     }
 
+    /// Count records a replacement sink chose not to store as filtered.
+    pub(crate) fn account_filtered(&mut self, streams: &[DeliveryStream]) {
+        for stream in streams {
+            self.counts_mut(*stream).filtered += 1;
+        }
+    }
+
+    /// Queue the held context row, recording whether a replacement sink filters this invocation.
+    pub(crate) fn release_context(&mut self, filter_active: bool) {
+        if let Some(mut context) = self.held_context.take() {
+            context.recall_filter_active = filter_active;
+            let row = invocation_row(&self.envelope, &context);
+            self.push(vec![row], DeliveryStream::Invocation, Priority::Context);
+        }
+    }
+
     /// Count records the delivery thread could not turn into rows as failed.
     pub(crate) fn account_unbuildable(&mut self, streams: &[DeliveryStream]) {
         for stream in streams {
@@ -428,7 +491,7 @@ impl WriterState {
         }
     }
 
-    /// Count a written batch as delivered, less conflicts, or a failed one as failed.
+    /// Count a written batch as delivered, less conflicts and records of tables whose insert failed, or a failed one as failed.
     pub(crate) fn account(
         &mut self,
         batch: &[DeliveryStream],
@@ -436,8 +499,20 @@ impl WriterState {
     ) {
         match outcome {
             Ok(outcome) => {
+                let failed: Vec<DeliveryStream> = outcome
+                    .failed
+                    .iter()
+                    .filter_map(|table| record_stream(*table))
+                    .collect();
                 for stream in batch {
-                    self.counts_mut(*stream).delivered += 1;
+                    if failed.contains(stream) {
+                        self.counts_mut(*stream).failed += 1;
+                    } else {
+                        self.counts_mut(*stream).delivered += 1;
+                    }
+                }
+                if let Some(reason) = &outcome.failure {
+                    self.degraded.get_or_insert_with(|| reason.clone());
                 }
                 for conflict in &outcome.conflicts {
                     let stream = stream_of(conflict.table);
