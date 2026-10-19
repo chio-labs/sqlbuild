@@ -35,6 +35,9 @@ from sqlbuild.executor.load.models import (
     LoadRuntimeParams,
 )
 from sqlbuild.executor.load.types import LoadProgressCallback
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure,
+)
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
 
@@ -150,13 +153,13 @@ def open_load_connections(
     try:
         for _ in range(effective_concurrency):
             connections.append(adapter.connect(connection_config))
-    except Exception:
+    except Exception as error:
         if on_connection_error is not None:
             on_connection_error(effective_concurrency, elapsed_seconds=time.monotonic() - start)
         connection: Any
         for connection in connections:
             adapter.close(connection)
-        raise
+        raise_warehouse_connection_failure(adapter=adapter, error=error)
     if on_connection_complete is not None:
         on_connection_complete(effective_concurrency, elapsed_seconds=time.monotonic() - start)
     return tuple(connections)

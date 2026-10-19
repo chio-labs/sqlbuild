@@ -17,6 +17,7 @@ class OpenConnectionFailureTestCase:
     connection_config: dict[str, object]
     monotonic_times: tuple[float, float]
     expected_error: BaseException
+    expected_raised_type: type[BaseException]
     expected_event_order: tuple[str, ...]
     expected_elapsed_seconds: tuple[float, ...]
     expected_connection_counts: tuple[int, ...]

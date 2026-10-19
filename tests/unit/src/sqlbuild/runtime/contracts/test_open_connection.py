@@ -6,6 +6,7 @@ from collections.abc import Iterator
 import pytest
 
 from sqlbuild._native import open_connection_with_hooks
+from sqlbuild.executor.pipeline.exceptions import WarehouseConnectionError
 from sqlbuild.runtime.contracts.models import ConnectionHooks
 from tests.unit.src.sqlbuild.runtime.contracts._test_types import (
     OpenConnectionFailureTestCase,
@@ -75,10 +76,11 @@ def test_given_connection_hooks_when_opening_succeeds_then_reports_order_and_ela
     "test_case",
     [
         OpenConnectionFailureTestCase(
-            description="failed connection reports the original exception",
+            description="failed connection reports a coded error caused by the original",
             connection_config={"database": "unavailable.duckdb"},
             monotonic_times=(20.0, 21.25),
             expected_error=RuntimeError("connection unavailable"),
+            expected_raised_type=WarehouseConnectionError,
             expected_event_order=("start", "connect", "error"),
             expected_elapsed_seconds=(1.25,),
             expected_connection_counts=(1, 1),
@@ -88,6 +90,7 @@ def test_given_connection_hooks_when_opening_succeeds_then_reports_order_and_ela
             connection_config={"database": "unavailable.duckdb"},
             monotonic_times=(20.0, 21.25),
             expected_error=KeyboardInterrupt(),
+            expected_raised_type=KeyboardInterrupt,
             expected_event_order=("start", "connect"),
             expected_elapsed_seconds=(),
             expected_connection_counts=(1,),
@@ -95,7 +98,7 @@ def test_given_connection_hooks_when_opening_succeeds_then_reports_order_and_ela
     ],
     ids=lambda case: case.description,
 )
-def test_given_connection_hooks_when_opening_fails_then_reports_error_and_reraises_identity(
+def test_given_connection_hooks_when_opening_fails_then_reports_error_and_raises_original_cause(
     test_case: OpenConnectionFailureTestCase,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -118,7 +121,7 @@ def test_given_connection_hooks_when_opening_fails_then_reports_error_and_rerais
         connection_counts.append(connection_count)
         elapsed_seconds_values.append(float(elapsed_seconds))
 
-    with pytest.raises(type(test_case.expected_error)) as exc_info:
+    with pytest.raises(test_case.expected_raised_type) as exc_info:
         open_connection_with_hooks(
             adapter=adapter,
             connection_config=test_case.connection_config,
@@ -128,7 +131,9 @@ def test_given_connection_hooks_when_opening_fails_then_reports_error_and_rerais
             ),
         )
 
-    assert exc_info.value is test_case.expected_error
+    assert test_case.expected_error in (exc_info.value, exc_info.value.__cause__), (
+        test_case.description
+    )
     assert adapter.connected_config is test_case.connection_config
     assert tuple(events) == test_case.expected_event_order
     assert tuple(elapsed_seconds_values) == test_case.expected_elapsed_seconds

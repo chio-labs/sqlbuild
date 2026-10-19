@@ -39,6 +39,9 @@ from sqlbuild.executor.pipeline.exceptions import (
     AuditExecutionError,
     AuditOutcomeError,
 )
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure,
+)
 from sqlbuild.executor.pipeline.models import AuditExecutionFailure, AuditPipelineCallbacks
 from sqlbuild.executor.scheduling.main._run_worker import run_worker_with_completion
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
@@ -289,7 +292,7 @@ def _run_audits(
             connection_config=connection_config,
             connection_count=worker_count,
         )
-    except BaseException:
+    except BaseException as error:
         if callbacks.on_connection_error is not None:
             try:
                 callbacks.on_connection_error(
@@ -297,7 +300,7 @@ def _run_audits(
                 )
             except BaseException:
                 pass
-        raise
+        raise_warehouse_connection_failure(adapter=adapter, error=error)
     active_error: BaseException | None = None
     try:
         if callbacks.on_connection_complete is not None:

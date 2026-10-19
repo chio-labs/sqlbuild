@@ -68,6 +68,8 @@ pub(crate) enum ExecutorHost {
     MigrationRelationForLocation,
     IsCompatibilityView,
     AuditExecutionError,
+    WarehouseConnectionError,
+    RaiseWarehouseConnectionFailure,
     AuditPipelineCallbacks,
     RunAuditPipelineWithCallbacks,
     RunBuildPipeline,
@@ -484,6 +486,16 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
     HostEntry {
         name: "AuditExecutionError",
         kind: HostKind::Exception,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "WarehouseConnectionError",
+        kind: HostKind::Exception,
+        edge: HostEdge::Executor,
+    },
+    HostEntry {
+        name: "raise_warehouse_connection_failure",
+        kind: HostKind::Function,
         edge: HostEdge::Executor,
     },
     HostEntry {

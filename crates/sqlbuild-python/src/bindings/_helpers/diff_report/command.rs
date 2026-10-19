@@ -37,6 +37,7 @@ use crate::bindings::_helpers::diff_report::support::{
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
@@ -441,7 +442,9 @@ fn run_model_diff(
             ],
         )?
     };
-    let connection: Bound<'_, PyAny> = adapter.call_method1("connect", (&connection_config,))?;
+    let connection: Bound<'_, PyAny> = adapter
+        .call_method1("connect", (&connection_config,))
+        .map_err(|error| connection_failure(&adapter, &error))?;
     let extras: [(&str, Bound<'_, PyAny>); 5] = [
         ("bounded", native_field(request, "bounded")?),
         ("max_column_examples", object(py, column_examples)?),

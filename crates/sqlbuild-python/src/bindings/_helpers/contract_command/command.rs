@@ -27,6 +27,7 @@ use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
@@ -199,7 +200,7 @@ fn compare<'py>(
                 if exception(py, &error) {
                     connection_timing(&reporter, "on_connection_error", connection_started)?;
                 }
-                return Err(error);
+                return Err(connection_failure(&adapter, &error));
             }
         };
     let compared: PyResult<Bound<'py, PyAny>> = (|| {

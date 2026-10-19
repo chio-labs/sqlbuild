@@ -19,6 +19,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -280,7 +281,7 @@ pub(crate) fn connection_with_hooks<'py>(
             if error.is_instance_of::<PyException>(hooks.py()) && !on_error.is_none() {
                 on_error.call((SINGLE_CONNECTION,), Some(&elapsed(started)?))?;
             }
-            return Err(error);
+            return Err(connection_failure(adapter, &error));
         }
     };
     let on_complete: Bound<'py, PyAny> = native_field(hooks, "on_connection_complete")?;
