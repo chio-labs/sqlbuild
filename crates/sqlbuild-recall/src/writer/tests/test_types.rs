@@ -214,3 +214,26 @@ pub(crate) struct CoreReleaseStoreTestCase {
     pub(crate) write: fn(&std::path::Path),
     pub(crate) expected_rows: Vec<Vec<RecallValue>>,
 }
+
+pub(crate) struct ReplacementOrderTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) priorities: Vec<Priority>,
+    pub(crate) expected_order: Vec<usize>,
+}
+
+/// A lifecycle event that records when its replacement runs and keeps nothing.
+#[derive(Debug)]
+pub(crate) struct RecordingReplacement {
+    pub(crate) index: usize,
+    pub(crate) seen: std::sync::Arc<std::sync::Mutex<Vec<usize>>>,
+}
+
+impl PendingLifecycleEvent for RecordingReplacement {
+    fn replace(self: Box<Self>) -> ReplacedEvents {
+        self.seen
+            .lock()
+            .expect("the record is not poisoned")
+            .push(self.index);
+        ReplacedEvents::Published(Vec::new())
+    }
+}

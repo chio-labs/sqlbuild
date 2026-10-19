@@ -2,22 +2,23 @@ use std::time::Duration;
 
 use crate::records::models::{OutputStream, RecallValue};
 use crate::schema::models::Table;
-use crate::writer::models::SetupOutcome;
+use crate::writer::models::{Priority, SetupOutcome};
 
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
     artifact_counts, close_under_held_lock, event_counts, insert_heartbeat,
     invocation_during_discovery, output_stored_while_running, partially_inserted,
-    pending_event_counts, record_run, recorded_session, replaced_session, session_on_corrupt_store,
-    written_to_core_release_store,
+    pending_event_counts, record_run, recorded_session, replaced_session, replacement_order,
+    session_on_corrupt_store, written_to_core_release_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
     ArtifactSizeTestCase, CoreReleaseStoreTestCase, CorruptStoreTestCase, DiscoveryTestCase,
     EventBuildTestCase, HeldLockTestCase, PartialInsertTestCase, PendingEventTestCase,
-    RecordedSession, ReplacementTestCase, SessionTestCase, StoredWhileRunningTestCase,
+    RecordedSession, ReplacementOrderTestCase, ReplacementTestCase, SessionTestCase,
+    StoredWhileRunningTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -348,6 +349,30 @@ fn given_a_store_from_the_first_release_when_written_then_rows_land_and_columns_
         assert_eq!(
             written_to_core_release_store(test_case.write),
             test_case.expected_rows,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_events_of_mixed_priority_in_one_batch_when_replaced_then_the_sink_sees_publication_order()
+{
+    let test_cases = [ReplacementOrderTestCase {
+        description: "a failure and a terminal event do not overtake earlier lifecycle events",
+        priorities: vec![
+            Priority::Lifecycle,
+            Priority::FailedTerminal,
+            Priority::Terminal,
+            Priority::Lifecycle,
+        ],
+        expected_order: vec![0, 1, 2, 3],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            replacement_order(&test_case.priorities),
+            test_case.expected_order,
             "{}",
             test_case.description
         );

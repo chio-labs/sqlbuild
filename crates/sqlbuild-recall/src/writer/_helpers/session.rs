@@ -14,7 +14,7 @@ use crate::records::main::parse_event::parse_event;
 use crate::records::models::OutputStream;
 use crate::writer::_helpers::delivery::locked;
 use crate::writer::_helpers::queue::{Payload, Queued, SqlInput};
-use crate::writer::constants::{JSON_SCALAR_BYTES, MAX_ARTIFACT_BYTES, PENDING_EVENT_BYTES};
+use crate::writer::constants::{JSON_SCALAR_BYTES, MAX_ARTIFACT_BYTES};
 use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, RecallSession, SetupOutcome,
 };
@@ -120,13 +120,8 @@ impl RecallSession {
         identity.insert("schema_version".to_owned(), Value::from(schema_version));
         let priority: Priority =
             event_severity(&identity).map_or(Priority::Lifecycle, event_priority);
-        let record = Queued {
-            payload: Payload::Pending(event),
-            stream: DeliveryStream::Events,
-            bytes: PENDING_EVENT_BYTES,
-        };
         let mut state = locked(&self.shared.state);
-        state.push_record(record, priority);
+        state.push_pending(event, priority);
         self.shared.wake.notify_one();
     }
 

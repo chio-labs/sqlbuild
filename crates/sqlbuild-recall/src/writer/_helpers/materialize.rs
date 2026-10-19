@@ -14,7 +14,7 @@ use crate::records::models::{ArtifactInput, OutputChunk, OutputStream, RecallRow
 use crate::writer::_helpers::output_chunk::output_chunk;
 use crate::writer::_helpers::queue::{Payload, Queued, SqlInput};
 use crate::writer::models::{DeliveryStream, ReplacedEvents, ReplacedOutput};
-use crate::writer::types::OutputReplacement;
+use crate::writer::types::{OutputReplacement, PendingLifecycleEvent};
 
 /// A batch ready to write: its rows, the streams of the records they came from, and records already settled.
 #[derive(Debug, Default)]
@@ -114,13 +114,14 @@ impl Materializer {
         Some(artifact_rows(&self.envelope, &artifact).to_vec())
     }
 
-    /// The rows of `batch`, with each record's stream sorted by how it is accounted.
+    /// The rows of `batch`, with each record's stream sorted by how it is accounted; lifecycle replacements see their events in publication order.
     pub(crate) fn build(
         &mut self,
         batch: Vec<Queued>,
         replacement: Option<&dyn OutputReplacement>,
     ) -> Built {
         let mut built = Built::default();
+        let mut pending_events: Vec<(u64, Box<dyn PendingLifecycleEvent>)> = Vec::new();
         for record in batch {
             let stream: DeliveryStream = record.stream;
             match record.payload {
@@ -145,24 +146,7 @@ impl Materializer {
                     }
                     Err(_) => built.unbuildable.push(stream),
                 },
-                Payload::Pending(pending) => match pending.replace() {
-                    ReplacedEvents::Published(events) if events.is_empty() => {
-                        built.filtered.push(stream);
-                    }
-                    ReplacedEvents::Published(events) => {
-                        built.extra_events += events.len() as u64 - 1;
-                        for event in events {
-                            match event_object_row(&self.envelope, &event) {
-                                Ok(row) => {
-                                    built.rows.push(row);
-                                    built.written.push(stream);
-                                }
-                                Err(_) => built.unbuildable.push(stream),
-                            }
-                        }
-                    }
-                    ReplacedEvents::Failed => built.unbuildable.push(stream),
-                },
+                Payload::Pending(sequence, pending) => pending_events.push((sequence, pending)),
                 Payload::Sql(input) => match self.sql_rows(input) {
                     Some(rows) => {
                         built.rows.extend(rows);
@@ -170,6 +154,28 @@ impl Materializer {
                     }
                     None => built.settled.push(stream),
                 },
+            }
+        }
+        pending_events.sort_by_key(|(sequence, _)| *sequence);
+        for (_, pending) in pending_events {
+            let stream = DeliveryStream::Events;
+            match pending.replace() {
+                ReplacedEvents::Published(events) if events.is_empty() => {
+                    built.filtered.push(stream);
+                }
+                ReplacedEvents::Published(events) => {
+                    built.extra_events += events.len() as u64 - 1;
+                    for event in events {
+                        match event_object_row(&self.envelope, &event) {
+                            Ok(row) => {
+                                built.rows.push(row);
+                                built.written.push(stream);
+                            }
+                            Err(_) => built.unbuildable.push(stream),
+                        }
+                    }
+                }
+                ReplacedEvents::Failed => built.unbuildable.push(stream),
             }
         }
         built

@@ -16,7 +16,7 @@ use crate::records::models::{
 use crate::store::models::InsertOutcome;
 use crate::writer::_helpers::delivery::{record_stream, stream_of};
 use crate::writer::_helpers::tail::{TailRing, TailSegment};
-use crate::writer::constants::{QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
+use crate::writer::constants::{PENDING_EVENT_BYTES, QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
 use crate::writer::models::{DeliveryStream, Priority};
 use crate::writer::types::PendingLifecycleEvent;
 
@@ -34,8 +34,8 @@ pub(crate) struct SqlInput {
 pub(crate) enum Payload {
     Rows(Vec<RecallRow>),
     Event(Map<String, Value>),
-    /// An event the lifecycle replacement sink decides on when its batch is built.
-    Pending(Box<dyn PendingLifecycleEvent>),
+    /// An event the lifecycle replacement sink decides on when its batch is built, by publication sequence.
+    Pending(u64, Box<dyn PendingLifecycleEvent>),
     Sql(SqlInput),
 }
 
@@ -52,14 +52,14 @@ impl Queued {
     pub(crate) fn rows(&self) -> &[RecallRow] {
         match &self.payload {
             Payload::Rows(rows) => rows,
-            Payload::Event(_) | Payload::Pending(_) | Payload::Sql(_) => &[],
+            Payload::Event(_) | Payload::Pending(..) | Payload::Sql(_) => &[],
         }
     }
 
     fn row_count(&self) -> usize {
         match &self.payload {
             Payload::Rows(rows) => rows.len(),
-            Payload::Event(_) | Payload::Pending(_) => 1,
+            Payload::Event(_) | Payload::Pending(..) => 1,
             Payload::Sql(_) => 2,
         }
     }
@@ -95,6 +95,8 @@ pub(crate) struct WriterState {
     tail_open: Option<OutputStream>,
     unreported_output_drops: u64,
     pub(crate) diagnostic_sequence: u64,
+    /// The publication sequence of the next event for the lifecycle replacement.
+    pending_sequence: u64,
     pub(crate) closing: bool,
     pub(crate) deadline: Option<Instant>,
     pub(crate) finished: bool,
@@ -142,6 +144,7 @@ impl WriterState {
             tail_open: None,
             unreported_output_drops: 0,
             diagnostic_sequence: 0,
+            pending_sequence: 0,
             closing: false,
             deadline: None,
             finished: false,
@@ -233,6 +236,24 @@ impl WriterState {
         self.records += 1;
         self.bytes += record.bytes;
         self.buckets[priority as usize].push_back(record);
+    }
+
+    /// Queue an event for the lifecycle replacement, numbered in publication order.
+    pub(crate) fn push_pending(
+        &mut self,
+        event: Box<dyn PendingLifecycleEvent>,
+        priority: Priority,
+    ) {
+        let sequence: u64 = self.pending_sequence;
+        self.pending_sequence += 1;
+        self.push_record(
+            Queued {
+                payload: Payload::Pending(sequence, event),
+                stream: DeliveryStream::Events,
+                bytes: PENDING_EVENT_BYTES,
+            },
+            priority,
+        );
     }
 
     pub(crate) fn queued(&self) -> usize {

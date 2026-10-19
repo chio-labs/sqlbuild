@@ -17,7 +17,7 @@ use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, SessionConfig, SessionStore, SetupOutcome,
 };
 use crate::writer::tests::test_types::{
-    CopyingReplacement, PartialStore, PrefixReplacement, RecordedSession,
+    CopyingReplacement, PartialStore, PrefixReplacement, RecordedSession, RecordingReplacement,
 };
 
 /// The envelope of invocation `invocation_id`.
@@ -541,4 +541,24 @@ pub(crate) fn written_to_core_release_store(write: fn(&std::path::Path)) -> Vec<
     )
     .expect("the query is valid")
     .rows
+}
+
+/// The order a lifecycle replacement sees events published with `priorities` and taken in one batch.
+pub(crate) fn replacement_order(priorities: &[Priority]) -> Vec<usize> {
+    use crate::writer::_helpers::materialize::Materializer;
+
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut state = WriterState::new(envelope("ordered"));
+    for (index, priority) in priorities.iter().enumerate() {
+        state.push_pending(
+            Box::new(RecordingReplacement {
+                index,
+                seen: Arc::clone(&seen),
+            }),
+            *priority,
+        );
+    }
+    let batch = state.take_batch(usize::MAX);
+    drop(Materializer::new(envelope("ordered")).build(batch, None));
+    std::mem::take(&mut *seen.lock().expect("the record is not poisoned"))
 }
