@@ -28,6 +28,15 @@ const PATCHED_KEYS: [&str; 6] = [
 /// `materialized` values a delta compile handles; others name materializations it cannot.
 const PATCHED_MATERIALIZATIONS: [&str; 2] = ["view", "table"];
 const MATERIALIZED_KEY: &str = "materialized";
+/// Plain `--` comments, which every adapter's SQL reads as comments.
+const LINE_COMMENT: &str = "--";
+/// Reference call kinds and the upstream kinds they resolve to.
+const REF_CALL: &str = "ref";
+const SOURCE_CALL: &str = "source";
+const SEED_CALL: &str = "seed";
+const MODEL_KIND: &str = "model";
+const SOURCE_KIND: &str = "source";
+const SEED_KIND: &str = "seed";
 
 /// Bytes of a digest kept per header value; a collision would need 2^64 work to find.
 const KEPT_DIGEST_BYTES: usize = 16;
@@ -77,36 +86,30 @@ fn encode_value(value: &AuthoredValue, out: &mut Vec<u8>) {
     }
 }
 
-/// The pseudo header key holding a digest of the references a model's authored query names.
-const REFERENCES_KEY: &str = "\u{0}references";
-
-/// A digest of the reference calls `query_sql` names, scanned with plain `--` comments. An edit
-/// that changes them changes what the model reads, which a delta compile does not patch.
-fn references_digest(query_sql: &str) -> String {
+/// Whether every model, source and seed `query_sql` names was among the stored `upstream`.
+fn references_read(query_sql: &str, upstream: &[(String, String)]) -> bool {
     let syntax: LexicalSyntax = LexicalSyntax {
         line_comment_prefixes: vec![LINE_COMMENT.to_owned()],
         ..LexicalSyntax::default()
     };
-    let mut buffer: Vec<u8> = Vec::new();
-    match extract_sql_references(query_sql, &syntax) {
-        ReferenceExtraction::Extracted(scan) => {
-            for reference in &scan.references {
-                for part in [
-                    reference.kind,
-                    &reference.name,
-                    reference.package.as_deref().unwrap_or(""),
-                ] {
-                    buffer.extend_from_slice(&(part.len() as u64).to_le_bytes());
-                    buffer.extend_from_slice(part.as_bytes());
-                }
-            }
+    let ReferenceExtraction::Extracted(scan) = extract_sql_references(query_sql, &syntax) else {
+        return false;
+    };
+    scan.references.iter().all(|reference| {
+        let kind: Option<&str> = match reference.kind {
+            REF_CALL => Some(MODEL_KIND),
+            SOURCE_CALL => Some(SOURCE_KIND),
+            SEED_CALL => Some(SEED_KIND),
+            _ => None,
+        };
+        match (kind, &reference.package) {
+            (Some(kind), None) => upstream
+                .iter()
+                .any(|(stored_kind, name)| stored_kind == kind && *name == reference.name),
+            _ => true,
         }
-        ReferenceExtraction::Failed(_) => buffer.push(0xff),
-    }
-    short_hex(&bytes_digest(&buffer))
+    })
 }
-
-const LINE_COMMENT: &str = "--";
 
 fn short_hex(digest: &[u8]) -> String {
     let mut hex: String = String::with_capacity(KEPT_DIGEST_BYTES * 2);
@@ -117,7 +120,7 @@ fn short_hex(digest: &[u8]) -> String {
     hex
 }
 
-fn header_keys(values: &[(String, AuthoredValue)], query_sql: &str) -> HeaderKeys {
+fn header_keys(values: &[(String, AuthoredValue)]) -> HeaderKeys {
     let mut buffer: Vec<u8> = Vec::new();
     let mut keys: HeaderKeys = values
         .iter()
@@ -128,21 +131,16 @@ fn header_keys(values: &[(String, AuthoredValue)], query_sql: &str) -> HeaderKey
             (key.clone(), hex)
         })
         .collect();
-    keys.push((REFERENCES_KEY.to_owned(), references_digest(query_sql)));
     keys.sort();
     keys
 }
 
 /// Record one discovered model's header keys for the image.
-pub(crate) fn record_header_keys(
-    relative_path: &str,
-    values: &[(String, AuthoredValue)],
-    query_sql: &str,
-) {
+pub(crate) fn record_header_keys(relative_path: &str, values: &[(String, AuthoredValue)]) {
     if !capturing() {
         return;
     }
-    let keys: HeaderKeys = header_keys(values, query_sql);
+    let keys: HeaderKeys = header_keys(values);
     let path: String = relative_path.replace('\\', "/");
     capture(|capture| {
         capture.header_keys.insert(path, keys);
@@ -166,7 +164,7 @@ pub(crate) enum HeaderChange {
 pub(crate) fn header_change(
     project_dir: &Path,
     relative_path: &str,
-    stored: Option<&HeaderKeys>,
+    (stored, upstream): (Option<&HeaderKeys>, &[(String, String)]),
 ) -> HeaderChange {
     let Some(stored) = stored else {
         return HeaderChange::Unsupported(format!("{relative_path} has no recorded header"));
@@ -181,7 +179,10 @@ pub(crate) fn header_change(
     let Ok(parsed) = parse_model_text(&file_path, contents, &model_file_options()) else {
         return HeaderChange::Unparsed;
     };
-    let current: HeaderKeys = header_keys(&parsed.header_values, &parsed.query_sql);
+    if !references_read(&parsed.query_sql, upstream) {
+        return HeaderChange::Unsupported(format!("{relative_path} changed what it references"));
+    }
+    let current: HeaderKeys = header_keys(&parsed.header_values);
     let stored_map: BTreeMap<&str, &str> = stored
         .iter()
         .map(|(key, digest)| (key.as_str(), digest.as_str()))
@@ -198,9 +199,6 @@ pub(crate) fn header_change(
         .collect();
     if changed.is_empty() {
         return HeaderChange::Unchanged;
-    }
-    if changed.contains(REFERENCES_KEY) {
-        return HeaderChange::Unsupported(format!("{relative_path} changed what it references"));
     }
     for key in &changed {
         if key == MATERIALIZED_KEY {

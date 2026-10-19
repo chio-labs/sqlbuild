@@ -637,12 +637,21 @@ fn first_rerun(
             return Err(format!("{path} is not a model or SQL test file"));
         }
     }
+    let upstream_by_path: HashMap<&str, &[(String, String)]> = gate
+        .models
+        .iter()
+        .map(|model| (model.relative_path.as_str(), model.upstream.as_slice()))
+        .collect();
     for path in &rerun.model_paths {
         let name: &str = model_by_path
             .get(path.as_str())
             .copied()
             .unwrap_or_default();
-        match header_change(project_dir, path, gate.header_keys.get(path)) {
+        let upstream: &[(String, String)] = upstream_by_path
+            .get(path.as_str())
+            .copied()
+            .unwrap_or_default();
+        match header_change(project_dir, path, (gate.header_keys.get(path), upstream)) {
             HeaderChange::Unchanged => {}
             HeaderChange::Unparsed if !ERRORS_ON_DELTA_PATH => {
                 return Err(format!("{path} does not parse"));

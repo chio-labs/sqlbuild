@@ -72,7 +72,6 @@ fn model_items<'py>(
                 crate::bindings::_helpers::compile_delta::header_keys::record_header_keys(
                     &file.relative_path,
                     &model.header_values,
-                    &model.query_sql,
                 );
                 let file_path: String = root.display_path(&file.relative_path);
                 let paths = DiscoveredPaths::Native(file.relative_path.clone(), file_path);

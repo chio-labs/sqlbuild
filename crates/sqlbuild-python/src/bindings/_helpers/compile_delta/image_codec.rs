@@ -1,8 +1,7 @@
 //! The project image's binary sections: the native store's length-prefixed records, with each
 //! distinct string written once and referred to by its index.
 
-use std::collections::HashMap;
-
+use rustc_hash::FxHashMap;
 use sqlbuild_cache::store::models::{RecordReader, RecordWriter};
 
 /// The most items a list reserves room for before reading them, against corrupt counts.
@@ -11,7 +10,7 @@ const MAX_RESERVED_ITEMS: usize = 1 << 16;
 /// Writes one section: its values refer to a table of the distinct strings they hold.
 #[derive(Default)]
 pub(crate) struct Encoder<'a> {
-    ids: HashMap<&'a str, u64>,
+    ids: FxHashMap<&'a str, u64>,
     strings: Vec<&'a str>,
     body: RecordWriter,
 }

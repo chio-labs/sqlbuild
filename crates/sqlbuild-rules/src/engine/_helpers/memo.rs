@@ -12,7 +12,7 @@ use crate::engine::_helpers::evaluation::{EvaluationControl, evaluate_request_wi
 use crate::errors::RowsError;
 use crate::models::{EvaluateRequest, Model, RetainedRows, RowsEvaluation, RowsRequest};
 
-/// Where the model-free request's JSON holds its empty model list, which the rows fill.
+/// Where the model-free request's JSON holds its empty model list; strings escape their quotes.
 const EMPTY_MODELS: &[u8] = b",\"models\":[],\"sql_tests\":";
 const MODELS_KEY: &[u8] = b",\"models\":[";
 
@@ -109,14 +109,9 @@ fn retained_rows(
             Err(_unencodable) => return None,
         },
     };
-    let mut found = request_json
+    let at: usize = request_json
         .windows(EMPTY_MODELS.len())
-        .enumerate()
-        .filter(|(_, window)| *window == EMPTY_MODELS)
-        .map(|(index, _)| index);
-    let (Some(at), None) = (found.next(), found.next()) else {
-        return None;
-    };
+        .position(|window| window == EMPTY_MODELS)?;
     let rows: usize = row_json.iter().map(Vec::len).sum::<usize>() + row_json.len();
     let mut json: Vec<u8> = Vec::with_capacity(request_json.len() + rows);
     json.extend_from_slice(&request_json[..at]);
