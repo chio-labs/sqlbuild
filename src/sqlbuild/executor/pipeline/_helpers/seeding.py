@@ -12,6 +12,9 @@ from sqlbuild._native import PlanOutput, SeedPlanEntry
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
 from sqlbuild.executor.build.models import SeedExecutionResult
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure,
+)
 from sqlbuild.executor.scheduling.types import ExecutionStatus
 from sqlbuild.executor.seed.main._execute import execute_seed
 from sqlbuild.runtime.contracts.types import ConnectionElapsedCallback
@@ -46,13 +49,13 @@ def run_seed_pipeline(
     try:
         for _ in range(effective_concurrency):
             connections.append(adapter.connect(connection_config))
-    except Exception:
+    except Exception as error:
         if on_connection_error is not None:
             on_connection_error(effective_concurrency, elapsed_seconds=time.monotonic() - start)
         connection: Any
         for connection in connections:
             adapter.close(connection)
-        raise
+        raise_warehouse_connection_failure(adapter=adapter, error=error)
     if on_connection_complete is not None:
         on_connection_complete(effective_concurrency, elapsed_seconds=time.monotonic() - start)
 

@@ -1336,3 +1336,12 @@ class ModelConfigEnginesBuildE2ETestCase:
     expected_exit_code: int
     expected_output_fragments: tuple[str, ...]
     expected_relations: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class WarehouseConnectionFailureE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_exit_code: int
+    expected_stderr_fragments: tuple[str, ...]
+    extra_files: dict[str, str] = field(default_factory=dict)

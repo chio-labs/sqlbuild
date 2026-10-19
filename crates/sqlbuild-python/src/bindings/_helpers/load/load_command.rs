@@ -35,6 +35,7 @@ use crate::bindings::_helpers::load::load_selection::{
     LoadProject, LoaderDefaults, loader_defaults,
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
@@ -168,7 +169,9 @@ fn check_reference_targets(
         .iter()
         .map(|source| native_field(source, "name")?.extract())
         .collect::<PyResult<_>>()?;
-    let connection: Bound<'_, PyAny> = adapter.call_method1("connect", (connection_config,))?;
+    let connection: Bound<'_, PyAny> = adapter
+        .call_method1("connect", (connection_config,))
+        .map_err(|error| connection_failure(adapter, &error))?;
     let checked: PyResult<()> = (|| {
         let locations: Vec<Bound<'_, PyTuple>> = invocation
             .references

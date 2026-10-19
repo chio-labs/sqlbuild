@@ -33,6 +33,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
@@ -214,7 +215,8 @@ fn connect<'py>(
     let connection: Bound<'py, PyAny> = within(
         &lifecycle(py, ("clone", "clone_target_connection"))?,
         |_| invocation.adapter.call_method1("connect", (&config,)),
-    )?;
+    )
+    .map_err(|error| connection_failure(&invocation.adapter, &error))?;
     let summary: String = format!(
         "{}  ({:.2}s)",
         invocation.adapter_name,

@@ -32,3 +32,16 @@ class AuditConcurrencyError(RuntimeError):
 
 class AuditOutcomeError(RuntimeError):
     """Raised when audit execution returns an unknown quality outcome."""
+
+
+class WarehouseConnectionError(Exception):
+    """Raised when a command cannot open its warehouse connection."""
+
+    code: str = "C115"
+
+    def __init__(self, *, adapter_name: str, reason: str) -> None:
+        self.message: str = f"could not connect to the {adapter_name} warehouse: {reason}"
+        self.help: str = (
+            "Check the connection settings of the target; `sqb debug` tests the connection."
+        )
+        super().__init__(self.message)

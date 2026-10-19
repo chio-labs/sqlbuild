@@ -270,6 +270,12 @@ from sqlbuild.executor.old_name_views._helpers.janitor import (
     is_compatibility_view as is_compatibility_view,
 )
 from sqlbuild.executor.pipeline.exceptions import AuditExecutionError as AuditExecutionError
+from sqlbuild.executor.pipeline.exceptions import (
+    WarehouseConnectionError as WarehouseConnectionError,
+)
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure as raise_warehouse_connection_failure,
+)
 from sqlbuild.executor.pipeline.main.run import AuditPipelineCallbacks as AuditPipelineCallbacks
 from sqlbuild.executor.pipeline.main.run import (
     run_audit_pipeline_with_callbacks as run_audit_pipeline_with_callbacks,

@@ -22,6 +22,7 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::freshness::freshness_observe::{PreviousState, observe_freshness};
 use crate::bindings::_helpers::freshness::observation::Observer;
 use crate::bindings::_helpers::freshness::state_io::{StateRead, read_latest};
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::planner_selection::selectors::{
     expand_project_upstream_keys, select_project_graph,
 };
@@ -221,7 +222,9 @@ fn observe(
             ],
         )?),
     )?;
-    let connection: Bound<'_, PyAny> = adapter.call_method1("connect", (connection_config,))?;
+    let connection: Bound<'_, PyAny> = adapter
+        .call_method1("connect", (connection_config,))
+        .map_err(|error| connection_failure(adapter, &error))?;
     let observed = (|| {
         let project: Bound<'_, PyAny> = native_field(graph, "project")?;
         let by_identity: Option<Bound<'_, PyAny>> =

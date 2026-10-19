@@ -42,6 +42,9 @@ from sqlbuild.executor.pipeline._helpers.scenario_timeouts import (
     timed_out_scenario_result,
 )
 from sqlbuild.executor.pipeline._helpers.settings import resolve_promotion_mode
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure,
+)
 from sqlbuild.executor.scenario.classes.prepared_scenario_schemas import PreparedScenarioSchemas
 from sqlbuild.executor.scenario.classes.running_scenarios import RunningScenarios
 from sqlbuild.executor.scenario.classes.scenario_interrupts import ScenarioInterrupts
@@ -421,10 +424,10 @@ def _scenario_target_connections(
                 connection_config=connection_config,
                 connection_count=connection_count,
             )
-    except Exception:
+    except Exception as error:
         if hooks.on_connection_error is not None:
             hooks.on_connection_error(connection_count, elapsed_seconds=time.monotonic() - start)
-        raise
+        raise_warehouse_connection_failure(adapter=adapter, error=error)
     if hooks.on_connection_complete is not None:
         hooks.on_connection_complete(connection_count, elapsed_seconds=time.monotonic() - start)
     recovery: ConnectionRecovery = ConnectionRecovery(

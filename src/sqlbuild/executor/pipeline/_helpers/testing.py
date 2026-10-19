@@ -30,6 +30,9 @@ from sqlbuild.executor.pipeline._helpers.connections import (
     close_connections,
     open_worker_connections,
 )
+from sqlbuild.executor.pipeline.main.raise_warehouse_connection_failure import (
+    raise_warehouse_connection_failure,
+)
 from sqlbuild.executor.pipeline.models import TestPipelineCallbacks
 from sqlbuild.executor.scheduling.classes.recovering_connection_pool import RecoveringConnectionPool
 from sqlbuild.executor.scheduling.types import ExecutionStatus
@@ -85,12 +88,12 @@ def run_test_pipeline(
             connection_config=connection_config,
             connection_count=worker_count,
         )
-    except BaseException:
+    except BaseException as error:
         if resolved_callbacks.on_connection_error is not None:
             resolved_callbacks.on_connection_error(
                 worker_count, elapsed_seconds=time.monotonic() - start
             )
-        raise
+        raise_warehouse_connection_failure(adapter=adapter, error=error)
     if resolved_callbacks.on_connection_complete is not None:
         resolved_callbacks.on_connection_complete(
             worker_count, elapsed_seconds=time.monotonic() - start

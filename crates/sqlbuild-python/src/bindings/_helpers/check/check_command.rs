@@ -11,6 +11,7 @@ use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external
 use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
 use crate::bindings::_helpers::graph::execution_gates::sql_ref_key;
 use crate::bindings::_helpers::graph::python_lifecycle::build_python_sql_run_lifecycle;
+use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::planner_entries::command_plans::build_relation_command_plan;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_selection::selectors::parse_project_selector;
@@ -564,8 +565,9 @@ fn execute<'py>(
 ) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let py: Python<'py> = invocation.py();
     let adapter: Bound<'py, PyAny> = native_field(invocation, "adapter")?;
-    let connection: Bound<'py, PyAny> =
-        adapter.call_method1("connect", (native_field(invocation, "connection_config")?,))?;
+    let connection: Bound<'py, PyAny> = adapter
+        .call_method1("connect", (native_field(invocation, "connection_config")?,))
+        .map_err(|error| connection_failure(&adapter, &error))?;
     let event_writer: Bound<'py, PyAny> =
         Bound::new(py, ExecutionEventWriter::new(py, None)?)?.into_any();
     let executed: PyResult<Vec<Bound<'py, PyAny>>> = (|| {
