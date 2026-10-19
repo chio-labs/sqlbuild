@@ -6,7 +6,7 @@ use pyo3::PyResult;
 use sqlbuild_rules::models::{EvaluateRequest, Model, SqlTestFact};
 
 use crate::bindings::_helpers::compile_delta::context::{delta_unsupported, injection};
-use crate::bindings::_helpers::compile_delta::image::BaseRules;
+use crate::bindings::_helpers::compile_delta::image::{BaseRules, PendingRules};
 
 /// `request` unchanged outside a delta compile; inside one, the whole project's request with
 /// the rerun models' rows and the rerun SQL tests' facts taken from `request`.
@@ -18,7 +18,8 @@ pub(crate) fn whole_project_request(request: EvaluateRequest) -> PyResult<Evalua
         .rules
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .take();
+        .take()
+        .and_then(PendingRules::resolved);
     let Some(base) = taken else {
         return Err(delta_unsupported(
             "the previous compile did not run the built-in rules",

@@ -21,7 +21,7 @@ const RULES_SECTION: &str = "rules";
 const RULE_DIGESTS_SECTION: &str = "rule-digests";
 
 /// Everything a delta compile reads of the compile it patches.
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub(crate) struct ProjectImage {
     pub(crate) format: String,
     pub(crate) json_output: bool,
@@ -60,11 +60,35 @@ impl BaseRules {
     }
 }
 
-/// An image's rules request: decoded from a stored image, or as a compile just retained it.
-#[derive(Clone, Debug)]
+/// An image's rules request: decoding from a stored image, or as a compile just retained it.
+#[derive(Debug)]
 pub(crate) enum ImageRules {
-    Decoded(BaseRules),
+    Decoding(PendingRules),
     Retained(RetainedRows),
+}
+
+/// A stored rules request decoding on its own thread while the delta compile starts, or
+/// decoded already.
+#[derive(Debug)]
+pub(crate) enum PendingRules {
+    Decoding(std::thread::JoinHandle<Option<BaseRules>>),
+    Ready(BaseRules),
+}
+
+impl PendingRules {
+    /// The decoded request, or `None` when it could not be decoded.
+    pub(crate) fn resolved(self) -> Option<BaseRules> {
+        match self {
+            Self::Decoding(handle) => handle.join().ok().flatten(),
+            Self::Ready(rules) => Some(rules),
+        }
+    }
+}
+
+fn decoded_rules(request: &[u8], digests: &[u8]) -> Option<BaseRules> {
+    let request: EvaluateRequest = serde_json::from_slice(request).ok()?;
+    let digests: Vec<String> = decoded_strings(digests)?;
+    (digests.len() == request.models.len()).then_some(BaseRules { request, digests })
 }
 
 /// The analysis session's final relation facts, as stored.
@@ -490,7 +514,7 @@ impl ProjectImage {
         };
         let rules: Option<RetainedRows> = match self.rules {
             Some(ImageRules::Retained(rules)) => Some(rules),
-            Some(ImageRules::Decoded(_)) | None => None,
+            Some(ImageRules::Decoding(_)) | None => None,
         };
         let (gate, facts) = rayon::join(|| gate.encode(), || facts.encode());
         let rules = rules.map(|rules| (rules.request_json, encoded_strings(&rules.digests)));
@@ -506,21 +530,24 @@ impl ProjectImage {
     }
 
     /// The image stored in `sections` behind `gate`, or `None` when it is unreadable.
-    pub(crate) fn decode(sections: &ImageSections, gate: ImageGate) -> Option<Self> {
-        let (facts, rules) = rayon::join(
-            || StoredFacts::decode(section(sections, FACTS_SECTION)?),
-            || -> Option<Option<ImageRules>> {
-                let Some(bytes) = section(sections, RULES_SECTION) else {
-                    return Some(None);
-                };
-                let request: EvaluateRequest = serde_json::from_slice(bytes).ok()?;
-                let digests: Vec<String> =
-                    decoded_strings(section(sections, RULE_DIGESTS_SECTION)?)?;
-                (digests.len() == request.models.len())
-                    .then_some(Some(ImageRules::Decoded(BaseRules { request, digests })))
-            },
-        );
-        let facts: StoredFacts = facts?;
+    ///
+    /// The rules request, the largest section, is taken out of `sections` and decodes on its
+    /// own thread.
+    pub(crate) fn decode(sections: &mut ImageSections, gate: ImageGate) -> Option<Self> {
+        let mut taken = |name: &str| {
+            sections
+                .iter_mut()
+                .find(|(section, _)| section == name)
+                .map(|(_, bytes)| std::mem::take(bytes))
+        };
+        let rules: Option<ImageRules> = match (taken(RULES_SECTION), taken(RULE_DIGESTS_SECTION)) {
+            (Some(request), Some(digests)) => Some(ImageRules::Decoding(PendingRules::Decoding(
+                std::thread::spawn(move || decoded_rules(&request, &digests)),
+            ))),
+            (None, None) => None,
+            _ => return None,
+        };
+        let facts: StoredFacts = StoredFacts::decode(section(sections, FACTS_SECTION)?)?;
         let types: Shapes = facts.types;
         let relations: ImageRelations = ImageRelations {
             complete: restored(facts.complete, &types)?,
@@ -548,7 +575,7 @@ impl ProjectImage {
             lint_model_keys: facts.lint_model_keys,
             lint_file_keys: facts.lint_file_keys,
             header_keys: gate.header_keys,
-            rules: rules?,
+            rules,
         })
     }
 

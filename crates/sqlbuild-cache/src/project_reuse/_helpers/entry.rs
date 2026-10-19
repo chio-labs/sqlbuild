@@ -143,23 +143,29 @@ pub(crate) fn write_entry(
     (inputs, output, image): (&StoredInputs, &StoredOutput, Option<&ImageSections>),
     max_entries: usize,
 ) -> std::io::Result<()> {
-    let meta: Vec<u8> = encode_output(output);
-    let (encoded, identity) = encode_sections(
-        OUTPUT_ROLE,
-        &[
-            (OUTPUT_META_SECTION, &meta),
-            (STDOUT_SECTION, output.stdout.as_bytes()),
-        ],
-    );
-    write_atomically(&output_path(path), &encoded)?;
-    drop(encoded);
-    let image_identity: Option<ContentDigest> = match image {
-        Some(sections) => Some(write_image(path, sections)?),
-        None => {
-            let _ = std::fs::remove_file(image_path(path));
-            None
+    let write_output = || -> std::io::Result<ContentDigest> {
+        let meta: Vec<u8> = encode_output(output);
+        let (encoded, identity) = encode_sections(
+            OUTPUT_ROLE,
+            &[
+                (OUTPUT_META_SECTION, &meta),
+                (STDOUT_SECTION, output.stdout.as_bytes()),
+            ],
+        );
+        write_atomically(&output_path(path), &encoded)?;
+        Ok(identity)
+    };
+    let write_named_image = || -> std::io::Result<Option<ContentDigest>> {
+        match image {
+            Some(sections) => Ok(Some(write_image(path, sections)?)),
+            None => {
+                let _ = std::fs::remove_file(image_path(path));
+                Ok(None)
+            }
         }
     };
+    let (identity, image_identity) = rayon::join(write_output, write_named_image);
+    let (identity, image_identity) = (identity?, image_identity?);
     let encoded_inputs: Vec<u8> = encode_inputs(inputs);
     let mut sections: Vec<(&str, &[u8])> = vec![
         (INPUTS_SECTION, &encoded_inputs),

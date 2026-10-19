@@ -21,7 +21,7 @@ use crate::bindings::_helpers::compile_delta::header_keys::{
     HeaderChange, custom_rule_reads, header_change,
 };
 use crate::bindings::_helpers::compile_delta::image::{
-    BaseRules, ImageGate, ImageRelations, ImageRules, ProjectImage,
+    BaseRules, ImageGate, ImageRelations, ImageRules, PendingRules, ProjectImage,
 };
 use crate::bindings::_helpers::compile_delta::splice::{SpliceScope, spliced_report};
 use crate::bindings::_helpers::compile_driver::command::{PhasesOutcome, unrecorded_compile};
@@ -238,7 +238,7 @@ fn lent_injection(
             .collect(),
         relations: std::mem::take(&mut image.relations).into(),
         rules: std::sync::Mutex::new(match image.rules.take() {
-            Some(ImageRules::Decoded(rules)) => Some(rules),
+            Some(ImageRules::Decoding(rules)) => Some(rules),
             Some(ImageRules::Retained(_)) | None => None,
         }),
         fact_digests: std::mem::take(&mut image.fact_digests)
@@ -469,7 +469,7 @@ pub(crate) fn run<'py>(
     if rerun.models.len() > limit {
         return fallback("too many models would compile again");
     }
-    let Some(mut image) = ProjectImage::decode(&stored.image, gate) else {
+    let Some(mut image) = ProjectImage::decode(&mut stored.image, gate) else {
         return fallback("the project image cannot be read");
     };
     stored.image = ImageSections::new();
@@ -554,7 +554,7 @@ pub(crate) fn run<'py>(
         let Some(rules) = rules else {
             return fallback("the delta compile retained no rules request");
         };
-        injection.rules = std::sync::Mutex::new(Some(rules));
+        injection.rules = std::sync::Mutex::new(Some(PendingRules::Ready(rules)));
         for name in added {
             if let Some(model) = stored_models.get(name.as_str()) {
                 rerun.model_paths.insert(model.relative_path.clone());
