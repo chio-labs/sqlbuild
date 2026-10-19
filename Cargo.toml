@@ -15,6 +15,7 @@ members = [
     "crates/sqlbuild-analysis",
     "crates/sqlbuild-rules",
     "crates/sqlbuild-refactor",
+    "crates/sqlbuild-embed",
     "crates/sqlbuild-cli",
     "crates/sqlbuild-python",
 ]
@@ -40,6 +41,7 @@ order = [
     "sqlbuild-analysis",
     "sqlbuild-rules",
     "sqlbuild-refactor",
+    "sqlbuild-embed",
     "sqlbuild-cli",
     "sqlbuild-python",
 ]
@@ -60,6 +62,8 @@ getrandom = "0.4"
 globset = "0.4"
 # Windows only: tells NTFS junctions, which Python walks as directories, from symbolic links.
 junction = { version = "2.1.0", default-features = false }
+# Unix only: `sqb` loads libpython with `dlopen` to run the Python CLI in its own process.
+libc = "0.2"
 # Python loads the extension with dlopen, so mimalloc must not use initial-exec TLS.
 mimalloc = { version = "0.1", default-features = false, features = ["local_dynamic_tls"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
@@ -101,6 +105,7 @@ sqlbuild-config = { path = "crates/sqlbuild-config" }
 sqlbuild-core = { path = "crates/sqlbuild-core" }
 sqlbuild-cursor = { path = "crates/sqlbuild-cursor" }
 sqlbuild-discovery = { path = "crates/sqlbuild-discovery" }
+sqlbuild-embed = { path = "crates/sqlbuild-embed" }
 sqlbuild-render = { path = "crates/sqlbuild-render" }
 sqlbuild-refactor = { path = "crates/sqlbuild-refactor" }
 sqlbuild-rules = { path = "crates/sqlbuild-rules" }

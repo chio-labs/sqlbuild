@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::launcher::_helpers::messages::report_handoff_failure;
-use crate::launcher::constants::{HANDOFF_FAILURE_EXIT_CODE, PYTHON_CLI_SCRIPT};
+use crate::launcher::constants::{
+    HANDOFF_FAILURE_EXIT_CODE, HOST_REPORT_VARIABLE, PYTHON_CLI_SCRIPT,
+};
 
 /// The Python CLI script beside this program or beside the file it links to.
 pub(crate) fn python_cli(program: &Path) -> Option<PathBuf> {
@@ -22,20 +24,27 @@ fn failure(script: &Path, error: &std::io::Error) -> i32 {
     HANDOFF_FAILURE_EXIT_CODE
 }
 
-/// Replace this process with the Python CLI; returns only when it cannot start.
+/// Replace this process with the Python CLI, telling it `report`; returns only when it cannot start.
 #[cfg(unix)]
-pub(crate) fn hand_off(script: &Path, arguments: &[OsString]) -> i32 {
+pub(crate) fn hand_off(script: &Path, arguments: &[OsString], report: &str) -> i32 {
     use std::os::unix::process::CommandExt;
 
-    let error = Command::new(script).args(arguments).exec();
+    let error = Command::new(script)
+        .args(arguments)
+        .env(HOST_REPORT_VARIABLE, report)
+        .exec();
     failure(script, &error)
 }
 
 /// Run the Python CLI as a child that alone handles Ctrl+C, and return its exit code.
 #[cfg(not(unix))]
-pub(crate) fn hand_off(script: &Path, arguments: &[OsString]) -> i32 {
+pub(crate) fn hand_off(script: &Path, arguments: &[OsString], report: &str) -> i32 {
     let _ = ctrlc::set_handler(|| {});
-    match Command::new(script).args(arguments).status() {
+    match Command::new(script)
+        .args(arguments)
+        .env(HOST_REPORT_VARIABLE, report)
+        .status()
+    {
         Ok(status) => status.code().unwrap_or(HANDOFF_FAILURE_EXIT_CODE),
         Err(error) => failure(script, &error),
     }

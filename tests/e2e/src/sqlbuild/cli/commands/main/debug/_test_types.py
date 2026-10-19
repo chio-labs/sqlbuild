@@ -17,3 +17,10 @@ class DebugJsonCliTestCase:
     command: tuple[str, ...]
     expected_success: bool
     expected_check_tail: list[dict[str, str]]
+
+
+@dataclass(frozen=True)
+class DebugHostTestCase:
+    description: str
+    host_mode: str
+    expected_host_line_prefix: str

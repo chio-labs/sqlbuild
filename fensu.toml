@@ -444,6 +444,21 @@ path = "crates/sqlbuild-analysis/src/assembly/analysis_session/models.rs"
 reason = "NullabilityCallback implements Debug manually because it holds the adapter's nullability rule closure, which cannot implement Debug; other models derive it."
 
 [[targets.rust.rule_exceptions]]
+rule = "FPRSL302"
+path = "crates/sqlbuild-embed/Cargo.toml"
+reason = "Loading libpython and calling CPython's main needs unsafe code; this crate repeats the workspace lints with unsafe code denied instead of forbidden so that one module can allow it."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSH012"
+path = "crates/sqlbuild-embed/src/lib.rs"
+reason = "The crate root denies unsafe code; only the libpython loading module allows it, because dlopen, dlsym and the CPython calls are foreign functions."
+
+[[targets.rust.rule_exceptions]]
+rule = "FPRSH013"
+path = "crates/sqlbuild-embed/src/host/_helpers/library.rs"
+reason = "The only module allowed unsafe code: dlopen, dlsym, Py_GetVersion, Py_BytesMain and setting the start-up environment before any thread exists."
+
+[[targets.rust.rule_exceptions]]
 rule = "FPRSL105"
 path = "crates/sqlbuild-analysis/src/sql_tokens/main/builtin_function_names.rs"
 reason = "This test-support entry exists only for the SQL lint tests in sqlbuild-rules, which the analyzer does not count as importers."
@@ -469,6 +484,7 @@ crate_names = [
     "sqlbuild-core",
     "sqlbuild-cursor",
     "sqlbuild-discovery",
+    "sqlbuild-embed",
     "sqlbuild-model-config",
     "sqlbuild-pysource",
     "sqlbuild-python",

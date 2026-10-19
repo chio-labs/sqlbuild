@@ -4,7 +4,8 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
-use crate::launcher::_helpers::handoff::{hand_off, python_cli};
+use crate::launcher::_helpers::handoff::python_cli;
+use crate::launcher::_helpers::hosting::run_python_cli;
 use crate::launcher::_helpers::launch_key::{launch_key, launch_record_path};
 use crate::launcher::_helpers::messages::{print_version, report_missing_python_cli};
 use crate::launcher::constants::{
@@ -52,5 +53,5 @@ pub(crate) fn launch(arguments: Vec<OsString>, started: (Instant, SystemTime)) -
         handed.push(option);
     }
     handed.extend(arguments);
-    hand_off(&script, &handed)
+    run_python_cli(&script, &handed)
 }

@@ -1,0 +1,27 @@
+[package]
+name = "sqlbuild-embed"
+version.workspace = true
+description = "Runs the installed Python CLI inside the `sqb` process: interpreter discovery, libpython loading and the CPython main entry."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+blake3.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+# The workspace lints, except that unsafe code is denied rather than forbidden: the module that
+# loads libpython and calls into it is the only one allowed to opt out.
+[lints.rust]
+unsafe_code = "deny"
+unreachable_pub = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+await_holding_lock = "deny"

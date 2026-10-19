@@ -1175,6 +1175,7 @@ dependencies = [
  "serde_json",
  "sqlbuild-cache",
  "sqlbuild-core",
+ "sqlbuild-embed",
  "tempfile",
 ]
 
@@ -1214,6 +1215,15 @@ dependencies = [
  "sqlbuild-core",
  "sqlbuild-model-config",
  "sqlbuild-sqltext",
+ "tempfile",
+]
+
+[[package]]
+name = "sqlbuild-embed"
+version = "0.160.1"
+dependencies = [
+ "blake3",
+ "libc",
  "tempfile",
 ]
 

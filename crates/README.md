@@ -21,7 +21,8 @@ that can be tested and benchmarked with `cargo test` alone.
 | `sqlbuild-analysis` | SQL analysis over polyglot: query analysis, binding, semantic validation and usage, column references, type normalization, FAST/RICH lineage, SQL-test/scenario extraction and compiler-side assembly, and Snowflake cost statement classification and query-tag parsing. |
 | `sqlbuild-rules` | Built-in rules and the rules engine, the custom-rule host, SQL lint, quality checks and formatting, rules configuration and the request models. It also owns the build identity script. |
 | `sqlbuild-refactor` | Native rename/move plans, contract-adoption edits, MODEL/SCHEMA/YAML text edits and atomic staging/commit with rollback. Shared scope placement delegates to the native scope implementation; user Python source inspection remains at the Python AST boundary. |
-| `sqlbuild-cli` | The `sqb` and `sqlbuild` executables: `--version`, unchanged compiles replayed from the shared reuse store with Python's exact streams, exit code and compute log capture, and a handoff of every other invocation to the installed `sqlbuild-python` script. Built as its own wheel (`crates/sqlbuild-cli/pyproject.toml`). |
+| `sqlbuild-embed` | Runs the Python CLI inside the `sqb` process: finds the interpreter the `sqlbuild-python` script names and the shared libpython of its installation (cached per user by the interpreter's file stamps), loads it and calls CPython's own `main`. The only crate with `unsafe` code, confined to the loading module; any failure is a reason for `sqb` to fall back to running the script. |
+| `sqlbuild-cli` | The `sqb` and `sqlbuild` executables: `--version`, unchanged compiles replayed from the shared reuse store with Python's exact streams, exit code and compute log capture, and every other invocation run by the installed Python CLI, in the `sqb` process through `sqlbuild-embed` when the interpreter allows it and by running the `sqlbuild-python` script otherwise. Built as its own wheel (`crates/sqlbuild-cli/pyproject.toml`). |
 | `sqlbuild-python` | The only PyO3 crate: the `_native` module, its Python classes and functions, conversions from Python objects, and the process allocator. |
 
 ## Layering
@@ -33,7 +34,7 @@ sqlbuild-python
   -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments
   -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-render -> sqlbuild-discovery -> sqlbuild-config
   -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-pysource -> sqlbuild-state -> sqlbuild-cursor -> sqlbuild-core
-sqlbuild-cli -> sqlbuild-cache, sqlbuild-core
+sqlbuild-cli -> sqlbuild-embed, sqlbuild-cache, sqlbuild-core
 ```
 
 `sqlbuild-scopes` reuses the macro scanner in `sqlbuild-render`; render itself depends only on

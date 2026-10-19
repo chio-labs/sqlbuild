@@ -9,6 +9,7 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.debug._test_types import (
     DebugCliTestCase,
+    DebugHostTestCase,
     DebugJsonCliTestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -371,3 +372,45 @@ def test_given_debug_json_with_providers_when_running_then_outputs_provider_summ
     assert payload["success"] is test_case.expected_success
     providers: list[dict[str, str]] = payload["providers"]  # type: ignore[assignment]
     assert providers == test_case.expected_check_tail
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DebugHostTestCase(
+            description="uv run sqb starts Python in its own process",
+            host_mode="embedded",
+            expected_host_line_prefix="  python host: embedded (libpython ",
+        ),
+        DebugHostTestCase(
+            description="the exec fallback says why it was used",
+            host_mode="exec",
+            expected_host_line_prefix="  python host: exec (SQLBUILD_HOST_MODE=exec)\n",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_host_mode_when_debugging_then_runtime_reports_how_python_started(
+    tmp_path: Path,
+    test_case: DebugHostTestCase,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="debug_project",
+        repo_files={
+            "sqlbuild_project.toml": (
+                'name = "debug_project"\nadapter = "duckdb"\n\n'
+                '[connection]\ndatabase = "debug.duckdb"\n'
+            ),
+        },
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", "debug", "--no-connection"),
+        project_dir=project_dir,
+        env={"SQLBUILD_HOST_MODE": test_case.host_mode},
+    )
+
+    assert result.returncode == 0, result.stderr
+    host_line: str = result.stdout[result.stdout.index("  python host: ") :]
+    assert host_line.startswith(test_case.expected_host_line_prefix), result.stdout
