@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.160.2](https://github.com/chio-labs/sqlbuild/compare/v0.160.1...v0.160.2) (2026-10-19)
+
+
+### Performance Improvements
+
+* compile only the changed models after an edit ([#1157](https://github.com/chio-labs/sqlbuild/issues/1157)) ([0808c72](https://github.com/chio-labs/sqlbuild/commit/0808c724c9c5c3800071d5c72dd08dbc4d23a9e9))
+
 ## [0.160.1](https://github.com/chio-labs/sqlbuild/compare/v0.160.0...v0.160.1) (2026-10-19)
 
 
