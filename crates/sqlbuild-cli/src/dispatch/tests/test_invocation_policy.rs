@@ -37,7 +37,7 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
             },
         },
         InvocationPolicyTestCase {
-            description: "a raw query diff is neither observed nor checks skills",
+            description: "a raw query diff is not observed, so it is not recorded either",
             facts: CommandFacts {
                 raw_query_diff: true,
                 ..facts("diff", None)
@@ -46,7 +46,7 @@ fn given_parsed_command_when_choosing_services_then_matches_python_entry_rules()
                 creates_project: false,
                 observed: false,
                 maintains_skills: false,
-                recalled: true,
+                recalled: false,
             },
         },
         InvocationPolicyTestCase {
