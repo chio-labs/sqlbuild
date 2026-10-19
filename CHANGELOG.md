@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.159.0](https://github.com/chio-labs/sqlbuild/compare/v0.158.2...v0.159.0) (2026-10-19)
+
+
+### Features
+
+* add a SQLite adapter ([#1150](https://github.com/chio-labs/sqlbuild/issues/1150)) ([e86f3a0](https://github.com/chio-labs/sqlbuild/commit/e86f3a00c82a9814b5fc694c00519f97699ac30b))
+
 ## [0.158.2](https://github.com/chio-labs/sqlbuild/compare/v0.158.1...v0.158.2) (2026-10-19)
 
 
