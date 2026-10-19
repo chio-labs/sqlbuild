@@ -448,6 +448,19 @@ rule = "FPRSL105"
 path = "crates/sqlbuild-analysis/src/sql_tokens/main/builtin_function_names.rs"
 reason = "This test-support entry exists only for the SQL lint tests in sqlbuild-rules, which the analyzer does not count as importers."
 
+[targets.rust.rule_options.FPRSR311]
+allowed_entries = [
+    "Cargo.toml",
+    "build.rs",
+    "src/",
+    "tests/",
+    "benches/",
+    "examples/",
+    "README*",
+    "LICENSE*",
+    "pyproject.toml",
+]
+
 [targets.rust.rule_options.FPRSL301]
 forbidden_packages = [
     "sqlbuild-structure-checker",
