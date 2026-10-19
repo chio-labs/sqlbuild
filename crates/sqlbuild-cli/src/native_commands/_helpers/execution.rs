@@ -6,6 +6,7 @@ use std::time::SystemTime;
 
 use crate::argv::models::Stream;
 use crate::compute_logs::constants::DEFAULT_RETENTION_COUNT;
+use crate::compute_logs::main::abandon_capture::abandon_capture;
 use crate::compute_logs::main::finish_capture::finish_capture;
 use crate::compute_logs::main::open_log_root::open_log_root;
 use crate::compute_logs::main::start_capture::start_capture;
@@ -16,11 +17,11 @@ use crate::native_commands::_helpers::paths::project_location;
 use crate::native_commands::_helpers::project_facts::has_no_runtime_extensions;
 use crate::native_commands::_helpers::rules::run_rules;
 use crate::native_commands::_helpers::skills::{run_skills, skill_freshness_notice};
-use crate::native_commands::_helpers::terminal::{exit_on_interrupt, write_text};
-use crate::native_commands::constants::UNKNOWN_COMMAND;
+use crate::native_commands::_helpers::terminal::{finish_lost_stdout, write_output};
+use crate::native_commands::constants::{UNCAUGHT_EXCEPTION_STATUS, UNKNOWN_COMMAND};
 use crate::native_commands::errors::PythonNeeded;
 use crate::native_commands::models::{
-    CommandOutput, InstalledPackage, NativeCommand, NativeInvocation, ProjectLocation,
+    CommandOutput, InstalledPackage, LostStdout, NativeCommand, NativeInvocation, ProjectLocation,
 };
 
 /// The capture Python's `dispatch_with_compute_logs` opens; a failure only loses the log.
@@ -44,6 +45,19 @@ fn open_capture(
     })
 }
 
+/// Close the capture the way Python's does once the command's output met its reader.
+fn close_capture(capture: OpenCapture, mut end: CaptureEnd, lost: Option<&LostStdout>) {
+    match lost {
+        None => drop(finish_capture(capture, &end)),
+        Some(LostStdout::Raised(_)) => {
+            end.stdout.clear();
+            end.exit_code = i64::from(UNCAUGHT_EXCEPTION_STATUS);
+            drop(finish_capture(capture, &end));
+        }
+        Some(LostStdout::AtExit(_) | LostStdout::Dropped) => drop(abandon_capture(capture, &end)),
+    }
+}
+
 /// Print an observed command's output after the skill notice, retaining both in its capture.
 fn finish_observed(
     invocation: &NativeInvocation,
@@ -58,20 +72,22 @@ fn finish_observed(
     };
     let capture: io::Result<OpenCapture> = open_capture(invocation, project, started_at);
     let stderr: String = notice + &output.stderr;
-    write_text(Stream::Stderr, &stderr);
-    write_text(Stream::Stdout, &output.stdout);
+    let lost: Option<LostStdout> = write_output(&[
+        (Stream::Stderr, stderr.as_str()),
+        (Stream::Stdout, output.stdout.as_str()),
+    ]);
     if let Ok(capture) = capture {
-        let finished: io::Result<()> = finish_capture(
+        close_capture(
             capture,
-            &CaptureEnd {
+            CaptureEnd {
                 stdout: output.stdout.into_bytes(),
                 stderr: stderr.into_bytes(),
                 exit_code: i64::from(output.exit_code),
             },
+            lost.as_ref(),
         );
-        drop(finished);
     }
-    output.exit_code
+    finish_lost_stdout(lost.as_ref(), output.exit_code)
 }
 
 /// What an observed command prints, unless it needs Python after all.
@@ -97,14 +113,15 @@ pub(crate) fn run_command(
     python_cli: &Path,
     error_color: bool,
 ) -> Result<i32, PythonNeeded> {
-    exit_on_interrupt();
     let package: InstalledPackage = installed_package(python_cli)?;
     let project: ProjectLocation = project_location(invocation.project_dir.as_deref())?;
     if invocation.creates_project {
         let output: CommandOutput = run_init(&project.resolved, &package, error_color)?;
-        write_text(Stream::Stderr, &output.stderr);
-        write_text(Stream::Stdout, &output.stdout);
-        return Ok(output.exit_code);
+        let lost: Option<LostStdout> = write_output(&[
+            (Stream::Stderr, output.stderr.as_str()),
+            (Stream::Stdout, output.stdout.as_str()),
+        ]);
+        return Ok(finish_lost_stdout(lost.as_ref(), output.exit_code));
     }
     let started_at: SystemTime = SystemTime::now();
     let output: CommandOutput = observed_output(&invocation.command, &project, &package)?;

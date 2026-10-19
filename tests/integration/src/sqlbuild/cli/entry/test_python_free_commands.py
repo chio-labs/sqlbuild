@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.integration.src.sqlbuild.cli.entry._test_types import (
+    BrokenPipeTestCase,
     InterruptTestCase,
     PythonFreeTestCase,
     PythonStartTestCase,
@@ -26,9 +27,11 @@ from tests.integration.src.sqlbuild.cli.entry.helpers import (
     reset_directory,
     restore_default_interrupt,
     run,
+    run_without_reader,
 )
 
 INTERRUPT_DELAY_SECONDS: float = 1.0
+TRACEBACK_LAST_LINE: bytes = b"BrokenPipeError: [Errno 32] Broken pipe\n"
 INTERRUPT_TIMEOUT_SECONDS: float = 30.0
 
 
@@ -299,12 +302,12 @@ def test_given_invocation_needing_python_when_running_sqb_then_python_runs_it(
             description="rules list waiting on the project file",
             args=("rules", "list"),
             prepare=prepare_named_pipe_project,
-            expected_exit_code=130,
+            expected_exit_code=-signal.SIGINT,
         ),
     ],
     ids=lambda case: case.description,
 )
-def test_given_python_free_command_when_interrupted_then_sqb_exits_130_without_python(
+def test_given_python_free_command_when_interrupted_then_sqb_dies_by_sigint_without_python(
     test_case: InterruptTestCase, tmp_path: Path
 ) -> None:
     marker: Path = tmp_path / "python-starts.log"
@@ -327,6 +330,62 @@ def test_given_python_free_command_when_interrupted_then_sqb_exits_130_without_p
 
     assert process.returncode == test_case.expected_exit_code, stderr
     assert python_starts(marker) == 0
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX pipes")
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        BrokenPipeTestCase(
+            description="help kept until the final flush",
+            args=("--help",),
+            prepare=prepare_nothing,
+            expected_exit_code=120,
+            expected_stderr_end=TRACEBACK_LAST_LINE,
+        ),
+        BrokenPipeTestCase(
+            description="a short observed report kept until the final flush",
+            args=("rules", "show", "SQBRMODEL101"),
+            prepare=prepare_project,
+            expected_exit_code=120,
+            expected_stderr_end=TRACEBACK_LAST_LINE,
+        ),
+        BrokenPipeTestCase(
+            description="a report the failed flush drops",
+            args=("rules", "list"),
+            prepare=prepare_project,
+            expected_exit_code=0,
+            expected_stderr_end=b"",
+        ),
+        BrokenPipeTestCase(
+            description="a report whose write fails",
+            args=("rules", "--json", "list"),
+            prepare=prepare_project,
+            expected_exit_code=1,
+            expected_stderr_end=TRACEBACK_LAST_LINE,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stdout_without_reader_when_running_sqb_then_status_and_logs_match_python(
+    test_case: BrokenPipeTestCase, tmp_path: Path
+) -> None:
+    marker: Path = tmp_path / "python-starts.log"
+    _ = marker.write_text("", encoding="utf-8")
+    program: Path = counting_environment(tmp_path / "environment", marker)
+    workspace: Path = reset_directory(tmp_path / "workspace")
+    test_case.prepare(workspace)
+    python: LauncherRun = run_without_reader(PYTHON_CLI, args=test_case.args, cwd=workspace)
+    python_logs: list[dict[str, object]] = compute_log_files(workspace)
+    test_case.prepare(reset_directory(workspace))
+
+    native: LauncherRun = run_without_reader(program, args=test_case.args, cwd=workspace)
+
+    assert (native[0], python[0]) == (test_case.expected_exit_code,) * 2
+    assert native[2].endswith(test_case.expected_stderr_end), native[2]
+    assert python[2].endswith(test_case.expected_stderr_end), python[2]
+    assert python_starts(marker) == 0
+    assert compute_log_files(workspace) == python_logs
 
 
 if __name__ == "__main__":

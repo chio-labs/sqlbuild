@@ -4,11 +4,15 @@ mod argv_host;
 mod decision;
 #[path = "tests/helpers.rs"]
 mod helpers;
+#[path = "tests/test_init.rs"]
+mod init;
 #[path = "tests/test_paths.rs"]
 mod paths;
 #[path = "tests/test_project_facts.rs"]
 mod project_facts;
 #[path = "tests/test_rules.rs"]
 mod rules;
+#[path = "tests/test_terminal.rs"]
+mod terminal;
 #[path = "tests/test_types.rs"]
 mod test_types;

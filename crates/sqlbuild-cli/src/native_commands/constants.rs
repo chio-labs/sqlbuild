@@ -32,9 +32,6 @@ pub(crate) const SKILLS_DIRECTORY: [&str; 3] = [".agents", "skills", "sqlbuild"]
 pub(crate) const HOME_VARIABLE: &str = "HOME";
 #[cfg(windows)]
 pub(crate) const HOME_VARIABLE: &str = "USERPROFILE";
-/// The exit status of a command stopped by Ctrl+C.
-#[cfg(unix)]
-pub(crate) const INTERRUPTED_EXIT_CODE: i32 = 130;
 /// The command name compute logs record for a bare `sqb`.
 pub(crate) const UNKNOWN_COMMAND: &str = "unknown";
 /// Commands with no handler: observed, then successful.
@@ -77,3 +74,11 @@ pub(crate) const PYTHON_INT_MAX_STR_DIGITS: usize = 4300;
 pub(crate) const DIGIT_SEPARATOR: char = '_';
 /// Where a loaded project configuration names its lifecycle sinks.
 pub(crate) const LIFECYCLE_SINK_PATH: [&str; 3] = ["sinks", "lifecycle", "named"];
+/// CPython's default buffer size for a piped stdout.
+pub(crate) const PYTHON_STDOUT_BUFFER_SIZE: usize = 8192;
+pub(crate) const BROKEN_PIPE_EXCEPTION: &str = "BrokenPipeError: [Errno 32] Broken pipe";
+/// What Python prints when the final flush of a lost stdout fails, and the status it exits with.
+pub(crate) const EXIT_FLUSH_FAILURE: &str =
+    "Exception ignored in: <_io.TextIOWrapper name='<stdout>' mode='w' encoding='utf-8'>";
+pub(crate) const EXIT_FLUSH_FAILURE_STATUS: i32 = 120;
+pub(crate) const UNCAUGHT_EXCEPTION_STATUS: i32 = 1;

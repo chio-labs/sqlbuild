@@ -113,3 +113,14 @@ class InterruptTestCase:
     args: tuple[str, ...]
     prepare: Callable[[Path], None]
     expected_exit_code: int
+
+
+@dataclass(frozen=True)
+class BrokenPipeTestCase:
+    """One Python-free command line whose stdout has no reader."""
+
+    description: str
+    args: tuple[str, ...]
+    prepare: Callable[[Path], None]
+    expected_exit_code: int
+    expected_stderr_end: bytes

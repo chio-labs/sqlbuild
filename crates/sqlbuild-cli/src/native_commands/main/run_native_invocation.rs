@@ -4,16 +4,16 @@ use std::ffi::OsString;
 use std::path::Path;
 
 use crate::argv::main::parse_cli_arguments::parse_cli_arguments;
-use crate::argv::models::{ArgvOutcome, ArgvSettings, Namespace};
+use crate::argv::models::{ArgvOutcome, ArgvSettings, Namespace, Stream};
 use crate::native_commands::_helpers::argv_host::{NativeArgvHost, namespace_defaults};
 use crate::native_commands::_helpers::decision::native_invocation;
 use crate::native_commands::_helpers::execution::run_command;
 use crate::native_commands::_helpers::terminal::{
-    stdout_supports_color, terminal_columns, write_text,
+    finish_lost_stdout, stdout_supports_color, terminal_columns, write_output,
 };
 use crate::native_commands::constants::NO_COLOR_OPTION;
 use crate::native_commands::errors::PythonNeeded;
-use crate::native_commands::models::NativeInvocation;
+use crate::native_commands::models::{LostStdout, NativeInvocation};
 
 /// The exit status of an invocation `sqb` served, or why the same arguments go to Python.
 pub fn run_native_invocation(
@@ -39,10 +39,16 @@ pub fn run_native_invocation(
     }
     let namespace: Namespace = match outcome.parsed {
         Err(code) => {
-            for (stream, text) in &outcome.writes {
-                write_text(*stream, text);
-            }
-            return Ok(i32::try_from(code).unwrap_or(1));
+            let writes: Vec<(Stream, &str)> = outcome
+                .writes
+                .iter()
+                .map(|(stream, text)| (*stream, text.as_str()))
+                .collect();
+            let lost: Option<LostStdout> = write_output(&writes);
+            return Ok(finish_lost_stdout(
+                lost.as_ref(),
+                i32::try_from(code).unwrap_or(1),
+            ));
         }
         Ok(namespace) if outcome.writes.is_empty() => namespace,
         Ok(_) => return Err(PythonNeeded::Arguments),

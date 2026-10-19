@@ -7,6 +7,7 @@ use sqlbuild_core::text::main::python_str_repr::python_str_repr;
 use crate::argv::main::cli_namespace_defaults::cli_namespace_defaults;
 use crate::argv::models::{NamespaceDefault, TypeFailure, Value};
 use crate::argv::types::ArgvHost;
+use crate::launcher::constants::PROGRAM_VERSION;
 use crate::native_commands::constants::{
     DIGIT_SEPARATOR, INT_ASCII_SPACES, INT_CONVERTER, NEGATIVE_SIGN, POSITIVE_INTEGER_CONVERTER,
     POSITIVE_INTEGER_MESSAGE, POSITIVE_SIGN, PYTHON_INT_MAX_STR_DIGITS, ZERO_TEXT,
@@ -93,7 +94,7 @@ impl ArgvHost for NativeArgvHost {
     }
 
     fn program_version(&mut self) -> String {
-        env!("CARGO_PKG_VERSION").to_owned()
+        PROGRAM_VERSION.to_owned()
     }
 }
 

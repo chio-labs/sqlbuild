@@ -14,6 +14,7 @@ type LauncherRun = tuple[int, bytes, bytes]
 
 _ELAPSED_SECONDS: re.Pattern[bytes] = re.compile(rb"\(\d+\.\d s\)")
 _PHASE_SECONDS: re.Pattern[bytes] = re.compile(rb"\(\d+\.\d+s\)")
+_DIAGNOSTIC_IDENTITY: re.Pattern[bytes] = re.compile(rb'"(invocation_id|occurred_at)":"[^"]*"')
 NATIVE_SQB: Path = Path(sys.executable).with_name("sqb")
 PYTHON_CLI: Path = Path(sys.executable).with_name("sqlbuild-python")
 PROJECT_FILES: dict[str, str] = {
@@ -227,9 +228,9 @@ def reset_directory(directory: Path) -> Path:
 def _capture_files(capture: Path) -> dict[str, object]:
     metadata: dict[str, object] = capture_metadata(capture)
     for volatile in ("invocation_id", "started_at", "completed_at", "capture_date"):
-        _ = metadata.pop(volatile)
+        _ = metadata.pop(volatile, None)
     streams: dict[str, bytes] = {
-        name: (capture / name).read_bytes()
+        name: _DIAGNOSTIC_IDENTITY.sub(rb'"\1":""', (capture / name).read_bytes())
         for name in ("stdout.log", "stderr.log", "diagnostics.jsonl")
     }
     return {"complete": (capture / "complete").exists(), "metadata": metadata, **streams}
@@ -291,3 +292,23 @@ def restore_default_interrupt() -> None:
     """Give a spawned command default Ctrl-C handling even when its parent ignores SIGINT."""
 
     _ = signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
+def run_without_reader(program: Path, *, args: tuple[str, ...], cwd: Path) -> LauncherRun:
+    """Run with a stdout pipe whose reader has already closed; return exit code and stderr."""
+
+    reader, writer = os.pipe()
+    os.close(reader)
+    try:
+        completed: subprocess.CompletedProcess[bytes] = subprocess.run(
+            [str(program), *args],
+            cwd=cwd,
+            stdout=writer,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "NO_COLOR": "1"},
+            check=False,
+            timeout=600,
+        )
+    finally:
+        os.close(writer)
+    return completed.returncode, b"", completed.stderr

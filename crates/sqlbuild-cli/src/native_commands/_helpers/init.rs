@@ -17,7 +17,7 @@ use sqlbuild_core::init_command::main::scaffold_blank_project::scaffold_blank_pr
 use crate::dispatch::main::failure_report::failure_report;
 use crate::dispatch::models::CommandFailure;
 use crate::native_commands::_helpers::skills::home_dir;
-use crate::native_commands::_helpers::terminal::stdout_supports_color;
+use crate::native_commands::_helpers::terminal::{error_description, stdout_supports_color};
 use crate::native_commands::constants::{INIT_FAILURE_PREFIX, USER_ERROR_CLASS};
 use crate::native_commands::errors::PythonNeeded;
 use crate::native_commands::models::{CommandOutput, InstalledPackage};
@@ -31,15 +31,31 @@ fn failed(stderr: String) -> Result<CommandOutput, PythonNeeded> {
     })
 }
 
-/// The project's skills could not be installed: what the Python CLI prints for its error.
-fn skills_failure(error: &WorkspaceError, use_color: bool) -> Result<CommandOutput, PythonNeeded> {
-    let WorkspaceError::User {
-        code,
-        message,
-        help,
-    } = error
-    else {
-        return failed(format!("{INIT_FAILURE_PREFIX}{error:?}\n"));
+/// The project's skills could not be installed: what the Python CLI prints for its user error.
+fn skills_failure(
+    base_dir: &Path,
+    error: &WorkspaceError,
+    use_color: bool,
+) -> Result<CommandOutput, PythonNeeded> {
+    let (code, message, help) = match error {
+        WorkspaceError::User {
+            code,
+            message,
+            help,
+        } => (code, message, help),
+        WorkspaceError::Decode { path, .. } => {
+            return failed(format!(
+                "{INIT_FAILURE_PREFIX}cannot install SQLBuild skills: {} is not UTF-8 text\n",
+                path.display()
+            ));
+        }
+        WorkspaceError::Io(error) => {
+            return failed(format!(
+                "{INIT_FAILURE_PREFIX}cannot install SQLBuild skills into {}: {}\n",
+                base_dir.display(),
+                error_description(error)
+            ));
+        }
     };
     let (_, log_message) = failure_report(CommandFailure::User);
     let coded: String = format_coded_error(
@@ -75,8 +91,9 @@ pub(crate) fn run_init(
             return Err(PythonNeeded::Failure);
         }
         return failed(format!(
-            "{INIT_FAILURE_PREFIX}{error}: {}\n",
-            path.display()
+            "{INIT_FAILURE_PREFIX}cannot create {}: {}\n",
+            path.display(),
+            error_description(&error)
         ));
     }
     if let Err(error) = install_skills(&SkillInstallRequest {
@@ -87,7 +104,7 @@ pub(crate) fn run_init(
         requested_targets: Vec::new(),
         force: false,
     }) {
-        return skills_failure(&error, error_color);
+        return skills_failure(base_dir, &error, error_color);
     }
     Ok(CommandOutput {
         stdout: render_init_summary(

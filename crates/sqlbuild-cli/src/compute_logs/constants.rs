@@ -33,3 +33,8 @@ pub const DEFAULT_LOG_DIRECTORY: &str = "logs";
 pub const MONTHS_PER_YEAR: i64 = 12;
 pub const MAX_DAY_OF_MONTH: i64 = 31;
 pub const HOURS_PER_DAY: i64 = 24;
+/// The debug record Python's capture logs when its streams could not be finalized.
+pub const CAPTURE_FAILURE_LOGGER: &str = "sqlbuild.cli.compute_logs";
+pub const CAPTURE_FAILURE_MESSAGE: &str = "local compute log capture unavailable";
+pub const DIAGNOSTIC_PRODUCER: &str = "sqlbuild";
+pub const DIAGNOSTIC_SCHEMA_VERSION: i64 = 1;

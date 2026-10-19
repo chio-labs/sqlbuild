@@ -66,3 +66,18 @@ pub(super) fn output_start(output: &CommandOutput, length: usize) -> (String, i3
         output.exit_code,
     )
 }
+
+/// Bytes a reader no longer takes and what Python's stdout buffer makes of them.
+pub(super) struct LostStdoutTestCase {
+    pub(super) description: &'static str,
+    pub(super) total: usize,
+    pub(super) expected_lost: crate::native_commands::models::LostStdout,
+}
+
+/// A directory `init` meets once the project file exists, and the start of its error.
+pub(super) struct InitFailureTestCase {
+    pub(super) description: &'static str,
+    pub(super) blocking_file: &'static str,
+    pub(super) expected_stderr_start: &'static str,
+    pub(super) expected_exit_code: i32,
+}

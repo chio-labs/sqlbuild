@@ -17,7 +17,6 @@ path = "src/bin/sqlbuild.rs"
 
 [dependencies]
 blake3.workspace = true
-ctrlc.workspace = true
 getrandom.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -28,6 +27,9 @@ sqlbuild-rules.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+ctrlc.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

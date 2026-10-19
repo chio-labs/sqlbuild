@@ -1,11 +1,15 @@
-//! The process's terminal: its width, colour support, stream writes and Ctrl+C.
+//! The process's terminal: its width, colour support and stream writes.
 
 use std::io::{self, IsTerminal, Write};
 
 use crate::argv::models::Stream;
 use crate::native_commands::_helpers::argv_host::python_int;
-use crate::native_commands::constants::{COLUMNS_VARIABLE, FALLBACK_COLUMNS, NO_COLOR_VARIABLE};
+use crate::native_commands::constants::{
+    BROKEN_PIPE_EXCEPTION, COLUMNS_VARIABLE, EXIT_FLUSH_FAILURE, EXIT_FLUSH_FAILURE_STATUS,
+    FALLBACK_COLUMNS, NO_COLOR_VARIABLE, PYTHON_STDOUT_BUFFER_SIZE, UNCAUGHT_EXCEPTION_STATUS,
+};
 use crate::native_commands::errors::PythonNeeded;
+use crate::native_commands::models::LostStdout;
 
 /// `int(os.environ["COLUMNS"])`, `0` when unset or not an integer; beyond 64 bits is Python's.
 fn columns_variable() -> Result<i64, PythonNeeded> {
@@ -59,35 +63,93 @@ fn console_bytes(text: &str) -> Vec<u8> {
     }
 }
 
-/// Write and flush one text; a closed or full stream drops it, as the parse's writes do.
-pub(crate) fn write_text(stream: Stream, text: &str) {
-    if text.is_empty() {
-        return;
-    }
-    let bytes: Vec<u8> = console_bytes(text);
-    let written: io::Result<()> = match stream {
+fn write_stream(stream: Stream, bytes: &[u8]) -> io::Result<()> {
+    match stream {
         Stream::Stdout => {
             let mut output = io::stdout().lock();
-            output.write_all(&bytes).and_then(|()| output.flush())
+            output.write_all(bytes).and_then(|()| output.flush())
         }
         Stream::Stderr => {
             let mut output = io::stderr().lock();
-            output.write_all(&bytes).and_then(|()| output.flush())
+            output.write_all(bytes).and_then(|()| output.flush())
         }
-    };
-    drop(written);
+    }
 }
 
-/// End the process with status 130 on Ctrl+C; handing off by `exec` restores the default.
-#[cfg(unix)]
-pub(crate) fn exit_on_interrupt() {
-    use crate::native_commands::constants::INTERRUPTED_EXIT_CODE;
-
-    drop(ctrlc::set_handler(|| {
-        std::process::exit(INTERRUPTED_EXIT_CODE)
-    }));
+/// The system's description of an I/O failure, without Rust's `(os error N)` suffix.
+pub(crate) fn error_description(error: &io::Error) -> String {
+    let described: String = error.to_string();
+    match error.raw_os_error() {
+        Some(errno) => described
+            .strip_suffix(&format!(" (os error {errno})"))
+            .unwrap_or(&described)
+            .to_owned(),
+        None => described,
+    }
 }
 
-/// The Python child waited for alone handles Ctrl+C, so the native command keeps the default.
-#[cfg(not(unix))]
-pub(crate) fn exit_on_interrupt() {}
+/// The last line of the traceback Python prints for a failed write.
+fn exception_line(error: &io::Error) -> String {
+    if error.kind() == io::ErrorKind::BrokenPipe {
+        return BROKEN_PIPE_EXCEPTION.to_owned();
+    }
+    match error.raw_os_error() {
+        Some(errno) => format!("OSError: [Errno {errno}] {}", error_description(error)),
+        None => format!("OSError: {error}"),
+    }
+}
+
+/// CPython's 8 KiB stdout buffer keeps up to half until exit, drops more, and fails a full write.
+pub(crate) fn lost_stdout(total: usize, error: &io::Error) -> LostStdout {
+    if total >= PYTHON_STDOUT_BUFFER_SIZE {
+        LostStdout::Raised(exception_line(error))
+    } else if total <= PYTHON_STDOUT_BUFFER_SIZE / 2 {
+        LostStdout::AtExit(exception_line(error))
+    } else {
+        LostStdout::Dropped
+    }
+}
+
+/// Write each text in order and flush it; errors on stderr are ignored, as Python's are.
+pub(crate) fn write_output(writes: &[(Stream, &str)]) -> Option<LostStdout> {
+    let encoded: Vec<(Stream, Vec<u8>)> = writes
+        .iter()
+        .filter(|(_, text)| !text.is_empty())
+        .map(|(stream, text)| (*stream, console_bytes(text)))
+        .collect();
+    let total: usize = encoded
+        .iter()
+        .filter(|(stream, _)| *stream == Stream::Stdout)
+        .map(|(_, bytes)| bytes.len())
+        .sum();
+    let mut lost: Option<LostStdout> = None;
+    for (stream, bytes) in &encoded {
+        let written: io::Result<()> = match (stream, &lost) {
+            (Stream::Stdout, Some(_)) => Ok(()),
+            _ => write_stream(*stream, bytes),
+        };
+        if let (Stream::Stdout, Err(error)) = (stream, written) {
+            lost = Some(lost_stdout(total, &error));
+        }
+    }
+    lost
+}
+
+/// Report lost stdout as Python does and return the exit status that results.
+pub(crate) fn finish_lost_stdout(lost: Option<&LostStdout>, exit_code: i32) -> i32 {
+    match lost {
+        None | Some(LostStdout::Dropped) => exit_code,
+        Some(LostStdout::AtExit(exception)) => {
+            let text: String = format!("{EXIT_FLUSH_FAILURE}\n{exception}\n");
+            drop(write_stream(Stream::Stderr, &console_bytes(&text)));
+            EXIT_FLUSH_FAILURE_STATUS
+        }
+        Some(LostStdout::Raised(exception)) => {
+            drop(write_stream(
+                Stream::Stderr,
+                &console_bytes(&format!("{exception}\n")),
+            ));
+            UNCAUGHT_EXCEPTION_STATUS
+        }
+    }
+}

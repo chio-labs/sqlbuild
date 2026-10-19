@@ -71,3 +71,14 @@ pub(crate) struct ProjectLocation {
     /// `Path(--project-dir).resolve()`, or `Path.cwd()`.
     pub(crate) resolved: PathBuf,
 }
+
+/// What Python's buffered stdout does with output its reader no longer takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum LostStdout {
+    /// Kept until exit, whose failed flush Python reports with this exception and status 120.
+    AtExit(String),
+    /// Dropped by a failed flush; the command's own status stands.
+    Dropped,
+    /// Raised by the write: an uncaught exception, with this last line and status 1.
+    Raised(String),
+}
