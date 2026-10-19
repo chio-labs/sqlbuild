@@ -433,6 +433,44 @@ from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import run_sqb
             expected_stderr_fragments=("model 'daily_revenue' requires unique_key for row diff",),
         ),
         DiffCommandE2ETestCase(
+            description="an unknown cli key column fails with a coded error",
+            command=(
+                "--no-color",
+                "diff",
+                "prod:dev",
+                "--full",
+                "--key",
+                "nope",
+                "--select",
+                "daily_revenue",
+            ),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "error[X311]",
+                "row diff key column 'nope' does not exist in prod.daily_revenue",
+            ),
+        ),
+        DiffCommandE2ETestCase(
+            description="a relation missing on the FROM side fails with a coded error",
+            mutation_sql=("DROP TABLE prod.daily_revenue",),
+            command=("--no-color", "diff", "prod:dev", "--full", "--select", "daily_revenue"),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "error[X310]",
+                "model 'daily_revenue' has no relation prod.daily_revenue in the FROM target",
+            ),
+        ),
+        DiffCommandE2ETestCase(
+            description="a relation missing on the TO side fails with a coded error",
+            mutation_sql=("DROP TABLE dev.daily_revenue",),
+            command=("--no-color", "diff", "prod:dev", "--full", "--select", "daily_revenue"),
+            expected_exit_code=1,
+            expected_stderr_fragments=(
+                "error[X310]",
+                "model 'daily_revenue' has no relation dev.daily_revenue in the TO target",
+            ),
+        ),
+        DiffCommandE2ETestCase(
             description="cli key enables model without declared unique key",
             command=(
                 "--no-color",

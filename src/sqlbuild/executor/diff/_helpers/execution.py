@@ -50,11 +50,21 @@ def execute_model_diff(
         unique_key = options.unique_key_override
     elif _model_has_unique_key(right_model):
         unique_key = get_unique_key(right_model)
-    schema_result: SchemaDiffResult = adapter.diff_schema(
-        connection=connection,
-        left=left_relation,
-        right=right_relation,
-    )
+    try:
+        schema_result: SchemaDiffResult = adapter.diff_schema(
+            connection=connection,
+            left=left_relation,
+            right=right_relation,
+        )
+    except Exception as error:
+        _raise_missing_relation(
+            adapter=adapter,
+            connection=connection,
+            name=name,
+            sides=(("FROM", left_model, left_relation), ("TO", right_model, right_relation)),
+            error=error,
+        )
+        raise
     if options.max_columns is not None:
         observed_columns: int = max(
             schema_result.left_column_count,
@@ -367,6 +377,12 @@ def _execute_model_row_diff(
             (*get_row_diff_exclude_columns(right_model), *options.excluded_columns_override)
         )
     )
+    _require_key_columns(
+        adapter=adapter,
+        connection=connection,
+        relations=(left_relation, right_relation),
+        keys=resolved_unique_key,
+    )
     intersection: tuple[str, ...] = tuple(
         key for key in resolved_unique_key if key in excluded_columns
     )
@@ -516,3 +532,86 @@ def _model_has_unique_key(model: Any) -> bool:
     if isinstance(raw, list | tuple):
         return any(isinstance(item, str) and item for item in raw)
     return False
+
+
+def _raise_missing_relation(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    name: str,
+    sides: tuple[tuple[str, Any, str], tuple[str, Any, str]],
+    error: Exception,
+) -> None:
+    """Raise a coded error when a schema diff failed because one side's relation is missing."""
+
+    left, right = sides
+    left_missing: bool = _relation_missing(
+        adapter=adapter, connection=connection, model=left[1], error=error
+    )
+    right_missing: bool = not left_missing and _relation_missing(
+        adapter=adapter, connection=connection, model=right[1], error=error
+    )
+    missing: tuple[tuple[str, Any, str], ...] = tuple(
+        side for side, absent in ((left, left_missing), (right, right_missing)) if absent
+    )
+    if not missing:
+        return
+    label, _, relation = missing[0]
+    raise ExecutorInputError(
+        f"model '{name}' has no relation {relation} in the {label} target",
+        code="X310",
+        help="Build the model in that target first, or leave it out of --select.",
+    ) from error
+
+
+def _relation_missing(
+    *, adapter: BaseAdapter, connection: Any, model: Any, error: Exception
+) -> bool:
+    """Whether the model's relation is absent; a failed check re-raises the diff's own error."""
+
+    try:
+        exists: bool = adapter.relation_exists(
+            connection=connection,
+            database=model.destination.database,
+            schema=model.destination.schema,
+            name=model.destination.name,
+        )
+    except Exception:
+        raise error  # noqa: B904
+    return not exists
+
+
+def _require_key_columns(
+    *,
+    adapter: BaseAdapter,
+    connection: Any,
+    relations: tuple[str, str],
+    keys: tuple[str, ...],
+) -> None:
+    """Reject row diff key columns that one of the relations does not have."""
+
+    if not keys:
+        return
+    left, right = relations
+    _require_relation_keys(adapter=adapter, connection=connection, relation=left, keys=keys)
+    _require_relation_keys(adapter=adapter, connection=connection, relation=right, keys=keys)
+
+
+def _require_relation_keys(
+    *, adapter: BaseAdapter, connection: Any, relation: str, keys: tuple[str, ...]
+) -> None:
+    columns: set[str] = {
+        column.name.lower()
+        for column in adapter.describe_relation(connection=connection, relation=relation)
+    }
+    missing: tuple[str, ...] = tuple(key for key in keys if key.lower() not in columns)
+    if not missing:
+        return
+    noun: str = "column" if len(missing) == 1 else "columns"
+    verb: str = "does" if len(missing) == 1 else "do"
+    raise ExecutorInputError(
+        f"row diff key {noun} {', '.join(repr(key) for key in missing)} "
+        f"{verb} not exist in {relation}",
+        code="X311",
+        help="Pass --key with columns both relations have, or fix the model's unique_key.",
+    )
