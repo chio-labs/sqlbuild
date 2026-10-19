@@ -5088,3 +5088,10 @@ def restore_default_interrupt() -> None:
     """Give a spawned command default Ctrl-C handling even when its parent ignores SIGINT."""
 
     _ = signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
+def json_diagnostic_codes(stdout: str) -> tuple[str, ...]:
+    """Return the diagnostic codes of a compile JSON document; empty stdout has none."""
+
+    document: dict[str, Any] = json.loads(stdout or "{}")
+    return tuple(str(diagnostic["code"]) for diagnostic in document.get("diagnostics", ()))

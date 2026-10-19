@@ -9,8 +9,35 @@ import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
     CompileSelectionTestCase,
+    SelectorFileErrorTestCase,
 )
+from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import json_diagnostic_codes
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import prepare_inline_project, run_sqb
+
+_PROJECT_TOML: str = (
+    'name = "compile_selection"\n'
+    'adapter = "duckdb"\n'
+    'default_target = "dev"\n\n'
+    "[connection]\n"
+    'database = "selection.duckdb"\n\n'
+    "[targets.dev]\n"
+    'schema = "dev"\n'
+)
+_SOURCE_FILES: dict[str, str] = {
+    "sources/raw.yml": (
+        "sources:\n"
+        "  - name: raw__orders\n"
+        "    description: Raw orders.\n"
+        "    schema: main\n"
+        "    table: raw_orders\n"
+        "    columns:\n"
+        "      - name: order_id\n"
+        "        type: INTEGER\n"
+    ),
+    "models/stg_orders.sql": (
+        "MODEL (description 'Staged orders.');\n\nSELECT order_id FROM __source(\"raw__orders\")\n"
+    ),
+}
 
 
 @pytest.mark.parametrize(
@@ -95,6 +122,59 @@ def test_given_model_selection_when_compiling_then_limits_offline_analysis_and_r
         assert fragment in result.stdout
     for fragment in test_case.unexpected_stdout_fragments:
         assert fragment not in result.stdout
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SelectorFileErrorTestCase(
+            description="compile names the missing selector file",
+            command=("compile",),
+            expected_json_codes=(),
+        ),
+        SelectorFileErrorTestCase(
+            description="compile json reports the missing selector file as a diagnostic",
+            command=("compile", "--json"),
+            expected_json_codes=("C114",),
+        ),
+        SelectorFileErrorTestCase(
+            description="plan names the missing selector file",
+            command=("plan",),
+            expected_json_codes=(),
+        ),
+        SelectorFileErrorTestCase(
+            description="build names the missing selector file",
+            command=("build",),
+            expected_json_codes=(),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_missing_selector_file_when_running_then_reports_a_coded_error(
+    test_case: SelectorFileErrorTestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="compile_selection",
+        repo_files={"sqlbuild_project.toml": _PROJECT_TOML, **_SOURCE_FILES},
+    )
+
+    result: subprocess.CompletedProcess[str] = run_sqb(
+        command=("--no-color", *test_case.command, "--select-file", "missing.txt"),
+        project_dir=project_dir,
+        working_dir=project_dir,
+    )
+
+    output: str = result.stdout + result.stderr
+    assert result.returncode == 1, test_case.description + output
+    assert "Traceback" not in output, test_case.description + output
+    assert "error[C114]: cannot read selector file missing.txt" in result.stderr, (
+        test_case.description + output
+    )
+    assert json_diagnostic_codes(result.stdout) == test_case.expected_json_codes, (
+        test_case.description + output
+    )
 
 
 if __name__ == "__main__":
