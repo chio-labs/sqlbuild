@@ -12,6 +12,8 @@ use crate::bindings::_helpers::compile_delta::image::{
     ProjectImage, RULE_DIGESTS_SECTION,
 };
 
+/// The rows of a request without models: a zero model count.
+const RULE_ROWS: [u8; 8] = [0; 8];
 const OTHER_FORMAT: &str = "sqlbuild-project-image-v0";
 
 pub(crate) fn pairs(values: &[(&str, &str)]) -> Vec<(String, String)> {
@@ -104,6 +106,7 @@ pub(crate) fn image() -> ProjectImage {
         )]),
         rules: Some(ImageRules::Retained(RetainedRows {
             request_json: request,
+            rows: RULE_ROWS.to_vec(),
             digests: Vec::new(),
         })),
     }

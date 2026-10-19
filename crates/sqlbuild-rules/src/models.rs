@@ -933,10 +933,12 @@ pub struct RowsRequest {
     pub retain: bool,
 }
 
-/// A request kept for the project image as `EvaluateRequest` JSON without its models' SQL text.
+/// A request kept for the project image: its model-free JSON and its rows without SQL text.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RetainedRows {
     pub request_json: Vec<u8>,
+    /// Each model's row without its SQL text, in the native record format, in model order.
+    pub rows: Vec<u8>,
     /// Each model's payload digest, which keys its cached findings, in model order.
     pub digests: Vec<String>,
 }

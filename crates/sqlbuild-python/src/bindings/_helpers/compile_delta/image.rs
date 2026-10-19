@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
 use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
 use sqlbuild_cache::project_reuse::types::ImageSections;
+use sqlbuild_rules::engine::main::retained_request::retained_request;
 use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
 
 use crate::bindings::_helpers::compile_delta::context::{
@@ -14,13 +15,14 @@ use crate::bindings::_helpers::compile_delta::header_keys::HeaderKeys;
 use crate::bindings::_helpers::compile_delta::image_codec::{Decoder, Encoder};
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
-pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v6";
+pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v7";
 pub(crate) const GATE_SECTION: &str = "gate";
 /// The upstream kind of a model another model reads.
 const MODEL_KIND: &str = "model";
 pub(crate) const FACTS_SECTION: &str = "facts";
 const RULES_SECTION: &str = "rules";
 pub(crate) const RULE_DIGESTS_SECTION: &str = "rule-digests";
+const RULE_ROWS_SECTION: &str = "rule-rows";
 
 /// Everything a delta compile reads of the compile it patches.
 #[derive(Debug, Default)]
@@ -56,9 +58,8 @@ pub(crate) struct BaseRules {
 impl BaseRules {
     /// The rows a compile retained, decoded.
     pub(crate) fn decoded(retained: &RetainedRows) -> Option<Self> {
-        let request: EvaluateRequest = from_json(&retained.request_json)?;
-        (request.models.len() == retained.digests.len()).then(|| Self {
-            request,
+        Some(Self {
+            request: retained_request(retained)?,
             digests: retained.digests.clone(),
         })
     }
@@ -119,10 +120,13 @@ fn from_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Option<T> {
     Some(value)
 }
 
-fn decoded_rules(request: &[u8], digests: &[u8]) -> Option<BaseRules> {
-    let request: EvaluateRequest = from_json(request)?;
-    let digests: Vec<String> = decoded_strings(digests)?;
-    (digests.len() == request.models.len()).then_some(BaseRules { request, digests })
+fn decoded_rules(request_json: Vec<u8>, rows: Vec<u8>, digests: &[u8]) -> Option<BaseRules> {
+    let retained: RetainedRows = RetainedRows {
+        request_json,
+        rows,
+        digests: decoded_strings(digests)?,
+    };
+    BaseRules::decoded(&retained)
 }
 
 /// The analysis session's final relation facts, as stored.
@@ -571,13 +575,20 @@ impl ProjectImage {
         };
         let rules: Option<RetainedRows> = self.rules.and_then(ImageRules::retained);
         let (gate, facts) = rayon::join(|| gate.encode(), || facts.encode());
-        let rules = rules.map(|rules| (rules.request_json, encoded_strings(&rules.digests)));
+        let rules = rules.map(|rules| {
+            (
+                rules.request_json,
+                rules.rows,
+                encoded_strings(&rules.digests),
+            )
+        });
         let mut sections: ImageSections = vec![
             (GATE_SECTION.to_owned(), gate),
             (FACTS_SECTION.to_owned(), facts?),
         ];
-        if let Some((request, digests)) = rules {
+        if let Some((request, rows, digests)) = rules {
             sections.push((RULES_SECTION.to_owned(), request));
+            sections.push((RULE_ROWS_SECTION.to_owned(), rows));
             sections.push((RULE_DIGESTS_SECTION.to_owned(), digests));
         }
         Ok(sections)
@@ -591,11 +602,18 @@ impl ProjectImage {
                 .find(|(section, _)| section == name)
                 .map(|(_, bytes)| std::mem::take(bytes))
         };
-        let rules: Option<ImageRules> = match (taken(RULES_SECTION), taken(RULE_DIGESTS_SECTION)) {
-            (Some(request), Some(digests)) => Some(ImageRules::Decoding(PendingRules::Decoding(
-                std::thread::spawn(move || decoded_rules(&request, &digests)),
-            ))),
-            (None, None) => None,
+        let stored_rules = (
+            taken(RULES_SECTION),
+            taken(RULE_ROWS_SECTION),
+            taken(RULE_DIGESTS_SECTION),
+        );
+        let rules: Option<ImageRules> = match stored_rules {
+            (Some(request), Some(rows), Some(digests)) => {
+                Some(ImageRules::Decoding(PendingRules::Decoding(
+                    std::thread::spawn(move || decoded_rules(request, rows, &digests)),
+                )))
+            }
+            (None, None, None) => None,
             _ => return None,
         };
         let facts: StoredFacts = StoredFacts::decode(section(&sections, FACTS_SECTION)?)?;

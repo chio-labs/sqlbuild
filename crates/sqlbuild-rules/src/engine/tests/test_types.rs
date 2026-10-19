@@ -290,3 +290,11 @@ pub(crate) struct RetainedRowsTestCase {
     pub(crate) expected_same_findings: bool,
     pub(crate) expected_missed: Option<&'static str>,
 }
+
+/// Model rows written in the native record format and read back.
+pub(crate) struct RowCodecTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) models: fn() -> Vec<crate::models::Model>,
+    /// How many truncations of the rows still read back.
+    pub(crate) expected_truncations_read: usize,
+}

@@ -1,13 +1,16 @@
+use serde_json::Value;
 use tempfile::TempDir;
 
 use crate::engine::_helpers::evaluation::STRIPPED_ROW_MISSED;
+use crate::engine::_helpers::retained::{encoded_rows, retained_request};
 use crate::engine::main::evaluate_rows::evaluate_rows;
+use crate::engine::tests::helpers::{coded_models, no_models, without_sql};
 use crate::engine::tests::helpers::{
     evaluation_summary, orders_models, restored_rows, speculative_rows_request,
 };
-use crate::engine::tests::test_types::RetainedRowsTestCase;
+use crate::engine::tests::test_types::{RetainedRowsTestCase, RowCodecTestCase};
 use crate::errors::RowsError;
-use crate::models::{EvaluateRequest, Fault, RetainedRows, RowsEvaluation, RowsRequest};
+use crate::models::{EvaluateRequest, Fault, Model, RetainedRows, RowsEvaluation, RowsRequest};
 
 #[test]
 fn given_retained_rows_when_evaluating_without_sql_then_only_cached_findings_stand_in()
@@ -34,8 +37,7 @@ fn given_retained_rows_when_evaluating_without_sql_then_only_cached_findings_sta
         request.retain = true;
         let first = evaluate_rows(request).map_err(|_| "first evaluation failed".to_owned())?;
         let retained: RetainedRows = first.retained.clone().ok_or("nothing was retained")?;
-        let kept: EvaluateRequest = serde_json::from_slice(&retained.request_json)
-            .map_err(|error| format!("the retained request does not decode: {error}"))?;
+        let kept: EvaluateRequest = restored_rows(&retained)?;
         let other_dir = TempDir::new().map_err(|error| error.to_string())?;
         let mut stripped: EvaluateRequest = restored_rows(&retained)?;
         stripped.project_dir = [project_dir.path(), other_dir.path()]
@@ -83,4 +85,53 @@ fn given_retained_rows_when_evaluating_without_sql_then_only_cached_findings_sta
         );
     }
     Ok(())
+}
+
+#[test]
+fn given_model_rows_when_encoded_and_decoded_then_every_fact_but_the_sql_survives() {
+    let test_cases = [
+        RowCodecTestCase {
+            description: "a model with every field set and a default model",
+            models: coded_models,
+            expected_truncations_read: 0,
+        },
+        RowCodecTestCase {
+            description: "no models",
+            models: no_models,
+            expected_truncations_read: 0,
+        },
+    ];
+    for test_case in test_cases {
+        let models: Vec<Model> = (test_case.models)();
+        let retained: RetainedRows = RetainedRows {
+            request_json: serde_json::to_vec(&EvaluateRequest::default()).unwrap_or_default(),
+            rows: encoded_rows(&models),
+            digests: vec![String::new(); models.len()],
+        };
+
+        let decoded: Option<Value> = retained_request(&retained)
+            .ok()
+            .and_then(|request| serde_json::to_value(request.models).ok());
+        let truncations_read: usize = (0..retained.rows.len())
+            .filter(|length| {
+                retained_request(&RetainedRows {
+                    rows: retained.rows[..*length].to_vec(),
+                    ..retained.clone()
+                })
+                .is_ok()
+            })
+            .count();
+
+        assert_eq!(
+            decoded,
+            Some(without_sql(models)),
+            "{}",
+            test_case.description
+        );
+        assert_eq!(
+            truncations_read, test_case.expected_truncations_read,
+            "{}",
+            test_case.description
+        );
+    }
 }
