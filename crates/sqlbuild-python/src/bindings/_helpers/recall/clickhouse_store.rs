@@ -30,7 +30,7 @@ use sqlbuild_recall::schema::main::table_columns::table_columns;
 use sqlbuild_recall::schema::main::table_spec::table_spec;
 use sqlbuild_recall::schema::main::table_statements::table_statements;
 use sqlbuild_recall::schema::main::view_statements::view_statements;
-use sqlbuild_recall::schema::models::{DdlOptions, Dialect, Table};
+use sqlbuild_recall::schema::models::{ColumnSpec, DdlOptions, Dialect, Table};
 use sqlbuild_recall::store::constants::LAST_INVOCATION_SELECTOR;
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
 use sqlbuild_recall::store::models::{
@@ -234,24 +234,25 @@ impl ClickHouseStore {
             self.read_columns(py)?;
             return Ok(tables);
         }
+        if complete && version == 0 {
+            self.read_columns(py)?;
+            if self.missing_columns().is_empty() {
+                self.record_version(py, envelope)?;
+                return Ok(tables);
+            }
+        }
         self.require_database(py)?;
         for statement in table_statements(Dialect::ClickHouse, &self.location.options) {
             self.command(py, &statement, "create the Recall tables")?;
         }
         self.read_columns(py)?;
-        for table in ALL_TABLES {
-            let spec = table_spec(table);
-            let present: &[StoredColumn] = self.columns.get(&table).map_or(&[], Vec::as_slice);
-            for column in table_columns(table) {
-                if !present.iter().any(|stored| stored.name == column.name) {
-                    let statement = add_column_statement(
-                        Dialect::ClickHouse,
-                        &self.location.options,
-                        (spec, &column),
-                    );
-                    self.command(py, &statement, "add a Recall column")?;
-                }
-            }
+        for (table, column) in self.missing_columns() {
+            let statement = add_column_statement(
+                Dialect::ClickHouse,
+                &self.location.options,
+                (table_spec(table), &column),
+            );
+            self.command(py, &statement, "add a Recall column")?;
         }
         self.read_columns(py)?;
         let upgrade: bool = version < RECALL_SCHEMA_VERSION;
@@ -265,19 +266,38 @@ impl ClickHouseStore {
             }
         }
         if upgrade {
-            let now = format_timestamp(SystemTime::now());
-            let row = meta_row(
-                envelope,
-                (
-                    META_SCHEMA_COMPONENT,
-                    META_SCHEMA_VERSION_KEY,
-                    &RECALL_SCHEMA_VERSION.to_string(),
-                ),
-                &now,
-            );
-            self.write(py, Table::Meta, &[row], SystemTime::now())?;
+            self.record_version(py, envelope)?;
         }
         Ok(self.state(py)?.tables)
+    }
+
+    /// Every column this build writes that the stored tables lack.
+    fn missing_columns(&self) -> Vec<(Table, ColumnSpec)> {
+        let mut missing: Vec<(Table, ColumnSpec)> = Vec::new();
+        for table in ALL_TABLES {
+            let present: &[StoredColumn] = self.columns.get(&table).map_or(&[], Vec::as_slice);
+            for column in table_columns(table) {
+                if !present.iter().any(|stored| stored.name == column.name) {
+                    missing.push((table, column));
+                }
+            }
+        }
+        missing
+    }
+
+    /// Record this build's schema version with an insert, which a writer allowed only `SELECT` and `INSERT` may run.
+    fn record_version(&self, py: Python<'_>, envelope: &RowEnvelope) -> Result<(), StoreError> {
+        let now = format_timestamp(SystemTime::now());
+        let row = meta_row(
+            envelope,
+            (
+                META_SCHEMA_COMPONENT,
+                META_SCHEMA_VERSION_KEY,
+                &RECALL_SCHEMA_VERSION.to_string(),
+            ),
+            &now,
+        );
+        self.write(py, Table::Meta, &[row], SystemTime::now())
     }
 
     fn write(

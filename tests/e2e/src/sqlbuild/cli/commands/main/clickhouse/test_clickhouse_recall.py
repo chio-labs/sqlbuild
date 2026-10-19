@@ -12,6 +12,7 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
     ClickHouseRecallConcurrencyTestCase,
     ClickHouseRecallDuplicateTestCase,
     ClickHouseRecallExpiryTestCase,
+    ClickHouseRecallLimitedWriterTestCase,
     ClickHouseRecallOutputTestCase,
     ClickHouseRecallPermissionTestCase,
     ClickHouseRecallRetentionConflictTestCase,
@@ -19,10 +20,13 @@ from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse._test_types import (
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.clickhouse.helpers import (
     age_recorded_invocations,
+    apply_printed_ddl,
     apply_printed_retention_fix,
     duplicate_recall_rows,
+    execute_clickhouse_sql,
     expire_recall_parts,
     fetch_clickhouse_rows,
+    limited_user,
     physical_rows,
     stored_ttl_days,
     write_recall_project,
@@ -419,6 +423,62 @@ def test_given_a_store_with_another_retention_when_building_then_the_conflict_is
         "recall_artifact_refs",
         7,
     )
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallLimitedWriterTestCase(
+            description="a store created from the printed script",
+            between_builds=(),
+            expected_recorded=[["build", "completed"], ["build", "completed"]],
+        ),
+        ClickHouseRecallLimitedWriterTestCase(
+            description="a printed-script store whose version row expired",
+            between_builds=(
+                "ALTER TABLE {database}.recall_meta DELETE WHERE 1 SETTINGS mutations_sync = 2",
+            ),
+            expected_recorded=[["build", "completed"], ["build", "completed"]],
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_store_from_the_printed_ddl_when_a_select_insert_user_builds_then_history_is_written(
+    test_case: ClickHouseRecallLimitedWriterTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    readonly: Path = write_recall_project(
+        parent=tmp_path / "readonly",
+        config=clickhouse_e2e_config,
+        database=recall_database,
+        settings=("", "settings = { readonly = 2 }\n"),
+    )
+    apply_printed_ddl(
+        config=clickhouse_e2e_config,
+        stderr=run(readonly, "build").stderr.decode(errors="replace"),
+    )
+
+    with limited_user(config=clickhouse_e2e_config, database=recall_database) as writer:
+        project_dir: Path = write_recall_project(
+            parent=tmp_path / "writer", config=writer, database=recall_database
+        )
+        first: subprocess.CompletedProcess[bytes] = run(project_dir, "build")
+        execute_clickhouse_sql(
+            config=clickhouse_e2e_config,
+            statements=tuple(
+                statement.format(database=recall_database) for statement in test_case.between_builds
+            ),
+        )
+        builds: list[subprocess.CompletedProcess[bytes]] = [first, run(project_dir, "build")]
+        recorded: list[list[object]] = recall_rows(
+            project_dir, "SELECT command, status FROM invocations ORDER BY invocation_started_at"
+        )
+
+    assert [built.returncode for built in builds] == [0 for _ in builds]
+    assert [b"Recall" in built.stderr for built in builds] == [False for _ in builds]
+    assert recorded == test_case.expected_recorded
 
 
 if __name__ == "__main__":

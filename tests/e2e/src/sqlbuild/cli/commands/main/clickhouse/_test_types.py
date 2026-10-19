@@ -154,3 +154,10 @@ class ClickHouseRecallRetentionConflictTestCase:
     created_with: str
     built_with: str
     expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallLimitedWriterTestCase:
+    description: str
+    between_builds: tuple[str, ...]
+    expected_recorded: list[list[object]]

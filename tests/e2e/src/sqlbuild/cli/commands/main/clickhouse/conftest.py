@@ -36,7 +36,9 @@ def clickhouse_e2e_config() -> Iterator[dict[str, object]]:
     from testcontainers.clickhouse import ClickHouseContainer
 
     try:
-        with ClickHouseContainer(CLICKHOUSE_IMAGE) as container:
+        with ClickHouseContainer(CLICKHOUSE_IMAGE).with_env(
+            "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT", "1"
+        ) as container:
             yield {
                 "host": container.get_container_host_ip(),
                 "port": int(container.get_exposed_port(8123)),

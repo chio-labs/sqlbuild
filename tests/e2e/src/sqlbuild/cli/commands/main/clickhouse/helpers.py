@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, cast
@@ -439,6 +441,40 @@ def apply_printed_retention_fix(*, config: dict[str, object], stderr: str) -> in
     finally:
         client.close()
     return len(statements)
+
+
+def apply_printed_ddl(*, config: dict[str, object], stderr: str) -> None:
+    """Run, as an administrator, the script a permission notice printed for creating the store."""
+
+    script: str = stderr.split(" with:\n\n", 1)[1].split("\nsqb ", 1)[0].strip()
+    execute_clickhouse_sql(
+        config=config,
+        statements=tuple(
+            statement.strip().removesuffix(";") for statement in script.split(";\n\n")
+        ),
+    )
+
+
+@contextmanager
+def limited_user(
+    *, config: dict[str, object], database: str, revoked_inserts: tuple[str, ...] = ()
+) -> Iterator[dict[str, object]]:
+    """A user with only `SELECT` and `INSERT` on `database`, less `revoked_inserts`."""
+
+    name: str = build_unique_schema_name(prefix="recall_writer")
+    password: str = uuid.uuid4().hex
+    execute_clickhouse_sql(
+        config=config,
+        statements=(
+            f"CREATE USER {name} IDENTIFIED BY '{password}'",
+            f"GRANT SELECT, INSERT ON {database}.* TO {name}",
+            *(f"REVOKE INSERT ON {database}.{table} FROM {name}" for table in revoked_inserts),
+        ),
+    )
+    try:
+        yield {**config, "user": name, "password": password}
+    finally:
+        execute_clickhouse_sql(config=config, statements=(f"DROP USER IF EXISTS {name}",))
 
 
 def duplicate_recall_rows(*, config: dict[str, object], database: str) -> None:

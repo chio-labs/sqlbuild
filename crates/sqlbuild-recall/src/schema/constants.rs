@@ -9,6 +9,8 @@ pub const MINIMUM_SQLITE_VERSION: (u32, u32) = (3, 44);
 /// The `recall_meta` component of schema rows.
 pub const META_SCHEMA_COMPONENT: &str = "schema";
 pub const META_SCHEMA_VERSION_KEY: &str = "schema_version";
+/// The invocation ID of the schema version row an administrator's DDL script inserts.
+pub const DDL_SCRIPT_INVOCATION: &str = "ddl-script";
 /// The `recall_meta` component of maintenance claims.
 pub const META_MAINTENANCE_COMPONENT: &str = "maintenance";
 pub const META_MAINTENANCE_CLAIM_KEY: &str = "claim";

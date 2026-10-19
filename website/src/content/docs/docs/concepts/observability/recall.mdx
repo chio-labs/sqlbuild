@@ -127,7 +127,8 @@ retention = "30d"
 - **Setup.** On first use Recall creates its `recall_*` MergeTree tables and the views above in that
   database, and adds columns that a newer SQLBuild introduces. After that, writing needs only
   `INSERT` and `SELECT` on the tables. If the user may not create them, the command still succeeds
-  and prints the complete DDL for an administrator to run.
+  and prints the complete DDL for an administrator to run; a store created from it accepts writers
+  limited to `SELECT` and `INSERT`.
 - **Writes.** History is sent in batches of up to 5,000 rows about once a second, one insert per
   table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
   concurrent commands can write one store.
