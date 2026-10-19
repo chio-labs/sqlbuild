@@ -329,11 +329,6 @@ class ClickHouseAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def star_exclude_keyword(self) -> str:
         return "EXCEPT"
 
-    def render_final_relation(self, *, relation: str) -> str:
-        """Read with ``FINAL`` so replacing and collapsing engines return one row per key."""
-
-        return f"(SELECT * FROM {relation} FINAL)"
-
     def relation_names_match(self, *, left: str, right: str) -> bool:
         return _unquote(left) == _unquote(right)
 

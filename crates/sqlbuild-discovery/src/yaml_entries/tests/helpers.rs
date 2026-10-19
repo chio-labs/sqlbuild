@@ -63,12 +63,13 @@ fn seed_line(seed: &ParsedSeedEntry<Node>) -> String {
 
 fn source_line(source: &ParsedSourceEntry<Node>) -> String {
     format!(
-        "{} loader={} managed={} schema={} table={}",
+        "{} loader={} managed={} schema={} table={}{}",
         source.name.python_str(),
         source.loader.as_deref().unwrap_or("-"),
         source.managed,
         shown(source.schema.as_ref()),
-        shown(source.table.as_ref())
+        shown(source.table.as_ref()),
+        if source.read_final { " final" } else { "" }
     )
 }
 

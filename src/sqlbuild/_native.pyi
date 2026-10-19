@@ -14399,6 +14399,7 @@ class SourceEntry(NativeRecord):
     database: str | None
     schema: str | None
     table: str | None
+    final: bool
     loader: str | None
     managed: bool
     integration_loader: IntegrationLoaderConfig | None
@@ -14420,6 +14421,7 @@ class SourceEntry(NativeRecord):
         database: str | None = ...,
         schema: str | None = ...,
         table: str | None = ...,
+        final: bool = ...,
         loader: str | None = ...,
         managed: bool = ...,
         integration_loader: IntegrationLoaderConfig | None = ...,

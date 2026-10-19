@@ -22,7 +22,7 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::references::source_relations::render_source_relation;
+use crate::bindings::_helpers::references::source_relations::render_source_read;
 use crate::bindings::_helpers::state_rows::freshness::{normalize, version_hash};
 use crate::bindings::_helpers::state_rows::timestamps::{in_utc, offset_aware};
 
@@ -200,7 +200,7 @@ fn observe_configured_inner<'py>(
         } else {
             format!(" WHERE {}", filter.str()?)
         };
-        let relation: String = render_source_relation(source, Some(&observer.adapter))?;
+        let relation: String = render_source_read(source, &observer.adapter)?;
         call_with(
             &native_field(&observer.adapter, "render_source_freshness_max_query")?,
             &[

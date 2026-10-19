@@ -9,7 +9,7 @@ use crate::bindings::_helpers::planner_strategy::values::input_error;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::ErrorId;
-use crate::bindings::_helpers::references::source_relations::render_source_relation;
+use crate::bindings::_helpers::references::source_relations::render_source_read;
 use crate::bindings::_helpers::type_system::equality::types_equal;
 use pyo3::IntoPyObject;
 use pyo3::prelude::{
@@ -246,7 +246,7 @@ pub(crate) fn render_source_read_relation(
     adapter: &Bound<'_, PyAny>,
     source_entry: &Bound<'_, PyAny>,
 ) -> PyResult<String> {
-    render_source_relation(source_entry, Some(adapter))
+    render_source_read(source_entry, adapter)
 }
 
 fn resolve_one(

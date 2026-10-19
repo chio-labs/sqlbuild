@@ -1,9 +1,22 @@
 //! A declared source rendered as the SQL table factor that reads it.
 
+use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult};
-use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::prelude::{
+    Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
+};
+use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
+
+/// The SQL analysis dialect whose engines read replacing tables with `FINAL`.
+const FINAL_READ_DIALECT: &str = "clickhouse";
+/// Error code for a `final` source on another adapter.
+const FINAL_UNSUPPORTED_CODE: &str = "A010";
+/// Guidance for a `final` source on another adapter.
+const FINAL_UNSUPPORTED_HELP: &str =
+    "Remove 'final' from the source; only ClickHouse reads sources with FINAL.";
 
 /// Leading words of a source expression that is a query rather than a relation.
 const QUERY_PREFIXES: [&str; 3] = ["select", "with", "values"];
@@ -70,6 +83,51 @@ pub(crate) fn render_source_relation<'py>(
         .flatten()
         .collect::<Vec<String>>()
         .join("."))
+}
+
+/// A source as the table factor that reads it, deduplicated with `FINAL` when `final`.
+pub(crate) fn render_source_read<'py>(
+    entry: &Bound<'py, PyAny>,
+    adapter: &Bound<'py, PyAny>,
+) -> PyResult<String> {
+    let relation: String = render_source_relation(entry, Some(adapter))?;
+    if !native_field(entry, "final")?.is_truthy()? {
+        return Ok(relation);
+    }
+    let dialect: Option<String> = native_field(adapter, "sql_analysis_dialect_name")?.extract()?;
+    if dialect.as_deref() != Some(FINAL_READ_DIALECT) {
+        return Err(final_unsupported(
+            entry.py(),
+            &native_field(adapter, "adapter_name")?.str()?.to_string(),
+        ));
+    }
+    Ok(format!("(SELECT * FROM {relation} FINAL)"))
+}
+
+/// The coded error for a `final` source on an adapter that cannot read with `FINAL`.
+fn final_unsupported(py: Python<'_>, adapter_name: &str) -> PyErr {
+    match host::entry(py, AdapterHost::AdapterUserError).and_then(|class| {
+        call_with(
+            &class,
+            &[
+                (
+                    "message",
+                    PyString::new(
+                        py,
+                        &format!(
+                            "adapter '{adapter_name}' does not support the source option 'final'"
+                        ),
+                    )
+                    .into_any(),
+                ),
+                ("code", PyString::new(py, FINAL_UNSUPPORTED_CODE).into_any()),
+                ("help", PyString::new(py, FINAL_UNSUPPORTED_HELP).into_any()),
+            ],
+        )
+    }) {
+        Ok(error) => PyErr::from_value(error),
+        Err(error) => error,
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

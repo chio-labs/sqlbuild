@@ -49,3 +49,11 @@ class NullableOffsetWindowTestCase:
     description: str
     statement: str
     expected_statement: str
+
+
+@dataclass(frozen=True)
+class FinalSourceReadTestCase:
+    description: str
+    adapter_name: str
+    expected_relation: str | None
+    expected_code: str | None
