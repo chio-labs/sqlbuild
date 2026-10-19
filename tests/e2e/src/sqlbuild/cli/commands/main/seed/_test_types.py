@@ -25,3 +25,14 @@ class SeedJsonOutputTestCase:
     expected_status: str
     expected_summary: dict[str, int]
     expected_assets: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class SeedYamlAuditE2ETestCase:
+    """Test case for the documented seed YAML audit example."""
+
+    description: str
+    audit_sql: str
+    seed_csv: str
+    expected_exit_code: int
+    expected_output_fragments: tuple[str, ...]

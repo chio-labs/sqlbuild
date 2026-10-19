@@ -89,6 +89,23 @@ fn given_attached_audits_when_rendering_then_python_rendering_is_returned() {
             ),
         },
         AttachedAuditTestCase {
+            description: "a seed audit reading @model is told to read @relation",
+            attachment: AuditAttachment {
+                owner_label: "seeds/waffle_types.yml".to_owned(),
+                sql_body: "SELECT * FROM __ref(\"@model\") WHERE NOT (price_cents >= 0)".to_owned(),
+                implicit_arguments: vec![
+                    ("seed".to_owned(), "waffle_types".to_owned()),
+                    ("relation".to_owned(), "__seed(\"waffle_types\")".to_owned()),
+                ],
+                ..attachment(Vec::new(), None, None)
+            },
+            expected_rendering: failed(
+                "seeds/waffle_types.yml is missing argument 'model' for generic audit \
+                 'accepted_values'; a seed audit receives 'seed' and 'relation', not 'model', \
+                 so read the attached relation with @relation",
+            ),
+        },
+        AttachedAuditTestCase {
             description: "an opaque value inside a referenced list is Python's value error",
             attachment: attachment(
                 vec![(

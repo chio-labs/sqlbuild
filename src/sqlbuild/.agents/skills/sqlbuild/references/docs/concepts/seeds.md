@@ -102,6 +102,21 @@ seeds:
           severity: error
 ```
 
+`not_null` and `unique` are built in. `expression_is_true` is a project generic audit; one that
+works on seeds reads the attached relation through `@relation`:
+
+```sql
+-- audits/generic/expression_is_true.sql
+AUDIT ();
+
+SELECT *
+FROM @relation
+WHERE NOT (@expression)
+```
+
+A seed audit receives `@seed` (the seed name) and `@relation`, but not `@model`, so a generic
+audit written as `FROM __ref("@model")` works only on models.
+
 During `sqb build`, seed audits run right after the seed loads. An `error` failure blocks every
 model that depends on the seed. See [Audits](audits.md#seed-audits).
 
