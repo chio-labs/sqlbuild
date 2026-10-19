@@ -25,3 +25,23 @@ def write_reference_pages(*, output_dir: Path, pages: dict[str, str]) -> None:
         if directory.is_dir() and not any(directory.iterdir()):
             directory.rmdir()
     print(f"Wrote {len(pages)} reference pages to {output_dir} ({len(stale_paths)} removed)")
+
+
+def outdated_reference_pages(*, output_dir: Path, pages: dict[str, str]) -> tuple[str, ...]:
+    """Return generated pages that are missing, differ from `pages`, or are no longer generated."""
+
+    existing: dict[str, str] = {
+        path.relative_to(output_dir).as_posix(): path.read_text(encoding="utf-8")
+        for path in output_dir.rglob("*.md")
+    }
+    changed: set[str] = {
+        relative_path
+        for relative_path, contents in pages.items()
+        if existing.get(relative_path) != contents
+    }
+    stale: set[str] = {
+        relative_path
+        for relative_path, contents in existing.items()
+        if relative_path not in pages and GENERATED_MARKER in contents
+    }
+    return tuple(sorted(changed | stale))
