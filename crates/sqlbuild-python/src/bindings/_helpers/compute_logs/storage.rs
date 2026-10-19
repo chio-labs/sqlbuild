@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Seek, Write};
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::PyRuntimeError;
@@ -27,6 +27,7 @@ use sqlbuild_cli::compute_logs::main::read_stream_chunk::read_stream_chunk;
 use sqlbuild_cli::compute_logs::main::stream_byte_counts::stream_byte_counts;
 use sqlbuild_cli::compute_logs::main::validate_capture_id::validate_capture_id;
 use sqlbuild_cli::compute_logs::models::CaptureDocument;
+use sqlbuild_recall::writer::models::RecallSession;
 
 use crate::bindings::_helpers::compile_driver::python_calls::{
     KeywordArguments, call_with, imported,
@@ -37,6 +38,8 @@ use crate::bindings::_helpers::compute_logs::conversion::{
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::recall::session::{forward_diagnostic, forward_output};
+use crate::bindings::_helpers::recall::sinks::RecallLifecycleSink;
 
 const DIAGNOSTICS_STREAM: usize = 2;
 
@@ -53,6 +56,8 @@ pub(crate) struct LocalFilesystemComputeLogStorage {
     root: PathBuf,
     retention_count: Option<i64>,
     state: Mutex<StorageState>,
+    /// The invocation's Recall session, fed every byte and diagnostic the capture accepts.
+    recall: OnceLock<Arc<RecallSession>>,
 }
 
 /// The stdout, stderr and diagnostics byte counts of open streams, as `tell()` reports them.
@@ -164,7 +169,13 @@ impl LocalFilesystemComputeLogStorage {
             root,
             retention_count,
             state: Mutex::new(StorageState::default()),
+            recall: OnceLock::new(),
         })
+    }
+
+    /// Feed every accepted byte and diagnostic to the invocation's Recall session.
+    fn attach_recall(&self, recall: PyRef<'_, RecallLifecycleSink>) {
+        drop(self.recall.set(Arc::clone(&recall.session)));
     }
 
     /// Return the resolved configured log root.
@@ -210,7 +221,13 @@ impl LocalFilesystemComputeLogStorage {
                 "compute log append data must be bytes",
             ));
         };
-        self.append_bytes(py, &invocation_id, stream, bytes.as_bytes())
+        self.append_bytes(py, &invocation_id, stream, bytes.as_bytes())?;
+        forward_output(
+            self.recall.get().map(Arc::as_ref),
+            &invocation_id,
+            (stream, bytes.as_bytes()),
+        );
+        Ok(())
     }
 
     /// Append one validated deterministic UTF-8 diagnostic JSON line.
@@ -230,16 +247,15 @@ impl LocalFilesystemComputeLogStorage {
         }
         let encoded: Bound<'_, PyAny> =
             host::entry(py, ExecutorHost::DiagnosticLogToJson)?.call1((record,))?;
-        let mut line: Vec<u8> = encoded
-            .downcast::<PyString>()?
-            .to_str()?
-            .as_bytes()
-            .to_vec();
+        let text: &str = encoded.downcast::<PyString>()?.to_str()?;
+        let mut line: Vec<u8> = text.as_bytes().to_vec();
         line.push(b'\n');
         self.ensure_open(py)?;
         let invocation_id = capture_id(invocation_id)?;
         checked(py, validate_capture_id(&invocation_id))?;
-        self.append_bytes(py, &invocation_id, DIAGNOSTICS_STREAM, &line)
+        self.append_bytes(py, &invocation_id, DIAGNOSTICS_STREAM, &line)?;
+        forward_diagnostic(self.recall.get().map(Arc::as_ref), &invocation_id, text);
+        Ok(())
     }
 
     /// Read at most the public byte limit from an exact stream offset.

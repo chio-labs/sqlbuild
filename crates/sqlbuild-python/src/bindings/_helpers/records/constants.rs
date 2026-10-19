@@ -941,6 +941,7 @@ const CLI_ENTRYPOINT_HANDLERS: RecordSpec = RecordSpec {
         FieldSpec::required("run_scope"),
         FieldSpec::new("run_contract", FieldDefault::None),
         FieldSpec::new("run_refactor", FieldDefault::None),
+        FieldSpec::new("run_recall", FieldDefault::None),
     ],
 };
 const COMMAND_WAREHOUSE_SCOPE: RecordSpec = RecordSpec {
@@ -1531,6 +1532,7 @@ const CLI_COMMAND: EnumSpec = EnumSpec {
         ("CONTRACT", "contract"),
         ("RENAME", "rename"),
         ("MV", "mv"),
+        ("RECALL", "recall"),
     ],
 };
 const PLAYGROUND_TEMPLATE: EnumSpec = EnumSpec {

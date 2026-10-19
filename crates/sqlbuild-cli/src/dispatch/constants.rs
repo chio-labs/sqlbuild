@@ -10,6 +10,8 @@ pub(crate) const SKILL_EXEMPT_COMMANDS: [&str; 3] = ["init", "playground", "skil
 pub(crate) const DBT_COMMAND_NAME: &str = "dbt";
 pub(crate) const DBT_INIT_SUBCOMMAND: &str = "init";
 pub(crate) const DIFF_COMMAND_NAME: &str = "diff";
+/// `sqb recall` reads history and is never recorded itself.
+pub(crate) const RECALL_COMMAND_NAME: &str = "recall";
 
 const PROJECT_DIR: Field = field("project_dir", Source::ProjectDir);
 const SELECT: Field = field("select", Source::Select);
@@ -412,6 +414,31 @@ pub(crate) const QUERY_ROUTE: Route = routed(
     "run_query",
     "run_query_command",
     &QUERY_ARGUMENTS,
+    CallShape {
+        slot_positional: 0,
+        implementation_keywords: true,
+    },
+);
+
+const RECALL_ARGUMENTS: [Field; 13] = [
+    PROJECT_DIR,
+    SELECTED_TARGET,
+    same("recall_command"),
+    attr("sql", "recall_sql"),
+    attr("backend", "recall_backend"),
+    attr("output_format", "recall_format"),
+    attr("limit", "recall_limit"),
+    attr("no_limit", "recall_no_limit"),
+    attr("max_cell_bytes", "recall_max_cell_bytes"),
+    attr("relation", "recall_relation"),
+    attr("invocation", "recall_invocation"),
+    attr("stream", "recall_stream"),
+    attr("tail", "recall_tail"),
+];
+pub(crate) const RECALL_ROUTE: Route = routed(
+    "run_recall",
+    "run_recall_command",
+    &RECALL_ARGUMENTS,
     CallShape {
         slot_positional: 0,
         implementation_keywords: true,

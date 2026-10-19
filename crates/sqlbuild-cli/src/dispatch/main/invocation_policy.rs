@@ -2,7 +2,7 @@
 
 use crate::dispatch::constants::{
     DBT_COMMAND_NAME, DBT_INIT_SUBCOMMAND, DIFF_COMMAND_NAME, PROJECT_CREATING_COMMANDS,
-    SKILL_EXEMPT_COMMANDS,
+    RECALL_COMMAND_NAME, SKILL_EXEMPT_COMMANDS,
 };
 use crate::dispatch::models::{CommandFacts, InvocationPolicy};
 
@@ -18,5 +18,6 @@ pub fn invocation_policy(facts: &CommandFacts) -> InvocationPolicy {
         creates_project,
         observed: !creates_project && !raw_query_diff,
         maintains_skills: !SKILL_EXEMPT_COMMANDS.contains(&command) && !raw_query_diff,
+        recalled: !creates_project && !command.is_empty() && command != RECALL_COMMAND_NAME,
     }
 }

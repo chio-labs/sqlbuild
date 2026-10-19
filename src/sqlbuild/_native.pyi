@@ -3321,6 +3321,14 @@ def invocation_context_from_environment(
     *, environment: Mapping[str, str] | None = None
 ) -> Mapping[str, object]: ...
 
+class RecallLifecycleSink:
+    """The invocation's Recall session as lifecycle and SQL artifact subscribers."""
+
+    def __call__(self, event: LifecycleEvent) -> None: ...
+    def record_sql(
+        self, *, sql: str, statement_id: str | None = None, resource_id: str | None = None
+    ) -> None: ...
+
 class LocalFilesystemComputeLogStorage:
     """Ordered fsync capture storage subject to underlying filesystem and hardware guarantees."""
 
@@ -3331,6 +3339,7 @@ class LocalFilesystemComputeLogStorage:
         root: Path | None = None,
         retention_count: int | None = 20,
     ) -> None: ...
+    def attach_recall(self, recall: RecallLifecycleSink) -> None: ...
     @property
     def root(self) -> Path: ...
     def start_capture(self, metadata: CaptureMetadata) -> None: ...
@@ -3644,6 +3653,18 @@ class CliNamespace:
     rules_command: str | None
     rules_rule_selector: str | None
     rules_skills_check: bool
+    recall_command: str | None
+    recall_sql: str | None
+    recall_backend: str
+    recall_format: str
+    recall_limit: int
+    recall_no_limit: bool
+    recall_max_cell_bytes: int | None
+    recall_state: bool
+    recall_relation: str | None
+    recall_invocation: str
+    recall_stream: str
+    recall_tail: int | None
     format_check: bool
     format_diff: bool
     format_fixtures_only: bool
@@ -8721,6 +8742,7 @@ class CliEntrypointHandlers(NativeRecord):
     run_scope: ScopeCommandHandler
     run_contract: Callable[..., int] | None
     run_refactor: Callable[..., int] | None
+    run_recall: Callable[..., int] | None
     def __init__(
         self,
         run_compile: Callable[[CompileCommandRequest], int],
@@ -8755,6 +8777,7 @@ class CliEntrypointHandlers(NativeRecord):
         run_scope: ScopeCommandHandler,
         run_contract: Callable[..., int] | None = None,
         run_refactor: Callable[..., int] | None = None,
+        run_recall: Callable[..., int] | None = None,
     ) -> None: ...
 
 class CommandWarehouseScope(NativeRecord):
@@ -9554,6 +9577,7 @@ class CliCommand(StrEnum):
     CONTRACT = "contract"
     RENAME = "rename"
     MV = "mv"
+    RECALL = "recall"
 
 class ScopeCommandHandler(Protocol):
     def __call__(self, *, request: ScopeCommandRequest) -> int: ...

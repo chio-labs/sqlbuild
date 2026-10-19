@@ -1323,6 +1323,7 @@ dependencies = [
  "sqlbuild-discovery",
  "sqlbuild-model-config",
  "sqlbuild-pysource",
+ "sqlbuild-recall",
  "sqlbuild-refactor",
  "sqlbuild-render",
  "sqlbuild-rules",
