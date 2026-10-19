@@ -78,6 +78,7 @@ from sqlbuild.executor.run._helpers.execution.hook_phases import (
     run_post_hook_phase,
     run_pre_hook_phase,
 )
+from sqlbuild.executor.run._helpers.execution.inferred_types import inferred_column_types
 from sqlbuild.executor.run._helpers.execution.results import (
     build_failed_result,
     build_skipped_result,
@@ -2805,6 +2806,7 @@ def _stage_microbatch_delta(
                     connection=context.connection,
                     destination=targets.delta_qualified,
                     sql=batch_sql,
+                    config={"inferred_column_types": inferred_column_types(context.entry)},
                     statement_recorder=state.statement_recorder,
                 )
                 lifecycle.completed(metadata={"changed_count": 1})

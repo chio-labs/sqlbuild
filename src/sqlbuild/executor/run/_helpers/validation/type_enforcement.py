@@ -74,7 +74,7 @@ def enforce_types_staged(
         connection=connection,
         destination=enforced_qualified,
         sql=f"SELECT {projection_sql} FROM {staging_qualified}",
-        config={"table_type": table_type},
+        config={"table_type": table_type, "column_types": declared_map},
         statement_recorder=statement_recorder,
     )
     adapter.drop(

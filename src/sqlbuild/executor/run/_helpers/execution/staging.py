@@ -7,6 +7,7 @@ from typing import Any
 from sqlbuild._native import Fingerprint
 from sqlbuild.adapter.contract.classes.base_adapter import BaseAdapter
 from sqlbuild.adapter.contract.classes.statement_recorder import StatementRecorder
+from sqlbuild.executor.run._helpers.execution.inferred_types import inferred_column_types
 from sqlbuild.executor.run.models import ModelMaterializationContext
 from sqlbuild.runtime.observability.classes.operation_lifecycle import (
     OperationAttributes,
@@ -47,7 +48,10 @@ def create_staging_relation(
             connection=connection,
             destination=staging_qualified,
             sql=resolved_sql,
-            config={"table_type": context.entry.table_type},
+            config={
+                "table_type": context.entry.table_type,
+                "inferred_column_types": inferred_column_types(context.entry),
+            },
             statement_recorder=statement_recorder,
         )
         lifecycle.completed(metadata={"changed_count": 1})

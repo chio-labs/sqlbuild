@@ -6,7 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_command::support::{boolean, keyword_relay, none};
 use crate::bindings::_helpers::command_runtime::connection::{
-    anchor_duckdb_database, with_dbt_profile,
+    anchor_local_database_path, with_dbt_profile,
 };
 use crate::bindings::_helpers::command_runtime::warehouses::apply_command_warehouse;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
@@ -54,7 +54,7 @@ pub(crate) fn connection_config<'py>(
         (&project_dir, &adapter_name),
         (&discovered, &py.None().into_bound(py)),
     )?;
-    anchor_duckdb_database(
+    anchor_local_database_path(
         &config,
         (&project_dir, &adapter_name.str()?.extract::<String>()?),
     )?;

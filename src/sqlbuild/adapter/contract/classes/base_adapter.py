@@ -2537,5 +2537,31 @@ def _validate_rectangular_typed_array(*, value: SqlValue, adapter_name: str) -> 
     dimensions(value)
 
 
+def _render_explicit_source_relation_cast_subquery(
+    *,
+    source_relation: str,
+    cast_projections: tuple[str, ...],
+    cast_column_names: tuple[str, ...],
+    warehouse_column_names: tuple[str, ...],
+    all_columns_cast: bool,
+    render_identifier: Callable[[str], str],
+) -> str:
+    """Render source casts by listing pass-through columns, for engines without star exclusion."""
+
+    cast_clause: str = ", ".join(cast_projections)
+    if all_columns_cast:
+        return f"(SELECT {cast_clause} FROM {source_relation})"
+    projection_names: set[str] = set(cast_column_names)
+    passthrough_clause: str = ", ".join(
+        render_identifier(column)
+        for column in warehouse_column_names
+        if column not in projection_names
+    )
+    projection_clause: str = (
+        f"{passthrough_clause}, {cast_clause}" if passthrough_clause else cast_clause
+    )
+    return f"(SELECT {projection_clause} FROM {source_relation})"
+
+
 def _quote_sql_string(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"

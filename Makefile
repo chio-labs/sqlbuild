@@ -174,6 +174,7 @@ E2E_DUCKDB_CLI_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/seed \
 	tests/e2e/src/sqlbuild/cli/commands/main/skills \
 	tests/e2e/src/sqlbuild/cli/commands/main/snowflake \
+	tests/e2e/src/sqlbuild/cli/commands/main/sqlite \
 	tests/e2e/src/sqlbuild/cli/commands/main/sqlserver \
 	tests/e2e/src/sqlbuild/cli/commands/main/test
 

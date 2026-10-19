@@ -31,6 +31,7 @@ Bundled copies of every page on the SQLBuild documentation site, matching the in
 - [DuckDB](concepts/adapters/duckdb.md) (`concepts/adapters/duckdb`) - DuckDB adapter configuration for SQLBuild.
 - [MotherDuck](concepts/adapters/motherduck.md) (`concepts/adapters/motherduck`) - MotherDuck adapter configuration for SQLBuild.
 - [PostgreSQL](concepts/adapters/postgres.md) (`concepts/adapters/postgres`) - PostgreSQL adapter configuration for SQLBuild.
+- [SQLite](concepts/adapters/sqlite.md) (`concepts/adapters/sqlite`) - SQLite adapter configuration, capabilities and limits for SQLBuild.
 - [BigQuery](concepts/adapters/bigquery.md) (`concepts/adapters/bigquery`) - BigQuery adapter configuration for SQLBuild.
 - [Databricks](concepts/adapters/databricks.md) (`concepts/adapters/databricks`) - Databricks adapter configuration for SQLBuild.
 - [SQL Server](concepts/adapters/sqlserver.md) (`concepts/adapters/sqlserver`) - Microsoft SQL Server adapter configuration for SQLBuild.

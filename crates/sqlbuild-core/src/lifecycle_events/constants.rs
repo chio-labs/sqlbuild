@@ -258,7 +258,7 @@ pub const OPERATION_STRATEGIES: [&str; 10] = [
     "sql",
     "sync_all_columns",
 ];
-pub const OPERATION_ADAPTERS: [&str; 8] = [
+pub const OPERATION_ADAPTERS: [&str; 9] = [
     "bigquery",
     "custom",
     "databricks",
@@ -266,6 +266,7 @@ pub const OPERATION_ADAPTERS: [&str; 8] = [
     "motherduck",
     "postgres",
     "snowflake",
+    "sqlite",
     "sqlserver",
 ];
 

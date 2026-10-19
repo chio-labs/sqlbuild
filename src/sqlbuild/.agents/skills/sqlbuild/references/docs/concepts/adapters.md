@@ -24,6 +24,7 @@ SQLBuild uses adapters to connect to different database engines. Snowflake is th
 | [BigQuery](adapters/bigquery.md) | Beta | `sqlbuild[bigquery]` |
 | [Databricks](adapters/databricks.md) | Beta | `sqlbuild[databricks]` |
 | [SQL Server](adapters/sqlserver.md) | Beta | `sqlbuild[sqlserver]` |
+| [SQLite](adapters/sqlite.md) | Beta | included by default |
 | ClickHouse | Planned | |
 | Redshift | Planned | |
 | Trino | Planned | |
@@ -108,7 +109,7 @@ A few `StrictAdapter` methods are optional and have a documented default. `creat
 - SQLBuild discovers all `.py` files under `adapters/` recursively (excluding `__init__.py` and files starting with `_`)
 - Each file is scanned for classes that define a string `adapter_name` and subclass `StrictAdapter` (or any of its subclasses like `BaseAdapter` or a built-in adapter)
 - Adapter names must be unique across all adapter files - duplicates raise an error
-- Custom adapter names cannot shadow built-in names (`duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlserver`)
+- Custom adapter names cannot shadow built-in names (`duckdb`, `motherduck`, `snowflake`, `bigquery`, `databricks`, `postgres`, `sqlite`, `sqlserver`)
 
 ### Adapter class hierarchy
 

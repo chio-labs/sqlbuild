@@ -24,6 +24,7 @@ from sqlbuild.adapter.contract.classes.base_adapter import (
     _encode_typed_json,
     _quote_sql_string,
     _render_ansi_typed_scalar,
+    _render_explicit_source_relation_cast_subquery,
     _render_typed_value_list,
     _validate_rectangular_typed_array,
 )
@@ -2022,20 +2023,14 @@ class PostgresAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     ) -> str:
         """Render Postgres source casts without relying on unsupported star exclusion."""
 
-        cast_clause: str = ", ".join(cast_projections)
-        if all_columns_cast:
-            return f"(SELECT {cast_clause} FROM {source_relation})"
-        projection_names: set[str] = set(cast_column_names)
-        passthrough_columns: tuple[str, ...] = tuple(
-            column for column in warehouse_column_names if column not in projection_names
+        return _render_explicit_source_relation_cast_subquery(
+            source_relation=source_relation,
+            cast_projections=cast_projections,
+            cast_column_names=cast_column_names,
+            warehouse_column_names=warehouse_column_names,
+            all_columns_cast=all_columns_cast,
+            render_identifier=self.render_identifier,
         )
-        passthrough_clause: str = ", ".join(
-            self.render_identifier(name) for name in passthrough_columns
-        )
-        projection_clause: str = cast_clause
-        if passthrough_clause:
-            projection_clause = f"{passthrough_clause}, {cast_clause}"
-        return f"(SELECT {projection_clause} FROM {source_relation})"
 
     def requires_derived_table_aliases(self) -> bool:
         """Postgres does not require aliases for derived table factors."""

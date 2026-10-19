@@ -44,6 +44,7 @@
 					"docs/concepts/adapters/duckdb",
 					"docs/concepts/adapters/motherduck",
 					"docs/concepts/adapters/postgres",
+					"docs/concepts/adapters/sqlite",
 					"docs/concepts/adapters/bigquery",
 					"docs/concepts/adapters/databricks",
 					"docs/concepts/adapters/sqlserver"
