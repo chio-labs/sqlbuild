@@ -20,7 +20,7 @@ pub(crate) struct RecallLifecycleSink {
 impl RecallLifecycleSink {
     fn __call__(&self, py: Python<'_>, event: &Bound<'_, PyAny>) -> PyResult<()> {
         if let Some(object) = event_object(event)? {
-            drop(self.session.publish_event_object(&object));
+            self.session.publish_event_object(object);
             return Ok(());
         }
         let encoded = host::entry(py, ExecutorHost::LifecycleEventToJson)?.call1((event,))?;

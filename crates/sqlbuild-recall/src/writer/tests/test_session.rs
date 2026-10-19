@@ -6,12 +6,14 @@ use crate::writer::models::SetupOutcome;
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
-    artifact_counts, close_under_held_lock, recorded_session, session_on_corrupt_store,
+    artifact_counts, close_under_held_lock, event_counts, recorded_session,
+    session_on_corrupt_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
-    ArtifactSizeTestCase, CorruptStoreTestCase, HeldLockTestCase, RecordedSession, SessionTestCase,
+    ArtifactSizeTestCase, CorruptStoreTestCase, EventBuildTestCase, HeldLockTestCase,
+    RecordedSession, SessionTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -130,18 +132,54 @@ fn given_sql_of_different_sizes_when_published_then_oversized_sql_is_dropped_unh
         ArtifactSizeTestCase {
             description: "ordinary SQL is delivered with its reference",
             length: 64,
-            expected_counts: (1, 1, 0),
+            times: 1,
+            expected_counts: (1, 1, 0, vec![vec![RecallValue::Integer(1)]]),
+        },
+        ArtifactSizeTestCase {
+            description: "SQL seen twice is stored once and both records count as delivered",
+            length: 64,
+            times: 2,
+            expected_counts: (2, 2, 0, vec![vec![RecallValue::Integer(1)]]),
         },
         ArtifactSizeTestCase {
             description: "SQL above the artifact limit is counted as dropped",
             length: 4 * 1024 * 1024 + 1,
-            expected_counts: (1, 0, 1),
+            times: 1,
+            expected_counts: (1, 0, 1, vec![vec![RecallValue::Integer(0)]]),
         },
     ];
 
     for test_case in test_cases {
         assert_eq!(
-            artifact_counts(test_case.length),
+            artifact_counts(test_case.length, test_case.times),
+            test_case.expected_counts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_events_when_built_on_the_delivery_thread_then_unbuildable_ones_count_as_failed() {
+    let valid: &str = r#"{"event_id":"e1","event_type":"invocation_started","schema_version":2,
+        "producer":"sqlbuild","producer_version":"1","occurred_at":"2026-10-19T00:00:00.000000Z",
+        "invocation_id":"events","invocation_sequence":1,"external_context":{},"payload":{}}"#;
+    let test_cases = [
+        EventBuildTestCase {
+            description: "a complete event is delivered",
+            events: vec![valid],
+            expected_counts: (1, 1, 0),
+        },
+        EventBuildTestCase {
+            description: "an event without an ID is accepted, then counted as failed",
+            events: vec![valid, r#"{"event_type":"invocation_started"}"#],
+            expected_counts: (2, 1, 1),
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            event_counts(&test_case.events),
             test_case.expected_counts,
             "{}",
             test_case.description

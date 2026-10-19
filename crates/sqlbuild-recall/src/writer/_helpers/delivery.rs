@@ -16,6 +16,7 @@ use crate::store::main::maintain_sqlite_store::maintain_sqlite_store;
 use crate::store::main::open_sqlite_store::open_sqlite_store;
 use crate::store::main::quarantine_store::quarantine_store;
 use crate::store::models::{InsertOutcome, MaintenanceRequest, OpenMode, SqliteStore};
+use crate::writer::_helpers::materialize::{Built, Materializer};
 use crate::writer::_helpers::queue::{Queued, WriterState};
 use crate::writer::constants::{
     BATCH_ROWS, BATCH_WINDOW_MS, CLOCK_CHECK_MS, FINAL_ROWS_BUDGET_MS, HEARTBEAT_STALE_INTERVALS,
@@ -227,12 +228,16 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
         }
     };
     let mut next_heartbeat: SystemTime = SystemTime::now();
+    let mut materializer = Materializer::new(config.envelope.clone());
     loop {
         let (batch, closing) = next_batch(shared, next_heartbeat);
-        let mut rows: Vec<RecallRow> = batch
-            .iter()
-            .flat_map(|record| record.rows.clone())
-            .collect();
+        let built: Built = materializer.build(batch);
+        if !built.settled.is_empty() || !built.unbuildable.is_empty() {
+            let mut state = locked(&shared.state);
+            state.account(&built.settled, Ok(&InsertOutcome::default()));
+            state.account_unbuildable(&built.unbuildable);
+        }
+        let mut rows: Vec<RecallRow> = built.rows;
         let now: SystemTime = SystemTime::now();
         if now >= next_heartbeat && !closing {
             rows.push(heartbeat(config, now));
@@ -248,8 +253,8 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
             let written = write_batch(&store, &rows, give_up);
             let mut state = locked(&shared.state);
             match &written {
-                Ok(outcome) => state.account(&batch, Ok(outcome)),
-                Err(error) => state.account(&batch, Err(&error.message)),
+                Ok(outcome) => state.account(&built.written, Ok(outcome)),
+                Err(error) => state.account(&built.written, Err(&error.message)),
             }
         }
         let mut state = locked(&shared.state);

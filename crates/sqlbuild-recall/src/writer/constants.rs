@@ -25,3 +25,5 @@ pub const FINAL_ROWS_BUDGET_MS: u64 = 500;
 pub const MINIMUM_MAINTENANCE_MS: u64 = 200;
 /// SQL longer than this is counted as dropped without hashing or copying it.
 pub const MAX_ARTIFACT_BYTES: usize = 4 * 1024 * 1024;
+/// What a JSON scalar counts toward the queue's byte capacity.
+pub const JSON_SCALAR_BYTES: usize = 8;

@@ -1,25 +1,19 @@
 //! The session handle: producers queue records; `close` flushes within the shutdown budget.
 
-use std::sync::MutexGuard;
 use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::{Map, Value};
 
-use crate::records::constants::{
-    ARTIFACT_DIGEST_PREFIX, EXECUTED_SQL_ROLE, SEVERITY_ORDER, SQL_ARTIFACT_KIND, SQL_MEDIA_TYPE,
-};
+use crate::records::constants::SEVERITY_ORDER;
 use crate::records::errors::RecordError;
-use crate::records::main::artifact_rows::artifact_rows;
 use crate::records::main::diagnostic_input_from_json::diagnostic_input_from_json;
 use crate::records::main::diagnostic_row::diagnostic_row;
-use crate::records::main::event_object_row::event_object_row;
-use crate::records::main::event_row::event_row;
-use crate::records::main::format_timestamp::format_timestamp;
-use crate::records::main::sha256_hex::sha256_hex;
-use crate::records::models::{ArtifactInput, OutputStream, RecallRow, RecallValue};
+use crate::records::main::event_severity::event_severity;
+use crate::records::main::parse_event::parse_event;
+use crate::records::models::OutputStream;
 use crate::writer::_helpers::delivery::locked;
-use crate::writer::_helpers::queue::WriterState;
-use crate::writer::constants::MAX_ARTIFACT_BYTES;
+use crate::writer::_helpers::queue::{Payload, Queued, SqlInput};
+use crate::writer::constants::{JSON_SCALAR_BYTES, MAX_ARTIFACT_BYTES};
 use crate::writer::models::{
     DeliveryStream, DeliverySummary, Priority, RecallSession, SetupOutcome,
 };
@@ -29,6 +23,23 @@ pub(crate) fn severity_rank(severity: &str) -> usize {
         .iter()
         .position(|candidate| *candidate == severity)
         .unwrap_or(0)
+}
+
+/// Roughly how many bytes `event` holds, for the queue's byte capacity.
+fn json_bytes(event: &Map<String, Value>) -> usize {
+    event
+        .iter()
+        .map(|(key, value)| key.len() + value_bytes(value))
+        .sum()
+}
+
+fn value_bytes(value: &Value) -> usize {
+    match value {
+        Value::String(text) => text.len(),
+        Value::Array(items) => items.iter().map(value_bytes).sum(),
+        Value::Object(entries) => json_bytes(entries),
+        Value::Null | Value::Bool(_) | Value::Number(_) => JSON_SCALAR_BYTES,
+    }
 }
 
 fn event_priority(severity: &str) -> Priority {
@@ -78,26 +89,21 @@ impl RecallSession {
 
     /// Queue one lifecycle event from its canonical JSON.
     pub fn publish_event(&self, event_json: &str) -> Result<(), RecordError> {
-        let state = locked(&self.shared.state);
-        let row = event_row(&state.envelope, event_json)?;
-        self.queue_event(state, row);
+        self.publish_event_object(parse_event(event_json)?);
         Ok(())
     }
 
-    /// Queue one lifecycle event already decoded to its canonical JSON object.
-    pub fn publish_event_object(&self, event: &Map<String, Value>) -> Result<(), RecordError> {
-        let state = locked(&self.shared.state);
-        let row = event_object_row(&state.envelope, event)?;
-        self.queue_event(state, row);
-        Ok(())
-    }
-
-    fn queue_event(&self, mut state: MutexGuard<'_, WriterState>, row: RecallRow) {
-        let priority = match row.value("severity") {
-            Some(RecallValue::Text(severity)) => event_priority(severity),
-            _ => Priority::Lifecycle,
+    /// Queue one lifecycle event already decoded to its canonical JSON object; its row is built on the delivery thread.
+    pub fn publish_event_object(&self, event: Map<String, Value>) {
+        let priority: Priority = event_severity(&event).map_or(Priority::Lifecycle, event_priority);
+        let bytes: usize = json_bytes(&event);
+        let record = Queued {
+            payload: Payload::Event(event),
+            stream: DeliveryStream::Events,
+            bytes,
         };
-        state.push(vec![row], DeliveryStream::Events, priority);
+        let mut state = locked(&self.shared.state);
+        state.push_record(record, priority);
         self.shared.wake.notify_one();
     }
 
@@ -131,24 +137,18 @@ impl RecallSession {
             counts.dropped += 1;
             return;
         }
-        let digest = format!("{ARTIFACT_DIGEST_PREFIX}{}", sha256_hex(sql.as_bytes()));
-        let mut state = locked(&self.shared.state);
-        if !state.artifacts_seen.insert(digest.clone()) {
-            return;
-        }
-        let artifact = ArtifactInput {
-            ref_id: statement_id.map_or_else(|| digest.clone(), str::to_owned),
-            digest,
-            kind: SQL_ARTIFACT_KIND.to_owned(),
-            media_type: SQL_MEDIA_TYPE.to_owned(),
-            content: sql.as_bytes().to_vec(),
-            seen_at: format_timestamp(SystemTime::now()),
-            role: EXECUTED_SQL_ROLE.to_owned(),
-            statement_id: statement_id.map(str::to_owned),
-            resource_id: resource_id.map(str::to_owned),
+        let record = Queued {
+            bytes: sql.len(),
+            payload: Payload::Sql(SqlInput {
+                sql: sql.to_owned(),
+                statement_id: statement_id.map(str::to_owned),
+                resource_id: resource_id.map(str::to_owned),
+                seen_at: SystemTime::now(),
+            }),
+            stream: DeliveryStream::Artifacts,
         };
-        let rows = artifact_rows(&state.envelope, &artifact).to_vec();
-        state.push(rows, DeliveryStream::Artifacts, Priority::Artifact);
+        let mut state = locked(&self.shared.state);
+        state.push_record(record, Priority::Artifact);
         self.shared.wake.notify_one();
     }
 

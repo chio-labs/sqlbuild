@@ -31,8 +31,8 @@ impl RecallRow {
 
     /// The row's content digest.
     #[must_use]
-    pub fn content_sha256(&self) -> Option<&str> {
-        match self.value("content_sha256") {
+    pub fn content_hash(&self) -> Option<&str> {
+        match self.value("content_hash") {
             Some(RecallValue::Text(text)) => Some(text),
             _ => None,
         }

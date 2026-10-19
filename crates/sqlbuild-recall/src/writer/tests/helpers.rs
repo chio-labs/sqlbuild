@@ -2,14 +2,18 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 use crate::records::main::invocation_row::invocation_row;
-use crate::records::models::{InvocationContext, OutputStream, RecallValue, RowEnvelope};
+use crate::records::models::{
+    DeliveryCounts, InvocationContext, OutputStream, RecallValue, RowEnvelope,
+};
 use crate::store::main::open_sqlite_store::open_sqlite_store;
 use crate::store::main::query_store::query_store;
 use crate::store::main::read_output_transcript::read_output_transcript;
 use crate::store::models::OpenMode;
 use crate::writer::_helpers::queue::WriterState;
 use crate::writer::main::start_recall_session::start_recall_session;
-use crate::writer::models::{DeliveryStream, Priority, SessionConfig, SetupOutcome};
+use crate::writer::models::{
+    DeliveryStream, DeliverySummary, Priority, SessionConfig, SetupOutcome,
+};
 use crate::writer::tests::test_types::RecordedSession;
 
 /// The envelope of invocation `invocation_id`.
@@ -60,8 +64,8 @@ pub(crate) fn chunked(writes: &[(OutputStream, Vec<u8>)]) -> Vec<[Option<RecallV
     state.flush_output();
     state
         .take_batch(usize::MAX)
-        .into_iter()
-        .flat_map(|record| record.rows)
+        .iter()
+        .flat_map(|record| record.rows().iter())
         .map(|row| ["sequence", "stream", "byte_offset"].map(|name| row.value(name).cloned()))
         .collect()
 }
@@ -205,19 +209,48 @@ pub(crate) fn session_on_corrupt_store() -> (usize, bool, Vec<Vec<RecallValue>>)
     (session.notices().len(), moved, rows)
 }
 
-/// Artifact counts after publishing SQL of `length` bytes.
-pub(crate) fn artifact_counts(length: usize) -> (u64, u64, u64) {
-    let directory = tempfile::tempdir().expect("a temporary directory can be created");
-    let session = start_recall_session(config(directory.path().join("recall.sqlite3"), "sql"));
-    session.publish_sql(&"x".repeat(length), Some("s1"), None);
-    let summary = session.close();
-    let counts = summary
+fn stream_counts(summary: &DeliverySummary, stream: DeliveryStream) -> DeliveryCounts {
+    summary
         .streams
         .iter()
-        .find(|(stream, _)| *stream == DeliveryStream::Artifacts)
+        .find(|(candidate, _)| *candidate == stream)
         .map(|(_, counts)| *counts)
-        .unwrap_or_default();
-    (counts.accepted, counts.delivered, counts.dropped)
+        .unwrap_or_default()
+}
+
+/// Artifact counts and stored content rows after publishing the same SQL of `length` bytes `times` times.
+pub(crate) fn artifact_counts(
+    length: usize,
+    times: usize,
+) -> (u64, u64, u64, Vec<Vec<RecallValue>>) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("recall.sqlite3");
+    let session = start_recall_session(config(path.clone(), "sql"));
+    let sql: String = "x".repeat(length);
+    for index in 0..times {
+        session.publish_sql(&sql, Some(&format!("s{index}")), None);
+    }
+    let counts = stream_counts(&session.close(), DeliveryStream::Artifacts);
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    let stored = query_store(&store, "SELECT COUNT(*) FROM recall_artifacts", None)
+        .expect("the query is valid")
+        .rows;
+    (counts.accepted, counts.delivered, counts.dropped, stored)
+}
+
+/// Event counts after publishing `events`; rows are built on the delivery thread.
+pub(crate) fn event_counts(events: &[&str]) -> (u64, u64, u64) {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let session = start_recall_session(config(directory.path().join("recall.sqlite3"), "events"));
+    let parsed: Vec<serde_json::Map<String, serde_json::Value>> = events
+        .iter()
+        .map(|event| serde_json::from_str(event).expect("the fixture is a JSON object"))
+        .collect();
+    parsed
+        .into_iter()
+        .for_each(|event| session.publish_event_object(event));
+    let counts = stream_counts(&session.close(), DeliveryStream::Events);
+    (counts.accepted, counts.delivered, counts.failed)
 }
 
 /// Output chunks dropped by a queue of `capacity` records, as counted and as each delivered chunk reports them.
@@ -232,7 +265,7 @@ pub(crate) fn output_drops(capacity: usize, chunks: usize) -> (u64, Vec<Option<R
     taken.extend(state.take_batch(usize::MAX));
     let reported: Vec<Option<RecallValue>> = taken
         .iter()
-        .flat_map(|record| record.rows.iter())
+        .flat_map(|record| record.rows().iter())
         .map(|row| row.value("dropped_before").cloned())
         .collect();
     (

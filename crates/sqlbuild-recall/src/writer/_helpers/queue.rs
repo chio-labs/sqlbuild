@@ -1,7 +1,9 @@
 //! The bounded priority queue and the output coalescer, guarded together by one mutex.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 use std::time::{Duration, Instant, SystemTime};
+
+use serde_json::{Map, Value};
 
 use crate::records::constants::{DROPPED_BEFORE_COLUMN, MAX_OUTPUT_CHUNK_BYTES};
 use crate::records::main::format_timestamp::format_timestamp;
@@ -14,12 +16,47 @@ use crate::writer::_helpers::delivery::stream_of;
 use crate::writer::constants::{QUEUE_BYTE_CAPACITY, QUEUE_RECORD_CAPACITY};
 use crate::writer::models::{DeliveryStream, Priority};
 
-/// One queued record: the rows written together and where they are accounted.
+/// SQL a statement executed, hashed and turned into rows on the delivery thread.
+#[derive(Debug)]
+pub(crate) struct SqlInput {
+    pub(crate) sql: String,
+    pub(crate) statement_id: Option<String>,
+    pub(crate) resource_id: Option<String>,
+    pub(crate) seen_at: SystemTime,
+}
+
+/// What a queued record holds: finished rows, or input the delivery thread turns into rows.
+#[derive(Debug)]
+pub(crate) enum Payload {
+    Rows(Vec<RecallRow>),
+    Event(Map<String, Value>),
+    Sql(SqlInput),
+}
+
+/// One queued record: what is written together and where it is accounted.
 #[derive(Debug)]
 pub(crate) struct Queued {
-    pub(crate) rows: Vec<RecallRow>,
+    pub(crate) payload: Payload,
     pub(crate) stream: DeliveryStream,
     pub(crate) bytes: usize,
+}
+
+impl Queued {
+    /// The finished rows; empty while the delivery thread has yet to build them.
+    pub(crate) fn rows(&self) -> &[RecallRow] {
+        match &self.payload {
+            Payload::Rows(rows) => rows,
+            Payload::Event(_) | Payload::Sql(_) => &[],
+        }
+    }
+
+    fn row_count(&self) -> usize {
+        match &self.payload {
+            Payload::Rows(rows) => rows.len(),
+            Payload::Event(_) => 1,
+            Payload::Sql(_) => 2,
+        }
+    }
 }
 
 /// Output accepted but not yet chunked: contiguous writes to one stream.
@@ -44,7 +81,6 @@ pub(crate) struct WriterState {
     offsets: [u64; 2],
     unreported_output_drops: u64,
     pub(crate) diagnostic_sequence: u64,
-    pub(crate) artifacts_seen: HashSet<String>,
     pub(crate) closing: bool,
     pub(crate) deadline: Option<Instant>,
     pub(crate) finished: bool,
@@ -86,7 +122,6 @@ impl WriterState {
             offsets: [0; 2],
             unreported_output_drops: 0,
             diagnostic_sequence: 0,
-            artifacts_seen: HashSet::new(),
             closing: false,
             deadline: None,
             finished: false,
@@ -106,7 +141,7 @@ impl WriterState {
         self.counts_mut(record.stream).dropped += 1;
         if record.stream == DeliveryStream::Output {
             let carried: u64 = record
-                .rows
+                .rows()
                 .iter()
                 .map(|row| match row.value(DROPPED_BEFORE_COLUMN) {
                     Some(RecallValue::Integer(count)) => u64::try_from(*count).unwrap_or_default(),
@@ -128,12 +163,20 @@ impl WriterState {
         stream: DeliveryStream,
         priority: Priority,
     ) {
-        self.counts_mut(stream).accepted += 1;
-        let record = Queued {
-            bytes: row_bytes(&rows),
-            rows,
-            stream,
-        };
+        let bytes: usize = row_bytes(&rows);
+        self.push_record(
+            Queued {
+                payload: Payload::Rows(rows),
+                stream,
+                bytes,
+            },
+            priority,
+        );
+    }
+
+    /// Queue one record of any payload, displacing lower-priority records when full.
+    pub(crate) fn push_record(&mut self, record: Queued, priority: Priority) {
+        self.counts_mut(record.stream).accepted += 1;
         if self.rejecting {
             self.drop_record(&record);
             return;
@@ -172,7 +215,7 @@ impl WriterState {
                 let Some(record) = bucket.pop_front() else {
                     break;
                 };
-                rows += record.rows.len();
+                rows += record.row_count();
                 self.records -= 1;
                 self.bytes -= record.bytes;
                 batch.push(record);
@@ -262,12 +305,23 @@ impl WriterState {
         self.pending.is_some()
     }
 
+    /// Count records the delivery thread could not turn into rows as failed.
+    pub(crate) fn account_unbuildable(&mut self, streams: &[DeliveryStream]) {
+        for stream in streams {
+            self.counts_mut(*stream).failed += 1;
+        }
+    }
+
     /// Count a written batch as delivered, less conflicts, or a failed one as failed.
-    pub(crate) fn account(&mut self, batch: &[Queued], outcome: Result<&InsertOutcome, &str>) {
+    pub(crate) fn account(
+        &mut self,
+        batch: &[DeliveryStream],
+        outcome: Result<&InsertOutcome, &str>,
+    ) {
         match outcome {
             Ok(outcome) => {
-                for record in batch {
-                    self.counts_mut(record.stream).delivered += 1;
+                for stream in batch {
+                    self.counts_mut(*stream).delivered += 1;
                 }
                 for conflict in &outcome.conflicts {
                     let stream = stream_of(conflict.table);
@@ -277,8 +331,8 @@ impl WriterState {
                 }
             }
             Err(reason) => {
-                for record in batch {
-                    self.counts_mut(record.stream).failed += 1;
+                for stream in batch {
+                    self.counts_mut(*stream).failed += 1;
                 }
                 self.degraded.get_or_insert_with(|| reason.to_owned());
             }

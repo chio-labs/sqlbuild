@@ -20,12 +20,12 @@ pub const COMMON_COLUMNS: [ColumnSpec; 6] = [
     ColumnSpec::required("schema_version", ColumnType::Integer),
     ColumnSpec::required("producer_version", ColumnType::Text),
     ColumnSpec::required("ingested_at", ColumnType::Timestamp),
-    ColumnSpec::required("content_sha256", ColumnType::Text),
+    ColumnSpec::required("content_hash", ColumnType::Text),
 ];
 /// The artifact columns its content digest covers: what it is, not who saw it when.
 pub const ARTIFACT_CONTENT_COLUMNS: [&str; 5] = ["digest", "kind", "media_type", "size", "content"];
 /// Common columns left out of a row's content digest.
-pub const UNHASHED_COLUMNS: [&str; 2] = ["ingested_at", "content_sha256"];
+pub const UNHASHED_COLUMNS: [&str; 2] = ["ingested_at", "content_hash"];
 
 const CORRELATIONS: [ColumnSpec; 5] = [
     ColumnSpec::optional("run_id", ColumnType::Text),

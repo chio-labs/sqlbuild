@@ -2,9 +2,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tempfile::TempDir;
 
-use crate::records::main::event_row::event_row;
+use crate::records::main::event_object_row::event_object_row;
 use crate::records::main::format_timestamp::format_timestamp;
 use crate::records::main::output_row::output_row;
+use crate::records::main::parse_event::parse_event;
 use crate::records::main::parse_timestamp::parse_timestamp;
 use crate::records::models::{
     ArtifactInput, DeliveryCounts, OutputChunk, OutputStream, RecallRow, RecallValue, RowEnvelope,
@@ -84,7 +85,9 @@ pub(crate) fn event(
         "invocation_id":"{}","invocation_sequence":{sequence}{correlations},"payload":{payload}}}"#,
         envelope.invocation_id
     );
-    event_row(envelope, &json).expect("the fixture is a valid lifecycle event")
+    parse_event(&json)
+        .and_then(|event| event_object_row(envelope, &event))
+        .expect("the fixture is a valid lifecycle event")
 }
 
 /// The result rows of `sql`.

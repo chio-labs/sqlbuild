@@ -39,6 +39,20 @@ pub(crate) fn event_object(event_json: &str) -> Result<Map<String, Value>, Recor
     }
 }
 
+/// The export severity of an event's type; `None` without a text `event_type`.
+pub(crate) fn severity_of(event: &Map<String, Value>) -> Option<&'static str> {
+    let event_type: &str = event.get("event_type").and_then(Value::as_str)?;
+    let schema_version: i64 = event
+        .get("schema_version")
+        .and_then(Value::as_i64)
+        .unwrap_or_default();
+    Some(
+        lifecycle_export_policy(event_type, is_terminal(event_type, schema_version))
+            .severity
+            .value(),
+    )
+}
+
 /// Identity, type, export policy and correlation columns.
 pub(crate) fn envelope_columns(event: &Map<String, Value>) -> Result<Vec<Column>, RecordError> {
     let event_type: &str = required_text(event, "event_type")?;

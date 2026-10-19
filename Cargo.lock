@@ -1337,6 +1337,7 @@ dependencies = [
 name = "sqlbuild-recall"
 version = "0.158.2"
 dependencies = [
+ "blake3",
  "rusqlite",
  "serde_json",
  "sha2",

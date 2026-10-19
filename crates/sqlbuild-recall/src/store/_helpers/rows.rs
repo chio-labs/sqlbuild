@@ -62,7 +62,7 @@ fn write_row(
         .map(|(index, name)| format!("{name} = ?{}", index + 1))
         .collect();
     let lookup = format!(
-        "SELECT content_sha256 FROM \"{}\" WHERE {}",
+        "SELECT content_hash FROM \"{}\" WHERE {}",
         spec.name,
         condition.join(" AND ")
     );
@@ -81,7 +81,7 @@ fn write_row(
             .optional(),
         "read stored Recall row",
     )?;
-    let rejected: &str = row.content_sha256().unwrap_or_default();
+    let rejected: &str = row.content_hash().unwrap_or_default();
     match existing {
         Some(existing) if existing != rejected => Ok(Some(ConflictEvidence {
             table: row.table,

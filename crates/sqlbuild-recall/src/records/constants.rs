@@ -48,3 +48,5 @@ pub(crate) const FEBRUARY: i64 = 2;
 pub(crate) const MARCH_BASED_JANUARY_INDEX: i64 = 10;
 /// The output column counting chunks dropped just before this one.
 pub const DROPPED_BEFORE_COLUMN: &str = "dropped_before";
+/// Initial capacity of the buffer a row's content hash is computed over.
+pub(crate) const CONTENT_HASH_BUFFER_BYTES: usize = 1_024;

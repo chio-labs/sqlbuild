@@ -53,6 +53,13 @@ pub(crate) struct CorruptStoreTestCase {
 pub(crate) struct ArtifactSizeTestCase {
     pub(crate) description: &'static str,
     pub(crate) length: usize,
+    pub(crate) times: usize,
+    pub(crate) expected_counts: (u64, u64, u64, Vec<Vec<RecallValue>>),
+}
+
+pub(crate) struct EventBuildTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) events: Vec<&'static str>,
     pub(crate) expected_counts: (u64, u64, u64),
 }
 

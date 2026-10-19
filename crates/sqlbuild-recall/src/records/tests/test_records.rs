@@ -1,15 +1,14 @@
 use std::time::{Duration, UNIX_EPOCH};
 
-use crate::records::_helpers::ids::content_sha256;
+use crate::records::_helpers::ids::content_hash;
 use crate::records::_helpers::ids::diagnostic_record_id;
 use crate::records::_helpers::ids::output_record_id;
 use crate::records::main::diagnostic_input_from_json::diagnostic_input_from_json;
-use crate::records::main::event_row::event_row;
 use crate::records::main::format_timestamp::format_timestamp;
 use crate::records::main::output_row::output_row;
 use crate::records::main::parse_timestamp::parse_timestamp;
 use crate::records::models::{OutputChunk, OutputStream, RecallValue};
-use crate::records::tests::helpers::{envelope, present, row_columns, text};
+use crate::records::tests::helpers::{envelope, event_row, present, row_columns, text};
 use crate::records::tests::test_types::{
     ContentHashTestCase, DiagnosticTestCase, ParseTimestampTestCase, RecordIdTestCase,
     RejectedInputTestCase, RowColumnsTestCase, TimestampTestCase,
@@ -131,7 +130,7 @@ fn given_equal_and_different_content_when_hashed_then_only_content_matters() {
 
     for test_case in test_cases {
         assert_eq!(
-            content_sha256(&test_case.left) == content_sha256(&test_case.right),
+            content_hash(&test_case.left) == content_hash(&test_case.right),
             test_case.expected_equal,
             "{}",
             test_case.description
