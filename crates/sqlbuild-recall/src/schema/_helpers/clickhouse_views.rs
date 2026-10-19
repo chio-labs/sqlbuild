@@ -1,13 +1,21 @@
 //! The bodies of the supported views in ClickHouse: rows deduplicated by key, within retention.
 
 use crate::schema::_helpers::rendering::clickhouse_table;
-use crate::schema::constants::OUTPUT_TAIL_RECORDS;
+use crate::schema::constants::{OUTPUT_TAIL_RECORDS, REPLACING_ENGINE};
 use crate::schema::main::table_spec::table_spec;
 use crate::schema::models::{DdlOptions, Table};
 
-/// `table`'s rows within retention, first ingested copy per key.
+/// `table`'s rows within retention, one copy per key: `FINAL` for replacing tables, so filters on the sorting key reach the read, else the first ingested copy.
 fn deduplicated(table: Table, options: &DdlOptions) -> String {
     let spec = table_spec(table);
+    if spec.clickhouse_engine == REPLACING_ENGINE {
+        return format!(
+            "(SELECT * FROM {name} FINAL WHERE {expiry} >= now64(6) - INTERVAL {days} DAY)",
+            name = clickhouse_table(spec.name, options),
+            expiry = spec.expiry_column,
+            days = options.retention_days,
+        );
+    }
     format!(
         "(SELECT * FROM {name} WHERE {expiry} >= now64(6) - INTERVAL {days} DAY \
          ORDER BY ingested_at ASC LIMIT 1 BY {key})",

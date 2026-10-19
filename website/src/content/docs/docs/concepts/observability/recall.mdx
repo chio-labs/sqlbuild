@@ -132,8 +132,9 @@ retention = "30d"
   table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
   concurrent commands can write one store.
 - **Duplicates.** Every row has a deterministic key. A retried batch is deduplicated by ClickHouse,
-  and the views keep the first copy of each key, so a repeated delivery is counted once. A key
-  written again with different content keeps the first row and is listed in `conflicts`.
+  and the views read each key once (`FINAL` on `ReplacingMergeTree` tables), so a repeated delivery
+  is counted once. Before writing, Recall looks up the batch's keys: a key already stored with
+  different content keeps the stored row, and the rejected copy is listed in `conflicts`.
 - **Retention.** Every table carries a TTL of `retention` (SQL text a week longer, and refreshed
   while it is still referenced), and the views hide rows past `retention` at once. ClickHouse drops
   expired daily parts in the background, so rows may stay on disk for a while after the views stop

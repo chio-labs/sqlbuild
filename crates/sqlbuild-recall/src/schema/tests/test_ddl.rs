@@ -67,8 +67,16 @@ fn given_clickhouse_tables_when_rendered_then_engines_ttl_and_partitions_follow_
             ],
         },
         FragmentTestCase {
-            description: "heartbeats are append-only",
+            description: "heartbeats collapse repeated deliveries of a beat",
             statement: clickhouse_table("recall_heartbeats", None),
+            expected_fragments: &[
+                "ENGINE = ReplacingMergeTree()",
+                "ORDER BY (invocation_id, beat_at)",
+            ],
+        },
+        FragmentTestCase {
+            description: "schema records are append-only",
+            statement: clickhouse_table("recall_meta", None),
             expected_fragments: &["ENGINE = MergeTree()"],
         },
         FragmentTestCase {
@@ -115,7 +123,7 @@ fn given_clickhouse_statement_sets_when_rendered_then_every_statement_has_the_sh
         StatementSetTestCase {
             description: "views deduplicate rows and filter by retention",
             statements: views(None),
-            required_fragments: &["now64(6) - INTERVAL 14 DAY", "LIMIT 1 BY"],
+            required_fragments: &["now64(6) - INTERVAL 14 DAY", " FINAL WHERE "],
             expected_count: VIEW_NAMES.len(),
         },
     ];
