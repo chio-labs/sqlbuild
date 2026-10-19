@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 use crate::macro_arguments::_helpers::failures::{
     Failure, bytes_literal, complex_literal, dict_unpacking, ellipsis, formatted_string,
-    keyword_expansion, typed_reference, unary, unsupported,
+    keyword_expansion, typed_reference, unary, unhashable_key, unsupported,
 };
 use crate::macro_arguments::_helpers::lexer::NumberToken;
 use crate::macro_arguments::_helpers::syntax_tree::{CallArguments, Expr, Keyword, Node};
@@ -68,7 +68,11 @@ fn evaluate(node: &Node) -> Result<ArgumentValue, Failure> {
                 let Some(key) = key else {
                     return Err(dict_unpacking(value.position));
                 };
-                values.push((evaluate(key)?, evaluate(value)?));
+                let key_value: ArgumentValue = evaluate(key)?;
+                if !is_hashable(&key_value) {
+                    return Err(unhashable_key(key.position));
+                }
+                values.push((key_value, evaluate(value)?));
             }
             Ok(ArgumentValue::Dict(values))
         }
@@ -84,6 +88,16 @@ fn evaluate(node: &Node) -> Result<ArgumentValue, Failure> {
                 ArgumentValue::Positive(Box::new(value))
             })
         }
+    }
+}
+
+/// Whether Python can hash the value; a nested call's value is left for Python to check.
+fn is_hashable(value: &ArgumentValue) -> bool {
+    match value {
+        ArgumentValue::List(_) | ArgumentValue::Dict(_) => false,
+        ArgumentValue::Tuple(items) => items.iter().all(is_hashable),
+        ArgumentValue::Negative(inner) | ArgumentValue::Positive(inner) => is_hashable(inner),
+        _ => true,
     }
 }
 
