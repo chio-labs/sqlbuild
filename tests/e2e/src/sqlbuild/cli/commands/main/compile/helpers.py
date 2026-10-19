@@ -20,6 +20,7 @@ from bisect import bisect_left
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import replace
+from functools import partial
 from io import StringIO
 from pathlib import Path
 from types import FrameType, ModuleType
@@ -666,12 +667,14 @@ def _run_fresh_process_compile_benchmark(
     expected_max_wall_seconds: float,
     compile_args: tuple[str, ...],
     retained_payload_keys: tuple[str, ...] = _RETAINED_BENCHMARK_PAYLOAD_KEYS,
+    env: dict[str, str] | None = None,
 ) -> FreshProcessCompileBenchmarkResult:
     run: _TimedSqbRun = _run_timed_sqb(
         project_dir=project_dir,
         label=label,
         sqb_args=("compile", "--json", *compile_args),
         expected_max_wall_seconds=expected_max_wall_seconds,
+        env=env,
     )
     assert isinstance(run.payload, dict)
     payload: dict[str, object] = cast(dict[str, object], run.payload)
@@ -707,6 +710,7 @@ def _run_timed_sqb(
     label: str,
     sqb_args: tuple[str, ...],
     expected_max_wall_seconds: float,
+    env: dict[str, str] | None = None,
 ) -> _TimedSqbRun:
     measurement_path: Path = project_dir.parent / f"{label}-measurement.txt"
     output_path: Path = project_dir.parent / f"{label}.out"
@@ -737,6 +741,7 @@ def _run_timed_sqb(
                 stdout=output_file,
                 stderr=stderr_file,
                 start_new_session=True,
+                env={**os.environ, **(env or {})},
             ) as process:
                 try:
                     returncode: int = process.wait(timeout=expected_max_wall_seconds + 10.0)
@@ -940,6 +945,136 @@ def run_dense_warm_edit_benchmark(
         compile_args=("--no-cache",),
     )
     return measurements
+
+
+class DeltaEditLoopMeasurements(NamedTuple):
+    """Fresh-process compiles of an edit loop: deltas, delta fallbacks and delta-disabled ones."""
+
+    deltas: dict[str, FreshProcessCompileBenchmarkResult]
+    fallbacks: tuple[FreshProcessCompileBenchmarkResult, ...]
+    full: tuple[FreshProcessCompileBenchmarkResult, ...]
+
+
+DELTA_EDIT_LOOP_ENV: dict[str, str] = {REUSE_DISABLE_ENV_VAR: "0"}
+_DELTA_DISABLED_ENV: dict[str, str] = {**DELTA_EDIT_LOOP_ENV, DELTA_COMPILE_DISABLE_ENV_VAR: "1"}
+_WARM_UP_PAIRS: int = 1
+# Each pair swaps which compile runs first, so neither always runs on a warmer system.
+_ALTERNATING_CONFIG_RUNS: tuple[tuple[tuple[str, dict[str, str]], ...], ...] = (
+    (("fallback", DELTA_EDIT_LOOP_ENV), ("full", _DELTA_DISABLED_ENV)),
+    (("full", _DELTA_DISABLED_ENV), ("fallback", DELTA_EDIT_LOOP_ENV)),
+)
+_DENSE_DESCRIPTION: str = 'description "Generated dense model."'
+_DENSE_EXPECTED_VALUE: re.Pattern[str] = re.compile(r"(__expected__\w+ AS \(SELECT CAST\()\d+")
+_ANALYSIS_COUNTS: tuple[str, ...] = (
+    "analysis_batch_cache_hits",
+    "analysis_entry_cache_hits",
+    "analysis_cache_misses",
+    "analysis_cache_bypasses",
+)
+
+
+def analysed_model_count(result: FreshProcessCompileBenchmarkResult) -> int:
+    """How many models the compile analysed, from cache or not; a delta analyses only its own."""
+
+    timings: dict[str, int] = cast(dict[str, int], result.payload["compile_timings"])
+    return sum(timings[name] for name in _ANALYSIS_COUNTS)
+
+
+def _edit_loop_compile(
+    *, project_dir: Path, label: str, max_seconds: float, env: dict[str, str]
+) -> FreshProcessCompileBenchmarkResult:
+    return _run_fresh_process_compile_benchmark(
+        project_dir=project_dir,
+        label=label,
+        expected_max_wall_seconds=max_seconds,
+        compile_args=(),
+        env=env,
+    )
+
+
+def _edited_test_expectation(path: Path) -> None:
+    contents: str = path.read_text(encoding="utf-8")
+    edited, count = _DENSE_EXPECTED_VALUE.subn(r"\g<1>97", contents, count=1)
+    assert count == 1 and edited != contents, path
+    path.write_text(edited, encoding="utf-8")
+
+
+def run_dense_delta_edit_loop_benchmark(
+    *,
+    project_dir: Path,
+    edited_files: tuple[Path, Path, Path],
+    full_pairs: int,
+    expected_max_full_seconds: float,
+    expected_max_delta_seconds: float,
+) -> DeltaEditLoopMeasurements:
+    """Compile, edit a body, a header and a SQL test, then edit config with and without deltas."""
+
+    body_model, header_model, test_file = edited_files
+    _ = _edit_loop_compile(
+        project_dir=project_dir,
+        label="delta-loop-first",
+        max_seconds=2 * expected_max_full_seconds,
+        env=DELTA_EDIT_LOOP_ENV,
+    )
+    deltas: dict[str, FreshProcessCompileBenchmarkResult] = {}
+    for label, edit in (
+        (
+            "body",
+            partial(
+                _replace_benchmark_text,
+                path=body_model,
+                old="COALESCE(b.amount, 0) + CAST(b.id AS DOUBLE)",
+                new="COALESCE(b.amount, 1000) + CAST(b.id AS DOUBLE)",
+            ),
+        ),
+        (
+            "header",
+            partial(
+                _replace_benchmark_text,
+                path=header_model,
+                old=_DENSE_DESCRIPTION,
+                new='description "Edited dense model."',
+            ),
+        ),
+        (
+            "sql_test",
+            partial(_edited_test_expectation, test_file),
+        ),
+    ):
+        edit()
+        deltas[label] = _edit_loop_compile(
+            project_dir=project_dir,
+            label=f"delta-loop-{label}",
+            max_seconds=expected_max_delta_seconds,
+            env=DELTA_EDIT_LOOP_ENV,
+        )
+    runs: dict[str, list[FreshProcessCompileBenchmarkResult]] = {"fallback": [], "full": []}
+    for pair in range(_WARM_UP_PAIRS + full_pairs):
+        for kind, env in _ALTERNATING_CONFIG_RUNS[pair % len(_ALTERNATING_CONFIG_RUNS)]:
+            config: Path = project_dir / "sqlbuild_project.toml"
+            config.write_text(
+                config.read_text(encoding="utf-8") + f"# {kind} edit {pair}\n",
+                encoding="utf-8",
+            )
+            runs[kind].append(
+                _edit_loop_compile(
+                    project_dir=project_dir,
+                    label=f"delta-loop-{kind}-{pair}",
+                    max_seconds=expected_max_full_seconds,
+                    env=env,
+                )
+            )
+    return DeltaEditLoopMeasurements(
+        deltas=deltas,
+        fallbacks=tuple(runs["fallback"][_WARM_UP_PAIRS:]),
+        full=tuple(runs["full"][_WARM_UP_PAIRS:]),
+    )
+
+
+def median_cpu_seconds(results: tuple[FreshProcessCompileBenchmarkResult, ...]) -> float:
+    """The median CPU seconds of same-runner compiles."""
+
+    return statistics.median(result.cpu_seconds for result in results)
 
 
 def _append_benchmark_edit(path: Path, label: str) -> None:

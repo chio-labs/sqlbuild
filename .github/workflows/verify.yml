@@ -571,7 +571,8 @@ jobs:
     needs: [changes, lockfile]
     if: needs.changes.outputs.performance == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # The 3k and 10k cells also run the delta edit-loop guard, about five minutes at 10k.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -592,7 +593,7 @@ jobs:
         run: uv python install 3.12
       - name: Install dependencies
         run: uv sync --locked --all-groups --all-extras
-      - name: Run dense all-rules guard under 4 GiB
+      - name: Run dense all-rules and delta edit-loop guards under 4 GiB
         env:
           BENCHMARK_MODELS: ${{ matrix.models }}
           MEMORY_LIMIT_BYTES: "4294967296"
