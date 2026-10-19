@@ -1,3 +1,5 @@
+#[path = "tests/test_coverage.rs"]
+mod coverage;
 #[path = "tests/helpers.rs"]
 mod helpers;
 #[path = "tests/test_image.rs"]

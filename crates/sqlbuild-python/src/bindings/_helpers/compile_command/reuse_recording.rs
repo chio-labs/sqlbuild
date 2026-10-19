@@ -297,9 +297,11 @@ pub(crate) fn print_to<'py>(
 
 #[pymethods]
 impl RecordedCompileOutput {
-    /// Print one stderr result line, such as a note, and record it.
+    /// Print one stderr result line, such as a note, and record it; a delta only records it.
     pub(crate) fn print_stderr_line(&self, line: Bound<'_, PyString>) -> PyResult<()> {
-        print_to(line.py(), "stderr", &line)?;
+        if crate::bindings::_helpers::compile_delta::context::injection().is_none() {
+            print_to(line.py(), "stderr", &line)?;
+        }
         self.locked().0.push(line.unbind());
         Ok(())
     }

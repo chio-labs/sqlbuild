@@ -163,6 +163,9 @@ impl<'py> ReportInputs<'py> {
             return Ok(PyDict::new(py));
         }
         let reasons: Bound<'py, PyDict> = semantic_coverage(&self.project)?;
+        if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+            return Ok(reasons);
+        }
         let Some(names) = self.selected_names(MODEL_TYPE)? else {
             return Ok(reasons);
         };

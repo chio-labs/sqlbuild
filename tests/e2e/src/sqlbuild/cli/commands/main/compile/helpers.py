@@ -40,7 +40,11 @@ from scripts.cold_compile_performance.main.semantic_compile_fingerprint import (
 from scripts.compiler_differential.constants import FAILURE_BASE_FILES
 from scripts.delta_compile_series.models import DeltaCompileOutcome
 from sqlbuild._native import COMPILE_REUSE_DISABLE_ENV_VAR as REUSE_DISABLE_ENV_VAR
-from sqlbuild._native import ContractValidationResult, compiler_cache_directory
+from sqlbuild._native import (
+    DELTA_COMPILE_DISABLE_ENV_VAR,
+    ContractValidationResult,
+    compiler_cache_directory,
+)
 from sqlbuild._native import run_cli as main
 from sqlbuild.adapter.contract.classes.duckdb_backed_adapter import DuckDbBackedAdapter
 from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
@@ -5106,6 +5110,14 @@ def run_delta_compile(
     )
     return DeltaCompileOutcome(
         returncode=result.returncode, stdout=result.stdout, stderr=result.stderr
+    )
+
+
+def run_full_compile(project_dir: Path, *, args: tuple[str, ...]) -> DeltaCompileOutcome:
+    """Compile the project at `project_dir` in full, with delta compiles off."""
+
+    return run_delta_compile(
+        project_dir=project_dir, args=args, env={DELTA_COMPILE_DISABLE_ENV_VAR: "1"}
     )
 
 

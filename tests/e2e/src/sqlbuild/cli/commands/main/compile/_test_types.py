@@ -1112,8 +1112,20 @@ class DeltaCompileSeriesTestCase:
     seed: int
     json_output: bool
     steps: int
+    adapter: str = "duckdb"
     expected_unexpected_outcomes: tuple[str, ...] = ()
     expected_minimum_deltas: int = 3
+
+
+@dataclass(frozen=True)
+class DeltaCompileFullCopyTestCase:
+    description: str
+    edits: tuple[tuple[str, str, str], ...]
+    expected_delta_line: bool
+    stored_edits: tuple[tuple[str, str, str], ...] = ()
+    json_output: bool = False
+    adapter: str = "duckdb"
+    expected_difference: None = None
 
 
 @dataclass(frozen=True)

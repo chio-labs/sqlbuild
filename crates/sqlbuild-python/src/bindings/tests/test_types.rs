@@ -1,6 +1,7 @@
 use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_config::models::ConfigValue;
 
+use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
 use crate::bindings::_helpers::compile_delta::image::ProjectImage;
 
 /// A stored report, a delta report and what splicing the delta into the stored one gives.
@@ -38,4 +39,21 @@ pub(crate) struct ImageRoundTripTestCase {
     pub(crate) expected_model_subjects: bool,
     /// The retained rules request's model and digest count, or `None` without one.
     pub(crate) expected_rule_models: Option<usize>,
+}
+
+/// Stored and fresh semantic coverage facts, and the whole project's partial-check reasons.
+pub(crate) struct CoverageTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) stored: Vec<ModelCoverage>,
+    pub(crate) fresh: Vec<ModelCoverage>,
+    pub(crate) stored_order: Vec<(String, Vec<String>)>,
+    pub(crate) fresh_order: Vec<(String, Vec<String>)>,
+    pub(crate) expected_reasons: Vec<(String, Vec<String>)>,
+}
+
+/// An error message a delta round reported.
+pub(crate) struct UncompiledModelTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) message: &'static str,
+    pub(crate) expected_uncompiled: bool,
 }

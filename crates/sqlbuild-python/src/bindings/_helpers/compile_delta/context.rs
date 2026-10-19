@@ -7,6 +7,7 @@ use sqlbuild_analysis::assembly::analysis_session::models::{RelationTables, Sess
 use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_rules::models::RetainedRows;
 
+use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
 use crate::bindings::_helpers::compile_delta::image::PendingRules;
 
 /// The facts a full compile leaves for its project image beyond its analysis record.
@@ -47,6 +48,8 @@ pub(crate) struct ImageCapture {
     pub(crate) lint_file_keys: Option<Vec<(String, Option<String>)>>,
     /// The closed shape each model published for semantic checks, in publication order.
     pub(crate) model_shapes: Option<Vec<ModelShape>>,
+    /// The notable semantic coverage facts of every model, when semantic checks reported them.
+    pub(crate) coverage: Option<Vec<ModelCoverage>>,
     /// Why this compile cannot be the base of a delta compile, when something ruled it out.
     pub(crate) unsupported: Option<String>,
 }
@@ -123,6 +126,10 @@ pub(crate) struct DeltaInjection {
     pub(crate) model_shapes: Vec<ModelShape>,
     /// The whole project's text report model lines, with the rerun models' lines to replace.
     pub(crate) text_models: Vec<(String, bool, i64)>,
+    /// The whole project's notable semantic coverage facts, as the image recorded them.
+    pub(crate) coverage: Option<Vec<ModelCoverage>>,
+    /// Every project model in project order, with the models it reads.
+    pub(crate) coverage_order: Vec<(String, Vec<String>)>,
 }
 
 static CAPTURE: Mutex<Option<ImageCapture>> = Mutex::new(None);

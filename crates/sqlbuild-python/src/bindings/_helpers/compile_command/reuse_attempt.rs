@@ -14,6 +14,7 @@ use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FORMAT};
 
 use crate::bindings::_helpers::cli::launch_state::launch_record_path;
+use crate::bindings::_helpers::cli::progress::{NativeProgressProjector, current_projector};
 use crate::bindings::_helpers::compile_command::constants::{
     COMPILE_CACHE_DISABLE_ENV_VAR, COMPILE_CACHE_DISABLE_VALUE, COMPILE_COMMAND_NAME,
     COMPILED_DIRECTORY_NAME, COMPUTE_LOG_DIRECTORY_NAME, EXCLUDED_DIRECTORIES,
@@ -513,9 +514,24 @@ fn compiled_with_delta<'py>(
     let py: Python<'py> = request.py();
     let verifying: bool = env_enabled(DELTA_VERIFY_ENV_VAR);
     let started: f64 = monotonic(py)?;
-    let delta: DeltaOutcome<'py> = match driver::run(request, attempt) {
+    let projector: Option<pyo3::Py<NativeProgressProjector>> = current_projector(py)?;
+    if let Some(projector) = &projector {
+        projector.get().hold_lines();
+    }
+    let ran: PyResult<DeltaOutcome<'py>> = driver::run(request, attempt);
+    let held: Vec<String> = projector
+        .as_ref()
+        .map(|projector| projector.get().release_lines())
+        .unwrap_or_default();
+    let delta: DeltaOutcome<'py> = match ran {
         Ok(delta) => delta,
         Err(error) => DeltaOutcome::Fallback(format!("the delta compile failed: {error}")),
+    };
+    let write_held = || -> PyResult<()> {
+        match &projector {
+            Some(projector) => projector.get().write_held(py, &held),
+            None => Ok(()),
+        }
     };
     context::reset();
     let project_dir: Bound<'py, PyAny> = native_field(attempt, "project_dir")?;
@@ -528,6 +544,7 @@ fn compiled_with_delta<'py>(
     )?;
     match delta {
         DeltaOutcome::Finished(finished) if !verifying => {
+            write_held()?;
             let (files, models) = (finished.changed_files, finished.rerun_models);
             let committing: std::time::Instant = std::time::Instant::now();
             let code: i64 = driver::commit(*finished, (request, attempt))?;
@@ -542,7 +559,10 @@ fn compiled_with_delta<'py>(
             )?;
             return Ok(code);
         }
-        DeltaOutcome::Raised(error) if !verifying => return Err(error),
+        DeltaOutcome::Raised(error) if !verifying => {
+            write_held()?;
+            return Err(error);
+        }
         DeltaOutcome::Fallback(reason) => {
             reuse_debug(py, &format!("Delta compile fell back: {reason}"))?;
             if verifying {

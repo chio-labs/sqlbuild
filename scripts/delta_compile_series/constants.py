@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from scripts.delta_compile_series.models import DeltaCompileEdit
 from scripts.delta_compile_series.types import EditTarget
 
@@ -18,6 +20,9 @@ FALLBACK_WEIGHT: int = 1
 STALE_PROBLEMS: str = "reports problems in files the edit leaves alone"
 PROJECT_CONFIG: str = "sqlbuild_project.toml"
 RANDOM_VALUE_LIMIT: int = 10**6
+FULL_COPY_SUFFIX: str = "_full_copy"
+DURATION_PATTERN: re.Pattern[str] = re.compile(r"\s*\(\d+(?:\.\d+)?s\)")
+COMPILE_TIMINGS_PATTERN: re.Pattern[str] = re.compile(r'\n  "compile_timings": \{[^{}]*\n  \}')
 
 EDITS: tuple[DeltaCompileEdit, ...] = (
     DeltaCompileEdit("body_constant", r"COALESCE\(b\.amount, \d+\)", "COALESCE(b.amount, {value})"),
@@ -37,6 +42,19 @@ EDITS: tuple[DeltaCompileEdit, ...] = (
         r"(__expected__\w+ AS \(SELECT CAST\()\d+",
         r"\g<1>{value}",
         target=EditTarget.TESTS,
+    ),
+    DeltaCompileEdit(
+        "analysis_off",
+        r"MODEL \(description",
+        "MODEL (sql_analysis false, description",
+        fallback_reason="changed its sql_analysis header key",
+    ),
+    DeltaCompileEdit(
+        "test_retarget",
+        r"(__expected__\w+_\d{4})[1-9]( AS)",
+        r"\g<1>0\g<2>",
+        target=EditTarget.TESTS,
+        fallback_reason="now covers other models",
     ),
     DeltaCompileEdit(
         "materialization",

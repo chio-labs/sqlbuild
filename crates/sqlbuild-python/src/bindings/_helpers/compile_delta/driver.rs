@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyStringMethods;
 use sqlbuild_analysis::assembly::analysis_session::models::RelationTables;
 use sqlbuild_cache::project_reuse::main::read_delta_base::read_delta_base;
@@ -11,8 +11,11 @@ use sqlbuild_cache::project_reuse::main::read_delta_output::read_delta_output;
 use sqlbuild_cache::project_reuse::models::{DeltaBase, DeltaCandidate, ProjectFileChanges};
 use sqlbuild_cache::project_reuse::types::ImageSections;
 
+use crate::bindings::_helpers::cli::progress::{NativeProgressProjector, current_projector};
 use crate::bindings::_helpers::compile_command::reuse_attempt::reuse_debug;
-use crate::bindings::_helpers::compile_command::reuse_recording::RecordedCompileOutput;
+use crate::bindings::_helpers::compile_command::reuse_recording::{
+    RecordedCompileOutput, print_to,
+};
 use crate::bindings::_helpers::compile_delta::context::{
     CapturedDiagnostic, CapturedModel, CapturedTest, DeltaInjection, ImageCapture, RecordMerge,
     start_capture, take_capture, take_delta_unsupported, with_injection,
@@ -49,8 +52,17 @@ const RULE_PHASE: &str = "\"phase\": \"rule\"";
 const UNKNOWN_SOURCE: &str = "unknown source";
 /// The upstream kind of a source a model reads.
 const SOURCE_KIND: &str = "source";
+/// The upstream kind of a model a model reads.
+const MODEL_KIND: &str = "model";
 const TESTS_ROOT: &str = "tests/";
+const STDERR: &str = "stderr";
 const SQL_SUFFIX: &str = ".sql";
+/// How generated SQL test CTE names mark their prefix, as in `__ref__orders`.
+const CTE_PREFIX_MARK: &str = "__";
+const QUOTE: char = '\'';
+/// What errors for a reference to a model the project lacks say.
+const MISSING_MODEL_PHRASES: [&str; 2] = ["unknown model", "which does not exist"];
+const UNCOMPILED_MODEL: &str = "the delta compile reported a model it did not compile as missing";
 /// How many changed, added and removed paths the candidates debug line names.
 const CANDIDATES_LOGGED: usize = 5;
 const UNREADABLE_IMAGE: &str = "the project image cannot be read";
@@ -272,6 +284,12 @@ fn lent_injection(
         model_subjects: image.model_subjects.take(),
         text_models: image.text_models.clone().unwrap_or_default(),
         model_shapes: std::mem::take(&mut image.model_shapes),
+        coverage: image.coverage.take(),
+        coverage_order: image
+            .models
+            .iter()
+            .map(|model| (model.name.clone(), upstream_models(&model.upstream)))
+            .collect(),
         lint_model_keys: image.lint_model_keys.take(),
         lint_file_keys: image.lint_file_keys.take(),
         ..DeltaInjection::default()
@@ -285,6 +303,7 @@ fn returned(mut image: ProjectImage, injection: DeltaInjection) -> ProjectImage 
     image.fact_digests = injection.fact_digests.into_iter().collect();
     image.model_subjects = injection.model_subjects;
     image.model_shapes = injection.model_shapes;
+    image.coverage = injection.coverage;
     image.lint_model_keys = injection.lint_model_keys;
     image.lint_file_keys = injection.lint_file_keys;
     image
@@ -354,13 +373,29 @@ enum RoundOutcome<'py> {
     Stop(DeltaOutcome<'py>),
 }
 
+/// Compile the rerun set once, keeping the longest round's lines: every phase a full compile runs.
 fn round<'py>(
     request: &Bound<'py, PyAny>,
     attempt: &Bound<'py, PyAny>,
     (injection, rerun): (DeltaInjection, &Rerun),
 ) -> PyResult<(RoundOutcome<'py>, Option<DeltaInjection>)> {
     start_capture();
+    let projector: Option<Py<NativeProgressProjector>> = current_projector(request.py())?;
+    let earlier: Vec<String> = projector
+        .as_ref()
+        .map(|projector| projector.get().exchange_held_lines(Vec::new()))
+        .unwrap_or_default();
     let (ran, injection) = with_injection(injection, || unrecorded_compile(request, attempt));
+    if let Some(projector) = &projector {
+        let latest: Vec<String> = projector.get().exchange_held_lines(Vec::new());
+        let _ = projector
+            .get()
+            .exchange_held_lines(if latest.len() < earlier.len() {
+                earlier
+            } else {
+                latest
+            });
+    }
     Ok((ran_round(ran, rerun)?, injection))
 }
 
@@ -587,10 +622,29 @@ fn rounds<'py>(
         let injection_for_round: DeltaInjection =
             for_rerun(injection, &rerun, rerun.sources.clone());
         let (outcome, back) = round(request, attempt, (injection_for_round, &rerun))?;
+        let model_names: &[String] = back
+            .as_ref()
+            .map_or(&[], |injection| injection.model_names.as_slice());
         let ran: Round<'py> = match outcome {
             RoundOutcome::Ran(ran) => *ran,
+            RoundOutcome::Stop(DeltaOutcome::Raised(error))
+                if names_uncompiled_model(&error.to_string(), model_names, &rerun.models) =>
+            {
+                return stopped(UNCOMPILED_MODEL);
+            }
             RoundOutcome::Stop(outcome) => return Ok(Err(outcome)),
         };
+        if ran
+            .capture
+            .diagnostics
+            .iter()
+            .any(|diagnostic| names_uncompiled_model(&diagnostic.json, model_names, &rerun.models))
+        {
+            return stopped(UNCOMPILED_MODEL);
+        }
+        if let Some(path) = rechained_test(&ran.capture.test_chains, &image.tests, &changed_tests) {
+            return stopped(format!("{path} now covers other models"));
+        }
         let Some(back) = back else {
             return stopped("the delta compile's injection is still in use");
         };
@@ -768,19 +822,106 @@ fn first_rerun(
         .iter()
         .map(|(path, name)| (*name, *path))
         .collect();
+    let upstream_by_name: HashMap<&str, &[(String, String)]> = gate
+        .models
+        .iter()
+        .map(|model| (model.name.as_str(), model.upstream.as_slice()))
+        .collect();
     for test in &gate.tests {
         if !changed_tests.contains(&test.relative_path) {
             continue;
         }
-        for name in &test.chain {
+        let ring = test.chain.iter().flat_map(|name| {
+            upstream_models(
+                upstream_by_name
+                    .get(name.as_str())
+                    .copied()
+                    .unwrap_or_default(),
+            )
+        });
+        let named: BTreeSet<String> =
+            test_model_references(project_dir, &test.relative_path, &path_by_model)?;
+        for name in test.chain.iter().cloned().chain(ring).chain(named) {
             let Some(path) = path_by_model.get(name.as_str()) else {
                 return Err(format!("{} tests a model the image lacks", test.key));
             };
-            rerun.models.insert(name.clone());
             rerun.model_paths.insert((*path).to_owned());
+            rerun.models.insert(name);
         }
     }
     Ok((rerun, changed_tests))
+}
+
+/// The first edited SQL test whose model chain the delta resolved differently than stored.
+fn rechained_test<'a>(
+    fresh: &[CapturedTest],
+    stored: &'a [CapturedTest],
+    changed_tests: &BTreeSet<String>,
+) -> Option<&'a str> {
+    let sorted = |chain: &[String]| -> BTreeSet<String> { chain.iter().cloned().collect() };
+    let fresh: HashMap<&str, BTreeSet<String>> = fresh
+        .iter()
+        .map(|test| (test.key.as_str(), sorted(&test.chain)))
+        .collect();
+    stored
+        .iter()
+        .filter(|test| changed_tests.contains(&test.relative_path))
+        .find(|test| fresh.get(test.key.as_str()) != Some(&sorted(&test.chain)))
+        .map(|test| test.relative_path.as_str())
+}
+
+/// Every project model the SQL test file at `path` names, a harmless superset of its references.
+fn test_model_references(
+    project_dir: &std::path::Path,
+    path: &str,
+    path_by_model: &HashMap<&str, &str>,
+) -> Result<BTreeSet<String>, String> {
+    let Ok(text) = std::fs::read_to_string(project_dir.join(path)) else {
+        return Err(format!("{path} cannot be read"));
+    };
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    for word in text.split(|character: char| !(character.is_alphanumeric() || character == '_')) {
+        let unprefixed: &str = word
+            .strip_prefix(CTE_PREFIX_MARK)
+            .and_then(|rest| rest.split_once(CTE_PREFIX_MARK))
+            .map_or(word, |(_, name)| name);
+        for candidate in [word, unprefixed] {
+            if path_by_model.contains_key(candidate) {
+                names.insert(candidate.to_owned());
+            }
+        }
+    }
+    Ok(names)
+}
+
+/// Whether `message` reports as missing a project model the delta did not compile.
+pub(crate) fn names_uncompiled_model(
+    message: &str,
+    model_names: &[String],
+    rerun_models: &BTreeSet<String>,
+) -> bool {
+    MISSING_MODEL_PHRASES
+        .iter()
+        .any(|phrase| message.contains(phrase))
+        && message
+            .split(QUOTE)
+            .skip(1)
+            .step_by(2)
+            .filter(|name| !rerun_models.contains(*name))
+            .any(|name| project_model(model_names, name))
+}
+
+fn project_model(model_names: &[String], name: &str) -> bool {
+    model_names.iter().any(|model| model == name)
+}
+
+/// The names of the models among `upstream`.
+fn upstream_models(upstream: &[(String, String)]) -> Vec<String> {
+    upstream
+        .iter()
+        .filter(|(kind, _)| kind == MODEL_KIND)
+        .map(|(_, name)| name.clone())
+        .collect()
 }
 
 /// Whether only a full compile would repeat a stored non-rule diagnostic outside the rerun.
@@ -981,6 +1122,9 @@ fn patched_image(base: ProjectImage, rerun: &Rerun, capture: ImageCapture) -> Pr
     if let Some(shapes) = capture.model_shapes {
         image.model_shapes = shapes;
     }
+    if capture.coverage.is_some() {
+        image.coverage = capture.coverage;
+    }
     image.header_keys.extend(capture.header_keys);
     let mut pinned: BTreeSet<String> = std::mem::take(&mut image.pinned_sources)
         .into_iter()
@@ -1016,6 +1160,9 @@ pub(crate) fn commit(
         RecordedCompileOutput::recorded(py, &stderr_lines, &format!("{report}\n")),
     )?
     .into_any();
+    for line in &stderr_lines {
+        print_to(py, STDERR, line.as_str())?;
+    }
     crate::bindings::_helpers::compile_delta::context::set_pending_image(image);
     crate::bindings::_helpers::compile_delta::context::set_record_merge(Some(merge));
     crate::bindings::_helpers::compile_driver::command::store_and_print(

@@ -1,6 +1,6 @@
 //! The invocation-scoped native CLI projection of canonical lifecycle facts.
 
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -43,6 +43,8 @@ pub(crate) struct NativeProgressProjector {
     state: Mutex<ProgressProjection>,
     stream: Py<PyAny>,
     coordinator: Py<PyAny>,
+    /// The lines held back instead of written, while something holds them.
+    held: Mutex<Option<Vec<String>>>,
 }
 
 fn payload_value<'py>(payload: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
@@ -169,6 +171,37 @@ pub(crate) fn terminal_stream(stream: &Bound<'_, PyAny>) -> PyResult<bool> {
 }
 
 impl NativeProgressProjector {
+    fn held(&self) -> MutexGuard<'_, Option<Vec<String>>> {
+        self.held.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Hold back every line from now on instead of writing it.
+    pub(crate) fn hold_lines(&self) {
+        *self.held() = Some(Vec::new());
+    }
+
+    /// Replace the lines held back so far with `lines`, returning them; nothing while not holding.
+    pub(crate) fn exchange_held_lines(&self, lines: Vec<String>) -> Vec<String> {
+        match self.held().as_mut() {
+            Some(held) => std::mem::replace(held, lines),
+            None => Vec::new(),
+        }
+    }
+
+    /// Write lines as they come again, returning those held back since `hold_lines`.
+    pub(crate) fn release_lines(&self) -> Vec<String> {
+        self.held().take().unwrap_or_default()
+    }
+
+    /// Write lines held back earlier, as they would have been written.
+    pub(crate) fn write_held(&self, py: Python<'_>, lines: &[String]) -> PyResult<()> {
+        let coordinator: &Bound<'_, PyAny> = self.coordinator.bind(py);
+        for line in lines {
+            persist(coordinator, self.stream.bind(py), line)?;
+        }
+        Ok(())
+    }
+
     fn locked(&self) -> PyResult<MutexGuard<'_, ProgressProjection>> {
         self.state
             .lock()
@@ -192,7 +225,12 @@ impl NativeProgressProjector {
                 (lines, value)
             };
             for line in lines {
-                persist(coordinator, self.stream.bind(py), &format!("{line}\n"))?;
+                let text: String = format!("{line}\n");
+                if let Some(held) = self.held().as_mut() {
+                    held.push(text);
+                    continue;
+                }
+                persist(coordinator, self.stream.bind(py), &text)?;
             }
             Ok(value)
         })();
@@ -236,6 +274,7 @@ impl NativeProgressProjector {
             })),
             stream: stream.unbind(),
             coordinator: coordinator.unbind(),
+            held: Mutex::new(None),
         })
     }
 

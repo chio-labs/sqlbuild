@@ -41,6 +41,17 @@ fn given_stored_and_delta_reports_when_splicing_then_only_rerun_items_and_delta_
             expected_report: None,
         },
         SpliceTestCase {
+            description: "the delta's partial-check reasons, already the whole project's, replace the stored",
+            base: r#"{"has_errors": false, "semantic_checks_partial": {"customers": ["open input: orders"]}, "resources": {}, "diagnostics": []}"#,
+            delta: r#"{"has_errors": true, "semantic_checks_partial": {"customers": ["depends on invalid model orders"]}, "resources": {}, "diagnostics": [{"code": "B002"}]}"#,
+            models: &["orders"],
+            tests: &[],
+            sources: None,
+            expected_report: Some(
+                r#"{"has_errors": true, "semantic_checks_partial": {"customers": ["depends on invalid model orders"]}, "resources": {}, "diagnostics": [{"code": "B002"}]}"#,
+            ),
+        },
+        SpliceTestCase {
             description: "a whole-project section that differs cannot be spliced",
             base: r#"{"has_errors": false, "target": "dev", "summary": {"errors": 0, "warnings": 0}, "resources": {}, "diagnostics": [], "compile_timings": {}}"#,
             delta: r#"{"has_errors": false, "target": "prod", "summary": {"errors": 0, "warnings": 0}, "resources": {}, "diagnostics": [], "compile_timings": {}}"#,

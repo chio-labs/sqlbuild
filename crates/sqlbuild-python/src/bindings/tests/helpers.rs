@@ -7,6 +7,7 @@ use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
 use crate::bindings::_helpers::compile_delta::context::{
     CapturedDiagnostic, CapturedModel, CapturedTest,
 };
+use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
 use crate::bindings::_helpers::compile_delta::image::{
     BaseRules, FACTS_SECTION, GATE_SECTION, IMAGE_FORMAT, ImageRelations, ImageRules, PendingRules,
     ProjectImage, RULE_DIGESTS_SECTION,
@@ -95,6 +96,12 @@ pub(crate) fn image() -> ProjectImage {
             ("orders".to_owned(), order_types),
             ("customers".to_owned(), pairs(&[("customer_id", "VARCHAR")])),
         ],
+        coverage: Some(vec![ModelCoverage {
+            name: "orders".to_owned(),
+            disabled: false,
+            blocked: true,
+            partial: strings(&["open source: raw_orders"]),
+        }]),
         lint_model_keys: Some(pairs(&[("models/orders.sql", "lint-key")])),
         lint_file_keys: Some(vec![
             ("models/orders.sql".to_owned(), Some("file-key".to_owned())),
@@ -133,6 +140,7 @@ pub(crate) fn facts(image: &ProjectImage) -> String {
                 &image.pinned_sources,
                 &image.test_sources,
                 &image.model_shapes,
+                &image.coverage,
                 &image.lint_model_keys,
                 &image.lint_file_keys,
                 &image.header_keys,
@@ -213,4 +221,26 @@ pub(crate) fn names(values: &[&str]) -> BTreeSet<String> {
 /// A YAML string value.
 pub(crate) fn text(value: &str) -> ConfigValue {
     ConfigValue::String(value.to_owned())
+}
+
+/// One model's semantic coverage facts.
+pub(crate) fn coverage(
+    name: &str,
+    (disabled, blocked): (bool, bool),
+    partial: &[&str],
+) -> ModelCoverage {
+    ModelCoverage {
+        name: name.to_owned(),
+        disabled,
+        blocked,
+        partial: strings(partial),
+    }
+}
+
+/// Models paired with their upstream names, or with their reasons.
+pub(crate) fn order(models: &[(&str, &[&str])]) -> Vec<(String, Vec<String>)> {
+    models
+        .iter()
+        .map(|(name, upstream)| ((*name).to_owned(), strings(upstream)))
+        .collect()
 }

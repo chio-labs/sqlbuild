@@ -9,7 +9,10 @@ use sqlbuild_core::cli_text::models::ModelLine;
 use crate::bindings::_helpers::compile_command::report::diagnostic_item;
 use crate::bindings::_helpers::compile_delta::context::{
     CapturedDiagnostic, CapturedModel, CapturedTest, ModelShape, capture, capture_unsupported,
-    capturing, injection,
+    capturing, delta_unsupported, injection,
+};
+use crate::bindings::_helpers::compile_delta::coverage::{
+    ModelCoverage, coverage_reasons, merged_coverage, merged_order,
 };
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
@@ -148,6 +151,39 @@ pub(crate) fn captured_diagnostic(diagnostic: &Bound<'_, PyAny>) -> PyResult<Cap
             .collect(),
         error: value.get("severity").and_then(serde_json::Value::as_str) == Some("error"),
     })
+}
+
+/// The partial-check reasons of the `fresh` models, merged in a delta with the stored models'.
+pub(crate) fn semantic_reasons(
+    order: Vec<(String, Vec<String>)>,
+    fresh: Vec<ModelCoverage>,
+) -> PyResult<Vec<(String, Vec<String>)>> {
+    let (order, facts): (Vec<(String, Vec<String>)>, Vec<ModelCoverage>) = match injection() {
+        None => (
+            order,
+            fresh.into_iter().filter(ModelCoverage::notable).collect(),
+        ),
+        Some(injection) => {
+            let Some(stored) = &injection.coverage else {
+                return Err(delta_unsupported(
+                    "the stored compile recorded no semantic coverage",
+                ));
+            };
+            (
+                merged_order(&injection.coverage_order, &order),
+                merged_coverage(stored, &fresh),
+            )
+        }
+    };
+    let reasons: Vec<(String, Vec<String>)> = coverage_reasons(&order, &facts);
+    if capturing() {
+        capture(|capture| {
+            if capture.coverage.is_none() {
+                capture.coverage = Some(facts);
+            }
+        });
+    }
+    Ok(reasons)
 }
 
 /// In a delta compile, publish the shapes of every model it does not compile again first.

@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import shutil
 from functools import partial
 from pathlib import Path
 
 import pytest
 
-from scripts.delta_compile_series.constants import DELTA_COMPILE_LINE, PROJECT_CONFIG
+from scripts.delta_compile_series._helpers.outcomes import full_compile_difference
+from scripts.delta_compile_series.constants import (
+    DELTA_COMPILE_LINE,
+    DOUBLE_CAST,
+    DOUBLE_COLUMN,
+    FLOAT_CAST,
+    FLOAT_COLUMN,
+    PROJECT_CONFIG,
+)
 from scripts.delta_compile_series.main.run_delta_compile_sequence import (
     run_delta_compile_sequence,
 )
@@ -23,6 +32,7 @@ from scripts.delta_compile_series.models import (
 from scripts.delta_compile_series.types import SequenceEdit
 from sqlbuild._native import DELTA_COMPILE_DISABLE_ENV_VAR, DELTA_COMPILE_VERIFY_ENV_VAR
 from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
+    DeltaCompileFullCopyTestCase,
     DeltaCompileOptOutTestCase,
     DeltaCompileSequenceTestCase,
     DeltaCompileSeriesTestCase,
@@ -30,12 +40,35 @@ from tests.e2e.src.sqlbuild.cli.commands.main.compile._test_types import (
 from tests.e2e.src.sqlbuild.cli.commands.main.compile.helpers import (
     replace_project_text,
     run_delta_compile,
+    run_full_compile,
     without_compile_timings,
 )
 
 _MODEL_COUNT: int = 300
 _JSON_COMPILE: tuple[str, ...] = ("compile", "--json")
 _TEXT_COMPILE: tuple[str, ...] = ("compile",)
+_UNTYPED_ADAPTER: str = "sqlserver"
+_SMALL_MODEL_COUNT: int = 30
+_SMALL_MODEL_ROOT: str = "models/sales000/intermediate/clean"
+_ANALYSED_MODEL: str = f"{_SMALL_MODEL_ROOT}/batch00000/sales000__int_clean__orders_00001.sql"
+_SMALL_EDITED_MODEL: str = f"{_SMALL_MODEL_ROOT}/batch00001/sales000__int_clean__orders_00005.sql"
+_RESHAPED_MODEL: str = f"{_SMALL_MODEL_ROOT}/batch00002/sales000__int_clean__orders_00010.sql"
+_SMALL_EDITED_TEST: str = (
+    "tests/unit/sales000/intermediate/clean/batch00001/"
+    "test_sales000_int_clean_orders_00005__preserves_order_id.sql"
+)
+_EXPECTED_MODEL_CTE: str = "__expected__sales000__int_clean__orders_00005 AS"
+_RETARGETED_MODEL_CTE: str = "__expected__sales000__int_clean__orders_00020 AS"
+_BINDING_ERROR_EDIT: tuple[str, str, str] = (
+    _SMALL_EDITED_MODEL,
+    "COALESCE(b.amount, ",
+    "COALESCE(b.missing_col, ",
+)
+_BODY_EDIT: tuple[str, str, str] = (
+    _SMALL_EDITED_MODEL,
+    "COALESCE(b.amount, ",
+    "COALESCE(b.amount, 1 + ",
+)
 _REUSE_ROOT: str = "target/cache/compiler-native-v1/project-reuse-v3"
 _EDITED_MODEL: str = (
     "models/sales000/intermediate/clean/batch00000/sales000__int_clean__orders_00003.sql"
@@ -50,6 +83,13 @@ _EDITED_MODEL: str = (
         DeltaCompileSeriesTestCase(
             description="long_json_series", seed=13, json_output=True, steps=20
         ),
+        DeltaCompileSeriesTestCase(
+            description="partial_checks_text_report",
+            seed=14,
+            json_output=False,
+            steps=12,
+            adapter=_UNTYPED_ADAPTER,
+        ),
     ],
     ids=lambda case: case.description,
 )
@@ -57,7 +97,9 @@ def test_given_seeded_edit_series_when_compiling_each_edit_then_deltas_match_ful
     test_case: DeltaCompileSeriesTestCase, tmp_path: Path
 ) -> None:
     project_dir: Path = tmp_path / "dense_orders"
-    write_delta_compile_project(project_dir=project_dir, model_count=_MODEL_COUNT)
+    write_delta_compile_project(
+        project_dir=project_dir, model_count=_MODEL_COUNT, adapter=test_case.adapter
+    )
     args: tuple[str, ...] = (_TEXT_COMPILE, _JSON_COMPILE)[int(test_case.json_output)]
 
     series: DeltaCompileSeries = run_delta_compile_series(
@@ -74,6 +116,115 @@ def test_given_seeded_edit_series_when_compiling_each_edit_then_deltas_match_ful
 
     assert series.unexpected == test_case.expected_unexpected_outcomes, series.steps
     assert series.deltas >= test_case.expected_minimum_deltas, series.steps
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeltaCompileSeriesTestCase(description="text_report", seed=15, json_output=False, steps=12),
+        DeltaCompileSeriesTestCase(
+            description="partial_checks_json_report",
+            seed=16,
+            json_output=True,
+            steps=12,
+            adapter=_UNTYPED_ADAPTER,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_seeded_edit_series_when_compiling_each_edit_then_output_matches_full_compiles_of_copies(
+    test_case: DeltaCompileSeriesTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "dense_orders"
+    write_delta_compile_project(
+        project_dir=project_dir, model_count=_MODEL_COUNT, adapter=test_case.adapter
+    )
+    args: tuple[str, ...] = (_TEXT_COMPILE, _JSON_COMPILE)[int(test_case.json_output)]
+
+    series: DeltaCompileSeries = run_delta_compile_series(
+        project_dir=project_dir,
+        seed=test_case.seed,
+        steps=test_case.steps,
+        compile_project=partial(run_delta_compile, project_dir=project_dir, args=args, env={}),
+        compile_in_full=partial(run_full_compile, args=args),
+    )
+
+    assert series.unexpected == test_case.expected_unexpected_outcomes, series.steps
+    assert series.deltas >= test_case.expected_minimum_deltas, series.steps
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DeltaCompileFullCopyTestCase(
+            description="a model without SQL analysis keeps its partial-check notice",
+            stored_edits=((_ANALYSED_MODEL, "MODEL (", "MODEL (sql_analysis false, "),),
+            edits=(_BODY_EDIT,),
+            expected_delta_line=True,
+        ),
+        DeltaCompileFullCopyTestCase(
+            description="an invalid model makes its unchanged dependents partial",
+            edits=(_BINDING_ERROR_EDIT,),
+            expected_delta_line=True,
+        ),
+        DeltaCompileFullCopyTestCase(
+            description="an invalid model makes its unchanged dependents partial in JSON",
+            edits=(_BINDING_ERROR_EDIT,),
+            expected_delta_line=True,
+            json_output=True,
+        ),
+        DeltaCompileFullCopyTestCase(
+            description="a dialect without type checks reports every model partial",
+            edits=(_BODY_EDIT,),
+            expected_delta_line=True,
+            json_output=True,
+            adapter=_UNTYPED_ADAPTER,
+        ),
+        DeltaCompileFullCopyTestCase(
+            description="a SQL test expecting another model falls back after its round",
+            edits=((_SMALL_EDITED_TEST, _EXPECTED_MODEL_CTE, _RETARGETED_MODEL_CTE),),
+            expected_delta_line=False,
+        ),
+        DeltaCompileFullCopyTestCase(
+            description="a shape change printed once over several rounds",
+            edits=(
+                (_RESHAPED_MODEL, DOUBLE_COLUMN, FLOAT_COLUMN),
+                (_RESHAPED_MODEL, DOUBLE_CAST, FLOAT_CAST),
+                (_RESHAPED_MODEL, DOUBLE_CAST, FLOAT_CAST),
+            ),
+            expected_delta_line=True,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_stored_compile_when_compiling_an_edit_then_it_prints_what_a_full_compile_prints(
+    test_case: DeltaCompileFullCopyTestCase, tmp_path: Path
+) -> None:
+    project_dir: Path = tmp_path / "dense_orders"
+    write_delta_compile_project(
+        project_dir=project_dir, model_count=_SMALL_MODEL_COUNT, adapter=test_case.adapter
+    )
+    args: tuple[str, ...] = (_TEXT_COMPILE, _JSON_COMPILE)[int(test_case.json_output)]
+    for relative_path, old, new in test_case.stored_edits:
+        replace_project_text(project_dir, relative_path, old, new)
+    _ = run_delta_compile(project_dir=project_dir, args=args, env={})
+    for relative_path, old, new in test_case.edits:
+        replace_project_text(project_dir, relative_path, old, new)
+    copy: Path = tmp_path / "full_copy"
+    _ = shutil.copytree(project_dir, copy, symlinks=True)
+
+    edited: DeltaCompileOutcome = run_delta_compile(project_dir=project_dir, args=args, env={})
+
+    assert (DELTA_COMPILE_LINE in edited.stderr) == test_case.expected_delta_line, edited.stderr
+    assert (
+        full_compile_difference(
+            outcome=edited,
+            full=run_full_compile(copy, args=args),
+            project_dir=project_dir,
+            full_project_dir=copy,
+        )
+        == test_case.expected_difference
+    )
 
 
 @pytest.mark.parametrize(

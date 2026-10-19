@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import random
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
 from scripts.delta_compile_series._helpers.edits import edited_file
-from scripts.delta_compile_series._helpers.outcomes import judged
+from scripts.delta_compile_series._helpers.outcomes import full_compile_difference, judged
 from scripts.delta_compile_series.constants import (
+    DELTA_COMPILE_LINE,
     DELTA_WEIGHT,
     EDITS,
     FALLBACK_WEIGHT,
+    FULL_COPY_SUFFIX,
     REVERT_PROBABILITY,
 )
 from scripts.delta_compile_series.models import (
@@ -21,10 +24,33 @@ from scripts.delta_compile_series.models import (
 )
 
 
+def _compared(
+    *,
+    project_dir: Path,
+    compile_project: Callable[[], DeltaCompileOutcome],
+    compile_in_full: Callable[[Path], DeltaCompileOutcome],
+) -> tuple[DeltaCompileOutcome, str | None]:
+    """Compile, and compile a copy of the project as it was in full; how what they print differs."""
+
+    copy: Path = project_dir.with_name(project_dir.name + FULL_COPY_SUFFIX)
+    shutil.rmtree(copy, ignore_errors=True)
+    _ = shutil.copytree(project_dir, copy, symlinks=True)
+    outcome: DeltaCompileOutcome = compile_project()
+    problem: str | None = full_compile_difference(
+        outcome=outcome, full=compile_in_full(copy), project_dir=project_dir, full_project_dir=copy
+    )
+    return outcome, problem
+
+
 def run_delta_compile_series(
-    *, project_dir: Path, seed: int, steps: int, compile_project: Callable[[], DeltaCompileOutcome]
+    *,
+    project_dir: Path,
+    seed: int,
+    steps: int,
+    compile_project: Callable[[], DeltaCompileOutcome],
+    compile_in_full: Callable[[Path], DeltaCompileOutcome] | None = None,
 ) -> DeltaCompileSeries:
-    """Edit or revert `steps` times, compiling after each, and judge every compile."""
+    """Edit or revert `steps` times, compiling after each, and judge or compare every compile."""
 
     rng: random.Random = random.Random(seed)
     weights: list[int] = [
@@ -46,11 +72,23 @@ def run_delta_compile_series(
             pending.append((path, original, edit))
         step: str = f"step {index}: {'revert ' if reverted else ''}{edit.kind} in {path.name}"
         described.append(step)
-        outcome: DeltaCompileOutcome = compile_project()
-        others_edited: bool = any(other != path for other, _, _ in pending)
-        delta, problem = judged(
-            outcome=outcome, edit=edit, reverted=reverted, others_edited=others_edited
-        )
+        if compile_in_full is None:
+            outcome: DeltaCompileOutcome = compile_project()
+            others_edited: bool = any(other != path for other, _, _ in pending)
+            delta, problem = judged(
+                outcome=outcome,
+                edit=edit,
+                reverted=reverted,
+                others_edited=others_edited,
+                after_failure=failing,
+            )
+        else:
+            outcome, problem = _compared(
+                project_dir=project_dir,
+                compile_project=compile_project,
+                compile_in_full=compile_in_full,
+            )
+            delta: bool = DELTA_COMPILE_LINE in outcome.stderr
         deltas += int(delta)
         if problem is not None:
             unexpected.append(f"{step}: {problem}")

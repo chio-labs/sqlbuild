@@ -1,4 +1,5 @@
 pub(crate) mod context;
+pub(crate) mod coverage;
 pub(crate) mod driver;
 pub(crate) mod header_keys;
 pub(crate) mod image;

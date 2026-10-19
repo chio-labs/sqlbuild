@@ -11,11 +11,12 @@ use sqlbuild_rules::models::{EvaluateRequest, RetainedRows};
 use crate::bindings::_helpers::compile_delta::context::{
     CapturedDiagnostic, CapturedModel, CapturedTest, ImageCapture, ModelShape,
 };
+use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
 use crate::bindings::_helpers::compile_delta::header_keys::HeaderKeys;
 use crate::bindings::_helpers::compile_delta::image_codec::{Decoder, Encoder};
 
 /// Changes whenever the image's meaning changes, so an older image is never read.
-pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v7";
+pub(crate) const IMAGE_FORMAT: &str = "sqlbuild-project-image-v8";
 pub(crate) const GATE_SECTION: &str = "gate";
 /// The upstream kind of a model another model reads.
 const MODEL_KIND: &str = "model";
@@ -41,6 +42,7 @@ pub(crate) struct ProjectImage {
     pub(crate) pinned_sources: Vec<String>,
     pub(crate) test_sources: BTreeMap<String, Vec<String>>,
     pub(crate) model_shapes: Vec<ModelShape>,
+    pub(crate) coverage: Option<Vec<ModelCoverage>>,
     pub(crate) lint_model_keys: Option<Vec<(String, String)>>,
     pub(crate) lint_file_keys: Option<Vec<(String, Option<String>)>>,
     pub(crate) header_keys: BTreeMap<String, HeaderKeys>,
@@ -238,6 +240,7 @@ struct StoredFacts {
     pinned_sources: Vec<String>,
     test_sources: BTreeMap<String, Vec<String>>,
     model_shapes: StoredShapes,
+    coverage: Option<Vec<ModelCoverage>>,
     lint_model_keys: Option<Vec<(String, String)>>,
     lint_file_keys: Option<Vec<(String, Option<String>)>>,
 }
@@ -254,6 +257,7 @@ type StoredMisc = (
     Vec<CapturedDiagnostic>,
     Option<Vec<(String, bool, i64)>>,
     Vec<String>,
+    Option<Vec<ModelCoverage>>,
 );
 
 fn put_shapes<'a>(encoder: &mut Encoder<'a>, shapes: &'a Shapes) {
@@ -366,6 +370,7 @@ impl StoredFacts {
             &self.diagnostics,
             &self.text_models,
             &self.environment_names,
+            &self.coverage,
         ))
         .map_err(|error| error.to_string())?;
         let mut encoder: Encoder<'_> = Encoder::default();
@@ -453,7 +458,7 @@ impl StoredFacts {
             .list(|decoder| Some((decoder.string()?, decoder.strings()?)))?
             .into_iter()
             .collect();
-        let (diagnostics, text_models, environment_names): StoredMisc =
+        let (diagnostics, text_models, environment_names, coverage): StoredMisc =
             from_json(decoder.bytes()?)?;
         decoder.finish()?;
         Some(Self {
@@ -472,6 +477,7 @@ impl StoredFacts {
             pinned_sources,
             test_sources,
             model_shapes,
+            coverage,
             lint_model_keys,
             lint_file_keys,
         })
@@ -531,6 +537,7 @@ impl ProjectImage {
                 .map(|(path, names)| (path, names.into_iter().collect()))
                 .collect(),
             model_shapes,
+            coverage: capture.coverage,
             lint_model_keys: capture.lint_model_keys,
             lint_file_keys: capture.lint_file_keys,
             header_keys: capture.header_keys,
@@ -568,6 +575,7 @@ impl ProjectImage {
             diagnostics: self.diagnostics,
             text_models: self.text_models,
             environment_names: self.environment_names,
+            coverage: self.coverage,
             pinned_sources: self.pinned_sources,
             test_sources: self.test_sources,
             lint_model_keys: self.lint_model_keys,
@@ -643,6 +651,7 @@ impl ProjectImage {
             pinned_sources: facts.pinned_sources,
             test_sources: facts.test_sources,
             model_shapes,
+            coverage: facts.coverage,
             lint_model_keys: facts.lint_model_keys,
             lint_file_keys: facts.lint_file_keys,
             header_keys: gate.header_keys,
