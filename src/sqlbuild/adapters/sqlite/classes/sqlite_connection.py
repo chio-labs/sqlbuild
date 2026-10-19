@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 
 from sqlbuild.adapter.contract.classes.observed_cursor import ObservedCursor
 from sqlbuild.adapter.contract.exceptions import AdapterUserError
@@ -38,24 +38,16 @@ class SqliteConnection:
         return self.execute_with(sql=sql, parameters=())
 
     def execute_with(self, *, sql: str, parameters: Sequence[object]) -> ObservedCursor:
-        self._enter(sql)
-        cursor: ObservedCursor = self.cursor()
-        try:
-            cursor.execute(sql, parameters)
-        except sqlite3.Error as error:
-            coded: AdapterUserError | None = self._locked_error(error)
-            if coded is None:
-                raise
-            raise coded from error
-        finally:
-            self._leave()
-        return cursor
+        return self._run(sql=sql, run=lambda cursor: cursor.execute(sql, parameters))
 
     def executemany(self, *, sql: str, rows: Iterable[Sequence[object]]) -> ObservedCursor:
+        return self._run(sql=sql, run=lambda cursor: cursor.executemany(sql, rows))
+
+    def _run(self, *, sql: str, run: Callable[[ObservedCursor], object]) -> ObservedCursor:
         self._enter(sql)
         cursor: ObservedCursor = self.cursor()
         try:
-            cursor.executemany(sql, rows)
+            run(cursor)
         except sqlite3.Error as error:
             coded: AdapterUserError | None = self._locked_error(error)
             if coded is None:

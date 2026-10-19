@@ -1691,7 +1691,12 @@ class BaseAdapter(RetentionAdapterMixin, StrictAdapter):
             value_sql: str = f"CAST({alias}.{key} AS VARCHAR)"
             key_parts.append(f"CONCAT(LENGTH({value_sql}), ':', {value_sql})")
         payload_parts: str = ", ".join((f"'{seed}'", *key_parts))
-        return f"MD5(CONCAT_WS('|', {payload_parts}))"
+        return self._render_row_diff_digest(f"CONCAT_WS('|', {payload_parts})")
+
+    def _render_row_diff_digest(self, payload_sql: str) -> str:
+        """Render the hash function applied to one canonical key payload."""
+
+        return f"MD5({payload_sql})"
 
     def sample_unequal_rows(
         self,

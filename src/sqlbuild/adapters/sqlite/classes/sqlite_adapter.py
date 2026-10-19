@@ -1831,22 +1831,10 @@ class SqliteAdapter(MicrobatchMixin, UnkeyedDiffMixin, BaseAdapter):
     def format_row_diff_decimal_sql(self, value: Decimal) -> str:
         return format(value, "f")
 
-    def _render_row_diff_key_hash(
-        self,
-        *,
-        keys: tuple[str, ...],
-        alias: str,
-        seed: int,
-    ) -> str:
+    def _render_row_diff_digest(self, payload_sql: str) -> str:
         """Hash through the deterministic function every connection registers."""
 
-        key_parts: list[str] = []
-        key: str
-        for key in keys:
-            value_sql: str = f"CAST({alias}.{key} AS TEXT)"
-            key_parts.append(f"CONCAT(LENGTH({value_sql}), ':', {value_sql})")
-        payload_parts: str = ", ".join((f"'{seed}'", *key_parts))
-        return f"{HASH_FUNCTION_NAME}(CONCAT_WS('|', {payload_parts}))"
+        return f"{HASH_FUNCTION_NAME}({payload_sql})"
 
     def render_create_initial_snapshot_destination(
         self,
