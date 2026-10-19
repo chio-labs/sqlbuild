@@ -211,26 +211,38 @@ fn given_heartbeats_due_faster_than_batches_fill_when_running_then_queued_record
 #[test]
 fn given_an_output_replacement_when_closed_then_published_filtered_and_failed_chunks_are_accounted()
 {
-    let test_cases = [ReplacementTestCase {
-        description: "one chunk published changed, one filtered, one failed",
-        output: &[
-            (OutputStream::Stderr, b"drop that\n"),
-            (OutputStream::Stdout, b"boom\n"),
-            (OutputStream::Stderr, b"keep this\n"),
-        ],
-        expected_transcript: b"KEEP THIS\n",
-        expected_accounting: vec![vec![
-            RecallValue::Integer(1),
-            RecallValue::Integer(1),
-            RecallValue::Integer(2),
-            RecallValue::Integer(1),
-            RecallValue::Text("dropped".to_owned()),
-        ]],
-    }];
+    let accounting = vec![vec![
+        RecallValue::Integer(1),
+        RecallValue::Integer(1),
+        RecallValue::Integer(2),
+        RecallValue::Integer(1),
+        RecallValue::Text("dropped".to_owned()),
+    ]];
+    let output: &[(OutputStream, &[u8])] = &[
+        (OutputStream::Stderr, b"drop that\n"),
+        (OutputStream::Stdout, b"boom\n"),
+        (OutputStream::Stderr, b"keep this\n"),
+    ];
+    let test_cases = [
+        ReplacementTestCase {
+            description: "one chunk published changed, one filtered, one failed",
+            output,
+            discovery: Duration::ZERO,
+            expected_transcript: b"KEEP THIS\n",
+            expected_accounting: accounting.clone(),
+        },
+        ReplacementTestCase {
+            description: "output written during a slow discovery waits for the replacement",
+            output,
+            discovery: Duration::from_millis(900),
+            expected_transcript: b"KEEP THIS\n",
+            expected_accounting: accounting,
+        },
+    ];
 
     for test_case in test_cases {
         assert_eq!(
-            replaced_session(test_case.output),
+            replaced_session(test_case.output, test_case.discovery),
             (
                 test_case.expected_transcript.to_vec(),
                 test_case.expected_accounting

@@ -236,11 +236,29 @@ impl WriterState {
         self.records
     }
 
-    /// Up to `limit` rows, highest priority first.
+    /// Whether output waits in the queue until discovery decides whether a replacement sink filters it.
+    fn holding_output(&self) -> bool {
+        self.held_context.is_some()
+    }
+
+    /// Records a batch may take now: output is held while the context row is.
+    pub(crate) fn ready(&self) -> usize {
+        if self.holding_output() {
+            self.records - self.buckets[Priority::Output as usize].len()
+        } else {
+            self.records
+        }
+    }
+
+    /// Up to `limit` rows, highest priority first; held output stays queued.
     pub(crate) fn take_batch(&mut self, limit: usize) -> Vec<Queued> {
         let mut batch: Vec<Queued> = Vec::new();
         let mut rows = 0;
-        for bucket in self.buckets.iter_mut().rev() {
+        let held: Option<usize> = self.holding_output().then_some(Priority::Output as usize);
+        for (index, bucket) in self.buckets.iter_mut().enumerate().rev() {
+            if held == Some(index) {
+                continue;
+            }
             while rows < limit {
                 let Some(record) = bucket.pop_front() else {
                     break;

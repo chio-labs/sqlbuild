@@ -345,9 +345,10 @@ pub(crate) fn output_stored_while_running(
     stored.rows
 }
 
-/// The transcript and output accounting a session with a deferred context and `PrefixReplacement` stored for `output`.
+/// The transcript and output accounting a session with a deferred context and `PrefixReplacement` stored for `output`, written `discovery` before the replacement is set.
 pub(crate) fn replaced_session(
     output: &[(OutputStream, &[u8])],
+    discovery: Duration,
 ) -> (Vec<u8>, Vec<Vec<RecallValue>>) {
     let directory = tempfile::tempdir().expect("a temporary directory can be created");
     let path = directory.path().join("logs/recall.sqlite3");
@@ -355,11 +356,12 @@ pub(crate) fn replaced_session(
         defer_context: true,
         ..config(path.clone(), "replaced")
     });
-    session.set_output_replacement(Arc::new(PrefixReplacement));
-    session.publish_context(true);
     for (stream, data) in output {
         session.append_output(*stream, data);
     }
+    std::thread::sleep(discovery);
+    session.set_output_replacement(Arc::new(PrefixReplacement));
+    session.publish_context(true);
     drop(session.close());
     let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
     let transcript =

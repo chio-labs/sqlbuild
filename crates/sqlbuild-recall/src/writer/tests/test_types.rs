@@ -94,6 +94,8 @@ pub(crate) struct StoredWhileRunningTestCase {
 pub(crate) struct ReplacementTestCase {
     pub(crate) description: &'static str,
     pub(crate) output: &'static [(OutputStream, &'static [u8])],
+    /// How long discovery takes after the output is written, before the replacement is set.
+    pub(crate) discovery: Duration,
     pub(crate) expected_transcript: &'static [u8],
     pub(crate) expected_accounting: Vec<Vec<RecallValue>>,
 }

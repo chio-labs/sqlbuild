@@ -248,13 +248,12 @@ fn next_batch(
         {
             state.flush_output();
         }
-        if state.queued() > 0 && first_seen.is_none() {
+        if state.ready() > 0 && first_seen.is_none() {
             first_seen = Some(now);
         }
         let window_over =
             first_seen.is_some_and(|seen| now.duration_since(seen) >= batching.window);
-        if state.queued() >= batching.rows || (state.queued() > 0 && (window_over || state.closing))
-        {
+        if state.ready() >= batching.rows || (state.ready() > 0 && (window_over || state.closing)) {
             return (state.take_batch(batching.rows), state.closing);
         }
         if state.closing && state.queued() == 0 && !state.has_pending_output() {
