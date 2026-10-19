@@ -182,6 +182,19 @@ _IGNORE_ENTRY: str = (
             expected_error_pattern="sets cte without relation",
         ),
         RulesConfigErrorTestCase(
+            description="unknown published layer",
+            source='[rules.rule_options.SQBRGRAPH103]\npublished_layers = ["gold"]\n',
+            expected_error_pattern="published_layers entries must be model name layers",
+        ),
+        RulesConfigErrorTestCase(
+            description="allowed qualifier without a reason",
+            source=(
+                "[rules.rule_options.SQBRPROJECT107]\n"
+                'allowed_qualifiers = [{ qualifier = "csv_export" }]\n'
+            ),
+            expected_error_pattern="allowed_qualifiers entries must be",
+        ),
+        RulesConfigErrorTestCase(
             description="unknown SQL test rules key",
             source='[rules.sql_tests]\npipeline_directory = "pipelines"\nroot = "tests"\n',
             expected_error_pattern="unknown field `root`",

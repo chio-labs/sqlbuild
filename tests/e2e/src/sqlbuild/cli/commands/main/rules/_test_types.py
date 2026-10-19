@@ -268,3 +268,14 @@ class RuleExceptionConfigCase:
     expected_exit: int
     expected_messages: tuple[str, ...] = ()
     expected_fragments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PublishedLayerCase:
+    """One set of published models checked by the published-layer Rules."""
+
+    description: str
+    files: tuple[tuple[str, str], ...]
+    rules_toml: str
+    expected_findings: tuple[tuple[str, str], ...]
+    expected_exit: int

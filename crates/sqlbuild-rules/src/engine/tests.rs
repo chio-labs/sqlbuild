@@ -8,6 +8,8 @@ mod evaluation;
 mod helpers;
 #[path = "tests/test_incremental_rules.rs"]
 mod incremental_rules;
+#[path = "tests/test_published_layers.rs"]
+mod published_layers;
 #[path = "tests/test_query_facts.rs"]
 mod query_facts;
 #[path = "tests/test_relation_exceptions.rs"]

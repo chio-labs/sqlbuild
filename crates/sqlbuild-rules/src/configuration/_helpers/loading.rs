@@ -1,6 +1,9 @@
 use crate::configuration::_helpers::removed_settings::removed_settings;
 use crate::configuration::errors::RulesConfigLoadError;
-use crate::constants::{MIN_CUSTOM_RULE_TEST_CASES_KEY, RELATION_EXCEPTION_RULES};
+use crate::constants::{
+    ALLOWED_QUALIFIERS_OPTION, MIN_CUSTOM_RULE_TEST_CASES_KEY, MODEL_NAME_LAYERS,
+    PUBLISHED_LAYERS_OPTION, PUBLISHED_READ_CODE, PUBLISHED_SHAPE_CODE, RELATION_EXCEPTION_RULES,
+};
 use crate::models::RulesConfig;
 use fensu_policy::policy::types::RuleCodeGrammar;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
@@ -206,6 +209,7 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
             return Err(format!("invalid rule code: {code}"));
         }
     }
+    validate_published_layer_options(config)?;
     for exception in &config.rule_exceptions {
         if exception.rule.trim().is_empty()
             || exception.path.trim().is_empty()
@@ -262,6 +266,82 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
     for allow in &config.select_star_allow {
         if allow.paths.is_empty() || allow.reason.trim().is_empty() {
             return Err("rules.select_star_allow requires paths and reason".into());
+        }
+    }
+    Ok(())
+}
+
+/// Published layers name model layers; allowed qualifiers are literal and carry a reason.
+fn validate_published_layer_options(config: &RulesConfig) -> Result<(), String> {
+    for code in [PUBLISHED_READ_CODE, PUBLISHED_SHAPE_CODE] {
+        let Some(layers) = config
+            .rule_options
+            .get(code)
+            .and_then(|options| options.get(PUBLISHED_LAYERS_OPTION))
+        else {
+            continue;
+        };
+        let label: String = format!("rules.rule_options.{code}.{PUBLISHED_LAYERS_OPTION}");
+        let Some(layers) = layers.as_array() else {
+            return Err(format!("{label} must be a list of model name layers"));
+        };
+        for layer in layers {
+            match layer.as_str() {
+                Some(name) if MODEL_NAME_LAYERS.contains(&name) => {}
+                _ => {
+                    return Err(format!(
+                        "{label} entries must be model name layers: {}",
+                        MODEL_NAME_LAYERS.join(", ")
+                    ));
+                }
+            }
+        }
+    }
+    let Some(entries) = config
+        .rule_options
+        .get(PUBLISHED_SHAPE_CODE)
+        .and_then(|options| options.get(ALLOWED_QUALIFIERS_OPTION))
+    else {
+        return Ok(());
+    };
+    let label: String =
+        format!("rules.rule_options.{PUBLISHED_SHAPE_CODE}.{ALLOWED_QUALIFIERS_OPTION}");
+    let shape: String = format!(
+        "{label} entries must be {{ qualifier = \"...\", reason = \"...\" }} tables with an \
+         optional domain"
+    );
+    let Some(entries) = entries.as_array() else {
+        return Err(shape);
+    };
+    let mut seen: std::collections::BTreeSet<(Option<&str>, &str)> =
+        std::collections::BTreeSet::new();
+    for entry in entries {
+        let Some(table) = entry.as_object() else {
+            return Err(shape);
+        };
+        if table
+            .keys()
+            .any(|key| !["domain", "qualifier", "reason"].contains(&key.as_str()))
+        {
+            return Err(shape);
+        }
+        let text = |key: &str| table.get(key).map(|value| value.as_str().map(str::trim));
+        let (Some(Some(qualifier)), Some(Some(reason))) = (text("qualifier"), text("reason"))
+        else {
+            return Err(shape);
+        };
+        let domain: Option<&str> = match text("domain") {
+            None => None,
+            Some(Some(domain)) if !domain.is_empty() => Some(domain),
+            Some(_) => return Err(shape),
+        };
+        if qualifier.is_empty() || reason.is_empty() {
+            return Err(format!(
+                "{label} entries need a non-empty qualifier and reason"
+            ));
+        }
+        if !seen.insert((domain, qualifier)) {
+            return Err(format!("duplicate {label} entry: {qualifier}"));
         }
     }
     Ok(())
