@@ -75,9 +75,10 @@ behind a loose timing budget. It runs in the 3,000-model fresh-process compile j
 
 The same inspection project also bounds `sqb plan --json` against an empty DuckDB warehouse. The
 plan budget is a ratio to a warm `sqb compile --json` measured in the same test on the same runner,
-plus a peak-RSS cap. A second case plans a 300-model copy of the benchmark and fails when the
-planning CPU of the large project (plan CPU minus compile CPU) exceeds twice its linear projection
-from the small one, so super-linear planning work fails on any runner.
+plus a peak-RSS cap. The CPU-time ratio is the tight limit; a looser wall-time ratio backstops lost
+parallelism and lock or I/O waits. A second case plans a 300-model copy of the benchmark and fails
+when the planning CPU of the large project (plan CPU minus compile CPU) exceeds twice its linear
+projection from the small one, so super-linear planning work fails on any runner.
 
 `test_build_performance.py` builds a 1,000-model DuckDB benchmark without tests or audits from an
 empty warehouse once per module, with wall and peak-RSS limits. Its existing-state cases copy the
