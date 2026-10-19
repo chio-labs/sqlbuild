@@ -10,6 +10,8 @@ mod helpers;
 mod incremental_rules;
 #[path = "tests/test_query_facts.rs"]
 mod query_facts;
+#[path = "tests/test_relation_exceptions.rs"]
+mod relation_exceptions;
 #[path = "tests/test_retained_rows.rs"]
 mod retained_rows;
 #[path = "tests/test_scope_facts.rs"]

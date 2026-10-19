@@ -324,7 +324,6 @@ const R_LINT_CONFIG: RecordSpec = RecordSpec {
         FieldSpec::new("header_rules_enabled", FieldDefault::True),
         FieldSpec::new("max_literal_length", FieldDefault::Int(100)),
         FieldSpec::new("max_ranking_order_by", FieldDefault::Int(5)),
-        FieldSpec::new("allow_suppressions", FieldDefault::True),
         FieldSpec {
             name: "relation_keys",
             default: FieldDefault::EmptyDict,

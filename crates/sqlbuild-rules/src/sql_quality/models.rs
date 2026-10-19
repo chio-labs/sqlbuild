@@ -32,6 +32,8 @@ pub struct DeclaredRelation {
     pub columns: Vec<DeclaredKeyColumn>,
     /// Table-level audits as `(definition name, its string column argument)`.
     pub audits: Vec<(String, Option<String>)>,
+    /// Whether the relation is known to hold at most one row, which the empty key proves.
+    pub at_most_one_row: bool,
 }
 
 /// One declared column: its name, its audit definition names and whether it is declared non-null.

@@ -53,8 +53,7 @@ from tests.integration.src.sqlbuild.cli.commands.main.helpers import (
 
 _CACHE_RULES_TOML: str = 'name = "orders"\nadapter = "duckdb"\n\n[rules]\nselect = ["SQBRSQL004"]\n'
 _CACHE_THRESHOLD_TOML: str = _CACHE_RULES_TOML + "thresholds = { max_literal_length = 7 }\n"
-_CACHE_POLICY_TOML: str = _CACHE_THRESHOLD_TOML + "allow_exceptions = false\n"
-_CACHE_SELECTION_TOML: str = _CACHE_POLICY_TOML.replace(
+_CACHE_SELECTION_TOML: str = _CACHE_THRESHOLD_TOML.replace(
     '"SQBRSQL004"', '"SQBRSQL004", "SQBRSQL001"'
 )
 _CACHE_MODEL_SQL: str = 'MODEL (description "Orders");\nSELECT order_id FROM orders LIMIT 1\n'
@@ -2879,10 +2878,10 @@ def test_given_relative_project_path_when_compiling_twice_then_sql_finding_remai
 
 @pytest.mark.parametrize(
     "test_case",
-    [RulesIntegrationTestCase("unused inline suppression is diagnosed", 1, "SQBRSQL000")],
+    [RulesIntegrationTestCase("inline directive without a finding fails", 1, "SQBRSQL000")],
     ids=lambda case: case.description,
 )
-def test_given_unused_inline_suppression_when_compiling_then_stale_directive_is_reported(
+def test_given_inline_directive_without_finding_when_compiling_then_directive_is_reported(
     test_case: RulesIntegrationTestCase,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -3034,7 +3033,6 @@ def test_given_empty_rule_selection_when_compiling_then_only_configuration_is_va
                 (_CACHE_RULES_TOML, _CACHE_EDITED_SQL),
                 (_CACHE_RULES_TOML, _CACHE_EDITED_SQL),
                 (_CACHE_THRESHOLD_TOML, _CACHE_EDITED_SQL),
-                (_CACHE_POLICY_TOML, _CACHE_EDITED_SQL),
                 (_CACHE_SELECTION_TOML, _CACHE_EDITED_SQL),
                 (_CACHE_SELECTION_TOML, _CACHE_EDITED_SQL),
             ),
@@ -3043,7 +3041,6 @@ def test_given_empty_rule_selection_when_compiling_then_only_configuration_is_va
                 (1, 0),
                 (0, 1),
                 (1, 0),
-                (0, 1),
                 (0, 1),
                 (0, 1),
                 (1, 0),

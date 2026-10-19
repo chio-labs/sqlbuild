@@ -13,8 +13,8 @@ from sqlbuild._native import (
     load_rules_config,
 )
 from tests.unit.src.sqlbuild.rule_engine._helpers.engine._test_types import (
-    AllowExceptionsConfigTestCase,
     PolicyLayoutConfigTestCase,
+    RelationExceptionConfigTestCase,
     RuleIgnoreConfigTestCase,
     RulesConfigErrorTestCase,
     SqlTestRulesConfigTestCase,
@@ -166,9 +166,20 @@ _IGNORE_ENTRY: str = (
             expected_error_pattern="must be a normalized path relative to tests/unit",
         ),
         RulesConfigErrorTestCase(
-            description="non-boolean allow_exceptions",
-            source='[rules]\nallow_exceptions = "no"\n',
-            expected_error_pattern="invalid rules config",
+            description="relation for a Rule that reports no relation",
+            source=(
+                '[[rules.rule_exceptions]]\nrule = "SQBRSQL004"\npath = "models/orders.sql"\n'
+                'relation = "customers"\nreason = "A reviewed sample"\n'
+            ),
+            expected_error_pattern="sets relation, but only SQBRSQL038 report a joined relation",
+        ),
+        RulesConfigErrorTestCase(
+            description="cte without relation",
+            source=(
+                '[[rules.rule_exceptions]]\nrule = "SQBRSQL038"\npath = "models/orders.sql"\n'
+                'cte = "checks"\nreason = "Deliberate"\n'
+            ),
+            expected_error_pattern="sets cte without relation",
         ),
         RulesConfigErrorTestCase(
             description="unknown SQL test rules key",
@@ -192,31 +203,21 @@ def test_given_invalid_rules_config_when_loading_then_raises_clear_error(
     "test_case",
     (
         RulesConfigErrorTestCase(
-            description="exception entry",
+            description="false",
             source=f"[rules]\nallow_exceptions = false\n{_EXCEPTION_ENTRY}",
             expected_error_pattern=(
-                r"has 1 \[\[rules\.rule_exceptions\]\] entry, which this project does not "
-                r"allow; sqlbuild_project\.toml sets \[rules\] allow_exceptions = false"
+                r"sets \[rules\] allow_exceptions, which SQLBuild no longer supports"
             ),
         ),
         RulesConfigErrorTestCase(
-            description="scoped ignore entry",
-            source=f"[rules]\nallow_exceptions = false\n{_IGNORE_ENTRY}",
-            expected_error_pattern=r"has 1 \[\[rules\.rule_ignores\]\] entry,",
-        ),
-        RulesConfigErrorTestCase(
-            description="exceptions and scoped ignores",
-            source=f"[rules]\nallow_exceptions = false\n{_EXCEPTION_ENTRY}{_EXCEPTION_ENTRY}"
-            f"{_IGNORE_ENTRY}",
-            expected_error_pattern=(
-                r"has 2 \[\[rules\.rule_exceptions\]\] entries and "
-                r"1 \[\[rules\.rule_ignores\]\] entry,"
-            ),
+            description="true",
+            source="[rules]\nallow_exceptions = true\n",
+            expected_error_pattern=r"inline -- sqb: ignore suppressions were removed",
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_exceptions_forbidden_when_loading_then_raises_error_with_exact_setting_help(
+def test_given_removed_allow_exceptions_when_loading_then_raises_error_explaining_the_removal(
     tmp_path: Path,
     test_case: RulesConfigErrorTestCase,
 ) -> None:
@@ -225,42 +226,42 @@ def test_given_exceptions_forbidden_when_loading_then_raises_error_with_exact_se
     with pytest.raises(RulesConfigError, match=test_case.expected_error_pattern) as raised:
         load_rules_config(project_dir=tmp_path)
 
-    assert raised.value.help.endswith(
-        "set this in sqlbuild_project.toml:\n            [rules]\n"
-        "            allow_exceptions = true"
-    )
+    assert "remove the allow_exceptions line from [rules]" in raised.value.help
+    assert "[[rules.rule_exceptions]]" in raised.value.help
 
 
 @pytest.mark.parametrize(
     "test_case",
     (
-        AllowExceptionsConfigTestCase(
-            description="absent setting allows exceptions",
+        RelationExceptionConfigTestCase(
+            description="file-wide exception and scoped ignore",
             source=_EXCEPTION_ENTRY + _IGNORE_ENTRY,
-            expected_allow_exceptions=True,
+            expected_relation=None,
+            expected_cte=None,
         ),
-        AllowExceptionsConfigTestCase(
-            description="true allows exceptions",
-            source=f"[rules]\nallow_exceptions = true\n{_EXCEPTION_ENTRY}{_IGNORE_ENTRY}",
-            expected_allow_exceptions=True,
-        ),
-        AllowExceptionsConfigTestCase(
-            description="false with only the project-wide ignore list",
-            source='[rules]\nallow_exceptions = false\nignore = ["SQBRSQL004"]\n',
-            expected_allow_exceptions=False,
+        RelationExceptionConfigTestCase(
+            description="relation-level exception narrowed to a CTE",
+            source=(
+                '[[rules.rule_exceptions]]\nrule = "SQBRSQL038"\npath = "models/orders.sql"\n'
+                'relation = "order_policy"\ncte = "order_checks"\n'
+                'reason = "Every order is checked against every policy"\n'
+            ),
+            expected_relation="order_policy",
+            expected_cte="order_checks",
         ),
     ),
     ids=lambda case: case.description,
 )
-def test_given_allow_exceptions_setting_when_loading_then_config_records_it(
+def test_given_rule_exceptions_when_loading_then_config_records_their_scope(
     tmp_path: Path,
-    test_case: AllowExceptionsConfigTestCase,
+    test_case: RelationExceptionConfigTestCase,
 ) -> None:
     (tmp_path / "sqlbuild_project.toml").write_text(test_case.source, encoding="utf-8")
 
     config: RulesConfig = load_rules_config(project_dir=tmp_path)
 
-    assert config.allow_exceptions is test_case.expected_allow_exceptions
+    assert config.rule_exceptions[0].relation == test_case.expected_relation
+    assert config.rule_exceptions[0].cte == test_case.expected_cte
 
 
 @pytest.mark.parametrize(

@@ -33,3 +33,7 @@ pub(crate) const NATIVE_ROWS_MEMO_VERSION: &str = "native-rules-rows-response-v2
 pub(crate) const SQL_RULE_PREFIX: &str = "SQBRSQL";
 /// Threshold key setting the fewest test cases a custom rule must ship.
 pub const MIN_CUSTOM_RULE_TEST_CASES_KEY: &str = "min_custom_rule_test_cases";
+/// Rules whose findings name a joined relation, so an exception may cover just that relation.
+pub(crate) const RELATION_EXCEPTION_RULES: [&str; 1] = ["SQBRSQL038"];
+/// The removed exception switch, which used to allow or forbid every escape hatch at once.
+pub(crate) const REMOVED_ALLOW_EXCEPTIONS: &str = "allow_exceptions";

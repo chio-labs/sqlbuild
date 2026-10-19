@@ -1,37 +1,45 @@
-use crate::constants::MIN_CUSTOM_RULE_TEST_CASES_KEY;
+use crate::configuration::_helpers::removed_settings::removed_settings;
+use crate::configuration::errors::RulesConfigLoadError;
+use crate::constants::{MIN_CUSTOM_RULE_TEST_CASES_KEY, RELATION_EXCEPTION_RULES};
 use crate::models::RulesConfig;
 use fensu_policy::policy::types::RuleCodeGrammar;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
 use std::path::Path;
 
-pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, String> {
+pub(crate) fn load(project_dir: &Path) -> Result<RulesConfig, RulesConfigLoadError> {
+    let invalid = RulesConfigLoadError::Invalid;
     let path = project_dir.join(PROJECT_CONFIG_FILENAME);
     let source = std::fs::read_to_string(&path).map_err(|error| {
-        format!(
+        invalid(format!(
             "could not load rules config from {}: {error}",
             path.display()
-        )
+        ))
     })?;
     let root: toml::Table = toml::from_str(&source).map_err(|error| {
-        format!(
+        invalid(format!(
             "could not load rules config from {}: {error}",
             path.display()
-        )
+        ))
     })?;
     if root.contains_key("policy") || root.contains_key("lint") || root.contains_key("kata") {
-        return Err("unsupported legacy rules configuration; use [rules]".to_owned());
+        return Err(invalid(
+            "unsupported legacy rules configuration; use [rules]".to_owned(),
+        ));
     }
     let config = match root.get("rules") {
         None => RulesConfig::default(),
         Some(value) => {
-            validate_raw(value)?;
+            if let Some(error) = value.as_table().and_then(removed_settings) {
+                return Err(RulesConfigLoadError::Policy(error));
+            }
+            validate_raw(value).map_err(invalid)?;
             value
                 .clone()
                 .try_into::<RulesConfig>()
-                .map_err(|error| format!("invalid rules config: {error}"))?
+                .map_err(|error| invalid(format!("invalid rules config: {error}")))?
         }
     };
-    validate(&config)?;
+    validate(&config).map_err(invalid)?;
     Ok(config)
 }
 
@@ -48,7 +56,6 @@ fn validate_raw(value: &toml::Value) -> Result<(), String> {
         "rule_exceptions",
         "graph_edge_exceptions",
         "rule_ignores",
-        "allow_exceptions",
         "select_star_allow",
         "domains",
         "approved_source_tokens",
@@ -209,6 +216,7 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
         if !grammar.rule_code_is_exact(&exception.rule) {
             return Err(format!("invalid rule code: {}", exception.rule));
         }
+        validate_relation_scope(exception)?;
     }
     let mut graph_edges: std::collections::BTreeSet<(&str, &str)> =
         std::collections::BTreeSet::new();
@@ -255,6 +263,32 @@ pub(crate) fn validate(config: &RulesConfig) -> Result<(), String> {
         if allow.paths.is_empty() || allow.reason.trim().is_empty() {
             return Err("rules.select_star_allow requires paths and reason".into());
         }
+    }
+    Ok(())
+}
+
+/// A relation-level exception names a non-empty relation, for a Rule that reports one.
+fn validate_relation_scope(exception: &crate::models::RuleException) -> Result<(), String> {
+    let blank = |value: &Option<String>| value.as_ref().is_some_and(|text| text.trim().is_empty());
+    if blank(&exception.relation) || blank(&exception.cte) {
+        return Err("rules.rule_exceptions relation and cte must be non-empty strings".into());
+    }
+    if exception.cte.is_some() && exception.relation.is_none() {
+        return Err(format!(
+            "rules.rule_exceptions entry for {} at {} sets cte without relation; cte narrows a \
+             relation-level exception",
+            exception.rule, exception.path
+        ));
+    }
+    if exception.relation.is_some() && !RELATION_EXCEPTION_RULES.contains(&exception.rule.as_str())
+    {
+        return Err(format!(
+            "rules.rule_exceptions entry for {} at {} sets relation, but only {} report a joined \
+             relation; remove relation to cover the whole file",
+            exception.rule,
+            exception.path,
+            RELATION_EXCEPTION_RULES.join(", ")
+        ));
     }
     Ok(())
 }

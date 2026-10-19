@@ -5,6 +5,8 @@ use crate::project_validation::errors::HeaderError;
 use crate::project_validation::models::CsvSettings;
 use sqlbuild_core::text::main::decode_text::decode_text;
 
+/// The quote character seed loaders use when a seed declares none.
+const DEFAULT_QUOTECHAR: char = '"';
 /// The size of the chunks `TextIOWrapper` decodes.
 const DECODE_CHUNK: usize = 8192;
 const UNQUOTED_NEWLINE: &str =
@@ -318,6 +320,60 @@ fn first_record(
         return Ok(Some(parser.fields));
     }
     Ok(None)
+}
+
+/// Non-blank records in `bytes`, at most `limit`; `None` for a prefix ending before `limit`.
+pub(crate) fn csv_record_count(
+    bytes: &[u8],
+    settings: &CsvSettings,
+    complete: bool,
+    limit: usize,
+) -> Result<Option<usize>, HeaderError> {
+    let mut dialect: Dialect = Dialect::new(settings, usize::MAX);
+    if settings.quotechar.is_none() {
+        dialect.quotechar = Some(DEFAULT_QUOTECHAR);
+    }
+    let text: String = match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_owned(),
+        Err(error) if error.error_len().is_none() && !complete => {
+            String::from_utf8_lossy(&bytes[..error.valid_up_to()]).into_owned()
+        }
+        Err(_) => decoded_prefix(bytes, bytes.len())?,
+    };
+    let mut parser: Parser<'_> = Parser {
+        settings: &dialect,
+        state: State::StartRecord,
+        field: String::new(),
+        field_len: 0,
+        fields: Vec::new(),
+    };
+    let mut count: usize = 0;
+    let mut lines = lines(&text).peekable();
+    while let Some(line) = lines.next() {
+        let terminated: bool = line.ends_with(['\n', '\r']);
+        if lines.peek().is_none() && !complete && !terminated_line(line, terminated, &text) {
+            return Ok(None);
+        }
+        for character in line.chars() {
+            parser.process(Input::Char(character))?;
+        }
+        parser.process(Input::Eol)?;
+        if parser.state == State::StartRecord {
+            if !std::mem::take(&mut parser.fields).is_empty() {
+                count += 1;
+            }
+            if count >= limit {
+                return Ok(Some(count));
+            }
+        }
+    }
+    if !complete {
+        return Ok(None);
+    }
+    if parser.field_len != 0 || parser.state == State::InQuotedField || !parser.fields.is_empty() {
+        count += 1;
+    }
+    Ok(Some(count.min(limit)))
 }
 
 /// Whether a final line is known to be whole: it ends with `\n`, or `\r` not followed later.

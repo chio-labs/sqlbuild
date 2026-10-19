@@ -6,7 +6,8 @@ use sqlbuild_attachments::ceremonial_select::models::OmittedSelect;
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
 use crate::lint_text::constants::{
-    INVALID_BATCH, LINE_COMMENT_PREFIX, LINT_API_VERSION, OMITTED_CEREMONIAL_SELECT_SQL,
+    CROSS_KEYWORD, INVALID_BATCH, LINE_COMMENT_PREFIX, LINT_API_VERSION,
+    OMITTED_CEREMONIAL_SELECT_SQL,
 };
 use crate::lint_text::models::{LintSqlBody, LintSqlOptions};
 use crate::sql_lint::main::batch_engine::lint_batch_json;
@@ -24,6 +25,13 @@ pub(crate) fn omitted_select(body: &LintSqlBody) -> Option<usize> {
         OmittedSelect::At(offset) => Some(offset),
         OmittedSelect::Absent => None,
     }
+}
+
+/// Whether `text` may hold a `CROSS JOIN`; other bodies omit relation names to share requests.
+fn mentions_cross_join(text: &str) -> bool {
+    text.as_bytes()
+        .windows(CROSS_KEYWORD.len())
+        .any(|window| window.eq_ignore_ascii_case(CROSS_KEYWORD))
 }
 
 fn strings(values: &[String]) -> Value {
@@ -94,6 +102,14 @@ pub(crate) fn lint_payload(
             .map(|(sentinel, keys)| (sentinel.clone(), Value::from(keys.clone())))
             .collect();
         let _ = payload.insert("relation_keys".to_string(), Value::Object(keys));
+    }
+    if !body.relation_names.is_empty() && mentions_cross_join(&body.lint_text) {
+        let names: Map<String, Value> = body
+            .relation_names
+            .iter()
+            .map(|(sentinel, name)| (sentinel.clone(), Value::from(name.clone())))
+            .collect();
+        let _ = payload.insert("relation_names".to_string(), Value::Object(names));
     }
     Value::Object(payload)
 }

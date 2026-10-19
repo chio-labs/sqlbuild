@@ -245,3 +245,26 @@ class OneModelCustomRuleEditCase:
     expected_warm_counts: tuple[int, int]
     expected_edit_counts: tuple[int, int]
     expected_edit_exit_code: int
+
+
+@dataclass(frozen=True)
+class OneRowCrossJoinCase:
+    """One model whose CROSS JOIN reads a relation that may hold at most one row."""
+
+    description: str
+    seed_rows: tuple[str, ...]
+    model_sql: str
+    expected_messages: tuple[str, ...]
+    expected_exit: int
+
+
+@dataclass(frozen=True)
+class RuleExceptionConfigCase:
+    """One `sqlbuild_project.toml` exception setup compiled against two cross joins."""
+
+    description: str
+    rules_toml: str
+    model_sql: str
+    expected_exit: int
+    expected_messages: tuple[str, ...] = ()
+    expected_fragments: tuple[str, ...] = ()

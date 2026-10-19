@@ -4,6 +4,8 @@ mod authored_tokens;
 mod batch_lint;
 #[path = "tests/test_comment_formatter.rs"]
 mod comment_formatter;
+#[path = "tests/test_cross_joins.rs"]
+mod cross_joins;
 #[path = "tests/test_empty_fixture_lint.rs"]
 mod empty_fixture_lint;
 #[path = "tests/test_format_corpus.rs"]

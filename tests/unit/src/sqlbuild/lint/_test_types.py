@@ -8,6 +8,15 @@ from sqlbuild._native import SqlLexicalSyntax
 
 
 @dataclass(frozen=True)
+class InlineDirectiveTestCase:
+    """One model with an inline suppression directive above a query."""
+
+    description: str
+    query: str
+    expected_violations: tuple[tuple[str, int, str], ...]
+
+
+@dataclass(frozen=True)
 class LintBehaviorTestCase:
     """Identity for one non-tabular lint behavior test."""
 

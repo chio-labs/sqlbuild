@@ -1,4 +1,3 @@
-pub mod apply_suppressions;
 pub mod dependency_sites;
 pub mod first_header_only;
 pub mod format_fixture_blocks;
@@ -9,6 +8,7 @@ pub mod named_declaration_role_kind;
 pub mod neutralize_audit_parameters;
 pub mod neutralize_context_interpolation;
 pub mod neutralize_interpolation;
+pub mod reject_inline_suppressions;
 pub mod resolve_format_settings;
 pub mod restore_interpolation;
 pub mod scan_fixture_null_candidates;

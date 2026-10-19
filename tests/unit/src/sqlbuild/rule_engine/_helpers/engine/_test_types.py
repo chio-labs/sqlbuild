@@ -13,12 +13,13 @@ class RulesConfigErrorTestCase:
 
 
 @dataclass(frozen=True)
-class AllowExceptionsConfigTestCase:
-    """One `[rules] allow_exceptions` configuration that loads."""
+class RelationExceptionConfigTestCase:
+    """One `[[rules.rule_exceptions]]` configuration that loads, with its relation scope."""
 
     description: str
     source: str
-    expected_allow_exceptions: bool
+    expected_relation: str | None
+    expected_cte: str | None
 
 
 @dataclass(frozen=True)

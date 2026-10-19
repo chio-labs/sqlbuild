@@ -50,3 +50,7 @@ pub(crate) const RELATION_MODIFIER_KEYWORDS: [&str; 43] = [
     "WHERE",
     "WINDOW",
 ];
+/// The parts of a `SQBRSQL038` message that names its joined relation and CTE.
+pub(crate) const CROSS_JOIN_PREFIX: &str = "CROSS JOIN with `";
+pub(crate) const CROSS_JOIN_CTE_MARKER: &str = "` in CTE `";
+pub(crate) const CROSS_JOIN_SUFFIX: &str = "` creates an explicit cartesian product";

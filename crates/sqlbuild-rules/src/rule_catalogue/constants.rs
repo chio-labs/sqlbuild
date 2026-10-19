@@ -33,7 +33,7 @@ pub(crate) const LAYOUT_RULE_PREFIXES: [&str; 2] = ["SQBRPROJECT2", "SQBRDECLARA
 pub(crate) const TEST_RULE_PREFIX: &str = "SQBRTEST";
 pub(crate) const GRAPH_EDGE_RULE_CODE: &str = "SQBRGRAPH101";
 pub(crate) const REPLACEABLE_SKILL_STATES: [&str; 3] = ["fresh", "missing", "stale"];
-pub(crate) const RULE_EXAMPLES: [(&str, &str); 25] = [
+pub(crate) const RULE_EXAMPLES: [(&str, &str); 26] = [
     (
         "SQBRSQL040",
         "Compute category_key in an input CTE, then JOIN categories AS c ON o.category_key = c.category_key.",
@@ -65,6 +65,10 @@ pub(crate) const RULE_EXAMPLES: [(&str, &str); 25] = [
     (
         "SQBRPROJECT101",
         "domain__int_clean__entity or domain__mart_v__entity.",
+    ),
+    (
+        "SQBRSQL038",
+        "JOIN customers AS c ON o.customer_id = c.customer_id, or CROSS JOIN a provably one-row relation such as a one-row seed or an aggregate without GROUP BY.",
     ),
     (
         "SQBRPROJECT105",

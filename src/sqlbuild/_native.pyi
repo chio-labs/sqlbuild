@@ -3966,10 +3966,10 @@ def format_lint_sql_bodies(
 def lint_native_sql_bodies(
     bodies: list[LintBody], contents_by_path: dict[Path, str], config: LintConfig
 ) -> list[LintViolation]: ...
-def apply_lint_suppressions(
+def reject_lint_suppressions(
     violations: list[LintViolation],
     contents_by_path: dict[Path, str],
-    allow_suppressions: bool,
+    project_dir: Path,
 ) -> list[LintViolation]: ...
 def load_rules_config(*, project_dir: Path) -> RulesConfig: ...
 def valid_rules_config(*, project_dir: Path) -> RulesConfig | None: ...
@@ -10456,7 +10456,6 @@ class LintConfig(NativeRecord):
     header_rules_enabled: bool
     max_literal_length: int
     max_ranking_order_by: int
-    allow_suppressions: bool
     relation_keys: Mapping[str, tuple[tuple[str, ...], ...]]
     def __init__(
         self,
@@ -10469,7 +10468,6 @@ class LintConfig(NativeRecord):
         header_rules_enabled: bool = ...,
         max_literal_length: int = ...,
         max_ranking_order_by: int = ...,
-        allow_suppressions: bool = ...,
         relation_keys: Mapping[str, tuple[tuple[str, ...], ...]] = ...,
     ) -> None: ...
 
@@ -12572,11 +12570,15 @@ class RuleExemption(NativeRecord):
     rule: str
     path: str
     reason: str
+    relation: str | None
+    cte: str | None
     def __init__(
         self,
         rule: str,
         path: str,
         reason: str,
+        relation: str | None = ...,
+        cte: str | None = ...,
     ) -> None: ...
 
 class GraphEdgeExclusion(NativeRecord):
@@ -17878,7 +17880,6 @@ class RulesConfig(NativeRecord):
     rule_exceptions: tuple[RuleExemption, ...]
     graph_edge_exceptions: tuple[GraphEdgeExclusion, ...]
     rule_ignores: tuple[RuleIgnore, ...]
-    allow_exceptions: bool
     select_star_allow: tuple[SelectStarAllow, ...]
     domains: tuple[str, ...]
     approved_source_tokens: tuple[str, ...]
@@ -17896,7 +17897,6 @@ class RulesConfig(NativeRecord):
         rule_exceptions: tuple[RuleExemption, ...] = ...,
         graph_edge_exceptions: tuple[GraphEdgeExclusion, ...] = ...,
         rule_ignores: tuple[RuleIgnore, ...] = ...,
-        allow_exceptions: bool = ...,
         select_star_allow: tuple[SelectStarAllow, ...] = ...,
         domains: tuple[str, ...] = ...,
         approved_source_tokens: tuple[str, ...] = ...,

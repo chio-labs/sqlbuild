@@ -12,12 +12,14 @@ use crate::engine::main::discard_speculative_rows::discard_speculative_rows;
 use crate::engine::main::retained_request::retained_request;
 use crate::models::{
     Column, Declaration, DeclarationMember, DynamicColumnFamily, EvaluateRequest, Fault, Model,
-    Reference, RetainedRows, RowsEvaluation, RowsRequest, SpeculativeAnswer, SpeculativeRows,
+    Reference, RetainedRows, RowsEvaluation, RowsRequest, RulesConfig, SpeculativeAnswer,
+    SpeculativeRows,
 };
 
 use crate::engine::_helpers::evaluation::evaluate_json;
 use crate::engine::_helpers::evaluation::evaluate_request as evaluate_parsed;
 use crate::engine::_helpers::evaluation::parse_parts;
+use crate::engine::main::finalize_rows::finalize_rows;
 use crate::engine::tests::test_types;
 
 pub(crate) fn request(project_dir: &TempDir, config: &Value) -> String {
@@ -734,4 +736,49 @@ pub(crate) fn without_sql(models: Vec<Model>) -> Value {
         })
         .collect();
     serde_json::to_value(stripped).unwrap_or_default()
+}
+
+
+/// The model path the relation-exception cases use.
+pub(crate) const CROSS_JOIN_MODEL_PATH: &str = "models/orders.sql";
+/// The Rule whose findings name a joined relation.
+pub(crate) const CROSS_JOIN_CODE: &str = "SQBRSQL038";
+
+fn cross_join_fault(message: &str, line: u64) -> Fault {
+    Fault {
+        unevaluated: false,
+        code: CROSS_JOIN_CODE.to_owned(),
+        path: CROSS_JOIN_MODEL_PATH.to_owned(),
+        line,
+        column: 1,
+        message: message.to_owned(),
+        remediation: String::new(),
+    }
+}
+
+/// Finalize a top-level `order_policy` join and a `customers` join in CTE `checks`.
+pub(crate) fn finalize_cross_joins(exceptions: Value) -> Result<Vec<Fault>, String> {
+    let project_dir = TempDir::new().map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(project_dir.path().join("models"))
+        .map_err(|error| error.to_string())?;
+    std::fs::write(project_dir.path().join(CROSS_JOIN_MODEL_PATH), "SELECT 1")
+        .map_err(|error| error.to_string())?;
+    let config: RulesConfig = serde_json::from_value(json!({"rule_exceptions": exceptions}))
+        .map_err(|error| error.to_string())?;
+    let findings: Vec<Fault> = vec![
+        cross_join_fault(
+            "CROSS JOIN with `order_policy` creates an explicit cartesian product",
+            3,
+        ),
+        cross_join_fault(
+            "CROSS JOIN with `customers` in CTE `checks` creates an explicit cartesian product",
+            7,
+        ),
+    ];
+    finalize_rows(
+        project_dir.path().to_string_lossy().into_owned(),
+        config,
+        &[CROSS_JOIN_CODE.to_owned()],
+        findings,
+    )
 }

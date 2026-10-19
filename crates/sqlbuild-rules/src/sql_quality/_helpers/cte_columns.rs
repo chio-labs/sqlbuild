@@ -421,7 +421,7 @@ fn unused_outputs(
             });
         found.push(LintDiagnostic {
             code: UNUSED_CTE_OUTPUT.code,
-            message: UNUSED_CTE_OUTPUT.message,
+            message: Cow::Borrowed(UNUSED_CTE_OUTPUT.message),
             remediation: Cow::Borrowed(if select.distinct {
                 DISTINCT_UNUSED_REMEDIATION
             } else if select

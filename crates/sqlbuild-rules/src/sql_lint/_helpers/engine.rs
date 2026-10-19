@@ -11,12 +11,13 @@ use polyglot_sql::{
 
 use crate::sql_lint::constants::LINT_API_VERSION;
 use crate::sql_lint::models::{
-    AdditionalFactOptions, LintDiagnostic, LintEdit, LintRequest, LintResponse, LintRuleMetadata,
-    QueryFacts,
+    AdditionalFactOptions, CrossJoinRequest, LintDiagnostic, LintEdit, LintRequest, LintResponse,
+    LintRuleMetadata, QueryFacts,
 };
 
 use crate::sql_lint::_helpers::additional::collect_additional_facts;
 use crate::sql_lint::_helpers::inline_relations::collect_inline_query_relation_spans;
+use crate::sql_lint::_helpers::join_predicates::cross_join_diagnostics;
 use crate::sql_lint::_helpers::terminal_shape::collect_terminal_shape_facts;
 
 const NULL_COMPARISON: LintRuleMetadata = LintRuleMetadata {
@@ -192,7 +193,7 @@ const NESTED_ELSE_CASE: LintRuleMetadata = LintRuleMetadata {
 const UNUSED_JOINED_RELATION: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL032",
     message: "Joined relation contributes no referenced values",
-    remediation: "Use the joined relation, remove the join, or suppress this intentional cardinality filter.",
+    remediation: "Use the joined relation or remove the join. When the join intentionally filters rows, record it as a reviewed [[rules.rule_exceptions]] entry with a reason in sqlbuild_project.toml.",
 };
 const COMMENT_ATTACHMENT: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL033",
@@ -222,7 +223,7 @@ const RECURSIVE_CTE: LintRuleMetadata = LintRuleMetadata {
 const CROSS_JOIN: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL038",
     message: "CROSS JOIN creates an explicit cartesian product",
-    remediation: "Use a keyed JOIN, or suppress this rule with a reason when the cartesian product is intentional.",
+    remediation: "Use a keyed JOIN, or make one side provably at most one row (LIMIT 1, an aggregate without GROUP BY, or a one-row seed). When the cartesian product is intentional, record it as a reviewed [[rules.rule_exceptions]] entry with rule, path, relation and reason in sqlbuild_project.toml.",
 };
 const INLINE_QUERY_RELATION: LintRuleMetadata = LintRuleMetadata {
     code: "SQBRSQL039",
@@ -420,6 +421,16 @@ pub(crate) fn lint(request: LintRequest) -> Result<LintResponse, String> {
         enabled: &enabled,
     };
     let mut diagnostics = diagnostics(&context);
+    if enabled.contains(CROSS_JOIN.code) {
+        let cross_joins = CrossJoinRequest {
+            statements: &statements,
+            tokens: &tokens,
+            cross_spans: &facts.cross_joins,
+            relation_keys: &request.relation_keys,
+            relation_names: &request.relation_names,
+        };
+        diagnostics.extend(cross_join_diagnostics(&cross_joins, &CROSS_JOIN));
+    }
     let depths = token_depths(&tokens);
     if enabled.contains(JOIN_EXPRESSION.code) {
         diagnostics.extend(diagnostics_for_spans(
@@ -1713,13 +1724,6 @@ fn rule_migration_diagnostics(context: &DiagnosticContext<'_>) -> Vec<LintDiagno
             Some("replacing recursion requires an authored query design"),
         ));
     }
-    if enabled.contains(CROSS_JOIN.code) {
-        diagnostics.extend(diagnostics_for_spans(
-            &CROSS_JOIN,
-            &facts.cross_joins,
-            Some("a keyed relationship requires user intent"),
-        ));
-    }
     if enabled.contains(INLINE_QUERY_RELATION.code) {
         diagnostics.extend(diagnostics_for_spans(
             &INLINE_QUERY_RELATION,
@@ -1866,7 +1870,7 @@ fn diagnostic(
     let span = span.unwrap_or_default();
     LintDiagnostic {
         code: rule.code,
-        message: rule.message,
+        message: Cow::Borrowed(rule.message),
         remediation: Cow::Borrowed(rule.remediation),
         start: span.start,
         end: span.end,

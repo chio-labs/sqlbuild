@@ -1,140 +1,130 @@
-//! Suppression directive parsing and matching.
+//! Inline suppression directives, which SQLBuild rejects in favour of configured exceptions.
 
 use std::sync::LazyLock;
 
 use regex::Regex;
-use sqlbuild_core::text::main::python_isspace::python_isspace;
 
+use crate::constants::SETTING_SNIPPET_INDENT;
 use crate::lint_text::_helpers::lines::LineSpan;
 use crate::lint_text::_helpers::sites::compiled;
 use crate::lint_text::constants::{
-    FORBIDDEN_FIX_REASON, FORBIDDEN_MESSAGE, FORBIDDEN_REMEDIATION, INVALID_MESSAGE,
-    INVALID_REMEDIATION, NATIVE_RULE_PREFIX, REASON_REQUIRED_FIX_REASON, SUPPRESSION_CODE,
-    SUPPRESSION_PATTERN, SUPPRESSION_PREFIX, UNUSED_REMEDIATION,
+    CROSS_JOIN_CODE, CROSS_JOIN_RELATION_PATTERN, DIRECTIVE_FIX_REASON, DIRECTIVE_MESSAGE,
+    DIRECTIVE_PATTERN, REASON_PLACEHOLDER, RULE_PLACEHOLDER, SUPPRESSION_PREFIX,
 };
 use crate::lint_text::errors::LintTextError;
-use crate::lint_text::models::{
-    RetainedViolation, SuppressibleViolation, SuppressionDirective, SuppressionFinding,
-};
+use crate::lint_text::models::SuppressionFinding;
+use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_core::text::main::python_isspace::python_isspace;
 
-static SUPPRESSION: LazyLock<Result<Regex, regex::Error>> =
-    LazyLock::new(|| Regex::new(SUPPRESSION_PATTERN));
+static DIRECTIVE: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(DIRECTIVE_PATTERN));
+static CROSS_JOIN_RELATION: LazyLock<Result<Regex, regex::Error>> =
+    LazyLock::new(|| Regex::new(CROSS_JOIN_RELATION_PATTERN));
 
-/// Valid directives, and the one-based lines of invalid ones.
-pub(crate) fn parse_directives(
+/// One inline directive: what it names, and what the exception entry for it holds.
+struct Directive {
+    line: usize,
+    code: Option<String>,
+    reason: Option<String>,
+    relation: Option<String>,
+}
+
+/// The rejection finding for every directive line in one file.
+pub(crate) fn directive_findings(
+    file: usize,
+    path: &str,
     lines: &[LineSpan<'_>],
-) -> Result<(Vec<SuppressionDirective>, Vec<usize>), LintTextError> {
-    let pattern: &Regex = compiled(&SUPPRESSION)?;
-    let mut directives: Vec<SuppressionDirective> = Vec::new();
-    let mut invalid: Vec<usize> = Vec::new();
+) -> Result<Vec<SuppressionFinding>, LintTextError> {
+    let pattern: &Regex = compiled(&DIRECTIVE)?;
+    let relation_pattern: &Regex = compiled(&CROSS_JOIN_RELATION)?;
+    let mut findings: Vec<SuppressionFinding> = Vec::new();
     for (index, line) in lines.iter().enumerate() {
         if !line.content.to_lowercase().contains(SUPPRESSION_PREFIX) {
             continue;
         }
-        let Some(captures) = pattern.captures(line.content) else {
-            invalid.push(index + 1);
-            continue;
+        let captures = pattern.captures(line.content);
+        let text = |name: &str| -> Option<String> {
+            captures
+                .as_ref()
+                .and_then(|found| found.name(name))
+                .map(|found| found.as_str().trim().to_owned())
+                .filter(|value| !value.is_empty())
         };
-        let mut target: usize = index + 1;
-        while target < lines.len() && skippable(lines[target].content) {
-            target += 1;
-        }
-        directives.push(SuppressionDirective {
-            code: captures["code"].to_string(),
+        let code: Option<String> = text("code");
+        let relation: Option<String> = if code.as_deref() == Some(CROSS_JOIN_CODE) {
+            target_line(lines, index)
+                .and_then(|target| cross_joined_relation(relation_pattern, target))
+        } else {
+            None
+        };
+        let directive = Directive {
             line: index + 1,
-            target: target + 1,
+            code,
+            reason: text("reason"),
+            relation,
+        };
+        findings.push(SuppressionFinding {
+            file,
+            line: directive.line,
+            message: DIRECTIVE_MESSAGE.to_owned(),
+            remediation: remediation(&directive, path),
+            fault: true,
+            fix: None,
+            fix_unavailable_reason: Some(DIRECTIVE_FIX_REASON),
         });
     }
-    Ok((directives, invalid))
+    Ok(findings)
 }
 
-/// Blank lines and comment lines between a directive and the line it suppresses.
-fn skippable(line: &str) -> bool {
-    let stripped: &str = line.trim_start_matches(python_isspace);
-    stripped.is_empty() || stripped.starts_with("--")
-}
-
-/// Whether a retained violation is the native finding one directive suppresses.
-pub(crate) fn matches_directive(
-    item: &RetainedViolation,
-    violations: &[SuppressibleViolation],
-    file: usize,
-    directive: &SuppressionDirective,
-) -> bool {
-    let (item_file, line, code, native): (usize, usize, &str, bool) = match item {
-        RetainedViolation::Existing(index) => {
-            let violation: &SuppressibleViolation = &violations[*index];
-            (
-                violation.file,
-                violation.line,
-                &violation.code,
-                violation.native,
-            )
-        }
-        RetainedViolation::Added(finding) => (finding.file, finding.line, SUPPRESSION_CODE, true),
-    };
-    item_file == file
-        && line == directive.target
-        && code == directive.code
-        && native
-        && code.starts_with(NATIVE_RULE_PREFIX)
-}
-
-/// Findings for every directive line when the project forbids suppressions.
-pub(crate) fn forbidden_findings(
-    file: usize,
-    directives: &[SuppressionDirective],
-    invalid: &[usize],
-) -> Vec<RetainedViolation> {
-    let mut lines: Vec<usize> = invalid
-        .iter()
-        .copied()
-        .chain(directives.iter().map(|directive| directive.line))
-        .collect();
-    lines.sort_unstable();
-    lines.dedup();
+/// The next line that is neither blank nor a comment: the line a directive meant to cover.
+fn target_line<'a>(lines: &[LineSpan<'a>], directive: usize) -> Option<&'a str> {
     lines
-        .into_iter()
-        .map(|line| {
-            RetainedViolation::Added(SuppressionFinding {
-                file,
-                line,
-                message: FORBIDDEN_MESSAGE.to_string(),
-                remediation: FORBIDDEN_REMEDIATION,
-                fault: true,
-                fix: None,
-                fix_unavailable_reason: Some(FORBIDDEN_FIX_REASON),
-            })
+        .iter()
+        .skip(directive + 1)
+        .map(|line| line.content)
+        .find(|content| {
+            let stripped: &str = content.trim_start_matches(python_isspace);
+            !stripped.is_empty() && !stripped.starts_with("--")
         })
-        .collect()
 }
 
-/// The finding for an invalid directive line.
-pub(crate) fn invalid_finding(file: usize, line: usize) -> RetainedViolation {
-    RetainedViolation::Added(SuppressionFinding {
-        file,
-        line,
-        message: INVALID_MESSAGE.to_string(),
-        remediation: INVALID_REMEDIATION,
-        fault: false,
-        fix: None,
-        fix_unavailable_reason: Some(REASON_REQUIRED_FIX_REASON),
-    })
+/// The relation a `CROSS JOIN` on `line` reads: a dependency's name or an authored identifier.
+fn cross_joined_relation(pattern: &Regex, line: &str) -> Option<String> {
+    let captures = pattern.captures(line)?;
+    captures
+        .name("dependency")
+        .or_else(|| captures.name("identifier"))
+        .map(|found| found.as_str().to_owned())
 }
 
-/// The finding for a directive that suppressed nothing, with an edit removing its line.
-pub(crate) fn unused_finding(
-    file: usize,
-    directive: &SuppressionDirective,
-    span: &LineSpan<'_>,
-) -> RetainedViolation {
-    RetainedViolation::Added(SuppressionFinding {
-        file,
-        line: directive.line,
-        message: format!("Unused suppression for {}", directive.code),
-        remediation: UNUSED_REMEDIATION,
-        fault: false,
-        fix: Some((span.start, span.end)),
-        fix_unavailable_reason: None,
-    })
+/// Remove-and-declare help, with the exact `[[rules.rule_exceptions]]` entry to add.
+fn remediation(directive: &Directive, path: &str) -> String {
+    let mut entry: Vec<String> = vec![
+        "[[rules.rule_exceptions]]".to_owned(),
+        format!(
+            "rule = {}",
+            toml_string(directive.code.as_deref().unwrap_or(RULE_PLACEHOLDER))
+        ),
+        format!("path = {}", toml_string(path)),
+    ];
+    if let Some(relation) = &directive.relation {
+        entry.push(format!("relation = {}", toml_string(relation)));
+    }
+    entry.push(format!(
+        "reason = {}",
+        toml_string(directive.reason.as_deref().unwrap_or(REASON_PLACEHOLDER))
+    ));
+    let rule: &str = directive.code.as_deref().unwrap_or("Rule");
+    let snippet: String = entry
+        .iter()
+        .map(|line| format!("\n{SETTING_SNIPPET_INDENT}{line}"))
+        .collect();
+    format!(
+        "Remove this comment, then fix the {rule} finding, or record it as a reviewed exception in \
+         {PROJECT_CONFIG_FILENAME}:{snippet}"
+    )
+}
+
+fn toml_string(value: &str) -> String {
+    toml::Value::String(value.to_owned()).to_string()
 }
