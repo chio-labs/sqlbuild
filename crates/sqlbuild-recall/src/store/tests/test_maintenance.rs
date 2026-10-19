@@ -26,6 +26,7 @@ fn given_expired_recent_and_running_invocations_when_maintained_then_only_expire
         &old_running,
         (&shifted(-10), &shifted(80)),
         (None, None),
+        (None, None),
     ));
     mixed.extend(artifact_rows(
         &old,

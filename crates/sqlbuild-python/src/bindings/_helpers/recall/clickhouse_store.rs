@@ -218,7 +218,7 @@ impl ClickHouseStore {
         Ok(())
     }
 
-    /// Create missing tables, add missing columns and replace the views when this build's schema is newer; a newer store keeps its views.
+    /// Create missing tables, add missing columns and replace the views when this build's schema is newer or columns were added; a newer store keeps its views.
     fn ensure_schema(
         &mut self,
         py: Python<'_>,
@@ -230,13 +230,13 @@ impl ClickHouseStore {
             version,
         } = self.state(py)?;
         let complete: bool = tables.len() == ALL_TABLES.len() && views.len() == VIEW_NAMES.len();
-        if complete && version >= RECALL_SCHEMA_VERSION {
+        if complete {
             self.read_columns(py)?;
-            return Ok(tables);
-        }
-        if complete && version == 0 {
-            self.read_columns(py)?;
-            if self.missing_columns().is_empty() {
+            let columns_complete: bool = self.missing_columns().is_empty();
+            if columns_complete && version >= RECALL_SCHEMA_VERSION {
+                return Ok(tables);
+            }
+            if columns_complete && version == 0 {
                 self.record_version(py, envelope)?;
                 return Ok(tables);
             }
@@ -246,7 +246,9 @@ impl ClickHouseStore {
             self.command(py, &statement, "create the Recall tables")?;
         }
         self.read_columns(py)?;
-        for (table, column) in self.missing_columns() {
+        let missing: Vec<(Table, ColumnSpec)> = self.missing_columns();
+        let added: bool = !missing.is_empty();
+        for (table, column) in missing {
             let statement = add_column_statement(
                 Dialect::ClickHouse,
                 &self.location.options,
@@ -257,7 +259,7 @@ impl ClickHouseStore {
         self.read_columns(py)?;
         let upgrade: bool = version < RECALL_SCHEMA_VERSION;
         for (name, statement) in view_statements(Dialect::ClickHouse, &self.location.options) {
-            if upgrade {
+            if upgrade || added {
                 self.command(py, &statement, "create the Recall views")?;
             } else if !views.contains(name) {
                 let statement =
@@ -585,18 +587,21 @@ impl ClickHouseReader {
         py: Python<'_>,
         selector: &str,
     ) -> Result<String, StoreError> {
-        let table = self
-            .store
-            .location
-            .table(table_spec(Table::Invocations).name);
+        let location = &self.store.location;
+        let started = format!(
+            "(SELECT invocation_id, invocation_started_at FROM {} \
+             UNION ALL SELECT invocation_id, invocation_started_at FROM {})",
+            location.table(table_spec(Table::Invocations).name),
+            location.table(table_spec(Table::Heartbeats).name),
+        );
         let sql = if selector == LAST_INVOCATION_SELECTOR {
             format!(
-                "SELECT invocation_id FROM {table} \
+                "SELECT invocation_id FROM {started} \
                  ORDER BY invocation_started_at DESC, invocation_id DESC LIMIT 1"
             )
         } else {
             format!(
-                "SELECT DISTINCT invocation_id FROM {table} \
+                "SELECT DISTINCT invocation_id FROM {started} \
                  WHERE startsWith(invocation_id, {}) ORDER BY invocation_id LIMIT 3",
                 literal(selector)
             )

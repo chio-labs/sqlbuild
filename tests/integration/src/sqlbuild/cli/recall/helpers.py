@@ -199,6 +199,38 @@ def killed_build(project_dir: Path, *, heartbeat_seconds: str) -> tuple[str, lis
     return str(running[0][0]), recorded
 
 
+def killed_during_discovery(
+    project_dir: Path, *, heartbeat_seconds: str
+) -> tuple[list[list[object]], subprocess.CompletedProcess[bytes]]:
+    """Rows left by a build SIGKILLed while importing a slow sink, and `recall output last`."""
+
+    sink: Path = project_dir / "sinks" / "slow_import.py"
+    sink.parent.mkdir(parents=True, exist_ok=True)
+    _ = sink.write_text(
+        "import os\nimport time\n\n"
+        "time.sleep(float(os.environ.get('ORDERS_IMPORT_SECONDS', '0')))\n",
+        encoding="utf-8",
+    )
+    process: subprocess.Popen[bytes] = start(
+        project_dir,
+        "build",
+        SQLBUILD_RECALL_HEARTBEAT_SECONDS=heartbeat_seconds,
+        ORDERS_IMPORT_SECONDS="60",
+    )
+    _ = wait_for(
+        "SELECT invocation_id FROM invocations WHERE status = 'running'",
+        project_dir,
+        timeout=120,
+    )
+    os.killpg(process.pid, signal.SIGKILL)
+    _ = process.wait(timeout=30)
+    time.sleep(5 * float(heartbeat_seconds))
+    recorded: list[list[object]] = recall_rows(
+        project_dir, "SELECT command, status, started_at IS NOT NULL FROM invocations"
+    )
+    return recorded, run(project_dir, "recall", "output", "last")
+
+
 def concurrent_builds(project_dir: Path, targets: tuple[str, ...]) -> tuple[list[int], int, int]:
     """Exit codes of concurrent builds, reads made meanwhile and unexpected read failures."""
 

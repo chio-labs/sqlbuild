@@ -7,14 +7,15 @@ use crate::writer::models::SetupOutcome;
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
-    artifact_counts, close_under_held_lock, event_counts, output_stored_while_running,
-    partially_inserted, recorded_session, replaced_session, session_on_corrupt_store,
+    artifact_counts, close_under_held_lock, event_counts, invocation_during_discovery,
+    output_stored_while_running, partially_inserted, recorded_session, replaced_session,
+    session_on_corrupt_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
-    ArtifactSizeTestCase, CorruptStoreTestCase, EventBuildTestCase, HeldLockTestCase,
-    PartialInsertTestCase, RecordedSession, ReplacementTestCase, SessionTestCase,
+    ArtifactSizeTestCase, CorruptStoreTestCase, DiscoveryTestCase, EventBuildTestCase,
+    HeldLockTestCase, PartialInsertTestCase, RecordedSession, ReplacementTestCase, SessionTestCase,
     StoredWhileRunningTestCase,
 };
 
@@ -272,6 +273,29 @@ fn given_one_table_of_a_batch_failing_when_written_then_only_its_records_count_a
         assert_eq!(
             partially_inserted(test_case.failing),
             test_case.expected_counts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_a_held_context_row_when_discovery_runs_then_the_first_heartbeat_names_the_command() {
+    let test_cases = [DiscoveryTestCase {
+        description: "a run killed during discovery is still listed with its command",
+        wait: Duration::from_millis(600),
+        expected_rows: vec![vec![
+            RecallValue::Text("build".to_owned()),
+            RecallValue::Text("running".to_owned()),
+            RecallValue::Integer(1),
+            RecallValue::Integer(0),
+        ]],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            invocation_during_discovery(test_case.wait),
+            test_case.expected_rows,
             "{}",
             test_case.description
         );

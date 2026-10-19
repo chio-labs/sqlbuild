@@ -39,6 +39,7 @@ from tests.integration.src.sqlbuild.cli.recall.helpers import (
     OUTPUT_LOG_SINK,
     concurrent_builds,
     killed_build,
+    killed_during_discovery,
     recall_rows,
     run,
     write_sinks,
@@ -328,6 +329,36 @@ def test_given_a_killed_build_when_heartbeats_stop_then_the_invocation_is_abando
     running_id, recorded = killed_build(project_dir, heartbeat_seconds=test_case.heartbeat_seconds)
 
     assert recorded == [[running_id, test_case.expected_status, 1, 0]]
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        ClickHouseRecallAbandonedTestCase(
+            description="a build SIGKILLed during discovery is listed and recalled",
+            heartbeat_seconds="0.5",
+            expected_status="abandoned",
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_a_build_killed_during_discovery_when_recalled_then_its_command_and_start_remain(
+    test_case: ClickHouseRecallAbandonedTestCase,
+    tmp_path: Path,
+    clickhouse_e2e_config: dict[str, object],
+    recall_database: str,
+) -> None:
+    project_dir: Path = write_recall_project(
+        parent=tmp_path, config=clickhouse_e2e_config, database=recall_database
+    )
+
+    recorded, recalled = killed_during_discovery(
+        project_dir, heartbeat_seconds=test_case.heartbeat_seconds
+    )
+
+    assert recorded == [["build", test_case.expected_status, 1]]
+    assert recalled.returncode == 0, recalled.stderr
+    assert f"the invocation is {test_case.expected_status}".encode() in recalled.stderr
 
 
 @pytest.mark.parametrize(

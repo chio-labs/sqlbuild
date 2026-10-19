@@ -219,15 +219,18 @@ fn given_terminals_and_heartbeats_when_projected_then_status_never_claims_false_
             &running,
             (&wall_clock(-1), &wall_clock(90)),
             (None, Some(1)),
+            (None, None),
         ),
         heartbeat_row(
             &abandoned,
             ("2026-10-01T12:00:30.000000Z", "2026-10-01T12:02:00.000000Z"),
             (None, None),
+            (None, None),
         ),
         heartbeat_row(
             &abandoned,
             ("2026-10-01T12:00:00.000000Z", "2026-10-01T12:01:30.000000Z"),
+            (None, None),
             (None, None),
         ),
     ];

@@ -163,3 +163,9 @@ impl RecallStoreOpener for PartialStore {
         Duration::from_millis(10)
     }
 }
+
+pub(crate) struct DiscoveryTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) wait: Duration,
+    pub(crate) expected_rows: Vec<Vec<RecallValue>>,
+}

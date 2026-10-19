@@ -26,6 +26,7 @@ pub(crate) fn batch() -> Vec<RecallRow> {
         &envelope(),
         ("2026-10-19T00:00:01.000000Z", "2026-10-19T00:01:31.000000Z"),
         (Some("host"), Some(7)),
+        (None, None),
     )];
     rows.extend(artifact_rows(
         &envelope(),

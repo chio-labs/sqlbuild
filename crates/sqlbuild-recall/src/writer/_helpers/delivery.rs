@@ -184,12 +184,19 @@ fn write_batch(
     }
 }
 
-fn heartbeat(config: &SessionConfig, now: SystemTime) -> RecallRow {
+/// A heartbeat at `now`; the `first` names the command before the context row may be written.
+fn heartbeat(config: &SessionConfig, now: SystemTime, first: bool) -> RecallRow {
     let stale = now + config.heartbeat_interval * HEARTBEAT_STALE_INTERVALS;
+    let context = &config.context;
     heartbeat_row(
         &config.envelope,
         (&format_timestamp(now), &format_timestamp(stale)),
-        (config.context.host_token.as_deref(), config.context.pid),
+        (context.host_token.as_deref(), context.pid),
+        if first {
+            (context.command.as_deref(), context.subcommand.as_deref())
+        } else {
+            (None, None)
+        },
     )
 }
 
@@ -328,6 +335,7 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
         }
     };
     let mut next_heartbeat: SystemTime = SystemTime::now();
+    let mut first_heartbeat: bool = true;
     let mut materializer = Materializer::new(config.envelope.clone());
     let batching: Batching = batching(config);
     loop {
@@ -344,7 +352,8 @@ pub(crate) fn deliver(shared: &Arc<Shared>, config: &SessionConfig) {
         let mut rows: Vec<RecallRow> = built.rows;
         let now: SystemTime = SystemTime::now();
         if now >= next_heartbeat && !closing {
-            rows.push(heartbeat(config, now));
+            rows.push(heartbeat(config, now, first_heartbeat));
+            first_heartbeat = false;
             next_heartbeat = now + config.heartbeat_interval;
         }
         if !rows.is_empty() {

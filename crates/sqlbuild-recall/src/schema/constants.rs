@@ -140,11 +140,13 @@ const ARTIFACT_REF_COLUMNS: [ColumnSpec; 6] = [
     ColumnSpec::required("referenced_at", ColumnType::Timestamp),
 ];
 
-const HEARTBEAT_COLUMNS: [ColumnSpec; 4] = [
+const HEARTBEAT_COLUMNS: [ColumnSpec; 6] = [
     ColumnSpec::required("beat_at", ColumnType::Timestamp),
     ColumnSpec::required("stale_at", ColumnType::Timestamp),
     ColumnSpec::optional("host_token", ColumnType::Text),
     ColumnSpec::optional("pid", ColumnType::Integer),
+    ColumnSpec::optional("command", ColumnType::Text),
+    ColumnSpec::optional("subcommand", ColumnType::Text),
 ];
 
 const DELIVERY_COLUMNS: [ColumnSpec; 9] = [

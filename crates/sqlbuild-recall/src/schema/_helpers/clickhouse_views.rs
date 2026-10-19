@@ -58,7 +58,8 @@ terminals AS (
     GROUP BY invocation_id
 ),
 beats AS (
-    SELECT invocation_id, max(beat_at) AS last_heartbeat_at, max(stale_at) AS stale_at
+    SELECT invocation_id, max(beat_at) AS last_heartbeat_at, max(stale_at) AS stale_at,
+        min(command) AS command, min(subcommand) AS subcommand
     FROM {beats} GROUP BY invocation_id
 )
 SELECT
@@ -81,8 +82,8 @@ SELECT
     terminals.terminal_exit_code AS exit_code,
     terminals.terminal_error_type AS error_type,
     terminals.terminal_error_code AS error_code,
-    coalesce(context.command, started.command) AS command,
-    context.subcommand AS subcommand,
+    coalesce(context.command, started.command, beats.command) AS command,
+    coalesce(context.subcommand, beats.subcommand) AS subcommand,
     context.target AS target,
     context.adapter AS adapter,
     context.project_name AS project_name,

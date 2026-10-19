@@ -396,3 +396,24 @@ pub(crate) fn partially_inserted(failing: Table) -> [(u64, u64, u64); 2] {
         (counts.accepted, counts.delivered, counts.failed)
     })
 }
+
+/// What `invocations` shows for a session still waiting on discovery, its context row held, after `wait`.
+pub(crate) fn invocation_during_discovery(wait: Duration) -> Vec<Vec<RecallValue>> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    let session = start_recall_session(SessionConfig {
+        defer_context: true,
+        ..config(path.clone(), "discovering")
+    });
+    std::thread::sleep(wait);
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    let shown = query_store(
+        &store,
+        "SELECT command, status, started_at IS NOT NULL, \
+         (SELECT COUNT(*) FROM recall_invocations) FROM invocations",
+        None,
+    )
+    .expect("the query is valid");
+    drop(session.close());
+    shown.rows
+}
