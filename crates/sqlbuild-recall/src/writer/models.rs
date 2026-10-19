@@ -6,6 +6,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use crate::records::models::{DeliveryCounts, InvocationContext, RowEnvelope};
+use crate::store::types::RecallStoreOpener;
 use crate::writer::_helpers::delivery::Shared;
 
 /// The datasets whose delivery is accounted separately.
@@ -67,10 +68,19 @@ impl Priority {
     pub const COUNT: usize = 8;
 }
 
+/// Where a session writes.
+#[derive(Clone, Debug)]
+pub enum SessionStore {
+    /// The native SQLite store at this path.
+    Sqlite(PathBuf),
+    /// A store opened through `RecallStoreOpener`.
+    Hosted(Arc<dyn RecallStoreOpener>),
+}
+
 /// What one writer session needs.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct SessionConfig {
-    pub store_path: PathBuf,
+    pub store: SessionStore,
     pub envelope: RowEnvelope,
     pub context: InvocationContext,
     pub retention_days: u32,

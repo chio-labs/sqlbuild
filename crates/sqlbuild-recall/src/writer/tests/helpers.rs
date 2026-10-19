@@ -12,7 +12,7 @@ use crate::store::models::OpenMode;
 use crate::writer::_helpers::queue::WriterState;
 use crate::writer::main::start_recall_session::start_recall_session;
 use crate::writer::models::{
-    DeliveryStream, DeliverySummary, Priority, SessionConfig, SetupOutcome,
+    DeliveryStream, DeliverySummary, Priority, SessionConfig, SessionStore, SetupOutcome,
 };
 use crate::writer::tests::test_types::RecordedSession;
 
@@ -73,7 +73,7 @@ pub(crate) fn chunked(writes: &[(OutputStream, Vec<u8>)]) -> Vec<[Option<RecallV
 /// A session configuration writing invocation `invocation_id` to `path`.
 pub(crate) fn config(path: PathBuf, invocation_id: &str) -> SessionConfig {
     SessionConfig {
-        store_path: path,
+        store: SessionStore::Sqlite(path),
         envelope: envelope(invocation_id),
         context: InvocationContext {
             command: Some("build".to_owned()),
@@ -320,4 +320,24 @@ pub(crate) fn chunk_facts(
             RecallValue::Integer(sequences)
         })),
     ]
+}
+
+/// Output chunks stored while a session still runs, when heartbeats fall due faster than batches fill.
+pub(crate) fn output_stored_while_running(
+    heartbeat: Duration,
+    wait: Duration,
+) -> Vec<Vec<RecallValue>> {
+    let directory = tempfile::tempdir().expect("a temporary directory can be created");
+    let path = directory.path().join("logs/recall.sqlite3");
+    let session = start_recall_session(SessionConfig {
+        heartbeat_interval: heartbeat,
+        ..config(path.clone(), "beating")
+    });
+    session.append_output(OutputStream::Stdout, b"progress\n");
+    std::thread::sleep(wait);
+    let store = open_sqlite_store(&path, OpenMode::ReadOnly).expect("the store opens");
+    let stored = query_store(&store, "SELECT COUNT(*) FROM recall_output", None)
+        .expect("the query is valid");
+    drop(session.close());
+    stored.rows
 }

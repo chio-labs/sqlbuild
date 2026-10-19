@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod clickhouse;
 pub mod records;
 pub mod schema;
 pub mod settings;

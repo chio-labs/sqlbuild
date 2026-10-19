@@ -1,3 +1,5 @@
+pub(crate) mod clickhouse_calls;
+pub(crate) mod clickhouse_store;
 pub(crate) mod command;
 pub(crate) mod console;
 pub(crate) mod constants;

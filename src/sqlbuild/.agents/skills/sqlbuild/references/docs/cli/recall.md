@@ -27,8 +27,9 @@ sqb recall output last
 
 ## sqb recall query
 
-Run one read-only SQLite `SELECT` against the Recall views. Statements that write, and multiple
-statements, are rejected.
+Run one read-only `SELECT` against the Recall views, in the store's dialect: SQLite for the local
+store, ClickHouse for a [ClickHouse store](../concepts/observability/recall.md#sharing-history-in-clickhouse).
+Statements that write, and multiple statements, are rejected.
 
 | Flag | Description |
 |------|-------------|

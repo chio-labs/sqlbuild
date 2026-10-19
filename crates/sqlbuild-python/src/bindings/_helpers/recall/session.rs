@@ -21,12 +21,15 @@ use sqlbuild_recall::store::models::QuarantineOutcome;
 use sqlbuild_recall::writer::constants::DEFAULT_HEARTBEAT_INTERVAL_MS;
 use sqlbuild_recall::writer::main::start_recall_session::start_recall_session;
 use sqlbuild_recall::writer::models::{
-    DeliverySummary, RecallSession, SessionConfig, SetupOutcome,
+    DeliverySummary, RecallSession, SessionConfig, SessionStore, SetupOutcome,
 };
 
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
+use crate::bindings::_helpers::recall::clickhouse_store::{
+    ClickHouseLocation, ClickHouseStoreOpener,
+};
 use crate::bindings::_helpers::recall::console::write_stderr;
 use crate::bindings::_helpers::recall::constants::{
     CLOSE_POLL_MS, DDL_NOTICE_PREFIX, HEARTBEAT_ENVIRONMENT, HOST_TOKEN_LENGTH,
@@ -216,25 +219,30 @@ fn permission_notice(
     (settings, project_dir): (&RecallSettings, &Path),
     reason: &str,
 ) -> Option<String> {
-    let StoreLocation::Sqlite { path } = &settings.store else {
-        return None;
+    let (dialect, database, place): (Dialect, Option<String>, String) = match &settings.store {
+        StoreLocation::Sqlite { path } => (Dialect::Sqlite, None, format!("at {}", path.display())),
+        StoreLocation::ClickHouse { database, .. } => (
+            Dialect::ClickHouse,
+            Some(database.clone()),
+            format!("in ClickHouse database `{database}`"),
+        ),
+        StoreLocation::Unsupported { .. } => return None,
     };
-    if !notice_due(project_dir, &path.to_string_lossy()) {
+    if !notice_due(project_dir, &place) {
         return None;
     }
     let script = ddl_script(
-        Dialect::Sqlite,
+        dialect,
         &DdlOptions {
-            database: None,
+            database,
             retention_days: settings.retention_days,
             cluster: None,
         },
     );
     Some(format!(
         "Recall history is not being written{}: {reason}. An administrator can create the \
-         store at {} with:\n\n{script}\n",
+         store {place} with:\n\n{script}\n",
         target_phrase(settings),
-        path.display()
     ))
 }
 
@@ -284,8 +292,22 @@ fn started_session(
     (args, identity, facts): (&Bound<'_, PyAny>, &Bound<'_, PyAny>, &CommandFacts),
     (settings, project_dir): (&RecallSettings, &Path),
 ) -> PyResult<Option<Arc<RecallSession>>> {
-    let store_path: PathBuf = match &settings.store {
-        StoreLocation::Sqlite { path } => path.clone(),
+    let store: SessionStore = match &settings.store {
+        StoreLocation::Sqlite { path } => {
+            notify(py, quarantined_notice(path));
+            if let Some(reason) = store_location_problem(path) {
+                notify(py, permission_notice((settings, project_dir), &reason));
+                return Ok(None);
+            }
+            SessionStore::Sqlite(path.clone())
+        }
+        StoreLocation::ClickHouse {
+            config, database, ..
+        } => SessionStore::Hosted(Arc::new(ClickHouseStoreOpener {
+            location: ClickHouseLocation::new(config, database, settings.retention_days),
+            retention_notice: notice_due,
+            project_dir: project_dir.to_path_buf(),
+        })),
         StoreLocation::Unsupported {
             connection,
             adapter,
@@ -297,17 +319,12 @@ fn started_session(
             return Ok(None);
         }
     };
-    notify(py, quarantined_notice(&store_path));
-    if let Some(reason) = store_location_problem(&store_path) {
-        notify(py, permission_notice((settings, project_dir), &reason));
-        return Ok(None);
-    }
     let Some(invocation_id) = text_value(&native_field(identity, "invocation_id")?)? else {
         return Ok(None);
     };
     let context = invocation_facts(py, (args, facts), (settings, project_dir))?;
     let session = start_recall_session(SessionConfig {
-        store_path,
+        store,
         maintenance_owner: format!(
             "{}:{}",
             context.host_token.as_deref().unwrap_or("host"),
@@ -376,7 +393,13 @@ fn closing_notices(recall: &InvocationRecall, session: &RecallSession) -> Vec<St
     let mut notices: Vec<String> = session
         .notices()
         .into_iter()
-        .map(|notice| format!("Recall: {notice}.\n"))
+        .map(|notice| {
+            if notice.ends_with('\n') {
+                format!("Recall: {notice}")
+            } else {
+                format!("Recall: {notice}.\n")
+            }
+        })
         .collect();
     if let (Some(SetupOutcome::PermissionDenied { reason }), Some((settings, project_dir))) =
         (session.wait_for_setup(Duration::ZERO), &recall.settings)

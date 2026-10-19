@@ -13,11 +13,12 @@ Online: https://sqlbuild.com/docs/concepts/observability/recall/
 - Output limit
 - Retention
 - When the store cannot be written
+- Sharing history in ClickHouse
 - Querying history
 - Relationship to compute logs
 
-Recall records each `sqb` invocation in a local SQLite store so you can ask what happened after the
-fact: which command ran, how it ended, which statements it executed and how long they took, and
+Recall records each `sqb` invocation in a local SQLite store, or in a shared
+[ClickHouse store](#sharing-history-in-clickhouse), so you can ask what happened after the fact: which command ran, how it ended, which statements it executed and how long they took, and
 exactly what it printed. Recall is on by default and needs no setup.
 
 ## What is recorded
@@ -64,7 +65,7 @@ enabled = false               # do not record runs against the ci target
 | Key | Default | Description |
 |-----|---------|-------------|
 | `enabled` | `true` | Set to `false` to stop recording |
-| `connection` | (none) | A `sqlite` connection whose `path` names the store; defaults to `logs/recall.sqlite3` |
+| `connection` | (none) | A `sqlite` connection whose `path` names the store, or a `clickhouse` connection; defaults to `logs/recall.sqlite3` |
 | `retention` | `"30d"` | How long invocations are kept, in days (`d`) or hours (`h`), up to 3650 days |
 | `shutdown_timeout` | `"3s"` | The cap on time spent flushing history at exit, in `s` or `ms`, up to 10 minutes |
 | `diagnostics_min_severity` | `"info"` | `trace`, `debug`, `info`, `warning`, `error`, or `critical` |
@@ -115,13 +116,53 @@ repeats at most once a day. If the store file is not a SQLite database, Recall m
 `recall.sqlite3.corrupt-<UTC timestamp>`, starts a fresh store, and says so once. Commands that
 find the same corrupt file coordinate through `recall.sqlite3.lock`, so only one of them moves it.
 
-A `connection` that does not use the `sqlite` adapter is not supported yet; Recall prints a notice
-and records nothing.
+A `connection` on any adapter other than `sqlite` or `clickhouse` is not supported; Recall prints a
+notice and records nothing.
+
+## Sharing history in ClickHouse
+
+Point `connection` at a ClickHouse connection to keep one history for a whole team. The connection
+needs `adapter = "clickhouse"` when the project uses another adapter, and its `database` must
+already exist; Recall never creates databases.
+
+```toml
+[connections.history]
+adapter = "clickhouse"
+host = "${env:CLICKHOUSE_HOST}"
+user = "recall_writer"
+password = "${env:CLICKHOUSE_PASSWORD}"
+database = "observability"
+
+[recall]
+connection = "history"
+retention = "30d"
+```
+
+- **Setup.** On first use Recall creates its `recall_*` MergeTree tables and the views above in that
+  database, and adds columns that a newer SQLBuild introduces. After that, writing needs only
+  `INSERT` and `SELECT` on the tables. If the user may not create them, the command still succeeds
+  and prints the complete DDL for an administrator to run.
+- **Writes.** History is sent in batches of up to 5,000 rows about once a second, one insert per
+  table, with the same queue, shutdown budget and exit-code guarantees as the local store. Many
+  concurrent commands can write one store.
+- **Duplicates.** Every row has a deterministic key. A retried batch is deduplicated by ClickHouse,
+  and the views keep the first copy of each key, so a repeated delivery is counted once. A key
+  written again with different content keeps the first row and is listed in `conflicts`.
+- **Retention.** Every table carries a TTL of `retention` (SQL text a week longer, and refreshed
+  while it is still referenced), and the views hide rows past `retention` at once. ClickHouse drops
+  expired daily parts in the background, so rows may stay on disk for a while after the views stop
+  showing them. Retention belongs to the store: when a project's `retention` differs from the
+  tables' TTL, Recall warns once a day with the `ALTER TABLE … MODIFY TTL` and view statements that
+  would apply it, and never changes the TTL itself.
+- **Reading.** `sqb recall query`, `schema` and `output` read the ClickHouse store, so queries use
+  ClickHouse SQL. `--json` output includes the server's `rows_read`, `bytes_read` and `query_id`.
+
+Use a single ClickHouse server or ClickHouse Cloud; `ON CLUSTER` stores are not supported yet.
 
 ## Querying history
 
-Use [`sqb recall`](../../cli/recall.md) to read the store. Queries are read-only SQLite `SELECT`
-statements against these views:
+Use [`sqb recall`](../../cli/recall.md) to read the store. Queries are read-only `SELECT` statements,
+in the store's SQL dialect, against these views:
 
 | View | One row per |
 |------|-------------|

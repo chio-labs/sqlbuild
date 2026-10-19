@@ -1,5 +1,7 @@
 pub mod add_column_statement;
+pub mod clickhouse_relation;
 pub mod ddl_script;
+pub mod retention_fix_statements;
 pub mod sqlite_retention_sql;
 pub mod table_columns;
 pub mod table_spec;

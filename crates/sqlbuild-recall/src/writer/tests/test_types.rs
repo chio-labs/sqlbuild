@@ -76,3 +76,10 @@ pub(crate) struct CaptureLimitTestCase {
     pub(crate) writes: Vec<(OutputStream, &'static [u8])>,
     pub(crate) expected_rows: Vec<[Option<RecallValue>; 6]>,
 }
+
+pub(crate) struct StoredWhileRunningTestCase {
+    pub(crate) description: &'static str,
+    pub(crate) heartbeat: std::time::Duration,
+    pub(crate) wait: std::time::Duration,
+    pub(crate) expected_rows: Vec<Vec<RecallValue>>,
+}

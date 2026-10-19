@@ -6,14 +6,14 @@ use crate::writer::models::SetupOutcome;
 #[cfg(unix)]
 use crate::writer::tests::helpers::unwritable_session;
 use crate::writer::tests::helpers::{
-    artifact_counts, close_under_held_lock, event_counts, recorded_session,
-    session_on_corrupt_store,
+    artifact_counts, close_under_held_lock, event_counts, output_stored_while_running,
+    recorded_session, session_on_corrupt_store,
 };
 #[cfg(unix)]
 use crate::writer::tests::test_types::UnwritableTestCase;
 use crate::writer::tests::test_types::{
     ArtifactSizeTestCase, CorruptStoreTestCase, EventBuildTestCase, HeldLockTestCase,
-    RecordedSession, SessionTestCase,
+    RecordedSession, SessionTestCase, StoredWhileRunningTestCase,
 };
 
 const CLOSE_SLACK_SECONDS: f64 = 0.3;
@@ -180,6 +180,26 @@ fn given_events_when_built_on_the_delivery_thread_then_unbuildable_ones_count_as
         assert_eq!(
             event_counts(&test_case.events),
             test_case.expected_counts,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_heartbeats_due_faster_than_batches_fill_when_running_then_queued_records_are_still_written()
+ {
+    let test_cases = [StoredWhileRunningTestCase {
+        description: "a 50 ms heartbeat still lets queued output reach the store",
+        heartbeat: Duration::from_millis(50),
+        wait: Duration::from_millis(1_500),
+        expected_rows: vec![vec![RecallValue::Integer(1)]],
+    }];
+
+    for test_case in test_cases {
+        assert_eq!(
+            output_stored_while_running(test_case.heartbeat, test_case.wait),
+            test_case.expected_rows,
             "{}",
             test_case.description
         );

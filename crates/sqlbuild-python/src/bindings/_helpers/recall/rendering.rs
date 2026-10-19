@@ -6,8 +6,10 @@ use sqlbuild_core::query_command::main::render_query_long::render_query_long;
 use sqlbuild_core::query_command::main::render_query_table::render_query_table;
 use sqlbuild_core::query_command::models::QueryDisplay;
 use sqlbuild_recall::records::models::RecallValue;
+use sqlbuild_recall::schema::models::Dialect;
 use sqlbuild_recall::store::models::{DescribedColumn, DescribedRelation, QueryResult};
 
+use crate::bindings::_helpers::recall::clickhouse_calls::QueryStatistics;
 use crate::bindings::_helpers::recall::constants::{
     BASE64_ALPHABET, CSV_FORMAT, JOIN_KEYS, JSON_FORMAT, TABLE_FORMAT,
 };
@@ -91,9 +93,13 @@ fn json_cell(value: &RecallValue) -> Value {
 /// What the JSON document reports besides rows.
 pub(crate) struct QueryContext<'a> {
     pub(crate) target: Option<&'a str>,
+    /// The SQLite file or the ClickHouse database.
     pub(crate) store_path: &'a str,
+    pub(crate) adapter: &'a str,
     pub(crate) limit: Option<usize>,
     pub(crate) elapsed_ms: f64,
+    /// Server statistics; ClickHouse only.
+    pub(crate) statistics: Option<&'a QueryStatistics>,
 }
 
 /// The rendered result in `format`: `long`, `table`, `csv` or `json`.
@@ -112,7 +118,7 @@ pub(crate) fn render_result(
         let document = json!({
             "backend": "logs",
             "target": context.target,
-            "store": {"adapter": "sqlite", "database": context.store_path},
+            "store": {"adapter": context.adapter, "database": context.store_path},
             "columns": result.columns,
             "rows": rows,
             "row_count": result.rows.len(),
@@ -120,9 +126,9 @@ pub(crate) fn render_result(
             "limit": context.limit,
             "statistics": {
                 "elapsed_ms": context.elapsed_ms,
-                "rows_read": Value::Null,
-                "bytes_read": Value::Null,
-                "query_id": Value::Null,
+                "rows_read": context.statistics.and_then(|statistics| statistics.rows_read),
+                "bytes_read": context.statistics.and_then(|statistics| statistics.bytes_read),
+                "query_id": context.statistics.and_then(|statistics| statistics.query_id.clone()),
             },
         });
         return format!("{document}\n");
@@ -176,8 +182,20 @@ fn relation_note(name: &str) -> &'static str {
 pub(crate) fn render_schema(
     relations: &[DescribedRelation],
     json_output: bool,
-    (store_path, retention_days): (&str, u32),
+    (store_path, store_dialect, retention_days): (&str, Dialect, u32),
 ) -> String {
+    let (adapter, dialect, time_semantics): (&str, &str, &str) = match store_dialect {
+        Dialect::ClickHouse => (
+            "clickhouse",
+            "ClickHouse",
+            "timestamps are DateTime64(6, 'UTC')",
+        ),
+        Dialect::Sqlite => (
+            "sqlite",
+            "SQLite",
+            "timestamps are ISO-8601 UTC text with microseconds",
+        ),
+    };
     let filter_hint =
         "filter invocation_started_at to bound scans; all rows of an invocation expire together";
     if json_output {
@@ -211,18 +229,18 @@ pub(crate) fn render_schema(
             .collect();
         let document = json!({
             "backend": "logs",
-            "dialect": "sqlite",
-            "store": {"adapter": "sqlite", "database": store_path},
+            "dialect": adapter,
+            "store": {"adapter": adapter, "database": store_path},
             "retention_days": retention_days,
-            "time_semantics": "timestamps are ISO-8601 UTC text with microseconds",
+            "time_semantics": time_semantics,
             "bounds": filter_hint,
             "relations": items,
         });
         return format!("{document}\n");
     }
     let mut lines: Vec<String> = vec![
-        format!("Recall store {store_path} (SQLite dialect, retention {retention_days} days)"),
-        "Timestamps are ISO-8601 UTC text with microseconds; ".to_owned() + filter_hint + ".",
+        format!("Recall store {store_path} ({dialect} dialect, retention {retention_days} days)"),
+        format!("T{}; {filter_hint}.", &time_semantics[1..]),
     ];
     for relation in relations {
         lines.push(String::new());

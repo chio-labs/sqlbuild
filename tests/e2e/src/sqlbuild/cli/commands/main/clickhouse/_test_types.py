@@ -95,3 +95,62 @@ class ClickHouseOutputColumnNameE2ETestCase:
     expected_return_code: int
     expected_output_fragments: tuple[str, ...]
     expected_columns: tuple[tuple[object, ...], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallRetentionTestCase:
+    description: str
+    recall_settings: str
+    expected_ttl_days: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallExpiryTestCase:
+    description: str
+    created_with: str
+    recall_settings: str
+    aged_days: int
+    expected_fix_statements: int
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallDuplicateTestCase:
+    description: str
+    view_counts_sql: str
+    expected_physical_factor: int
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallPermissionTestCase:
+    description: str
+    connection_settings: str
+    expected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallConcurrencyTestCase:
+    description: str
+    targets: tuple[str, ...]
+    expected_status: str
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallAbandonedTestCase:
+    description: str
+    heartbeat_seconds: str
+    expected_status: str
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallOutputTestCase:
+    description: str
+    args: tuple[str, ...]
+    expected_stream: str
+
+
+@dataclass(frozen=True)
+class ClickHouseRecallRetentionConflictTestCase:
+    description: str
+    created_with: str
+    built_with: str
+    expected_fragments: tuple[str, ...]

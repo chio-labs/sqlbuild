@@ -89,3 +89,5 @@ pub(crate) const UTC_ZONE_NAME: &str = "UTC";
 pub(crate) const CLOSE_POLL_MS: u64 = 50;
 /// Longest wait at startup for another process moving a corrupt store aside; the writer thread retries within the shutdown budget.
 pub(crate) const QUARANTINE_START_WAIT_MS: u64 = 200;
+/// Seconds in a day, for the artifact refresh cutoff.
+pub(crate) const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
