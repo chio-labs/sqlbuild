@@ -168,11 +168,7 @@ jobs:
           smoke_scripts="$(dirname "${smoke_python}")"
           "${run_as[@]}" "${smoke_scripts}/sqb" --version
           "${run_as[@]}" "${smoke_scripts}/sqb" --help
-          if [[ -n "${SMOKE_ARCH}" ]]; then
-            "${run_as[@]}" "${smoke_python}" "${smoke_scripts}/sqlbuild" --help
-          else
-            "${smoke_scripts}/sqlbuild" --help
-          fi
+          "${run_as[@]}" "${smoke_scripts}/sqlbuild" --help
       - name: Check wheel contents and run a native command
         if: matrix.platform.name == 'linux-x86_64'
         run: |
