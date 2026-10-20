@@ -1218,6 +1218,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sqlbuild-build-features"
+version = "0.164.0"
+dependencies = [
+ "arrayvec",
+ "bstr",
+ "either",
+ "memchr",
+ "once_cell",
+ "regex-automata",
+ "syn 2.0.119",
+ "syn 3.0.3",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "sqlbuild-cache"
 version = "0.164.0"
 dependencies = [
@@ -1240,6 +1255,7 @@ dependencies = [
  "rustix",
  "serde",
  "serde_json",
+ "sqlbuild-build-features",
  "sqlbuild-cache",
  "sqlbuild-config",
  "sqlbuild-core",

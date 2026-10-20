@@ -6,6 +6,7 @@ that can be tested and benchmarked with `cargo test` alone.
 
 | Crate | Responsibility |
 |---|---|
+| `sqlbuild-build-features` | No code. Enables, in the `sqb` build, the dependency features the extension build resolves, so Cargo compiles the crates both builds share (polyglot-sql, `sqlbuild-analysis`, `sqlbuild-rules` and the rest) once. `make check-build-features` (part of `make check-ci`) fails when the two builds resolve a shared crate differently and names the features to add. |
 | `sqlbuild-core` | Constants shared by several crates, the panic boundary that turns an unwinding native failure into a named compiler error, passive identity, diagnostic and SQL value types, text positions, a JSON emitter whose output matches Python's `json.dumps` and `orjson` byte for byte, and run-cost allocation with exact Python `decimal` default-context arithmetic and Snowflake query-history SQL. |
 | `sqlbuild-cursor` | Microbatch cursor algebra: typed cursor values, grain flooring and stepping, half-open interval clamping, merging and batch splitting, timestamp text normalization and calendar durations, with Python `datetime` results and errors. Zones other than fixed offsets are resolved through a caller-supplied lookup. |
 | `sqlbuild-state` | Append-only warehouse state rows: content-addressed migration event IDs, typed event SQL literals and statements, and source freshness data-version normalization, hashing, equivalence, age policy and latest-state read SQL, byte-compatible with the rows Python wrote. It also owns execution history: lifecycle event batch digests and conflicts, run projection, event and run cursors, filter and page validation, and the SQLite and PostgreSQL statements the native history backends run. |
@@ -33,7 +34,7 @@ sqlbuild-python
   -> sqlbuild-refactor -> sqlbuild-rules -> sqlbuild-analysis -> sqlbuild-attachments
   -> sqlbuild-model-config -> sqlbuild-scopes -> sqlbuild-render -> sqlbuild-discovery -> sqlbuild-config
   -> sqlbuild-sqltext -> sqlbuild-cache -> sqlbuild-pysource -> sqlbuild-state -> sqlbuild-cursor -> sqlbuild-core
-sqlbuild-cli -> sqlbuild-cache, sqlbuild-core
+sqlbuild-cli -> sqlbuild-cache, sqlbuild-core, sqlbuild-build-features
 ```
 
 `sqlbuild-scopes` reuses the macro scanner in `sqlbuild-render`; render itself depends only on

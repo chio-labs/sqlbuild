@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/sqlbuild-build-features",
     "crates/sqlbuild-core",
     "crates/sqlbuild-cursor",
     "crates/sqlbuild-state",
@@ -26,6 +27,7 @@ resolver = "2"
 # out of every crate below the polyglot floor. See crates/README.md.
 [workspace.metadata.native-layers]
 order = [
+    "sqlbuild-build-features",
     "sqlbuild-core",
     "sqlbuild-cursor",
     "sqlbuild-state",
@@ -77,6 +79,17 @@ polyglot-sql-function-catalogs = { git = "https://github.com/chio-labs/polyglot.
     "dialect-duckdb",
 ] }
 blake3 = { version = "1", features = ["rayon"] }
+# Only sqlbuild-build-features uses these: each enables in the sqb build exactly the features the
+# extension build resolves for that crate, so both builds share one compile of every common crate.
+arrayvec = "0.7"
+bstr = "1"
+either = { version = "1", default-features = false, features = ["use_std"] }
+memchr = "2"
+once_cell = "1"
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-search"] }
+syn-v2-macro-features = { package = "syn", version = "2", default-features = false, features = ["extra-traits", "fold", "visit-mut"] }
+syn-v3-macro-features = { package = "syn", version = "3", default-features = false, features = ["extra-traits", "full"] }
+thiserror = "2"
 # Windows only: `sqb` ignores Ctrl+C while the Python CLI it started handles it.
 ctrlc = "3"
 quote = "1"
@@ -99,6 +112,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 sha2 = "0.10"
 sqlbuild-analysis = { path = "crates/sqlbuild-analysis" }
 sqlbuild-attachments = { path = "crates/sqlbuild-attachments" }
+sqlbuild-build-features = { path = "crates/sqlbuild-build-features" }
 sqlbuild-cache = { path = "crates/sqlbuild-cache" }
 sqlbuild-cli = { path = "crates/sqlbuild-cli" }
 sqlbuild-config = { path = "crates/sqlbuild-config" }

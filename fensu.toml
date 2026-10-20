@@ -1567,6 +1567,7 @@ remediation = "consume SQLBuild-owned SQL fact rows instead of raw parser types"
 crate_names = [
     "sqlbuild-analysis",
     "sqlbuild-attachments",
+    "sqlbuild-build-features",
     "sqlbuild-cache",
     "sqlbuild-cli",
     "sqlbuild-config",
