@@ -243,21 +243,35 @@ impl TransientStatusReporter {
         Ok(())
     }
 
-    /// Erase the live status so a persistent line can be written in its place.
+    /// Erase the live status so a persistent line can be written in its place; the spinner idles.
     fn clear_transient_line(&self, py: Python<'_>) -> PyResult<()> {
-        self.exit_status(py)
-    }
-
-    /// Restart the live status below persistent output written while it was active.
-    fn redraw_transient_line(slf: &Bound<'_, Self>) -> PyResult<()> {
-        let redraw: bool = {
-            let state = slf.get().state();
-            state.message.is_some() && !state.drawn
-        };
-        if redraw {
-            Self::enter_status(slf)?;
+        if std::mem::take(&mut self.state().drawn) {
+            let stream: &Bound<'_, PyAny> = self.stream.bind(py);
+            write(stream, &format!("{CLEAR_LINE}{SHOW_CURSOR}"))?;
+            flush(stream)?;
         }
         Ok(())
+    }
+
+    /// Draw the live status again below persistent output, reusing its running spinner.
+    fn redraw_transient_line(slf: &Bound<'_, Self>) -> PyResult<()> {
+        let reporter: &Self = slf.get();
+        let (redraw, spinning) = {
+            let state = reporter.state();
+            (
+                state.message.is_some() && !state.drawn,
+                state.stop_event.is_some(),
+            )
+        };
+        if !redraw {
+            return Ok(());
+        }
+        if !spinning {
+            return Self::enter_status(slf);
+        }
+        write(reporter.stream.bind(slf.py()), HIDE_CURSOR)?;
+        reporter.state().drawn = true;
+        reporter.draw(slf.py())
     }
 
     /// Render one preflight progress update.
