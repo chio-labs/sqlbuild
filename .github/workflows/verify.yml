@@ -268,6 +268,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      # Restores the native dependency builds that rust-cache.yml saves on main; workspace crates
+      # always build from source. Verify never saves: a pull request or merge queue cache is
+      # visible only to its own ref. Jobs that run the same cargo builds share a key.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-checks
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -315,6 +322,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -355,6 +366,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -398,6 +413,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install ${{ matrix.python }}
       - name: Install dependencies
@@ -431,6 +450,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-windows
+          save-if: false
       - name: Test the native discovery crate (walk, junctions, ordering, read errors)
         run: cargo test --locked -p sqlbuild-discovery
       - name: Install Python
@@ -481,6 +504,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -512,6 +539,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -541,6 +572,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -589,6 +624,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -668,8 +707,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
+      - name: Seed the base build directory with the cached dependency builds
+        run: |
+          if [[ -d target ]]; then
+            cp -a target base/target
+          fi
       - name: Install head dependencies
         run: uv sync --locked --all-groups --all-extras
       - name: Install base dependencies
@@ -734,6 +782,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -801,6 +853,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -847,6 +903,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies
@@ -880,6 +940,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          save-if: false
       - name: Install Python
         run: uv python install 3.12
       - name: Install dependencies

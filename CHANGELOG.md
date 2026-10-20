@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.164.0](https://github.com/chio-labs/sqlbuild/compare/v0.163.0...v0.164.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* inline `-- sqb: ignore` comments are errors and `[rules] allow_exceptions` is rejected. Move each reviewed deviation into a [[rules.rule_exceptions]] entry and delete the setting.
+
+### Features
+
+* make configuration the only Rule exception mechanism, speed up sqb query and fix exit and cost failures ([#1175](https://github.com/chio-labs/sqlbuild/issues/1175)) ([d8b34c8](https://github.com/chio-labs/sqlbuild/commit/d8b34c89c275b3b056c7d35a84beb5eb94168556))
+
 ## [0.163.0](https://github.com/chio-labs/sqlbuild/compare/v0.162.1...v0.163.0) (2026-10-20)
 
 

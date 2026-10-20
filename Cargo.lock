@@ -1189,7 +1189,7 @@ checksum = "5b3dc8af474f516a851ff4bd12db780f948b9250ad37211e4eec0bccea54e01b"
 
 [[package]]
 name = "sqlbuild-analysis"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "polyglot-sql",
  "polyglot-sql-function-catalogs",
@@ -1211,7 +1211,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-attachments"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "sqlbuild-core",
  "sqlbuild-sqltext",
@@ -1219,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-cache"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "blake3",
  "rayon",
@@ -1232,7 +1232,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-cli"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "blake3",
  "ctrlc",
@@ -1249,7 +1249,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-config"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "saphyr-parser",
  "sqlbuild-core",
@@ -1260,7 +1260,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-core"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "regex",
  "sha2",
@@ -1268,14 +1268,14 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-cursor"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "sqlbuild-core",
 ]
 
 [[package]]
 name = "sqlbuild-discovery"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "junction",
  "rayon",
@@ -1295,7 +1295,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-model-config"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "regex",
  "sqlbuild-core",
@@ -1303,7 +1303,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-pysource"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "ruff_python_ast",
  "ruff_python_parser",
@@ -1314,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-python"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "fensu-policy",
  "mimalloc",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-recall"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "blake3",
  "rusqlite",
@@ -1360,7 +1360,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-refactor"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1374,7 +1374,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-render"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "serde_json",
  "sqlbuild-cache",
@@ -1384,7 +1384,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-rules"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "blake3",
  "fensu-policy",
@@ -1409,7 +1409,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-scopes"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "serde_json",
  "sha2",
@@ -1422,7 +1422,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-sqltext"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "rayon",
  "serde",
@@ -1431,7 +1431,7 @@ dependencies = [
 
 [[package]]
 name = "sqlbuild-state"
-version = "0.163.0"
+version = "0.164.0"
 dependencies = [
  "serde_json",
  "sha2",
