@@ -117,3 +117,9 @@ as `datetime(ordered_at, 'start of day')`, have no DuckDB translation and fail l
 | SQLite older than 3.44 | `A701` |
 | Another process holds the write lock beyond `busy_timeout` | `A702` |
 | Concurrent microbatch writes: one file has one writer | refused at plan time |
+
+## Recall store
+
+[Recall](/docs/concepts/observability/recall) keeps its local history in a SQLite file,
+`logs/recall.sqlite3`, for every project, whichever adapter it builds with. Point
+`[recall] connection` at a `sqlite` connection to put the file somewhere else.

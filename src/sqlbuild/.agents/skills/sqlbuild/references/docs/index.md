@@ -42,6 +42,12 @@ updated, a [migration](concepts/models/migrations.md) moves its table instead of
 history, and the old name keeps working as a view. Columns can be renamed the same way. The
 [janitor](cli/janitor.md) archives tables the project no longer builds before it deletes them.
 
+## Investigate
+
+[Recall](concepts/observability/recall.md) records every command: what ran, the SQL it executed,
+audit results and everything it printed. Agents and people query that history with SQL through
+[`sqb recall`](cli/recall.md), then check live state in the warehouse with the same command.
+
 ## How it fits together
 
 | Step | Command | What it does |
@@ -51,8 +57,10 @@ history, and the old name keeps working as a view. Columns can be renamed the sa
 | Plan | [`sqb plan`](cli/plan.md) | Shows what will run, why, and how much it will rebuild |
 | Build | [`sqb build`](cli/build.md) | Runs tests, builds models in dependency order, and blocks bad data with audits |
 | Compare | [`sqb diff`](cli/diff.md) | Compares schemas and rows between two targets |
+| Investigate | [`sqb recall`](cli/recall.md) | Queries the history of past runs, then live warehouse state |
 
-SQLBuild works with DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL and SQL Server.
+SQLBuild works with DuckDB, MotherDuck, Snowflake, BigQuery, Databricks, PostgreSQL, SQL Server,
+ClickHouse and SQLite.
 DuckDB runs locally, so you can try everything without warehouse credentials. See
 [Adapters](concepts/adapters.md) for connection setup.
 

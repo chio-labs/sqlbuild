@@ -8,6 +8,7 @@ Online: https://sqlbuild.com/docs/concepts/observability/recall/
 
 ## Contents
 
+- An investigation, start to finish
 - What is recorded
 - Settings
 - Output limit
@@ -21,6 +22,64 @@ Online: https://sqlbuild.com/docs/concepts/observability/recall/
 Recall records each `sqb` invocation in a local SQLite store, or in a shared
 [ClickHouse store](#sharing-history-in-clickhouse), so you can ask what happened after the fact: which command ran, how it ended, which statements it executed and how long they took, and
 exactly what it printed. Recall is on by default and needs no setup.
+
+## An investigation, start to finish
+
+The waffle shop example's `daily_revenue` model has an audit, `revenue_is_non_negative`, at warn
+severity. One night the payments feed starts recording a refund as a negative payment. The unit tests
+still pass, because they run on mocked data. The build finishes with a warning that nobody reads.
+
+The next morning, ask when the audit started failing:
+
+```bash
+sqb recall query --format table \
+  "SELECT invocation_started_at AS run, outcome, violation_count FROM audit_results
+   WHERE audit_name = 'revenue_is_non_negative' ORDER BY run DESC LIMIT 3"
+```
+
+```
+run                         | outcome | violation_count
+--------------------------- | ------- | ---------------
+2026-10-20T00:01:44.784683Z | warn    | 1
+2026-10-20T00:00:34.652468Z | pass    | 0
+2026-10-19T23:59:23.827831Z | pass    | 0
+
+3 rows
+```
+
+See what that run printed, exactly as the scheduler saw it:
+
+```bash
+sqb recall output last --tail 4
+```
+
+```
+  daily_revenue
+    audit revenue_is_non_negative returned 1 row
+
+✓ Completed with warnings  PASS=89  WARN=1  FAIL=0  INSUFFICIENT=0  SKIP=0  TOTAL=90  (3.08s)
+```
+
+Then check what is true in the warehouse now, with the same command:
+
+```bash
+sqb recall query --backend warehouse --format table \
+  "SELECT r.revenue_date, r.total_revenue_cents, p.payment_id, p.amount_cents
+   FROM prod.daily_revenue r JOIN prod.stg_payments p
+     ON CAST(p.paid_at AS DATE) = r.revenue_date
+   WHERE p.amount_cents < 0"
+```
+
+```
+revenue_date | total_revenue_cents | payment_id | amount_cents
+------------ | ------------------- | ---------- | ------------
+2026-04-03   | -1250               | 9          | -2200
+
+1 row
+```
+
+The bad row is still in prod, and payment 9 explains it. A coding agent can follow the same steps:
+every answer is a SQL query over the [views](#querying-history), with the same output in `--json`.
 
 ## What is recorded
 
