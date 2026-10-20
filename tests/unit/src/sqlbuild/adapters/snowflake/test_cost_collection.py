@@ -68,7 +68,7 @@ class _Collect:
             collection_error=True,
             close_error=False,
             expected_status=CostStatus.COLLECTION_FAILED,
-            expected_message_fragment="collection failed (PermissionError)",
+            expected_message_fragment="collection failed (PermissionError: query history denied)",
         ),
         SnowflakeCostCollectionTestCase(
             description="close failure downgrades successful collection to partial",
@@ -113,6 +113,6 @@ def test_given_telemetry_stage_failure_when_collecting_then_safe_status_is_retur
 
     assert summary.status == test_case.expected_status
     assert connect.config["login_timeout"] == 5
-    assert connect.config["network_timeout"] == 5
+    assert connect.config["network_timeout"] == 15
     assert (test_case.expected_message_fragment or "") in (summary.message or "")
     assert (test_case.expected_limitation_fragment or "") in " ".join(summary.limitations)

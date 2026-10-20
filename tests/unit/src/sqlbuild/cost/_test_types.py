@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from sqlbuild.cost.types import CostStatus
@@ -101,3 +102,32 @@ class CostResourceScopeTestCase:
     expected_resource_name: str
     expected_phase: str
     expected_attempt: int
+
+
+@dataclass(frozen=True)
+class SnowflakeScaleTestCase:
+    description: str
+    statement_count: int
+    duration_minutes: int
+    timeout_window: timedelta | None
+    expected_status: CostStatus
+    expected_query_count: int
+    expected_message_fragments: tuple[str, ...] = ()
+    expected_max_sql_length: int = 2_000
+    expected_max_slice: timedelta = timedelta(minutes=15)
+
+
+@dataclass(frozen=True)
+class SnowflakeLargeRunCostTestCase:
+    description: str
+    timeout_window: timedelta | None
+    expected_status: CostStatus
+    expected_message_fragment: str
+    expected_max_sql_length: int = 2_000
+
+
+@dataclass(frozen=True)
+class SnowflakeCostFailureMessageTestCase:
+    description: str
+    expected_status: CostStatus
+    expected_message: str

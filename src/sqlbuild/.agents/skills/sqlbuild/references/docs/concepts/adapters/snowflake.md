@@ -132,6 +132,14 @@ contract rate. Use `sqb cost`, `sqb cost latest`, `sqb cost <run_id>`, or
 provide a versioned, decimal-safe output contract. Pending detail records are refreshed from
 Snowflake when inspected again.
 
+SQLBuild reads `INFORMATION_SCHEMA.QUERY_HISTORY` when the run finishes, in end-time slices of
+at most 15 minutes, so a long run with tens of thousands of statements costs several short reads
+rather than one slow one. Each read has a 10-second statement timeout; a slice that reaches it is
+split in half and read again. If history still cannot be read within the 30-second collection
+budget, the build is unaffected and its cost is recorded as `pending`, with a message naming the
+timeout; `sqb cost <run_id>` collects it later. Any other failure is recorded as
+`collection_failed` with the Snowflake error that caused it.
+
 These values are attributed compute credits and estimated cost, not Snowflake-billed credits or
 invoice reconciliation. The estimate uses only query history visible to the executing role and does
 not reconstruct invisible concurrent work, warehouse resume or idle tail, the 60-second minimum,

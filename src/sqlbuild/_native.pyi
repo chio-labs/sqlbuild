@@ -7592,14 +7592,15 @@ def snowflake_query_observations(
     deadline: float,
     database: str | None = None,
     result_limit: int | None = None,
+    run_id: str | None = None,
 ) -> tuple[tuple[QueryCostObservation, ...], frozenset[str], dict[str, str], bool]: ...
 def render_snowflake_query_history_sql(
     *,
     started_at: datetime,
-    classification_query_ids: Iterable[str],
     database: str | None = None,
     completed_at: datetime | None = None,
     result_limit: int = 10000,
+    run_id: str | None = None,
 ) -> str: ...
 def snowflake_statement_is_metadata_only(*, query_type: object, query_text: object) -> bool: ...
 def parse_sqlbuild_query_tag(value: object) -> dict[str, str | None] | None: ...
