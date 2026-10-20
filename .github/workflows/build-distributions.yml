@@ -124,16 +124,29 @@ jobs:
         if: inputs.prebuilt-run-id == ''
         with:
           command: build
-          args: --release --out dist --features extension-module
+          # One platform records a cargo build timing report for build time work.
+          args: >-
+            --release --out dist --features extension-module
+            ${{ matrix.platform.name == 'linux-x86_64' && '--timings' || '' }}
           target: ${{ matrix.platform.target }}
           manylinux: auto
       - uses: PyO3/maturin-action@v1
         if: inputs.prebuilt-run-id == ''
         with:
           command: build
-          args: --release --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
+          args: >-
+            --release --out dist --manifest-path crates/sqlbuild-cli/Cargo.toml
+            ${{ matrix.platform.name == 'linux-x86_64' && '--timings' || '' }}
           target: ${{ matrix.platform.target }}
           manylinux: auto
+      - name: Upload the cargo build timing reports
+        if: inputs.prebuilt-run-id == '' && matrix.platform.name == 'linux-x86_64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-${{ matrix.platform.name }}
+          path: target/cargo-timings/cargo-timing-*.html
+          if-no-files-found: warn
+          retention-days: 30
       - name: Download prebuilt wheels
         if: inputs.prebuilt-run-id != ''
         uses: actions/download-artifact@v4
