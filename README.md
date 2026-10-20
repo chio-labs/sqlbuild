@@ -78,6 +78,14 @@ The playground runs on local DuckDB, with no warehouse credentials.
 - **Tidy up safely.** The [janitor](https://sqlbuild.com/docs/cli/janitor/) archives stale tables
   before anything is deleted.
 
+### Find out what happened
+
+- **Every run is recorded.** [Recall](https://sqlbuild.com/docs/concepts/observability/recall/)
+  keeps each command's statements, SQL, audit results and exact output. Agents and people query it
+  with SQL through [`sqb recall`](https://sqlbuild.com/docs/cli/recall/), then check live state in
+  the warehouse with the same command. History stays in a SQLite file in the project, or in
+  ClickHouse for a team.
+
 Ingestion with Python loaders, and Python tasks, assets and checks, run in the same graph as your SQL
 models. See the [docs](https://sqlbuild.com/docs/) for everything else.
 
