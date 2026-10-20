@@ -138,7 +138,7 @@ pub(crate) fn execute_dbt_sqlbuild_work<'py>(
             native_field(&command, "value")?.extract::<String>()?
         )
     };
-    let concurrency = native_field(&project, "settings")?.getattr("concurrency")?;
+    let concurrency = native_field(&context, "concurrency")?;
     let header = pyo3::IntoPyObjectExt::into_bound_py_any(
         format_execution_header(
             &text(py, &display).extract::<String>()?,

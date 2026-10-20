@@ -70,6 +70,7 @@ fn request_options<'py>(context: &BuildContext<'py>) -> PyResult<Bound<'py, PyAn
                 boolean(py, python_selectors),
             ),
             ("max_microbatches", field("max_microbatches")?),
+            ("concurrency", field("concurrency")?),
             ("selection_diagnostics", field("selection_diagnostics")?),
             ("plan_sql_tests", field("run_tests")?),
             ("accepts_unit_test_selectors", boolean(py, true)),

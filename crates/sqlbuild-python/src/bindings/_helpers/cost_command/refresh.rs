@@ -2,7 +2,7 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_core::cost_command::constants::{
     HISTORY_SELECTOR, LATEST_SELECTOR, REFRESHABLE_STATUSES,
 };
@@ -25,6 +25,9 @@ use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
+
+/// Collection budget of an explicit `sqb cost` refresh, which a user waits for on purpose.
+const REFRESH_BUDGET_SECONDS: f64 = 300.0;
 
 fn coverage(summary: &Bound<'_, PyAny>) -> PyResult<CostCoverage> {
     Ok(CostCoverage {
@@ -167,6 +170,10 @@ fn refresh(py: Python<'_>, request: &Bound<'_, PyAny>) -> PyResult<()> {
             ("statement_ledger_path", ledger),
             ("usd_per_credit", native_field(&current, "usd_per_credit")?),
             ("rate_source", native_field(&current, "rate_source")?),
+            (
+                "budget_seconds",
+                REFRESH_BUDGET_SECONDS.into_pyobject(py)?.into_any(),
+            ),
         ],
     )?;
     if accepts_cost_refresh(&coverage(&current)?, &coverage(&summary)?) != Some(true) {

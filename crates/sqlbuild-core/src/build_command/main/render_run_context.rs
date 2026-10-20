@@ -30,7 +30,15 @@ pub fn render_run_context(facts: &RunContextFacts, style: CliStyle) -> String {
         ("warehouse", warehouse),
         (
             "concurrency",
-            format!("{} configured limit", facts.concurrency),
+            if facts.concurrency_source.is_empty() {
+                format!("{} configured limit", facts.concurrency)
+            } else {
+                format!(
+                    "{} configured limit ({})",
+                    facts.concurrency,
+                    sanitize(&facts.concurrency_source)
+                )
+            },
         ),
         ("full_refresh", facts.full_refresh.to_string()),
         (

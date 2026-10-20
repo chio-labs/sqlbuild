@@ -13,7 +13,7 @@ use sqlbuild_core::scenario_command::models::{
     ScenarioNamespace, ScenarioTestFlags, SqlAnalysisCommand,
 };
 
-use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
@@ -98,16 +98,12 @@ fn prepare<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<TestRu
         project_connection_config(&project)?
     };
     let style: CliStyle = style(request)?;
-    let requested: Bound<'py, PyAny> = request.getattr("concurrency")?;
-    let concurrency: i64 = if requested.is_none() {
-        native_field(
-            &build_effective_settings_config(&project.discovered.clone())?,
-            "concurrency",
-        )?
-        .extract()?
-    } else {
-        requested.extract()?
-    };
+    let concurrency: i64 = resolve_concurrency(
+        &request.getattr("concurrency")?,
+        &project.discovered,
+        &py.None().into_bound(py),
+    )?
+    .limit;
     let sys: Bound<'py, PyModule> = py.import("sys")?;
     let stream: Bound<'py, PyAny> = sys.getattr(if flag(request, "json_output")? {
         "stderr"

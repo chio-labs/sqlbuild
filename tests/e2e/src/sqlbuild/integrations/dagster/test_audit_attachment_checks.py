@@ -1,0 +1,139 @@
+"""E2E coverage of Dagster asset checks for every audit attachment kind.
+
+The project has seed, source and model audits, a singular audit inferred to attach to a model,
+and a singular audit that runs at the end of the build.
+"""
+
+import subprocess
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from dagster import AssetExecutionContext, AssetKey, ExecuteInProcessResult, materialize
+
+from sqlbuild.integrations.dagster import SqlBuildCliResource, SqlBuildProject, sqlbuild_assets
+from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
+    REPO_ROOT,
+    prepare_inline_project,
+    run_sqb,
+)
+from tests.e2e.src.sqlbuild.integrations.dagster._test_types import (
+    DagsterAuditAttachmentChecksE2ETestCase,
+)
+from tests.e2e.src.sqlbuild.integrations.dagster.helpers import (
+    ATTACHMENT_CHECK_PROJECT_FILES,
+    AuditCheckOutcome,
+    audit_check_outcome,
+)
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterAuditAttachmentChecksE2ETestCase(
+            description="build reports every audit attachment kind as checks",
+            command=("build",),
+            expected_checked_assets=(
+                ("main", "products"),
+                ("raw_orders",),
+                ("main", "orders"),
+                ("main", "customers"),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_every_audit_attachment_kind_when_building_through_dagster_then_checks_are_reported(
+    test_case: DagsterAuditAttachmentChecksE2ETestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="attachment_checks",
+        repo_files=ATTACHMENT_CHECK_PROJECT_FILES,
+    )
+
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir, sqb_command=(str(REPO_ROOT / ".venv" / "bin" / "sqb"),)
+    )
+    sqlbuild_project.prepare()
+
+    @sqlbuild_assets(project=sqlbuild_project, required_resource_keys={"sqb"})
+    def sqlbuild_attachment_checks(context: AssetExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(list(test_case.command), context=context).stream()
+
+    result: ExecuteInProcessResult = materialize(
+        [sqlbuild_attachment_checks],
+        resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
+    )
+
+    checks: AuditCheckOutcome = audit_check_outcome(
+        result=result, assets=sqlbuild_attachment_checks
+    )
+
+    assert checks.success is True
+    assert {
+        AssetKey(list(path)) for path in test_case.expected_checked_assets
+    } <= checks.declared_assets
+    assert checks.declared <= checks.evaluated
+    assert checks.all_passed is True
+    assert "integration output degraded" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        DagsterAuditAttachmentChecksE2ETestCase(
+            description="audit reports every audit attachment kind as checks",
+            command=("audit",),
+            expected_checked_assets=(
+                ("main", "products"),
+                ("raw_orders",),
+                ("main", "orders"),
+                ("main", "customers"),
+            ),
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_every_audit_attachment_kind_when_auditing_through_dagster_then_checks_are_reported(
+    test_case: DagsterAuditAttachmentChecksE2ETestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="attachment_checks",
+        repo_files=ATTACHMENT_CHECK_PROJECT_FILES,
+    )
+    prebuild: subprocess.CompletedProcess[str] = run_sqb(
+        command=("build",), project_dir=project_dir
+    )
+
+    sqlbuild_project: SqlBuildProject = SqlBuildProject(
+        project_dir=project_dir, sqb_command=(str(REPO_ROOT / ".venv" / "bin" / "sqb"),)
+    )
+    sqlbuild_project.prepare()
+
+    @sqlbuild_assets(project=sqlbuild_project, required_resource_keys={"sqb"})
+    def sqlbuild_attachment_checks(context: AssetExecutionContext) -> Iterator[object]:
+        yield from context.resources.sqb.cli(list(test_case.command), context=context).stream()
+
+    result: ExecuteInProcessResult = materialize(
+        [sqlbuild_attachment_checks],
+        resources={"sqb": SqlBuildCliResource(project_dir=sqlbuild_project)},
+    )
+
+    checks: AuditCheckOutcome = audit_check_outcome(
+        result=result, assets=sqlbuild_attachment_checks
+    )
+
+    assert prebuild.returncode == 0, prebuild.stdout + prebuild.stderr
+    assert checks.success is True
+    assert {
+        AssetKey(list(path)) for path in test_case.expected_checked_assets
+    } <= checks.declared_assets
+    assert checks.declared <= checks.evaluated
+    assert checks.all_passed is True
+    assert "integration output degraded" not in capsys.readouterr().err

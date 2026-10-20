@@ -122,3 +122,11 @@ class DbtPlanSafetyE2ETestCase:
     command: tuple[str, ...]
     expected_fragments: tuple[str, ...]
     unexpected_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DbtTargetConcurrencyE2ETestCase:
+    description: str
+    target_settings: str
+    command: tuple[str, ...]
+    expected_fragment: str

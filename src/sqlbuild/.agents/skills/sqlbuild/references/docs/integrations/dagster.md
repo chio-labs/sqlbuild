@@ -102,7 +102,7 @@ precedence; SQLBuild does not silently combine it with Dagster's implicit asset 
 SQLBuild tests, audits, scenarios, and Python checks are registered as Dagster asset checks:
 
 - **Unit tests** become checks attached to the models they test
-- **Audits** become checks attached to the model or source they audit, with severity mapped to `AssetCheckSeverity.ERROR` or `AssetCheckSeverity.WARN`
+- **Audits** become checks attached to the model, source, or seed they audit, with severity mapped to `AssetCheckSeverity.ERROR` or `AssetCheckSeverity.WARN`. A singular audit that runs at the end of the build becomes a check on each model it reads
 - **Scenarios** become checks attached to the models they exercise
 - **Python checks** (`@check`) become checks attached to the tasks, assets, or loaders they validate
 

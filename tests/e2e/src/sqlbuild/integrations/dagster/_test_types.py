@@ -145,3 +145,10 @@ class DagsterEmptyCursorInputsCheckE2ETestCase:
     model_sql: str
     asset_key: tuple[str, ...]
     expected_check_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DagsterAuditAttachmentChecksE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_checked_assets: tuple[tuple[str, ...], ...]

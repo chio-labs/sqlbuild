@@ -1,5 +1,8 @@
+import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
 from sqlbuild._native import CostRunRecord, QueryCostObservation, ResourceCost
 from sqlbuild.cost.models import RunCostSummary
@@ -67,3 +70,60 @@ def build_cost_run_record(*, run_id: str, completed_at: datetime) -> CostRunReco
             estimated_usd=resource.estimated_usd,
         ),
     )
+
+
+def history_row(*, query_id: str, ended_at: datetime) -> tuple[Any, ...]:
+    """One successful one-second warehouse query ending at `ended_at`."""
+
+    return (
+        query_id,
+        "",
+        "TRANSFORM_WH",
+        "X-Small",
+        "STANDARD",
+        1,
+        ended_at - timedelta(seconds=1),
+        ended_at,
+        1000,
+        100,
+        "SUCCESS",
+        "INSERT",
+        None,
+        ended_at,
+    )
+
+
+def run_history_rows(
+    *, origin: datetime, statement_count: int, duration: timedelta
+) -> list[tuple[Any, ...]]:
+    """History rows of one run whose statements end evenly across `duration`."""
+
+    step: timedelta = duration / statement_count
+    return [
+        history_row(query_id=f"q-{index:05d}", ended_at=origin + step * (index + 1))
+        for index in range(statement_count)
+    ]
+
+
+def write_ledger(*, path: Path, run_id: str, rows: list[tuple[Any, ...]]) -> None:
+    """Write one statement-ledger entry for each history row."""
+
+    with path.open("w", encoding="utf-8") as ledger:
+        for index, row in enumerate(rows):
+            ledger.write(
+                json.dumps(
+                    {
+                        "statement_id": f"statement-{index}",
+                        "run_id": run_id,
+                        "resource_type": "model",
+                        "resource_name": f"orders_{index % 1400}",
+                        "phase": "execute",
+                        "attempt": 1,
+                        "query_id": row[0],
+                        "status": "success",
+                        "started_at": row[6].isoformat(),
+                        "completed_at": row[7].isoformat(),
+                    }
+                )
+                + "\n"
+            )

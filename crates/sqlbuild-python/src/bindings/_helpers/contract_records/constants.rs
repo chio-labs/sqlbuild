@@ -146,6 +146,7 @@ const R_TARGET_CONFIG: RecordSpec = RecordSpec {
             "warehouses",
             FieldDefault::NativeCall(RecordId::TargetWarehousesConfig),
         ),
+        FieldSpec::new("concurrency", FieldDefault::None),
     ],
 };
 const R_LOCAL_TARGET_CONFIG: RecordSpec = RecordSpec {
@@ -184,6 +185,7 @@ const R_LOCAL_TARGET_CONFIG: RecordSpec = RecordSpec {
             "warehouses",
             FieldDefault::NativeCall(RecordId::TargetWarehousesConfig),
         ),
+        FieldSpec::new("concurrency", FieldDefault::None),
     ],
 };
 const R_SETTINGS_CONFIG: RecordSpec = RecordSpec {

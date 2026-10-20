@@ -1039,3 +1039,12 @@ class OversizedDurationTestCase:
     description: str
     section: str
     expected_error_fragment: str
+
+
+@dataclass(frozen=True)
+class TargetConcurrencyConfigTestCase:
+    description: str
+    target_lines: str
+    expected_concurrency: int | None = None
+    expected_error_fragment: str = ""
+    expected_error_code: str = "D001"

@@ -352,6 +352,7 @@ const DBT_SQLBUILD_WORK_CONTEXT: RecordSpec = RecordSpec {
         FieldSpec::required("use_color"),
         FieldSpec::required("snapshots_config"),
         FieldSpec::required("execution_limits"),
+        FieldSpec::required("concurrency"),
     ],
 };
 const PLAN_SAFETY_GATES: RecordSpec = RecordSpec {

@@ -25,6 +25,10 @@ pub(crate) const CREDITS_PER_HOUR: [(&str, u64); 10] = [
 pub const QUERY_HISTORY_RESULT_LIMIT: usize = 10_000;
 pub(crate) const QUERY_HISTORY_FUNCTION: &str = "INFORMATION_SCHEMA.QUERY_HISTORY";
 pub(crate) const NULL_QUERY_TEXT: &str = "NULL AS QUERY_TEXT";
+/// The compact, key-sorted query-tag fragment every SQLBuild-tagged statement carries.
+pub(crate) const SQLBUILD_TAG_FRAGMENT: &str = "\"app\":\"sqlbuild\"";
+/// The query-tag fragment of hook statements, whose text is never requested.
+pub(crate) const HOOK_TAG_FRAGMENT: &str = "\"resource_type\":\"hook\"";
 /// The rounding digit at which `ROUND_HALF_EVEN` looks past the first dropped digit.
 pub(crate) const HALF_DIGIT: u8 = 5;
 /// `str(Decimal)` switches to exponent form at or below this many left digits.
