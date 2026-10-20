@@ -1,0 +1,126 @@
+name: Rust Build Cache
+
+# Saves the native dependency builds that Verify restores. Verify never saves its own: a cache saved
+# by a pull request or merge queue run is visible only to that ref, while one saved on main is
+# visible to every pull request. Each job runs the same cargo builds as the Verify jobs sharing its
+# key, so the cached artifacts match theirs, and builds only when main has no cache for the current
+# lockfile and toolchain. Release distributions never use these caches.
+on:
+  push:
+    branches: [main]
+  # A new stable toolchain changes the key without a push to main.
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-cache-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  linux:
+    name: Linux extension
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Look up the cache
+        id: lookup
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+          lookup-only: true
+          save-if: false
+      - name: Restore the closest cache
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-linux
+      - name: Install Python
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: uv python install 3.12
+      - name: Build the extension as Verify does
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: uv sync --locked --all-groups --all-extras
+
+  checks:
+    name: Linux extension and native checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Look up the cache
+        id: lookup
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-checks
+          lookup-only: true
+          save-if: false
+      - name: Restore the closest cache
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-checks
+      - name: Install Python
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: uv python install 3.12
+      - name: Build the extension as Verify does
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: uv sync --locked --all-groups --all-extras
+      - name: Build the native checks as make rust-check does
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: |
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo test --workspace --all-features --no-run
+
+  windows:
+    name: Windows extension
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.3"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Look up the cache
+        id: lookup
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-windows
+          lookup-only: true
+          save-if: false
+      - name: Restore the closest cache
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: verify-windows
+      - name: Build the native discovery tests as Verify does
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: cargo test --locked -p sqlbuild-discovery --no-run
+      - name: Install Python
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: uv python install 3.12
+      - name: Build the extension as Verify does
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: uv sync --locked --no-dev --python 3.12
