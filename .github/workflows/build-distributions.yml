@@ -103,6 +103,7 @@ jobs:
             runner: macos-15
             target: x86_64
             python-architecture: x64
+            smoke-arch: x86_64
           - name: macos-arm64
             runner: macos-15
             target: aarch64
@@ -146,6 +147,8 @@ jobs:
           github-token: ${{ github.token }}
       - name: Smoke test installed wheels and native console entry points
         shell: bash
+        env:
+          SMOKE_ARCH: ${{ matrix.platform.smoke-arch }}
         run: |
           python -m venv "${RUNNER_TEMP}/wheel-smoke"
           if [[ -x "${RUNNER_TEMP}/wheel-smoke/Scripts/python.exe" ]]; then
@@ -153,13 +156,23 @@ jobs:
           else
             smoke_python="${RUNNER_TEMP}/wheel-smoke/bin/python"
           fi
-          "${smoke_python}" -m pip install --find-links dist dist/*.whl
+          # A cross-compiled wheel runs under Rosetta; the cached Python is universal, so force
+          # the wheel's architecture or it starts as arm64 and rejects the wheel.
+          run_as=()
+          if [[ -n "${SMOKE_ARCH}" ]]; then
+            run_as=(arch "-${SMOKE_ARCH}")
+          fi
+          "${run_as[@]}" "${smoke_python}" -m pip install --find-links dist dist/*.whl
           cd "${RUNNER_TEMP}"
-          "${smoke_python}" -c "import sqlbuild._native"
+          "${run_as[@]}" "${smoke_python}" -c "import sqlbuild._native"
           smoke_scripts="$(dirname "${smoke_python}")"
-          "${smoke_scripts}/sqb" --version
-          "${smoke_scripts}/sqb" --help
-          "${smoke_scripts}/sqlbuild" --help
+          "${run_as[@]}" "${smoke_scripts}/sqb" --version
+          "${run_as[@]}" "${smoke_scripts}/sqb" --help
+          if [[ -n "${SMOKE_ARCH}" ]]; then
+            "${run_as[@]}" "${smoke_python}" "${smoke_scripts}/sqlbuild" --help
+          else
+            "${smoke_scripts}/sqlbuild" --help
+          fi
       - name: Check wheel contents and run a native command
         if: matrix.platform.name == 'linux-x86_64'
         run: |
