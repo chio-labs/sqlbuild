@@ -1,6 +1,6 @@
 use crate::argv::models::{ArgvOutcome, Value};
 use crate::argv::tests::helpers::{parse, strings};
-use crate::argv::tests::test_types::{ExitTestCase, ParsedValueTestCase};
+use crate::argv::tests::test_types::{ExitTestCase, HelpTextTestCase, ParsedValueTestCase};
 
 #[test]
 fn given_accepted_arguments_when_parsing_then_attributes_hold_the_parsed_values() {
@@ -28,6 +28,12 @@ fn given_accepted_arguments_when_parsing_then_attributes_hold_the_parsed_values(
             argv: &["dbt", "plan", "--no-color", "--", "--no-color"],
             attribute: "dbt_args",
             expected_value: strings(&["--", "--no-color"]),
+        },
+        ParsedValueTestCase {
+            description: "clone still accepts the hidden --no-sql-analysis flag",
+            argv: &["clone", "--from", "prod", "--no-sql-analysis"],
+            attribute: "no_sql_validation",
+            expected_value: Value::Bool(true),
         },
         ParsedValueTestCase {
             description: "a nested sub-command's dest is set",
@@ -98,5 +104,47 @@ fn given_help_version_or_rejected_arguments_when_parsing_then_exits_after_writin
             "{}",
             test_case.description
         );
+    }
+}
+
+#[test]
+fn given_command_help_when_parsing_then_hidden_options_are_left_out() {
+    let test_cases = [
+        HelpTextTestCase {
+            description: "clone help omits the no-op SQL analysis flag",
+            argv: &["clone", "--help"],
+            expected_present: &["--from FROM_TARGET", "--select"],
+            expected_absent: &["--no-sql-analysis", "--no-sql-validation"],
+        },
+        HelpTextTestCase {
+            description: "build help keeps the SQL analysis flag",
+            argv: &["build", "--help"],
+            expected_present: &["--no-sql-analysis"],
+            expected_absent: &[],
+        },
+    ];
+
+    for test_case in test_cases {
+        let outcome: ArgvOutcome = parse(test_case.argv);
+        let help: String = outcome
+            .writes
+            .iter()
+            .map(|(_, text)| text.as_str())
+            .collect();
+        let present: Vec<&str> = test_case
+            .expected_present
+            .iter()
+            .copied()
+            .filter(|fragment| help.contains(fragment))
+            .collect();
+        let absent: Vec<&str> = test_case
+            .expected_absent
+            .iter()
+            .copied()
+            .filter(|fragment| !help.contains(fragment))
+            .collect();
+        assert_eq!(outcome.parsed, Err(0), "{}", test_case.description);
+        assert_eq!(present, test_case.expected_present, "{help}");
+        assert_eq!(absent, test_case.expected_absent, "{help}");
     }
 }

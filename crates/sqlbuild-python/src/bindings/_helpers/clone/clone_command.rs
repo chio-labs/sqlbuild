@@ -87,13 +87,12 @@ fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
 fn progress_reporter<'py>(
     stream: &Bound<'py, PyAny>,
     style: CliStyle,
-) -> PyResult<Bound<'py, PyAny>> {
+) -> PyResult<Bound<'py, PlanningProgressReporter>> {
     let py: Python<'py> = stream.py();
-    Ok(Bound::new(
+    Bound::new(
         py,
         PlanningProgressReporter::new(py, stream, style.use_color)?,
-    )?
-    .into_any())
+    )
 }
 
 fn lifecycle<'py>(py: Python<'py>, (kind, name): (&str, &str)) -> PyResult<Bound<'py, PyAny>> {
@@ -137,13 +136,13 @@ fn invocation<'py>(py: Python<'py>, request: &Bound<'py, PyAny>) -> PyResult<Inv
         !native_field(request, "no_color")?.extract::<bool>()? && stdout_supports_color(py)?;
     let style: CliStyle = CliStyle { use_color };
     let stream: Bound<'py, PyAny> = py.import("sys")?.getattr("stdout")?;
-    let progress: Bound<'py, PyAny> = progress_reporter(&stream, style)?;
-    progress.call_method1("start", ("Discovering project...",))?;
+    let progress: Bound<'py, PlanningProgressReporter> = progress_reporter(&stream, style)?;
+    progress.get().start(py, "Discovering project...")?;
     let discovered: Bound<'py, PyAny> = discover_project_inputs(
         py,
         Some(keywords(py, &[("project_dir", project_dir.clone())])?),
     )?;
-    progress.call_method1("complete", ("Discovered project.",))?;
+    progress.get().complete(py, "Discovered project.")?;
     reject_unit_test_selectors(
         &native_field(request, "select")?,
         &native_field(request, "exclude")?,
@@ -206,11 +205,11 @@ fn connect<'py>(
             ],
         )?),
     )?;
-    let progress: Bound<'py, PyAny> = progress_reporter(&invocation.stream, invocation.style)?;
-    progress.call_method1(
-        "start",
-        (format!("Connecting to {}...", invocation.adapter_name),),
-    )?;
+    let progress: Bound<'py, PlanningProgressReporter> =
+        progress_reporter(&invocation.stream, invocation.style)?;
+    progress
+        .get()
+        .start(py, &format!("Connecting to {}...", invocation.adapter_name))?;
     let started: Instant = Instant::now();
     let connection: Bound<'py, PyAny> = within(
         &lifecycle(py, ("clone", "clone_target_connection"))?,
@@ -222,13 +221,9 @@ fn connect<'py>(
         invocation.adapter_name,
         started.elapsed().as_secs_f64()
     );
-    progress.call_method1(
-        "complete_styled",
-        (format_phase_line(
-            invocation.style,
-            true,
-            ("Warehouse connected", &summary),
-        ),),
+    progress.get().complete_styled(
+        py,
+        &format_phase_line(invocation.style, true, ("Warehouse connected", &summary)),
     )?;
     Ok((config, connection))
 }
@@ -240,11 +235,12 @@ fn prepare<'py>(
     (config, connection): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
-    let progress: Bound<'py, PyAny> = progress_reporter(&invocation.stream, invocation.style)?;
+    let progress: Bound<'py, PlanningProgressReporter> =
+        progress_reporter(&invocation.stream, invocation.style)?;
     let started: Instant = Instant::now();
-    let pipeline: Bound<'py, PyAny> =
+    let prepared: PyResult<Bound<'py, PyAny>> =
         within(&lifecycle(py, ("project", "project_compile"))?, |_| {
-            progress.call_method1("on_progress", ("Preparing clone plan...",))?;
+            progress.get().on_progress(py, "Preparing clone plan...")?;
             let resolver: Bound<'py, PyAny> = resolve_external_sql_reference_resolver(
                 invocation.project_dir.clone(),
                 invocation.discovered.clone(),
@@ -280,15 +276,17 @@ fn prepare<'py>(
                     &text(py, &invocation.destination),
                 ),
             )?;
-            progress.call_method1(
-                "on_progress",
-                (format!(
+            progress.get().on_progress(
+                py,
+                &format!(
                     "Prepared clone plan. ({:.2}s)",
                     started.elapsed().as_secs_f64()
-                ),),
+                ),
             )?;
             Ok(pipeline)
-        })?;
+        });
+    let pipeline: Bound<'py, PyAny> =
+        prepared.or_else(|error| progress.get().finish(py, false).and(Err(error)))?;
     if destination_entry_count(&pipeline)? == 0 {
         return Err(user_error(py, NOTHING_TO_CLONE));
     }

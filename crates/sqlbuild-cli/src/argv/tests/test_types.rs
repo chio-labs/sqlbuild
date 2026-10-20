@@ -40,6 +40,14 @@ pub(super) struct ExitTestCase {
     pub(super) expected_last_write: &'static str,
 }
 
+/// A help request and fragments its text must and must not contain.
+pub(super) struct HelpTextTestCase {
+    pub(super) description: &'static str,
+    pub(super) argv: &'static [&'static str],
+    pub(super) expected_present: &'static [&'static str],
+    pub(super) expected_absent: &'static [&'static str],
+}
+
 /// Text, width and indent for `textwrap.wrap`, and the expected lines.
 pub(super) struct WrapTestCase {
     pub(super) description: &'static str,

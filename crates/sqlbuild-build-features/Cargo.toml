@@ -1,0 +1,32 @@
+[package]
+name = "sqlbuild-build-features"
+version.workspace = true
+description = "No code: makes the sqb build resolve dependency features exactly as the extension build does, so both builds share one compile of every common crate."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+# Cargo resolves features separately for each build, so without these entries the sqb build
+# hashes the crates it shares with the extension differently and compiles polyglot-sql,
+# sqlbuild-analysis and sqlbuild-rules a second time. The workspace entries enable in the sqb
+# build exactly the features the extension build already resolves; sqlbuild-cli depends on this
+# crate, so the extension build sees them too and stays unchanged. `make check-build-features`
+# fails when the two builds resolve a shared crate differently.
+[dependencies]
+arrayvec.workspace = true
+bstr.workspace = true
+either.workspace = true
+memchr.workspace = true
+once_cell.workspace = true
+regex-automata.workspace = true
+thiserror.workspace = true
+
+# Proc-macro dependencies resolve with build dependencies, so the syn features PyO3's macros use
+# are enabled here. The empty build script makes Cargo resolve them.
+[build-dependencies]
+syn-v2-macro-features.workspace = true
+syn-v3-macro-features.workspace = true
+
+[lints]
+workspace = true

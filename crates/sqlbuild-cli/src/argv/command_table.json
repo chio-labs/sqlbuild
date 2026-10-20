@@ -2899,7 +2899,9 @@
         "nargs": 0,
         "const": true,
         "default": false,
-        "help": "disable SQL syntax, binding, type inference, and semantic validation",
+        "help": {
+         "suppress": true
+        },
         "group": 1
        },
        {

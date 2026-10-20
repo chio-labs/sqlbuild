@@ -80,7 +80,7 @@ pub(crate) const KIND_WIDTH: usize = 10;
 pub(crate) const NESTED_PREFIX: &str = "    ";
 pub(crate) const UNKNOWN_RESOURCE_NAME: &str = "warehouse";
 /// Messages that complete a planning phase rather than update it.
-pub(crate) const PLANNING_COMPLETION_PREFIXES: [&str; 14] = [
+pub(crate) const PLANNING_COMPLETION_PREFIXES: [&str; 15] = [
     "Built ",
     "Checked ",
     "Compiled ",
@@ -91,11 +91,14 @@ pub(crate) const PLANNING_COMPLETION_PREFIXES: [&str; 14] = [
     "Inspected ",
     "Loaded ",
     "Planned ",
+    "Prepared ",
     "Recorded ",
     "Refreshed ",
     "Resolved ",
     "Cloned ",
 ];
+/// Messages that end a planning phase with a failure.
+pub(crate) const PLANNING_FAILURE_PREFIXES: [&str; 1] = ["Failed "];
 pub(crate) const ASSERTION_PREFIX: &str = "assertion ";
 pub(crate) const PASS_OUTCOME: &str = "pass";
 pub(crate) const ERROR_OUTCOME: &str = "error";
