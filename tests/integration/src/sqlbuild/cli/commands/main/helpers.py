@@ -32,6 +32,7 @@ from sqlbuild.adapters.duckdb.classes.duckdb_adapter import DuckDbAdapter
 from tests.integration.src.sqlbuild.cli.commands.main._test_types import (
     RepeatedJsonParseTestCase,
 )
+from tests.unit.src.sqlbuild.rule_engine._helpers.run.helpers import rebuild_identity
 
 STAGE_CAPTURE_SUFFIX: str = ".json"
 
@@ -1008,3 +1009,85 @@ def typed_config_reads(*, project_dir: Path, extra_header: str) -> int:
     exit_code: int = main(["--project-dir", str(project_dir), "plan", "--json", "--no-cache"])
     assert exit_code == 0
     return native_module.compile_stage_work_info(reset=True).get("typed_config_reads", 0)
+
+
+FORMAT_CACHE_UNFORMATTED_MODELS: dict[str, str] = {
+    "orders.sql": (
+        'MODEL (description "Orders placed by customers.", materialized table);\n'
+        "select   order_id, customer_id from __source('shop', 'orders')\n"
+    ),
+    "customers.sql": (
+        'MODEL (description "Customers who placed orders.", materialized table);\n'
+        "select customer_id,   min(order_id) as first_order_id from __ref('orders') "
+        "group by customer_id\n"
+    ),
+    "products.sql": (
+        'MODEL (description "Products in the catalog.", materialized view);\n'
+        "select 1 as product_id, 'widget' as product_name\n"
+    ),
+}
+
+
+def write_formatted_cache_project(*, project_dir: Path) -> None:
+    """Write three small models and format them once without the format result cache."""
+
+    (project_dir / "sqlbuild_project.toml").write_text(
+        'name = "orders"\nadapter = "duckdb"\n', encoding="utf-8"
+    )
+    models_dir: Path = project_dir / "models"
+    models_dir.mkdir()
+    name: str
+    sql: str
+    for name, sql in FORMAT_CACHE_UNFORMATTED_MODELS.items():
+        (models_dir / name).write_text(sql, encoding="utf-8")
+    assert main(["--project-dir", str(project_dir), "format", "--no-cache"]) == 0
+
+
+def format_result_store_path(*, project_dir: Path) -> Path:
+    """The project's format result store file."""
+
+    return (
+        native_module.compiler_cache_directory(project_dir)
+        / native_module.FORMAT_RESULT_STORE_FILE_NAME
+    )
+
+
+def check_format_with_work(
+    *, project_dir: Path, arguments: tuple[str, ...] = ()
+) -> tuple[int, dict[str, int]]:
+    """Run `format --check` in process and return its exit code and native stage work."""
+
+    _ = native_module.compile_stage_work_info(reset=True)
+    exit_code: int = main(["--project-dir", str(project_dir), "format", "--check", *arguments])
+    return exit_code, native_module.compile_stage_work_info()
+
+
+def edit_cached_orders_model(project_dir: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make one cached model unformatted again."""
+
+    (project_dir / "models" / "orders.sql").write_text(
+        FORMAT_CACHE_UNFORMATTED_MODELS["orders.sql"], encoding="utf-8"
+    )
+
+
+def widen_format_line_width(project_dir: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Change the `[format]` line width, which every cache key includes."""
+
+    config: Path = project_dir / "sqlbuild_project.toml"
+    _ = config.write_text(
+        config.read_text(encoding="utf-8") + "\n[format]\nline_width = 120\n", encoding="utf-8"
+    )
+
+
+def damage_format_result_store(project_dir: Path, _monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overwrite the end of the stored format results so the store fails its checksum."""
+
+    path: Path = format_result_store_path(project_dir=project_dir)
+    assert path.is_file()
+    _ = path.write_bytes(path.read_bytes()[:-7] + b"damaged")
+
+
+def rebuild_formatter(_project_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend another SQLBuild build formats the project."""
+
+    rebuild_identity(monkeypatch=monkeypatch)

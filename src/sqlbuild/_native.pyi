@@ -5344,6 +5344,7 @@ class SqlTestScanCache:
     def save(self) -> None: ...
 
 SQL_TEST_SCAN_STORE_FILE_NAME: str
+FORMAT_RESULT_STORE_FILE_NAME: str
 
 def content_digest(parts: list[str]) -> str: ...
 def compiled_code_identity() -> str: ...
@@ -5796,6 +5797,7 @@ def run_format_command(
     fix: bool = False,
     json_output: bool = False,
     no_color: bool = False,
+    no_cache: bool = False,
 ) -> int: ...
 def format_parameterized_test_label(
     *,

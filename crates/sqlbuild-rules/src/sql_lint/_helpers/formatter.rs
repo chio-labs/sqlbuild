@@ -8,8 +8,8 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::sql_lint::_helpers::formatter_syntax::{cte_macro_indices, protect_syntax};
 use crate::sql_lint::_helpers::printed_layout::{PrintedSql, WrapOptions, wrap_lines};
 use crate::sql_lint::_helpers::token_layout::{
-    AuthoredSql, KeywordRecase, comments_in, neutralize_comments, print_authored_tokens,
-    verify_token_invariant,
+    AuthoredSql, KeywordRecase, OracleLayout, comments_in, neutralize_comments, oracle_layout,
+    print_authored_tokens, tokenize, verify_token_invariant,
 };
 use crate::sql_lint::constants::{
     CAST_TYPE_SEPARATOR_KEYWORD, CLOSE_PARENTHESIS, LINT_API_VERSION, OPEN_PARENTHESIS,
@@ -91,8 +91,8 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
         dialect: &dialect,
         wrap: wrap.as_ref(),
     };
-    let (formatted, oracle) = format_layout(&original, &layout, &parse_options)?;
-    if relayout(&formatted, &oracle, &layout)? != formatted {
+    let (formatted, formatted_tokens, oracle) = format_layout(&original, &layout, &parse_options)?;
+    if relayout((&formatted, &formatted_tokens), oracle.as_ref(), &layout)? != formatted {
         return Err(NOT_IDEMPOTENT_FAILURE.to_string());
     }
     let changed = formatted != original;
@@ -105,18 +105,21 @@ fn try_format_sql(request: FormatRequest) -> Result<FormatResponse, String> {
     })
 }
 
+/// The printed output of [`format_layout`], its tokens, and the oracle it was printed against.
+type FormattedLayout = (String, Vec<Token>, Option<OracleLayout>);
+
 /// Print the tokens of `sql` with parse-tree whitespace; return the output and its oracle.
 fn format_layout(
     sql: &str,
     layout: &Layout<'_>,
     parse_options: &ParseOptions,
-) -> Result<(String, String), String> {
+) -> Result<FormattedLayout, String> {
     let dialect = layout.dialect;
     let tokens = dialect
         .tokenize(sql)
         .map_err(|error| format!("native formatter tokenization failed: {error}"))?;
     if tokens.is_empty() {
-        return Ok((sql.to_string(), sql.to_string()));
+        return Ok((sql.to_string(), tokens, None));
     }
     let comments = comments_in(sql, &tokens);
     let neutral = neutralize_comments(sql, &comments);
@@ -125,30 +128,39 @@ fn format_layout(
         .parse_with_options(&validation_sql.sql, parse_options)
         .map_err(|error| format!("native formatter could not parse SQL: {error}"))?;
     let semantic_tokens = without_statement_terminators(&tokens);
-    let oracle = layout_oracle(&neutral, &semantic_tokens, dialect, parse_options)?;
+    let oracle = oracle_layout(
+        &layout_oracle(&neutral, &semantic_tokens, dialect, parse_options)?,
+        dialect,
+    )?;
     let authored = AuthoredSql {
         sql,
         tokens: &tokens,
         comments: &comments,
     };
     let (printed, recases) = layout.print(&authored, &oracle)?;
-    verify_token_invariant(sql, &printed, dialect, &recases)?;
-    Ok((printed, oracle))
+    let printed_tokens = tokenize(&printed, dialect)?;
+    verify_token_invariant(
+        (sql, &tokens),
+        (&printed, &printed_tokens),
+        dialect,
+        &recases,
+    )?;
+    Ok((printed, printed_tokens, Some(oracle)))
 }
 
 /// Re-print formatted SQL against its oracle; unchanged tokens imply an unchanged layout.
-fn relayout(formatted: &str, oracle: &str, layout: &Layout<'_>) -> Result<String, String> {
-    let tokens = layout
-        .dialect
-        .tokenize(formatted)
-        .map_err(|error| format!("native formatter tokenization failed: {error}"))?;
-    if tokens.is_empty() {
+fn relayout(
+    (formatted, tokens): (&str, &[Token]),
+    oracle: Option<&OracleLayout>,
+    layout: &Layout<'_>,
+) -> Result<String, String> {
+    let Some(oracle) = oracle.filter(|_| !tokens.is_empty()) else {
         return Ok(formatted.to_string());
-    }
-    let comments = comments_in(formatted, &tokens);
+    };
+    let comments = comments_in(formatted, tokens);
     let authored = AuthoredSql {
         sql: formatted,
-        tokens: &tokens,
+        tokens,
         comments: &comments,
     };
     Ok(layout.print(&authored, oracle)?.0)
@@ -164,7 +176,7 @@ impl Layout<'_> {
     fn print(
         &self,
         authored: &AuthoredSql<'_>,
-        oracle: &str,
+        oracle: &OracleLayout,
     ) -> Result<(String, BTreeMap<usize, KeywordRecase>), String> {
         let (printed, recases) = print_authored_tokens(authored, oracle, self.dialect)?;
         let no_widths: HashMap<String, usize> = HashMap::new();

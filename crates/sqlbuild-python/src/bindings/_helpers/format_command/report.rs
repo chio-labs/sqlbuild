@@ -1,10 +1,9 @@
 //! A format run's Python violations and Rule fix reports as plain report data.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_core::format_command::models::{LintFinding, LintReport, RuleFixLine};
 use sqlbuild_core::text::main::python_splitlines::python_splitlines;
 
@@ -28,25 +27,24 @@ fn display_path(path: &Path, root: &Path) -> String {
 }
 
 fn source_line(
-    contents: &Bound<'_, PyDict>,
+    contents: &HashMap<PathBuf, String>,
     path: &Bound<'_, PyAny>,
     line: i64,
 ) -> PyResult<Option<String>> {
-    let Some(source) = contents.get_item(path)? else {
+    let Some(source) = contents.get(&path.extract::<PathBuf>()?) else {
         return Ok(None);
     };
-    let source: String = source.extract()?;
     if line < 1 {
         return Ok(None);
     }
-    let lines: Vec<&str> = python_splitlines(&source);
+    let lines: Vec<&str> = python_splitlines(source);
     let index: usize = usize::try_from(line - 1).unwrap_or(usize::MAX);
     Ok(lines.get(index).map(|line| (*line).to_owned()))
 }
 
 fn finding(
     violation: &Bound<'_, PyAny>,
-    contents: &Bound<'_, PyDict>,
+    contents: &HashMap<PathBuf, String>,
     root: &Path,
 ) -> PyResult<LintFinding> {
     let path: Bound<'_, PyAny> = native_field(violation, "file_path")?;
