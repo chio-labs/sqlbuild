@@ -3,6 +3,7 @@
 use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use sqlbuild_config::effective::models::EffectiveConcurrency;
 use sqlbuild_core::build_command::errors::BuildCommandError;
 use sqlbuild_core::build_command::main::duration_limit_error::duration_limit_error;
 use sqlbuild_core::build_command::models::DurationLimit;
@@ -12,6 +13,7 @@ use crate::bindings::_helpers::build_command::support::{boolean, or_none, text};
 use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::cli::progress_reporters::PlanningProgressReporter;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
@@ -51,11 +53,13 @@ impl<'py> BuildContext<'py> {
         native_field(&self.invocation, name)
     }
 
-    /// The requested concurrency, or the project setting.
-    pub(crate) fn concurrency(&self, project: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        or_none(self.request.getattr("concurrency")?, || {
-            native_field(project, "settings")?.getattr("concurrency")
-        })
+    /// `--concurrency`, else the selected target's `concurrency`, else `[settings]`.
+    pub(crate) fn concurrency(&self) -> PyResult<EffectiveConcurrency> {
+        resolve_concurrency(
+            &self.request.getattr("concurrency")?,
+            &self.get("discovered_inputs")?,
+            &native_field(&self.request, "selected_target")?,
+        )
     }
 }
 

@@ -106,6 +106,7 @@ E2E_DUCKDB_BUILD_CORE_PATHS := \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_scoped_declarations.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_selector_surface.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_table_function_dependency.py \
+	tests/e2e/src/sqlbuild/cli/commands/main/build/test_target_concurrency.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_template_expressions.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_terminal_failure.py \
 	tests/e2e/src/sqlbuild/cli/commands/main/build/test_validation_failures.py

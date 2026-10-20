@@ -13699,6 +13699,7 @@ class TargetConfig(NativeRecord):
     execution_limits: ExecutionLimitsConfig
     diff: TargetDiffConfig
     warehouses: TargetWarehousesConfig
+    concurrency: int | None
     def __init__(
         self,
         connection: dict[str, object] = ...,
@@ -13721,6 +13722,7 @@ class TargetConfig(NativeRecord):
         execution_limits: ExecutionLimitsConfig = ...,
         diff: TargetDiffConfig = ...,
         warehouses: TargetWarehousesConfig = ...,
+        concurrency: int | None = ...,
     ) -> None: ...
 
 class LocalTargetConfig(NativeRecord):
@@ -13746,6 +13748,7 @@ class LocalTargetConfig(NativeRecord):
     execution_limits: ExecutionLimitsConfig
     diff: TargetDiffConfig
     warehouses: TargetWarehousesConfig
+    concurrency: int | None
     def __init__(
         self,
         connection: dict[str, object] = ...,
@@ -13769,6 +13772,7 @@ class LocalTargetConfig(NativeRecord):
         execution_limits: ExecutionLimitsConfig = ...,
         diff: TargetDiffConfig = ...,
         warehouses: TargetWarehousesConfig = ...,
+        concurrency: int | None = ...,
     ) -> None: ...
 
 class SettingsConfig(NativeRecord):

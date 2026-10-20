@@ -48,3 +48,13 @@ pub(super) struct MessageTestCase {
     pub(super) names: &'static [&'static str],
     pub(super) expected_message: &'static str,
 }
+
+pub(super) struct ConcurrencyTestCase {
+    pub(super) description: &'static str,
+    pub(super) requested: Option<i64>,
+    pub(super) target: Option<(&'static str, i64)>,
+    pub(super) settings: i64,
+    pub(super) local_override: bool,
+    pub(super) expected_limit: i64,
+    pub(super) expected_source: &'static str,
+}

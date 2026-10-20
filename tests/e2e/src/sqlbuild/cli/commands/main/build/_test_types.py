@@ -1372,3 +1372,12 @@ class MaterializationTypeChangeTestCase:
     description: str
     materializations: tuple[str, ...]
     expected_table_types: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TargetConcurrencyE2ETestCase:
+    description: str
+    target_concurrency: str
+    local_settings: str
+    command: tuple[str, ...]
+    expected_fragment: str

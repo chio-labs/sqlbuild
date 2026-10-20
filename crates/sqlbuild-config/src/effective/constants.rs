@@ -210,4 +210,11 @@ pub(crate) const TARGET_FIELDS: &[TargetField] = &[
             decided_by: &["query"],
         },
     },
+    TargetField {
+        group: None,
+        name: "concurrency",
+        rule: MergeRule::Overlay {
+            decided_by: &["concurrency"],
+        },
+    },
 ];

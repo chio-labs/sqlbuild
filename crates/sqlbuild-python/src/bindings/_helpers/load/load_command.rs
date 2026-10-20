@@ -19,9 +19,9 @@ use sqlbuild_core::load_command::models::{LoadCounts, LoadResultText};
 use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::cli::progress_text::write_execution_header;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
-use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_settings_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_target_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::python_calls::call_with;
@@ -300,16 +300,12 @@ fn prepare<'py>(
         )
         .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?
         .extract()?;
-    let requested: Bound<'py, PyAny> = native_field(request, "concurrency")?;
-    let concurrency: i64 = if requested.is_none() {
-        native_field(
-            &build_effective_settings_config(&discovered.clone())?,
-            "concurrency",
-        )?
-        .extract()?
-    } else {
-        requested.extract()?
-    };
+    let concurrency: i64 = resolve_concurrency(
+        &native_field(request, "concurrency")?,
+        discovered,
+        &native_field(request, "selected_target")?,
+    )?
+    .limit;
     let typed: Bound<'py, PyAny> =
         type_cursor_overrides(&native_field(request, "cursor_overrides")?, &[])?;
     let cursor_overrides: Bound<'py, PyAny> = if typed.is_truthy()? {

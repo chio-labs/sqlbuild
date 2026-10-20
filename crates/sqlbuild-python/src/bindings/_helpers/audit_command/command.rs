@@ -15,6 +15,7 @@ use crate::bindings::_helpers::build_progress::audit_progress::AuditProgressRepo
 use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
 use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::cli::progress_text::write_execution_header;
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
 use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords, within};
@@ -184,15 +185,12 @@ fn prepare_run<'py>(
     let py: Python<'py> = request.py();
     let entries: Bound<'py, PyAny> =
         native_field(pipeline, "plan_output")?.getattr("audit_entries")?;
-    let requested: Bound<'py, PyAny> = native_field(request, "concurrency")?;
-    let concurrency: i64 = if requested.is_none() {
-        native_field(pipeline, "project")?
-            .getattr("settings")?
-            .getattr("concurrency")?
-            .extract::<i64>()?
-    } else {
-        requested.extract::<i64>()?
-    };
+    let concurrency: i64 = resolve_concurrency(
+        &native_field(request, "concurrency")?,
+        &native_field(invocation, "discovered_inputs")?,
+        &native_field(request, "selected_target")?,
+    )?
+    .limit;
     let audit_count: usize = entries.len()?;
     let worker_count: i64 = concurrency.min(i64::try_from(audit_count).unwrap_or(i64::MAX));
     let stream: Bound<'py, PyAny> = native_field(invocation, "progress_stream")?;

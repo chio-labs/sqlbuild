@@ -179,6 +179,8 @@ pub struct RunContextFacts {
     /// The warehouse and where it came from.
     pub warehouse: Option<(String, String)>,
     pub concurrency: i64,
+    /// The configuration layer the concurrency came from.
+    pub concurrency_source: String,
     pub full_refresh: bool,
     pub selected_count: usize,
     pub total_count: usize,
