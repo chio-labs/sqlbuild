@@ -40,11 +40,17 @@ pub(crate) struct Phase<H> {
     pub(crate) reads: Vec<(&'static str, String)>,
 }
 
-/// The layered values with hooks set aside, and whether a layer configures the schema.
+/// What layering sets aside until the end: hooks, which of them are the header's own, and the schema layer.
+pub(crate) struct SetAside<H> {
+    pub(crate) hooks: Entries<H>,
+    pub(crate) own_hooks: Vec<String>,
+    pub(crate) layer_schema_configured: bool,
+}
+
+/// The layered values, what is set aside, and whether any value holds a template.
 pub(crate) struct Layered<H> {
     pub(crate) phase: Phase<H>,
-    pub(crate) hooks: Entries<H>,
-    pub(crate) layer_schema_configured: bool,
+    pub(crate) set_aside: SetAside<H>,
     pub(crate) has_templates: bool,
 }
 
@@ -79,6 +85,11 @@ pub(crate) fn layered<B: ConfigBuildHost>(
         let facts = key_text(key).and_then(|name| own_facts(model.header.facts, &own, &name));
         facts.map_or_else(|| contains_template(&value), |facts| facts.template)
     });
+    let own_hooks: Vec<String> = own
+        .iter()
+        .filter(|name| HOOK_KEYS.contains(&name.as_str()))
+        .cloned()
+        .collect();
     let layer_schema_configured: bool = config_entry(model.header.entries, SCHEMA_KEY).is_some()
         || path_values.is_some_and(|values| config_entry(values, SCHEMA_KEY).is_some());
     Ok(Layered {
@@ -87,8 +98,11 @@ pub(crate) fn layered<B: ConfigBuildHost>(
             own,
             reads: Vec::new(),
         },
-        hooks,
-        layer_schema_configured,
+        set_aside: SetAside {
+            hooks,
+            own_hooks,
+            layer_schema_configured,
+        },
         has_templates,
     })
 }
@@ -175,10 +189,14 @@ pub(crate) fn targeted<B: ConfigBuildHost>(
 /// The built config: hooks restored, storage keys dropped, overrides read and macros rejected.
 pub(crate) fn finished<B: ConfigBuildHost>(
     model: &BuildModel<'_, B>,
-    layered: (Entries<B::Handle>, bool),
+    set_aside: SetAside<B::Handle>,
     targeted: Targeted<B::Handle>,
 ) -> Result<BuiltModelConfig<B::Handle>, HostHalt<B>> {
-    let (hooks, layer_schema_configured) = layered;
+    let SetAside {
+        hooks,
+        own_hooks,
+        layer_schema_configured,
+    } = set_aside;
     let (header, config) = (&model.header, ConfigBuildHalt::Config);
     let mut resolved: Entries<B::Handle> = targeted.phase.values;
     for (key, value) in hooks {
@@ -190,6 +208,12 @@ pub(crate) fn finished<B: ConfigBuildHost>(
     let table_type_value = config_entry(header.entries, TABLE_TYPE_KEY);
     let table_type = table_type_override(table_type_value, model.name).map_err(config)?;
     check_no_config_macros(&values, header.facts, &targeted.phase.own).map_err(config)?;
+    let mut own_header_keys: Vec<String> = targeted.phase.own;
+    let restored: Vec<String> = own_hooks
+        .into_iter()
+        .filter(|name| !own_header_keys.contains(name))
+        .collect();
+    own_header_keys.extend(restored);
     Ok(BuiltModelConfig {
         values,
         header_keys: sorted_header_keys(header.entries)?,
@@ -199,5 +223,6 @@ pub(crate) fn finished<B: ConfigBuildHost>(
         retention,
         table_type,
         reads: targeted.phase.reads,
+        own_header_keys,
     })
 }

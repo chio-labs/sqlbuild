@@ -635,3 +635,42 @@ def marker_kept(*, project_dir: Path, header: dict[object, object], key: object)
         config_value_inputs(project_dir=project_dir, header=header).model_inputs[0].config
     )
     return config.values[cast("str", key)] is MARKER
+
+
+def header_column_paths(*, project_dir: Path, headers: tuple[str, ...]) -> tuple[int, int]:
+    """How many models reuse their natively parsed header columns, and how many reparse them."""
+
+    files: dict[str, str] = {
+        "sqlbuild_project.toml": CONFIG_VALUE_PROJECT["sqlbuild_project.toml"],
+        **{
+            f"models/marts/orders_{index}.sql": f"MODEL ({header});\n\nSELECT 1 AS order_id\n"
+            for index, header in enumerate(headers)
+        },
+    }
+    for relative_path, contents in files.items():
+        path: Path = project_dir / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(contents, encoding="utf-8")
+    discovered: DiscoveredProjectInputs = discover_project_inputs(project_dir=project_dir)
+    adapter: DuckDbAdapter = DuckDbAdapter()
+    _ = _native.compile_stage_work_info(reset=True)
+    _ = build_compile_inputs(
+        discovered_inputs=discovered,
+        adapter_context=CompileAdapterContext(
+            value_renderer=adapter,
+            collection_rendering=resolve_effective_collection_rendering(
+                project_config=discovered.project_config, declaration_override=None
+            ),
+            python_functions_inherit_default_namespace=(
+                adapter.python_functions_inherit_default_namespace()
+            ),
+            sql_lexical_syntax=adapter.sql_lexical_syntax,
+        ),
+        run_id="20261007T000000Z_orders",
+        resolved_connection={},
+        no_sql_validation=True,
+        defer_model_sql_validation=True,
+        no_cache=True,
+    )
+    work: dict[str, int] = _native.compile_stage_work_info(reset=True)
+    return (work.get("native_header_columns", 0), work.get("parsed_header_columns", 0))

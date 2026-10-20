@@ -25,13 +25,12 @@ pub fn build_model_config<B: ConfigBuildHost>(
     };
     let Layered {
         mut phase,
-        hooks,
-        layer_schema_configured,
+        set_aside,
         has_templates,
     } = layered(&model, matched_path_default)?;
     if has_templates {
         phase = model_templates(&model, phase)?;
     }
     let targeted = targeted(&model, phase, has_templates)?;
-    finished(&model, (hooks, layer_schema_configured), targeted)
+    finished(&model, set_aside, targeted)
 }

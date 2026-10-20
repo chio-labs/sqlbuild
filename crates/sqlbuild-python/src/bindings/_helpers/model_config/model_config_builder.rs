@@ -205,6 +205,53 @@ fn halted<'py>(
     })
 }
 
+/// The built values as a new `dict`; entries still the header's own keep the header's objects.
+fn own_values_dict<'py>(
+    header: &Bound<'py, PyDict>,
+    built: &BuiltModelConfig<HostHandle>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py: Python<'py> = header.py();
+    let mapping: Bound<'py, PyDict> = PyDict::new(py);
+    for (key, value) in &built.values {
+        let own: bool = own_key(key, &built.own_header_keys);
+        let key: Bound<'py, PyAny> = config_object(py, key)?;
+        let value: Bound<'py, PyAny> = match own.then(|| header.get_item(&key)).transpose()? {
+            Some(Some(value)) => value,
+            _ => config_object(py, value)?,
+        };
+        mapping.set_item(key, value)?;
+    }
+    Ok(mapping)
+}
+
+/// Whether `key` is a string key named among the header's own keys.
+fn own_key(key: &PyConfigNode, own: &[String]) -> bool {
+    let text: Option<&str> = match key {
+        ConfigNode::Str(text) => Some(text),
+        ConfigNode::Host(host) if host.facts.strict_text => host.facts.text.as_deref(),
+        _ => None,
+    };
+    text.is_some_and(|text| own.iter().any(|name| name == text))
+}
+
+/// One model's build projected for Python.
+fn projected_build<'py>(
+    header: &Bound<'py, PyDict>,
+    built: BuiltModelConfig<HostHandle>,
+) -> PyResult<BuiltConfig<'py>> {
+    let py: Python<'py> = header.py();
+    Ok(BuiltConfig {
+        values: own_values_dict(header, &built)?,
+        header_keys: built.header_keys,
+        logical_schema: projected(py, built.logical_schema)?,
+        layer_schema_configured: built.layer_schema_configured,
+        logical_database: projected(py, built.logical_database)?,
+        retention: built.retention,
+        table_type: built.table_type,
+        reads: built.reads,
+    })
+}
+
 fn projected<'py>(
     py: Python<'py>,
     value: Option<PyConfigNode>,
@@ -253,29 +300,12 @@ impl NativeModelConfigBuilder {
             matched_path_default,
             model_name,
         ) {
-            Ok(built) => Ok(ConfigBuild::Built(self.projected_build(py, built)?)),
+            Ok(built) => Ok(ConfigBuild::Built(projected_build(header, built)?)),
             Err(halt) => match halted(py, halt)? {
                 Ok(error) => Ok(ConfigBuild::Rejected(native_config_error(py, error)?)),
                 Err(error) => Err(error),
             },
         }
-    }
-
-    fn projected_build<'py>(
-        &self,
-        py: Python<'py>,
-        built: BuiltModelConfig<HostHandle>,
-    ) -> PyResult<BuiltConfig<'py>> {
-        Ok(BuiltConfig {
-            values: config_dict(py, &built.values)?,
-            header_keys: built.header_keys,
-            logical_schema: projected(py, built.logical_schema)?,
-            layer_schema_configured: built.layer_schema_configured,
-            logical_database: projected(py, built.logical_database)?,
-            retention: built.retention,
-            table_type: built.table_type,
-            reads: built.reads,
-        })
     }
 
     /// `build_layered_model_values` with an empty header: what a path default's models inherit.

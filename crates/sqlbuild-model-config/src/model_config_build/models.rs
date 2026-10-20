@@ -49,6 +49,8 @@ pub struct BuiltModelConfig<H> {
     pub table_type: TableTypeOverride,
     /// The `(kind, name)` environment and context reads, in order.
     pub reads: Vec<(&'static str, String)>,
+    /// The header keys whose built values are still the header's own values.
+    pub own_header_keys: Vec<String>,
 }
 
 /// Why a build stops: the config error it raises, a caller error, or a header key that is not text.

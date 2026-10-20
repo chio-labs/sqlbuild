@@ -62,3 +62,13 @@ class OpaqueConfigValueTestCase:
     header: dict[object, object]
     key: object
     expected_same_object: bool
+
+
+@dataclass(frozen=True)
+class HeaderColumnPathTestCase:
+    """MODEL headers with columns, and how many models reuse or reparse their native columns."""
+
+    description: str
+    headers: tuple[str, ...]
+    expected_native: int
+    expected_parsed: int
