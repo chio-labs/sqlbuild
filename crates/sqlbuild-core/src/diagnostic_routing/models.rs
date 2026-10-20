@@ -22,3 +22,14 @@ pub struct RouteOptions {
     /// This destination receives SQL text, so it only accepts records that carry it.
     pub include_sql_text: bool,
 }
+
+/// How a console that is not in debug mode shows one third-party record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThirdPartyConsoleForm {
+    /// The record stays off the console.
+    Hidden,
+    /// The first line of the message, without a traceback.
+    Summary,
+    /// The whole message and traceback.
+    Full,
+}

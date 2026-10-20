@@ -11,6 +11,7 @@ use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::progress::main::connection_phase_line::connection_phase_line;
 use sqlbuild_core::progress::main::connection_start_message::connection_start_message;
 use sqlbuild_core::progress::main::is_planning_completion_message::is_planning_completion_message;
+use sqlbuild_core::progress::main::is_planning_failure_message::is_planning_failure_message;
 
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::build_progress::progress::{
@@ -146,7 +147,7 @@ impl PlanningProgressReporter {
         })
     }
 
-    fn on_progress(&self, py: Python<'_>, message: &str) -> PyResult<()> {
+    pub(crate) fn on_progress(&self, py: Python<'_>, message: &str) -> PyResult<()> {
         if let Some(projector) = &self.projector
             && projector_operation_active(projector.get(), PROJECT_COMPILE_OPERATION)?
         {
@@ -155,13 +156,16 @@ impl PlanningProgressReporter {
         if is_planning_completion_message(message) {
             return self.complete(py, message);
         }
+        if is_planning_failure_message(message) {
+            return self.error(py, message);
+        }
         if !self.active.load(Ordering::SeqCst) {
             return self.start(py, message);
         }
         self.update(py, message)
     }
 
-    fn start(&self, py: Python<'_>, message: &str) -> PyResult<()> {
+    pub(crate) fn start(&self, py: Python<'_>, message: &str) -> PyResult<()> {
         self.call_status(py, "start", message)?;
         self.active.store(true, Ordering::SeqCst);
         Ok(())
@@ -174,14 +178,14 @@ impl PlanningProgressReporter {
         self.call_status(py, "update", message)
     }
 
-    fn complete(&self, py: Python<'_>, message: &str) -> PyResult<()> {
+    pub(crate) fn complete(&self, py: Python<'_>, message: &str) -> PyResult<()> {
         self.call_status_keyword(py, "complete", message)?;
         self.active.store(false, Ordering::SeqCst);
         Ok(())
     }
 
     /// Complete with a pre-styled message written verbatim.
-    fn complete_styled(&self, py: Python<'_>, message: &str) -> PyResult<()> {
+    pub(crate) fn complete_styled(&self, py: Python<'_>, message: &str) -> PyResult<()> {
         self.call_status_keyword(py, "complete_styled", message)?;
         self.active.store(false, Ordering::SeqCst);
         Ok(())
@@ -195,7 +199,7 @@ impl PlanningProgressReporter {
     }
 
     #[pyo3(signature = (*, blank_line_after = false))]
-    fn finish(&self, py: Python<'_>, blank_line_after: bool) -> PyResult<()> {
+    pub(crate) fn finish(&self, py: Python<'_>, blank_line_after: bool) -> PyResult<()> {
         self.status.bind(py).call_method0("close")?;
         self.active.store(false, Ordering::SeqCst);
         if blank_line_after {

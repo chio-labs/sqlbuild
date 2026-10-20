@@ -18,6 +18,7 @@ from sqlbuild.cli.commands._helpers.entry.compute_log_diagnostics import (
 )
 from sqlbuild.diagnostics.classes.invocation_diagnostic_routing import InvocationDiagnosticRouting
 from sqlbuild.diagnostics.main.configure import configure_diagnostics
+from sqlbuild.diagnostics.main.diagnostic_project_roots import diagnostic_project_roots
 from sqlbuild.diagnostics.models import DiagnosticRoutingOptions
 from sqlbuild.runtime.compute_logs.main.run_with_compute_log_capture import (
     run_with_compute_log_capture,
@@ -39,9 +40,11 @@ def dispatch_with_compute_logs(
     if creates_project:
         return operation()
     project_dir: Path = Path(args.project_dir) if args.project_dir is not None else Path.cwd()
+    project_roots: tuple[str, ...] = diagnostic_project_roots(project_dir=project_dir)
     routing_options: DiagnosticRoutingOptions = DiagnosticRoutingOptions(
         debug_console=args.debug,
         use_color=(not args.no_color) and supports_color(),
+        project_roots=project_roots,
     )
     started_at: datetime = datetime.now(UTC)
     command: str = "unknown" if args.command is None else str(args.command)
@@ -72,6 +75,7 @@ def dispatch_with_compute_logs(
             invocation_id=identity.invocation_id,
             debug=args.debug,
             use_color=routing_options.use_color,
+            project_roots=project_roots,
         )
         with routing:
             for failure, channel in failures:

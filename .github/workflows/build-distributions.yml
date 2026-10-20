@@ -135,6 +135,13 @@ jobs:
           manylinux: auto
       - uses: PyO3/maturin-action@v1
         if: inputs.prebuilt-run-id == ''
+        # On macOS maturin links the extension with these flags for every crate, which changes
+        # their build hash. Passing the same flags here lets sqb reuse the crates the extension
+        # build just compiled instead of compiling them again; sqb has no undefined symbols, and
+        # the smoke test below runs it.
+        env:
+          RUSTFLAGS: >-
+            ${{ runner.os == 'macOS' && '-C link-arg=-undefined -C link-arg=dynamic_lookup' || '' }}
         with:
           command: build
           args: >-

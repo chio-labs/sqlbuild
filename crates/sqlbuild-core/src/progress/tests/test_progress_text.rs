@@ -7,6 +7,7 @@ use crate::progress::main::format_expectation_name::format_expectation_name;
 use crate::progress::main::format_inspection_record::format_inspection_record;
 use crate::progress::main::format_status_spinner_line::format_status_spinner_line;
 use crate::progress::main::is_planning_completion_message::is_planning_completion_message;
+use crate::progress::main::is_planning_failure_message::is_planning_failure_message;
 use crate::progress::main::machine_output_mode::machine_output_mode;
 use crate::progress::models::{ExpectationStep, InspectionRecord, OutputModeFacts};
 
@@ -23,6 +24,16 @@ fn given_planning_message_when_classifying_then_completions_are_recognized() {
             description: "an applied clone plan completes",
             message: "Applied clone plan. (0.10s)",
             expected_is_completion: true,
+        },
+        CompletionMessageTestCase {
+            description: "a prepared clone plan completes",
+            message: "Prepared clone plan. (0.10s)",
+            expected_is_completion: true,
+        },
+        CompletionMessageTestCase {
+            description: "an ongoing clone preparation does not complete",
+            message: "Preparing clone plan...",
+            expected_is_completion: false,
         },
         CompletionMessageTestCase {
             description: "a finalized dbt run completes",
@@ -44,6 +55,36 @@ fn given_planning_message_when_classifying_then_completions_are_recognized() {
     for test_case in test_cases {
         assert_eq!(
             is_planning_completion_message(test_case.message),
+            test_case.expected_is_completion,
+            "{}",
+            test_case.description
+        );
+    }
+}
+
+#[test]
+fn given_planning_message_when_classifying_then_failures_are_recognized() {
+    let test_cases = [
+        CompletionMessageTestCase {
+            description: "a failed cursor watermark ends its phase",
+            message: "Failed runtime cursor watermark (1/1): dev.orders.updated_at [max] (0.10s): boom",
+            expected_is_completion: true,
+        },
+        CompletionMessageTestCase {
+            description: "a successful completion is not a failure",
+            message: "Inspected runtime cursor watermark (1/1): dev.orders.updated_at [max] (0.10s)",
+            expected_is_completion: false,
+        },
+        CompletionMessageTestCase {
+            description: "an ongoing phase is not a failure",
+            message: "Inspecting runtime cursor watermark (1/1): dev.orders.updated_at [max]...",
+            expected_is_completion: false,
+        },
+    ];
+
+    for test_case in test_cases {
+        assert_eq!(
+            is_planning_failure_message(test_case.message),
             test_case.expected_is_completion,
             "{}",
             test_case.description

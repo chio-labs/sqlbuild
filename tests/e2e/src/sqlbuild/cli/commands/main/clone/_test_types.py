@@ -42,3 +42,27 @@ class CloneDeferredSourceFunctionE2ETestCase:
     description: str
     expected_stdout_fragments: tuple[str, ...]
     expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
+class ClonePreparationE2ETestCase:
+    description: str
+    clone_arguments: tuple[str, ...]
+    expected_assets: tuple[tuple[str, str, str, str | None, str], ...]
+    expected_query_results: tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+
+
+@dataclass(frozen=True)
+class CloneTerminalProgressE2ETestCase:
+    description: str
+    columns: int
+    expected_screen_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClonePreparationFailureE2ETestCase:
+    description: str
+    columns: int
+    broken_model_path: str
+    broken_model_sql: str
+    expected_screen_fragments: tuple[str, ...]

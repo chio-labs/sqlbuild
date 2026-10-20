@@ -62,3 +62,5 @@ pub const LEVEL_INFO: i64 = 20;
 pub const LEVEL_WARNING: i64 = 30;
 pub const LEVEL_ERROR: i64 = 40;
 pub const LEVEL_CRITICAL: i64 = 50;
+/// Directories that hold installed packages, even inside a project (a project `.venv`).
+pub const PACKAGE_DIRECTORIES: [&str; 2] = ["site-packages", "dist-packages"];
