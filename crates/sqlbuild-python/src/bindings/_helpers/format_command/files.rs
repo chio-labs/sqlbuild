@@ -1,4 +1,4 @@
-//! Authored SQL files as `{Path: str}` dictionaries, and writing formatted files back.
+//! Writing formatted files back atomically, in the authored newline convention.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -6,9 +6,8 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use pyo3::exceptions::PyOSError;
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
-use pyo3::types::{PyDict, PyDictMethods};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::prelude::{Bound, PyAny, PyModule, PyModuleMethods, PyResult, Python};
+use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 const LINE_FEED: &str = "\n";
 const CARRIAGE_RETURN_LINE_FEED: &str = "\r\n";
@@ -20,32 +19,13 @@ pub(crate) struct FormatChange<'py> {
     pub(crate) after: String,
 }
 
-/// The entries of a `{Path: value}` dictionary, sorted as Python sorts paths.
-pub(crate) fn sorted_items<'py>(
-    dictionary: &Bound<'py, PyDict>,
-) -> PyResult<Vec<(Bound<'py, PyAny>, Bound<'py, PyAny>)>> {
-    let mut items: Vec<(PathBuf, Bound<'py, PyAny>, Bound<'py, PyAny>)> = dictionary
-        .iter()
-        .map(|(key, value)| Ok((key.extract::<PathBuf>()?, key, value)))
-        .collect::<PyResult<_>>()?;
-    items.sort_by(|left, right| left.0.cmp(&right.0));
-    Ok(items
-        .into_iter()
-        .map(|(_, key, value)| (key, value))
-        .collect())
-}
-
-/// `{path: overrides.get(path, contents) for path, contents in files.items()}`.
-pub(crate) fn overlaid<'py>(
-    files: &Bound<'py, PyDict>,
-    overrides: &Bound<'py, PyDict>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let merged: Bound<'py, PyDict> = PyDict::new(files.py());
-    for (path, contents) in files.iter() {
-        let value: Bound<'py, PyAny> = overrides.get_item(&path)?.unwrap_or(contents);
-        merged.set_item(path, value)?;
-    }
-    Ok(merged)
+/// One file a format run would leave in its final text.
+pub(crate) struct PendingWrite<'t> {
+    pub(crate) path: &'t Path,
+    /// The text read, or empty for a file the run did not collect.
+    pub(crate) authored: &'t str,
+    pub(crate) contents: &'t str,
+    pub(crate) newline: &'static str,
 }
 
 /// Generated contents in the authored newline convention.
@@ -99,45 +79,27 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(write_file_atomically, module)?)
 }
 
-/// The changed files in path order, written in place when `write` is set.
+/// The changed files of `writes`, in their order, written in place when `write` is set.
 pub(crate) fn persist_changes<'py>(
-    (files, updated): (&Bound<'py, PyDict>, &Bound<'py, PyDict>),
-    newlines: &Bound<'py, PyDict>,
+    py: Python<'py>,
+    writes: &[PendingWrite<'_>],
     write: bool,
 ) -> PyResult<Vec<FormatChange<'py>>> {
     let mut changes: Vec<FormatChange<'py>> = Vec::new();
-    for (path, contents) in sorted_items(updated)? {
-        let newline: String = newlines
-            .get_item(&path)?
-            .map_or_else(|| Ok(LINE_FEED.to_owned()), |value| value.extract())?;
-        let authored: String = files
-            .get_item(&path)?
-            .map_or_else(|| Ok(String::new()), |value| value.extract())?;
-        let after: String = with_newline_style(&contents.extract::<String>()?, &newline);
-        let before: String = with_newline_style(&authored, &newline);
+    for pending in writes {
+        let after: String = with_newline_style(pending.contents, pending.newline);
+        let before: String = with_newline_style(pending.authored, pending.newline);
         if after == before {
             continue;
         }
         if write {
-            write_atomically(&path.extract::<PathBuf>()?, &after)?;
+            write_atomically(pending.path, &after)?;
         }
         changes.push(FormatChange {
-            path,
+            path: pending.path.into_pyobject(py)?.into_any(),
             before,
             after,
         });
     }
     Ok(changes)
-}
-
-/// `{Path: contents}` of the collected files, in collection order.
-pub(crate) fn file_dictionary<'py>(
-    py: Python<'py>,
-    files: Vec<(PathBuf, String)>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let dictionary: Bound<'py, PyDict> = PyDict::new(py);
-    for (path, contents) in files {
-        dictionary.set_item(path, contents)?;
-    }
-    Ok(dictionary)
 }

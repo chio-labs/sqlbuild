@@ -17,7 +17,7 @@ use sqlbuild_rules::lint_text::main::reject_inline_suppressions::reject_inline_s
 use sqlbuild_rules::lint_text::main::restore_interpolation::restore_interpolation;
 use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_null_candidates;
 use sqlbuild_rules::lint_text::models::{
-    FormatFile, FormattedBodies, InterpolationSite, Neutralized, SuppressionFinding,
+    FormatFault, FormatFile, FormattedBodies, InterpolationSite, Neutralized, SuppressionFinding,
 };
 
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
@@ -156,7 +156,10 @@ pub(crate) fn reject_lint_suppressions<'py>(
 }
 
 /// The parts of `path` below `project_dir`, or `None` outside the project.
-fn relative_parts(path: &std::path::Path, project_dir: &std::path::Path) -> Option<Vec<String>> {
+pub(crate) fn relative_parts(
+    path: &std::path::Path,
+    project_dir: &std::path::Path,
+) -> Option<Vec<String>> {
     match path.strip_prefix(project_dir) {
         Ok(relative) => Some(
             relative
@@ -166,6 +169,42 @@ fn relative_parts(path: &std::path::Path, project_dir: &std::path::Path) -> Opti
         ),
         Err(_) => None,
     }
+}
+
+/// The `format-unsafe` fault of a body the formatter declined in the file at `file_path`.
+pub(crate) fn unsafe_fault<'py>(
+    file_path: &Bound<'py, PyAny>,
+    fault: &FormatFault,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py: Python<'py> = file_path.py();
+    let severity: Bound<'py, PyAny> = enum_member(py, RecordId::LintSeverity, "FAULT")?;
+    new_record_with(
+        py,
+        RecordId::LintViolation,
+        &[
+            ("file_path", file_path.clone()),
+            ("line", fault.line.into_pyobject(py)?.into_any()),
+            ("column", 1_usize.into_pyobject(py)?.into_any()),
+            ("code", PyString::new(py, FORMAT_UNSAFE_CODE).into_any()),
+            (
+                "message",
+                PyString::new(
+                    py,
+                    &format!(
+                        "File left unchanged because its SQL body could not be formatted: {}",
+                        fault.reason
+                    ),
+                )
+                .into_any(),
+            ),
+            ("severity", severity),
+            ("engine", PyString::new(py, NATIVE_ENGINE).into_any()),
+            (
+                "remediation",
+                PyString::new(py, FORMAT_UNSAFE_REMEDIATION).into_any(),
+            ),
+        ],
+    )
 }
 
 /// Format the SQL bodies of `files`; return changed texts by path and declined-body faults.
@@ -196,36 +235,10 @@ pub(crate) fn format_lint_sql_bodies<'py>(
     for (index, text) in result.formatted {
         formatted.set_item(&files[index].0, text)?;
     }
-    let fault: Bound<'py, PyAny> = enum_member(py, RecordId::LintSeverity, "FAULT")?;
     let faults: Vec<Bound<'py, PyAny>> = result
         .faults
-        .into_iter()
-        .map(|item| {
-            new_record_with(py, RecordId::LintViolation, &[
-                    ("file_path", files[item.file].0.clone()),
-                    ("line", item.line.into_pyobject(py)?.into_any()),
-                    ("column", 1_usize.into_pyobject(py)?.into_any()),
-                    ("code", PyString::new(py, FORMAT_UNSAFE_CODE).into_any()),
-                    (
-                        "message",
-                        PyString::new(
-                            py,
-                            &format!(
-                                "File left unchanged because its SQL body could not be formatted: {}",
-                                item.reason
-                            ),
-                        )
-                        .into_any(),
-                    ),
-                    ("severity", fault.clone()),
-                    ("engine", PyString::new(py, NATIVE_ENGINE).into_any()),
-                    (
-                        "remediation",
-                        PyString::new(py, FORMAT_UNSAFE_REMEDIATION).into_any(),
-                    ),
-                ],
-            )
-        })
+        .iter()
+        .map(|item| unsafe_fault(&files[item.file].0, item))
         .collect::<PyResult<_>>()?;
     Ok((formatted, faults))
 }

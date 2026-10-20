@@ -5,3 +5,4 @@ pub(crate) mod registration;
 pub(crate) mod report;
 pub(crate) mod run;
 pub(crate) mod selection;
+pub(crate) mod stages;

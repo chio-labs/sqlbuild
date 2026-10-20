@@ -7,7 +7,7 @@ use sqlbuild_rules::dsl_headers::main::inner_header_text::inner_header_text;
 use sqlbuild_rules::dsl_headers::models::{HeaderSpan, ParseFailure, ParseOutcome};
 use sqlbuild_rules::dsl_headers::types::HeaderParser;
 use sqlbuild_sqltext::compiler::main::header_word_value::header_word_value;
-use sqlbuild_sqltext::compiler::main::model_header_parsing::parse_batch;
+use sqlbuild_sqltext::compiler::main::model_header_single_parsing::parse_one;
 use sqlbuild_sqltext::compiler::models::{AuthoredValue, HeaderWord};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
@@ -45,8 +45,7 @@ impl HeaderParser for NativeHeaderParser {
     type Error = String;
 
     fn parse(&self, kind: &str, inner: &str) -> ParseOutcome<AuthoredValue, String> {
-        let headers: Vec<String> = vec![inner.to_owned()];
-        let parsed = match catch_compiler_panic(|| parse_batch(&headers)) {
+        let parsed = match catch_compiler_panic(|| Ok(parse_one(inner))) {
             Ok(parsed) => parsed,
             Err(message) => {
                 return ParseOutcome::Raised(
@@ -58,7 +57,7 @@ impl HeaderParser for NativeHeaderParser {
                 );
             }
         };
-        let (value, _, error) = parsed.into_iter().next().unwrap_or((None, None, None));
+        let (value, _, error) = parsed;
         if let Some(value) = value {
             return ParseOutcome::Parsed(value);
         }
