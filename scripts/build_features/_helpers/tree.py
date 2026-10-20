@@ -36,6 +36,8 @@ def run_cargo_tree(*, root: Path, selection: tuple[str, ...], target: str) -> st
             "--prefix",
             "indent",
             "--no-dedupe",
+            "--color",
+            "never",
         ),
         cwd=root,
         capture_output=True,

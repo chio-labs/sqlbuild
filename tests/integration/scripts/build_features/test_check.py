@@ -49,9 +49,13 @@ pytestmark: pytest.MarkDecorator = pytest.mark.skipif(
     ids=lambda case: case.description,
 )
 def test_given_workspace_when_checking_build_features_then_reports_crates_compiled_twice(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], test_case: BuildFeaturesTestCase
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    test_case: BuildFeaturesTestCase,
 ) -> None:
     write_workspace(tmp_path, test_case)
+    monkeypatch.setenv("CARGO_TERM_COLOR", "always")
 
     exit_code: int = run_build_features_check(["--root", str(tmp_path)])
 
