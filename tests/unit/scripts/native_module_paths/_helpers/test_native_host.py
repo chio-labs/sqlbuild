@@ -10,13 +10,15 @@ import pytest
 
 import sqlbuild._native as native
 import sqlbuild._native_host as native_host
+from scripts.native_module_paths._helpers.host_roots import host_dead_code_roots, host_targets
 from tests.unit.scripts.native_module_paths._helpers._test_types import (
+    HostDeadCodeRootCase,
     HostImportCase,
     HostKindCase,
     HostTableCase,
     HostUnknownNameCase,
 )
-from tests.unit.scripts.native_module_paths._helpers.helpers import resolved_kind
+from tests.unit.scripts.native_module_paths._helpers.helpers import FENSU_CONFIG, resolved_kind
 
 
 @pytest.mark.parametrize(
@@ -113,6 +115,27 @@ def test_given_unknown_name_when_reading_native_host_then_raises_attribute_error
         getattr(native_host, test_case.name)
 
     assert str(raised.value) == test_case.expected_error
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        HostDeadCodeRootCase(
+            description="every host target is a dead-code root and every host root a target",
+            expected_missing_targets=(),
+            expected_extra_targets=(),
+        )
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_native_host_table_when_reading_fensu_roots_then_roots_match_targets(
+    test_case: HostDeadCodeRootCase,
+) -> None:
+    targets: set[tuple[str, str]] = host_targets()
+    roots: set[tuple[str, str]] = host_dead_code_roots(config=FENSU_CONFIG)
+
+    assert tuple(sorted(targets - roots)) == test_case.expected_missing_targets
+    assert tuple(sorted(roots - targets)) == test_case.expected_extra_targets
 
 
 if __name__ == "__main__":

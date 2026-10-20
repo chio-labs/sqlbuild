@@ -6,24 +6,50 @@ use crate::schema::models::Table;
 pub const BATCH_ROWS: usize = 5_000;
 /// Longest wait for a batch to fill, so each table gets at most about one part per second per writer.
 pub const BATCH_WINDOW_MS: u64 = 1_000;
+/// ClickHouse `READONLY`.
+pub const READONLY_CODE: u64 = 164;
+/// ClickHouse `DATABASE_ACCESS_DENIED`.
+pub const DATABASE_ACCESS_DENIED_CODE: u64 = 291;
+/// ClickHouse `ACCESS_DENIED`.
+pub const ACCESS_DENIED_CODE: u64 = 497;
+/// ClickHouse `AUTHENTICATION_FAILED`.
+pub const AUTHENTICATION_FAILED_CODE: u64 = 516;
+/// ClickHouse `TIMEOUT_EXCEEDED`.
+pub const TIMEOUT_EXCEEDED_CODE: u64 = 159;
+/// ClickHouse `TOO_MANY_SIMULTANEOUS_QUERIES`.
+pub const TOO_MANY_SIMULTANEOUS_QUERIES_CODE: u64 = 202;
+/// ClickHouse `SOCKET_TIMEOUT`.
+pub const SOCKET_TIMEOUT_CODE: u64 = 209;
+/// ClickHouse `NETWORK_ERROR`.
+pub const NETWORK_ERROR_CODE: u64 = 210;
+/// ClickHouse `MEMORY_LIMIT_EXCEEDED`.
+pub const MEMORY_LIMIT_EXCEEDED_CODE: u64 = 241;
+/// ClickHouse `TABLE_IS_READ_ONLY`.
+pub const TABLE_IS_READ_ONLY_CODE: u64 = 242;
+/// ClickHouse `TOO_MANY_PARTS`.
+pub const TOO_MANY_PARTS_CODE: u64 = 252;
+/// ClickHouse `UNKNOWN_STATUS_OF_INSERT`.
+pub const UNKNOWN_STATUS_OF_INSERT_CODE: u64 = 319;
+/// ClickHouse `SYSTEM_ERROR`.
+pub const SYSTEM_ERROR_CODE: u64 = 425;
 /// Server error codes meaning the user may not create or write the store.
 pub const PERMISSION_CODES: [u64; 4] = [
-    164, // READONLY
-    291, // DATABASE_ACCESS_DENIED
-    497, // ACCESS_DENIED
-    516, // AUTHENTICATION_FAILED
+    READONLY_CODE,
+    DATABASE_ACCESS_DENIED_CODE,
+    ACCESS_DENIED_CODE,
+    AUTHENTICATION_FAILED_CODE,
 ];
 /// Server error codes worth retrying with the same rows and deduplication tokens.
 pub const TRANSIENT_CODES: [u64; 9] = [
-    159, // TIMEOUT_EXCEEDED
-    202, // TOO_MANY_SIMULTANEOUS_QUERIES
-    209, // SOCKET_TIMEOUT
-    210, // NETWORK_ERROR
-    241, // MEMORY_LIMIT_EXCEEDED
-    242, // TABLE_IS_READ_ONLY
-    252, // TOO_MANY_PARTS
-    319, // UNKNOWN_STATUS_OF_INSERT
-    425, // SYSTEM_ERROR
+    TIMEOUT_EXCEEDED_CODE,
+    TOO_MANY_SIMULTANEOUS_QUERIES_CODE,
+    SOCKET_TIMEOUT_CODE,
+    NETWORK_ERROR_CODE,
+    MEMORY_LIMIT_EXCEEDED_CODE,
+    TABLE_IS_READ_ONLY_CODE,
+    TOO_MANY_PARTS_CODE,
+    UNKNOWN_STATUS_OF_INSERT_CODE,
+    SYSTEM_ERROR_CODE,
 ];
 /// UNKNOWN_DATABASE: Recall never creates databases.
 pub const UNKNOWN_DATABASE_CODE: u64 = 81;

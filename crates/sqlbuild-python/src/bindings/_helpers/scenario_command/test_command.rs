@@ -23,8 +23,8 @@ use crate::bindings::_helpers::result_output::documents::format_scenario_executi
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use crate::bindings::_helpers::scenario_command::conversions::succeeded;
 use crate::bindings::_helpers::scenario_command::presentation::{
-    CompletionKind, SectionStatus, activity, begin_section, connection_hooks, progress_relay,
-    write_completion,
+    CompletionKind, RelayContext, SectionStatus, activity, begin_section, connection_hooks,
+    progress_relay, write_completion,
 };
 use crate::bindings::_helpers::scenario_command::setup::{
     CompileInputs, ScenarioProject, boolean, cli_user_error, compile, discover_project, flush, int,
@@ -209,12 +209,12 @@ fn run_scenarios(
     let relay = progress_relay(
         &run.stream,
         &section,
-        (
-            &run.project.project_dir,
-            &run.adapter,
-            CompletionKind::Run { target_dir },
-            run.style,
-        ),
+        RelayContext {
+            project_dir: &run.project.project_dir,
+            adapter: &run.adapter,
+            kind: CompletionKind::Run { target_dir },
+            style: run.style,
+        },
     )?;
     let project_name: Bound<'_, PyAny> = native_field(
         &native_field(&run.project.discovered, "project_config")?,

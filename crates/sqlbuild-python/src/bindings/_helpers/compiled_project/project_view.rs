@@ -576,12 +576,12 @@ fn resource_row(
             tag_names.push(tag?.str()?.extract()?);
         }
     }
-    Ok((
-        key_row(&native_field(resource, KEY_ATTRIBUTE)?)?,
+    Ok(ResourceRow {
+        key: key_row(&native_field(resource, KEY_ATTRIBUTE)?)?,
         deps,
-        tag_names,
-        None,
-    ))
+        tags: tag_names,
+        folder: None,
+    })
 }
 
 /// `(resource type, name)` of a `CompiledObjectKey`.

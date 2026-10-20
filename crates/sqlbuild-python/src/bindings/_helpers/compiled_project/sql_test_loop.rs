@@ -42,7 +42,7 @@ use crate::bindings::_helpers::compiled_project::model_loop::{
     LoopContext, NativeModelLoop, compile_error, helped_compile_error,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_calls::{
-    origin_references, report_invalid_call,
+    CallOrigin, origin_references, report_invalid_call,
 };
 use crate::bindings::_helpers::compiled_project::source_loop::{
     AuthoredExpansion, expanded_authored_sql, scoped_declarations,
@@ -70,19 +70,32 @@ const MACRO_VISIBILITY: &str = "macro_visibility";
 /// A test case's discovered case, name and parameter values in authored order.
 pub(crate) type TestCaseRow = (Py<PyAny>, String, Vec<(String, Py<PyAny>)>);
 
-/// A test block, its name, SQL, mode, declared parameter names, cases and authored SQL span.
-pub(crate) type TestBlockRow = (
-    Py<PyAny>,
-    Option<String>,
-    String,
-    String,
-    Vec<String>,
-    Vec<TestCaseRow>,
-    Option<(usize, usize)>,
-);
+positional_record! {
+    extract;
+    /// A test block, its name, SQL, mode, declared parameter names, cases and authored SQL span.
+    pub(crate) struct TestBlockRow {
+        pub(crate) block: Py<PyAny>,
+        pub(crate) name: Option<String>,
+        pub(crate) sql_body: String,
+        pub(crate) mode: String,
+        pub(crate) parameters: Vec<String>,
+        pub(crate) cases: Vec<TestCaseRow>,
+        pub(crate) sql_body_span: Option<(usize, usize)>,
+    }
+}
 
-/// A test file's paths, stem, discovered file, contents and blocks.
-pub(crate) type TestFileRow = (String, String, String, Py<PyAny>, String, Vec<TestBlockRow>);
+positional_record! {
+    extract;
+    /// A test file's paths, stem, discovered file, contents and blocks.
+    pub(crate) struct TestFileRow {
+        pub(crate) file_path: String,
+        pub(crate) relative_path: String,
+        pub(crate) stem: String,
+        pub(crate) file: Py<PyAny>,
+        pub(crate) contents: String,
+        pub(crate) blocks: Vec<TestBlockRow>,
+    }
+}
 
 /// What every SQL test and scenario of one compile resolves and records with.
 #[derive(FromPyObject)]
@@ -151,11 +164,11 @@ impl<'py> TestScope<'_, 'py> {
     pub(crate) fn attached(&self, files: &[TestFileRow]) -> PyResult<Vec<Py<PyAny>>> {
         let mut expanded: Vec<ExpandedTest<'_, 'py>> = Vec::new();
         for file in files {
-            for block in &file.5 {
-                if block.5.is_empty() {
+            for block in &file.blocks {
+                if block.cases.is_empty() {
                     expanded.push(self.expanded(file, block, None)?);
                 }
-                for case in &block.5 {
+                for case in &block.cases {
                     expanded.push(self.expanded(file, block, Some(case))?);
                 }
             }
@@ -178,8 +191,20 @@ impl<'py> TestScope<'_, 'py> {
         case: Option<&'a TestCaseRow>,
     ) -> PyResult<ExpandedTest<'a, 'py>> {
         let py: Python<'py> = self.py();
-        let (file_path, relative_path, stem, _, contents, _) = file;
-        let (_, name, sql_body, mode, parameters, _, _) = block;
+        let TestFileRow {
+            file_path,
+            relative_path,
+            stem,
+            contents,
+            ..
+        } = file;
+        let TestBlockRow {
+            name,
+            sql_body,
+            mode,
+            parameters,
+            ..
+        } = block;
         let test_name: &str = name.as_deref().unwrap_or(stem);
         let resource: Bound<'py, PyAny> = self
             .context
@@ -329,7 +354,7 @@ impl<'py> TestScope<'_, 'py> {
         let (file, block) = test;
         let request: SqlTestRequest = SqlTestRequest {
             sql: sql.to_owned(),
-            file_label: file.1.clone(),
+            file_label: file.relative_path.clone(),
             mode: mode.to_owned(),
             raw: true,
             authored: false,
@@ -348,7 +373,7 @@ impl<'py> TestScope<'_, 'py> {
             ..
         } = &classification
         {
-            let origin: FileOrigin<'_> = (&file.0, &file.1, &file.4);
+            let origin: FileOrigin<'_> = (&file.file_path, &file.relative_path, &file.contents);
             if self.authored_invalid_calls(file, block, &actual.0)? == 0 {
                 for cte in helpers.iter().chain([expected]) {
                     origin_references(self.context, &self.model_loop.syntax, &cte.1, origin)?;
@@ -367,8 +392,8 @@ impl<'py> TestScope<'_, 'py> {
     ) -> PyResult<usize> {
         let syntax = &self.model_loop.syntax;
         let request: SqlTestRequest = SqlTestRequest {
-            sql: block.2.clone(),
-            file_label: file.1.clone(),
+            sql: block.sql_body.clone(),
+            file_label: file.relative_path.clone(),
             mode: MODEL_MODE.to_owned(),
             raw: false,
             authored: true,
@@ -394,16 +419,24 @@ impl<'py> TestScope<'_, 'py> {
                 ReferenceExtraction::Failed(failure) => return Err(self.error(&failure.message)),
             };
             for invalid in &scan.invalid_calls {
-                let Some(offset) =
-                    authored_test_offset(&file.4, &block.2, block.6, body_start + invalid.start)
-                else {
+                let Some(offset) = authored_test_offset(
+                    &file.contents,
+                    &block.sql_body,
+                    block.sql_body_span,
+                    body_start + invalid.start,
+                ) else {
                     return Ok(reported);
                 };
                 report_invalid_call(
                     self.context,
                     invalid,
                     Some(offset),
-                    (None, &file.1, &file.0, &file.4),
+                    CallOrigin {
+                        name: None,
+                        relative_path: &file.relative_path,
+                        file_path: &file.file_path,
+                        contents: &file.contents,
+                    },
                 )?;
                 reported += 1;
             }
@@ -611,11 +644,11 @@ impl<'py> TestScope<'_, 'py> {
         let mut files: Vec<(&str, Vec<usize>)> = Vec::new();
         let mut positions: HashMap<&str, usize> = HashMap::new();
         for (index, test) in tests.iter().enumerate() {
-            match positions.get(test.file.1.as_str()) {
+            match positions.get(test.file.relative_path.as_str()) {
                 Some(position) => files[*position].1.push(index),
                 None => {
-                    positions.insert(&test.file.1, files.len());
-                    files.push((&test.file.1, vec![index]));
+                    positions.insert(&test.file.relative_path, files.len());
+                    files.push((&test.file.relative_path, vec![index]));
                 }
             }
         }
@@ -635,8 +668,8 @@ impl<'py> TestScope<'_, 'py> {
             let mut modes: Vec<&str> = Vec::with_capacity(indexes.len());
             for index in indexes {
                 parts.push(tests[*index].sql.clone());
-                parts.push(tests[*index].block.3.clone());
-                modes.push(&tests[*index].block.3);
+                parts.push(tests[*index].block.mode.clone());
+                modes.push(&tests[*index].block.mode);
             }
             let stored: Option<Vec<SqlTestClassification>> = match &store {
                 Some(store) => store
@@ -662,8 +695,8 @@ impl<'py> TestScope<'_, 'py> {
             .iter()
             .map(|index| SqlTestRequest {
                 sql: tests[*index].sql.clone(),
-                file_label: tests[*index].file.1.clone(),
-                mode: tests[*index].block.3.clone(),
+                file_label: tests[*index].file.relative_path.clone(),
+                mode: tests[*index].block.mode.clone(),
                 raw: false,
                 authored: false,
                 scenario: false,
@@ -713,9 +746,21 @@ impl<'py> TestScope<'_, 'py> {
         let offset: Option<usize> = failure
             .token
             .as_ref()
-            .filter(|_| sql == block.2)
-            .and_then(|(_, offset)| authored_test_offset(&file.4, &block.2, block.6, *offset));
-        located_error(self.context, failure, (&file.1, &file.4), offset)
+            .filter(|_| sql == block.sql_body)
+            .and_then(|(_, offset)| {
+                authored_test_offset(
+                    &file.contents,
+                    &block.sql_body,
+                    block.sql_body_span,
+                    *offset,
+                )
+            });
+        located_error(
+            self.context,
+            failure,
+            (&file.relative_path, &file.contents),
+            offset,
+        )
     }
 
     /// Check one classified test; `None` when a P013 problem was reported instead.
@@ -725,8 +770,20 @@ impl<'py> TestScope<'_, 'py> {
         classification: SqlTestClassification,
     ) -> PyResult<Option<Py<PyAny>>> {
         let py: Python<'py> = self.py();
-        let (file_path, relative_path, stem, test_file, contents, _) = test.file;
-        let (test_block, name, _, mode, _, _, _) = test.block;
+        let TestFileRow {
+            file_path,
+            relative_path,
+            stem,
+            file: test_file,
+            contents,
+            ..
+        } = test.file;
+        let TestBlockRow {
+            block: test_block,
+            name,
+            mode,
+            ..
+        } = test.block;
         let test_name: &str = name.as_deref().unwrap_or(stem);
         let origin: FileOrigin<'_> = (file_path, relative_path, contents);
         let payload: Bound<'py, PyAny> = match &classification {
@@ -911,14 +968,14 @@ impl<'py> TestScope<'_, 'py> {
     ) -> PyResult<()> {
         let py: Python<'py> = self.py();
         let located: CteLocation = sql_test_cte_location(
-            &file.4,
-            &block.2,
+            &file.contents,
+            &block.sql_body,
             &problem.cte_name,
             problem.call.as_deref(),
         );
         let (line, column) = (located.line, located.column);
         let arguments: Bound<'py, PyDict> = PyDict::new(py);
-        arguments.set_item("path", native_field(file.3.bind(py), "relative_path")?)?;
+        arguments.set_item("path", native_field(file.file.bind(py), "relative_path")?)?;
         arguments.set_item("line", line)?;
         arguments.set_item("column", column)?;
         arguments.set_item("end_line", located.end_line)?;
@@ -941,7 +998,7 @@ impl<'py> TestScope<'_, 'py> {
             py,
             [
                 HELPER_REFERENCE_CODE.to_owned(),
-                file.1.replace('\\', "/"),
+                file.relative_path.replace('\\', "/"),
                 format!("{line:09}:{column:09}"),
                 problem.message.clone(),
             ],

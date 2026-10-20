@@ -24,8 +24,8 @@ use crate::bindings::_helpers::scopes::scope_lookup::build_scope_lookup;
 use crate::bindings::_helpers::scopes::scope_objects::ScopeClasses;
 use crate::bindings::_helpers::scopes::scope_report_objects::read_result;
 use crate::bindings::_helpers::scopes::scope_reports::{
-    scope_browse, scope_explain, scope_list, scope_move_preview, scope_report,
-    serialize_scope_report,
+    ExplainArguments, ListArguments, ReportArguments, scope_browse, scope_explain, scope_list,
+    scope_move_preview, scope_report, serialize_scope_report,
 };
 
 const TARGET_ERROR_CODE: &str = "C960";
@@ -249,12 +249,12 @@ fn query_result<'py>(
         return Ok(scope_list(
             py,
             lookup,
-            (
+            ListArguments {
                 folder,
-                Some(filters),
-                optional_text(py, &target),
-                prospective,
-            ),
+                filters: Some(filters),
+                target: optional_text(py, &target),
+                target_is_prospective: prospective,
+            },
         )?
         .into_bound(py));
     }
@@ -264,12 +264,12 @@ fn query_result<'py>(
     let mut report: Bound<'_, PyAny> = scope_report(
         py,
         lookup,
-        (
-            optional_text(py, &target),
-            optional_text(py, &at),
+        ReportArguments {
+            target: optional_text(py, &target),
+            at: optional_text(py, &at),
             directory,
-            Some(filters),
-        ),
+            filters: Some(filters),
+        },
     )?
     .into_bound(py);
     let explain: Option<String> = native_field(request, "explain")?.extract()?;
@@ -277,12 +277,12 @@ fn query_result<'py>(
         let (explanation, diagnostics): (Bound<'_, PyAny>, Bound<'_, PyAny>) = scope_explain(
             py,
             lookup,
-            (
-                PyString::new(py, &declaration).into_any(),
-                optional_text(py, &target),
-                optional_text(py, &at),
+            ExplainArguments {
+                declaration: PyString::new(py, &declaration).into_any(),
+                target: optional_text(py, &target),
+                at: optional_text(py, &at),
                 directory,
-            ),
+            },
         )
         .map(|(explanation, diagnostics)| {
             (explanation.into_bound(py), diagnostics.into_bound(py))

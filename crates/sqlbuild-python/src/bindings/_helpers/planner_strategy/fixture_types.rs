@@ -9,7 +9,7 @@ use sqlbuild_analysis::planner_fixtures::models::{
 
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
-use crate::bindings::_helpers::analysis::model_reads::lineage_facts;
+use crate::bindings::_helpers::analysis::model_reads::{LineageFactRow, lineage_facts};
 use crate::bindings::_helpers::planner_strategy::constants::{
     DIRECT_TRANSFORM, MODEL_REFERENCE_KIND,
 };
@@ -88,7 +88,13 @@ pub(crate) fn expected_fixture_types<'a>(
 
 pub(crate) fn projections(model: &Bound<'_, PyAny>) -> PyResult<Vec<FixtureTypeProjection>> {
     let mut projections: Vec<FixtureTypeProjection> = Vec::new();
-    for (output_column, transform, _, sources) in lineage_facts(model)?.unwrap_or_default() {
+    for LineageFactRow {
+        output_column,
+        transform,
+        sources,
+        ..
+    } in lineage_facts(model)?.unwrap_or_default()
+    {
         if transform != DIRECT_TRANSFORM {
             continue;
         }

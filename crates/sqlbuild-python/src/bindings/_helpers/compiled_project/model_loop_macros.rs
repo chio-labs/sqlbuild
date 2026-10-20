@@ -17,7 +17,7 @@ use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
 use crate::bindings::_helpers::compiled_project::model_loop_inputs::reference_row;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::render::macro_expansion::{
-    ExpansionOutput, NativeMacroExpansion, expanded,
+    ExpansionOutput, NativeMacroExpansion, StateInput, expanded,
 };
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 
@@ -112,13 +112,13 @@ pub(crate) fn expanded_with<'py>(
     let py: Python<'py> = consumer.py();
     let expansion: NativeMacroExpansion = NativeMacroExpansion::new(
         &context.classes.path_class.call1((file_path,))?,
-        (
-            classes.loaded_macros.clone_ref(py),
-            PyDict::new(py).unbind(),
-            classes.macro_context.clone().unbind(),
-            declarations.clone().unbind(),
-            consumer.clone().unbind(),
-        ),
+        StateInput {
+            loaded_macros: classes.loaded_macros.clone_ref(py),
+            overrides: PyDict::new(py).unbind(),
+            macro_context: classes.macro_context.clone().unbind(),
+            declarations: declarations.clone().unbind(),
+            consumer: consumer.clone().unbind(),
+        },
         native_field(&classes.macro_context, ENFORCE_ATTRIBUTE)?.is_truthy()?,
         classes.expansion.clone_ref(py),
     )?;

@@ -28,7 +28,13 @@ const PYTHON_CHECK_KIND: &str = "python_check";
 const JSON_INDENT: i64 = 2;
 
 /// One test's identity as the test runtime target matches entries to results.
-type TestKey = (String, Option<String>, Option<i64>, Option<String>);
+#[derive(Hash, PartialEq, Eq)]
+struct TestKey {
+    name: String,
+    source_path: Option<String>,
+    block_index: Option<i64>,
+    case_name: Option<String>,
+}
 
 fn posix(path: &Bound<'_, PyAny>) -> PyResult<Option<String>> {
     if path.is_none() {
@@ -42,16 +48,21 @@ fn path_object<'py>(py: Python<'py>, text: &str) -> PyResult<Bound<'py, PyAny>> 
 }
 
 fn test_key(value: &Bound<'_, PyAny>, name_field: &str) -> PyResult<TestKey> {
-    Ok((
-        native_field(value, name_field)?.extract()?,
-        posix(&native_field(value, "source_path")?)?,
-        native_field(value, "block_index")?.extract()?,
-        native_field(value, "case_name")?.extract()?,
-    ))
+    Ok(TestKey {
+        name: native_field(value, name_field)?.extract()?,
+        source_path: posix(&native_field(value, "source_path")?)?,
+        block_index: native_field(value, "block_index")?.extract()?,
+        case_name: native_field(value, "case_name")?.extract()?,
+    })
 }
 
 fn path_facts(test: &Bound<'_, PyAny>, model_names: Vec<String>) -> PyResult<SqlTestPathFacts> {
-    let (name, source_path, block_index, case_name) = test_key(test, "name")?;
+    let TestKey {
+        name,
+        source_path,
+        block_index,
+        case_name,
+    } = test_key(test, "name")?;
     Ok(SqlTestPathFacts {
         name,
         source_path,

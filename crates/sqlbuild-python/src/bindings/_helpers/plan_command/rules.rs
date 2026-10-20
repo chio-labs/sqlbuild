@@ -3,8 +3,10 @@
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python, pyfunction,
 };
-use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::wrap_pyfunction;
+use sqlbuild_rules::rule_catalogue::main::render_rule_list::render_rule_list;
+use sqlbuild_rules::rule_catalogue::models::RuleListing;
 
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
@@ -81,47 +83,31 @@ fn run_skills(
     Ok(if fresh { 0 } else { 1 })
 }
 
+fn rule_listing(rule: &Bound<'_, PyAny>) -> PyResult<RuleListing> {
+    let subject: Bound<'_, PyAny> = native_field(rule, "subject")?;
+    Ok(RuleListing {
+        code: native_field(rule, "code")?.str()?.extract()?,
+        family: native_field(rule, "family")?.extract()?,
+        message: native_field(rule, "message")?.str()?.extract()?,
+        custom: native_field(rule, "custom")?.is_truthy()?,
+        subject: if subject.is_none() {
+            None
+        } else {
+            Some(native_field(&subject, "value")?.extract()?)
+        },
+    })
+}
+
 fn list_rules(catalogue: &Bound<'_, PyAny>, json_output: bool) -> PyResult<i32> {
-    let py: Python<'_> = catalogue.py();
-    if !json_output {
-        let mut lines: Vec<String> = Vec::new();
-        for rule in catalogue.try_iter()? {
-            let rule: Bound<'_, PyAny> = rule?;
-            lines.push(format!(
-                "{}  {}",
-                native_field(&rule, "code")?.str()?,
-                native_field(&rule, "message")?.str()?
-            ));
-        }
-        print_line(py, &lines.join("\n"), false)?;
-        return Ok(0);
-    }
-    let rules: Bound<'_, PyList> = PyList::empty(py);
+    let mut rules: Vec<RuleListing> = Vec::new();
     for rule in catalogue.try_iter()? {
-        let rule: Bound<'_, PyAny> = rule?;
-        let item: Bound<'_, PyDict> = PyDict::new(py);
-        for field in ["code", "family", "message", "custom"] {
-            item.set_item(field, native_field(&rule, field)?)?;
-        }
-        let subject: Bound<'_, PyAny> = native_field(&rule, "subject")?;
-        item.set_item(
-            "subject",
-            if subject.is_none() {
-                subject
-            } else {
-                native_field(&subject, "value")?
-            },
-        )?;
-        rules.append(item)?;
+        rules.push(rule_listing(&rule?)?);
     }
-    let payload: Bound<'_, PyDict> = PyDict::new(py);
-    payload.set_item("rules", rules)?;
-    let options: Bound<'_, PyDict> = PyDict::new(py);
-    options.set_item("sort_keys", true)?;
-    let text: String = imported(py, "json", "dumps")?
-        .call((payload,), Some(&options))?
-        .extract()?;
-    print_line(py, &text, false)?;
+    print_line(
+        catalogue.py(),
+        &render_rule_list(&rules, json_output),
+        false,
+    )?;
     Ok(0)
 }
 

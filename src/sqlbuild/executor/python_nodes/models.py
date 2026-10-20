@@ -112,16 +112,6 @@ class PythonNodeFanInDecision:
     skip_mode: SkipMode | None = None
 
 
-@dataclass(frozen=True)
-class CursorWindow:
-    """Resolved cursor bounds for one Python execution run."""
-
-    start_cursor_ts: datetime | None = None
-    end_cursor_ts: datetime | None = None
-    start_cursor_int: int | None = None
-    end_cursor_int: int | None = None
-
-
 from sqlbuild.executor.python_nodes.classes.run_state import PythonNodeRunState  # noqa: E402
 
 

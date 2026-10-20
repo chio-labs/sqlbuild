@@ -162,6 +162,17 @@ fn read_only_query(
     Ok(normalized.to_owned())
 }
 
+positional_record! {
+    extract;
+    /// The target name, target, database and schema a raw-query diff resolves.
+    struct ResolvedNamespace<'py> {
+        target_name: Bound<'py, PyAny>,
+        _target: Bound<'py, PyAny>,
+        database: Bound<'py, PyAny>,
+        schema: Bound<'py, PyAny>,
+    }
+}
+
 /// Resolve raw SQL, the active target namespace, the adapter and its connection.
 pub(crate) fn prepare_query_diff<'py>(
     request: &Bound<'py, PyAny>,
@@ -206,12 +217,12 @@ pub(crate) fn prepare_query_diff<'py>(
         )?),
     )
     .and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))?;
-    let (target_name, _target, database, schema): (
-        Bound<'py, PyAny>,
-        Bound<'py, PyAny>,
-        Bound<'py, PyAny>,
-        Bound<'py, PyAny>,
-    ) = namespace.extract()?;
+    let ResolvedNamespace {
+        target_name,
+        database,
+        schema,
+        ..
+    }: ResolvedNamespace<'py> = namespace.extract()?;
     if schema.is_none() {
         return Err(failure(
             py,

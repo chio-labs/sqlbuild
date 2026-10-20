@@ -52,7 +52,7 @@ pub fn read_output_transcript(
             .optional(),
         "read Recall invocation",
     )?;
-    let completeness: Option<(i64, i64, i64, bool, bool, Option<String>)> = checked(
+    checked(
         store
             .connection
             .query_row(
@@ -60,26 +60,17 @@ pub fn read_output_transcript(
                  gap_reason FROM output_invocations WHERE invocation_id = ?1",
                 [invocation_id],
                 |row| {
-                    Ok((
-                        row.get(0)?,
-                        row.get(1)?,
-                        row.get(2)?,
-                        row.get(3)?,
-                        row.get(4)?,
-                        row.get(5)?,
-                    ))
+                    transcript.missing_sequences = row.get(0)?;
+                    transcript.reported_drops = row.get(1)?;
+                    transcript.filtered = row.get(2)?;
+                    transcript.flush_complete = row.get(3)?;
+                    transcript.complete = row.get(4)?;
+                    transcript.gap_reason = row.get(5)?;
+                    Ok(())
                 },
             )
             .optional(),
         "read Recall output completeness",
     )?;
-    if let Some((missing, drops, filtered, flushed, complete, reason)) = completeness {
-        transcript.missing_sequences = missing;
-        transcript.reported_drops = drops;
-        transcript.filtered = filtered;
-        transcript.flush_complete = flushed;
-        transcript.complete = complete;
-        transcript.gap_reason = reason;
-    }
     Ok(transcript)
 }

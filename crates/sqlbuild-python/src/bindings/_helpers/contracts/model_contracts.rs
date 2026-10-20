@@ -20,17 +20,18 @@ use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::type_system::normalization::normalization_error;
 use crate::bindings::types::CompilerDetach;
 
-/// `(code, is_error, message, column, declared_index, output_column, related, help)`.
-pub(crate) type DiagnosticRow = (
-    &'static str,
-    bool,
-    String,
-    Option<String>,
-    Option<usize>,
-    Option<String>,
-    Option<(String, String)>,
-    String,
-);
+/// One contract diagnostic: its code, severity, message, column, location, related output and help.
+#[derive(Clone)]
+pub(crate) struct DiagnosticRow {
+    pub(crate) code: &'static str,
+    pub(crate) is_error: bool,
+    pub(crate) message: String,
+    pub(crate) column_name: Option<String>,
+    pub(crate) declared_index: Option<usize>,
+    pub(crate) output_column: Option<String>,
+    pub(crate) related: Option<(String, String)>,
+    pub(crate) help: String,
+}
 
 /// Evaluate the column contract of every model the compile's owner recorded, in its order.
 pub(crate) fn evaluate_project_model_contracts(
@@ -133,8 +134,14 @@ fn fact_dynamic_proof(proof: &DynamicProofFact) -> DynamicContractProof {
     }
 }
 
-/// `(model name, model path, code, message, help)`.
-pub(crate) type ConflictRow = (String, String, &'static str, String, String);
+/// One K011 conflict: the model name and path, and the code, message and help.
+pub(crate) struct ConflictRow {
+    pub(crate) name: String,
+    pub(crate) relative_path: String,
+    pub(crate) code: &'static str,
+    pub(crate) message: String,
+    pub(crate) help: String,
+}
 
 /// The K011 conflicts of enforced contracts under immediate table promotion, by model name.
 pub(crate) fn project_promotion_conflicts(
@@ -166,29 +173,29 @@ pub(crate) fn project_promotion_conflicts(
         .into_iter()
         .map(|conflict| {
             let model: &CompiledModelFacts = &models[conflict.model_index];
-            (
-                model.name.clone(),
-                model.relative_path.clone(),
-                conflict.code,
-                conflict.message,
-                conflict.help,
-            )
+            ConflictRow {
+                name: model.name.clone(),
+                relative_path: model.relative_path.clone(),
+                code: conflict.code,
+                message: conflict.message,
+                help: conflict.help,
+            }
         })
         .collect())
 }
 
 fn diagnostic_row(diagnostic: ContractDiagnostic) -> DiagnosticRow {
     let (declared_index, output_column) = diagnostic.location.into_parts();
-    (
-        diagnostic.code,
-        diagnostic.severity == ContractSeverity::Error,
-        diagnostic.message,
-        diagnostic.column_name,
+    DiagnosticRow {
+        code: diagnostic.code,
+        is_error: diagnostic.severity == ContractSeverity::Error,
+        message: diagnostic.message,
+        column_name: diagnostic.column_name,
         declared_index,
         output_column,
-        diagnostic
+        related: diagnostic
             .related_output
             .map(|related| (related.column_name, related.message)),
-        diagnostic.help,
-    )
+        help: diagnostic.help,
+    }
 }

@@ -29,30 +29,14 @@ use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::rules::lint_pipeline::{
     LintViolationRow, NATIVE_ENGINE, ViolationClasses, project_relative_path,
 };
+use crate::bindings::models::Positional;
 use crate::bindings::types::CompilerDetach;
 
 const FORMAT_UNSAFE_CODE: &str = "format-unsafe";
 const FORMAT_UNSAFE_REMEDIATION: &str = "Rewrite the unsupported SQL shape or report a minimal formatter reproduction. No header, SQL body, or fixture changes were written to this file.";
 
-/// One interpolation site as `InterpolationSite` fields.
-type SiteTuple = (String, usize, usize, usize, usize, String);
-
-fn site_tuples(neutralized: Neutralized) -> (String, Vec<SiteTuple>) {
-    let sites: Vec<SiteTuple> = neutralized
-        .sites
-        .into_iter()
-        .map(|site| {
-            (
-                site.sentinel,
-                site.neutralized_start,
-                site.neutralized_end,
-                site.original_start,
-                site.original_end,
-                site.original_text,
-            )
-        })
-        .collect();
-    (neutralized.text, sites)
+fn site_tuples(neutralized: Neutralized) -> (String, Vec<Positional<InterpolationSite>>) {
+    (neutralized.text, Positional::wrap_all(neutralized.sites))
 }
 
 #[pyfunction]
@@ -61,7 +45,7 @@ fn neutralize_lint_interpolation(
     body: &str,
     dialect: &str,
     for_formatting: bool,
-) -> PyResult<(String, Vec<SiteTuple>)> {
+) -> PyResult<(String, Vec<Positional<InterpolationSite>>)> {
     compiler_guard(|| {
         neutralize_interpolation(body, dialect, for_formatting)
             .map(site_tuples)
@@ -70,29 +54,26 @@ fn neutralize_lint_interpolation(
 }
 
 #[pyfunction]
-fn neutralize_lint_context_interpolation(body: &str) -> PyResult<(String, Vec<SiteTuple>)> {
+fn neutralize_lint_context_interpolation(
+    body: &str,
+) -> PyResult<(String, Vec<Positional<InterpolationSite>>)> {
     compiler_guard(|| Ok(site_tuples(neutralize_context_interpolation(body))))
 }
 
 #[pyfunction]
-fn neutralize_lint_audit_parameters(body: &str) -> PyResult<(String, Vec<SiteTuple>)> {
+fn neutralize_lint_audit_parameters(
+    body: &str,
+) -> PyResult<(String, Vec<Positional<InterpolationSite>>)> {
     compiler_guard(|| Ok(site_tuples(neutralize_audit_parameters(body))))
 }
 
 /// Restored text, or `(False, reason)` when a sentinel is missing or repeated.
 #[pyfunction]
-fn restore_lint_interpolation(fixed: &str, sites: Vec<SiteTuple>) -> PyResult<(bool, String)> {
-    let sites: Vec<InterpolationSite> = sites
-        .into_iter()
-        .map(|site| InterpolationSite {
-            sentinel: site.0,
-            neutralized_start: site.1,
-            neutralized_end: site.2,
-            original_start: site.3,
-            original_end: site.4,
-            original_text: site.5,
-        })
-        .collect();
+fn restore_lint_interpolation(
+    fixed: &str,
+    sites: Vec<Positional<InterpolationSite>>,
+) -> PyResult<(bool, String)> {
+    let sites: Vec<InterpolationSite> = Positional::unwrap_all(sites);
     match compiler_guard(|| Ok(restore_interpolation(fixed, &sites)))? {
         Ok(restored) => Ok((true, restored)),
         Err(LintTextError::Restoration(message)) => Ok((false, message)),

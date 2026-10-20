@@ -24,16 +24,28 @@ use crate::bindings::_helpers::records::fields::mapping_items;
 use crate::bindings::_helpers::records::ids::ErrorId;
 
 type NameRows = Vec<(String, Vec<String>)>;
-/// `(name, tags, POSIX relative path, upstream node names)` of one discovered node.
-type InventoryRow = (String, Vec<String>, String, Vec<String>);
-/// `(edges, upstream, downstream, tags, paths)` in Python's dict order.
-type IndexesRow = (
-    Vec<(String, String)>,
-    NameRows,
-    NameRows,
-    NameRows,
-    Vec<(String, String)>,
-);
+positional_record! {
+    extract;
+    /// `(name, tags, POSIX relative path, upstream node names)` of one discovered node.
+    struct InventoryRow {
+        name: String,
+        tags: Vec<String>,
+        relative_path: String,
+        upstream: Vec<String>,
+    }
+}
+
+positional_record! {
+    into;
+    /// `(edges, upstream, downstream, tags, paths)` in Python's dict order.
+    struct IndexesRow {
+        edges: Vec<(String, String)>,
+        upstream: NameRows,
+        downstream: NameRows,
+        tags: NameRows,
+        paths: Vec<(String, String)>,
+    }
+}
 
 /// The `PlannerInputError` Python raises for a selector failure.
 fn planner_error(py: Python<'_>, error: SelectorError) -> PyErr {
@@ -189,12 +201,19 @@ fn python_node_graph_indexes(nodes: Vec<InventoryRow>) -> PyResult<IndexesRow> {
     compiler_guard(|| {
         let nodes: Vec<InventoryNode> = nodes
             .into_iter()
-            .map(|(name, tags, relative_path, upstream)| InventoryNode {
-                name,
-                tags,
-                relative_path,
-                upstream,
-            })
+            .map(
+                |InventoryRow {
+                     name,
+                     tags,
+                     relative_path,
+                     upstream,
+                 }| InventoryNode {
+                    name,
+                    tags,
+                    relative_path,
+                    upstream,
+                },
+            )
             .collect();
         let InventoryIndexes {
             edges,
@@ -203,7 +222,13 @@ fn python_node_graph_indexes(nodes: Vec<InventoryRow>) -> PyResult<IndexesRow> {
             tags,
             paths,
         } = graph_indexes(&nodes);
-        Ok((edges, upstream, downstream, tags, paths))
+        Ok(IndexesRow {
+            edges,
+            upstream,
+            downstream,
+            tags,
+            paths,
+        })
     })
 }
 

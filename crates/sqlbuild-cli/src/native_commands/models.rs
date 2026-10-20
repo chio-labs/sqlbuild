@@ -1,0 +1,84 @@
+//! Python-free commands, the invocation facts they run with and what they print.
+
+use std::path::PathBuf;
+
+/// What `sqb skills` installs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SkillsOptions {
+    pub(crate) global_install: bool,
+    pub(crate) targets: Vec<String>,
+    pub(crate) force: bool,
+}
+
+/// Which `sqb rules` inspection runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RulesAction {
+    List,
+    Show,
+}
+
+/// What `sqb rules list|show` prints.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RulesOptions {
+    pub(crate) action: RulesAction,
+    pub(crate) selector: Option<String>,
+    pub(crate) json: bool,
+}
+
+/// A command that runs without Python.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum NativeCommand {
+    /// `clean` and a bare `sqb`: observed, with no handler to run.
+    Nothing,
+    Init,
+    Skills(SkillsOptions),
+    Rules(RulesOptions),
+}
+
+/// One parsed invocation `sqb` serves without Python.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NativeInvocation {
+    pub(crate) command: NativeCommand,
+    /// The parsed command name; `None` for a bare `sqb`.
+    pub(crate) command_name: Option<String>,
+    /// `--project-dir` as given.
+    pub(crate) project_dir: Option<PathBuf>,
+    pub(crate) target: Option<String>,
+    pub(crate) creates_project: bool,
+    pub(crate) maintains_skills: bool,
+}
+
+/// What a command printed and the status it ends with.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct CommandOutput {
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
+    pub(crate) exit_code: i32,
+}
+
+/// Where the installed `sqlbuild` package keeps what the commands read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct InstalledPackage {
+    /// The packaged `.agents/skills/sqlbuild` directory.
+    pub(crate) skills_root: PathBuf,
+}
+
+/// The directories one command runs against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProjectLocation {
+    /// `Path(--project-dir)`, or `Path.cwd()`, unresolved.
+    pub(crate) given: PathBuf,
+    /// `Path(--project-dir).resolve()`, or `Path.cwd()`.
+    pub(crate) resolved: PathBuf,
+}
+
+/// What Python's buffered stdout does with output its reader no longer takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum LostStdout {
+    /// Kept until exit, whose failed flush Python reports with this exception and status 120.
+    AtExit(String),
+    /// Dropped by a failed flush; the command's own status stands.
+    Dropped,
+    /// Raised by the write: an uncaught exception, with this last line and status 1.
+    Raised(String),
+}

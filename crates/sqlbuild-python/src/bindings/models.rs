@@ -1,8 +1,13 @@
 //! Python-facing classes and mapping requests, converted to native models at the boundary.
 
+use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyErr, PyResult, Python};
+use pyo3::types::PyTuple;
 use pyo3::{FromPyObject, pyclass};
 use sqlbuild_analysis::semantic_validation::models as validation;
-use sqlbuild_analysis::semantic_validation::types::{Expansion, Relations};
+use sqlbuild_analysis::semantic_validation::models::Expansion;
+use sqlbuild_analysis::semantic_validation::types::Relations;
+
+use crate::bindings::types::{FromPositional, IntoPositional};
 use std::collections::HashMap;
 
 #[derive(FromPyObject, Debug)]
@@ -32,7 +37,7 @@ pub(crate) struct PositionInput {
     pub(crate) query: String,
     pub(crate) expanded: String,
     pub(crate) cleaned: String,
-    pub(crate) passes: Vec<Vec<Expansion>>,
+    pub(crate) passes: Vec<Vec<Positional<Expansion>>>,
 }
 
 #[pyclass(module = "sqlbuild._native")]
@@ -83,7 +88,11 @@ impl From<PositionInput> for validation::PositionInput {
             query: input.query,
             expanded: input.expanded,
             cleaned: input.cleaned,
-            passes: input.passes,
+            passes: input
+                .passes
+                .into_iter()
+                .map(Positional::unwrap_all)
+                .collect(),
         }
     }
 }
@@ -147,4 +156,36 @@ pub(crate) struct DeclarationTextRequest {
     pub(crate) function_keys: Vec<String>,
     pub(crate) audit_keys: Vec<String>,
     pub(crate) hook_keys: Vec<String>,
+}
+
+/// A record of another crate exchanged with Python as its positional tuple.
+#[derive(Clone, Debug)]
+pub(crate) struct Positional<T>(pub(crate) T);
+
+impl<T> Positional<T> {
+    /// Each record of `items`, for Python.
+    pub(crate) fn wrap_all(items: Vec<T>) -> Vec<Self> {
+        items.into_iter().map(Self).collect()
+    }
+
+    /// Each record Python sent in `items`.
+    pub(crate) fn unwrap_all(items: Vec<Self>) -> Vec<T> {
+        items.into_iter().map(|item| item.0).collect()
+    }
+}
+
+impl<'py, T: FromPositional> FromPyObject<'py> for Positional<T> {
+    fn extract_bound(value: &Bound<'py, PyAny>) -> PyResult<Self> {
+        T::from_positional(value).map(Self)
+    }
+}
+
+impl<'py, T: IntoPositional> IntoPyObject<'py> for Positional<T> {
+    type Target = PyTuple;
+    type Output = Bound<'py, PyTuple>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        self.0.into_positional(py)
+    }
 }

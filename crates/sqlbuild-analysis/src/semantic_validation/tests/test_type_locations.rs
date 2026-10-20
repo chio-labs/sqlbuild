@@ -1,4 +1,5 @@
 use crate::semantic_validation::main::diagnostics::binding_diagnostics;
+use crate::semantic_validation::models::DiagnosticRow;
 use crate::semantic_validation::tests::test_types::TypeLocationTestCase;
 
 #[test]
@@ -68,16 +69,14 @@ fn given_position_less_type_findings_when_mapping_then_each_points_at_its_own_ex
         let rows = test_case
             .findings
             .iter()
-            .map(|(code, message)| {
-                (
-                    (*code).to_owned(),
-                    (*message).to_owned(),
-                    None,
-                    None,
-                    None,
-                    None,
-                    "error".to_owned(),
-                )
+            .map(|(code, message)| DiagnosticRow {
+                code: (*code).to_owned(),
+                message: (*message).to_owned(),
+                line: None,
+                column: None,
+                start: None,
+                end: None,
+                severity: "error".to_owned(),
             })
             .collect();
         let mapped = binding_diagnostics(test_case.sql, test_case.dialect, rows)?;
@@ -85,7 +84,7 @@ fn given_position_less_type_findings_when_mapping_then_each_points_at_its_own_ex
             .iter()
             .zip(test_case.expected_starts)
             .map(|(row, expected)| {
-                row.4.map_or_else(String::new, |start| {
+                row.start.map_or_else(String::new, |start| {
                     test_case
                         .sql
                         .chars()
@@ -107,7 +106,9 @@ fn given_position_less_type_findings_when_mapping_then_each_points_at_its_own_ex
             test_case.description
         );
         assert!(
-            mapped.iter().all(|row| row.2.is_some() && row.3.is_some()),
+            mapped
+                .iter()
+                .all(|row| row.line.is_some() && row.column.is_some()),
             "{}",
             test_case.description
         );

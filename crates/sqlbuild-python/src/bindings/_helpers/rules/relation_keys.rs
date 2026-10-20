@@ -27,18 +27,21 @@ const UNIQUE_AUDIT_COLUMN_ARGUMENT: &str = "column";
 const RELATION_KIND_SEED: &str = "seed";
 const RELATION_KIND_SOURCE: &str = "source";
 
-/// `(kind, name, materialized, mode, strategy, cursor, unique key, columns, audits)`.
-pub(crate) type RelationKeyRow = (
-    String,
-    String,
-    String,
-    String,
-    String,
-    bool,
-    Option<Vec<String>>,
-    Vec<(String, Vec<String>, bool)>,
-    Vec<(String, Option<String>)>,
-);
+positional_record! {
+    extract, into;
+    /// `(kind, name, materialized, mode, strategy, cursor, unique key, columns, audits)`.
+    pub(crate) struct RelationKeyRow {
+        kind: String,
+        name: String,
+        materialized: String,
+        mode: String,
+        strategy: String,
+        has_cursor: bool,
+        unique_key: Option<Vec<String>>,
+        columns: Vec<(String, Vec<String>, bool)>,
+        audits: Vec<(String, Option<String>)>,
+    }
+}
 
 /// The key row of one relation from its config values and declared column and audit specs.
 pub(crate) fn relation_key_row(
@@ -59,19 +62,19 @@ pub(crate) fn relation_key_row(
         }
         audits = audit_key_rows(declared_audits)?;
     }
-    Ok((
-        kind.to_owned(),
+    Ok(RelationKeyRow {
+        kind: kind.to_owned(),
         name,
-        config_text(values, MATERIALIZED_CONFIG)?,
-        config_text(values, INCREMENTAL_MODE_CONFIG)?,
-        config_text(values, INCREMENTAL_STRATEGY_CONFIG)?,
-        values
+        materialized: config_text(values, MATERIALIZED_CONFIG)?,
+        mode: config_text(values, INCREMENTAL_MODE_CONFIG)?,
+        strategy: config_text(values, INCREMENTAL_STRATEGY_CONFIG)?,
+        has_cursor: values
             .get_item(CURSOR_CONFIG)?
             .is_some_and(|value| value.is_truthy().unwrap_or(false)),
-        unique_key(values)?,
+        unique_key: unique_key(values)?,
         columns,
         audits,
-    ))
+    })
 }
 
 /// Each audit spec's `(definition name, column argument when it is text)`.
@@ -97,15 +100,15 @@ pub(crate) fn audit_key_rows(audits: &Bound<'_, PyAny>) -> PyResult<Vec<(String,
 pub(crate) fn source_view_key_row(view: &Bound<'_, PyAny>) -> Option<PyResult<RelationKeyRow>> {
     read_source_view(view, |source, py| {
         let facts: &SourceKeyFacts = source.key_facts(py)?;
-        Ok((
-            RELATION_KIND_SOURCE.to_owned(),
-            source.attached().name.clone(),
-            String::new(),
-            String::new(),
-            String::new(),
-            false,
-            None,
-            facts
+        Ok(RelationKeyRow {
+            kind: RELATION_KIND_SOURCE.to_owned(),
+            name: source.attached().name.clone(),
+            materialized: String::new(),
+            mode: String::new(),
+            strategy: String::new(),
+            has_cursor: false,
+            unique_key: None,
+            columns: facts
                 .columns
                 .iter()
                 .map(|column| {
@@ -116,8 +119,8 @@ pub(crate) fn source_view_key_row(view: &Bound<'_, PyAny>) -> Option<PyResult<Re
                     )
                 })
                 .collect(),
-            facts.audits.clone(),
-        ))
+            audits: facts.audits.clone(),
+        })
     })
 }
 
@@ -306,7 +309,17 @@ fn compiled_relation_keys<'py>(project: &Bound<'py, PyAny>) -> PyResult<Bound<'p
 }
 
 fn declared_relation(row: RelationKeyRow) -> DeclaredRelation {
-    let (kind, name, materialized, mode, strategy, has_cursor, unique_key, columns, audits) = row;
+    let RelationKeyRow {
+        kind,
+        name,
+        materialized,
+        mode,
+        strategy,
+        has_cursor,
+        unique_key,
+        columns,
+        audits,
+    } = row;
     DeclaredRelation {
         kind,
         name,

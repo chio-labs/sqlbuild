@@ -4,12 +4,12 @@ use crate::compiler::_helpers::model_headers::tokenization::{
 use crate::compiler::main::declaration_references::scan_declaration_references;
 use crate::compiler::main::model_header_single_parsing::parse_one;
 use crate::compiler::main::sql_interpolation::interpolate_sql;
+use crate::compiler::models::CharSpan;
 use crate::compiler::models::{
     AuthoredValue, DeclarationReferenceKind, DeclarationReferenceScan, DeclarationReferenceStop,
     InterpolationRead,
 };
 use crate::compiler::tests::test_types::{HeaderNestingTestCase, MapHost};
-use crate::compiler::types::CharSpan;
 use std::collections::BTreeMap;
 use std::thread;
 
@@ -251,11 +251,20 @@ pub(crate) fn interpolated(host: &MapHost, sql: &str) -> Result<String, String> 
 pub(crate) fn interpolation_facts(
     host: &MapHost,
     sql: &str,
-) -> (Vec<CharSpan>, Vec<InterpolationRead>) {
+) -> (Vec<[usize; 4]>, Vec<InterpolationRead>) {
     interpolate_sql(host, sql, "models/orders.sql").map_or_else(
         |failure| (Vec::new(), failure.reads),
-        |result| (result.spans, result.reads),
+        |result| (result.spans.iter().map(span_parts).collect(), result.reads),
     )
+}
+
+fn span_parts(span: &CharSpan) -> [usize; 4] {
+    [
+        span.source_start,
+        span.source_end,
+        span.output_start,
+        span.output_end,
+    ]
 }
 
 /// Named locations from `[line, column, end_line, end_column]` rows.

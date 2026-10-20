@@ -1,4 +1,4 @@
-//! The native `sqb` executable: replays reused compiles and hands other invocations to Python.
+//! The native `sqb` executable: replays reused compiles, runs Python-free commands and hands the rest to Python.
 
 #![forbid(unsafe_code)]
 
@@ -7,4 +7,5 @@ pub mod compute_logs;
 pub mod diff_report;
 pub mod dispatch;
 pub mod launcher;
+pub mod native_commands;
 pub mod replay;

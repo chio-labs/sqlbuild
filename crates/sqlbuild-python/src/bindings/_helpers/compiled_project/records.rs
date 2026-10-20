@@ -13,7 +13,9 @@ use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::compiled_project::inputs_view::NativeInputsView;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
-use crate::bindings::_helpers::compiled_project::project::{NativeCompiledProject, model_facts};
+use crate::bindings::_helpers::compiled_project::project::{
+    AnalysisPy, NativeCompiledProject, ProofPy, model_facts,
+};
 use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
 use crate::bindings::_helpers::compiled_project::schema_facts::entry_schema_fact;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, record_class};
@@ -397,28 +399,30 @@ pub(crate) fn record_model_analyses<'py>(
             None
         } else {
             let families: Bound<'py, PyAny> = native_field(&proof, "families")?;
-            Some((
-                native_field(&proof, "output_proven")?.extract()?,
-                native_field(&proof, "bare_dynamic_pivot")?.extract()?,
-                family_types(&families, true)?,
-                native_field(&proof, "failure_reason")?.extract()?,
-                family_types(&families, false)?,
-            ))
+            Some(ProofPy {
+                output_proven: native_field(&proof, "output_proven")?.extract()?,
+                bare_dynamic_pivot: native_field(&proof, "bare_dynamic_pivot")?.extract()?,
+                families: family_types(&families, true)?,
+                failure_reason: native_field(&proof, "failure_reason")?.extract()?,
+                named_families: family_types(&families, false)?,
+            })
         };
-        let analysis = (
-            !inferred.is_none(),
-            rows.iter()
+        let analysis = AnalysisPy {
+            inferred: !inferred.is_none(),
+            inferred_columns: rows
+                .iter()
                 .map(|(name, column_type, _)| (name.clone(), column_type.clone()))
                 .collect(),
-            rows.iter()
+            nullable_columns: rows
+                .iter()
                 .map(|(_, _, nullability)| nullability.eq(&nullable))
                 .collect::<PyResult<_>>()?,
-            native_field(model, "fast_lineage_has_star")?.is_truthy()?,
-            native_field(model, "unchecked_output_columns")?
+            fast_lineage_has_star: native_field(model, "fast_lineage_has_star")?.is_truthy()?,
+            unchecked: native_field(model, "unchecked_output_columns")?
                 .try_iter()?
                 .map(|column| column?.extract())
                 .collect::<PyResult<_>>()?,
-        );
+        };
         let name: String = native_field(model, "name")?.extract()?;
         transferred += usize::from(
             project

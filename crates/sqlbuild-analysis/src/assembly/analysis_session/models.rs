@@ -11,7 +11,7 @@ use sqlbuild_cache::store::models::NativeStore;
 use crate::assembly::analysis_session::_helpers::catalog_state::SessionCatalog;
 use crate::assembly::analysis_session::_helpers::mappings::ShapeTable;
 use crate::assembly::analysis_session::types::{NullabilityRuleFn, OutputSources, Pairs, Shapes};
-use crate::semantic_validation::types::DiagnosticRow;
+use crate::semantic_validation::models::DiagnosticRow;
 
 /// One `ref`, `source`, `seed`, `table_fn` or `udf` call a model's SQL makes.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -43,8 +43,8 @@ use crate::bindings::_helpers::rules::lint_pipeline::{
 };
 use crate::bindings::_helpers::rules::relation_keys::project_relation_keys;
 use crate::bindings::_helpers::rules::rule_cache::{
-    StoredEntries, cached_rule_findings, encoded_findings, model_rule_keys, settings_lint_key,
-    stored_entries, write_rule_cache,
+    ModelRuleRow, StoredEntries, cached_rule_findings, encoded_findings, model_rule_keys,
+    settings_lint_key, stored_entries, write_rule_cache,
 };
 
 const DATACLASSES_MODULE: &str = "dataclasses";
@@ -290,17 +290,22 @@ fn model_rule_identities(run: &SqlRun<'_, '_>, lint_key: &str) -> PyResult<Vec<(
     if run.codes.is_empty() {
         return Ok(Vec::new());
     }
-    let mut models: Vec<(String, String, String, Option<String>)> = Vec::new();
+    let mut models: Vec<ModelRuleRow> = Vec::new();
     for model in sql_rule_models(&run.project, true)? {
         if let Some(key) = model.key {
-            models.push((model.path, key.authored_sql, key.query_sql, key.contract));
+            models.push(ModelRuleRow {
+                path: model.path,
+                authored_sql: key.authored_sql,
+                query_sql: key.query_sql,
+                contract: key.contract,
+            });
         }
     }
     let keys: BTreeMap<String, String> =
         model_rule_keys(run.project.py(), lint_key, run.codes, &models);
     let fresh: Vec<(String, String)> = models
         .into_iter()
-        .map(|(path, ..)| {
+        .map(|ModelRuleRow { path, .. }| {
             let key: String = keys[&path].clone();
             (path, key)
         })

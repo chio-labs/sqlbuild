@@ -1,12 +1,33 @@
 //! Compile-owned native catalog, mapping state and boundary requests.
 
-use crate::semantic_validation::types::{Expansion, PreparedCompactAnalysis, ProbeKey, Relations};
+use crate::semantic_validation::types::{PreparedCompactAnalysis, ProbeKey, Relations};
 use polyglot_sql::validation::SchemaTable;
 use polyglot_sql::{DialectType, SchemaValidationOptions};
 use rayon::ThreadPool;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, Mutex};
+
+/// One schema-validation diagnostic with its cleaned-SQL position.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DiagnosticRow {
+    pub code: String,
+    pub message: String,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
+    pub start: Option<usize>,
+    pub end: Option<usize>,
+    pub severity: String,
+}
+
+/// One macro-expansion edit: the authored char span and the span it expanded to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Expansion {
+    pub source_start: usize,
+    pub source_end: usize,
+    pub output_start: usize,
+    pub output_end: usize,
+}
 
 #[derive(Default, Debug)]
 pub struct Columns(pub Vec<(String, Option<String>)>);

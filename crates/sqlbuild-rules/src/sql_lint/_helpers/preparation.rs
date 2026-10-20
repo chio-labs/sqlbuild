@@ -7,7 +7,7 @@ use regex::Regex;
 
 use crate::lint_text::main::neutralize_interpolation::neutralize_interpolation;
 use crate::lint_text::models::Neutralized;
-use crate::sql_lint::types::{InterpolationSite, PreparedSql};
+use crate::sql_lint::types::PreparedSql;
 use sqlbuild_sqltext::sql_scan::main::quote_policy::quote_policy;
 
 static CTES: LazyLock<Result<Regex, regex::Error>> = LazyLock::new(|| {
@@ -68,21 +68,7 @@ pub(crate) fn prepare(
     }
     let mut referenced: Vec<String> = referenced.into_iter().collect();
     referenced.sort();
-    let sites: Vec<InterpolationSite> = neutralized
-        .sites
-        .into_iter()
-        .map(|site| {
-            (
-                site.sentinel,
-                site.neutralized_start,
-                site.neutralized_end,
-                site.original_start,
-                site.original_end,
-                site.original_text,
-            )
-        })
-        .collect();
-    Ok(Some((neutralized.text, sites, referenced)))
+    Ok(Some((neutralized.text, neutralized.sites, referenced)))
 }
 
 /// The byte offset of character position `position`, or `None` past the end.

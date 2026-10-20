@@ -40,26 +40,26 @@ use crate::bindings::_helpers::scopes::scope_report_objects::{
 type PyObject = Py<PyAny>;
 
 /// Target, location, whether it is a directory, and the filters.
-pub(crate) type ReportArguments<'py> = (
-    Option<Bound<'py, PyAny>>,
-    Option<Bound<'py, PyAny>>,
-    bool,
-    Option<Bound<'py, PyAny>>,
-);
+pub(crate) struct ReportArguments<'py> {
+    pub(crate) target: Option<Bound<'py, PyAny>>,
+    pub(crate) at: Option<Bound<'py, PyAny>>,
+    pub(crate) directory: bool,
+    pub(crate) filters: Option<Bound<'py, PyAny>>,
+}
 /// Declaration, target, location and whether it is a directory.
-pub(crate) type ExplainArguments<'py> = (
-    Bound<'py, PyAny>,
-    Option<Bound<'py, PyAny>>,
-    Option<Bound<'py, PyAny>>,
-    bool,
-);
+pub(crate) struct ExplainArguments<'py> {
+    pub(crate) declaration: Bound<'py, PyAny>,
+    pub(crate) target: Option<Bound<'py, PyAny>>,
+    pub(crate) at: Option<Bound<'py, PyAny>>,
+    pub(crate) directory: bool,
+}
 /// Folder, filters, target and whether the target is prospective.
-pub(crate) type ListArguments<'py> = (
-    String,
-    Option<Bound<'py, PyAny>>,
-    Option<Bound<'py, PyAny>>,
-    bool,
-);
+pub(crate) struct ListArguments<'py> {
+    pub(crate) folder: String,
+    pub(crate) filters: Option<Bound<'py, PyAny>>,
+    pub(crate) target: Option<Bound<'py, PyAny>>,
+    pub(crate) target_is_prospective: bool,
+}
 
 const CURRENT_FOLDER: &str = ".";
 
@@ -148,7 +148,12 @@ pub(crate) fn scope_report(
     lookup: &Bound<'_, PyAny>,
     request: ReportArguments<'_>,
 ) -> PyResult<PyObject> {
-    let (target, at, directory, filters) = request;
+    let ReportArguments {
+        target,
+        at,
+        directory,
+        filters,
+    } = request;
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     let selected: Bound<'_, PyAny> = match filters.filter(|filters| !filters.is_none()) {
         Some(filters) => filters,
@@ -178,7 +183,12 @@ pub(crate) fn scope_explain(
     lookup: &Bound<'_, PyAny>,
     request: ExplainArguments<'_>,
 ) -> PyResult<(PyObject, PyObject)> {
-    let (declaration, target, at, directory) = request;
+    let ExplainArguments {
+        declaration,
+        target,
+        at,
+        directory,
+    } = request;
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     let reports: LookupReports = lookup_reports(lookup)?;
     let request: ExplainRequest = ExplainRequest {
@@ -240,7 +250,12 @@ pub(crate) fn scope_list(
     lookup: &Bound<'_, PyAny>,
     request: ListArguments<'_>,
 ) -> PyResult<PyObject> {
-    let (folder, filters, target, target_is_prospective) = request;
+    let ListArguments {
+        folder,
+        filters,
+        target,
+        target_is_prospective,
+    } = request;
     let classes: ScopeClasses<'_> = ScopeClasses::new(py)?;
     let reports: LookupReports = lookup_reports(lookup)?;
     let request: FolderRequest =
@@ -354,12 +369,12 @@ fn query_scope_report_binding<'py>(
     scope_report(
         py,
         &arguments.value("lookup")?,
-        (
-            optional(&arguments, "target")?,
-            optional(&arguments, "at")?,
-            arguments.flag("directory")?,
-            optional(&arguments, "filters")?,
-        ),
+        ReportArguments {
+            target: optional(&arguments, "target")?,
+            at: optional(&arguments, "at")?,
+            directory: arguments.flag("directory")?,
+            filters: optional(&arguments, "filters")?,
+        },
     )
 }
 
@@ -379,12 +394,12 @@ fn explain_scope_declaration_binding<'py>(
     scope_explain(
         py,
         &arguments.value("lookup")?,
-        (
-            arguments.value("declaration")?,
-            optional(&arguments, "target")?,
-            optional(&arguments, "at")?,
-            arguments.flag("directory")?,
-        ),
+        ExplainArguments {
+            declaration: arguments.value("declaration")?,
+            target: optional(&arguments, "target")?,
+            at: optional(&arguments, "at")?,
+            directory: arguments.flag("directory")?,
+        },
     )
 }
 
@@ -435,12 +450,12 @@ fn list_scope_declarations_binding<'py>(
     scope_list(
         py,
         &arguments.value("lookup")?,
-        (
-            arguments.value("folder")?.extract()?,
-            optional(&arguments, "filters")?,
-            optional(&arguments, "target")?,
-            arguments.flag("target_is_prospective")?,
-        ),
+        ListArguments {
+            folder: arguments.value("folder")?.extract()?,
+            filters: optional(&arguments, "filters")?,
+            target: optional(&arguments, "target")?,
+            target_is_prospective: arguments.flag("target_is_prospective")?,
+        },
     )
 }
 

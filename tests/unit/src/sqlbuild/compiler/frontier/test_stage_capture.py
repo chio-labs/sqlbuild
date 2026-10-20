@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.compiler_differential.classes.capture_file import expand_capture_text
+from scripts.compiler_differential._helpers.comparing.capture_text import expand_capture_text
 from sqlbuild._native import (
     STAGE_CAPTURE_DIR_ENV_VAR,
     CompilerStage,

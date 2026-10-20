@@ -331,7 +331,14 @@ audit_getters!(NativeAuditInput, {
                 attached
                     .references
                     .iter()
-                    .map(|(kind, name, package, _)| (kind.clone(), name.clone(), package.clone()))
+                    .map(
+                        |ReferenceRow {
+                             kind,
+                             name,
+                             package,
+                             ..
+                         }| (kind.clone(), name.clone(), package.clone()),
+                    )
                     .collect(),
                 attached
                     .target

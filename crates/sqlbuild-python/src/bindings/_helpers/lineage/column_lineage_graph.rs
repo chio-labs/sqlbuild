@@ -58,6 +58,17 @@ enum EdgeParts {
     },
 }
 
+positional_record! {
+    extract;
+    /// One compact lineage row: output name index, transform and confidence codes, sources.
+    struct CompactColumnRow<'py> {
+        name_index: Bound<'py, PyAny>,
+        transform_code: i64,
+        confidence_code: i64,
+        sources: Bound<'py, PyAny>,
+    }
+}
+
 /// Indexed edge records, materialised edges shared between equal records.
 struct EdgeRecords {
     keys: Vec<EdgeKey>,
@@ -442,12 +453,12 @@ impl RecordBuilder {
             || native_field(columns, "resource_name_indexes")?.is_truthy()?;
         let mut members = CodeMembers::default();
         for row in native_field(columns, "rows")?.try_iter()? {
-            let (name_index, transform_code, confidence_code, sources): (
-                Bound<'_, PyAny>,
-                i64,
-                i64,
-                Bound<'_, PyAny>,
-            ) = row?.extract()?;
+            let CompactColumnRow {
+                name_index,
+                transform_code,
+                confidence_code,
+                sources,
+            }: CompactColumnRow<'_> = row?.extract()?;
             let output_column: String = pool.get_item(name_index)?.extract()?;
             for source in sources.try_iter()? {
                 let (kind, name, column): (Bound<'_, PyAny>, Bound<'_, PyAny>, Bound<'_, PyAny>) =

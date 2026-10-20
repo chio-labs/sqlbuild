@@ -25,11 +25,10 @@ use crate::bindings::_helpers::compiled_project::project::{
 };
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::records::fields::{field as native_field, replaced_keywords};
-use crate::bindings::_helpers::render::declaration_expansion::{
-    ExpandedDeclarations, ScannedReference, span_rows,
-};
+use crate::bindings::_helpers::render::declaration_expansion::{ExpandedDeclarations, span_rows};
 use crate::bindings::_helpers::render::macro_call_rows::{SpanRow, span_row};
 use crate::bindings::_helpers::render::macro_expansion::ExpansionOutput;
+use crate::bindings::_helpers::sqltext::declaration_references::ScannedReference;
 use sqlbuild_discovery::model_files::models::HeaderFacts;
 
 const HEADER_KEYS_ATTRIBUTE: &str = "model_header_keys";
@@ -77,10 +76,25 @@ impl ModelLoopRow {
         }
     }
 }
-/// `(interpolated query, template reads, error, substitution spans)`.
-pub(crate) type InterpolationRow = (String, Vec<(String, String)>, Option<String>, Vec<SpanRow>);
-/// `(kind, name, package, call argument count)`.
-pub(crate) type ReferenceRow = (String, String, Option<String>, Option<usize>);
+/// A model query's interpolation: the interpolated query, template reads, error and spans.
+pub(crate) struct InterpolationRow {
+    pub(crate) sql: String,
+    pub(crate) reads: Vec<(String, String)>,
+    pub(crate) error: Option<String>,
+    /// The substitution spans.
+    pub(crate) spans: Vec<SpanRow>,
+}
+positional_record! {
+    extract, into;
+    /// `(kind, name, package, call argument count)`.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub(crate) struct ReferenceRow {
+        pub(crate) kind: String,
+        pub(crate) name: String,
+        pub(crate) package: Option<String>,
+        pub(crate) call_argument_count: Option<usize>,
+    }
+}
 
 /// One model the native loop finished, before the host builds its Python view.
 pub(crate) struct FinishedModel<'py> {
@@ -130,7 +144,12 @@ pub(crate) fn finished_record<'py>(
             },
         authored_query: authored_query_sql,
         contents: authored_sql,
-        interpolation: (interpolated_sql, _, _, interpolation_spans),
+        interpolation:
+            InterpolationRow {
+                sql: interpolated_sql,
+                spans: interpolation_spans,
+                ..
+            },
         model_file,
         ..
     } = row;

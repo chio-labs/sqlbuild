@@ -6,7 +6,7 @@ import json
 import re
 from datetime import date, timedelta
 
-from scripts.compiler_differential.classes.capture_file import expand_capture_text
+from scripts.compiler_differential._helpers.comparing.capture_text import expand_capture_text
 from scripts.planner_differential.constants import (
     COMPACT_TIMESTAMP_PATTERN,
     DATE_PATTERN,

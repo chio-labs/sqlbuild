@@ -20,6 +20,17 @@ use crate::bindings::_helpers::rules::relation_keys::audit_key_rows;
 
 const SOURCE_RESOURCE: &str = "source";
 
+positional_record! {
+    into;
+    /// `(name, has a loader, database, schema)` of one source.
+    pub(crate) struct SourceAssemblyRow {
+        name: String,
+        managed: bool,
+        database: Option<String>,
+        schema: Option<String>,
+    }
+}
+
 /// `(database, schema)` native project assembly resolved for a source, or `None`.
 pub(crate) type SourceNamespace = Option<(Option<String>, Option<String>)>;
 
@@ -210,18 +221,15 @@ impl NativeSourceInput {
 
     /// `(name, has a loader, database, schema)`, what project assembly resolves a namespace from.
     #[getter]
-    pub(crate) fn assembly_row(
-        &self,
-        py: Python<'_>,
-    ) -> PyResult<(String, bool, Option<String>, Option<String>)> {
+    pub(crate) fn assembly_row(&self, py: Python<'_>) -> PyResult<SourceAssemblyRow> {
         read_source(&self.owner, self.index, py, |source, py| {
             let attached: &AttachedSource = &source.attached;
-            Ok((
-                attached.name.clone(),
-                !native_field(attached.entry.bind(py), "loader")?.is_none(),
-                attached.database.clone(),
-                attached.schema.clone(),
-            ))
+            Ok(SourceAssemblyRow {
+                name: attached.name.clone(),
+                managed: !native_field(attached.entry.bind(py), "loader")?.is_none(),
+                database: attached.database.clone(),
+                schema: attached.schema.clone(),
+            })
         })
     }
 }
@@ -241,12 +249,12 @@ impl NativeCompiledSource {
     /// The source's project graph row: its key, with no dependencies, tags or folder.
     pub(crate) fn graph_row(&self, py: Python<'_>) -> PyResult<ResourceRow> {
         read_source(&self.owner, self.index, py, |source, _| {
-            Ok((
-                (SOURCE_RESOURCE.to_owned(), source.attached.name.clone()),
-                Vec::new(),
-                Vec::new(),
-                None,
-            ))
+            Ok(ResourceRow {
+                key: (SOURCE_RESOURCE.to_owned(), source.attached.name.clone()),
+                deps: Vec::new(),
+                tags: Vec::new(),
+                folder: None,
+            })
         })
     }
 }

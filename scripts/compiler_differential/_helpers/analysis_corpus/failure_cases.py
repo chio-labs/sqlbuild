@@ -54,9 +54,6 @@ _HOOK_PATH: str = "hooks/sql/record_refresh.sql"
 _EXPRESSION_AUDIT: str = 'AUDIT ();\n\nSELECT *\nFROM __ref("@model")\nWHERE NOT (@expression)\n'
 _EXPRESSION_AUDIT_PATH: str = "models/marts/_sqlbuild/_audits/generic/expression_is_true.sql"
 _TEST_PATH: str = "tests/unit/test_stg_orders.sql"
-_ORDER_ROW: str = (
-    "  SELECT 1 AS order_id, 10 AS customer_id, CAST(5 AS DOUBLE) AS amount, 'placed' AS status\n"
-)
 
 
 def _mart(body: str) -> dict[str, str]:

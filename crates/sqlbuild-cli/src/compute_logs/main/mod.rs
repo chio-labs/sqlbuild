@@ -1,3 +1,4 @@
+pub mod abandon_capture;
 pub mod capture_inventory;
 pub mod capture_is_complete;
 pub mod check_completion;

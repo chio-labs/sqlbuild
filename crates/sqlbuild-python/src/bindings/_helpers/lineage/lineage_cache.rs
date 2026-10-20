@@ -70,8 +70,27 @@ const SCHEMA_SQL: &str = "
         );
         ";
 
-type ResourceRow = (String, String, Option<String>, Option<String>);
-type EdgeRow = (String, String, String, String);
+positional_record! {
+    extract;
+    /// One cached resource: its type, name, relative path and qualified name.
+    struct ResourceRow {
+        resource_type: String,
+        name: String,
+        relative_path: Option<String>,
+        qualified_name: Option<String>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// One cached lineage edge: its upstream and downstream types and names.
+    struct EdgeRow {
+        upstream_type: String,
+        upstream_name: String,
+        downstream_type: String,
+        downstream_name: String,
+    }
+}
 type TripleRow = (String, String, String);
 
 fn cache_path(project_dir: &Path) -> PathBuf {
@@ -178,7 +197,13 @@ fn read_index(connection: &Bound<'_, PyAny>) -> PyResult<Option<LineageIndex>> {
         return Ok(None);
     }
     let mut nodes: HashMap<LineageKey, LineageNode> = HashMap::new();
-    for (resource_type, name, relative_path, qualified_name) in resources {
+    for ResourceRow {
+        resource_type,
+        name,
+        relative_path,
+        qualified_name,
+    } in resources
+    {
         let key: LineageKey = LineageKey {
             resource_type,
             name,
@@ -201,7 +226,13 @@ fn read_index(connection: &Bound<'_, PyAny>) -> PyResult<Option<LineageIndex>> {
     };
     let mut upstream: Groups<LineageKey, LineageKey> = Groups::new();
     let mut downstream: Groups<LineageKey, LineageKey> = Groups::new();
-    for (upstream_type, upstream_name, downstream_type, downstream_name) in edges {
+    for EdgeRow {
+        upstream_type,
+        upstream_name,
+        downstream_type,
+        downstream_name,
+    } in edges
+    {
         let (Some(parent), Some(child)) = (
             known(upstream_type, upstream_name),
             known(downstream_type, downstream_name),
@@ -379,12 +410,15 @@ fn write_index(
         "INSERT INTO lookups VALUES (?, ?, ?)",
         PyList::new(py, lookups)?,
     )?;
-    let mut edges: Vec<(&str, &str, &str, &str)> = Vec::new();
+    let mut edges: Vec<Bound<'_, PyTuple>> = Vec::new();
     for (child, parents) in &index.upstream {
         for parent in parents {
             let ((parent_type, parent_name), (child_type, child_name)) =
                 (key_parts(parent), key_parts(child));
-            edges.push((parent_type, parent_name, child_type, child_name));
+            edges.push(PyTuple::new(
+                py,
+                [parent_type, parent_name, child_type, child_name],
+            )?);
         }
     }
     insert(

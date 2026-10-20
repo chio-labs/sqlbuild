@@ -29,13 +29,22 @@ pub struct ModelComparison {
     pub lineage_equal: bool,
 }
 
+/// A diagnostic's location-insensitive identity.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DiagnosticIdentity {
+    pub code: String,
+    pub resource_type: String,
+    pub resource_name: String,
+    pub message: String,
+}
+
 /// Location-insensitive diagnostic multiplicities for one owner.
 #[derive(Debug)]
 pub struct DiagnosticComparison {
     pub owner: usize,
     pub edited: bool,
-    pub before: BTreeMap<(String, String, String, String), i64>,
-    pub after: BTreeMap<(String, String, String, String), i64>,
+    pub before: BTreeMap<DiagnosticIdentity, i64>,
+    pub after: BTreeMap<DiagnosticIdentity, i64>,
 }
 
 /// Failures attributed to edited owners and changes outside those owners.

@@ -23,7 +23,7 @@ use sqlbuild_analysis::assembly::analysis_session::models::{
     SessionStep,
 };
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
-use sqlbuild_analysis::semantic_validation::types::DiagnosticRow;
+use sqlbuild_analysis::semantic_validation::models::DiagnosticRow;
 use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults;
 
 use sqlbuild_cache::store::models::NativeStore;
@@ -38,77 +38,138 @@ use crate::bindings::_helpers::analysis_session::nullability_rules::{
 };
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::cache::native_store::{open_store, save_store};
+use crate::bindings::models::Positional;
 use crate::bindings::models::ProjectCatalog;
 use crate::bindings::types::CompilerDetach;
 
 /// `(name, type, nullability)`.
 type ColumnRow = (String, Option<String>, String);
-/// `(output column, transform code, confidence code, [(resource type, resource, column)])`.
-type LineageItem = (String, u8, u8, Vec<(String, String, String)>);
-/// `(name, pivot column, value column, aggregate, type, name pattern)`.
-pub(crate) type FamilyRow = (String, String, String, String, String, Option<String>);
+positional_record! {
+    into;
+    /// One lineage column: output column, transform and confidence codes and its sources.
+    struct LineageItem {
+        output_column: String,
+        transform_code: u8,
+        confidence_code: u8,
+        /// `(resource type, resource, column)` of each source.
+        sources: Vec<(String, String, String)>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// One declared dynamic column family.
+    pub(crate) struct FamilyRow {
+        pub(crate) name: String,
+        pub(crate) pivot_column: String,
+        pub(crate) value_column: String,
+        pub(crate) aggregate: String,
+        pub(crate) data_type: String,
+        pub(crate) name_pattern: Option<String>,
+    }
+}
+
 /// A model's name, SQL, placeholders, references, lineage, required names, flags and pivot.
-pub(crate) type ModelRow = (
-    String,
-    String,
-    Pairs,
-    Vec<(String, String)>,
-    bool,
-    Option<(String, String)>,
-    Vec<FamilyRow>,
-);
+pub(crate) struct ModelRow {
+    pub(crate) name: String,
+    pub(crate) query_sql: String,
+    pub(crate) placeholders: Pairs,
+    pub(crate) reference_rows: Vec<(String, String)>,
+    pub(crate) recover_cte_facts: bool,
+    pub(crate) snapshot_columns: Option<(String, String)>,
+    pub(crate) dynamic_families: Vec<FamilyRow>,
+}
+
 /// The profile settings, relation shapes and models one session analyses.
-pub(crate) type RequestRow = (
-    String,
-    bool,
-    Pairs,
-    Option<Pairs>,
-    bool,
-    Shapes,
-    Shapes,
-    Shapes,
-    Shapes,
-    Vec<(String, Vec<FamilyRow>)>,
-    Vec<ModelRow>,
-);
+pub(crate) struct RequestRow {
+    pub(crate) dialect: String,
+    pub(crate) case_sensitive_shapes: bool,
+    pub(crate) function_return_types: Pairs,
+    pub(crate) nullability_rules: Option<Pairs>,
+    pub(crate) rich_type_inference: bool,
+    pub(crate) column_types: Shapes,
+    pub(crate) column_nullability: Shapes,
+    pub(crate) complete_schemas: Shapes,
+    pub(crate) catalog_schemas: Shapes,
+    pub(crate) dynamic_families_by_table: Vec<(String, Vec<FamilyRow>)>,
+    pub(crate) models: Vec<ModelRow>,
+}
+
 /// `(publications, failures)`.
 pub(crate) type StepRow = (Shapes, Vec<String>);
-/// One model's analysis, lineage source and cleaned SQL.
-type OutcomeRow = (
-    bool,
-    Option<Vec<ColumnRow>>,
-    &'static str,
-    Vec<LineageItem>,
-    bool,
-    bool,
-    Vec<DiagnosticRow>,
-    bool,
-    String,
-);
-/// `(output proven, fixed columns, (family, inferred type), inputs, failure, bare pivot)`.
-type ProofRow = (
-    bool,
-    Vec<ColumnRow>,
-    Vec<(String, Option<String>)>,
-    Vec<String>,
-    Option<String>,
-    bool,
-);
+
+positional_record! {
+    into;
+    /// One model's analysis, lineage source and cleaned SQL.
+    struct OutcomeRow {
+        analysis_succeeded: bool,
+        columns: Option<Vec<ColumnRow>>,
+        lineage_source: &'static str,
+        lineage: Vec<LineageItem>,
+        has_star: bool,
+        star_resolved: bool,
+        binding_diagnostics: Vec<Positional<DiagnosticRow>>,
+        binding_validated: bool,
+        cleaned_sql: String,
+    }
+}
+
+positional_record! {
+    into;
+    /// One dynamic pivot proof.
+    pub(crate) struct ProofRow {
+        output_proven: bool,
+        fixed_columns: Vec<ColumnRow>,
+        /// `(family, inferred type)` of each family.
+        families: Vec<(String, Option<String>)>,
+        input_relations: Vec<String>,
+        failure_reason: Option<String>,
+        bare_dynamic_pivot: bool,
+    }
+}
+
 /// One model's pivot SQL and declared families.
 pub(crate) type PivotModelRow = (String, Vec<FamilyRow>);
-/// The dialect, relation facts and families by table every proof reads, and the models.
-type PivotRequestRow = (
-    String,
-    Shapes,
-    Shapes,
-    Shapes,
-    Vec<(String, Vec<FamilyRow>)>,
-    Vec<PivotModelRow>,
-);
+
+positional_record! {
+    extract;
+    /// The dialect, relation facts and families by table every proof reads, and the models.
+    pub(crate) struct PivotRequestRow {
+        pub(crate) dialect: String,
+        pub(crate) column_types: Shapes,
+        pub(crate) authoritative_types: Shapes,
+        pub(crate) column_nullability: Shapes,
+        pub(crate) families_by_table: Vec<(String, Vec<FamilyRow>)>,
+        pub(crate) models: Vec<PivotModelRow>,
+    }
+}
+
 /// `("absent" | "deferred" | "proof", proof)`.
 pub(crate) type ContractRow = (&'static str, Option<ProofRow>);
-/// `(hits, misses, stored, why the store was not read or saved)`.
-pub(crate) type CacheStatsRow = (usize, usize, usize, Option<String>);
+
+positional_record! {
+    into;
+    /// The analysis cache's hits, misses, stored entries and why it was not read or saved.
+    #[derive(Clone)]
+    pub(crate) struct CacheStatsRow {
+        pub(crate) hits: usize,
+        pub(crate) misses: usize,
+        pub(crate) stored: usize,
+        pub(crate) failure: Option<String>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// The settings and expressions one expression-source shape request infers.
+    pub(crate) struct ExpressionShapesRow {
+        pub(crate) dialect: String,
+        pub(crate) case_sensitive_shapes: bool,
+        pub(crate) function_return_types: Pairs,
+        pub(crate) nullability_rules: Option<Pairs>,
+        pub(crate) expressions: Vec<String>,
+    }
+}
 /// `(catalog schema additions, analysis-shape names, whether each model's analysis succeeded)`.
 pub(crate) type FinishRow = (Shapes, Vec<String>, Vec<bool>);
 
@@ -188,7 +249,12 @@ impl NativeModelAnalysisSession {
             let saved: Option<String> = save_store(py, &store, path, &[])
                 .err()
                 .map(|error| error.to_string());
-            self.cache_stats = Some((stats.hits, stats.misses, stats.stored, saved));
+            self.cache_stats = Some(CacheStatsRow {
+                hits: stats.hits,
+                misses: stats.misses,
+                stored: stats.stored,
+                failure: saved,
+            });
         }
         let SessionOutcome {
             models,
@@ -217,10 +283,10 @@ impl NativeModelAnalysisSession {
     }
 
     /// Each requested model's raw binding diagnostic rows, in request order.
-    pub(crate) fn binding_rows(&self) -> Vec<Vec<DiagnosticRow>> {
+    pub(crate) fn binding_rows(&self) -> Vec<Vec<Positional<DiagnosticRow>>> {
         self.outcomes
             .iter()
-            .map(|(outcome, _)| outcome.analysis.binding_diagnostics.clone())
+            .map(|(outcome, _)| Positional::wrap_all(outcome.analysis.binding_diagnostics.clone()))
             .collect()
     }
 
@@ -295,7 +361,14 @@ pub(crate) fn start_model_analysis_session(
                 attach_analysis_cache(&mut session, store);
                 cache_path = Some(path);
             }
-            Err(error) => cache_stats = Some((0, 0, 0, Some(error.to_string()))),
+            Err(error) => {
+                cache_stats = Some(CacheStatsRow {
+                    hits: 0,
+                    misses: 0,
+                    stored: 0,
+                    failure: Some(error.to_string()),
+                });
+            }
         }
     }
     Ok(NativeModelAnalysisSession {
@@ -315,11 +388,16 @@ pub(crate) fn start_model_analysis_session(
 pub(crate) fn infer_expression_source_shapes(
     py: Python<'_>,
     catalog: PyRef<'_, ProjectCatalog>,
-    request: (String, bool, Pairs, Option<Pairs>, Vec<String>),
+    request: ExpressionShapesRow,
     adapter_rules: Option<(Py<PyDict>, Py<PyAny>)>,
 ) -> PyResult<Vec<Option<Pairs>>> {
-    let (dialect, case_sensitive_shapes, function_return_types, nullability_rules, expressions) =
-        request;
+    let ExpressionShapesRow {
+        dialect,
+        case_sensitive_shapes,
+        function_return_types,
+        nullability_rules,
+        expressions,
+    } = request;
     let rule_failure: RuleFailure = RuleFailure::default();
     let request = ExpressionShapeRequest {
         dialect,
@@ -347,7 +425,7 @@ pub(crate) fn infer_expression_source_shapes(
 }
 
 fn session_request(request: RequestRow) -> SessionRequest {
-    let (
+    let RequestRow {
         dialect,
         case_sensitive_shapes,
         function_return_types,
@@ -359,7 +437,7 @@ fn session_request(request: RequestRow) -> SessionRequest {
         catalog_schemas,
         dynamic_families_by_table,
         models,
-    ) = request;
+    } = request;
     SessionRequest {
         dialect,
         case_sensitive_shapes,
@@ -379,7 +457,7 @@ fn session_request(request: RequestRow) -> SessionRequest {
 }
 
 fn model_request(row: ModelRow) -> ModelRequest {
-    let (
+    let ModelRow {
         name,
         query_sql,
         placeholders,
@@ -387,7 +465,7 @@ fn model_request(row: ModelRow) -> ModelRequest {
         recover_cte_facts,
         snapshot_columns,
         dynamic_families,
-    ) = row;
+    } = row;
     let has_set_operation = names_set_operation(&query_sql);
     let facts = model_reference_facts(&reference_rows);
     let pivot_sql = if placeholders.is_empty() {
@@ -420,13 +498,11 @@ fn column_row(column: ColumnFact) -> ColumnRow {
 
 fn lineage_items(rows: Vec<LineageRow>) -> Vec<LineageItem> {
     rows.into_iter()
-        .map(|row| {
-            (
-                row.output_column,
-                row.transform_code,
-                row.confidence_code,
-                row.sources,
-            )
+        .map(|row| LineageItem {
+            output_column: row.output_column,
+            transform_code: row.transform_code,
+            confidence_code: row.confidence_code,
+            sources: row.sources,
         })
         .collect()
 }
@@ -438,7 +514,14 @@ fn families_by_table(rows: Vec<(String, Vec<FamilyRow>)>) -> Vec<(String, Vec<Dy
 }
 
 fn dynamic_family(row: FamilyRow) -> DynamicFamily {
-    let (name, pivot_column, value_column, aggregate, data_type, name_pattern) = row;
+    let FamilyRow {
+        name,
+        pivot_column,
+        value_column,
+        aggregate,
+        data_type,
+        name_pattern,
+    } = row;
     DynamicFamily {
         name,
         pivot_column,
@@ -454,14 +537,14 @@ fn contract_row(outcome: PivotOutcome) -> ContractRow {
         PivotOutcome::Absent => ("absent", None),
         PivotOutcome::Proof(proof) => (
             "proof",
-            Some((
-                proof.output_proven,
-                proof.fixed_columns.into_iter().map(column_row).collect(),
-                proof.families,
-                proof.input_relations,
-                proof.failure_reason,
-                proof.bare_dynamic_pivot,
-            )),
+            Some(ProofRow {
+                output_proven: proof.output_proven,
+                fixed_columns: proof.fixed_columns.into_iter().map(column_row).collect(),
+                families: proof.families,
+                input_relations: proof.input_relations,
+                failure_reason: proof.failure_reason,
+                bare_dynamic_pivot: proof.bare_dynamic_pivot,
+            }),
         ),
     }
 }
@@ -472,19 +555,19 @@ fn outcome_row(outcome: ModelOutcome, cleaned_sql: String) -> OutcomeRow {
         LineageFacts::Native(rows) => ("native", lineage_items(rows)),
         LineageFacts::NativeFacts(rows) => ("facts", lineage_items(rows)),
     };
-    (
-        analysis.analysis_succeeded,
-        analysis
+    OutcomeRow {
+        analysis_succeeded: analysis.analysis_succeeded,
+        columns: analysis
             .columns
             .map(|columns| columns.into_iter().map(column_row).collect()),
-        source,
+        lineage_source: source,
         lineage,
-        analysis.has_star,
-        analysis.star_resolved,
-        analysis.binding_diagnostics,
-        analysis.binding_validated,
+        has_star: analysis.has_star,
+        star_resolved: analysis.star_resolved,
+        binding_diagnostics: Positional::wrap_all(analysis.binding_diagnostics),
+        binding_validated: analysis.binding_validated,
         cleaned_sql,
-    )
+    }
 }
 
 /// Each model's dynamic pivot proof outside any session.
@@ -493,8 +576,14 @@ pub(crate) fn prove_dynamic_column_contracts(
     py: Python<'_>,
     request: PivotRequestRow,
 ) -> PyResult<Vec<ContractRow>> {
-    let (dialect, column_types, authoritative_types, column_nullability, by_table, models) =
-        request;
+    let PivotRequestRow {
+        dialect,
+        column_types,
+        authoritative_types,
+        column_nullability,
+        families_by_table: by_table,
+        models,
+    } = request;
     let request = PivotBatchRequest {
         tables: PivotTables {
             dialect,

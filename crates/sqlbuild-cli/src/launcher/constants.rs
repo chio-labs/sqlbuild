@@ -11,6 +11,8 @@ pub const LAUNCH_RECORD_OPTION: &str = "--sqlbuild-launch-record=";
 /// The program name argparse reports, fixed by the Python parser.
 pub const PROGRAM_NAME: &str = "sqb";
 pub const VERSION_OPTIONS: [&str; 2] = ["--version", "-V"];
+/// The version `--version` prints, alone or among other options; the wheels share it.
+pub const PROGRAM_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Global options naming the project directory, exactly as the Python parser spells them.
 pub const PROJECT_DIR_OPTIONS: [&str; 2] = ["--project-dir", "--sqb-project-dir"];
 /// Prefixes argparse could expand to a project directory option.

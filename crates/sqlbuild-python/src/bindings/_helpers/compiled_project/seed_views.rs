@@ -24,13 +24,24 @@ const FILE_PATH_ATTRIBUTE: &str = "file_path";
 const STEM_ATTRIBUTE: &str = "stem";
 const RELATIVE_PATH_ATTRIBUTE: &str = "relative_path";
 
-/// `(database, schema, logical database, logical schema)` of a seed's destination.
-pub(crate) type SeedNamespace = (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-);
+positional_record! {
+    extract;
+    /// `(database, schema, logical database, logical schema)` of a seed's destination.
+    pub(crate) struct SeedNamespace {
+        database: Option<String>,
+        schema: Option<String>,
+        logical_database: Option<String>,
+        logical_schema: Option<String>,
+    }
+}
+
+/// A seed's name, CSV file, declaration and declaring schema file.
+pub(crate) struct SeedParts<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) seed_file: &'a Py<PyAny>,
+    pub(crate) schema_entry: &'a Py<PyAny>,
+    pub(crate) schema_file: &'a Py<PyAny>,
+}
 
 /// One seed CSV paired with its declaration; the discovered objects are discovery's.
 pub(crate) struct SeedRecord {
@@ -100,18 +111,23 @@ pub(crate) fn paired_seeds(
 
 impl SeedRecord {
     /// The seed's name, CSV file, declaration and declaring schema file.
-    pub(crate) fn parts(&self) -> (&str, &Py<PyAny>, &Py<PyAny>, &Py<PyAny>) {
-        (
-            &self.name,
-            &self.seed_file,
-            &self.schema_entry,
-            &self.schema_file,
-        )
+    pub(crate) fn parts(&self) -> SeedParts<'_> {
+        SeedParts {
+            name: &self.name,
+            seed_file: &self.seed_file,
+            schema_entry: &self.schema_entry,
+            schema_file: &self.schema_file,
+        }
     }
 
     /// Keep the destination native project assembly resolved for the seed.
     pub(crate) fn set_namespace(&mut self, namespace: SeedNamespace) {
-        let (database, schema, logical_database, logical_schema) = namespace;
+        let SeedNamespace {
+            database,
+            schema,
+            logical_database,
+            logical_schema,
+        } = namespace;
         self.destination = Some(DestinationFact {
             database,
             schema,
@@ -201,12 +217,12 @@ impl NativeCompiledSeed {
             for tag in native_field(seed.schema_entry.bind(py), TAGS_ATTRIBUTE)?.try_iter()? {
                 tags.push(tag?.str()?.extract()?);
             }
-            Ok((
-                (SEED_RESOURCE.to_owned(), seed.name.clone()),
-                Vec::new(),
+            Ok(ResourceRow {
+                key: (SEED_RESOURCE.to_owned(), seed.name.clone()),
+                deps: Vec::new(),
                 tags,
-                None,
-            ))
+                folder: None,
+            })
         })
     }
 

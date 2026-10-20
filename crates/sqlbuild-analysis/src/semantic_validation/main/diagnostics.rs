@@ -1,4 +1,4 @@
-use crate::semantic_validation::types::DiagnosticRow;
+use crate::semantic_validation::models::DiagnosticRow;
 
 pub fn binding_diagnostics(
     sql: &str,

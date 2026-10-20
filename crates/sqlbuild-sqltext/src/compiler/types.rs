@@ -1,6 +1,3 @@
-/// One substitution in code points: `(source start, source end, output start, output end)`.
-pub type CharSpan = (usize, usize, usize, usize);
-
 /// The project variables, process environment and context values one interpolation reads.
 pub trait InterpolationHost {
     /// The text of project variable `name`, `Err(message)` when it cannot be text, or `None`.

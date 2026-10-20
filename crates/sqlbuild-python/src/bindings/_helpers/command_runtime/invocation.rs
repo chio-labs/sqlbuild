@@ -17,13 +17,13 @@ use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 
 /// The project directory, discovered inputs, adapter context, colour and progress stream.
-type InvocationContext<'py> = (
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-    Bound<'py, PyAny>,
-    bool,
-    Bound<'py, PyAny>,
-);
+struct InvocationContext<'py> {
+    project_dir: Bound<'py, PyAny>,
+    discovered: Bound<'py, PyAny>,
+    adapter_context: Bound<'py, PyAny>,
+    use_color: bool,
+    stream: Bound<'py, PyAny>,
+}
 
 fn boolean(py: Python<'_>, value: bool) -> Bound<'_, PyAny> {
     PyBool::new(py, value).to_owned().into_any()
@@ -97,13 +97,25 @@ fn invocation_context<'py>(
     let stream: Bound<'py, PyAny> =
         py.import("sys")?
             .getattr(if machine_output { "stderr" } else { "stdout" })?;
-    Ok((project_dir, discovered, adapter_context, use_color, stream))
+    Ok(InvocationContext {
+        project_dir,
+        discovered,
+        adapter_context,
+        use_color,
+        stream,
+    })
 }
 
 fn context_fields<'py>(
     context: &InvocationContext<'py>,
 ) -> PyResult<Vec<(&'static str, Bound<'py, PyAny>)>> {
-    let (project_dir, discovered, adapter_context, use_color, stream) = context;
+    let InvocationContext {
+        project_dir,
+        discovered,
+        adapter_context,
+        use_color,
+        stream,
+    } = context;
     let py: Python<'py> = project_dir.py();
     Ok(vec![
         ("effective_project_dir", project_dir.clone()),
@@ -139,7 +151,12 @@ pub(crate) fn resolve_reported_command_invocation<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = request.py();
     let context: InvocationContext<'py> = invocation_context(request, require_connection)?;
-    let (_, _, adapter_context, use_color, stream) = &context;
+    let InvocationContext {
+        adapter_context,
+        use_color,
+        stream,
+        ..
+    } = &context;
     let mut fields: Vec<(&str, Bound<'py, PyAny>)> = context_fields(&context)?;
     fields.push((
         "connection_progress",

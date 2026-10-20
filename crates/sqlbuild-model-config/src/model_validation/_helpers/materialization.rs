@@ -434,7 +434,7 @@ fn check_engine<N: AuthoredNode>(config: &ConfigView<'_, N>) -> Check {
         _ => Err(ValidationStop::Error(
             config
                 .config_error(format!(
-                    "{ENGINE_KEY} '{}' must be a single-server MergeTree-family table engine",
+                    "{ENGINE_KEY} '{}' must be a non-replicated MergeTree-family table engine",
                     value.python_str()
                 ))
                 .with_help(model_header_help(

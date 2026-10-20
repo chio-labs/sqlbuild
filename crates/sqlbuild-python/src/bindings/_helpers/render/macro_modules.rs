@@ -14,20 +14,44 @@ use sqlbuild_pysource::macro_modules::types::MacroScopeKind;
 use crate::bindings::_helpers::boundary::panics::{NativeCompilerError, compiler_error};
 use crate::bindings::types::CompilerDetach;
 
-/// Path as `str`, `as_posix` and parts, root and owner parts, scope, source and CPython error.
-type SourceRow = (
-    String,
-    String,
-    Vec<String>,
-    Option<Vec<String>>,
-    Option<Vec<String>>,
-    String,
-    String,
-    Option<String>,
-);
+positional_record! {
+    extract;
+    /// Path as `str`, `as_posix` and parts, root and owner parts, scope, source and CPython error.
+    pub(crate) struct SourceRow {
+        display: String,
+        posix: String,
+        parts: Vec<String>,
+        declaration_root: Option<Vec<String>>,
+        owning_path: Option<Vec<String>>,
+        scope_kind: String,
+        contents: String,
+        syntax_error: Option<String>,
+    }
+}
 
-/// `(name, file index, parameters, line, source digest, dependency macro names)`.
-type ExportRow = (String, usize, Vec<String>, usize, String, Vec<String>);
+positional_record! {
+    into;
+    /// `(name, file index, parameters, line, source digest, dependency macro names)`.
+    pub(crate) struct ExportRow {
+        name: String,
+        file_index: usize,
+        parameters: Vec<String>,
+        line: usize,
+        source_digest: String,
+        dependencies: Vec<String>,
+    }
+}
+
+positional_record! {
+    extract;
+    /// `(name, path, contents, dependencies)` of one macro module to load.
+    struct ModuleSpecRow {
+        name: String,
+        file_path: String,
+        contents: String,
+        dependencies: Vec<String>,
+    }
+}
 
 /// `(file index, message)`.
 type FaultRow = (usize, String);
@@ -49,8 +73,16 @@ fn scope_kind_of(value: &str) -> MacroScopeKind {
 }
 
 fn source(row: SourceRow) -> MacroModuleSource {
-    let (display, posix, parts, declaration_root, owning_path, scope_kind, contents, syntax_error) =
-        row;
+    let SourceRow {
+        display,
+        posix,
+        parts,
+        declaration_root,
+        owning_path,
+        scope_kind,
+        contents,
+        syntax_error,
+    } = row;
     MacroModuleSource {
         relative_path: MacroModulePath {
             display,
@@ -66,14 +98,14 @@ fn source(row: SourceRow) -> MacroModuleSource {
 }
 
 fn export_row(export: MacroExport) -> ExportRow {
-    (
-        export.name,
-        export.file_index,
-        export.parameters,
-        export.line,
-        export.source_digest,
-        export.dependencies,
-    )
+    ExportRow {
+        name: export.name,
+        file_index: export.file_index,
+        parameters: export.parameters,
+        line: export.line,
+        source_digest: export.source_digest,
+        dependencies: export.dependencies,
+    }
 }
 
 fn fault_row(fault: MacroFault) -> FaultRow {
@@ -112,13 +144,16 @@ pub(crate) fn inventory_macro_modules(
 
 /// `(synthetic root, packages shallowest first, module execution order)` of `(name, path, contents, dependencies)` rows.
 #[pyfunction]
-fn macro_module_load_plan(
-    modules: Vec<(String, String, String, Vec<String>)>,
-) -> (String, Vec<String>, Vec<String>) {
+fn macro_module_load_plan(modules: Vec<ModuleSpecRow>) -> (String, Vec<String>, Vec<String>) {
     let specs: Vec<MacroModuleSpec> = modules
         .into_iter()
         .map(
-            |(name, file_path, contents, dependencies)| MacroModuleSpec {
+            |ModuleSpecRow {
+                 name,
+                 file_path,
+                 contents,
+                 dependencies,
+             }| MacroModuleSpec {
                 name,
                 file_path,
                 contents,

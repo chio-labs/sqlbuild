@@ -16,7 +16,8 @@ use crate::semantic_checks::_helpers::resource_sql::resources::{
     MissingColumnAudit, ResourceSql, audit_label, missing_column_audits, resources,
 };
 use crate::semantic_checks::models::{
-    ResourceSqlDiagnostic, ResourceSqlFailure, ResourceSqlKind, ResourceSqlRequest, SemanticFailure,
+    ResourceSpan, ResourceSqlDiagnostic, ResourceSqlFailure, ResourceSqlKind, ResourceSqlRequest,
+    SemanticFailure,
 };
 use crate::semantic_validation::main::normalize::normalize_analysis_sql;
 use crate::semantic_validation::models::{Columns, NormalizationInput, ProjectCatalog};
@@ -32,7 +33,17 @@ const CURSOR_CONTEXT: &str = "Model SQL";
 const ANALYSIS_CURSOR_LITERAL: &str = "CAST('2000-01-01 00:00:00' AS TIMESTAMP)";
 const GENERIC_DIALECT: &str = "generic";
 
-type Key = (String, String, String, i64, i64, i64);
+/// A finding's identity: its path, code, message, start and native order when unlocated.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct Key {
+    path: String,
+    code: String,
+    message: String,
+    line: i64,
+    column: i64,
+    /// The finding's native index when it has no start, else `-1`.
+    order: i64,
+}
 
 fn kind_label(kind: ResourceSqlKind) -> &'static str {
     match kind {
@@ -88,26 +99,26 @@ fn binding_request(
 
 /// Python's `_reported_diagnostic`: drop open-relation lookups, make parser rejections P001.
 fn reported(resource: &ResourceSql, finding: &Finding) -> Option<Finding> {
-    if finding.0 != UNKNOWN_TABLE_CODE {
+    if finding.code != UNKNOWN_TABLE_CODE {
         return Some(finding.clone());
     }
-    if finding.1.starts_with(UNKNOWN_TABLE_PREFIX) {
+    if finding.message.starts_with(UNKNOWN_TABLE_PREFIX) {
         return None;
     }
-    Some((
-        SYNTAX_ERROR_CODE.to_owned(),
-        format!(
+    Some(Finding {
+        code: SYNTAX_ERROR_CODE.to_owned(),
+        message: format!(
             "SQL syntax error in {} '{}': {}",
             kind_label(resource.kind),
             resource.name,
-            finding.1
+            finding.message
         ),
-        finding.2,
-        finding.3,
-        finding.4,
-        finding.5,
-        ERROR_SEVERITY.to_owned(),
-    ))
+        line: finding.line,
+        column: finding.column,
+        start: finding.start,
+        end: finding.end,
+        severity: ERROR_SEVERITY.to_owned(),
+    })
 }
 
 /// What one resource's findings are checked against.
@@ -128,31 +139,31 @@ fn resource_diagnostics(
             continue;
         };
         let span = location(resource, checking.cleaned_sql, &finding)?;
-        let key: Key = (
-            resource.path.clone(),
-            finding.0.clone(),
-            finding.1.clone(),
-            span.0,
-            span.1,
-            if finding.4.is_none() {
+        let key: Key = Key {
+            path: resource.path.clone(),
+            code: finding.code.clone(),
+            message: finding.message.clone(),
+            line: span.line,
+            column: span.column,
+            order: if finding.start.is_none() {
                 index as i64
             } else {
                 -1
             },
-        );
+        };
         if found.iter().any(|(existing, _)| *existing == key) {
             continue;
         }
         let authored_text = text_from(resource, span);
         let authored_line = line_at(resource, span);
         let help = resource_sql_help(
-            &finding.0,
-            &finding.1,
+            &finding.code,
+            &finding.message,
             &HelpContext {
                 kind: resource.kind,
                 authored_text: &authored_text,
                 authored_line: &authored_line,
-                column: span.1,
+                column: span.column,
                 authored_body: &resource.authored_body,
                 audit_definition: resource.audit_definition.as_deref(),
                 shapes: &checking.request.shapes,
@@ -162,16 +173,18 @@ fn resource_diagnostics(
         )
         .map_err(semantic)?;
         let message = match &resource.label {
-            Some(label) if finding.0 != SYNTAX_ERROR_CODE => format!("{label}: {}", finding.1),
-            _ => finding.1.clone(),
+            Some(label) if finding.code != SYNTAX_ERROR_CODE => {
+                format!("{label}: {}", finding.message)
+            }
+            _ => finding.message.clone(),
         };
         found.push((
             key,
             ResourceSqlDiagnostic {
                 kind: resource.kind,
                 resource_name: resource.name.clone(),
-                is_error: finding.6 == ERROR_SEVERITY,
-                code: finding.0.clone(),
+                is_error: finding.severity == ERROR_SEVERITY,
+                code: finding.code.clone(),
                 message,
                 path: resource.path.clone(),
                 span,
@@ -199,7 +212,7 @@ fn opt_out_diagnostic(
         code: OPT_OUT_CODE.to_owned(),
         message,
         path: resource.path.clone(),
-        span: (line, column, None, None),
+        span: ResourceSpan::start(line, column),
         note: Some(note),
         help: Some(help),
     })
@@ -230,7 +243,12 @@ pub(crate) fn missing_column_diagnostic(
             model.name
         ),
         path: model.path.clone(),
-        span: (line, start, Some(line), Some(end)),
+        span: ResourceSpan {
+            line,
+            column: start,
+            end_line: Some(line),
+            end_column: Some(end),
+        },
         note: None,
         help: Some(format!(
             "add {column} to the SELECT list of model '{}' or attach the {definition} audit to \

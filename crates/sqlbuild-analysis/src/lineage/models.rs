@@ -149,15 +149,41 @@ pub enum FastLineageOutcome {
     UnknownDialect(String),
 }
 
+/// A lineage outcome flattened into its status, columns, star flag and detail.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineageOutcomeParts<C> {
+    pub status: &'static str,
+    pub columns: Vec<C>,
+    pub has_star: bool,
+    pub detail: Option<String>,
+}
+
+impl<C> LineageOutcomeParts<C> {
+    fn new(status: &'static str, columns: Vec<C>, has_star: bool, detail: Option<String>) -> Self {
+        Self {
+            status,
+            columns,
+            has_star,
+            detail,
+        }
+    }
+}
+
 impl FastLineageOutcome {
-    /// `(status, columns, has_star, detail)`: detail is the parse error or the unknown dialect.
-    pub fn into_parts(self) -> (&'static str, Vec<LineageColumn>, bool, Option<String>) {
+    /// The status, columns and star flag; detail is the parse error or the unknown dialect.
+    pub fn into_parts(self) -> LineageOutcomeParts<LineageColumn> {
         match self {
-            Self::StarColumns(columns) => ("star", columns, true, None),
-            Self::Built { columns, has_star } => ("built", columns, has_star, None),
-            Self::Omitted => ("omitted", Vec::new(), false, None),
-            Self::Unparsed(message) => ("unparsed", Vec::new(), false, Some(message)),
-            Self::UnknownDialect(name) => ("unknown_dialect", Vec::new(), false, Some(name)),
+            Self::StarColumns(columns) => LineageOutcomeParts::new("star", columns, true, None),
+            Self::Built { columns, has_star } => {
+                LineageOutcomeParts::new("built", columns, has_star, None)
+            }
+            Self::Omitted => LineageOutcomeParts::new("omitted", Vec::new(), false, None),
+            Self::Unparsed(message) => {
+                LineageOutcomeParts::new("unparsed", Vec::new(), false, Some(message))
+            }
+            Self::UnknownDialect(name) => {
+                LineageOutcomeParts::new("unknown_dialect", Vec::new(), false, Some(name))
+            }
         }
     }
 }
@@ -217,11 +243,15 @@ pub enum RichLineageOutcome {
 }
 
 impl RichLineageOutcome {
-    /// `(status, columns, has_star, detail)`: detail is the polyglot error.
-    pub fn into_parts(self) -> (&'static str, Vec<RichLineageColumn>, bool, Option<String>) {
+    /// The status, columns and star flag; detail is the polyglot error.
+    pub fn into_parts(self) -> LineageOutcomeParts<RichLineageColumn> {
         match self {
-            Self::Built { columns, has_star } => ("built", columns, has_star, None),
-            Self::Skipped(message) => ("skipped", Vec::new(), false, Some(message)),
+            Self::Built { columns, has_star } => {
+                LineageOutcomeParts::new("built", columns, has_star, None)
+            }
+            Self::Skipped(message) => {
+                LineageOutcomeParts::new("skipped", Vec::new(), false, Some(message))
+            }
         }
     }
 }

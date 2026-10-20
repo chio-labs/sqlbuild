@@ -24,17 +24,28 @@ const RETURNS_KEY: &str = "returns";
 /// The only key of a table function's `returns` mapping.
 const TABLE_RETURNS_KEY: &str = "table";
 
-/// Model, seed, source, function and table function names.
-type ResourceNames = (
-    HashSet<String>,
-    HashSet<String>,
-    HashSet<String>,
-    HashSet<String>,
-    HashSet<String>,
-);
+positional_record! {
+    extract;
+    /// Model, seed, source, function and table function names.
+    struct ResourceNames {
+        models: HashSet<String>,
+        seeds: HashSet<String>,
+        sources: HashSet<String>,
+        functions: HashSet<String>,
+        table_functions: HashSet<String>,
+    }
+}
 
-/// References `(kind, name, rejected)`, schema columns, unmanaged retention and table type.
-type ModelFacts = (Vec<(String, String, bool)>, Option<Vec<String>>, bool, bool);
+positional_record! {
+    extract;
+    /// References `(kind, name, rejected)`, schema columns, unmanaged retention and table type.
+    struct ModelFacts {
+        references: Vec<(String, String, bool)>,
+        declared_columns: Option<Vec<String>>,
+        retention_unmanaged: bool,
+        table_type_declared: bool,
+    }
+}
 
 /// The project facts every model's validation reads, captured once per compile.
 #[pyclass(module = "sqlbuild._native", frozen)]
@@ -83,7 +94,13 @@ fn discovered_names(inputs: &Bound<'_, PyAny>) -> PyResult<ResourceNames> {
         functions.insert(name);
     }
     functions.extend(each(inputs, "python_function_files", model_stem)?);
-    Ok((models, seeds, sources, functions, table_functions))
+    Ok(ResourceNames {
+        models,
+        seeds,
+        sources,
+        functions,
+        table_functions,
+    })
 }
 
 /// Whether a SQL function's header `returns` is a mapping whose only key is `table`.
@@ -126,7 +143,13 @@ impl NativeModelValidator {
         custom_materializations: HashSet<String>,
         microbatch_concurrency: bool,
     ) -> PyResult<Self> {
-        let (models, seeds, sources, functions, table_functions) = names;
+        let ResourceNames {
+            models,
+            seeds,
+            sources,
+            functions,
+            table_functions,
+        } = names;
         Ok(Self {
             project: ProjectValidationFacts {
                 custom_materializations,
@@ -150,7 +173,12 @@ impl NativeModelValidator {
     ) -> PyResult<Py<PyAny>> {
         compiler_guard(|| {
             let (model_name, query_sql, relative_path) = model;
-            let (references, declared_columns, retention_unmanaged, table_type_declared) = facts;
+            let ModelFacts {
+                references,
+                declared_columns,
+                retention_unmanaged,
+                table_type_declared,
+            } = facts;
             let references: Vec<ModelReference> = references
                 .into_iter()
                 .map(|(kind, name, externally_rejected)| ModelReference {

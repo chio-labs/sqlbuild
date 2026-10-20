@@ -44,7 +44,7 @@ use crate::bindings::_helpers::records::construct::{new_record_with, record_clas
 use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::render::authored_sql::{AuthoredExpansion, expand_with_inputs};
-use crate::bindings::_helpers::render::declaration_expansion::SpanRow;
+use crate::bindings::_helpers::render::macro_call_rows::SpanRow;
 use crate::bindings::_helpers::rules::dsl_headers::header_violations;
 use crate::bindings::_helpers::rules::native_header_parser::{
     HeaderFailure, NativeHeaderParser, external_identifiers,
@@ -211,14 +211,12 @@ impl CompiledSource {
 /// Expansion span rows as lint spans.
 pub(crate) fn span_pass(rows: &[SpanRow]) -> Vec<ExpansionSpan> {
     rows.iter()
-        .map(
-            |&(source_start, source_end, output_start, output_end)| ExpansionSpan {
-                source_start: offset(source_start),
-                source_end: offset(source_end),
-                output_start: offset(output_start),
-                output_end: offset(output_end),
-            },
-        )
+        .map(|row| ExpansionSpan {
+            source_start: offset(row.source_start),
+            source_end: offset(row.source_end),
+            output_start: offset(row.output_start),
+            output_end: offset(row.output_end),
+        })
         .collect()
 }
 
@@ -807,12 +805,10 @@ pub(crate) fn prepare_single_body(request: &SingleBodyRequest<'_, '_>) -> PyResu
         role,
         dialect,
     } = request;
-    let (context, file_path, range, dialect): (
-        &SqlExpansionInputs,
-        &Bound<'_, PyAny>,
-        (usize, usize),
-        &str,
-    ) = (context, file_path, *range, dialect);
+    let context: &SqlExpansionInputs = context;
+    let file_path: &Bound<'_, PyAny> = file_path;
+    let range: (usize, usize) = *range;
+    let dialect: &str = dialect;
     let py: Python<'_> = file_path.py();
     let text: Vec<char> = contents.chars().collect();
     let planned: PlannedBody = plan_body(&text, range, neutralizer(role), None);
@@ -1069,28 +1065,6 @@ fn lint_body(
     body: PendingBody,
     (lint_text, prepared_sites, externally_referenced_ctes): PreparedSql,
 ) -> PyResult<(LintSqlBody, Vec<(String, String)>)> {
-    let prepared_sites: Vec<InterpolationSite> = prepared_sites
-        .into_iter()
-        .map(
-            |(
-                sentinel,
-                neutralized_start,
-                neutralized_end,
-                original_start,
-                original_end,
-                original_text,
-            )| {
-                InterpolationSite {
-                    sentinel,
-                    neutralized_start,
-                    neutralized_end,
-                    original_start,
-                    original_end,
-                    original_text,
-                }
-            },
-        )
-        .collect();
     let dependencies = dependency_sites(&prepared_sites).map_err(value_error)?;
     let mut passes: Vec<Vec<ExpansionSpan>> = Vec::with_capacity(body.passes.len() + 2);
     passes.push(sentinel_spans(&body.sites));

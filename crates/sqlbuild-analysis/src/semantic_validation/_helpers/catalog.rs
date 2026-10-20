@@ -6,10 +6,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use crate::semantic_validation::models::{
-    CatalogInput, Columns, CompactAnalysisJob, FunctionProbes, ProjectCatalog,
+    CatalogInput, Columns, CompactAnalysisJob, DiagnosticRow, FunctionProbes, ProjectCatalog,
 };
 use crate::semantic_validation::types::{
-    BindingRequest, DiagnosticRow, NormalizationRequest, PreparedCompactAnalysis, Relations,
+    BindingRequest, NormalizationRequest, PreparedCompactAnalysis, Relations,
 };
 use crate::semantic_validation::{
     _helpers::{diagnostics, identifiers},
@@ -616,8 +616,8 @@ impl ProjectCatalog {
 /// The diagnostic row of `error`, naming the failure when the parser gives no message.
 fn messaged_row(error: ValidationError) -> DiagnosticRow {
     let mut row: DiagnosticRow = diagnostic_row(error);
-    if row.1.is_empty() {
-        DEFAULT_BINDING_MESSAGE.clone_into(&mut row.1);
+    if row.message.is_empty() {
+        DEFAULT_BINDING_MESSAGE.clone_into(&mut row.message);
     }
     row
 }
@@ -627,15 +627,15 @@ pub(super) fn diagnostic_row(error: ValidationError) -> DiagnosticRow {
         polyglot_sql::ValidationSeverity::Error => "error",
         _ => "warning",
     };
-    (
-        error.code,
-        error.message,
-        error.line,
-        error.column,
-        error.start,
-        error.end,
-        severity.to_owned(),
-    )
+    DiagnosticRow {
+        code: error.code,
+        message: error.message,
+        line: error.line,
+        column: error.column,
+        start: error.start,
+        end: error.end,
+        severity: severity.to_owned(),
+    }
 }
 
 fn has_exact_columns(table: &SchemaTable) -> bool {

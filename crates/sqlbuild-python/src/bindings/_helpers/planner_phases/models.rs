@@ -26,6 +26,42 @@ pub(crate) struct ModelEntryResults<'py> {
     pub(crate) warnings: Vec<Bound<'py, PyAny>>,
 }
 
+/// The runtime, warehouse state, identities and overrides the base plan output reads.
+#[derive(Debug)]
+pub(crate) struct PlanOutputContext<'a, 'py> {
+    pub(crate) runtime: &'a Bound<'py, PyAny>,
+    pub(crate) warehouse: &'a Bound<'py, PyAny>,
+    pub(crate) identities: &'a Bound<'py, PyAny>,
+    pub(crate) overrides: &'a Bound<'py, PyAny>,
+}
+
+/// The execution scope, reconciled changes, planned entries and source freshness of a plan.
+#[derive(Debug)]
+pub(crate) struct PlannedModelEntries<'a, 'py> {
+    pub(crate) execution_scope: &'a Bound<'py, PyAny>,
+    pub(crate) reconciliation: &'a ChangeReconciliation<'py>,
+    pub(crate) entries: ModelEntryResults<'py>,
+    pub(crate) source_freshness: &'a Bound<'py, PyAny>,
+}
+
+/// The runtime, warehouse state, scopes and policies storage policy planning reads.
+#[derive(Debug)]
+pub(crate) struct StoragePolicyContext<'a, 'py> {
+    pub(crate) runtime: &'a Bound<'py, PyAny>,
+    pub(crate) warehouse: &'a Bound<'py, PyAny>,
+    pub(crate) scopes: &'a Bound<'py, PyAny>,
+    pub(crate) policies: &'a Bound<'py, PyAny>,
+}
+
+/// The scopes, warehouse state, identities and changes stale-selection warnings read.
+#[derive(Debug)]
+pub(crate) struct PlanWarningContext<'a, 'py> {
+    pub(crate) scopes: &'a Bound<'py, PyAny>,
+    pub(crate) warehouse: &'a Bound<'py, PyAny>,
+    pub(crate) identities: &'a Bound<'py, PyAny>,
+    pub(crate) stale_warning_changes: &'a Bound<'py, PyAny>,
+}
+
 /// Resolved execution environment shared by planner phases.
 #[pyclass(module = "sqlbuild._native", frozen, get_all)]
 #[derive(Debug)]

@@ -19,8 +19,14 @@ use crate::bindings::_helpers::compiled_project::model_loop::{LoopContext, compi
 const REFERENCE_CALL_SYNTAX_CODE: &str = "P012";
 const MODEL_RESOURCE: &str = "model";
 
-/// `(model name or none for a function, relative path, file path, contents)` of a file.
-pub(crate) type CallOrigin<'a> = (Option<&'a str>, &'a str, &'a str, &'a str);
+/// The model name, or none for a function, and the relative path, file path and contents of a file.
+#[derive(Clone, Copy)]
+pub(crate) struct CallOrigin<'a> {
+    pub(crate) name: Option<&'a str>,
+    pub(crate) relative_path: &'a str,
+    pub(crate) file_path: &'a str,
+    pub(crate) contents: &'a str,
+}
 
 /// Report each rejected call in order, at its authored location when the authored text has it.
 pub(crate) fn report_invalid_calls(
@@ -32,7 +38,7 @@ pub(crate) fn report_invalid_calls(
     if invalid_calls.is_empty() {
         return Ok(());
     }
-    let (_, _, _, contents) = origin;
+    let CallOrigin { contents, .. } = origin;
     let authored: HashMap<String, Vec<usize>> = match extract_sql_references(contents, syntax) {
         ReferenceExtraction::Extracted(scan) => {
             let mut starts: HashMap<String, Vec<usize>> = HashMap::new();
@@ -62,7 +68,12 @@ pub(crate) fn report_invalid_call(
     start: Option<usize>,
     origin: CallOrigin<'_>,
 ) -> PyResult<()> {
-    let (name, relative_path, file_path, contents) = origin;
+    let CallOrigin {
+        name,
+        relative_path,
+        file_path,
+        contents,
+    } = origin;
     let py: Python<'_> = context.host.py();
     let path: Bound<'_, PyAny> = context.classes.path_class.call1((relative_path,))?;
     let fields: Bound<'_, PyDict> = PyDict::new(py);
@@ -152,7 +163,12 @@ pub(crate) fn origin_references(
         context,
         syntax,
         &scanned.invalid_calls,
-        (None, relative_path, file_path, contents),
+        CallOrigin {
+            name: None,
+            relative_path,
+            file_path,
+            contents,
+        },
     )?;
     Ok(scanned.references)
 }

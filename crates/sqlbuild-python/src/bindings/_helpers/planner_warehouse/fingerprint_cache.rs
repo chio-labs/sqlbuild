@@ -31,7 +31,14 @@ const INSERT_SQL: &str =
     "INSERT OR REPLACE INTO migration_fingerprint (cache_key, payload) VALUES (?, ?)";
 const SELECT_SQL: &str = "SELECT payload FROM migration_fingerprint WHERE cache_key = ?";
 
-type MemoKey = (String, String, Option<String>, Vec<(String, String)>);
+/// A fingerprint request: query SQL, metadata JSON, dialect and visible renames.
+#[derive(Hash, PartialEq, Eq)]
+struct MemoKey {
+    query_sql: String,
+    metadata_json: String,
+    dialect: Option<String>,
+    visible_renames: Vec<(String, String)>,
+}
 
 static FINGERPRINT_WORK: PyOnceLock<Py<FingerprintWork>> = PyOnceLock::new();
 
@@ -160,10 +167,10 @@ impl MigrationFingerprintCache {
         }
         fingerprint_cache_key(&FingerprintCacheKey {
             shared_digest: self.shared_digest.clone(),
-            query_sql: key.0.clone(),
-            metadata_json: key.1.clone(),
-            dialect: key.2.clone(),
-            visible_renames: key.3.clone(),
+            query_sql: key.query_sql.clone(),
+            metadata_json: key.metadata_json.clone(),
+            dialect: key.dialect.clone(),
+            visible_renames: key.visible_renames.clone(),
         })
         .map_err(|error| PyValueError::new_err(format!("{error:?}")))
     }
@@ -339,7 +346,12 @@ impl MigrationFingerprintCache {
                 visible.push((name, identity));
             }
         }
-        let key: MemoKey = (query_sql, metadata_json, dialect, visible);
+        let key: MemoKey = MemoKey {
+            query_sql,
+            metadata_json,
+            dialect,
+            visible_renames: visible,
+        };
         if let Some(found) = self.fingerprints.get(&key) {
             return Ok(found.clone());
         }
@@ -348,9 +360,14 @@ impl MigrationFingerprintCache {
             Some(stored) => stored,
             None => {
                 count_computation(py, &key)?;
-                let identities: BTreeMap<String, String> = key.3.iter().cloned().collect();
-                let computed: Option<String> =
-                    fingerprint(&key.0, &key.1, &identities, key.2.as_deref())?;
+                let identities: BTreeMap<String, String> =
+                    key.visible_renames.iter().cloned().collect();
+                let computed: Option<String> = fingerprint(
+                    &key.query_sql,
+                    &key.metadata_json,
+                    &identities,
+                    key.dialect.as_deref(),
+                )?;
                 self.remember(&cache_key, computed.as_deref())?;
                 computed
             }

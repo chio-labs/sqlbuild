@@ -40,3 +40,10 @@ class HostUnknownNameCase:
     description: str
     name: str
     expected_error: str
+
+
+@dataclass(frozen=True)
+class HostDeadCodeRootCase:
+    description: str
+    expected_missing_targets: tuple[tuple[str, str], ...]
+    expected_extra_targets: tuple[tuple[str, str], ...]

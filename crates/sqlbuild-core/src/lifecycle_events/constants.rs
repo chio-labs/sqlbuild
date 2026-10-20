@@ -1,6 +1,6 @@
 //! The versioned lifecycle event catalogue and the payload value contracts it validates.
 
-use crate::lifecycle_events::types::CatalogEntry;
+use crate::lifecycle_events::models::EventDefinition;
 
 /// The lifecycle event schema version SQLBuild produces.
 pub const CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION: i64 = 2;
@@ -277,45 +277,51 @@ pub const OPERATION_ADAPTERS: [&str; 10] = [
 ];
 
 /// The schema version 1 catalogue in declaration order.
-pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
-    ("invocation_started", &[], &[], &["command"], false),
-    (
-        "invocation_completed",
-        &[],
-        &[],
-        &["command", "duration_ms", "exit_code"],
-        true,
-    ),
-    (
-        "invocation_failed",
-        &[],
-        &[],
-        &[
+pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [EventDefinition; 20] = [
+    EventDefinition {
+        event_type: "invocation_started",
+        required_correlations: &[],
+        required_payload: &[],
+        allowed_payload: &["command"],
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "invocation_completed",
+        required_correlations: &[],
+        required_payload: &[],
+        allowed_payload: &["command", "duration_ms", "exit_code"],
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "invocation_failed",
+        required_correlations: &[],
+        required_payload: &[],
+        allowed_payload: &[
             "command",
             "duration_ms",
             "error_code",
             "error_type",
             "exit_code",
         ],
-        true,
-    ),
-    (
-        "run_started",
-        &["run_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "run_started",
+        required_correlations: &["run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "configured_concurrency",
             "run_kind",
             "selected_count",
             "worker_count",
         ],
-        false,
-    ),
-    (
-        "run_completed",
-        &["run_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "run_completed",
+        required_correlations: &["run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "duration_ms",
             "fail_count",
             "failed_count",
@@ -325,13 +331,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "succeeded_count",
             "warn_count",
         ],
-        true,
-    ),
-    (
-        "run_failed",
-        &["run_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "run_failed",
+        required_correlations: &["run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "duration_ms",
             "error_code",
             "error_type",
@@ -343,32 +349,32 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "succeeded_count",
             "warn_count",
         ],
-        true,
-    ),
-    (
-        "resource_attempt_started",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[],
-        &["attempt_number", "resource_kind", "resource_name"],
-        false,
-    ),
-    (
-        "resource_attempt_completed",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "resource_attempt_started",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[],
+        allowed_payload: &["attempt_number", "resource_kind", "resource_name"],
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "resource_attempt_completed",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "attempt_number",
             "duration_ms",
             "resource_kind",
             "resource_name",
         ],
-        true,
-    ),
-    (
-        "resource_attempt_failed",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "resource_attempt_failed",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "attempt_number",
             "duration_ms",
             "error_code",
@@ -376,18 +382,18 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "resource_kind",
             "resource_name",
         ],
-        true,
-    ),
-    (
-        "resource_attempt_skipped",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "resource_attempt_skipped",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[
             "attempt_number",
             "resource_kind",
             "resource_name",
             "skip_code",
         ],
-        &[
+        allowed_payload: &[
             "attempt_number",
             "duration_ms",
             "resource_kind",
@@ -395,13 +401,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "skip_code",
             "skip_mode",
         ],
-        true,
-    ),
-    (
-        "operation_started",
-        &["operation_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "operation_started",
+        required_correlations: &["operation_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "hook_index",
             "hook_name",
@@ -415,13 +421,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "strategy",
             "target_kind",
         ],
-        false,
-    ),
-    (
-        "operation_completed",
-        &["operation_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "operation_completed",
+        required_correlations: &["operation_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "duration_ms",
             "exit_code",
@@ -439,13 +445,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "strategy",
             "target_kind",
         ],
-        true,
-    ),
-    (
-        "operation_failed",
-        &["operation_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "operation_failed",
+        required_correlations: &["operation_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "duration_ms",
             "error_code",
@@ -465,30 +471,30 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "strategy",
             "target_kind",
         ],
-        true,
-    ),
-    (
-        "retry_scheduled",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "retry_scheduled",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[
             "delay_ms",
             "error_type",
             "failed_attempt_number",
             "next_attempt_number",
         ],
-        &[
+        allowed_payload: &[
             "delay_ms",
             "error_code",
             "error_type",
             "failed_attempt_number",
             "next_attempt_number",
         ],
-        false,
-    ),
-    (
-        "audit_completed",
-        &["run_id"],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "audit_completed",
+        required_correlations: &["run_id"],
+        required_payload: &[
             "attachment_kind",
             "audit_definition_name",
             "audit_name",
@@ -497,7 +503,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "run_scope_phase",
             "severity",
         ],
-        &[
+        allowed_payload: &[
             "attached_column_name",
             "attached_target_kind",
             "attached_target_name",
@@ -534,13 +540,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "thresholds",
             "violation_count",
         ],
-        true,
-    ),
-    (
-        "statement_started",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "statement_started",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -552,13 +558,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "sql_digest",
             "statement_kind",
         ],
-        false,
-    ),
-    (
-        "statement_submitted",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "statement_submitted",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -569,13 +575,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "sql_digest",
             "statement_kind",
         ],
-        false,
-    ),
-    (
-        "statement_heartbeat",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "statement_heartbeat",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -588,13 +594,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "sql_digest",
             "statement_kind",
         ],
-        false,
-    ),
-    (
-        "statement_completed",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "statement_completed",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -607,13 +613,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "sql_digest",
             "statement_kind",
         ],
-        true,
-    ),
-    (
-        "statement_failed",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "statement_failed",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -628,55 +634,55 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V1: [CatalogEntry; 20] = [
             "sql_digest",
             "statement_kind",
         ],
-        true,
-    ),
+        terminal: true,
+    },
 ];
 /// The schema version 2 catalogue in declaration order.
-pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
-    (
-        "invocation_started",
-        &[],
-        &[],
-        &["adapter", "command", "selection_count", "target"],
-        false,
-    ),
-    (
-        "invocation_completed",
-        &[],
-        &[],
-        &["command", "duration_ms", "exit_code"],
-        true,
-    ),
-    (
-        "invocation_failed",
-        &[],
-        &[],
-        &[
+pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [EventDefinition; 23] = [
+    EventDefinition {
+        event_type: "invocation_started",
+        required_correlations: &[],
+        required_payload: &[],
+        allowed_payload: &["adapter", "command", "selection_count", "target"],
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "invocation_completed",
+        required_correlations: &[],
+        required_payload: &[],
+        allowed_payload: &["command", "duration_ms", "exit_code"],
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "invocation_failed",
+        required_correlations: &[],
+        required_payload: &[],
+        allowed_payload: &[
             "command",
             "duration_ms",
             "error_code",
             "error_type",
             "exit_code",
         ],
-        true,
-    ),
-    (
-        "run_started",
-        &["run_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "run_started",
+        required_correlations: &["run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "configured_concurrency",
             "run_kind",
             "selected_count",
             "worker_count",
         ],
-        false,
-    ),
-    (
-        "run_completed",
-        &["run_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "run_completed",
+        required_correlations: &["run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "duration_ms",
             "fail_count",
             "failed_count",
@@ -686,13 +692,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "succeeded_count",
             "warn_count",
         ],
-        true,
-    ),
-    (
-        "run_failed",
-        &["run_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "run_failed",
+        required_correlations: &["run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "duration_ms",
             "error_code",
             "error_type",
@@ -704,26 +710,26 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "succeeded_count",
             "warn_count",
         ],
-        true,
-    ),
-    (
-        "resource_attempt_started",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "resource_attempt_started",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "attempt_number",
             "plan_action",
             "plan_reason_code",
             "resource_kind",
             "resource_name",
         ],
-        false,
-    ),
-    (
-        "resource_attempt_completed",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "resource_attempt_completed",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "attempt_number",
             "duration_ms",
             "plan_action",
@@ -731,13 +737,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "resource_kind",
             "resource_name",
         ],
-        true,
-    ),
-    (
-        "resource_attempt_failed",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "resource_attempt_failed",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "attempt_number",
             "duration_ms",
             "error_code",
@@ -747,18 +753,18 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "resource_kind",
             "resource_name",
         ],
-        true,
-    ),
-    (
-        "resource_attempt_skipped",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "resource_attempt_skipped",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[
             "attempt_number",
             "resource_kind",
             "resource_name",
             "skip_code",
         ],
-        &[
+        allowed_payload: &[
             "attempt_number",
             "duration_ms",
             "plan_action",
@@ -768,13 +774,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "skip_code",
             "skip_mode",
         ],
-        true,
-    ),
-    (
-        "operation_started",
-        &["operation_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "operation_started",
+        required_correlations: &["operation_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "hook_index",
             "hook_name",
@@ -788,13 +794,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "strategy",
             "target_kind",
         ],
-        false,
-    ),
-    (
-        "operation_completed",
-        &["operation_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "operation_completed",
+        required_correlations: &["operation_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "duration_ms",
             "exit_code",
@@ -812,13 +818,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "strategy",
             "target_kind",
         ],
-        true,
-    ),
-    (
-        "operation_failed",
-        &["operation_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "operation_failed",
+        required_correlations: &["operation_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "duration_ms",
             "error_code",
@@ -838,30 +844,30 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "strategy",
             "target_kind",
         ],
-        true,
-    ),
-    (
-        "retry_scheduled",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "retry_scheduled",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[
             "delay_ms",
             "error_type",
             "failed_attempt_number",
             "next_attempt_number",
         ],
-        &[
+        allowed_payload: &[
             "delay_ms",
             "error_code",
             "error_type",
             "failed_attempt_number",
             "next_attempt_number",
         ],
-        false,
-    ),
-    (
-        "audit_completed",
-        &["run_id"],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "audit_completed",
+        required_correlations: &["run_id"],
+        required_payload: &[
             "attachment_kind",
             "audit_definition_name",
             "audit_name",
@@ -870,7 +876,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "run_scope_phase",
             "severity",
         ],
-        &[
+        allowed_payload: &[
             "attached_column_name",
             "attached_target_kind",
             "attached_target_name",
@@ -907,13 +913,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "thresholds",
             "violation_count",
         ],
-        true,
-    ),
-    (
-        "statement_started",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "statement_started",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -926,13 +932,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "sql_digest",
             "statement_kind",
         ],
-        false,
-    ),
-    (
-        "statement_submitted",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "statement_submitted",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -944,13 +950,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "sql_digest",
             "statement_kind",
         ],
-        false,
-    ),
-    (
-        "statement_heartbeat",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "statement_heartbeat",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -964,13 +970,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "sql_digest",
             "statement_kind",
         ],
-        false,
-    ),
-    (
-        "statement_completed",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "statement_completed",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -984,13 +990,13 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "sql_digest",
             "statement_kind",
         ],
-        true,
-    ),
-    (
-        "statement_failed",
-        &["statement_id"],
-        &[],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "statement_failed",
+        required_correlations: &["statement_id"],
+        required_payload: &[],
+        allowed_payload: &[
             "adapter",
             "affected_rows",
             "batch_size",
@@ -1006,12 +1012,12 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "sql_digest",
             "statement_kind",
         ],
-        true,
-    ),
-    (
-        "microbatch_started",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "microbatch_started",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[
             "batch_count",
             "batch_index",
             "batch_kind",
@@ -1024,7 +1030,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "planned_cursor_end_exclusive",
             "planned_cursor_start",
         ],
-        &[
+        allowed_payload: &[
             "batch_count",
             "batch_index",
             "batch_kind",
@@ -1037,12 +1043,12 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "planned_cursor_end_exclusive",
             "planned_cursor_start",
         ],
-        false,
-    ),
-    (
-        "microbatch_completed",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[
+        terminal: false,
+    },
+    EventDefinition {
+        event_type: "microbatch_completed",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[
             "batch_count",
             "batch_index",
             "batch_kind",
@@ -1055,7 +1061,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "planned_cursor_end_exclusive",
             "planned_cursor_start",
         ],
-        &[
+        allowed_payload: &[
             "affected_rows",
             "batch_count",
             "batch_index",
@@ -1070,12 +1076,12 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "planned_cursor_end_exclusive",
             "planned_cursor_start",
         ],
-        true,
-    ),
-    (
-        "microbatch_failed",
-        &["resource_attempt_id", "resource_id", "run_id"],
-        &[
+        terminal: true,
+    },
+    EventDefinition {
+        event_type: "microbatch_failed",
+        required_correlations: &["resource_attempt_id", "resource_id", "run_id"],
+        required_payload: &[
             "batch_count",
             "batch_index",
             "batch_kind",
@@ -1089,7 +1095,7 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "planned_cursor_end_exclusive",
             "planned_cursor_start",
         ],
-        &[
+        allowed_payload: &[
             "batch_count",
             "batch_index",
             "batch_kind",
@@ -1105,6 +1111,6 @@ pub(crate) const LIFECYCLE_EVENT_CATALOG_V2: [CatalogEntry; 23] = [
             "planned_cursor_end_exclusive",
             "planned_cursor_start",
         ],
-        true,
-    ),
+        terminal: true,
+    },
 ];

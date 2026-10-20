@@ -13,15 +13,15 @@ pub(crate) type QualifiedRow = (String, String, Option<IdentityRow>);
 /// An ownership root's path, kind and resource kind.
 pub(crate) type RootRow = (String, String, Option<String>);
 /// Identity, path, line, column, scope, ownership root and owning path.
-pub(crate) type DeclarationRow = (
-    QualifiedRow,
-    String,
-    i64,
-    i64,
-    String,
-    RootRow,
-    Option<String>,
-);
+pub(crate) struct DeclarationRow {
+    pub(crate) identity: QualifiedRow,
+    pub(crate) path: String,
+    pub(crate) line: i64,
+    pub(crate) column: i64,
+    pub(crate) scope: String,
+    pub(crate) root: RootRow,
+    pub(crate) owning_path: Option<String>,
+}
 
 fn invalid(what: &str) -> pyo3::PyErr {
     PyValueError::new_err(format!("invalid scope placement {what}"))
@@ -73,7 +73,15 @@ pub(crate) fn scope_kind(value: &str) -> PyResult<ScopeKind> {
 
 /// A declaration row as its record, without macro dependencies.
 pub(crate) fn declaration_record(row: DeclarationRow) -> PyResult<DeclarationRecord> {
-    let (identity, path, line, column, scope, root, owning_path) = row;
+    let DeclarationRow {
+        identity,
+        path,
+        line,
+        column,
+        scope,
+        root,
+        owning_path,
+    } = row;
     Ok(DeclarationRecord {
         identity: declaration_identity(identity)?,
         path,

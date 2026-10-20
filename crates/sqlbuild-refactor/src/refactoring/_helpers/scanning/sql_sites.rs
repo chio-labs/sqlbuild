@@ -46,8 +46,16 @@ pub(crate) struct ModelBody {
     pub(crate) passes: Vec<Vec<ExpansionSpan>>,
 }
 
-/// `RESOURCE_CALL_PATTERN` on a site's text: `(kind, name, name_start, name_end)`.
-fn resource_call(text: &[char]) -> Option<(String, String, usize, usize)> {
+/// A resource call a site's text holds, with its name span within that text.
+struct ResourceCall {
+    kind: String,
+    name: String,
+    name_start: usize,
+    name_end: usize,
+}
+
+/// `RESOURCE_CALL_PATTERN` on a site's text.
+fn resource_call(text: &[char]) -> Option<ResourceCall> {
     if !starts_with(text, 0, "__") {
         return None;
     }
@@ -82,12 +90,12 @@ fn resource_call(text: &[char]) -> Option<(String, String, usize, usize)> {
     if !(rest.is_empty() || rest == ['\n']) {
         return None;
     }
-    Some((
-        kind.to_owned(),
-        slice(text, name_start, name_end),
+    Some(ResourceCall {
+        kind: kind.to_owned(),
+        name: slice(text, name_start, name_end),
         name_start,
         name_end,
-    ))
+    })
 }
 
 fn skip_space(text: &[char], mut index: usize) -> usize {
@@ -102,7 +110,12 @@ pub(crate) fn resource_sites(text: &[char], context: &ScanContext) -> Vec<Resour
     interpolation_sites(text, context.backtick_identifiers)
         .into_iter()
         .filter_map(|site| {
-            let (kind, name, name_start, name_end) = resource_call(&chars(&site.text))?;
+            let ResourceCall {
+                kind,
+                name,
+                name_start,
+                name_end,
+            } = resource_call(&chars(&site.text))?;
             Some(ResourceSite {
                 kind,
                 name,
@@ -192,10 +205,10 @@ pub(crate) fn analysis_sql(text: &[char], context: &ScanContext) -> AnalysisSql 
         let call = resource_call(&chars(&site.text));
         let kind: char = call
             .as_ref()
-            .and_then(|(kind, ..)| kind.chars().next())
+            .and_then(|call| call.kind.chars().next())
             .unwrap_or(GENERIC_PLACEHOLDER_KIND);
         let placeholder = placeholder(kind, index, site.end - site.start);
-        if let Some((kind, name, ..)) = call {
+        if let Some(ResourceCall { kind, name, .. }) = call {
             let key = (kind, name);
             match tables.iter_mut().find(|(item, _)| *item == key) {
                 Some((_, placeholders)) => {

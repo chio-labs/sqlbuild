@@ -14,7 +14,7 @@ use sqlbuild_analysis::assembly::analysis_session::models::{
 };
 use sqlbuild_analysis::binding_locations::main::locate_binding_diagnostics::locate_binding_diagnostics;
 use sqlbuild_analysis::binding_locations::models::{BindingSource, LocatedDiagnostic};
-use sqlbuild_analysis::semantic_validation::types::{DiagnosticRow, Expansion};
+use sqlbuild_analysis::semantic_validation::models::{DiagnosticRow, Expansion};
 
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
@@ -30,15 +30,18 @@ use crate::bindings::_helpers::record_behaviours::lineage_facts::{
 const COMPILE_PHASE: &str = "compile";
 const MODEL_RESOURCE: &str = "model";
 
-/// `(output proven, fixed columns, (family, inferred type), inputs, failure, bare pivot)`.
-pub(crate) type ProofArgument = (
-    bool,
-    Vec<InferredRow>,
-    Vec<(String, Option<String>)>,
-    Vec<String>,
-    Option<String>,
-    bool,
-);
+positional_record! {
+    extract;
+    /// `(output proven, fixed columns, (family, inferred type), inputs, failure, bare pivot)`.
+    pub(crate) struct ProofArgument {
+        output_proven: bool,
+        fixed: Vec<InferredRow>,
+        families: Vec<(String, Option<String>)>,
+        input_relations: Vec<String>,
+        failure_reason: Option<String>,
+        bare_dynamic_pivot: bool,
+    }
+}
 
 /// The session analysis a model was assembled from: the session and its request position.
 pub(crate) type SessionArgument = (Py<NativeModelAnalysisSession>, usize);
@@ -81,8 +84,14 @@ fn inferred_row(column: &ColumnFact) -> InferredRow {
 }
 
 fn proof_fact(argument: ProofArgument) -> ContractProof {
-    let (output_proven, fixed, families, input_relations, failure_reason, bare_dynamic_pivot) =
-        argument;
+    let ProofArgument {
+        output_proven,
+        fixed,
+        families,
+        input_relations,
+        failure_reason,
+        bare_dynamic_pivot,
+    } = argument;
     ContractProof {
         output_proven,
         fixed_columns: fixed
@@ -157,8 +166,18 @@ fn located(input: &ModelInputRecord, outcome: &ModelOutcome) -> PyResult<Vec<Loc
     let query: &str = model_file.query_text();
     let expansion = &input.expansion;
     let passes: Vec<Vec<Expansion>> = vec![
-        expansion.declaration_spans.clone(),
-        expansion.macro_spans.clone(),
+        expansion
+            .declaration_spans
+            .iter()
+            .copied()
+            .map(Expansion::from)
+            .collect(),
+        expansion
+            .macro_spans
+            .iter()
+            .copied()
+            .map(Expansion::from)
+            .collect(),
     ];
     let source: BindingSource<'_> = BindingSource {
         authored,

@@ -270,7 +270,7 @@ pub(crate) fn binding_rows<'py>(
         .flatten()
     {
         let position: usize = position.extract()?;
-        rows_by_name.set_item(name, rows.get(position).into_pyobject(py)?)?;
+        rows_by_name.set_item(name, rows.get(position).cloned().into_pyobject(py)?)?;
     }
     Ok(rows_by_name)
 }

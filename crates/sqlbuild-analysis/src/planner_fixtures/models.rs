@@ -12,7 +12,14 @@ pub struct FixtureReadSchemas<'a> {
 
 use crate::required_columns::models::ColumnRead;
 
-use crate::planner_fixtures::types::FixtureReadReference;
+/// The complete reference identity retained by the fixture read cache.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct FixtureReadReference {
+    pub kind: String,
+    pub name: String,
+    pub package: Option<String>,
+    pub argument_count: Option<i64>,
+}
 
 /// The original SQL, complete references and dialect form the read cache key.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

@@ -39,6 +39,18 @@ from tests.unit.src.sqlbuild.adapters.clickhouse._test_types import TableLayoutT
             layout={"order_by": "order_id"},
             expected_clauses="ENGINE = MergeTree ORDER BY (order_id)",
         ),
+        TableLayoutTestCase(
+            description="a shared engine",
+            layout={"engine": "SharedMergeTree", "partition_by": "toYYYYMM(ordered_at)"},
+            expected_clauses=(
+                "ENGINE = SharedMergeTree ORDER BY tuple() PARTITION BY toYYYYMM(ordered_at)"
+            ),
+        ),
+        TableLayoutTestCase(
+            description="a shared replacing engine with its version column",
+            layout={"engine": "SharedReplacingMergeTree(version)", "order_by": ["customer_id"]},
+            expected_clauses="ENGINE = SharedReplacingMergeTree(version) ORDER BY (customer_id)",
+        ),
     ],
     ids=lambda case: case.description,
 )
