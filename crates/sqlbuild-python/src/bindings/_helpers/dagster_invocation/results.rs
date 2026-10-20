@@ -27,6 +27,7 @@ const CHECK_ASSET_KINDS: [&str; 5] = ["model", "source", "seed", "udf", "table_f
 const MATERIALIZE: &str = "materialize";
 const MATERIALIZATION: &str = "materialization";
 const CHECK: &str = "check";
+const AUDIT_CHECK_KIND: &str = "audit";
 
 /// DAG nodes upstream first, or in artifact order when edges form a cycle.
 pub(crate) fn sorted_nodes<'py>(dag: &Bound<'py, PyAny>) -> PyResult<Vec<Bound<'py, PyAny>>> {
@@ -238,6 +239,23 @@ fn dag_check_for<'py>(
     }
     for dag_check in items(dag, "checks")? {
         if get(&dag_check, "id")?.eq(&wanted)? {
+            return Ok(Some(dag_check));
+        }
+    }
+    singular_audit_check(dag, check)
+}
+
+/// The DAG check `audit:<name>` of a singular audit whose result names where it ran.
+fn singular_audit_check<'py>(
+    dag: &Bound<'py, PyAny>,
+    check: &Bound<'py, PyAny>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    if text_of(check, "kind")? != AUDIT_CHECK_KIND {
+        return Ok(None);
+    }
+    let wanted: String = format!("{AUDIT_CHECK_KIND}:{}", text_of(check, "name")?);
+    for dag_check in items(dag, "checks")? {
+        if text_of(&dag_check, "id")? == wanted && get(&dag_check, "attachment_kind")?.is_none() {
             return Ok(Some(dag_check));
         }
     }

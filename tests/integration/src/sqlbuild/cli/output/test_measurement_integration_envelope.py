@@ -1,4 +1,4 @@
-"""Measurement audit integration-envelope round-trip coverage."""
+"""Audit integration-envelope round-trip coverage."""
 
 from __future__ import annotations
 
@@ -19,10 +19,17 @@ from sqlbuild.compiler.auditing.types import (
     AuditSeverity,
     ThresholdOperator,
 )
+from sqlbuild.compiler.compile.types import AttachedAuditTargetKind
 from sqlbuild.executor.auditing.models import AuditExecutionResult
 from sqlbuild.runtime.observability.models import LifecycleEvent
-from tests.integration.src.sqlbuild.cli.output._test_types import MeasurementEnvelopeTestCase
-from tests.unit.src.sqlbuild.cli.output._helpers.helpers import written_integration_record
+from tests.integration.src.sqlbuild.cli.output._test_types import (
+    AttachmentKindEnvelopeTestCase,
+    MeasurementEnvelopeTestCase,
+)
+from tests.unit.src.sqlbuild.cli.output._helpers.helpers import (
+    audit_terminal,
+    written_integration_record,
+)
 from tests.unit.src.sqlbuild.runtime.observability.helpers import lifecycle_event
 
 
@@ -86,3 +93,70 @@ def test_given_measurement_execution_result_when_building_envelope_then_decode_r
     assert check.thresholds == {"warn": {"operator": "below", "limit": 100.0}}
     assert check.evidence_count == 0
     assert check.evidence_truncated is False
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        AttachmentKindEnvelopeTestCase(
+            "model audit",
+            AuditAttachmentKind.MODEL,
+            AttachedAuditTargetKind.MODEL,
+            "orders",
+            expected_attachment_kind="model",
+            expected_asset_name="orders",
+        ),
+        AttachmentKindEnvelopeTestCase(
+            "source audit",
+            AuditAttachmentKind.SOURCE,
+            AttachedAuditTargetKind.SOURCE,
+            "raw_orders",
+            expected_attachment_kind="source",
+            expected_asset_name="raw_orders",
+        ),
+        AttachmentKindEnvelopeTestCase(
+            "seed audit",
+            AuditAttachmentKind.SEED,
+            AttachedAuditTargetKind.SEED,
+            "products",
+            expected_attachment_kind="seed",
+            expected_asset_name="products",
+        ),
+        AttachmentKindEnvelopeTestCase(
+            "end-of-run audit",
+            AuditAttachmentKind.END,
+            None,
+            None,
+            expected_attachment_kind="end",
+            expected_asset_name=None,
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_every_attachment_kind_when_building_envelope_then_check_is_not_degraded(
+    test_case: AttachmentKindEnvelopeTestCase,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result: AuditExecutionResult = AuditExecutionResult(
+        audit_name="not_null",
+        audit_definition_name="not_null",
+        attachment_kind=test_case.attachment_kind,
+        attached_target_kind=test_case.attached_target_kind,
+        attached_target_name=test_case.attached_target_name,
+        severity=AuditSeverity.ERROR,
+        outcome=AuditOutcome.PASS,
+        row_count=0,
+        executed_sql="SELECT 1 WHERE FALSE",
+    )
+
+    envelope: IntegrationResultEnvelope = written_integration_record(
+        result=result, terminal=audit_terminal(result), directory=tmp_path, command="audit"
+    )
+
+    check: IntegrationCheckResult = envelope.checks[0]
+    assert envelope.projection_degraded is test_case.expected_degraded
+    assert check.attachment_kind == test_case.expected_attachment_kind
+    assert check.asset_name == test_case.expected_asset_name
+    assert check.passed is test_case.expected_passed
+    assert "integration output degraded" not in capsys.readouterr().err

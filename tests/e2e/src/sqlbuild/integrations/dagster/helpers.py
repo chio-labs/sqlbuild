@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
 from types import MappingProxyType
@@ -391,3 +392,94 @@ def sqlbuild_assets(context):
 
 defs = dg.Definitions(assets=[sqlbuild_assets], jobs=[dg.define_asset_job("stdout_capture_job")])
 """
+
+
+@dataclass(frozen=True)
+class AuditCheckOutcome:
+    """The asset checks one Dagster run declared and evaluated."""
+
+    success: bool
+    declared: frozenset[tuple[AssetKey, str]]
+    declared_assets: frozenset[AssetKey]
+    evaluated: frozenset[tuple[AssetKey, str]]
+    all_passed: bool
+
+
+ATTACHMENT_CHECK_PROJECT_FILES: dict[str, str] = {
+    "sqlbuild_project.toml": (
+        'name = "attachment_checks"\n'
+        'adapter = "duckdb"\n\n'
+        "[connection]\n"
+        'database = "attachment_checks.duckdb"\n'
+    ),
+    "seeds/products.csv": "product_id,product_name\n1,widget\n2,gadget\n",
+    "seeds/products.yml": (
+        "seeds:\n"
+        "  - name: products\n"
+        "    description: Product catalogue.\n"
+        "    columns:\n"
+        "      - name: product_id\n"
+        "        type: INTEGER\n"
+        "        audits:\n"
+        "          - not_null\n"
+        "      - name: product_name\n"
+        "        type: VARCHAR\n"
+    ),
+    "sources/raw.yml": (
+        "sources:\n"
+        "  - name: raw_orders\n"
+        "    description: Raw orders.\n"
+        "    expression: |\n"
+        "      SELECT 1 AS order_id, 1 AS product_id\n"
+        "      UNION ALL SELECT 2 AS order_id, 2 AS product_id\n"
+        "    columns:\n"
+        "      - name: order_id\n"
+        "        type: INTEGER\n"
+        "        audits:\n"
+        "          - not_null\n"
+        "      - name: product_id\n"
+        "        type: INTEGER\n"
+    ),
+    "models/orders.sql": (
+        "MODEL (description 'Orders.',\n"
+        "  columns (order_id (), product_id ()),\n"
+        "  audits [not_null (column order_id)],\n"
+        ");\n\n"
+        'SELECT order_id, product_id FROM __source("raw_orders")\n'
+    ),
+    "models/customers.sql": (
+        "MODEL (description 'Customers.');\n\nSELECT 1 AS customer_id, 1 AS order_id\n"
+    ),
+    "audits/singular/orders_have_customers.sql": (
+        'AUDIT (name "orders_have_customers", severity error);\n\n'
+        "SELECT o.order_id\n"
+        'FROM __ref("orders") o\n'
+        'LEFT JOIN __ref("customers") c ON o.order_id = c.order_id\n'
+        "WHERE c.order_id IS NULL AND o.order_id = 1\n"
+    ),
+    "audits/singular/orders_match_raw_orders.sql": (
+        'AUDIT (name "orders_match_raw_orders", severity error);\n\n'
+        "SELECT o.order_id\n"
+        'FROM __ref("orders") o\n'
+        'LEFT JOIN __source("raw_orders") r ON o.order_id = r.order_id\n'
+        "WHERE r.order_id IS NULL\n"
+    ),
+}
+
+
+def audit_check_outcome(*, result: ExecuteInProcessResult, assets: Any) -> AuditCheckOutcome:
+    """The asset checks a Dagster run of `assets` declared and evaluated."""
+
+    declared: frozenset[tuple[AssetKey, str]] = frozenset(
+        (spec.asset_key, spec.name) for spec in assets.check_specs
+    )
+    evaluations: list[Any] = list(result.get_asset_check_evaluations())
+    return AuditCheckOutcome(
+        success=result.success,
+        declared=declared,
+        declared_assets=frozenset(asset_key for asset_key, _ in declared),
+        evaluated=frozenset(
+            (evaluation.asset_key, evaluation.check_name) for evaluation in evaluations
+        ),
+        all_passed=all(evaluation.passed for evaluation in evaluations),
+    )
