@@ -2394,7 +2394,7 @@
         "nargs": 0,
         "const": true,
         "default": false,
-        "help": "Bypass the format result cache for this invocation",
+        "help": "format every file instead of skipping files a previous run found clean",
         "group": 1
        },
        {

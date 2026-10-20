@@ -1245,3 +1245,14 @@ class FormatCacheFaultTestCase:
     expected_code: str
     expected_hits: int
     expected_misses: int
+
+
+@dataclass(frozen=True)
+class FormatWriteFailureTestCase:
+    """A write that fails part-way through a format run and the files left as authored."""
+
+    description: str
+    locked_directory: str
+    later_directory: str
+    expected_error: type[BaseException]
+    expected_status: str
