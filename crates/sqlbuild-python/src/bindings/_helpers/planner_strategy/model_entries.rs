@@ -19,15 +19,15 @@ use sqlbuild_model_config::model_validation::constants::PHYSICAL_STORAGE_KEYS;
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
-use crate::bindings::_helpers::model_config::config_values::{
-    config_bool, config_cursor_bound, config_int, config_str, config_string_tuple,
+use crate::bindings::_helpers::model_config::typed_config::{
+    ConfigValues, config_cursor_bound, config_flag, config_integer_object, config_text_object,
+    config_text_tuple, config_value, model_values,
 };
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_strategy::constants::{
     CUSTOM_MATERIALIZATION, DDL_SEPARATOR, ENFORCED_CONTRACT, MICROBATCH_MODE,
     PHYSICAL_STORAGE_DIALECT, PHYSICAL_STORAGE_UNSUPPORTED_CODE, TABLE_RECREATING_ACTIONS,
 };
-use crate::bindings::_helpers::planner_strategy::cursor_inputs::model_values;
 use crate::bindings::_helpers::planner_strategy::cursor_types::{
     cursor_type_warning_record, warehouse_column_types,
 };
@@ -169,7 +169,7 @@ fn string_list<'py>(values: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py
 /// The model's `on_schema_change` policy, rejecting unknown values.
 fn on_schema_change<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = model.py();
-    let raw: Bound<'py, PyAny> = mapping_get(&model_values(model)?, "on_schema_change")?;
+    let raw: Bound<'py, PyAny> = config_value(py, &model_values(model)?, "on_schema_change")?;
     if raw.is_none() {
         return Ok(raw);
     }
@@ -210,9 +210,9 @@ fn lookback_of(
     model: &Bound<'_, PyAny>,
     effective_grain: Option<String>,
 ) -> PyResult<Option<String>> {
-    let values: Bound<'_, PyAny> = model_values(model)?;
+    let values: ConfigValues<'_> = model_values(model)?;
     let read = |key: &str| -> PyResult<Option<String>> {
-        config_str(&values, key)?
+        config_text_object(model.py(), &values, key)?
             .map(|value| text(&value))
             .transpose()
     };
@@ -269,7 +269,7 @@ fn logical_ddl<'py>(
         "create_table" => "render_create_table_as",
         "incremental_append" => "render_append",
         "incremental_delete_insert" if !cursor_column.is_none() && !cursor_bounds.is_none() => {
-            let values: Bound<'py, PyAny> = model_values(model)?;
+            let values: ConfigValues<'py> = model_values(model)?;
             let start = sentinel_to_token(&native_field(&cursor_bounds, "start")?)?;
             let end = sentinel_to_token(&native_field(&cursor_bounds, "end")?)?;
             pairs.push(("cursor_column", cursor_column));
@@ -277,7 +277,7 @@ fn logical_ddl<'py>(
             pairs.push(("cursor_end", PyString::new(py, &end).into_any()));
             pairs.push((
                 "cursor_type",
-                or_none(py, config_str(&values, "cursor_type")?),
+                or_none(py, config_text_object(py, &values, "cursor_type")?),
             ));
             "render_delete_insert_cursor"
         }
@@ -324,14 +324,14 @@ fn expected_output_columns<'py>(model: &Bound<'py, PyAny>) -> PyResult<Bound<'py
 /// The model's physical table layout, refused on adapters whose tables have none.
 fn storage_fields<'py>(
     request: &ModelEntryDecisions<'py>,
-    values: &Bound<'py, PyAny>,
+    values: &ConfigValues<'py>,
     entry: &Bound<'py, PyDict>,
 ) -> PyResult<()> {
-    let py: Python<'py> = values.py();
+    let py: Python<'py> = values.0.py();
     let storage: Bound<'py, PyDict> = PyDict::new(py);
     let mut keys: Vec<&str> = Vec::new();
     for key in PHYSICAL_STORAGE_KEYS {
-        let value: Bound<'py, PyAny> = mapping_get(values, key)?;
+        let value: Bound<'py, PyAny> = config_value(py, values, key)?;
         if !value.is_none() {
             storage.set_item(key, value)?;
             keys.push(key);
@@ -409,7 +409,7 @@ fn model_warnings<'py>(
         cursor_column: optional_string(&request.cursor_column)?,
         cursor_type: optional_string(&or_none(
             py,
-            config_str(&model_values(model)?, "cursor_type")?,
+            config_text_object(py, &model_values(model)?, "cursor_type")?,
         ))?,
         warehouse_columns: warehouse_column_types(warehouse_columns)?,
         sql_analysis_enabled: request.sql_analysis_enabled,
@@ -474,10 +474,10 @@ fn ddl_cursor_bounds<'py>(request: &ModelEntryDecisions<'py>) -> PyResult<Bound<
 /// The model's `max_duration`, its whole seconds, and the configuration layer that set it.
 fn execution_limit_fields<'py>(
     model: &Bound<'py, PyAny>,
-    values: &Bound<'py, PyAny>,
+    values: &ConfigValues<'py>,
     entry: &Bound<'py, PyDict>,
 ) -> PyResult<()> {
-    let Some(text) = config_str(values, MODEL_MAX_DURATION_KEY)? else {
+    let Some(text) = config_text_object(model.py(), values, MODEL_MAX_DURATION_KEY)? else {
         return Ok(());
     };
     let text: String = text.extract()?;
@@ -506,27 +506,27 @@ fn execution_limit_fields<'py>(
 /// Copy the model's authored strategy, cursor, batch and snapshot settings onto the entry.
 fn config_fields<'py>(
     request: &ModelEntryDecisions<'py>,
-    values: &Bound<'py, PyAny>,
+    values: &ConfigValues<'py>,
     entry: &Bound<'py, PyDict>,
 ) -> PyResult<()> {
     let py: Python<'py> = request.model.py();
     let model: &Bound<'py, PyAny> = &request.model;
     for (key, field) in STRING_FIELDS {
-        entry.set_item(field, or_none(py, config_str(values, key)?))?;
+        entry.set_item(field, or_none(py, config_text_object(py, values, key)?))?;
     }
     for key in SNAPSHOT_POLICY_FIELDS {
-        entry.set_item(key, or_none(py, config_str(values, key)?))?;
+        entry.set_item(key, or_none(py, config_text_object(py, values, key)?))?;
     }
     for key in ["cursor_start", "cursor_end"] {
-        entry.set_item(key, or_none(py, config_cursor_bound(values, key)?))?;
+        entry.set_item(key, or_none(py, config_cursor_bound(py, values, key)?))?;
     }
-    let microbatch: bool = match config_str(values, "incremental_mode")? {
+    let microbatch: bool = match config_text_object(py, values, "incremental_mode")? {
         Some(mode) => mode.eq(MICROBATCH_MODE)?,
         None => false,
     };
     let lookback: Option<String> = if microbatch {
         let read = |key: &str| -> PyResult<Option<String>> {
-            config_str(values, key)?
+            config_text_object(py, values, key)?
                 .map(|value| text(&value))
                 .transpose()
         };
@@ -540,27 +540,25 @@ fn config_fields<'py>(
         )?;
         lookback_of(model, grain)?
     } else {
-        config_str(values, "lookback")?
+        config_text_object(py, values, "lookback")?
             .map(|value| text(&value))
             .transpose()?
     };
     entry.set_item("lookback", lookback)?;
-    let concurrency: Bound<'py, PyAny> = match config_int(values, "batch_concurrency")? {
-        Some(concurrency) if concurrency.is_truthy()? => concurrency,
-        _ => 1_i64.into_pyobject(py)?.into_any(),
-    };
+    let concurrency: Bound<'py, PyAny> =
+        match config_integer_object(py, values, "batch_concurrency")? {
+            Some(concurrency) if concurrency.is_truthy()? => concurrency,
+            _ => 1_i64.into_pyobject(py)?.into_any(),
+        };
     entry.set_item("batch_concurrency", concurrency)?;
-    let (limit, limit_action) = microbatch_limit_config(values)?;
+    let (limit, limit_action) = microbatch_limit_config(&values.0)?;
     entry.set_item("microbatch_limit", or_none(py, limit))?;
     entry.set_item(
         "declared_microbatch_limit_action",
         or_none(py, limit_action),
     )?;
-    entry.set_item("check_columns", string_list(values, "check_columns")?)?;
-    let hard_deletes: Bound<'py, PyAny> = match config_bool(values, "invalidate_hard_deletes")? {
-        Some(flag) if flag.is_truthy()? => flag,
-        _ => PyBool::new(py, false).to_owned().into_any(),
-    };
+    entry.set_item("check_columns", string_list(&values.0, "check_columns")?)?;
+    let hard_deletes: bool = config_flag(py, values, "invalidate_hard_deletes")?.unwrap_or(false);
     entry.set_item("invalidate_hard_deletes", hard_deletes)?;
     Ok(())
 }
@@ -634,7 +632,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
 ) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyTuple>)> {
     let py: Python<'py> = request.model.py();
     let model: &Bound<'py, PyAny> = &request.model;
-    let values: Bound<'py, PyAny> = model_values(model)?;
+    let values: ConfigValues<'py> = model_values(model)?;
     let change: &Bound<'py, PyAny> = &request.change_result;
     let snapshot: &Bound<'py, PyAny> = &request.snapshot;
     let name: Bound<'py, PyAny> = model_reads::name_object(model)?;
@@ -649,9 +647,10 @@ pub(crate) fn assemble_model_plan_entry<'py>(
         (&schema_actions, &policy),
         (&enforcement, &warehouse_columns),
     )?;
-    let unique_key: Bound<'py, PyTuple> = string_list(&values, "unique_key")?;
-    let merge_exclude: Bound<'py, PyTuple> = config_string_tuple(&values, "merge_exclude_columns")?
-        .unwrap_or_else(|| PyTuple::empty(py));
+    let unique_key: Bound<'py, PyTuple> = string_list(&values.0, "unique_key")?;
+    let merge_exclude: Bound<'py, PyTuple> =
+        config_text_tuple(py, &values, "merge_exclude_columns")?
+            .unwrap_or_else(|| PyTuple::empty(py));
     let table_type: Bound<'py, PyAny> = native_field(
         &native_field(
             &native_field(&native_field(model, "config")?, "table_type")?,
@@ -684,7 +683,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     entry.set_item("expected_output_columns", expected_output_columns(model)?)?;
     entry.set_item("on_schema_change", policy)?;
     entry.set_item("type_enforcement", enforcement)?;
-    contract_fields(model, &values, &entry)?;
+    contract_fields(model, &values.0, &entry)?;
     entry.set_item("pre_hooks", &request.hooks.0)?;
     entry.set_item("post_hooks", &request.hooks.1)?;
     let fingerprint: Bound<'py, PyAny> =
@@ -700,7 +699,7 @@ pub(crate) fn assemble_model_plan_entry<'py>(
     )?;
     entry.set_item("schema_actions", schema_actions)?;
     custom_fields(
-        &values,
+        &values.0,
         text(&request.materialization_type)? == CUSTOM_MATERIALIZATION,
         &entry,
     )?;

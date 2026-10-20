@@ -5,10 +5,13 @@ use std::sync::{Arc, Mutex};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::pyclass;
-use pyo3::types::PyString;
+use pyo3::types::{PyString, PyTuple};
 use sqlbuild_model_config::config_values::errors::ConfigTypeError;
 use sqlbuild_model_config::config_values::main::checked_cursor_bound::checked_cursor_bound;
+use sqlbuild_model_config::config_values::main::checked_flag::checked_flag;
+use sqlbuild_model_config::config_values::main::checked_integer::checked_integer;
 use sqlbuild_model_config::config_values::main::checked_text::checked_text;
+use sqlbuild_model_config::config_values::main::checked_texts::checked_texts;
 use sqlbuild_model_config::config_values::models::{ConfigNode, CursorBound};
 
 use crate::bindings::_helpers::compile_driver::stage_work::{TYPED_CONFIG_READS, count_stage};
@@ -206,4 +209,45 @@ pub(crate) fn config_value<'py>(
 /// `values.get(key)` as its typed node, `None` (null) when absent.
 pub(crate) fn config_node_of(values: &ConfigValues<'_>, key: &str) -> PyResult<Arc<PyConfigNode>> {
     node(values, key)
+}
+
+/// `key`'s boolean value, or `None` when absent or `None`.
+pub(crate) fn config_flag(
+    py: Python<'_>,
+    values: &ConfigValues<'_>,
+    key: &str,
+) -> PyResult<Option<bool>> {
+    let node: Arc<PyConfigNode> = node(values, key)?;
+    checked_flag(key, Some(&node)).map_err(|error| type_error(py, &error))
+}
+
+/// `key`'s integer value as its Python object, or `None` when absent or `None`.
+pub(crate) fn config_integer_object<'py>(
+    py: Python<'py>,
+    values: &ConfigValues<'_>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let node: Arc<PyConfigNode> = node(values, key)?;
+    checked_integer(key, Some(&node))
+        .map_err(|error| type_error(py, &error))?
+        .map(|value| config_object(py, value))
+        .transpose()
+}
+
+/// `key`'s strings as a tuple, or `None` when absent or `None`.
+pub(crate) fn config_text_tuple<'py>(
+    py: Python<'py>,
+    values: &ConfigValues<'_>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyTuple>>> {
+    let node: Arc<PyConfigNode> = node(values, key)?;
+    let Some(items) = checked_texts(key, Some(&node)).map_err(|error| type_error(py, &error))?
+    else {
+        return Ok(None);
+    };
+    let objects: Vec<Bound<'py, PyAny>> = items
+        .into_iter()
+        .map(|item| config_object(py, item))
+        .collect::<PyResult<_>>()?;
+    PyTuple::new(py, objects).map(Some)
 }
