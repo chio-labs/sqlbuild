@@ -399,6 +399,18 @@ def test_given_two_layers_when_checking_direction_then_lower_and_same_layers_pas
             source="use crate::bindings::_helpers::compile_driver::project;\n",
             expected_lines=[],
         ),
+        NativeLayeringTestCase(
+            description="tests.rs module roots are skipped",
+            path=f"{HELPERS}/discovery/tests.rs",
+            source="use crate::bindings::_helpers::compile_driver::project;\n",
+            expected_lines=[],
+        ),
+        NativeLayeringTestCase(
+            description="a test_ file name outside a tests directory is source and is checked",
+            path=f"{HELPERS}/discovery/test_command.rs",
+            source="use crate::bindings::_helpers::compile_driver::project;\n",
+            expected_lines=[1],
+        ),
     ],
     ids=lambda case: case.description,
 )

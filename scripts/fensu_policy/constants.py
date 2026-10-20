@@ -304,7 +304,6 @@ NATIVE_TEST_MODULE_MARKER: str = "#[cfg(test)]"
 NATIVE_RUST_SUFFIX: str = ".rs"
 NATIVE_TEST_DIRECTORY: str = "tests"
 NATIVE_TEST_FILE_NAME: str = "tests.rs"
-NATIVE_TEST_FILE_PREFIX: str = "test_"
 NATIVE_LINE_COMMENT: str = "//"
 NATIVE_STRING_QUOTE: str = '"'
 NATIVE_SKIPPED_LINE_PREFIXES: tuple[str, ...] = (

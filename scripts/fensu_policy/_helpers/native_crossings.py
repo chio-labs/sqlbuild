@@ -20,7 +20,6 @@ from scripts.fensu_policy.constants import (
     NATIVE_STRING_QUOTE,
     NATIVE_TEST_DIRECTORY,
     NATIVE_TEST_FILE_NAME,
-    NATIVE_TEST_FILE_PREFIX,
     NATIVE_TEST_MODULE_MARKER,
 )
 
@@ -31,17 +30,13 @@ _FIELD: re.Pattern[str] = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?\w+\s*:")
 
 
 def is_checked_binding(*, path: str) -> bool:
-    """Whether `path` is non-test source of the native bindings crate."""
+    """Whether `path` is non-test bindings source; tests live under `tests/` or in `tests.rs`."""
 
     if not path.startswith(NATIVE_BINDINGS_ROOT) or not path.endswith(NATIVE_RUST_SUFFIX):
         return False
     parts: list[str] = path.split("/")
     name: str = parts[-1]
-    return (
-        NATIVE_TEST_DIRECTORY not in parts[:-1]
-        and name != NATIVE_TEST_FILE_NAME
-        and not name.startswith(NATIVE_TEST_FILE_PREFIX)
-    )
+    return NATIVE_TEST_DIRECTORY not in parts[:-1] and name != NATIVE_TEST_FILE_NAME
 
 
 def is_edge_path(*, path: str, edge_paths: Iterable[str]) -> bool:
