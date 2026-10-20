@@ -8,8 +8,9 @@ use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, sentinel_to_token};
 use crate::bindings::_helpers::cursor::values::{local_date_time, replaced};
-use crate::bindings::_helpers::model_config::config_values::config_cursor_bound;
-use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
+use crate::bindings::_helpers::model_config::typed_config::{
+    config_cursor_bound as typed_cursor_bound, config_text_object, model_values,
+};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::display::resolve_bounded_cursor_override;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;
@@ -81,11 +82,9 @@ pub(crate) struct CursorWindowInputs<'py> {
 
 /// One string-valued model configuration entry.
 pub(crate) fn config_str<'py>(model: &Bound<'py, PyAny>, key: &str) -> PyResult<Bound<'py, PyAny>> {
-    Ok(authored_config_str(
-        &native_field(&native_field(model, "config")?, "values")?,
-        key,
-    )?
-    .unwrap_or_else(|| model.py().None().into_bound(model.py())))
+    let py: Python<'py> = model.py();
+    Ok(config_text_object(py, &model_values(model)?, key)?
+        .unwrap_or_else(|| py.None().into_bound(py)))
 }
 
 /// One cursor-bound model configuration entry as its token text.
@@ -93,13 +92,8 @@ pub(crate) fn config_bound<'py>(
     model: &Bound<'py, PyAny>,
     key: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
-    object(
-        model.py(),
-        config_cursor_bound(
-            &native_field(&native_field(model, "config")?, "values")?,
-            key,
-        )?,
-    )
+    let py: Python<'py> = model.py();
+    object(py, typed_cursor_bound(py, &model_values(model)?, key)?)
 }
 
 fn boolean(py: Python<'_>, value: bool) -> PyResult<Bound<'_, PyAny>> {

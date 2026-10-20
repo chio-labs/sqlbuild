@@ -5,9 +5,11 @@ use std::sync::{Arc, Mutex};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::pyclass;
+use pyo3::types::PyString;
 use sqlbuild_model_config::config_values::errors::ConfigTypeError;
+use sqlbuild_model_config::config_values::main::checked_cursor_bound::checked_cursor_bound;
 use sqlbuild_model_config::config_values::main::checked_text::checked_text;
-use sqlbuild_model_config::config_values::models::ConfigNode;
+use sqlbuild_model_config::config_values::models::{ConfigNode, CursorBound};
 
 use crate::bindings::_helpers::compile_driver::stage_work::{TYPED_CONFIG_READS, count_stage};
 use crate::bindings::_helpers::model_config::config_nodes::{
@@ -21,6 +23,7 @@ use crate::bindings::_helpers::records::models::NativeRecord;
 
 const CONFIG_FIELD: &str = "config";
 const VALUES_FIELD: &str = "values";
+const ISOFORMAT_METHOD: &str = "isoformat";
 /// The config record's cache slot holding its typed values; no Python attribute reads it.
 const TYPED_VALUES_SLOT: &str = "__typed_values__";
 const POISONED: &str = "typed config values cache is poisoned";
@@ -160,4 +163,47 @@ pub(crate) fn config_text_is(
         }
         _ => false,
     })
+}
+
+/// A cursor bound's text object: a string's or integer's `str()`, a date's `isoformat()`.
+pub(crate) fn cursor_bound_object<'py>(
+    py: Python<'py>,
+    bound: CursorBound<'_, HostHandle>,
+) -> PyResult<Bound<'py, PyAny>> {
+    match bound {
+        CursorBound::Dated(value) => config_object(py, value)?.call_method0(ISOFORMAT_METHOD),
+        CursorBound::Stringified(ConfigNode::Str(text)) => Ok(PyString::new(py, text).into_any()),
+        CursorBound::Stringified(ConfigNode::Int(number)) => {
+            Ok(PyString::new(py, &number.to_string()).into_any())
+        }
+        CursorBound::Stringified(value) => Ok(config_object(py, value)?.str()?.into_any()),
+    }
+}
+
+/// `key`'s cursor bound as text, or `None` when absent or `None`.
+pub(crate) fn config_cursor_bound<'py>(
+    py: Python<'py>,
+    values: &ConfigValues<'_>,
+    key: &str,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let node: Arc<PyConfigNode> = node(values, key)?;
+    checked_cursor_bound(key, Some(&node))
+        .map_err(|error| type_error(py, &error))?
+        .map(|bound| cursor_bound_object(py, bound))
+        .transpose()
+}
+
+/// `values.get(key)` as its Python object, `None` when absent.
+pub(crate) fn config_value<'py>(
+    py: Python<'py>,
+    values: &ConfigValues<'_>,
+    key: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let value: Arc<PyConfigNode> = node(values, key)?;
+    config_object(py, &value)
+}
+
+/// `values.get(key)` as its typed node, `None` (null) when absent.
+pub(crate) fn config_node_of(values: &ConfigValues<'_>, key: &str) -> PyResult<Arc<PyConfigNode>> {
+    node(values, key)
 }
