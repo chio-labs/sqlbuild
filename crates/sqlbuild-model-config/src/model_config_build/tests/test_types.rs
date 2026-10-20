@@ -32,6 +32,14 @@ impl ConfigBuildHost for FixedHost {
     fn text_error(&self, _value: &Node) -> String {
         "not text".to_owned()
     }
+
+    fn python_str(&self, _value: &Node, _exact: bool) -> Result<String, String> {
+        Err("no host text".to_owned())
+    }
+
+    fn typed_hook_entry(&self, _value: &Node) -> Result<bool, String> {
+        Ok(false)
+    }
 }
 
 /// The built values and reads, or why the build stops.

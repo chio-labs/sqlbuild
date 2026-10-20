@@ -28,7 +28,7 @@ pub struct HostValue<H> {
     pub children: HostChildren<H>,
 }
 
-/// What config logic may read of an opaque value, read once when the value was converted.
+/// The cheap facts read of an opaque value when it is converted; anything else is asked of its handle.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HostFacts {
     pub kind: NodeKind,
@@ -38,13 +38,6 @@ pub struct HostFacts {
     pub strict_text: bool,
     pub integer: Option<i64>,
     pub number: Option<f64>,
-    pub python_str: String,
-    /// Whether `python_str` is the value's exact `str()`.
-    pub strict_str: bool,
-    pub python_repr: String,
-    pub date_like: bool,
-    /// Whether the value is a typed hook entry.
-    pub hook_entry: bool,
 }
 
 /// The converted items of an opaque list, tuple or mapping, which config logic walks.

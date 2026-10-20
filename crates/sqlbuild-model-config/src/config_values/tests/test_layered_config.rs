@@ -1,7 +1,7 @@
 use crate::config_values::main::layered_config::layered_config;
 use crate::config_values::models::ConfigNode;
 use crate::config_values::tests::helpers::{text, texts};
-use crate::config_values::tests::test_types::LayeredConfigTestCase;
+use crate::config_values::tests::test_types::{LayeredConfigTestCase, Node};
 
 #[test]
 fn given_two_layers_when_merged_then_overrides_keep_order_and_unions_merge() {
@@ -91,7 +91,9 @@ fn given_two_layers_when_merged_then_overrides_keep_order_and_unions_merge() {
         },
     ];
     for test_case in test_cases {
-        let layered = layered_config(&test_case.base, &test_case.overlay);
+        let text = |_: &Node| -> Result<String, ()> { Err(()) };
+        let layered = layered_config(&test_case.base, &test_case.overlay, &text)
+            .expect("plain scalar unions need no host text");
         assert_eq!(
             (layered.entries, layered.unioned_keys),
             (test_case.expected_entries, test_case.expected_unioned_keys),

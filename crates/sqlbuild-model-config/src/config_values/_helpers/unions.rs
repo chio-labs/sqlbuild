@@ -1,36 +1,44 @@
 //! The unions `_merged_with_tag_union` makes of string sequences and row-diff tolerances.
 
 use crate::config_values::_helpers::entries::{inserted, set_entry};
+use crate::config_values::_helpers::reprs::scalar_text;
 use crate::config_values::constants::AUDIT_OVERRIDE_SECTIONS;
 use crate::config_values::models::ConfigNode;
+use crate::config_values::types::{HostObject, ItemText};
 use crate::types::{AuthoredNode, NodeKind};
 
 /// `_as_string_list(value)`: `str()` of each list or tuple item.
-fn string_items<H: Clone>(value: &ConfigNode<H>) -> Vec<String> {
+fn string_items<H: HostObject, E>(
+    value: &ConfigNode<H>,
+    text: ItemText<'_, H, E>,
+) -> Result<Vec<String>, E> {
     match value.kind() {
-        NodeKind::List | NodeKind::Tuple => {
-            value.items().iter().map(AuthoredNode::python_str).collect()
-        }
-        _ => Vec::new(),
+        NodeKind::List | NodeKind::Tuple => (&value)
+            .items()
+            .into_iter()
+            .map(|item| scalar_text(item, false).map_or_else(|| text(item), Ok))
+            .collect(),
+        _ => Ok(Vec::new()),
     }
 }
 
 /// The strings of `base` then the new strings of `overlay`, as `_merge_string_sequence`.
-pub(crate) fn merged_strings<H: Clone>(
+pub(crate) fn merged_strings<H: HostObject, E>(
     base: &ConfigNode<H>,
     overlay: &ConfigNode<H>,
-) -> Vec<ConfigNode<H>> {
-    let mut merged: Vec<String> = string_items(base);
-    for item in string_items(overlay) {
+    text: ItemText<'_, H, E>,
+) -> Result<Vec<ConfigNode<H>>, E> {
+    let mut merged: Vec<String> = string_items(base, text)?;
+    for item in string_items(overlay, text)? {
         if !merged.contains(&item) {
             merged.push(item);
         }
     }
-    merged.into_iter().map(ConfigNode::Str).collect()
+    Ok(merged.into_iter().map(ConfigNode::Str).collect())
 }
 
 /// Row-diff tolerances deep-merged by section, as `_merge_row_diff_tolerances_mapping`.
-pub(crate) fn merged_tolerances<H: Clone>(
+pub(crate) fn merged_tolerances<H: HostObject>(
     base: &ConfigNode<H>,
     overlay: &ConfigNode<H>,
 ) -> ConfigNode<H> {

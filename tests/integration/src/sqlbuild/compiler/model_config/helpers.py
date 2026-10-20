@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeGuard, cast
+from typing import TYPE_CHECKING, ClassVar, TypeGuard, cast
 
 import pytest
 
@@ -573,7 +573,9 @@ class Marker:
 MARKER: Marker = Marker()
 
 
-def config_value_inputs(*, project_dir: Path, header: dict[object, object]) -> CompileInputsView:
+def config_value_inputs(
+    *, project_dir: Path, header: dict[object, object], cli_vars: dict[str, object] | None = None
+) -> CompileInputsView:
     """Build compile inputs for the config value project with its one model's header replaced."""
 
     for relative_path, contents in CONFIG_VALUE_PROJECT.items():
@@ -604,6 +606,7 @@ def config_value_inputs(*, project_dir: Path, header: dict[object, object]) -> C
             ),
             sql_lexical_syntax=adapter.sql_lexical_syntax,
         ),
+        cli_vars=cli_vars,
         run_id="20261007T000000Z_orders",
         resolved_connection={},
         no_sql_validation=True,
@@ -674,3 +677,58 @@ def header_column_paths(*, project_dir: Path, headers: tuple[str, ...]) -> tuple
     )
     work: dict[str, int] = _native.compile_stage_work_info(reset=True)
     return (work.get("native_header_columns", 0), work.get("parsed_header_columns", 0))
+
+
+class Exploding:
+    """An opaque value whose `str()` and `repr()` raise and count each call."""
+
+    calls: ClassVar[list[str]] = []
+
+    def __str__(self) -> str:
+        Exploding.calls.append("str")
+        raise ValueError("no str")
+
+    def __repr__(self) -> str:
+        Exploding.calls.append("repr")
+        raise ValueError("no repr")
+
+
+class ExplodingText(str):
+    """A string whose `str()` raises, which config unions print."""
+
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        raise ValueError("no str")
+
+
+def templated_alias(
+    *, project_dir: Path, header: dict[object, object], cli_vars: dict[str, object]
+) -> tuple[str, str]:
+    """The model's built alias as `("alias", text)`, or the raised error as `(type, message)`."""
+
+    try:
+        config: CompileModelConfig = (
+            config_value_inputs(project_dir=project_dir, header=header, cli_vars=cli_vars)
+            .model_inputs[0]
+            .config
+        )
+    except Exception as error:
+        return (type(error).__name__, str(error))
+    return ("alias", str(config.values.get("alias")))
+
+
+def opaque_reads(*, project_dir: Path) -> tuple[bool, tuple[str, ...]]:
+    """Whether an opaque header value reaches the config, and which of its texts compiling read."""
+
+    Exploding.calls.clear()
+    marker: Exploding = Exploding()
+    config: CompileModelConfig = (
+        config_value_inputs(
+            project_dir=project_dir,
+            header={"description": "x", "alias": "${region}", Severity.WARN: marker},
+        )
+        .model_inputs[0]
+        .config
+    )
+    return (config.values[cast("str", Severity.WARN)] is marker, tuple(Exploding.calls))

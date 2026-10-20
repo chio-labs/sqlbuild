@@ -72,3 +72,21 @@ class HeaderColumnPathTestCase:
     headers: tuple[str, ...]
     expected_native: int
     expected_parsed: int
+
+
+@dataclass(frozen=True)
+class TemplateTextTestCase:
+    """A MODEL header and CLI vars whose templated alias reads values as Python's text."""
+
+    description: str
+    header: dict[object, object]
+    cli_vars: dict[str, object]
+    expected_outcome: tuple[str, str]
+
+
+@dataclass(frozen=True)
+class OpaqueReadsTestCase:
+    """Whether an opaque header value reaches the config, and which of its texts compiling reads."""
+
+    description: str
+    expected_reads: tuple[bool, tuple[str, ...]]

@@ -2,9 +2,10 @@
 
 use crate::config_values::_helpers::reprs::{python_repr, python_str};
 use crate::config_values::models::{ConfigNode, HostChildren};
+use crate::config_values::types::HostObject;
 use crate::types::{AuthoredNode, NodeKind};
 
-impl<'a, H: Clone> AuthoredNode for &'a ConfigNode<H> {
+impl<'a, H: HostObject> AuthoredNode for &'a ConfigNode<H> {
     fn kind(&self) -> NodeKind {
         match *self {
             ConfigNode::Null => NodeKind::Null,
@@ -64,7 +65,7 @@ impl<'a, H: Clone> AuthoredNode for &'a ConfigNode<H> {
     }
 
     fn is_date_like(&self) -> bool {
-        matches!(self, ConfigNode::Host(host) if host.facts.date_like)
+        matches!(self, ConfigNode::Host(host) if host.handle.is_date_like())
     }
 
     fn items(&self) -> Vec<Self> {
@@ -94,7 +95,7 @@ impl<'a, H: Clone> AuthoredNode for &'a ConfigNode<H> {
     }
 }
 
-impl<H: Clone> AuthoredNode for ConfigNode<H> {
+impl<H: HostObject> AuthoredNode for ConfigNode<H> {
     fn kind(&self) -> NodeKind {
         (&self).kind()
     }

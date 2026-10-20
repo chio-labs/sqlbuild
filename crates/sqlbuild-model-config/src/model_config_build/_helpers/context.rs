@@ -3,6 +3,7 @@
 use crate::config_values::main::config_entry::config_entry;
 use crate::config_values::models::ConfigNode;
 use crate::config_values::types::ConfigEntries;
+use crate::config_values::types::HostObject;
 use crate::model_config_build::constants::{
     ALIAS_KEY, DATABASE_KEY, DESTINATION_DATABASE_CONTEXT, DESTINATION_QUALIFIED_CONTEXT,
     DESTINATION_SCHEMA_CONTEXT, DESTINATION_TABLE_CONTEXT, MODEL_ALIAS_CONTEXT,
@@ -20,7 +21,7 @@ fn named<H>(name: &str, value: ConfigNode<H>) -> (ConfigNode<H>, ConfigNode<H>) 
 }
 
 /// The value of `key` when it is a string, as `isinstance(raw, str)` keeps it.
-pub(crate) fn string_entry<H: Clone>(
+pub(crate) fn string_entry<H: HostObject>(
     values: &[(ConfigNode<H>, ConfigNode<H>)],
     key: &str,
 ) -> Option<ConfigNode<H>> {
@@ -30,19 +31,19 @@ pub(crate) fn string_entry<H: Clone>(
 }
 
 /// `build_run_context_values`: the run's id and target.
-pub(crate) fn run_context<H: Clone>(inputs: &ConfigBuildInputs<H>) -> Entries<H> {
+pub(crate) fn run_context<H: HostObject>(inputs: &ConfigBuildInputs<H>) -> Entries<H> {
     vec![
         named(RUN_ID_CONTEXT, inputs.run_id.clone()),
         named(RUN_TARGET_CONTEXT, inputs.target_name.clone()),
     ]
 }
 
-fn text_of<H: Clone>(value: &ConfigNode<H>) -> String {
+fn text_of<H: HostObject>(value: &ConfigNode<H>) -> String {
     value.text().unwrap_or_default()
 }
 
 /// `build_model_context_values` for a model's config values.
-pub(crate) fn model_context<H: Clone>(
+pub(crate) fn model_context<H: HostObject>(
     inputs: &ConfigBuildInputs<H>,
     values: &[(ConfigNode<H>, ConfigNode<H>)],
     model_name: &str,

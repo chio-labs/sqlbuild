@@ -4,10 +4,11 @@ use crate::config_values::_helpers::checks::{authored, wrong_type};
 use crate::config_values::constants::EXPECTED_TEXTS;
 use crate::config_values::errors::ConfigTypeError;
 use crate::config_values::models::ConfigNode;
+use crate::config_values::types::HostObject;
 use crate::types::{AuthoredNode, NodeKind};
 
 /// The string items of `key` when it is a list or tuple of strings, or `None` when absent or `None`.
-pub fn checked_texts<'a, H: Clone>(
+pub fn checked_texts<'a, H: HostObject>(
     key: &str,
     value: Option<&'a ConfigNode<H>>,
 ) -> Result<Option<Vec<&'a ConfigNode<H>>>, ConfigTypeError<'a, H>> {

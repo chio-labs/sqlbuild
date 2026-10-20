@@ -18,11 +18,6 @@ pub(super) fn host_text(value: &str) -> Node {
             strict_text: true,
             integer: None,
             number: None,
-            python_str: value.to_owned(),
-            strict_str: true,
-            python_repr: format!("<Severity.WARN: '{value}'>"),
-            date_like: false,
-            hook_entry: false,
         },
         children: HostChildren::None,
     }))
@@ -43,11 +38,6 @@ pub(super) fn host_date() -> Node {
             strict_text: false,
             integer: None,
             number: None,
-            python_str: "2024-01-02".to_owned(),
-            strict_str: true,
-            python_repr: "datetime.date(2024, 1, 2)".to_owned(),
-            date_like: true,
-            hook_entry: false,
         },
         children: HostChildren::None,
     }))

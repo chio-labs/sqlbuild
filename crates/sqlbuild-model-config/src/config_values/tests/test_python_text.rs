@@ -4,45 +4,37 @@ use crate::config_values::tests::test_types::PythonTextTestCase;
 use crate::types::AuthoredNode;
 
 #[test]
-fn given_config_values_when_printed_then_str_and_repr_match_python() {
+fn given_config_values_when_printed_then_scalars_print_natively_and_the_rest_by_python() {
     let test_cases = [
         PythonTextTestCase {
-            description: "scalars print as Python literals",
-            value: ConfigNode::Tuple(vec![
-                ConfigNode::Null,
-                ConfigNode::Bool(true),
-                ConfigNode::Int(-3),
-                ConfigNode::Float(1e16),
-            ]),
-            expected_str: "(None, True, -3, 1e+16)",
-            expected_repr: "(None, True, -3, 1e+16)",
+            description: "plain scalars print as Python literals",
+            value: ConfigNode::Float(1e16),
+            expected_str: "1e+16",
+            expected_repr: "1e+16",
         },
         PythonTextTestCase {
-            description: "a string prints itself and reprs quoted",
-            value: text("it's"),
-            expected_str: "it's",
-            expected_repr: "\"it's\"",
+            description: "a boolean and None print as Python spells them",
+            value: ConfigNode::Bool(false),
+            expected_str: "False",
+            expected_repr: "False",
         },
         PythonTextTestCase {
-            description: "a one-item tuple keeps its comma",
-            value: ConfigNode::Tuple(vec![ConfigNode::Float(1.0)]),
-            expected_str: "(1.0,)",
-            expected_repr: "(1.0,)",
+            description: "a string prints itself; its repr is Python's",
+            value: text("it's\u{200b}"),
+            expected_str: "it's\u{200b}",
+            expected_repr: "<repr>0",
         },
         PythonTextTestCase {
-            description: "mappings and lists nest item reprs, host values their own",
-            value: ConfigNode::Map(vec![(
-                text("severity"),
-                ConfigNode::List(vec![host_text("warn"), text("x")]),
-            )]),
-            expected_str: "{'severity': [<Severity.WARN: 'warn'>, 'x']}",
-            expected_repr: "{'severity': [<Severity.WARN: 'warn'>, 'x']}",
+            description: "a container prints by Python, never approximated in Rust",
+            value: ConfigNode::List(vec![host_text("warn"), text("x")]),
+            expected_str: "<str>0",
+            expected_repr: "<repr>0",
         },
         PythonTextTestCase {
-            description: "a host value prints its own str",
+            description: "a host value prints by Python",
             value: host_text("warn"),
-            expected_str: "warn",
-            expected_repr: "<Severity.WARN: 'warn'>",
+            expected_str: "<str>1",
+            expected_repr: "<repr>1",
         },
     ];
     for test_case in test_cases {

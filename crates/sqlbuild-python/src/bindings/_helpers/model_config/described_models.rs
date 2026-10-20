@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
-use pyo3::types::{PyDict, PyDictMethods, PyListMethods};
+use pyo3::types::{PyDict, PyDictMethods, PyListMethods, PyStringMethods};
 use sqlbuild_core::text::main::python_strip::python_strip;
 use sqlbuild_model_config::config_values::main::config_entry::config_entry;
 use sqlbuild_model_config::config_values::main::layered_config::layered_config;
@@ -47,6 +47,12 @@ pub(crate) fn externally_described_models<'py>(
         .iter()
         .map(|key| key.extract::<String>())
         .collect::<PyResult<_>>()?;
+    let text = |item: &PyConfigNode| -> PyResult<String> {
+        Ok(config_object(py, item)?
+            .str()?
+            .to_string_lossy()
+            .into_owned())
+    };
     let mut layers: HashMap<String, PyConfigEntries> = HashMap::new();
     let mut described: Vec<Bound<'py, PyAny>> = Vec::new();
     for model_file in native_field(&inputs, "model_files")?.try_iter()? {
@@ -62,14 +68,14 @@ pub(crate) fn externally_described_models<'py>(
                         path_defaults.as_any().get_item(&key)?.downcast_into()?;
                     layers.insert(key.clone(), config_entries(&layer)?);
                 }
-                values = layered_config(&values, &layers[&key]).entries;
+                values = layered_config(&values, &layers[&key], &text)?.entries;
             }
             PathDefaultChoice::Selected(None) => {}
             PathDefaultChoice::Conflict(error) => return Err(raised_config_error(py, error)),
         }
         let header: Bound<'py, PyDict> =
             native_field(&model_file, "header_values")?.downcast_into()?;
-        values = layered_config(&values, &config_entries(&header)?).entries;
+        values = layered_config(&values, &config_entries(&header)?, &text)?.entries;
         let schema_description: Option<PyConfigNode> = match config_entry(&values, MODEL_SCHEMA_KEY)
         {
             Some(name) if is_text_node(name) => model_schemas

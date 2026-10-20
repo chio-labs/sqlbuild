@@ -71,10 +71,10 @@ pub(crate) fn layered<B: ConfigBuildHost>(
         .transpose()?;
     let mut defaults: Entries<B::Handle> = project_defaults(model.inputs);
     if let Some(path_values) = path_values {
-        defaults = layered_own(&defaults, path_values).0;
+        defaults = layered_own(model.host, &defaults, path_values)?.0;
     }
-    let (mut values, own) = layered_own(&defaults, model.header.entries);
-    check_hooks(&values, model.name).map_err(ConfigBuildHalt::Config)?;
+    let (mut values, own) = layered_own(model.host, &defaults, model.header.entries)?;
+    check_hooks(model.host, &values, model.name)?;
     let mut hooks: Entries<B::Handle> = Vec::new();
     for key in HOOK_KEYS {
         if let Some(position) = values.iter().position(|(name, _)| name.is_text(key)) {

@@ -25,11 +25,13 @@ use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_nodes::{
     HostHandle, PyConfigEntries, PyConfigNode, config_dict, config_entries, config_node,
-    config_object,
+    config_object, hook_entry,
 };
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 use crate::bindings::_helpers::model_config::project_defaults::project_defaults_mapping;
 
+/// The config keys a model's context values read.
+const CONTEXT_KEYS: [&str; 3] = ["database", "schema", "alias"];
 const BUILD_STOPPED: &str = "a config value read as text without an error";
 
 /// The project-wide inputs every model's config build reads, converted once per compile.
@@ -110,6 +112,18 @@ impl ConfigBuildHost for PythonConfigHost<'_> {
             Ok(()) => PyRuntimeError::new_err(BUILD_STOPPED),
             Err(error) => error,
         }
+    }
+
+    fn python_str(&self, value: &PyConfigNode, exact: bool) -> PyResult<String> {
+        let text: Bound<'_, PyString> = config_object(self.environment.py(), value)?.str()?;
+        if exact {
+            return Ok(text.to_str()?.to_owned());
+        }
+        Ok(text.to_string_lossy().into_owned())
+    }
+
+    fn typed_hook_entry(&self, value: &PyConfigNode) -> PyResult<bool> {
+        hook_entry(&config_object(self.environment.py(), value)?)
     }
 }
 
@@ -314,7 +328,8 @@ impl NativeModelConfigBuilder {
         py: Python<'py>,
         matched_path_default: Option<&str>,
     ) -> PyResult<Result<Bound<'py, PyDict>, Py<NativeConfigError>>> {
-        match inherited_config::<HostHandle, PyErr>(&self.inputs, matched_path_default) {
+        let host: PythonConfigHost<'py> = self.host(py);
+        match inherited_config((&host, &self.inputs), matched_path_default) {
             Ok(values) => Ok(Ok(config_dict(py, &values)?)),
             Err(halt) => match halted(py, halt)? {
                 Ok(error) => Ok(Err(native_config_error(py, error)?)),
@@ -330,12 +345,14 @@ impl NativeModelConfigBuilder {
         model_name: &str,
         include_target_values: bool,
     ) -> PyResult<Bound<'py, PyDict>> {
-        let context: PyConfigEntries = model_context_values(
-            &self.inputs,
-            &config_entries(values)?,
-            model_name,
-            include_target_values,
-        );
+        let mut read: PyConfigEntries = Vec::with_capacity(CONTEXT_KEYS.len());
+        for key in CONTEXT_KEYS {
+            if let Some(value) = values.get_item(key)? {
+                read.push((ConfigNode::Str(key.to_owned()), config_node(&value)?));
+            }
+        }
+        let context: PyConfigEntries =
+            model_context_values(&self.inputs, &read, model_name, include_target_values);
         config_dict(values.py(), &context)
     }
 

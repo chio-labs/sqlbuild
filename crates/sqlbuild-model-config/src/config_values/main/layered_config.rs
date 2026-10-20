@@ -6,14 +6,15 @@ use crate::config_values::constants::{
     ROW_DIFF_EXCLUDE_COLUMNS_KEY, ROW_DIFF_TOLERANCES_KEY, TAGS_KEY,
 };
 use crate::config_values::models::{ConfigNode, LayeredConfig};
+use crate::config_values::types::{HostObject, ItemText};
 use crate::types::{AuthoredNode, NodeKind};
 
-/// `overlay` merged over a copy of `base`, with tags, row-diff exclusions and tolerances unioned.
-#[must_use]
-pub fn layered_config<H: Clone>(
+/// `overlay` over a copy of `base`, unioning tags, row-diff exclusions and tolerances; `text` prints non-scalar items.
+pub fn layered_config<H: HostObject, E>(
     base: &[(ConfigNode<H>, ConfigNode<H>)],
     overlay: &[(ConfigNode<H>, ConfigNode<H>)],
-) -> LayeredConfig<H> {
+    text: ItemText<'_, H, E>,
+) -> Result<LayeredConfig<H>, E> {
     let mut entries = base.to_vec();
     for (key, value) in overlay {
         entries = inserted(entries, key.clone(), value.clone());
@@ -23,7 +24,7 @@ pub fn layered_config<H: Clone>(
         if let (Some(base_items), Some(overlay_items)) =
             (set_entry(base, key), set_entry(overlay, key))
         {
-            let items: Vec<ConfigNode<H>> = merged_strings(base_items, overlay_items);
+            let items: Vec<ConfigNode<H>> = merged_strings(base_items, overlay_items, text)?;
             let merged: ConfigNode<H> = if tuple {
                 ConfigNode::Tuple(items)
             } else {
@@ -46,8 +47,8 @@ pub fn layered_config<H: Clone>(
             unioned_keys.push(ROW_DIFF_TOLERANCES_KEY);
         }
     }
-    LayeredConfig {
+    Ok(LayeredConfig {
         entries,
         unioned_keys,
-    }
+    })
 }

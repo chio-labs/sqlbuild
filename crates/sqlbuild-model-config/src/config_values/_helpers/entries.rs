@@ -1,6 +1,7 @@
 //! A config mapping read and written as a Python `dict`.
 
 use crate::config_values::models::ConfigNode;
+use crate::config_values::types::HostObject;
 use crate::types::{AuthoredNode, NodeKind};
 
 /// The exact text of a string key, borrowed.
@@ -15,7 +16,7 @@ fn key_text<H>(node: &ConfigNode<H>) -> Option<&str> {
 }
 
 /// Python's `==` between two dict keys: equal text, equal numbers, or equal tuples.
-pub(crate) fn same_key<H: Clone>(left: &ConfigNode<H>, right: &ConfigNode<H>) -> bool {
+pub(crate) fn same_key<H: HostObject>(left: &ConfigNode<H>, right: &ConfigNode<H>) -> bool {
     match (left, right) {
         (ConfigNode::Null, ConfigNode::Null) => true,
         (ConfigNode::Tuple(left), ConfigNode::Tuple(right)) => {
@@ -33,7 +34,7 @@ pub(crate) fn same_key<H: Clone>(left: &ConfigNode<H>, right: &ConfigNode<H>) ->
 }
 
 /// A boolean, integer or float key's numeric value, as Python compares keys.
-fn numeric<H: Clone>(node: &ConfigNode<H>) -> Option<f64> {
+fn numeric<H: HostObject>(node: &ConfigNode<H>) -> Option<f64> {
     match node {
         ConfigNode::Bool(flag) => Some(f64::from(u8::from(*flag))),
         ConfigNode::Int(_) | ConfigNode::Float(_) => node.number(),
@@ -42,7 +43,7 @@ fn numeric<H: Clone>(node: &ConfigNode<H>) -> Option<f64> {
 }
 
 /// `mapping.get(key)` for a string key.
-pub(crate) fn entry<'a, H: Clone>(
+pub(crate) fn entry<'a, H: HostObject>(
     entries: &'a [(ConfigNode<H>, ConfigNode<H>)],
     key: &str,
 ) -> Option<&'a ConfigNode<H>> {
@@ -53,7 +54,7 @@ pub(crate) fn entry<'a, H: Clone>(
 }
 
 /// `mapping.get(key)` unless absent or `None`.
-pub(crate) fn set_entry<'a, H: Clone>(
+pub(crate) fn set_entry<'a, H: HostObject>(
     entries: &'a [(ConfigNode<H>, ConfigNode<H>)],
     key: &str,
 ) -> Option<&'a ConfigNode<H>> {
@@ -61,7 +62,7 @@ pub(crate) fn set_entry<'a, H: Clone>(
 }
 
 /// `entries` after `mapping[key] = value`: an equal key keeps its place and its key, else the entry is appended.
-pub(crate) fn inserted<H: Clone>(
+pub(crate) fn inserted<H: HostObject>(
     mut entries: Vec<(ConfigNode<H>, ConfigNode<H>)>,
     key: ConfigNode<H>,
     value: ConfigNode<H>,

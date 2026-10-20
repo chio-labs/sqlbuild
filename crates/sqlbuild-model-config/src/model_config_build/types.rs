@@ -1,12 +1,13 @@
 //! What the model config build asks of its caller.
 
 use crate::config_values::models::ConfigNode;
+use crate::config_values::types::HostObject;
 use crate::model_config_build::models::ConfigBuildHalt;
 
 /// The process environment, project-var rendering and exact text errors, owned by the caller.
 pub trait ConfigBuildHost {
     /// The caller's handle of an opaque value.
-    type Handle: Clone;
+    type Handle: HostObject;
     /// An error the caller raises, held until the build stops.
     type Error;
 
@@ -20,6 +21,14 @@ pub trait ConfigBuildHost {
     ) -> Result<Result<String, String>, Self::Error>;
     /// The error reading `value` as exact text raises.
     fn text_error(&self, value: &ConfigNode<Self::Handle>) -> Self::Error;
+    /// Python's `str(value)` of a value that is not a plain scalar; `exact` rejects lone surrogates.
+    fn python_str(
+        &self,
+        value: &ConfigNode<Self::Handle>,
+        exact: bool,
+    ) -> Result<String, Self::Error>;
+    /// Whether `value` is a typed hook entry.
+    fn typed_hook_entry(&self, value: &ConfigNode<Self::Handle>) -> Result<bool, Self::Error>;
 }
 
 /// A config value of the build host `B`.

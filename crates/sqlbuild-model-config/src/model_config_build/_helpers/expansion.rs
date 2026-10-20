@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 
 use crate::config_values::main::config_entry::config_entry;
+use crate::config_values::main::plain_scalar_text::plain_scalar_text;
 use crate::config_values::models::{ConfigNode, HostChildren};
 use crate::config_values::types::ConfigEntries;
 use crate::errors::ConfigError;
@@ -110,10 +111,15 @@ impl<B: ConfigBuildHost> TemplateHost for BuildTemplateHost<'_, B> {
         match value {
             ConfigNode::Null => Ok(Scalar::Null),
             ConfigNode::Bool(flag) => Ok(Scalar::Bool(*flag)),
-            ConfigNode::Host(host) if !host.facts.strict_str => {
-                Err(self.hold(self.sources.host.text_error(value)))
-            }
-            _ => Ok(Scalar::Text(value.python_str())),
+            _ => match plain_scalar_text(value, false) {
+                Some(text) => Ok(Scalar::Text(text)),
+                None => self
+                    .sources
+                    .host
+                    .python_str(value, true)
+                    .map(Scalar::Text)
+                    .map_err(|error| self.hold(error)),
+            },
         }
     }
 

@@ -2,12 +2,13 @@
 
 use crate::config_values::models::ConfigNode;
 use crate::config_values::types::ConfigEntries;
+use crate::config_values::types::HostObject;
 use crate::model_config_build::_helpers::context::model_context;
 use crate::model_config_build::models::ConfigBuildInputs;
 
 /// `build_model_context_values` for a model's config values.
 #[must_use]
-pub fn model_context_values<H: Clone>(
+pub fn model_context_values<H: HostObject>(
     inputs: &ConfigBuildInputs<H>,
     values: &[(ConfigNode<H>, ConfigNode<H>)],
     model_name: &str,

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use pyo3::IntoPyObject;
-use pyo3::exceptions::{PyException, PyOverflowError, PyUnicodeEncodeError};
+use pyo3::exceptions::{PyOverflowError, PyUnicodeEncodeError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyFloat, PyInt, PyList, PyListMethods, PyString,
@@ -12,18 +12,12 @@ use pyo3::types::{
 use sqlbuild_model_config::config_values::models::{
     ConfigNode, HostChildren, HostFacts, HostValue,
 };
+use sqlbuild_model_config::config_values::types::HostObject;
 use sqlbuild_model_config::types::{AuthoredNode, NodeKind};
 
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::ids::RecordId;
-
-/// The Python object an opaque config value stands for.
-pub(crate) type HostHandle = Arc<Py<PyAny>>;
-/// A config value converted from Python.
-pub(crate) type PyConfigNode = ConfigNode<HostHandle>;
-/// A converted config mapping's entries.
-pub(crate) type PyConfigEntries = Vec<(PyConfigNode, PyConfigNode)>;
 
 /// The typed hook entry classes, which the config build checks hook lists against.
 const HOOK_ENTRY_CLASSES: [RecordId; 3] = [
@@ -32,14 +26,36 @@ const HOOK_ENTRY_CLASSES: [RecordId; 3] = [
     RecordId::PythonHookEntry,
 ];
 
-fn hook_entry(value: &Bound<'_, PyAny>) -> PyResult<bool> {
-    for class in HOOK_ENTRY_CLASSES {
-        if value.is_instance(&record_class(value.py(), class)?)? {
-            return Ok(true);
-        }
+/// The Python object an opaque config value stands for.
+#[derive(Clone, Debug)]
+pub(crate) struct HostHandle(pub(crate) Arc<Py<PyAny>>);
+
+impl HostObject for HostHandle {
+    fn is_date_like(&self) -> bool {
+        Python::attach(|py| PyNode(self.0.bind(py).clone()).is_date_like())
     }
-    Ok(false)
+
+    /// Python's text of the projected value; a `str()` or `repr()` that raises reads as empty, as `PyNode`.
+    fn display(node: &ConfigNode<Self>, repr: bool) -> String {
+        Python::attach(|py| {
+            config_object(py, node).map_or_else(
+                |_| String::new(),
+                |value| {
+                    let value: PyNode<'_> = PyNode(value);
+                    if repr {
+                        value.python_repr()
+                    } else {
+                        value.python_str()
+                    }
+                },
+            )
+        })
+    }
 }
+/// A config value converted from Python.
+pub(crate) type PyConfigNode = ConfigNode<HostHandle>;
+/// A converted config mapping's entries.
+pub(crate) type PyConfigEntries = Vec<(PyConfigNode, PyConfigNode)>;
 
 /// Whether a Python `str` encodes to UTF-8, which it does unless it holds a lone surrogate.
 fn utf8_text(text: &Bound<'_, PyString>) -> PyResult<bool> {
@@ -50,16 +66,7 @@ fn utf8_text(text: &Bound<'_, PyString>) -> PyResult<bool> {
     }
 }
 
-/// Whether `str(value)` succeeds with UTF-8 text; any error `str()` raises makes it inexact.
-fn exact_str(value: &Bound<'_, PyAny>) -> PyResult<bool> {
-    match value.str() {
-        Ok(text) => utf8_text(&text),
-        Err(error) if error.is_instance_of::<PyException>(value.py()) => Ok(false),
-        Err(error) => Err(error),
-    }
-}
-
-/// An opaque value with the facts `PyNode` reads of it, and its converted items.
+/// An opaque value with the cheap facts `PyNode` reads of it, and its converted items.
 fn host(value: &Bound<'_, PyAny>, children: HostChildren<HostHandle>) -> PyResult<PyConfigNode> {
     let node: PyNode<'_> = PyNode(value.clone());
     let strict_text: bool = match value.downcast::<PyString>() {
@@ -67,18 +74,13 @@ fn host(value: &Bound<'_, PyAny>, children: HostChildren<HostHandle>) -> PyResul
         Err(_) => false,
     };
     Ok(ConfigNode::Host(Box::new(HostValue {
-        handle: Arc::new(value.clone().unbind()),
+        handle: HostHandle(Arc::new(value.clone().unbind())),
         facts: HostFacts {
             kind: node.kind(),
             text: node.text(),
             strict_text,
             integer: node.integer(),
             number: node.number(),
-            python_str: node.python_str(),
-            strict_str: exact_str(value)?,
-            python_repr: node.python_repr(),
-            date_like: node.is_date_like(),
-            hook_entry: hook_entry(value)?,
         },
         children,
     })))
@@ -216,7 +218,7 @@ pub(crate) fn config_object<'py>(
         )?
         .into_any(),
         ConfigNode::Map(entries) => config_dict(py, entries)?.into_any(),
-        ConfigNode::Host(host) => host.handle.bind(py).clone(),
+        ConfigNode::Host(host) => host.handle.0.bind(py).clone(),
     })
 }
 
@@ -235,4 +237,13 @@ pub(crate) fn config_dict<'py>(
 /// Whether `node` kind is a Python `str` instance, as `isinstance(value, str)` reads it.
 pub(crate) fn is_text_node(node: &PyConfigNode) -> bool {
     node.kind() == NodeKind::Str
+}
+
+pub(crate) fn hook_entry(value: &Bound<'_, PyAny>) -> PyResult<bool> {
+    for class in HOOK_ENTRY_CLASSES {
+        if value.is_instance(&record_class(value.py(), class)?)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
