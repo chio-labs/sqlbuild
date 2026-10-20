@@ -15,7 +15,7 @@ use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none,
 };
 use crate::bindings::_helpers::build_progress::progress_text::with_verbose_inspection;
-use crate::bindings::_helpers::compile_driver::pipeline::run_compile_pipeline;
+use crate::bindings::_helpers::compile_driver::plan_pipeline::run_compile_pipeline;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::manifest::builder::build_manifest;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;

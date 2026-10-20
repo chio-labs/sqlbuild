@@ -39,13 +39,13 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
 use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::planner_entries::plan_output::sql_test_model_chain_names_by_key;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::sql_test_glue::plan_driver::plan_compiled_sql_test_artifacts;
+use crate::bindings::_helpers::sql_test_glue::plan_driver::sql_test_model_chain_names_by_key;
 
 const COMPILED_DIR: &str = "compiled";
 const MODELS_DIR: &str = "models";

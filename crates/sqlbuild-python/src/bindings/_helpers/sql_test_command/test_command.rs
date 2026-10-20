@@ -1,17 +1,13 @@
 //! `sqb test`: compile the selected SQL unit tests, inspect or run them, and report.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
-use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{
     Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,
 };
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyInt, PyString, PyTuple};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use sqlbuild_core::cli_text::models::CliStyle;
-use sqlbuild_core::json::main::dumps::dumps;
-use sqlbuild_core::json::models::{JsonDialect, StdlibJsonOptions};
-use sqlbuild_core::test_command::main::parameterized_test_label::parameterized_test_label;
 use sqlbuild_core::test_command::main::render_test_completion::render_test_completion;
 use sqlbuild_core::test_command::main::render_test_inspection::render_test_inspection;
 use sqlbuild_core::test_command::main::render_test_ready::render_test_ready;
@@ -19,9 +15,7 @@ use sqlbuild_core::test_command::main::test_exit_code::test_exit_code;
 use sqlbuild_core::test_command::main::test_group_name::test_group_name;
 use sqlbuild_core::test_command::main::test_name_width::test_name_width;
 use sqlbuild_core::test_command::main::test_outcome_status::test_outcome_status;
-use sqlbuild_core::test_command::models::{
-    TestFailure, TestInspectionEntry, TestParameter, TestPlanWarning,
-};
+use sqlbuild_core::test_command::models::{TestFailure, TestInspectionEntry, TestPlanWarning};
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
@@ -31,11 +25,12 @@ use crate::bindings::_helpers::build_progress::progress_reporters::ConnectionPro
 use crate::bindings::_helpers::build_progress::progress_text::{
     format_expectation_detail, format_expectation_name, write_execution_header,
 };
+use crate::bindings::_helpers::build_progress::result_text::test_label;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
-use crate::bindings::_helpers::compile_driver::selection_phases::compile_static_command_context;
+use crate::bindings::_helpers::compile_driver::static_context::compile_static_command_context;
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_test_runtime_target;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
@@ -48,13 +43,11 @@ use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::result_output::documents::format_test_execution_json;
 use crate::bindings::_helpers::result_output::documents::write_execution_json_output;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;
-use crate::bindings::_helpers::result_output::integration_values::json_value;
 use crate::bindings::_helpers::result_output::resource_ids::sql_test_identity;
 use crate::bindings::_helpers::sql_test_command::timeouts::{
     RunTimeout, TimeoutKind, resolve_run_timeout,
 };
 
-const DECIMAL_KIND: &str = "decimal";
 const PASS_OUTCOME: &str = "pass";
 const EXPECT_LABEL: &str = "expect";
 const UNKNOWN_GROUP: &str = "(unknown)";
@@ -67,65 +60,6 @@ fn text<'py>(py: Python<'py>, value: &str) -> Bound<'py, PyAny> {
 
 fn strings(values: Bound<'_, PyAny>) -> PyResult<Vec<String>> {
     values.try_iter()?.map(|value| value?.extract()).collect()
-}
-
-/// A payload as `json.dumps(payload, ensure_ascii=True, separators=(",", ":"))`.
-fn compact_json(payload: &Bound<'_, PyAny>) -> PyResult<String> {
-    let Some(value) = json_value(payload)? else {
-        let options: Bound<'_, PyDict> = PyDict::new(payload.py());
-        options.set_item("ensure_ascii", true)?;
-        options.set_item("separators", (",", ":"))?;
-        return payload
-            .py()
-            .import("json")?
-            .call_method("dumps", (payload,), Some(&options))?
-            .extract();
-    };
-    dumps(
-        &value,
-        &JsonDialect::Stdlib(StdlibJsonOptions::new(None).with_separators(",", ":")),
-    )
-    .map_err(|error| PyValueError::new_err(format!("{error:?}")))
-}
-
-/// The label of one test or result: its name, plus source and values for parameterized cases.
-pub(crate) fn test_label(item: &Bound<'_, PyAny>, name_field: &str) -> PyResult<String> {
-    let name: String = native_field(item, name_field)?.extract()?;
-    let source_path: Bound<'_, PyAny> = item.getattr("source_path")?;
-    let values: Vec<Bound<'_, PyAny>> = native_field(item, "parameter_values")?
-        .try_iter()?
-        .collect::<PyResult<_>>()?;
-    if source_path.is_none() || values.is_empty() {
-        return Ok(name);
-    }
-    let mut schema: HashMap<String, Bound<'_, PyAny>> = HashMap::new();
-    for declaration in item.getattr("parameter_schema")?.try_iter()? {
-        let declaration: Bound<'_, PyAny> = declaration?;
-        schema.insert(declaration.getattr("name")?.extract()?, declaration);
-    }
-    let mut parameters: Vec<TestParameter> = Vec::new();
-    for pair in values {
-        let (value_name, value): (String, Bound<'_, PyAny>) = pair.extract()?;
-        let declaration: &Bound<'_, PyAny> = schema
-            .get(&value_name)
-            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(value_name.clone()))?;
-        let raw: Bound<'_, PyAny> = value.getattr("value")?;
-        let kind: String = value.getattr("kind")?.getattr("value")?.extract()?;
-        let payload: Bound<'_, PyAny> = if kind == DECIMAL_KIND {
-            raw.str()?.into_any()
-        } else {
-            raw
-        };
-        parameters.push(TestParameter {
-            name: value_name,
-            value_type: native_field(&native_field(declaration, "value_type")?, "value")?
-                .extract()?,
-            nullable: declaration.getattr("nullable")?.is_truthy()?,
-            rendered: compact_json(&payload)?,
-        });
-    }
-    let path: String = source_path.call_method0("as_posix")?.extract()?;
-    Ok(parameterized_test_label(&name, Some(&path), &parameters))
 }
 
 /// The shared name column width of test rows and their expectation rows.
