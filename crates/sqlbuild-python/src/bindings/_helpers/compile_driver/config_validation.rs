@@ -193,6 +193,13 @@ pub(crate) fn reject_invalid_project_configuration(
     config: &ProjectConfiguration<'_, '_>,
 ) -> PyResult<()> {
     reject_local_sql_analysis_opt_out(config)?;
+    reject_invalid_connection_configuration(config)
+}
+
+/// Validate the target warehouses and target connections a warehouse connection depends on.
+pub(crate) fn reject_invalid_connection_configuration(
+    config: &ProjectConfiguration<'_, '_>,
+) -> PyResult<()> {
     reject_unsupported_target_warehouses(config)?;
     reject_invalid_target_connections(config)
 }
