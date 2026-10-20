@@ -99,6 +99,7 @@ pub(crate) fn pipeline_result<'py>(
                 "full_refresh",
                 "reload_sources",
                 "max_microbatches",
+                "concurrency",
             ],
         )?,
     )?;

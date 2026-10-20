@@ -2,10 +2,11 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::build_command::support::{boolean, emit, none, text, tuple};
 use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::dbt_interop::execution::render_dbt_execution_summary_footer;
@@ -301,6 +302,17 @@ pub(crate) fn run_dbt_sqlbuild_work<'py>(
                     &discovered,
                     native_field(&project, "effective_target_name")?,
                 )?,
+            ),
+            (
+                "concurrency",
+                resolve_concurrency(
+                    &py.None().into_bound(py),
+                    &discovered,
+                    &native_field(&project, "effective_target_name")?,
+                )?
+                .limit
+                .into_pyobject(py)?
+                .into_any(),
             ),
         ],
     )?;

@@ -29,6 +29,8 @@ pub(crate) struct PlanEntriesRequest<'py> {
     pub(crate) cursor_overrides: Bound<'py, PyAny>,
     pub(crate) full_refresh: bool,
     pub(crate) build_inputs: Bound<'py, PyAny>,
+    /// The effective worker limit execution will use.
+    pub(crate) concurrency: i64,
 }
 
 /// What assembling the plan output's fields reads.

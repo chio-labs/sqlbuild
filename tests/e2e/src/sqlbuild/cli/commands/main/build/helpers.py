@@ -1187,3 +1187,49 @@ def target_concurrency_project_files(
             "MODEL (description 'Orders.', materialized table);\n\nSELECT 1 AS order_id\n"
         ),
     }
+
+
+def target_concurrency_microbatch_files() -> dict[str, str]:
+    """A project whose `ci` target raises concurrency above `[settings]` for a microbatch model."""
+
+    return {
+        "sqlbuild_project.toml": (
+            'name = "target_microbatch"\n'
+            'adapter = "duckdb"\n'
+            'default_target = "dev"\n\n'
+            "[connection]\n"
+            'database = "warehouse.duckdb"\n\n'
+            "[settings]\n"
+            "concurrency = 1\n"
+            "microbatch_concurrency = true\n\n"
+            "[targets.dev]\n"
+            'schema = "main"\n\n'
+            "[targets.ci]\n"
+            'schema = "main"\n'
+            "concurrency = 3\n"
+        ),
+        "sources/raw.yml": (
+            "sources:\n"
+            "  - name: raw_events\n"
+            "    description: Raw events.\n"
+            "    schema: main\n"
+            "    table: raw_events\n"
+        ),
+        "models/orders.sql": (
+            'MODEL (description "Orders.",\n'
+            "  materialized incremental,\n"
+            "  incremental_strategy delete_insert,\n"
+            "  incremental_mode microbatch,\n"
+            "  microbatch_strategy watermark,\n"
+            "  cursor_watermark_mode all,\n"
+            "  cursor event_time,\n"
+            "  cursor_type timestamp,\n"
+            "  cursor_grain hour,\n"
+            "  cursor_inputs (raw_events (column event_time, roles [filter, watermark])),\n"
+            "  batch_size 1h,\n"
+            "  batch_concurrency 3,\n"
+            ");\n\n"
+            'SELECT id, event_time FROM __source("raw_events")\n'
+            "WHERE event_time >= __cursor_start() AND event_time < __cursor_end()\n"
+        ),
+    }

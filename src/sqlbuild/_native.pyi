@@ -7876,6 +7876,7 @@ class DbtSqlbuildWorkContext(NativeRecord):
     use_color: bool
     snapshots_config: SnapshotsConfig
     execution_limits: ExecutionLimitsConfig
+    concurrency: int
     def __init__(
         self,
         plan_output: PlanOutput,
@@ -7886,6 +7887,7 @@ class DbtSqlbuildWorkContext(NativeRecord):
         use_color: bool,
         snapshots_config: SnapshotsConfig,
         execution_limits: ExecutionLimitsConfig,
+        concurrency: int,
     ) -> None: ...
 
 class PlanSafetyGates(NativeRecord):
@@ -11900,6 +11902,7 @@ class CompilePipelineOptions(NativeRecord):
     resolve_python_run_selectors: bool
     no_cache: bool
     max_microbatches: int | None
+    concurrency: int | None
     selection_diagnostics: bool
     plan_sql_tests: bool
     record_migration_fingerprints: bool
@@ -11924,6 +11927,7 @@ class CompilePipelineOptions(NativeRecord):
         resolve_python_run_selectors: bool = ...,
         no_cache: bool = ...,
         max_microbatches: int | None = ...,
+        concurrency: int | None = ...,
         selection_diagnostics: bool = ...,
         plan_sql_tests: bool = ...,
         record_migration_fingerprints: bool = ...,
@@ -12189,6 +12193,7 @@ class PlannerOverrides(NativeRecord):
     forced_stale_model_names: tuple[str, ...]
     external_blocked_model_names: tuple[str, ...]
     max_microbatches: int | None
+    concurrency: int | None
     def __init__(
         self,
         cursor_overrides: CursorOverrides | None = ...,
@@ -12197,6 +12202,7 @@ class PlannerOverrides(NativeRecord):
         forced_stale_model_names: tuple[str, ...] = ...,
         external_blocked_model_names: tuple[str, ...] = ...,
         max_microbatches: int | None = ...,
+        concurrency: int | None = ...,
     ) -> None: ...
 
 class DeferralInputs(NativeRecord):

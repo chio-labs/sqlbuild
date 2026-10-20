@@ -86,6 +86,7 @@ const R_PLANNER_OVERRIDES: RecordSpec = RecordSpec {
         FieldSpec::new("forced_stale_model_names", FieldDefault::EmptyTuple),
         FieldSpec::new("external_blocked_model_names", FieldDefault::EmptyTuple),
         FieldSpec::new("max_microbatches", FieldDefault::None),
+        FieldSpec::new("concurrency", FieldDefault::None),
     ],
 };
 const R_DEFERRAL_INPUTS: RecordSpec = RecordSpec {

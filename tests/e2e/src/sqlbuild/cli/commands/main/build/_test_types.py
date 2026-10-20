@@ -1381,3 +1381,10 @@ class TargetConcurrencyE2ETestCase:
     local_settings: str
     command: tuple[str, ...]
     expected_fragment: str
+
+
+@dataclass(frozen=True)
+class TargetMicrobatchWarningE2ETestCase:
+    description: str
+    command: tuple[str, ...]
+    expected_warning_count: int

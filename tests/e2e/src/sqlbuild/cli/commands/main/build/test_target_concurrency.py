@@ -5,12 +5,15 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import duckdb
 import pytest
 
 from tests.e2e.src.sqlbuild.cli.commands.main.build._test_types import (
     TargetConcurrencyE2ETestCase,
+    TargetMicrobatchWarningE2ETestCase,
 )
 from tests.e2e.src.sqlbuild.cli.commands.main.build.helpers import (
+    target_concurrency_microbatch_files,
     target_concurrency_project_files,
 )
 from tests.e2e.src.sqlbuild.cli.commands.shared.helpers import (
@@ -139,3 +142,61 @@ def test_given_invalid_target_concurrency_when_running_then_config_error_is_code
     assert "D001" in output
     assert test_case.expected_fragment in output
     assert not (project_dir / "warehouse.duckdb").exists()
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        TargetMicrobatchWarningE2ETestCase(
+            description="the target's concurrency enables the concurrent microbatch warning",
+            command=("--no-color", "build", "--target", "ci"),
+            expected_warning_count=1,
+        ),
+        TargetMicrobatchWarningE2ETestCase(
+            description="--concurrency 1 overrides the target and suppresses the warning",
+            command=("--no-color", "build", "--target", "ci", "--concurrency", "1"),
+            expected_warning_count=0,
+        ),
+        TargetMicrobatchWarningE2ETestCase(
+            description="a target without concurrency keeps the serial project setting",
+            command=("--no-color", "build", "--target", "dev"),
+            expected_warning_count=0,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_target_concurrency_when_planning_microbatches_then_warning_uses_it(
+    test_case: TargetMicrobatchWarningE2ETestCase,
+    tmp_path: Path,
+) -> None:
+    project_dir: Path = prepare_inline_project(
+        tmp_path=tmp_path,
+        project_name="target_microbatch",
+        repo_files=target_concurrency_microbatch_files(),
+    )
+    connection: duckdb.DuckDBPyConnection = duckdb.connect(str(project_dir / "warehouse.duckdb"))
+    connection.execute("CREATE TABLE raw_events (id INTEGER, event_time TIMESTAMP)")
+    connection.execute(
+        "INSERT INTO raw_events VALUES (1, '2026-01-01 00:30:00'), (2, '2026-01-01 01:30:00')"
+    )
+    connection.close()
+    initial: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command, project_dir=project_dir
+    )
+    connection = duckdb.connect(str(project_dir / "warehouse.duckdb"))
+    connection.execute(
+        "INSERT INTO raw_events VALUES (3, '2026-01-01 02:30:00'), (4, '2026-01-01 03:30:00')"
+    )
+    connection.close()
+
+    incremental: subprocess.CompletedProcess[str] = run_sqb(
+        command=test_case.command, project_dir=project_dir
+    )
+
+    output: str = incremental.stdout + incremental.stderr
+    assert initial.returncode == 0, initial.stdout + initial.stderr
+    assert incremental.returncode == 0, output
+    assert (
+        output.count("Concurrent microbatch execution is enabled")
+        == test_case.expected_warning_count
+    )
