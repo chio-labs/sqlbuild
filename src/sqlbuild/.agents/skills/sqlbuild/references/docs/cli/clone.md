@@ -21,8 +21,9 @@ deferred clone. Clone cannot perform a cross-account, cross-server, or cross-fil
 transfer by opening a second connection.
 
 Clone never runs SQL analysis: it reads relation names, dependencies, and rendered view and
-function SQL from each target's project, and reports no compile diagnostics. The hidden
-`--no-sql-analysis` flag (alias `--no-sql-validation`) is still accepted but has no effect.
+function SQL from each target's project, so SQL analysis errors never stop it; structural errors,
+such as an unknown reference, still do. The hidden `--no-sql-analysis` flag (alias
+`--no-sql-validation`) is still accepted but has no effect.
 
 ## Usage
 
