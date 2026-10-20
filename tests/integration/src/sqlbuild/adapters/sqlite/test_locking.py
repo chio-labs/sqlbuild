@@ -13,6 +13,7 @@ import pytest
 
 from sqlbuild.adapters.sqlite.classes.sqlite_adapter import SqliteAdapter
 from tests.integration.src.sqlbuild.adapters.sqlite._test_types import (
+    SqliteConcurrentConnectTestCase,
     SqliteInProcessWritersTestCase,
     SqliteKilledWriterTestCase,
     SqliteLockTestCase,
@@ -208,3 +209,50 @@ def test_given_writer_killed_mid_transaction_when_reopening_then_target_is_uncha
 
     assert rows == test_case.expected_rows
     assert tables == test_case.expected_tables
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        SqliteConcurrentConnectTestCase(
+            description="threads opening a new file together all switch it to WAL",
+            connections=4,
+            attempts=25,
+            expected_open_connections=100,
+        ),
+    ],
+    ids=lambda case: case.description,
+)
+def test_given_new_file_when_threads_connect_together_then_every_connection_opens(
+    test_case: SqliteConcurrentConnectTestCase, adapter: SqliteAdapter, tmp_path: Path
+) -> None:
+    errors: list[BaseException] = []
+    opened_count: int = 0
+    for attempt in range(test_case.attempts):
+        config: dict[str, object] = {"path": str(tmp_path / f"shop_{attempt}.sqlite")}
+        barrier: threading.Barrier = threading.Barrier(test_case.connections)
+        opened: list[Any] = []
+
+        def connect(
+            config: dict[str, object] = config,
+            barrier: threading.Barrier = barrier,
+            opened: list[Any] = opened,
+        ) -> None:
+            barrier.wait(timeout=10)
+            try:
+                opened.append(adapter.connect(config))
+            except BaseException as error:
+                errors.append(error)
+
+        threads: tuple[threading.Thread, ...] = tuple(
+            threading.Thread(target=connect) for _ in range(test_case.connections)
+        )
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        opened_count += len(opened)
+        for connection in opened:
+            adapter.close(connection)
+
+    assert (opened_count, errors) == (test_case.expected_open_connections, [])
