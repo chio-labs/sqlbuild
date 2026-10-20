@@ -6,10 +6,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
 use crate::bindings::_helpers::compile_delta::report_hooks::semantic_reasons;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
+use crate::bindings::_helpers::compiled_project::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::semantic_shapes::shapes::project_shapes;
 

@@ -13,8 +13,11 @@ use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 
 use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FORMAT};
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::build_progress::progress::{
+    NativeProgressProjector, current_projector,
+};
 use crate::bindings::_helpers::cli::launch_state::launch_record_path;
-use crate::bindings::_helpers::cli::progress::{NativeProgressProjector, current_projector};
 use crate::bindings::_helpers::compile_command::constants::{
     COMPILE_CACHE_DISABLE_ENV_VAR, COMPILE_CACHE_DISABLE_VALUE, COMPILE_COMMAND_NAME,
     COMPILED_DIRECTORY_NAME, COMPUTE_LOG_DIRECTORY_NAME, EXCLUDED_DIRECTORIES,
@@ -37,7 +40,6 @@ use crate::bindings::_helpers::compile_delta::driver::{
 use crate::bindings::_helpers::compile_delta::{context, verify};
 use crate::bindings::_helpers::compile_driver::command::run_compile_command;
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::compile_outputs::reuse::{ReuseCheckPy, check_compile_reuse};
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;

@@ -8,9 +8,7 @@ use sqlbuild_cache::stage_capture::constants::OMITTED_ATTRIBUTES;
 use sqlbuild_cache::stage_capture::main::mask_capture_noise::mask_capture_noise as masked;
 use sqlbuild_cache::stage_capture::main::next_capture_number::next_capture_number;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    call_with, imported, keywords, within,
-};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords, within};
 use crate::bindings::_helpers::frontier::encoder::{CaptureEncoder, emit_error};
 use crate::bindings::_helpers::records::fields::field as native_field;
 

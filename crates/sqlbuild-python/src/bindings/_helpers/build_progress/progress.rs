@@ -17,8 +17,8 @@ use sqlbuild_core::progress::models::{
 };
 use sqlbuild_core::terminal_events::models::TerminalRequest;
 
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;

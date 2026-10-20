@@ -12,15 +12,15 @@ use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use sqlbuild_core::posix_path::main::posix_abspath::posix_abspath;
 
+use crate::bindings::_helpers::boundary::python_calls::{
+    KeywordArguments, call_with, imported, keywords,
+};
 use crate::bindings::_helpers::compile_command::constants::{
     BYTES_PER_MEBIBYTE, REUSE_BYPASS_TIMING, REUSE_CHECK_TIMING, REUSE_HIT_TIMING,
     REUSE_LOGGER_NAME, REUSE_MISS_TIMING, REUSE_STORE_DONE_PREFIX, REUSE_STORE_NOTICE_BYTES,
     REUSE_STORE_NOTICE_PATHS, REUSE_STORE_SKIPPED_PREFIX,
 };
 use crate::bindings::_helpers::compile_command::reuse_attempt::{reuse_rules, write_launch_record};
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
-};
 use crate::bindings::_helpers::compile_outputs::reuse::artifact_digest;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;

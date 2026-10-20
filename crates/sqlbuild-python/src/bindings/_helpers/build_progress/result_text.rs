@@ -7,7 +7,7 @@ use sqlbuild_core::build_progress::models::{
 };
 use sqlbuild_core::progress::main::format_expectation_detail::format_expectation_detail;
 
-use crate::bindings::_helpers::cli::progress_text::expectation_step;
+use crate::bindings::_helpers::build_progress::progress_text::expectation_step;
 use crate::bindings::_helpers::plan_output::display::{cursor_bound_display, inclusive_cursor_end};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sql_test_command::test_command::test_label;

@@ -5,7 +5,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use sqlbuild_core::cost_report::errors::CostArtifactError;
 use sqlbuild_core::cost_report::models::{CostResource, CostRun, CostSummary};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record;

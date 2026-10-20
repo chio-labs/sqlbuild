@@ -15,12 +15,12 @@ use crate::bindings::_helpers::analysis_session::model_analyses::{
 };
 use crate::bindings::_helpers::analysis_session::profile_inputs::text_pairs;
 use crate::bindings::_helpers::analysis_session::stage_functions::expression_source_shapes;
-use crate::bindings::_helpers::compile_driver::analysis_cache::analysis_cache_context;
-use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
-use crate::bindings::_helpers::compile_driver::compile_timings::{
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compile_context::compile_timings::{
     record_compile_cpu_timing, record_compile_timing,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compile_driver::analysis_cache::analysis_cache_context;
+use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
 use crate::bindings::_helpers::compile_driver::stage_work::{
     EXPRESSION_SHAPES, MODEL_ANALYSIS, count_stage,
 };

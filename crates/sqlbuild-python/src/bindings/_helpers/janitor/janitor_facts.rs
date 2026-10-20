@@ -7,7 +7,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyBool;
 use sqlbuild_analysis::janitor_planning::constants::UNTRACKED_QUERY_DIFF_REASON;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, dedupe_schema_keys, folded_schema, integer, optional, record,

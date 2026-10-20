@@ -8,9 +8,9 @@ use sqlbuild_analysis::semantic_checks::models::{
     CompletedDiagnostic, CompletionModel, CompletionRequest, SemanticDiagnostic, SemanticLocation,
 };
 
-use crate::bindings::_helpers::analysis::model_reads::{inferred_names, lineage_inputs};
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
+use crate::bindings::_helpers::compiled_project::model_reads::{inferred_names, lineage_inputs};
 use crate::bindings::_helpers::compiled_project::records::with_binding_diagnostics;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::semantic_checks::failures::semantic_error;

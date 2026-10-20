@@ -15,8 +15,8 @@ use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_
 use sqlbuild_model_config::execution_limits::models::ExecutionLimit;
 use sqlbuild_model_config::model_validation::constants::PHYSICAL_STORAGE_KEYS;
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_project::model_reads;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::config_values::{
     config_bool, config_cursor_bound, config_int, config_str, config_string_tuple,

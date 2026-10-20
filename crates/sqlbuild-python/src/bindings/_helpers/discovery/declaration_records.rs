@@ -16,7 +16,7 @@ use sqlbuild_discovery::tree::models::ProjectTree;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 use std::sync::Arc;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::header_declarations::typed_constant_record;

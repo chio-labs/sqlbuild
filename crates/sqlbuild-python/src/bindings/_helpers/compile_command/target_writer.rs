@@ -14,6 +14,9 @@ use sqlbuild_cache::artifacts::main::reusable_sql_test_record::reusable_sql_test
 use sqlbuild_cache::artifacts::models::SqlTestArtifactRecord;
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
+use crate::bindings::_helpers::boundary::python_calls::{
+    KeywordArguments, call_with, imported, keywords, within,
+};
 use crate::bindings::_helpers::compile_command::artifact_batch::ArtifactBatch;
 use crate::bindings::_helpers::compile_command::constants::RACY_WINDOW_NS;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
@@ -23,10 +26,7 @@ use crate::bindings::_helpers::compile_command::test_artifact_cache::{
     IdentityContext, artifact_identity_payload, artifact_record_key_payload, identity_context,
     payload_digests, read_cache, write_cache, yield_interpreter,
 };
-use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords, within,
-};
+use crate::bindings::_helpers::compile_context::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_driver::stage_work::{
     SQL_TEST_ARTIFACT_PLANS, SQL_TEST_MODEL_CHAINS, count_stage,
 };

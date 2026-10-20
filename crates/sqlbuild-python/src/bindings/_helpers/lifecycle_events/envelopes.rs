@@ -17,7 +17,7 @@ use sqlbuild_core::lifecycle_events::main::publishable_hook_name::publishable_ho
 use sqlbuild_core::lifecycle_events::main::run_bounds_problem::run_bounds_problem;
 use sqlbuild_core::lifecycle_events::models::{HookFacts, SequenceFact};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::lifecycle_events::payloads::validation_error;
 use crate::bindings::_helpers::lifecycle_events::validation::{
     frozen_json, known_event_check, optional_text_check, required_text_check, schema_version_check,

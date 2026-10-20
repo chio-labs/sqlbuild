@@ -13,7 +13,7 @@ use sqlbuild_cursor::algebra::models::{
 };
 use sqlbuild_cursor::algebra::types::ZoneRules;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::values::{
     DATETIME_MODULE, civil_date, local_date_time, naive_date_time, plain_date, replaced,
     timedelta_micros,

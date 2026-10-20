@@ -4,15 +4,15 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::boundary::python_calls::{
+    KeywordArguments, call_with, keywords, within,
+};
 use crate::bindings::_helpers::compile_attachment::declaration_scope::build_declaration_scope;
 use crate::bindings::_helpers::compile_attachment::effective_config::{
     build_effective_connection, build_effective_settings, build_effective_vars,
 };
 use crate::bindings::_helpers::compile_attachment::model_inputs::build_model_inputs;
-use crate::bindings::_helpers::compile_driver::diagnostic_collector::collect_compile_diagnostics;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords, within,
-};
+use crate::bindings::_helpers::compile_context::diagnostic_collector::collect_compile_diagnostics;
 use crate::bindings::_helpers::compiled_project::attachment::{attach_checks, attach_resources};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::compiled_project::records::{compile_inputs_view, inputs_with};

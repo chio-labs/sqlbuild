@@ -5,8 +5,8 @@ use pyo3::pyfunction;
 use pyo3::types::{PyBool, PyDict, PyTuple};
 use sqlbuild_rules::lint_text::models::{ExpansionSpan, LintSqlBody};
 
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;

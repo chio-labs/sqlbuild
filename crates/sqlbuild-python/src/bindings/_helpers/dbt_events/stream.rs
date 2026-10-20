@@ -14,7 +14,7 @@ use sqlbuild_core::dbt_events::main::format_dbt_active_nodes::format_dbt_active_
 use sqlbuild_core::dbt_events::main::render_dbt_node_row::render_dbt_node_row;
 use sqlbuild_core::dbt_events::models::{DbtRowPosition, DbtStreamState, DbtStreamUpdate};
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::dbt_events::event::dbt_event;
 use crate::bindings::_helpers::dbt_events::results::{native_result, python_result};
 use crate::bindings::_helpers::records::fields::mapping_get_or;

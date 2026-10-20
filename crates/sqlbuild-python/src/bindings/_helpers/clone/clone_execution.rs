@@ -8,11 +8,11 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyFrozenSet, PyString};
 use sqlbuild_core::clone_text::main::clone_relation_flow_text::clone_relation_flow_text;
 use sqlbuild_core::clone_text::models::FingerprintProgress;
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
 use crate::bindings::_helpers::clone::clone_command::Invocation;
 use crate::bindings::_helpers::clone::clone_progress::{
     CloneFingerprintReporter, CloneItemPrinter,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;

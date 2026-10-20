@@ -1,10 +1,10 @@
 //! Plan a compiled project over an open warehouse connection, and open that connection.
 
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::deferral::build_deferred_locations;
 use crate::bindings::_helpers::compile_driver::deferral::gather_deferred_relations;
 use crate::bindings::_helpers::compile_driver::deferral::resolve_deferred_target_config;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_graph_from_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::python_plan_entries::{
     build_python_run_plan_outputs, python_read_source_names_for,
 };
@@ -16,8 +16,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::host;

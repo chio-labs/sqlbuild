@@ -9,6 +9,7 @@ use sqlbuild_core::build_command::main::render_run_context::render_run_context;
 use sqlbuild_core::build_command::models::{RunContextFacts, SelectorFileFact};
 use sqlbuild_core::cli_text::models::CliStyle;
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords, within};
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::lifecycle::{
     DirectPythonLifecycle, LifecycleInputs, prepare_direct_python_lifecycle,
@@ -17,15 +18,14 @@ use crate::bindings::_helpers::build_command::support::{
     boolean, display_text, emit, frozenset, joined, keyword_relay, line_writer, none, text, tuple,
 };
 use crate::bindings::_helpers::build_progress::build_callbacks::BuildProgressCallbacks;
+use crate::bindings::_helpers::build_progress::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::build_progress::progress_text::write_execution_header;
 use crate::bindings::_helpers::check::check_core::{
     build_check_relation_targets, load_results_by_loader_name, record_python_run_state_results,
     relevant_check_functions,
 };
 use crate::bindings::_helpers::check::check_results::write_check_results;
-use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
-use crate::bindings::_helpers::cli::progress_text::write_execution_header;
 use crate::bindings::_helpers::command_runtime::warehouses::describe_connection_warehouse;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords, within};
 use crate::bindings::_helpers::compile_driver::relation_targets::build_project_relation_targets;
 use crate::bindings::_helpers::cost_telemetry::context::CostContext;
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};

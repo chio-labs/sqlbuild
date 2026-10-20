@@ -1,7 +1,7 @@
 //! Selected-scope validation that external source tables exist in the warehouse.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::discovery::locations::yaml_entry_line;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{planner_error, tuple};

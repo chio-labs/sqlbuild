@@ -1,9 +1,9 @@
 //! `sqb check`: run the selected Python checks after their Python dependencies.
 
-use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
-use crate::bindings::_helpers::cli::progress_text::write_execution_header;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::build_progress::progress::current_native_progress_projector;
+use crate::bindings::_helpers::build_progress::progress_text::write_execution_header;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pipeline_result;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::relation_targets::build_project_relation_targets;
 use crate::bindings::_helpers::compile_driver::relation_targets::build_python_relation_targets;
 use crate::bindings::_helpers::compile_driver::selection_phases::compile_static_command_context;
@@ -30,6 +30,7 @@ use sqlbuild_core::check_command::main::validate_check_selection::validate_check
 use sqlbuild_core::check_command::models::CheckResultText;
 use sqlbuild_core::cli_text::models::CliStyle;
 
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::check::check_core::{
     ReadSideInputs, load_results_by_loader_name, record_python_run_state_results,
     run_read_side_dependencies,
@@ -38,7 +39,6 @@ use crate::bindings::_helpers::check::check_results::{
     check_result_text, results_json, write_results,
 };
 use crate::bindings::_helpers::command_runtime::invocation::resolve_reported_command_invocation;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_python_check_runtime_target;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::graph::python_selection::python_node_names;

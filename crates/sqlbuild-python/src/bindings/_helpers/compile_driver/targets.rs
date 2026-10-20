@@ -22,7 +22,7 @@ use sqlbuild_core::text::main::python_strip::python_strip;
 
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 
 /// Connection settings that identify the warehouse two targets write to.

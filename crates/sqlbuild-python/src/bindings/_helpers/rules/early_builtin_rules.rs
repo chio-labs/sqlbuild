@@ -15,7 +15,7 @@ use sqlbuild_rules::errors::RowsError;
 use sqlbuild_rules::models::{RowsEvaluation, RowsRequest, SpeculativeAnswer, SpeculativeRows};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::compile_timings::{
+use crate::bindings::_helpers::compile_context::compile_timings::{
     add_compile_timing, record_compile_metric, record_compile_timing,
 };
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;

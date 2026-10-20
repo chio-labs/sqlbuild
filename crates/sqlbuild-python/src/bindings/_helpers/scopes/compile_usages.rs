@@ -18,7 +18,7 @@ use sqlbuild_scopes::scope_index::models::{
     DeclarationKind, DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind,
 };
 
-use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
+use crate::bindings::_helpers::compile_context::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::compiled_project::model_loop_named::scope_path_message;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;

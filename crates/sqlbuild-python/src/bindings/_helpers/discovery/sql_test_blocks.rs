@@ -13,7 +13,9 @@ use sqlbuild_model_config::sql_tests::main::sql_test_names_failure::sql_test_nam
 use sqlbuild_model_config::sql_tests::models::{SqlTestBlock, SqlTestCase};
 use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue};
 
-use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_value, sql_value};
+use crate::bindings::_helpers::authored_values::sql_values::{
+    SqlValueClasses, raw_value, sql_value,
+};
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;

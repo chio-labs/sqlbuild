@@ -12,7 +12,7 @@ use sqlbuild_core::dbt_cli::errors::DbtCliError;
 use sqlbuild_core::dbt_cli::main::dbt_flag_value::dbt_flag_value;
 use sqlbuild_core::dbt_cli::models::DbtParsedFlags;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::dbt_interop::cli::resolve_dbt_config;
 use crate::bindings::_helpers::dbt_interop::cli::{raised, resolved_path};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;

@@ -6,12 +6,12 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::boundary::python_calls::{
+    Status, call_with, imported, keywords, within,
+};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::project::build_project_graph_with_analysis_selection;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    Status, call_with, imported, keywords, within,
-};
 use crate::bindings::_helpers::compile_driver::stage_work::{
     COLUMN_LINEAGE, MODEL_CONTRACTS, count_stage,
 };

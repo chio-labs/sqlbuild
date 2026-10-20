@@ -37,7 +37,7 @@ use sqlbuild_state::execution_history::models::{
 };
 use sqlbuild_state::execution_history::types::UtcTime;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
+use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::execution_history::appends::prepared_batch;

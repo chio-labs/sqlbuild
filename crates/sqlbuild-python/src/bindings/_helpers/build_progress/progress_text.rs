@@ -15,8 +15,8 @@ use sqlbuild_core::progress::main::format_inspection_record::format_inspection_r
 use sqlbuild_core::progress::models::{ExpectationStep, InspectionRecord};
 use sqlbuild_core::progress::types::DifferenceSample;
 
-use crate::bindings::_helpers::cli::progress::write_persistent;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::build_progress::progress::write_persistent;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;

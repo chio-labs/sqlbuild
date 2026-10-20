@@ -25,6 +25,7 @@ pub(crate) mod model_loop_prepass;
 pub(crate) mod model_loop_python_hooks;
 pub(crate) mod model_loop_schema;
 pub(crate) mod model_loop_visibility;
+pub(crate) mod model_reads;
 pub(crate) mod project;
 pub(crate) mod project_view;
 pub(crate) mod records;

@@ -19,7 +19,7 @@ use sqlbuild_config::dbt_manifest::models::{
     ManifestNode, NodeChecksum, ParsedModel, ParsedSeed, ParsedSource,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

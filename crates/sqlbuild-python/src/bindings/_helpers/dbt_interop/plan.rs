@@ -8,7 +8,7 @@ use sqlbuild_core::cli_text::main::format_dbt_interop_plan::format_dbt_interop_p
 use sqlbuild_core::cli_text::main::format_dbt_interop_plan_json::format_dbt_interop_plan_json;
 use sqlbuild_core::cli_text::models::{DbtInteropPlanText, DbtLsNodeText, DisplayLimit};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::plan_output::plan_text::format_plan;
 use crate::bindings::_helpers::records::construct::{
     enum_from_value, enum_member, new_record, new_record_with,

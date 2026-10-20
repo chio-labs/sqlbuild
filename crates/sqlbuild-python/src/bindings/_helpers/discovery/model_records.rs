@@ -9,7 +9,7 @@ use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOpti
 use sqlbuild_discovery::models::{DiscoveredFile, FileOutcome, StageFailure};
 use std::path::Path;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::model_file_record::DiscoveredPaths;

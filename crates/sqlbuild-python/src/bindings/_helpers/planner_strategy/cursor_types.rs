@@ -9,9 +9,7 @@ use sqlbuild_analysis::planner_strategy::main::classify_cursor_sql_type::classif
 use sqlbuild_analysis::planner_strategy::main::cursor_type_warning::cursor_type_warning;
 use sqlbuild_analysis::planner_strategy::models::{CursorType, CursorTypeCheck};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_changes::results::planner_enum;

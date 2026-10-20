@@ -10,7 +10,7 @@ use pyo3::prelude::{
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
+use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, context_variable,
 };
 use crate::bindings::_helpers::event_exporting::constants::SCOPE_CONTEXT_VARIABLE;

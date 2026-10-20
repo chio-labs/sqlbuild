@@ -22,7 +22,7 @@ use sqlbuild_core::diagnostic_routing::models::{RecordFacts, RouteOptions};
 use sqlbuild_core::redaction::main::redact_text::redact_text;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::diagnostics::redaction::redacted_value;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;

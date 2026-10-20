@@ -39,8 +39,8 @@ use sqlbuild_state::execution_history::models::{
 };
 use sqlbuild_state::execution_history::types::UtcTime;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::execution_history::appends::prepared_batch;
 use crate::bindings::_helpers::execution_history::conversion::{
     checked, event_filter_spec, exact_int, history_error_of_kind, new_namespace, now,
@@ -634,7 +634,7 @@ impl SqliteExecutionHistory {
                 Some(record) => native_field(record, "cursor")?,
                 None => py.None().into_bound(py),
             };
-            crate::bindings::_helpers::compile_driver::python_calls::call_with(
+            crate::bindings::_helpers::boundary::python_calls::call_with(
                 &host::entry(py, ExecutorHost::EventPage)?,
                 &[
                     ("records", tuple_of(py, records)?.into_any()),
@@ -703,7 +703,7 @@ impl SqliteExecutionHistory {
                 }
                 None => py.None().into_bound(py),
             };
-            crate::bindings::_helpers::compile_driver::python_calls::call_with(
+            crate::bindings::_helpers::boundary::python_calls::call_with(
                 &host::entry(py, ExecutorHost::RunPage)?,
                 &[
                     ("records", run_records(py, &runs)?.into_any()),

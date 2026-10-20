@@ -12,11 +12,11 @@ use sqlbuild_core::progress::main::connection_phase_line::connection_phase_line;
 use sqlbuild_core::progress::main::connection_start_message::connection_start_message;
 use sqlbuild_core::progress::main::is_planning_completion_message::is_planning_completion_message;
 
-use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
-use crate::bindings::_helpers::cli::progress::{
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::build_progress::progress::{
     NativeProgressProjector, current_projector, projector_operation_active, write_persistent,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 
 const CONNECTION_OPTIONS: (&[&str], &[&str]) = (
     &["adapter_name", "stream"],

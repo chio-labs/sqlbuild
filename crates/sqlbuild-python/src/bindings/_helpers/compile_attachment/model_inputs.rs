@@ -6,10 +6,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use sqlbuild_analysis::assembly::project::main::sql_analysis_opt_out_help::sql_analysis_opt_out_help;
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::reserved_cursor_markers;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::compile_attachment::model_config::native_model_config_session;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
 use crate::bindings::_helpers::compiled_project::loop_classes::model_loop_classes;
 use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::compiled_project::model_loop::{LoopSwitches, NativeModelLoop};
@@ -230,7 +228,7 @@ pub(crate) fn build_model_inputs<'py>(
         vec![
             (
                 "report_diagnostic",
-                pyo3::wrap_pyfunction!(crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic, py)?.into_any(),
+                pyo3::wrap_pyfunction!(crate::bindings::_helpers::compile_context::diagnostic_collector::report_compile_diagnostic, py)?.into_any(),
             ),
             (
                 "record_template_reads",

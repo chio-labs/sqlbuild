@@ -12,7 +12,7 @@ use sqlbuild_state::microbatches::models::{
 };
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::microbatches::conversion::{
     BoundParser, enum_text, optional_text, timestamp,
 };

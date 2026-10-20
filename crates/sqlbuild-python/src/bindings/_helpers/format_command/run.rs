@@ -8,7 +8,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods};
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::{
     FORMAT_LINT_BATCHES, FORMAT_LINT_FILES, count_stage,
 };

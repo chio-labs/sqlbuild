@@ -1,6 +1,6 @@
 //! Native migration discovery over existing inspection and fingerprint cache boundaries.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::planner_migrations::matching::{
     match_migration_fingerprints, migration_destination_fingerprints,
 };

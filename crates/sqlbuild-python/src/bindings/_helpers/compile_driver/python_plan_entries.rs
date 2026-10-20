@@ -12,9 +12,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::python_plan::main::ordered_python_names::ordered_python_names;
 use sqlbuild_analysis::python_plan::main::upstream_closure::upstream_closure;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;

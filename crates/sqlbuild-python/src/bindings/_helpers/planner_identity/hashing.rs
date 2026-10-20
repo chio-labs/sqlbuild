@@ -13,7 +13,7 @@ use sqlbuild_analysis::sql_tokens::main::definition_fingerprint::definition_fing
 use sqlbuild_core::panics::main::is_compiler_panic::is_compiler_panic;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;

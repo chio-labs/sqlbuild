@@ -1,8 +1,6 @@
 //! Migration fingerprints computed at most once per model definition and reused across runs.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::planner_changes::metadata::without_declared_columns_hash;
 use crate::bindings::_helpers::planner_migrations::fingerprint::fingerprint;
 use crate::bindings::_helpers::planner_migrations::fingerprint::migration_fingerprint_ref_names;

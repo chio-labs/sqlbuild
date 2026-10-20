@@ -7,9 +7,9 @@ use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::janitor_planning::main::migration_origin_keys::migration_origin_keys;
 use sqlbuild_analysis::janitor_planning::main::old_name_request_matches::old_name_request_matches;
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_project::model_reads;
 use crate::bindings::_helpers::janitor::janitor_facts::{
     SchemaRelations, Warehouse, model_destinations,
 };

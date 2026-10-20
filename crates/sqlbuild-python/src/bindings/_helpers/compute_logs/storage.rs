@@ -29,9 +29,7 @@ use sqlbuild_cli::compute_logs::main::validate_capture_id::validate_capture_id;
 use sqlbuild_cli::compute_logs::models::CaptureDocument;
 use sqlbuild_recall::writer::models::RecallSession;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::compute_logs::conversion::{
     capture_id, document, inventory_item, is_exact_int, metadata_model, rejection, storage_error,
     stream_index,

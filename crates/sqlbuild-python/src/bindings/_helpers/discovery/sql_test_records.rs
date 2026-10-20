@@ -16,7 +16,7 @@ use sqlbuild_discovery::sql_tests::models::{
 use sqlbuild_discovery::tree::models::ProjectTree;
 use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::path_object;

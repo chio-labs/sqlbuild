@@ -4,11 +4,11 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyBool, PyCFunction, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compile_context::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_driver::inputs::{InputsRequest, attached_inputs};
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::project_graph;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::compile_driver::target_defaults::{
     TargetDefaults, apply_target_defaults,
 };
@@ -19,8 +19,8 @@ use crate::bindings::_helpers::compile_driver::targets::{
 use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, bridged, produced};
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
 
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::assembly::assemble_project;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::selection_phases::resolve_analysis_model_names;
 use crate::bindings::_helpers::compile_driver::stage_work::{
     PROJECT_GRAPHS, PROMOTION_CONFLICTS, count_stage,

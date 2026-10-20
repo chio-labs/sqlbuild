@@ -6,8 +6,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods};
 
-use crate::bindings::_helpers::compile_driver::input_reads::record_settings_class_read;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_context::input_reads::record_settings_class_read;
 use crate::bindings::_helpers::contracts::resource_identities::validate_resource_identity;
 use crate::bindings::_helpers::discovery::imported_modules::{
     ProjectDir, discovered, discovery_error, discovery_error_from, module_functions,

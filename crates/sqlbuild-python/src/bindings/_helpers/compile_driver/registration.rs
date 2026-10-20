@@ -3,10 +3,11 @@
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::wrap_pyfunction;
 
+use crate::bindings::_helpers::compile_context::{diagnostic_collector, input_reads};
 use crate::bindings::_helpers::compile_driver::{
-    analysis, analysis_cache, assembly, command, deferral, diagnostic_collector, diff, discovery,
-    input_reads, inputs, pipeline, pipeline_entries, plan_result, project, python_plan_entries,
-    relation_targets, selection_phases, stage_work, targets,
+    analysis, analysis_cache, assembly, command, deferral, diff, discovery, inputs, pipeline,
+    pipeline_entries, plan_result, project, python_plan_entries, relation_targets,
+    selection_phases, stage_work, targets,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

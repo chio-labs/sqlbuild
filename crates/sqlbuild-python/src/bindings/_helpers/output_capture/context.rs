@@ -10,9 +10,7 @@ use pyo3::prelude::{
 use pyo3::sync::PyOnceLock;
 use pyo3::types::PyTuple;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    call_with, context_variable, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, context_variable, imported};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 

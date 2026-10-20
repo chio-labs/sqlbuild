@@ -8,8 +8,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     ArtifactRecorder, artifact_written, artifact_written_at,
 };
-use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timing;
-use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
+use crate::bindings::_helpers::compile_context::compile_timings::add_compile_timing;
+use crate::bindings::_helpers::compile_context::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_outputs::artifacts::{
     BackgroundArtifactWriter, write_compiled_artifacts,
 };

@@ -7,9 +7,6 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use crate::bindings::_helpers::analysis::binding_catalog::{
     BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS, CatalogKey,
 };
-use crate::bindings::_helpers::analysis::model_reads::{
-    declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
-};
 use crate::bindings::_helpers::analysis::normalization::normalize_analysis_sql;
 use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_expression_source_shapes;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
@@ -17,6 +14,9 @@ use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     DeclaredRow, InferredRow, NativeCompiledModel,
 };
 use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::model_reads::{
+    declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
+};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;

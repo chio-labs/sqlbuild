@@ -9,7 +9,7 @@ use sqlbuild_core::cost_allocation::models::{
     AllocationStatus, CostQuery, PyDecimal, ResourceAllocation, RunAllocation, WarehouseKey,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cost_telemetry::values::{
     instant_micros, native_decimal, python_decimal,
 };

@@ -21,7 +21,7 @@ use sqlbuild_cache::stage_capture::models::CaptureDocument;
 use sqlbuild_core::json::errors::JsonEmitError;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::frontier::python_types::PythonTypes;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;

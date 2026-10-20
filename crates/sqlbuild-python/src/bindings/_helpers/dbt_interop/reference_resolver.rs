@@ -7,7 +7,7 @@ use pyo3::types::{PyDict, PySet, PySetMethods, PyString, PyTuple, PyTupleMethods
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 use std::collections::HashSet;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
+use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::dbt_interop::manifest::build_compile_dbt_manifest_index;

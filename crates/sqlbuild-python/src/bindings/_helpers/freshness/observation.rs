@@ -6,7 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_state::freshness::main::single_value_problem::single_value_problem;
 use sqlbuild_state::freshness::models::QueryShape;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
 use crate::bindings::_helpers::freshness::support::{
     OBSERVATION_ERROR, exception_text, freshness_error, presumed_utc_datetime, presumed_utc_value,
     text,

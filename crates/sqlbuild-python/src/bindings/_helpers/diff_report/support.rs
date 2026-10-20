@@ -6,7 +6,7 @@ use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_cli::diff_report::errors::DiffUserError;
 use sqlbuild_cli::diff_report::models::DiffRequestFacts;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::models::HostId;
 use crate::bindings::_helpers::records::construct::error_class;

@@ -16,7 +16,7 @@ use sqlbuild_rules::project_tree::main::project_path_escapes::project_path_escap
 use sqlbuild_rules::project_tree::main::project_tree_entries::project_tree_entries;
 use sqlbuild_rules::project_tree::models::ProjectTreeEntry;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;

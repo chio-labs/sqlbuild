@@ -8,7 +8,7 @@ use pyo3::prelude::{PyAnyMethods, PyResult, Python};
 use sqlbuild_core::compile_timings::main::compile_timing_milliseconds::compile_timing_milliseconds;
 use sqlbuild_core::compile_timings::models::CompileTimings;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 
 /// One compile invocation's collector, shared by every recorder on its thread.
 pub(crate) type CompileTimingsHandle = Rc<RefCell<CompileTimings>>;

@@ -4,7 +4,7 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::discovery::locations::project_relative_path;
 use crate::bindings::_helpers::discovery::python_module_files::discover_python_module_files;
 use crate::bindings::_helpers::event_exporting::scope::current_scope;

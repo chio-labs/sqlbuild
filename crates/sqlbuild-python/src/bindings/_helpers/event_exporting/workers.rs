@@ -14,7 +14,7 @@ use sqlbuild_core::event_export::models::{
     EventQueue, ExportSeverity, ExportSnapshot, QueuedEvent,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::event_exporting::constants::{
     INVOCATION_THREAD_PREFIX, LANE_WINDOW, NO_SECONDS, POLL_SECONDS,
 };

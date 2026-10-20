@@ -12,7 +12,7 @@ use sqlbuild_core::dlt_destination::models::{
 };
 use sqlbuild_core::loader_connection::models::LoaderConnection;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::load::ingestr_command::connection;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;

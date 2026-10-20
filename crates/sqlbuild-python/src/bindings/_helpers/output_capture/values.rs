@@ -11,7 +11,7 @@ use sqlbuild_core::command_output::errors::UnencodableText;
 use sqlbuild_core::command_output::types::PassText;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::macro_bridge::store_keys::text;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;

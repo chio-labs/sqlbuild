@@ -5,8 +5,8 @@ use sqlbuild_analysis::planner_fixtures::main::merge_metadata::merge_metadata;
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
-use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
+use crate::bindings::_helpers::compiled_project::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::planner_strategy::fixture_values::columns;
 use crate::bindings::_helpers::planner_strategy::models::FixtureRelation;
 use crate::bindings::_helpers::records::fields::field as native_field;

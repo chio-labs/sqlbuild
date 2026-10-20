@@ -5,13 +5,13 @@ use pyo3::types::{PyDict, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
+use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compile_driver::assembly::assemble_project;
 use crate::bindings::_helpers::compile_driver::deferral::{
     build_deferred_locations, resolve_deferred_target_config,
 };
 use crate::bindings::_helpers::compile_driver::pipeline::compile_project_phase;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::compile_analysis_selection;
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::planner_entries::command_plans::{
     resolve_static_command_scope, resolve_static_relation_context,
 };

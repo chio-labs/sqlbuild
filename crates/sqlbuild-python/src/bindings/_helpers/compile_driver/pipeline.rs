@@ -4,6 +4,7 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PySet, PySetMethods};
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::{
@@ -13,7 +14,6 @@ use crate::bindings::_helpers::compile_driver::plan_result::{
     PlanningInputs, connection_with_hooks, pipeline_result,
 };
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::compile_driver::selection_phases::{
     apply_unit_test_selectors, resolve_configured_rule_selection,
 };

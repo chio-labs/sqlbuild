@@ -17,7 +17,7 @@ use sqlbuild_discovery::yaml_files::models::{YamlFileOutcome, YamlPathFailure};
 use std::path::PathBuf;
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{

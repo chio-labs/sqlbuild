@@ -1,8 +1,8 @@
 //! Complete missing source metadata in bounded, database-grouped batches.
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_project::model_reads;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::{text, tuple};
 use crate::bindings::_helpers::planner_warehouse::constants::ACTIVE_CATALOG;

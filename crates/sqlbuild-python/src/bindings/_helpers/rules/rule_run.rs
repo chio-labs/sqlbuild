@@ -12,7 +12,7 @@ use sqlbuild_rules::rule_results::main::group_unevaluated::group_unevaluated;
 use sqlbuild_rules::rule_results::models::RuleFinding;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::fields::field as native_field;

@@ -10,6 +10,7 @@ use sqlbuild_core::build_command::main::render_phase_timings::render_phase_timin
 use sqlbuild_core::build_command::models::PhaseTimings;
 use sqlbuild_core::cli_text::models::CliStyle;
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::build_command::execution::{
     Outcome, Preparation, write_run_context,
 };
@@ -19,7 +20,6 @@ use crate::bindings::_helpers::build_command::support::{
 };
 use crate::bindings::_helpers::build_progress::footer::format_build_footer;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::plan_has_executable_work;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     write_python_check_runtime_target, write_runtime_target,
 };

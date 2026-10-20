@@ -7,7 +7,7 @@ use sqlbuild_analysis::python_selection::main::python_node_graph_indexes::python
 use sqlbuild_analysis::python_selection::models::{InventoryIndexes, InventoryNode};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::discovery::imported_modules::provider_usages;
 use crate::bindings::_helpers::graph::python_selection::resolve_python_sql_run_selection;
 use crate::bindings::_helpers::graph::views::compiled_graph_keys;

@@ -52,7 +52,7 @@ use sqlbuild_cli::dispatch::models::{
 use sqlbuild_core::format_command::main::format_path_selectors::format_path_selectors;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
+use crate::bindings::_helpers::boundary::python_calls::{imported, within};
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};

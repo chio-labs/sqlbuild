@@ -7,10 +7,8 @@ use std::collections::HashMap;
 
 use sqlbuild_attachments::audits::constants::BUILTIN_AUDITS;
 
-use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
+use crate::bindings::_helpers::compile_context::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compiled_project::audit_loop::{AuditBlockRow, AuditFileRow};
 use crate::bindings::_helpers::compiled_project::function_loop::{FunctionRow, FunctionSettings};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;

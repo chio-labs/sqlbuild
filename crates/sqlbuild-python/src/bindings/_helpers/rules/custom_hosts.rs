@@ -27,7 +27,7 @@ use sqlbuild_rules::custom_host_pool::models::{HostRuleSubject, HostRun, HostSli
 use sqlbuild_rules::custom_host_pool::types::{HostInvocation, HostPlan};
 use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;

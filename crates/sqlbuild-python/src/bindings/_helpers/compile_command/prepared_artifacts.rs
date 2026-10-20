@@ -7,15 +7,15 @@ use pyo3::prelude::{
 use pyo3::types::{PyCFunction, PyDict, PyFrozenSet, PyTuple};
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
 
+use crate::bindings::_helpers::boundary::python_calls::{
+    KeywordArguments, call_with, imported, keywords,
+};
 use crate::bindings::_helpers::compile_command::reuse_recording::CompileArtifactWrites;
 use crate::bindings::_helpers::compile_command::target_writer::{
     PlannedStaticSqlTests, plan_static_sql_tests,
 };
 use crate::bindings::_helpers::compile_command::target_writer::{
     Prepared, planning_diagnostics, publish_staged_target, staging_changed, write_static_target,
-};
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
 };
 use crate::bindings::_helpers::compile_driver::stage_work::{
     BACKGROUND_SQL_TEST_PLANS, count_stage,

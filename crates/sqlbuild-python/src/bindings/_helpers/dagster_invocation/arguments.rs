@@ -13,7 +13,7 @@ use sqlbuild_core::dagster_invocation::main::has_explicit_scenario_selector::has
 use sqlbuild_core::dagster_invocation::main::json_output_requested::json_output_requested;
 use sqlbuild_core::dagster_invocation::main::wrap_selectors::wrap_selectors;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::dagster_invocation::access::{
     AssetPath, CheckKey, asset_path, asset_path_or_empty, check_enabled, check_key_set, constant,
     constant_contains, get, items, node_with_id, nodes_by_id, path_set, string_tuple, text_of,

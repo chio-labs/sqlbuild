@@ -19,7 +19,7 @@ use sqlbuild_config::workspace::main::playground_summary::playground_summary;
 use sqlbuild_config::workspace::models::{PlaygroundRequest, SkillInstallRequest};
 use sqlbuild_core::cli_text::models::CliStyle;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;

@@ -1,6 +1,6 @@
 //! Python check planning: run-state recording, dependency relations and read-side preflight.
 
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::relation_targets::build_python_relation_targets;
 use crate::bindings::_helpers::graph::python_selection::resolve_python_check_excludes;
 use crate::bindings::_helpers::planner_phases::objects::object;
@@ -13,8 +13,8 @@ use pyo3::{pyfunction, wrap_pyfunction};
 
 use sqlbuild_core::build_command::errors::BuildCommandError;
 
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::build_command::policies::build_command_error;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;

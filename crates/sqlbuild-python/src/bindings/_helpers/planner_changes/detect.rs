@@ -1,6 +1,6 @@
 //! Detect how each selected model and function changed since its recorded build.
 
-use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compiled_project::model_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
@@ -25,11 +25,9 @@ use sqlbuild_analysis::planner_changes::models::{
     SchemaFindingRow,
 };
 
-use crate::bindings::_helpers::analysis::model_reads::{inferred_rows, star_flags};
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::InferredRow;
+use crate::bindings::_helpers::compiled_project::model_reads::{inferred_rows, star_flags};
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_host::user_code::UserCodeHost;

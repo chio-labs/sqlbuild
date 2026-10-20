@@ -6,7 +6,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyString};
 use pyo3::{pyclass, pymethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
 

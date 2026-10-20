@@ -7,15 +7,15 @@ use sqlbuild_core::build_command::constants::{
 };
 use sqlbuild_core::build_command::models::PlanSafetyGates;
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::build_command::defer_clone::run_defer_clone_boundary_prephase;
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::policies::{enforce_plan_policies, model_limit};
 use crate::bindings::_helpers::build_command::support::{
     boolean, emit, joined, keyword_relay, none,
 };
-use crate::bindings::_helpers::cli::progress_text::with_verbose_inspection;
+use crate::bindings::_helpers::build_progress::progress_text::with_verbose_inspection;
 use crate::bindings::_helpers::compile_driver::pipeline::run_compile_pipeline;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::manifest::builder::build_manifest;
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;

@@ -16,7 +16,7 @@ use pyo3::types::{
 use sqlbuild_discovery::model_files::main::model_file_stem::model_file_stem;
 use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::constants::{
     CACHED_PROPERTIES, CLASS_METHODS, CLASS_PROPERTIES, CURRENT_DIRECTORY_PATH, ENUMS,

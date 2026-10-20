@@ -1,6 +1,6 @@
 //! Per-model full-refresh resolution and full-rebuild refusals.
 
-use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compiled_project::model_reads;
 use crate::bindings::_helpers::planner_phases::constants::FULL_REFRESH_DISABLED_REBUILD_CODE;
 use crate::bindings::_helpers::planner_phases::objects::{frozenset, planner_error, strings};
 use crate::bindings::_helpers::records::fields::field as native_field;

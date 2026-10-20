@@ -17,7 +17,7 @@ use sqlbuild_recall::store::main::read_output_transcript::read_output_transcript
 use sqlbuild_recall::store::main::resolve_invocation::resolve_invocation;
 use sqlbuild_recall::store::models::{OpenMode, SqliteStore};
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::query_command::query::run_query_command;
 use crate::bindings::_helpers::recall::clickhouse_store::{ClickHouseLocation, ClickHouseReader};
 use crate::bindings::_helpers::recall::console::{write_stderr, write_stdout_bytes};

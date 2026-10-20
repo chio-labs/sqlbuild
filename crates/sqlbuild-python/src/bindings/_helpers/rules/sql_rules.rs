@@ -17,12 +17,12 @@ use sqlbuild_rules::rule_cache::main::file_rule_key::file_rule_key;
 use sqlbuild_rules::rule_results::main::duplicate_literal_hints::duplicate_literal_hints;
 use sqlbuild_rules::rule_results::models::RuleFinding;
 
-use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compiled_project::compiled_model_view::{
     NativeCompiledModel, SqlRuleInputs, SqlRuleKey,
 };
+use crate::bindings::_helpers::compiled_project::model_reads::output_proven;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;

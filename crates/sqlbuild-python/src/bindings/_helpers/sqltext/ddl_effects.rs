@@ -9,7 +9,7 @@ use sqlbuild_sqltext::ddl_effects::main::relation_name_key::relation_name_key as
 use sqlbuild_sqltext::ddl_effects::main::statement_metadata_effect::statement_metadata_effect as native_statement_metadata_effect;
 use sqlbuild_sqltext::ddl_effects::models::StatementMetadataEffect;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 

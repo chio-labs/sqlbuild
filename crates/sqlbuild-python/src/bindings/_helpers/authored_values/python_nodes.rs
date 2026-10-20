@@ -13,7 +13,7 @@ use sqlbuild_core::identifier_text::main::is_lowercase_identifier::is_lowercase_
 use sqlbuild_model_config::header_metadata::main::json_meta_problem::json_meta_problem;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
 use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;

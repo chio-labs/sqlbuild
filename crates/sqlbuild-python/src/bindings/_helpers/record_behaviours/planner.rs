@@ -9,7 +9,7 @@ use sqlbuild_core::migration_values::main::model_migration_blocks_build::model_m
 use sqlbuild_core::migration_values::main::storage_transition::storage_transition;
 use sqlbuild_core::migration_values::models::{DecisionTraits, ModelMigrationFacts};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
 use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
 use crate::bindings::_helpers::records::construct::error_class;

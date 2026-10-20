@@ -3,11 +3,11 @@
 use pyo3::prelude::{Bound, PyAny, PyResult, Python};
 use pyo3::types::PyString;
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
 use crate::bindings::_helpers::compile_driver::config_validation::{
     ProjectConfiguration, reject_invalid_connection_configuration,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
-use crate::bindings::_helpers::contracts::project_config::{
+use crate::bindings::_helpers::discovery::project_config::{
     load_local_config_file, load_project_config_file,
 };
 use crate::bindings::_helpers::native_host::executor::ExecutorHost;

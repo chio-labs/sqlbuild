@@ -1,7 +1,7 @@
 //! Model migration orchestration over Python-owned live inspection.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::planner_changes::renames::plan_reference_renames;
 use crate::bindings::_helpers::planner_migrations::column_objects::{config, replace};
 use crate::bindings::_helpers::planner_migrations::discovery::discover_model_migrations;

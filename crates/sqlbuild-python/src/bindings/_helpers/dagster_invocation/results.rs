@@ -9,7 +9,7 @@ use pyo3::{IntoPyObject, pyfunction};
 use sqlbuild_core::dagster_invocation::main::normalize_check_name::normalize_check_name;
 use sqlbuild_core::dagster_invocation::main::topological_order::topological_order;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::dagster_invocation::access::{
     AssetPath, CheckKey, asset_enabled, asset_path, check_enabled, check_key_set, constant,
     constant_contains, get, items, merged, node_with_id, nodes_by_id, path_set, string_list,

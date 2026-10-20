@@ -4,13 +4,13 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyString, PyTuple};
 use sqlbuild_config::project::main::unsupported_target_warehouse::unsupported_target_warehouse;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 
-use crate::bindings::_helpers::contracts::project_config::{
-    resolve_config_file_path, validate_local_sql_analysis,
-};
 use crate::bindings::_helpers::contracts::spec_resolution::{
     resolve_effective_adapter_name, resolve_target_config,
+};
+use crate::bindings::_helpers::discovery::project_config::{
+    resolve_config_file_path, validate_local_sql_analysis,
 };
 use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;

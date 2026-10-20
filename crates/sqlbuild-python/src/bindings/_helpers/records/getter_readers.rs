@@ -12,8 +12,8 @@ use crate::bindings::_helpers::compile_command::prepared_artifacts::PreparedComp
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     CompileArtifactWrites, RecordedCompileOutput,
 };
-use crate::bindings::_helpers::compile_driver::diagnostic_collector::CollectedCompileDiagnostics;
-use crate::bindings::_helpers::compile_driver::input_reads::CompileInputReads;
+use crate::bindings::_helpers::compile_context::diagnostic_collector::CollectedCompileDiagnostics;
+use crate::bindings::_helpers::compile_context::input_reads::CompileInputReads;
 use crate::bindings::_helpers::compiled_project::audit_views::{
     NativeAuditInput, NativeCompiledAudit,
 };

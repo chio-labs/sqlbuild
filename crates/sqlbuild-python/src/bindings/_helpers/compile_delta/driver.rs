@@ -11,7 +11,9 @@ use sqlbuild_cache::project_reuse::main::read_delta_output::read_delta_output;
 use sqlbuild_cache::project_reuse::models::{DeltaBase, DeltaCandidate, ProjectFileChanges};
 use sqlbuild_cache::project_reuse::types::ImageSections;
 
-use crate::bindings::_helpers::cli::progress::{NativeProgressProjector, current_projector};
+use crate::bindings::_helpers::build_progress::progress::{
+    NativeProgressProjector, current_projector,
+};
 use crate::bindings::_helpers::compile_command::reuse_attempt::reuse_debug;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     RecordedCompileOutput, print_to,

@@ -1,7 +1,7 @@
 //! Host SQL-test request preparation, native planning, and Python result conversion.
 
-use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timing;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::compile_context::compile_timings::add_compile_timing;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
 use crate::bindings::_helpers::records::construct::error_class;

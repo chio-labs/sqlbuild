@@ -1,9 +1,9 @@
 //! Model cursor orchestration over live warehouse snapshot facts.
 
-use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::compiled_project::model_reads;
 use crate::bindings::_helpers::model_config::config_values::{
     config_cursor_bound, config_str as authored_config_str,
 };

@@ -16,7 +16,7 @@ use sqlbuild_core::dbt_cli::models::DbtArgvCommand;
 use sqlbuild_core::dbt_process::main::run_dbt_process::run_dbt_process;
 use sqlbuild_core::dbt_process::models::DbtProcessOutput;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::dbt_interop::cli::{
     argv, ls_nodes, resolve_dbt_executable, sequence,
 };

@@ -11,8 +11,8 @@ use sqlbuild_core::dbt_command::main::render_dbt_init_preview::render_dbt_init_p
 use sqlbuild_core::dbt_command::main::render_dbt_init_summary::render_dbt_init_summary;
 use sqlbuild_core::dbt_command::models::DbtInitSummary;
 
-use crate::bindings::_helpers::cli::progress_reporters::DbtInitProgressReporter;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::build_progress::progress_reporters::DbtInitProgressReporter;
 use crate::bindings::_helpers::dbt_command::init_project::build_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::init_project::validate_dbt_init_project;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, path, stream};
