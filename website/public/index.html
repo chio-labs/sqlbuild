@@ -371,8 +371,8 @@ lifetime_orders
 									Every run is recorded: what ran, the SQL it executed, audit results and everything it printed. Agents and people ask in SQL, then check live state with the same command.
 								</p>
 							</div>
-<pre class="terminal"><span class="cmd">sqb recall query &quot;SELECT invocation_started_at AS run, outcome, violation_count
-  FROM audit_results WHERE audit_name = 'revenue_is_non_negative'
+<pre class="terminal"><span class="cmd">sqb recall query &quot;SELECT substr(invocation_started_at, 1, 16) AS run, outcome,
+  violation_count FROM audit_results WHERE audit_name = 'revenue_is_non_negative'
   ORDER BY run DESC LIMIT 3&quot;</span>
 run               <span class="dim">|</span> outcome <span class="dim">|</span> violation_count
 2026-10-20T00:01  <span class="dim">|</span> <span class="warn">warn</span>    <span class="dim">|</span> <span class="warn">1</span>

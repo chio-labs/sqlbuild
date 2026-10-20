@@ -17,6 +17,10 @@ published, rebuildable run projection. Diagnostic and compute logs are never acc
 contract. The public types, filters, pages, records, errors, and helper functions are exported from
 `sqlbuild.execution_history`.
 
+This is a Python API for applications that store and serve SQLBuild events themselves. To look into
+what past runs did, use [Recall](recall.md), which records every command
+automatically and is queried with [`sqb recall`](../../cli/recall.md).
+
 ## Public contracts
 
 `LifecycleEventLogStorage` provides `append_event`, `append_events`, `get_events`, `get_schema_version`,

@@ -19,6 +19,7 @@ Online: https://sqlbuild.com/docs/concepts/adapters/clickhouse/
 - Settings SQLBuild pins
 - SQL differences to watch
 - Limits
+- Recall store
 
 The ClickHouse adapter is in beta and supports a single server. Clusters (`ON CLUSTER`, replicated and distributed tables) are not supported yet. Please [report issues](https://github.com/chio-labs/sqlbuild/issues).
 
@@ -187,3 +188,11 @@ ClickHouse returns a type's default value (`0`, the epoch, an empty string) from
 - Snapshots always use an unsorted `MergeTree` table.
 - Seeds load through the HTTP insert interface as CSV, so large seeds never hit the `max_query_size` limit.
 - Retention and time travel are not available.
+
+## Recall store
+
+A ClickHouse connection can also hold [Recall](../observability/recall.md)'s command
+history for a whole team, whichever adapter the project builds with. Set
+`[recall] connection` to it; Recall creates its tables on first use, keeps every output byte by
+default, and needs only `SELECT` and `INSERT` once the tables exist. See
+[Sharing history in ClickHouse](../observability/recall.md#sharing-history-in-clickhouse).

@@ -13,13 +13,27 @@ whether work started, completed, failed, skipped, or retried.
 |--------|---------|-----------|
 | `LifecycleEvent` | Immutable invocation, run, resource-attempt, operation, statement, retry, and audit facts | Canonical lifecycle evidence once durably stored |
 | `DiagnosticLog` | Structured framework diagnostics | Explanatory only |
-| `stdout.log` / `stderr.log` | Exact host-local process output | Troubleshooting transcript |
-| [Recall](observability/recall.md) | Local queryable history of invocations, statements, SQL, and output | Troubleshooting history; best effort |
+| [Recall](observability/recall.md) | Queryable history of invocations, statements, SQL, audit results, and output, locally or in ClickHouse | Troubleshooting history; best effort |
+| `stdout.log` / `stderr.log` | Exact host-local process output (compute log files) | Troubleshooting transcript; also stored by Recall |
 | `CommandOutputRecord` | Bounded, ANSI-free remote stdout/stderr chunks | Potentially sensitive and lossy troubleshooting data |
 | Final JSON output | End-of-command aggregate | Result projection, not event history |
 
 Human-readable CLI output remains the normal operator interface. Structured records are a separate
 contract for integrations and durable consumers.
+
+## Which to use
+
+| You want to | Use |
+|-------------|-----|
+| Find out what a past run did: what ran, its SQL, audit results, errors and output | [Recall](observability/recall.md) and [`sqb recall`](../cli/recall.md) |
+| Send events or output to your own systems, such as a message queue or a monitoring tool | [Typed sinks](observability/sinks.md) |
+| Store lifecycle events and query run state from your own Python application | [Execution history](observability/execution-history.md) |
+| Read the result of the command you just ran | Its final `--json` output |
+
+Recall is on by default and covers investigation for people and agents. Sinks and execution history
+are for building on SQLBuild's events elsewhere. The `stdout.log`, `stderr.log` and
+`diagnostics.jsonl` compute log files under `logs/<date>/` are still written alongside Recall and
+hold the same bytes; prefer `sqb recall output`, which works the same with a shared store.
 
 ## Lifecycle envelope
 
