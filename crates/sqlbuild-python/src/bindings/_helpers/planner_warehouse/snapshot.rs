@@ -7,6 +7,7 @@ use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::fingerprints::latest_rows::select_latest_fingerprints;
 use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
+use crate::bindings::_helpers::model_config::typed_config::{config_node_of, model_values};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::graph::build_execution_upstream_deps;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;
@@ -35,6 +36,7 @@ use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;
 use sqlbuild_core::constants::MIGRATION_TABLE_NAME;
 use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
+use sqlbuild_model_config::types::{AuthoredNode, NodeKind};
 use std::collections::{BTreeSet, HashSet};
 
 /// Everything one snapshot gather needs.
@@ -469,9 +471,7 @@ fn shares_unfiltered(project: &Bound<'_, PyAny>, selected: &Bound<'_, PyAny>) ->
         if !names.contains(&model_reads::model_name(&model)?) {
             all_selected = false;
         }
-        if native_field(&native_field(&model, "config")?, "values")?
-            .call_method1("get", (MIGRATE_FROM_CONFIG_KEY,))?
-            .is_instance_of::<PyString>()
+        if config_node_of(&model_values(&model)?, MIGRATE_FROM_CONFIG_KEY)?.kind() == NodeKind::Str
         {
             any_migration = true;
         }

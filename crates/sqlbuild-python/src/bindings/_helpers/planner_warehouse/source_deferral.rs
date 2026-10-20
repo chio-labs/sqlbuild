@@ -6,6 +6,7 @@ use crate::bindings::_helpers::authored_values::project_vars::render_project_var
 use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
+use crate::bindings::_helpers::model_config::typed_config::{config_value, model_values};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_phases::objects::{
@@ -16,7 +17,6 @@ use crate::bindings::_helpers::planner_warehouse::constants::{
 };
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::mapping_get;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::pyfunction;
 use pyo3::types::PyDict as KeywordDict;
@@ -54,9 +54,9 @@ fn hook_source_reads(
     let py = model.py();
     let hook_entry = record_class(py, SQL_HOOK_ENTRY)?;
     let source_kind = host::entry(py, UserCodeHost::SqlResourceRefKind)?.getattr("SOURCE")?;
-    let values = native_field(&native_field(model, "config")?, "values")?;
+    let values = model_values(model)?;
     for key in MODEL_HOOK_CONFIG_KEYS {
-        let value = mapping_get(&values, key)?;
+        let value = config_value(py, &values, key)?;
         let entries: Vec<Bound<'_, PyAny>> =
             if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
                 value.try_iter()?.collect::<PyResult<_>>()?
