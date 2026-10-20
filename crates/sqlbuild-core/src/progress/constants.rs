@@ -97,6 +97,8 @@ pub(crate) const PLANNING_COMPLETION_PREFIXES: [&str; 15] = [
     "Resolved ",
     "Cloned ",
 ];
+/// Messages that end a planning phase with a failure.
+pub(crate) const PLANNING_FAILURE_PREFIXES: [&str; 1] = ["Failed "];
 pub(crate) const ASSERTION_PREFIX: &str = "assertion ";
 pub(crate) const PASS_OUTCOME: &str = "pass";
 pub(crate) const ERROR_OUTCOME: &str = "error";

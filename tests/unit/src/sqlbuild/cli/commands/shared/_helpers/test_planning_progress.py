@@ -12,7 +12,12 @@ from sqlbuild._native import (
 )
 from tests.unit.src.sqlbuild.cli.commands.shared._helpers._test_types import (
     PlanningFinishTestCase,
+    PlanningPhaseEndTestCase,
     PlanningProgressTestCase,
+)
+from tests.unit.src.sqlbuild.presentation.classes.helpers import (
+    RecordingStream,
+    persistent_lines,
 )
 
 
@@ -55,6 +60,45 @@ def test_given_planning_messages_when_reporting_then_writes_expected_output(
         reporter.on_progress(message)
 
     assert stream.getvalue() == test_case.expected_output
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    (
+        PlanningPhaseEndTestCase(
+            description="failed watermark ends its phase before later output",
+            messages=(
+                "Inspecting runtime cursor watermark (1/1): dev.orders.updated_at [max]...",
+                "Failed runtime cursor watermark (1/1): dev.orders.updated_at [max] (0.10s): boom",
+            ),
+            expected_lines=(
+                "Failed runtime cursor watermark (1/1): dev.orders.updated_at [max] (0.10s): boom",
+                "error[E001]: later output",
+                "",
+            ),
+        ),
+        PlanningPhaseEndTestCase(
+            description="prepared clone plan ends its phase before later output",
+            messages=("Preparing clone plan...", "Prepared clone plan. (0.10s)"),
+            expected_lines=("Prepared clone plan. (0.10s)", "error[E001]: later output", ""),
+        ),
+    ),
+    ids=lambda case: case.description,
+)
+def test_given_phase_ending_message_on_terminal_when_reporting_then_spinner_stops(
+    test_case: PlanningPhaseEndTestCase,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SQLBUILD_NO_PROGRESS", raising=False)
+    stream: RecordingStream = RecordingStream(events=[], tty=True)
+    reporter: PlanningProgressReporter = PlanningProgressReporter(stream=stream, use_color=False)
+
+    message: str
+    for message in test_case.messages:
+        reporter.on_progress(message)
+    stream.write("error[E001]: later output\n")
+
+    assert persistent_lines(stream.getvalue()) == test_case.expected_lines
 
 
 @pytest.mark.parametrize(

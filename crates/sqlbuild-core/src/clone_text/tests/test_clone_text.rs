@@ -149,12 +149,12 @@ fn given_items_when_completing_then_reports_messages_counts_and_exit_code() {
             expected_exit_code: 1,
         },
         CompletionTestCase {
-            description: "success shows the doubly parenthesised elapsed time",
+            description: "success shows the elapsed time in one pair of parentheses",
             items: vec![item("orders", "copied", CloneStatusKind::Success)],
             elapsed_seconds: Some(1.5),
             use_color: false,
             expected_text: "\n\u{2713} Completed successfully  CLONED=0  COPIED=1  RECREATED_VIEWS=0  \
-                RECREATED_FUNCTIONS=0  PASS=1  WARN=0  FAIL=0  TOTAL=1  ((1.50s))\n",
+                RECREATED_FUNCTIONS=0  PASS=1  WARN=0  FAIL=0  TOTAL=1  (1.50s)\n",
             expected_exit_code: 0,
         },
         CompletionTestCase {

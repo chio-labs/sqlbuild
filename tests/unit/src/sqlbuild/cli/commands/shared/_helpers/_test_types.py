@@ -156,3 +156,10 @@ class SqlTestStatusAlignmentTestCase:
     expected_models: tuple[str, ...]
     assertion_names: tuple[str, ...]
     expected_row_count: int
+
+
+@dataclass(frozen=True)
+class PlanningPhaseEndTestCase:
+    description: str
+    messages: tuple[str, ...]
+    expected_lines: tuple[str, ...]

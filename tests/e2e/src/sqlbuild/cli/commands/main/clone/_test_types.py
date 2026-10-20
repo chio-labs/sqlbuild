@@ -57,3 +57,12 @@ class CloneTerminalProgressE2ETestCase:
     description: str
     columns: int
     expected_screen_fragments: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClonePreparationFailureE2ETestCase:
+    description: str
+    columns: int
+    broken_model_path: str
+    broken_model_sql: str
+    expected_screen_fragments: tuple[str, ...]

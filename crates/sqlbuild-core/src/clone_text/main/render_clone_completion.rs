@@ -42,7 +42,7 @@ pub fn render_clone_completion(
         label: "TOTAL".to_owned(),
         value: count(items, |_| true),
     });
-    let elapsed: Option<String> = elapsed_seconds.map(|seconds| format!("({seconds:.2}s)"));
+    let elapsed: Option<String> = elapsed_seconds.map(|seconds| format!("{seconds:.2}s"));
     let footer: String = format_summary_footer(style, &counts, elapsed.as_deref());
     let warnings: i64 = count(items, |item| item.status == CloneStatusKind::Warning);
     let failures: i64 = count(items, |item| item.status == CloneStatusKind::Failed);
