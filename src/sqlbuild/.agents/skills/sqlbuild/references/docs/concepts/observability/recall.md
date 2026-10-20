@@ -29,36 +29,26 @@ The waffle shop example's `daily_revenue` model has an audit, `revenue_is_non_ne
 severity. One night the payments feed starts recording a refund as a negative payment. The unit tests
 still pass, because they run on mocked data. The build finishes with a warning that nobody reads.
 
-The next morning, ask when the audit started failing:
+The next morning, ask when the audit started failing, and what each of those builds reported:
 
 ```bash
 sqb recall query --format table \
-  "SELECT invocation_started_at AS run, outcome, violation_count FROM audit_results
-   WHERE audit_name = 'revenue_is_non_negative' ORDER BY run DESC LIMIT 3"
+  "SELECT a.invocation_started_at AS run, a.outcome, a.violation_count, i.status, i.exit_code
+   FROM audit_results a JOIN invocations i USING (invocation_id)
+   WHERE a.audit_name = 'revenue_is_non_negative' ORDER BY run DESC LIMIT 3"
 ```
 
 ```
-run                         | outcome | violation_count
---------------------------- | ------- | ---------------
-2026-10-20T00:01:44.784683Z | warn    | 1
-2026-10-20T00:00:34.652468Z | pass    | 0
-2026-10-19T23:59:23.827831Z | pass    | 0
+run                         | outcome | violation_count | status    | exit_code
+--------------------------- | ------- | --------------- | --------- | ---------
+2026-10-20T00:01:44.784683Z | warn    | 1               | completed | 0
+2026-10-20T00:00:34.652468Z | pass    | 0               | completed | 0
+2026-10-19T23:59:23.827831Z | pass    | 0               | completed | 0
 
 3 rows
 ```
 
-See what that run printed, exactly as the scheduler saw it:
-
-```bash
-sqb recall output last --tail 4
-```
-
-```
-  daily_revenue
-    audit revenue_is_non_negative returned 1 row
-
-✓ Completed with warnings  PASS=89  WARN=1  FAIL=0  INSUFFICIENT=0  SKIP=0  TOTAL=90  (3.08s)
-```
+The audit started warning on the latest build, and that build still exited 0, so nothing alerted.
 
 Then check what is true in the warehouse now, with the same command:
 
