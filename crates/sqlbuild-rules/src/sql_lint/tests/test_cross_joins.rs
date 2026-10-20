@@ -1,8 +1,11 @@
 use crate::sql_lint::main::cross_join_subject::cross_join_subject;
-use crate::sql_lint::tests::helpers::{POLICY_SENTINEL, cross_join_messages};
+use crate::sql_lint::tests::helpers::{
+    POLICY_SENTINEL, cross_join_messages, cross_join_remediations,
+};
 use crate::sql_lint::tests::test_types::{CrossJoinSubjectTestCase, CrossJoinTestCase};
 
 const GENERIC_MESSAGE: &str = "CROSS JOIN creates an explicit cartesian product";
+const UNNAMED_MESSAGE: &str = "CROSS JOIN creates an explicit cartesian product with an unnamed relation; only a file-wide exception (rule and path) can cover it";
 
 #[test]
 fn given_cross_joins_when_one_side_is_provably_one_row_then_only_multiplying_joins_are_reported()
@@ -165,11 +168,48 @@ fn given_cross_joins_when_one_side_is_provably_one_row_then_only_multiplying_joi
             ],
         },
         CrossJoinTestCase {
-            description: "an unrecognised relation keeps the generic finding",
+            description: "an unnamed relation says only a file-wide exception covers it",
             sql: "SELECT o.order_id FROM orders AS o CROSS JOIN UNNEST([1, 2]) AS u(n)",
             dialect: "duckdb",
             one_row_relations: &[],
-            expected_messages: &[GENERIC_MESSAGE],
+            expected_messages: &[UNNAMED_MESSAGE],
+        },
+        CrossJoinTestCase {
+            description: "a named window is never treated as unpartitioned",
+            sql: "WITH newest AS (SELECT order_id FROM orders WINDOW w AS (PARTITION BY customer_id ORDER BY order_id DESC) QUALIFY ROW_NUMBER() OVER w = 1) \
+                  SELECT c.customer_id FROM customers AS c CROSS JOIN newest AS n",
+            dialect: "duckdb",
+            one_row_relations: &[],
+            expected_messages: &["CROSS JOIN with `newest` creates an explicit cartesian product"],
+        },
+        CrossJoinTestCase {
+            description: "a join under a nested WITH names the top-level CTE",
+            sql: "WITH outer_checks AS (WITH inner_checks AS (SELECT o.order_id FROM orders AS o CROSS JOIN customers AS c) SELECT order_id FROM inner_checks) \
+                  SELECT order_id FROM outer_checks",
+            dialect: "duckdb",
+            one_row_relations: &[],
+            expected_messages: &[
+                "CROSS JOIN with `customers` in CTE `outer_checks` creates an explicit cartesian product",
+            ],
+        },
+        CrossJoinTestCase {
+            description: "a WITH inside a subquery of the final select names no CTE",
+            sql: "SELECT s.order_id FROM (WITH inner_checks AS (SELECT o.order_id FROM orders AS o CROSS JOIN customers AS c) SELECT order_id FROM inner_checks) AS s",
+            dialect: "duckdb",
+            one_row_relations: &[],
+            expected_messages: &[
+                "CROSS JOIN with `customers` creates an explicit cartesian product",
+            ],
+        },
+        CrossJoinTestCase {
+            description: "a WITH owned by a set operation names its CTE",
+            sql: "WITH checks AS (SELECT o.order_id FROM orders AS o CROSS JOIN customers AS c) \
+                  SELECT order_id FROM checks UNION ALL SELECT order_id FROM orders",
+            dialect: "duckdb",
+            one_row_relations: &[],
+            expected_messages: &[
+                "CROSS JOIN with `customers` in CTE `checks` creates an explicit cartesian product",
+            ],
         },
     ];
 
@@ -179,6 +219,32 @@ fn given_cross_joins_when_one_side_is_provably_one_row_then_only_multiplying_joi
         assert_eq!(
             messages, test_case.expected_messages,
             "{}",
+            test_case.description
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn given_unnamed_cross_join_when_linting_then_help_prints_a_file_wide_exception()
+-> Result<(), String> {
+    let test_cases = [CrossJoinTestCase {
+        description: "CROSS JOIN UNNEST",
+        sql: "SELECT o.order_id FROM orders AS o CROSS JOIN UNNEST([1, 2]) AS u(n)",
+        dialect: "duckdb",
+        one_row_relations: &[],
+        expected_messages: &[
+            "[[rules.rule_exceptions]]\n            rule = \"SQBRSQL038\"\n            path = \"<path of this file>\"\n            reason = \"<why this deviation is intentional>\"",
+        ],
+    }];
+
+    for test_case in test_cases {
+        let remediations: Vec<String> = cross_join_remediations(&test_case)?;
+
+        assert_eq!(remediations.len(), 1, "{}", test_case.description);
+        assert!(
+            remediations[0].contains(test_case.expected_messages[0]),
+            "{}: {remediations:?}",
             test_case.description
         );
     }

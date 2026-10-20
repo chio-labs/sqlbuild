@@ -32,6 +32,7 @@ use sqlbuild_rules::lint_text::models::{
 };
 use sqlbuild_rules::project_tree::main::project_real_path::project_real_path;
 use sqlbuild_rules::project_tree::main::project_real_paths::project_real_paths;
+use sqlbuild_rules::sql_lint::main::fill_finding_path::fill_finding_path;
 use sqlbuild_rules::sql_lint::main::preparation::prepare;
 use sqlbuild_rules::sql_lint::types::PreparedSql;
 
@@ -1166,7 +1167,7 @@ fn sentinel_spans(sites: &[InterpolationSite]) -> Vec<ExpansionSpan> {
         .collect()
 }
 
-/// `rows` with a finding for every inline suppression directive, sorted by path then place.
+/// `rows` with file paths in their help and a finding per inline directive, sorted by place.
 fn with_directive_findings(
     files: &[LintFile],
     project_dir: &Path,
@@ -1185,6 +1186,11 @@ fn with_directive_findings(
         reject_inline_suppressions(&sources).map_err(|error| error.to_string())
     })
     .map_err(value_error)?;
+    for violation in &mut violations {
+        if let Some(remediation) = &mut violation.remediation {
+            *remediation = fill_finding_path(remediation, &paths[violation.file]);
+        }
+    }
     violations.extend(findings.into_iter().map(LintViolationRow::suppression));
     violations.sort_by(|left, right| {
         (

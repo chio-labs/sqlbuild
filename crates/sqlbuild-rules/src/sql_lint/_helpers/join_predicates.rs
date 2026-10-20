@@ -3,12 +3,16 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
-use polyglot_sql::expressions::{Expression, JoinKind, Literal, Select, Subquery, TableRef};
+use polyglot_sql::expressions::{Expression, JoinKind, Literal, Select, Subquery, TableRef, With};
 use polyglot_sql::parser::{Parser, ParserConfig};
 use polyglot_sql::tokens::{Span, Token, TokenType};
 use polyglot_sql::{DialectType, ExpressionWalk};
 
-use crate::sql_lint::constants::{CROSS_JOIN_CTE_MARKER, CROSS_JOIN_PREFIX, CROSS_JOIN_SUFFIX};
+use crate::constants::SETTING_SNIPPET_INDENT;
+use crate::sql_lint::constants::{
+    CROSS_JOIN_CTE_MARKER, CROSS_JOIN_PATH_PLACEHOLDER, CROSS_JOIN_PREFIX,
+    CROSS_JOIN_REASON_PLACEHOLDER, CROSS_JOIN_SUFFIX, CROSS_JOIN_UNNAMED_MESSAGE,
+};
 use crate::sql_lint::models::{CrossJoinRequest, LintDiagnostic, LintRuleMetadata};
 
 const CROSS_JOIN_FIX_REASON: &str = "a keyed relationship requires user intent";
@@ -189,16 +193,38 @@ pub(super) fn cross_join_diagnostics(
         message: finding
             .relation
             .as_deref()
-            .map_or(Cow::Borrowed(rule.message), |relation| {
+            .map_or(Cow::Borrowed(CROSS_JOIN_UNNAMED_MESSAGE), |relation| {
                 Cow::Owned(cross_join_message(relation, finding.cte.as_deref()))
             }),
-        remediation: Cow::Borrowed(rule.remediation),
+        remediation: if finding.relation.is_some() {
+            Cow::Borrowed(rule.remediation)
+        } else {
+            Cow::Owned(file_wide_remediation(rule.code))
+        },
         start: finding.span.start,
         end: finding.span.end,
         fix_unavailable_reason: Some(CROSS_JOIN_FIX_REASON),
         fix: None,
     })
     .collect()
+}
+
+/// Help for a join no relation names: fix it, or record the file-wide exception it allows.
+fn file_wide_remediation(code: &str) -> String {
+    let entry: String = [
+        "[[rules.rule_exceptions]]".to_owned(),
+        format!("rule = \"{code}\""),
+        format!("path = \"{CROSS_JOIN_PATH_PLACEHOLDER}\""),
+        format!("reason = \"{CROSS_JOIN_REASON_PLACEHOLDER}\""),
+    ]
+    .iter()
+    .map(|line| format!("\n{SETTING_SNIPPET_INDENT}{line}"))
+    .collect();
+    format!(
+        "Use a keyed JOIN, or make one side provably at most one row. This join reads no named \
+         relation, so a relation-level exception cannot cover it; when the cartesian product is \
+         intentional, record a reviewed file-wide exception in sqlbuild_project.toml:{entry}"
+    )
 }
 
 /// The finding message naming the joined relation and, inside a CTE, that CTE.
@@ -263,7 +289,7 @@ fn multiplying_cross_joins(
         analysis.record_ctes(statement);
     }
     for statement in statements {
-        analysis.visit(statement, None);
+        analysis.visit(statement, None, true);
     }
     let significant: Vec<usize> = (0..tokens.len())
         .filter(|&index| {
@@ -304,10 +330,7 @@ impl Analysis<'_> {
     /// Record whether every CTE holds at most one row, in definition order.
     fn record_ctes(&mut self, expression: &Expression) {
         for node in expression.dfs() {
-            let Expression::Select(select) = node else {
-                continue;
-            };
-            let Some(with) = &select.with else {
+            let Some(with) = with_clause(node) else {
                 continue;
             };
             for cte in &with.ctes {
@@ -319,26 +342,29 @@ impl Analysis<'_> {
         }
     }
 
-    fn visit(&mut self, expression: &Expression, cte: Option<&str>) {
-        let Expression::Select(select) = expression else {
-            for child in expression.children() {
-                self.visit(child, cte);
-            }
-            return;
-        };
+    /// Record joins under `expression`, labelled with the top-level CTE containing them.
+    fn visit(&mut self, expression: &Expression, cte: Option<&str>, top: bool) {
         let mut bodies: Vec<&Expression> = Vec::new();
-        if let Some(with) = &select.with {
+        if let Some(with) = with_clause(expression) {
             for definition in &with.ctes {
                 bodies.push(&definition.this);
-                self.visit(&definition.this, Some(&definition.alias.name));
+                let label: Option<&str> = if top {
+                    Some(&definition.alias.name)
+                } else {
+                    cte
+                };
+                self.visit(&definition.this, label, false);
             }
         }
-        self.record_joins(select, cte);
+        if let Expression::Select(select) = expression {
+            self.record_joins(select, cte);
+        }
+        let branches_are_top: bool = top && is_set_operation(expression);
         for child in expression.children() {
             if bodies.iter().any(|body| std::ptr::eq(*body, child)) {
                 continue;
             }
-            self.visit(child, cte);
+            self.visit(child, cte, branches_are_top);
         }
     }
 
@@ -469,6 +495,24 @@ impl Analysis<'_> {
     }
 }
 
+/// The WITH clause a query expression owns.
+fn with_clause(expression: &Expression) -> Option<&With> {
+    match expression {
+        Expression::Select(select) => select.with.as_ref(),
+        Expression::Union(union) => union.with.as_ref(),
+        Expression::Intersect(intersect) => intersect.with.as_ref(),
+        Expression::Except(except) => except.with.as_ref(),
+        _ => None,
+    }
+}
+
+fn is_set_operation(expression: &Expression) -> bool {
+    matches!(
+        expression,
+        Expression::Union(_) | Expression::Intersect(_) | Expression::Except(_)
+    )
+}
+
 fn limited_to_one_row(select: &Select) -> bool {
     let limited: bool = select
         .limit
@@ -573,6 +617,7 @@ fn unpartitioned_row_number(expression: &Expression) -> bool {
         expression,
         Expression::WindowFunction(window)
             if matches!(window.this, Expression::RowNumber(_))
+                && window.over.window_name.is_none()
                 && window.over.partition_by.is_empty()
     )
 }

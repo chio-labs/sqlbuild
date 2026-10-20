@@ -260,6 +260,17 @@ fn is_tight_call(name: &str, sql: &str, arguments: &str) -> bool {
 
 /// The `SQBRSQL038` messages for one cross join case.
 pub(crate) fn cross_join_messages(test_case: &CrossJoinTestCase) -> Result<Vec<String>, String> {
+    cross_join_texts(test_case, "message")
+}
+
+/// The `SQBRSQL038` remediations for one cross join case.
+pub(crate) fn cross_join_remediations(
+    test_case: &CrossJoinTestCase,
+) -> Result<Vec<String>, String> {
+    cross_join_texts(test_case, "remediation")
+}
+
+fn cross_join_texts(test_case: &CrossJoinTestCase, field: &str) -> Result<Vec<String>, String> {
     let keys: Map<String, Value> = test_case
         .one_row_relations
         .iter()
@@ -280,11 +291,6 @@ pub(crate) fn cross_join_messages(test_case: &CrossJoinTestCase) -> Result<Vec<S
         .cloned()
         .unwrap_or_default()
         .iter()
-        .map(|diagnostic| {
-            diagnostic["message"]
-                .as_str()
-                .unwrap_or_default()
-                .to_owned()
-        })
+        .map(|diagnostic| diagnostic[field].as_str().unwrap_or_default().to_owned())
         .collect())
 }

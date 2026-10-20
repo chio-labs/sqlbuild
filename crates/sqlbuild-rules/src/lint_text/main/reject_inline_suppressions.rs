@@ -1,4 +1,4 @@
-//! `reject_inline_suppressions`: an error for every inline `-- sqb: ignore` directive.
+//! `reject_inline_suppressions`: an error for every `sqb: ignore` directive in a SQL comment.
 
 use crate::lint_text::_helpers::lines::{LineSpan, line_spans};
 use crate::lint_text::_helpers::suppressions::directive_findings;
@@ -12,7 +12,7 @@ pub fn reject_inline_suppressions(
     let mut findings: Vec<SuppressionFinding> = Vec::new();
     for (file, (path, contents)) in files.iter().enumerate() {
         let lines: Vec<LineSpan<'_>> = line_spans(contents);
-        findings.extend(directive_findings(file, path, &lines)?);
+        findings.extend(directive_findings(file, path, (contents, &lines))?);
     }
     Ok(findings)
 }

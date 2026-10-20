@@ -58,6 +58,10 @@ Relation-level exceptions are stale-checked like exact exceptions: an entry that
 fails compilation. `relation` is accepted only for `SQBRSQL038`, and a file-wide exception cannot be
 combined with relation-level exceptions for the same code and path.
 
+A join that reads no named relation, such as `CROSS JOIN UNNEST(...)` or `CROSS JOIN LATERAL`, has
+no relation to name. Its finding says so and prints the file-wide exception (rule and path) that is
+the only way to cover it.
+
 `SQBRSQL038` does not report a cross join when either side provably holds at most one row, so most
 intentional cross joins need no exception at all. SQLBuild infers this from the query, never from a
 declaration: a seed whose CSV has one data row (adding a second row brings the finding back), an
@@ -105,8 +109,8 @@ To turn a Rule off for the whole project, add its code to `[rules] ignore`.
 
 ## No inline suppressions
 
-SQLBuild has no inline suppression comment. An `-- sqb: ignore ...` line is a `SQBRSQL000` error
-that suppresses nothing, so the finding it was meant to hide is reported too. The error prints the
+SQLBuild has no inline suppression comment. An `-- sqb: ignore ...` or `/* sqb: ignore ... */`
+comment is a `SQBRSQL000` error that suppresses nothing, so the finding it was meant to hide is reported too. The error prints the
 exact entry to add instead:
 
 ```text

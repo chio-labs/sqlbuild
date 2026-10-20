@@ -266,6 +266,38 @@ fn given_inline_directives_when_rejecting_then_each_prints_its_configured_except
             )],
         },
         SuppressionTestCase {
+            description: "a string literal mentioning a directive is not one",
+            contents: "select '-- sqb: ignore SQBRSQL004 because text' as note, 'sqb: ignore' as other\n",
+            expected_findings: vec![],
+        },
+        SuppressionTestCase {
+            description: "a trailing directive after code names the join on its line",
+            contents: "select o.order_id\nfrom orders as o\ncross join customers as c -- sqb: ignore SQBRSQL038 because deliberate\n",
+            expected_findings: vec![directive_finding(
+                3,
+                "SQBRSQL038",
+                &[
+                    "rule = \"SQBRSQL038\"",
+                    "path = \"models/orders.sql\"",
+                    "relation = \"customers\"",
+                    "reason = \"deliberate\"",
+                ],
+            )],
+        },
+        SuppressionTestCase {
+            description: "a directive in a block comment",
+            contents: "select 1\n/* sqb: ignore SQBRSQL005 because kept */\nselect 2\n",
+            expected_findings: vec![directive_finding(
+                2,
+                "SQBRSQL005",
+                &[
+                    "rule = \"SQBRSQL005\"",
+                    "path = \"models/orders.sql\"",
+                    "reason = \"kept\"",
+                ],
+            )],
+        },
+        SuppressionTestCase {
             description: "a file without directives",
             contents: "select 1\n-- a plain comment\n",
             expected_findings: vec![],

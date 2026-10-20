@@ -28,7 +28,12 @@ pub(crate) const FORMAT_SITE_PATTERN: &str = r"(?i)^(?:@@|\$\{|@|(?:__cursor_end
 
 /// Diagnostic code of every inline suppression directive finding.
 pub const SUPPRESSION_CODE: &str = "SQBRSQL000";
-pub(crate) const SUPPRESSION_PREFIX: &str = "sqb: ignore";
+/// Text every directive contains, checked before scanning a file's comments.
+pub(crate) const DIRECTIVE_MARKER: &[u8] = b"sqb:";
+pub(crate) const BLOCK_COMMENT_OPENER: &str = "/*";
+pub(crate) const BLOCK_COMMENT_CLOSER: &str = "*/";
+/// Both comment openers are two bytes long.
+pub(crate) const COMMENT_OPENER_BYTES: usize = 2;
 pub(crate) const DIRECTIVE_PATTERN: &str =
     r"(?i)sqb:\s*ignore\b\s*(?P<code>[A-Za-z0-9_-]*)(?:\s+because\s+(?P<reason>.*\S))?";
 pub(crate) const CROSS_JOIN_CODE: &str = "SQBRSQL038";

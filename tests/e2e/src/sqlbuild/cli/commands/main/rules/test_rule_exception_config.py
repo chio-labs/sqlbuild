@@ -47,6 +47,18 @@ _PLAIN_SQL: str = _MODEL_SQL.format(directive="")
 _DIRECTIVE_SQL: str = _MODEL_SQL.format(
     directive="  -- sqb: ignore SQBRSQL038 because every order meets every customer\n"
 )
+_LITERAL_SQL: str = _PLAIN_SQL.replace(
+    "SELECT f.order_id, f.customer_id, f.region_id FROM final AS f",
+    "SELECT f.order_id, f.customer_id, f.region_id, 'sqb: ignore SQBRSQL038' AS note FROM final AS f",
+)
+_TRAILING_SQL: str = _PLAIN_SQL.replace(
+    '  CROSS JOIN __ref("customers") AS c\n',
+    '  CROSS JOIN __ref("customers") AS c -- sqb: ignore SQBRSQL038 because deliberate\n',
+)
+_UNNAMED_SQL: str = (
+    "MODEL (description 'Order checks.');\n"
+    'SELECT o.order_id, u.n FROM __ref("orders") AS o CROSS JOIN UNNEST([1, 2]) AS u(n)\n'
+)
 _UPSTREAM_FILES: tuple[tuple[str, str], ...] = (
     ("models/orders.sql", "MODEL (description 'Sample orders.');\nSELECT 1 AS order_id\n"),
     (
@@ -102,6 +114,36 @@ _UPSTREAM_FILES: tuple[tuple[str, str], ...] = (
                 '            path = "models/order_checks.sql"\n'
                 '            relation = "customers"\n'
                 '            reason = "every order meets every customer"',
+            ),
+        ),
+        RuleExceptionConfigCase(
+            description="a string literal mentioning a directive compiles cleanly",
+            rules_toml=_CTE_EXCEPTIONS,
+            model_sql=_LITERAL_SQL,
+            expected_exit=0,
+        ),
+        RuleExceptionConfigCase(
+            description="a trailing directive after code is an error",
+            rules_toml=_CTE_EXCEPTIONS,
+            model_sql=_TRAILING_SQL,
+            expected_exit=1,
+            expected_fragments=(
+                "Inline Rule suppressions are not supported",
+                '            relation = "customers"\n            reason = "deliberate"',
+            ),
+        ),
+        RuleExceptionConfigCase(
+            description="an unnamed join prints a file-wide exception for its file",
+            rules_toml="",
+            model_sql=_UNNAMED_SQL,
+            expected_exit=1,
+            expected_messages=(
+                "CROSS JOIN creates an explicit cartesian product with an unnamed relation; "
+                "only a file-wide exception (rule and path) can cover it",
+            ),
+            expected_fragments=(
+                '[[rules.rule_exceptions]]\n            rule = "SQBRSQL038"\n'
+                '            path = "models/order_checks.sql"\n',
             ),
         ),
         RuleExceptionConfigCase(
