@@ -1,4 +1,4 @@
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use sqlbuild_host::entries::models::AdapterHost;
 pub(super) const AUTOMATIC: &str = "automatic";
 pub(super) const DONE: &str = "done";
 pub(super) const PENDING_ARCHIVE: &str = "pending_archive";

@@ -1,6 +1,6 @@
 //! Boundary conversions for the column migration planner.
 
-use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
 use crate::bindings::_helpers::planner_identity::hashing::model_definition_hash;
 use crate::bindings::_helpers::planner_phases::objects::object;

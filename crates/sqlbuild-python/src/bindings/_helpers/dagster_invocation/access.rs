@@ -4,9 +4,9 @@ use std::collections::HashSet;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyTuple};
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 

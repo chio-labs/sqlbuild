@@ -1,6 +1,6 @@
 //! Assemble migration policy and redirected live cursor inspection requests.
 
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::planner_migrations::column_objects::native;
 use crate::bindings::_helpers::planner_migrations::models::MigrationPhase;
 use crate::bindings::_helpers::planner_phases::full_refresh::effectively_full_refreshed_model_names;

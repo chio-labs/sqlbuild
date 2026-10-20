@@ -1,7 +1,8 @@
 //! A declared source rendered as the SQL table factor that reads it.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use sqlbuild_host::entries::models::AdapterHost;
+
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{

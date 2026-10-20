@@ -2,20 +2,21 @@
 
 use std::collections::HashSet;
 
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyfunction;
-use pyo3::types::{PyDict, PyDictMethods};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyDict, PyDictMethods, PyType};
+use sqlbuild_host::entries::models::UserCodeHost;
 
-use crate::bindings::_helpers::compile_driver::input_reads::record_settings_class_read;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
+use crate::bindings::_helpers::compile_context::input_reads::record_settings_class_read;
 use crate::bindings::_helpers::contracts::resource_identities::validate_resource_identity;
 use crate::bindings::_helpers::discovery::imported_modules::{
     ProjectDir, discovered, discovery_error, discovery_error_from, module_functions,
     provider_by_name, provider_usages, shim, tuple_of,
 };
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
-use crate::bindings::_helpers::recall::writer::RecallWriter;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
@@ -31,6 +32,9 @@ const ROOT_LOCATION: &str = "<root>";
 const DEFAULT_MESSAGE: &str = "invalid value";
 const DEFAULT_ERROR_TYPE: &str = "validation_error";
 const DEFAULT_SETTINGS_ERROR: &str = "invalid provider settings";
+const RECALL_WRITER_UNINSTALLED: &str = "the native module registered no RecallWriter class";
+
+static RECALL_WRITER: PyOnceLock<Py<PyType>> = PyOnceLock::new();
 
 fn reject_invalid_identity(
     name: &Bound<'_, PyAny>,
@@ -281,19 +285,26 @@ pub(crate) fn discover_event_exporter_declarations<'py>(
     tuple_of(py, declarations)
 }
 
+/// Install the `RecallWriter` class sink parameters are recognised by, once, at registration.
+pub(crate) fn install_recall_writer(writer: &Bound<'_, PyType>) {
+    let _ = RECALL_WRITER.get_or_init(writer.py(), || writer.clone().unbind());
+}
+
 /// Each parameter of `function` with its annotation, and whether that annotation is `RecallWriter`.
 fn annotated_parameters<'py>(
     function: &Bound<'py, PyAny>,
 ) -> PyResult<Vec<(String, Bound<'py, PyAny>, bool)>> {
     let py: Python<'py> = function.py();
-    let writer = py.get_type::<RecallWriter>();
+    let writer: &Py<PyType> = RECALL_WRITER
+        .get(py)
+        .ok_or_else(|| PyRuntimeError::new_err(RECALL_WRITER_UNINSTALLED))?;
     let mut parameters: Vec<(String, Bound<'py, PyAny>, bool)> = Vec::new();
     for pair in shim(py, UserCodeHost::ParameterAnnotations)?
         .call1((function,))?
         .try_iter()?
     {
         let (parameter, annotation): (String, Bound<'py, PyAny>) = pair?.extract()?;
-        let is_writer: bool = annotation.is(writer.as_any());
+        let is_writer: bool = annotation.is(writer.bind(py).as_any());
         parameters.push((parameter, annotation, is_writer));
     }
     Ok(parameters)

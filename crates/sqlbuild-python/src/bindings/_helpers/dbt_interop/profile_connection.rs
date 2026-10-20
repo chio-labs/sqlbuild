@@ -6,15 +6,15 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::cli::resolved_path;
 use crate::bindings::_helpers::dbt_interop::profile::normalize_dbt_profile_connection;
 use crate::bindings::_helpers::dbt_interop::profile_load::{
     default_profiles_dir, load_dbt_project_metadata, load_selected_dbt_profile_output,
 };
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DBT_PROFILE_SOURCE: &str = "dbt_profile";

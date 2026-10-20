@@ -7,6 +7,7 @@ use pyo3::types::{
     PyTupleMethods,
 };
 use pyo3::{PyErr, pyclass, pymethods};
+use sqlbuild_discovery::model_files::models::{EntryFacts, HeaderFacts};
 use sqlbuild_model_config::config_presence::main::contains_template::contains_template;
 use sqlbuild_model_config::config_presence::main::entry_macro_path::entry_macro_path;
 use sqlbuild_model_config::config_presence::models::MacroPath;
@@ -20,9 +21,8 @@ use sqlbuild_model_config::templates::models::TemplateOptions;
 use sqlbuild_model_config::types::AuthoredNode;
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compiled_project::model_loop_config::{ConfigClasses, built_config};
-use crate::bindings::_helpers::compiled_project::model_loop_prepass::own_entry;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
+use crate::bindings::_helpers::model_config::config_classes::{ConfigClasses, built_config};
 use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_errors::native_config_error;
 use crate::bindings::_helpers::model_config::config_templates::{
@@ -30,7 +30,6 @@ use crate::bindings::_helpers::model_config::config_templates::{
 };
 use crate::bindings::_helpers::model_config::errors::NativeConfigError;
 use crate::bindings::_helpers::model_config::project_defaults::project_defaults_mapping;
-use sqlbuild_discovery::model_files::models::{EntryFacts, HeaderFacts};
 
 const HOOK_KEYS: [&str; 2] = ["pre_hooks", "post_hooks"];
 /// Hook keys in the sorted order `validate_model_hook_config` checks them.
@@ -841,4 +840,25 @@ fn sorted_keys(header: &Bound<'_, PyDict>) -> Built<Vec<String>> {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeModelConfigBuilder>()?;
     Ok(())
+}
+
+/// An entry's facts only when its value is the header's own, so replaced values read from Python.
+pub(crate) fn own_entry<'a, 'py>(
+    facts: &'a HeaderFacts,
+    header: &Bound<'py, PyDict>,
+    (key, value): (&Bound<'py, PyAny>, &Bound<'py, PyAny>),
+) -> PyResult<Option<&'a EntryFacts>> {
+    let Ok(name) = key.downcast::<PyString>() else {
+        return Ok(None);
+    };
+    let Ok(name) = name.to_str() else {
+        return Ok(None);
+    };
+    let Some(entry) = facts.entry(name) else {
+        return Ok(None);
+    };
+    Ok(header
+        .get_item(name)?
+        .filter(|own| own.is(value))
+        .map(|_| entry))
 }

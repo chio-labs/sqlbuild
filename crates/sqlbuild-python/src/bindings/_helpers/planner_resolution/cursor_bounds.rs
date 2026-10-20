@@ -1,10 +1,11 @@
 //! Snapshot conversion and cursor window policy boundary.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use sqlbuild_host::entries::models::ExecutorHost;
+
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::cursor::conversion::{CursorSession, algebra_error};
 use crate::bindings::_helpers::cursor::scalars::try_parse;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::maximum_safety::apply_maximum_start_policy;
 use crate::bindings::_helpers::planner_resolution::values::string;

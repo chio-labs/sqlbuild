@@ -17,7 +17,7 @@ use sqlbuild_discovery::yaml_files::models::{YamlFileOutcome, YamlPathFailure};
 use std::path::PathBuf;
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::path_object;
 use crate::bindings::_helpers::discovery::raised::{
@@ -155,12 +155,13 @@ fn load_files<'py>(
     let py: Python<'py> = project_dir.py();
     let tree: Bound<'py, NativeProjectTree> = project_tree(project_dir)?;
     let root: ProjectRoot = project_root(project_dir)?;
-    let mut documents: Option<crate::bindings::_helpers::compile_delta::yaml_cache::DocumentStore> =
-        if matches!(kind, YamlKind::Source) {
-            crate::bindings::_helpers::compile_delta::yaml_cache::open_documents(py)
-        } else {
-            None
-        };
+    let mut documents: Option<
+        crate::bindings::_helpers::compile_context::yaml_cache::DocumentStore,
+    > = if matches!(kind, YamlKind::Source) {
+        crate::bindings::_helpers::compile_context::yaml_cache::open_documents(py)
+    } else {
+        None
+    };
     for batch in batches(&tree.get().inner, paths, YAML_BATCH_BYTES) {
         let named: Vec<String> = batch
             .iter()
@@ -184,7 +185,7 @@ fn load_files<'py>(
         let mut outcomes: Vec<YamlFileOutcome> =
             outcomes.map_err(|failure| stage_error(&tree.get().inner, project_dir, failure))?;
         if matches!(kind, YamlKind::Source) {
-            crate::bindings::_helpers::compile_delta::report_hooks::retain_read_sources(
+            crate::bindings::_helpers::compile_context::yaml_cache::retain_read_sources(
                 &mut outcomes,
             );
         }
@@ -211,7 +212,7 @@ fn load_files<'py>(
         }
     }
     if let Some(documents) = &documents {
-        crate::bindings::_helpers::compile_delta::yaml_cache::save_documents(py, documents);
+        crate::bindings::_helpers::compile_context::yaml_cache::save_documents(py, documents);
     }
     Ok(())
 }

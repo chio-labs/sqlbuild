@@ -12,14 +12,14 @@ use sqlbuild_core::dagster_invocation::main::caller_json_output_path::caller_jso
 use sqlbuild_core::dagster_invocation::main::has_explicit_scenario_selector::has_explicit_scenario_selector;
 use sqlbuild_core::dagster_invocation::main::json_output_requested::json_output_requested;
 use sqlbuild_core::dagster_invocation::main::wrap_selectors::wrap_selectors;
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::dagster_invocation::access::{
     AssetPath, CheckKey, asset_path, asset_path_or_empty, check_enabled, check_key_set, constant,
     constant_contains, get, items, node_with_id, nodes_by_id, path_set, string_tuple, text_of,
 };
 use crate::bindings::_helpers::dagster_invocation::results::{dagster_check_name, sorted_nodes};
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const SELECT_FILE_FLAG: &str = "--select-file";

@@ -1,8 +1,9 @@
 //! Model ordering, selection and metadata at the migration discovery boundary.
 
+use sqlbuild_host::entries::models::UserCodeHost;
+
 use crate::bindings::_helpers::graph::node_set::PyNodeSet;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_identity::metadata::build_function_local_hashes;
 use crate::bindings::_helpers::planner_identity::metadata::build_model_version_identity_metadata_json;
 use crate::bindings::_helpers::planner_phases::objects::object;

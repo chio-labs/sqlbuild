@@ -9,12 +9,12 @@ use sqlbuild_config::dbt_profile::main::select_dbt_profile_target::select_dbt_pr
 use sqlbuild_config::dbt_profile::models::{
     DbtProfileOutputs, DbtProjectMetadata, DbtYamlValue, LoadedDbtProfile,
 };
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::dbt_interop::profile::raised;
 use crate::bindings::_helpers::dbt_interop::profile_connection::profile_error;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;
 

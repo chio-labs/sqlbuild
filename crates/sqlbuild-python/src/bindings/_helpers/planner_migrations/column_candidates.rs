@@ -1,6 +1,6 @@
 //! Gather live candidate evidence without changing adapter inspection ownership.
 
-use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_migrations::column_objects::{
     config, definition_hash, lower,
 };

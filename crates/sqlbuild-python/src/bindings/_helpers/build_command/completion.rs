@@ -9,7 +9,9 @@ use sqlbuild_core::build_command::main::python_node_failed::python_node_failed;
 use sqlbuild_core::build_command::main::render_phase_timings::render_phase_timings;
 use sqlbuild_core::build_command::models::PhaseTimings;
 use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_host::entries::models::ExecutorHost;
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::build_command::execution::{
     Outcome, Preparation, write_run_context,
 };
@@ -19,7 +21,6 @@ use crate::bindings::_helpers::build_command::support::{
 };
 use crate::bindings::_helpers::build_progress::footer::format_build_footer;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::plan_has_executable_work;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     write_python_check_runtime_target, write_runtime_target,
 };
@@ -27,7 +28,6 @@ use crate::bindings::_helpers::cost_report::degradation::{
     finalize_build_cost as finalize_cost, render_build_cost,
 };
 use crate::bindings::_helpers::cost_report::functions::cost_output_payload;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

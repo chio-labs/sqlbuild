@@ -1,6 +1,6 @@
 //! Boundary calls shared by reference and source resolution.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
 use crate::bindings::_helpers::records::fields::field as native_field;

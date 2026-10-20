@@ -12,8 +12,8 @@ use sqlbuild_analysis::planner_strategy::main::lineage_reference::lineage_refere
 use sqlbuild_analysis::planner_strategy::models::{ProducerFacts, ReferenceIdentity};
 use sqlbuild_analysis::planner_strategy::types::ReferenceGraph;
 
-use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::model_config::config_values::config_str;
 use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, microbatch_limit_config,

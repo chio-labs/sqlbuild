@@ -1,7 +1,7 @@
 //! Adapter rendering and declared cursor-window boundaries for native test planning.
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::sql_test_glue::plan_values::{model_payload, string};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};

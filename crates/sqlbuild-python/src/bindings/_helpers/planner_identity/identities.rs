@@ -13,11 +13,11 @@ use sqlbuild_analysis::planner_identity::main::expected_graph_identity_hashes::e
 use sqlbuild_analysis::planner_identity::main::graph_write_identity_hashes::graph_write_identity_hashes;
 use sqlbuild_analysis::planner_identity::main::model_local_identity_hash::model_local_identity_hash;
 use sqlbuild_analysis::planner_identity::models::{GraphKey, IdentityGraph, IdentityNode};
+use sqlbuild_host::entries::models::UserCodeHost;
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_identity::hashing::{graph_key, model_query_hash};
 use crate::bindings::_helpers::planner_identity::metadata::{
     function_local_hashes, model_version_identity_metadata_json, seed_identity,

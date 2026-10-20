@@ -17,8 +17,11 @@ use sqlbuild_core::clone_text::main::render_clone_header::render_clone_header;
 use sqlbuild_core::clone_text::main::validate_clone_policy::validate_clone_policy;
 use sqlbuild_core::clone_text::main::validate_clone_target_names::validate_clone_target_names;
 use sqlbuild_core::clone_text::models::CloneItemText;
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::cli::progress_reporters::PlanningProgressReporter;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
+use crate::bindings::_helpers::build_progress::progress_reporters::PlanningProgressReporter;
 use crate::bindings::_helpers::clone::clone_execution::{
     destination_entry_count, execute_clone_plan, resource_types_by_name,
 };
@@ -27,14 +30,11 @@ use crate::bindings::_helpers::clone::clone_progress::{clone_item_text, write_li
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::connection::resolve_target_connection_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;

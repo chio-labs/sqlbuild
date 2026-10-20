@@ -14,7 +14,7 @@ use pyo3::types::PyDict;
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;
 use crate::bindings::_helpers::planner_entries::plan_output::plan_selected_sql_tests;
 use crate::bindings::_helpers::records::construct::new_record_with;

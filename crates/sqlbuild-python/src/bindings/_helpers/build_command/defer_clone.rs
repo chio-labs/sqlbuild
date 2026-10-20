@@ -10,16 +10,16 @@ use pyo3::{IntoPyObject, IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_core::build_command::constants::EXECUTION_LIMIT_BUILD_NOTE;
 
 use sqlbuild_core::build_command::errors::BuildCommandError;
+use sqlbuild_host::entries::models::ExecutorHost;
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
 use crate::bindings::_helpers::build_command::policies::build_command_error;
 use crate::bindings::_helpers::build_command::policies::enforce_model_execution_limit_binding;
 use crate::bindings::_helpers::clone::clone_pipeline::run_clone_pipeline_with_options;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::clone_plans::{
     resolve_clone_boundary, resolve_skipped_view_chain,

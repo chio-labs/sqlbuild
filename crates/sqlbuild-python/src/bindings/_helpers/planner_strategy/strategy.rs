@@ -1,6 +1,6 @@
 //! Per-model plan actions, schema actions and plan warnings.
 
-use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_changes::results::native_enum;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
@@ -15,7 +15,7 @@ use sqlbuild_analysis::planner_strategy::models::{
     ModelStrategy, PlanAction, PlanReason, SchemaActionKind, WarningInputs,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_changes::results::planner_enum;
 use crate::bindings::_helpers::planner_strategy::values::{
     change_facts, config_value, finding_rows, input_error, materialization_value,

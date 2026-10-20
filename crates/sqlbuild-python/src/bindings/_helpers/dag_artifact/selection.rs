@@ -14,10 +14,10 @@ use sqlbuild_analysis::dag_artifact::models::{
     DagSelectionCheck, DagSelectionGraph, DagSelectionNode,
 };
 use sqlbuild_analysis::planner_selection::main::unit_test_selector_rejection::unit_test_selector_rejection;
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;

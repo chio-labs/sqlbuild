@@ -1,6 +1,7 @@
 //! Layouts of the compiler, lint and config value records hosted natively.
 
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use sqlbuild_host::entries::models::UserCodeHost;
+
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 

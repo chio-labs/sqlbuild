@@ -3,6 +3,7 @@ pub(crate) mod assets;
 pub(crate) mod checks;
 pub(crate) mod documents;
 pub(crate) mod event_writer;
+pub(crate) mod getters;
 pub(crate) mod integration_envelope;
 pub(crate) mod integration_records;
 pub(crate) mod integration_values;

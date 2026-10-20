@@ -15,7 +15,7 @@ use sqlbuild_model_config::declarations::models::{
 use sqlbuild_model_config::sql_values::errors::SqlValueFailure;
 use sqlbuild_model_config::sql_values::models::RawSqlValue;
 
-use crate::bindings::_helpers::contracts::sql_values::{
+use crate::bindings::_helpers::authored_values::sql_values::{
     SqlValueClasses, raw_value, sql_value, sql_value_error,
 };
 use crate::bindings::_helpers::records::construct::error_class;

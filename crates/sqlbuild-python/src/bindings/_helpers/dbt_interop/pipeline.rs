@@ -8,12 +8,12 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::dbt_cli::main::dbt_debug_args::dbt_debug_args;
 use std::time::Instant;
 
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::build_command::support::{boolean, none, text};
-use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::build_progress::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::plan_has_executable_work;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::dbt_interop::cli::resolve_dbt_config;
 use crate::bindings::_helpers::dbt_interop::execution::build_failed_sqlbuild_model_names;
 use crate::bindings::_helpers::dbt_interop::execution::build_merged_dbt_execution_argv;

@@ -3,21 +3,21 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::AdapterHost;
 
 use crate::bindings::_helpers::analysis::binding_catalog::{
     BindingCatalog, CASE_SENSITIVE_BINDING_DIALECTS, CatalogKey,
 };
-use crate::bindings::_helpers::analysis::model_reads::{
-    declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
-};
 use crate::bindings::_helpers::analysis::normalization::normalize_analysis_sql;
 use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_expression_source_shapes;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use crate::bindings::_helpers::compiled_views::compiled_model_view::{
     DeclaredRow, InferredRow, NativeCompiledModel,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::compiled_views::model_reads::{
+    declared_rows, dynamic_columns_declared, inferred_rows, star_flags, unchecked_columns,
+};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -326,7 +326,9 @@ fn model_shapes<'py>(
     let mut pending: Vec<Bound<'py, PyAny>> = native_field(project, "models")?
         .try_iter()?
         .collect::<PyResult<_>>()?;
-    crate::bindings::_helpers::compile_delta::report_hooks::inject_model_shapes(&pending, shapes)?;
+    crate::bindings::_helpers::semantic_shapes::delta_shapes::inject_model_shapes(
+        &pending, shapes,
+    )?;
     while !pending.is_empty() {
         let mut remaining: Vec<Bound<'py, PyAny>> = Vec::new();
         for model in &pending {
@@ -372,7 +374,7 @@ fn model_shapes<'py>(
         }
         pending = remaining;
     }
-    crate::bindings::_helpers::compile_delta::report_hooks::record_model_shapes(project, shapes)
+    crate::bindings::_helpers::semantic_shapes::delta_shapes::record_model_shapes(project, shapes)
 }
 
 fn all_known(names: &[String], shapes: &Bound<'_, PyDict>) -> PyResult<bool> {

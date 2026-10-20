@@ -8,6 +8,9 @@ use std::time::Instant;
 
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, IntoPyObject, PyAny, PyAnyMethods, PyResult, Python};
+use sqlbuild_host::compile_context::main::add_compile_timing::add_compile_timing;
+use sqlbuild_host::compile_context::main::record_compile_metric::record_compile_metric;
+use sqlbuild_host::compile_context::main::record_compile_timing::record_compile_timing;
 use sqlbuild_rules::engine::main::answer_speculative_rows::answer_speculative_rows;
 use sqlbuild_rules::engine::main::discard_speculative_rows::discard_speculative_rows;
 use sqlbuild_rules::engine::main::start_speculative_rows::start_speculative_rows;
@@ -15,11 +18,8 @@ use sqlbuild_rules::errors::RowsError;
 use sqlbuild_rules::models::{RowsEvaluation, RowsRequest, SpeculativeAnswer, SpeculativeRows};
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compile_driver::compile_timings::{
-    add_compile_timing, record_compile_metric, record_compile_timing,
-};
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::records::{
+use crate::bindings::_helpers::compiled_views::records::{
     compiled_project_facts, record_model_analyses,
 };
 use crate::bindings::_helpers::records::fields::field;

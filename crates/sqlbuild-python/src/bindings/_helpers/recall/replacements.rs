@@ -10,18 +10,17 @@ use sqlbuild_core::command_output::constants::RECALL_REPLACEMENT_SCHEMA_VERSION;
 use sqlbuild_core::command_output::main::ansi_free_text::ansi_free_text;
 use sqlbuild_core::event_export::main::route_lifecycle_event::route_lifecycle_event;
 use sqlbuild_core::event_export::models::{ExporterCounts, ExporterFilter};
+use sqlbuild_host::entries::models::{ExecutorHost, UserCodeHost};
 use sqlbuild_recall::records::models::{OutputChunk, OutputStream};
 use sqlbuild_recall::writer::models::{
     DeliveryStream, RecallSession, ReplacedEvents, ReplacedOutput,
 };
 use sqlbuild_recall::writer::types::{OutputReplacement, PendingLifecycleEvent};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::event_exporting::models::BoundEventExporter;
 use crate::bindings::_helpers::event_exporting::values::export_policy;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::recall::constants::{

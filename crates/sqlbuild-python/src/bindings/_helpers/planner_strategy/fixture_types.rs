@@ -9,7 +9,7 @@ use sqlbuild_analysis::planner_fixtures::models::{
 
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
-use crate::bindings::_helpers::analysis::model_reads::{LineageFactRow, lineage_facts};
+use crate::bindings::_helpers::compiled_views::model_reads::{LineageFactRow, lineage_facts};
 use crate::bindings::_helpers::planner_strategy::constants::{
     DIRECT_TRANSFORM, MODEL_REFERENCE_KIND,
 };

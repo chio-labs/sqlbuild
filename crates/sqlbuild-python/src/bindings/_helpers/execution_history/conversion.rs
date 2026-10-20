@@ -4,6 +4,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyInt, PyList, PyString, PyStringMethods, PyTuple};
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_state::execution_history::constants::ENVELOPE_TEXT_FIELDS;
 use sqlbuild_state::execution_history::errors::{HistoryError, HistoryErrorKind};
 use sqlbuild_state::execution_history::models::{
@@ -12,9 +13,8 @@ use sqlbuild_state::execution_history::models::{
 };
 use sqlbuild_state::execution_history::types::UtcTime;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

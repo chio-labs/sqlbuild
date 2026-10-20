@@ -1,6 +1,7 @@
 pub(crate) mod compile_usages;
 pub(crate) mod declaration_contexts;
 pub(crate) mod declaration_resolution;
+pub(crate) mod getters;
 pub(crate) mod placement;
 pub(crate) mod registration;
 pub(crate) mod relationship_names;

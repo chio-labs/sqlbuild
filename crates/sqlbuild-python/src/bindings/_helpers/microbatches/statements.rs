@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
 use sqlbuild_state::events::main::microbatch_event_id::microbatch_event_id;
 use sqlbuild_state::microbatches::main::create_index_sqls::create_index_sqls;
 use sqlbuild_state::microbatches::main::existing_event_ids_sql::existing_event_ids_sql;
@@ -13,12 +14,10 @@ use sqlbuild_state::state_tables::main::create_table_sql::create_table_sql;
 use sqlbuild_state::state_tables::models::TableColumn;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::contracts::state_literals::render_state_sql_literal;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::microbatches::conversion::{optional_text, state_error};
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;

@@ -11,8 +11,8 @@ use sqlbuild_core::scenario_command::main::format_captured_at::format_captured_a
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::input_reads::{context_read, environment_read};
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_context::input_reads::{context_read, environment_read};
 use crate::bindings::_helpers::model_config::config_errors::config_exception;
 use crate::bindings::_helpers::model_config::config_templates::{
     TemplateOutcome, TemplateSources, expand_config_templates, lone_surrogate_site,

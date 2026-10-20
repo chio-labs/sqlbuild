@@ -3,14 +3,14 @@
 use pyo3::prelude::{Bound, FromPyObject, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyInt, PyList, PyString};
 use sqlbuild_config::models::ConfigValue;
+use sqlbuild_host::entries::models::AdapterHost;
 use sqlbuild_recall::clickhouse::main::error_kind::error_kind;
 use sqlbuild_recall::records::models::RecallValue;
 use sqlbuild_recall::store::errors::{StoreError, StoreErrorKind};
 use sqlbuild_recall::store::models::QueryResult;
 
 use crate::bindings::_helpers::boundary::config_values::config_value_to_python;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
 

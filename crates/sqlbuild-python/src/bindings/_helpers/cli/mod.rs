@@ -4,8 +4,5 @@ pub(crate) mod entry;
 pub(crate) mod launch_state;
 pub(crate) mod namespace;
 pub(crate) mod observability;
-pub(crate) mod progress;
-pub(crate) mod progress_reporters;
-pub(crate) mod progress_text;
 pub(crate) mod registration;
 pub(crate) mod surrogates;

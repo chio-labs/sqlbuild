@@ -13,10 +13,10 @@ use sqlbuild_analysis::target_paths::main::runtime_sql_text::runtime_sql_text;
 use sqlbuild_analysis::target_paths::main::sql_test_output_path::sql_test_output_path;
 use sqlbuild_analysis::target_paths::models::SqlTestPathFacts;
 use sqlbuild_core::text::main::python_isspace::python_isspace;
+use sqlbuild_host::entries::models::AdapterHost;
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

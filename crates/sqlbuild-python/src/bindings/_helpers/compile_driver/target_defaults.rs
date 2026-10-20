@@ -3,11 +3,11 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyTuple;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
-use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
-use crate::bindings::_helpers::compiled_project::function_views::NativeCompiledFunction;
-use crate::bindings::_helpers::compiled_project::records::project_with;
-use crate::bindings::_helpers::compiled_project::seed_views::NativeCompiledSeed;
+use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_views::function_views::NativeCompiledFunction;
+use crate::bindings::_helpers::compiled_views::records::project_with;
+use crate::bindings::_helpers::compiled_views::seed_views::NativeCompiledSeed;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced;

@@ -1,7 +1,8 @@
 //! The Python models, enums and compile helpers the semantic completion stage reads and builds.
 
-use crate::bindings::_helpers::compiled_project::records::project_with;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use sqlbuild_host::entries::models::AdapterHost;
+
+use crate::bindings::_helpers::compiled_views::records::project_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;

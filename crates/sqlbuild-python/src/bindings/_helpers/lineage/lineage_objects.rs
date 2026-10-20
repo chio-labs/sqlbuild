@@ -1,6 +1,7 @@
 //! The Python lineage models and enums native lineage builds.
 
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use sqlbuild_host::entries::models::ExecutorHost;
+
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;

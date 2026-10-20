@@ -11,9 +11,9 @@ use sqlbuild_core::event_export::main::sanitized_exception_type::sanitized_excep
 use sqlbuild_core::event_export::models::{ExportPolicy, ExportSeverity, ExporterCounts};
 use sqlbuild_core::lifecycle_events::constants::CURRENT_LIFECYCLE_EVENT_SCHEMA_VERSION;
 use sqlbuild_core::lifecycle_events::main::catalog::catalog;
+use sqlbuild_host::entries::models::UserCodeHost;
 
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::enum_from_value;
 use crate::bindings::_helpers::records::ids::RecordId;
 

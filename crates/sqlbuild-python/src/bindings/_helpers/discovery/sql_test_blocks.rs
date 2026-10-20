@@ -8,13 +8,15 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use sqlbuild_host::entries::models::FacadeHost;
 use sqlbuild_model_config::sql_tests::main::sql_test_block::sql_test_block;
 use sqlbuild_model_config::sql_tests::main::sql_test_names_failure::sql_test_names_failure;
 use sqlbuild_model_config::sql_tests::models::{SqlTestBlock, SqlTestCase};
 use sqlbuild_model_config::sql_values::models::{RawKey, RawSqlValue};
 
-use crate::bindings::_helpers::contracts::sql_values::{SqlValueClasses, raw_value, sql_value};
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use crate::bindings::_helpers::authored_values::sql_values::{
+    SqlValueClasses, raw_value, sql_value,
+};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record};

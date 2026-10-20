@@ -11,7 +11,7 @@ use sqlbuild_state::events::main::recorded_renames::recorded_renames;
 use sqlbuild_state::events::models::RecordedRenameKey;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::constants::{
     COLUMN_KIND, LOGGING_MODULE, MIGRATION_LOGGER, MIGRATION_WRITE_ATTEMPTS,

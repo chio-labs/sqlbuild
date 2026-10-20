@@ -15,17 +15,18 @@ use sqlbuild_core::load_command::main::render_load_footer::render_load_footer;
 use sqlbuild_core::load_command::main::render_load_plan::render_load_plan;
 use sqlbuild_core::load_command::main::render_load_ready::render_load_ready;
 use sqlbuild_core::load_command::models::{LoadCounts, LoadResultText};
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost, UserCodeHost};
 
-use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
-use crate::bindings::_helpers::cli::progress_text::write_execution_header;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::build_progress::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::build_progress::progress_text::write_execution_header;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_target_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::load::load_progress::{
@@ -34,11 +35,8 @@ use crate::bindings::_helpers::load::load_progress::{
 use crate::bindings::_helpers::load::load_selection::{
     LoadProject, LoaderDefaults, loader_defaults,
 };
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;

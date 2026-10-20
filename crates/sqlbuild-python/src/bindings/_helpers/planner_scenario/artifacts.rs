@@ -1,6 +1,6 @@
 //! Scenario artifact dataclasses and adapter identifier callbacks.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_HASH_COLLISION, SCENARIO_PLAN_INVALID_HASH_PREFIX,
     SCENARIO_PLAN_RELATION_COLLISION,

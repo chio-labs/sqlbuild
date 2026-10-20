@@ -2,8 +2,8 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, Python};
 use pyo3::types::{PyDict, PyDictMethods};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 
 /// The coded error to raise for a failed `adapter.connect`, or the failure itself when coded.

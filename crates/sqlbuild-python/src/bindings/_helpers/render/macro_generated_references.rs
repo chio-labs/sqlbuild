@@ -11,7 +11,7 @@ use sqlbuild_sqltext::sql_references::models::{
 };
 use sqlbuild_sqltext::sql_scan::models::LexicalSyntax;
 
-use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
+use crate::bindings::_helpers::compile_context::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 

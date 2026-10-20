@@ -10,14 +10,13 @@ use pyo3::types::{
 use pyo3::types::{PyTupleMethods, PyTypeMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::identifier_text::main::is_lowercase_identifier::is_lowercase_identifier;
+use sqlbuild_host::entries::models::{FacadeHost, UserCodeHost};
 use sqlbuild_model_config::header_metadata::main::json_meta_problem::json_meta_problem;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::model_config::authored_nodes::PyNode;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const RANDOM_MODULE: &str = "random";

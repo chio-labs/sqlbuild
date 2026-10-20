@@ -28,13 +28,13 @@ use sqlbuild_rules::rule_cache::main::rules_bulk_cache_path::rules_bulk_cache_pa
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::{compiler_guard, value_error};
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::compiled_project::audit_views::NativeCompiledAudit;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::records::compiled_project_facts;
-use crate::bindings::_helpers::compiled_project::records::declaration_rows;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::compiled_views::audit_views::NativeCompiledAudit;
+use crate::bindings::_helpers::compiled_views::records::compiled_project_facts;
+use crate::bindings::_helpers::compiled_views::records::declaration_rows;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::RecordId;
@@ -306,7 +306,7 @@ fn built_request(
         request.models = built_models(&rows, &request, model_rows)?;
         let request: EvaluateRequest =
             crate::bindings::_helpers::compile_delta::rules_rows::whole_project_request(request)?;
-        let delta: bool = crate::bindings::_helpers::compile_delta::context::injection().is_some();
+        let delta: bool = crate::bindings::_helpers::compile_context::delta::injection().is_some();
         let memo: Option<(String, PathBuf)> = rows
             .memo
             .take()
@@ -315,7 +315,7 @@ fn built_request(
         Ok(RowsRequest {
             request,
             memo,
-            retain: crate::bindings::_helpers::compile_delta::context::capturing(),
+            retain: crate::bindings::_helpers::compile_context::delta::capturing(),
         })
     })
 }
@@ -356,9 +356,9 @@ fn evaluated<'py>(
         RowsError::Io(error) => PyOSError::new_err(error.to_string()),
     })?;
     if let Some(retained) = evaluation.retained.take() {
-        crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+        crate::bindings::_helpers::compile_context::delta::capture(|capture| {
             capture.rules =
-                Some(crate::bindings::_helpers::compile_delta::context::CapturedRules { retained });
+                Some(crate::bindings::_helpers::compile_context::delta::CapturedRules { retained });
         });
     }
     let classes = FindingClasses::new(py)?;

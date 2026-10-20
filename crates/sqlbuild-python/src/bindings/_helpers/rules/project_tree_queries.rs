@@ -21,7 +21,7 @@ use sqlbuild_rules::project_tree::main::project_tree_glob::project_tree_glob;
 use sqlbuild_rules::project_tree::main::read_project_text::read_project_text;
 use sqlbuild_rules::project_tree::main::resolve_project_path::resolve_project_path;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;

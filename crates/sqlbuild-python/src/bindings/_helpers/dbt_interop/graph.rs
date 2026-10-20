@@ -19,7 +19,7 @@ use sqlbuild_core::dbt_graph::models::{
 };
 use sqlbuild_core::dbt_graph::types::DbtSelectorResolver;
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_sqlbuild_model_dbt_refs;
 use crate::bindings::_helpers::planner_selection::model_selectors::{
     resolve_sqlbuild_model_selector_names, split_selector_expansion,

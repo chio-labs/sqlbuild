@@ -16,19 +16,19 @@ use sqlbuild_config::command_connection::main::unsupported_cli_warehouse::unsupp
 use sqlbuild_config::command_connection::models::AuthoredWarehouse;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
+use sqlbuild_host::entries::models::AdapterHost;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::command_runtime::runtime_errors::{
     expected_resolution_error, raised,
 };
 use crate::bindings::_helpers::command_runtime::warehouse_scope::current_command_warehouse_scope;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_runtime_config;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

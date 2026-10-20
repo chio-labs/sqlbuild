@@ -11,20 +11,19 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStri
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use sqlbuild_core::posix_path::main::posix_abspath::posix_abspath;
+use sqlbuild_host::entries::models::{FacadeHost, UserCodeHost};
 
+use crate::bindings::_helpers::boundary::python_calls::{
+    KeywordArguments, call_with, imported, keywords,
+};
 use crate::bindings::_helpers::compile_command::constants::{
     BYTES_PER_MEBIBYTE, REUSE_BYPASS_TIMING, REUSE_CHECK_TIMING, REUSE_HIT_TIMING,
     REUSE_LOGGER_NAME, REUSE_MISS_TIMING, REUSE_STORE_DONE_PREFIX, REUSE_STORE_NOTICE_BYTES,
     REUSE_STORE_NOTICE_PATHS, REUSE_STORE_SKIPPED_PREFIX,
 };
 use crate::bindings::_helpers::compile_command::reuse_attempt::{reuse_rules, write_launch_record};
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords,
-};
 use crate::bindings::_helpers::compile_outputs::reuse::artifact_digest;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MISS_OUTCOME: &str = "miss";
@@ -299,7 +298,7 @@ pub(crate) fn print_to<'py>(
 impl RecordedCompileOutput {
     /// Print one stderr result line, such as a note, and record it; a delta only records it.
     pub(crate) fn print_stderr_line(&self, line: Bound<'_, PyString>) -> PyResult<()> {
-        if crate::bindings::_helpers::compile_delta::context::injection().is_none() {
+        if crate::bindings::_helpers::compile_context::delta::injection().is_none() {
             print_to(line.py(), "stderr", &line)?;
         }
         self.locked().0.push(line.unbind());
@@ -525,7 +524,7 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
             ("rules", reuse_rules(py, true)?.into_any()),
         ],
     )?;
-    if let Some(mut capture) = crate::bindings::_helpers::compile_delta::context::take_capture() {
+    if let Some(mut capture) = crate::bindings::_helpers::compile_context::delta::take_capture() {
         capture.environment_names =
             native_field(&facts.input_reads, "environment_names")?.extract()?;
         let json_output: bool = facts.json_output.is_truthy()?;
@@ -538,7 +537,7 @@ fn record<'py>(facts: &CompileFacts<'py>) -> PyResult<bool> {
                 if let Ok(sections) = image.encode() {
                     pending = Some(sections);
                 }
-                crate::bindings::_helpers::compile_delta::context::set_pending_image(pending);
+                crate::bindings::_helpers::compile_context::delta::set_pending_image(pending);
             }
             Err(reason) => {
                 crate::bindings::_helpers::compile_command::reuse_attempt::reuse_debug(

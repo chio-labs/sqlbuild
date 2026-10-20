@@ -12,8 +12,13 @@ use pyo3::{IntoPyObjectExt, pyclass, pyfunction, wrap_pyfunction};
 use sqlbuild_cache::artifacts::main::new_sql_test_record::new_sql_test_record;
 use sqlbuild_cache::artifacts::main::reusable_sql_test_record::reusable_sql_test_record;
 use sqlbuild_cache::artifacts::models::SqlTestArtifactRecord;
+use sqlbuild_host::compile_context::main::record_compile_timing::record_compile_timing;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
+use crate::bindings::_helpers::boundary::python_calls::{
+    KeywordArguments, call_with, imported, keywords, within,
+};
 use crate::bindings::_helpers::compile_command::artifact_batch::ArtifactBatch;
 use crate::bindings::_helpers::compile_command::constants::RACY_WINDOW_NS;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
@@ -22,10 +27,6 @@ use crate::bindings::_helpers::compile_command::reuse_recording::{
 use crate::bindings::_helpers::compile_command::test_artifact_cache::{
     IdentityContext, artifact_identity_payload, artifact_record_key_payload, identity_context,
     payload_digests, read_cache, write_cache, yield_interpreter,
-};
-use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::compile_driver::stage_work::{
     SQL_TEST_ARTIFACT_PLANS, SQL_TEST_MODEL_CHAINS, count_stage,
@@ -36,16 +37,15 @@ use crate::bindings::_helpers::compile_outputs::artifacts::{
 use crate::bindings::_helpers::compile_outputs::runtime_target::{
     compiled_sql_test_path, planned_sql_test_path,
 };
-use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::planner_entries::plan_output::sql_test_model_chain_names_by_key;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::sql_test_glue::plan_driver::plan_compiled_sql_test_artifacts;
+use crate::bindings::_helpers::sql_test_glue::plan_driver::sql_test_model_chain_names_by_key;
 
 const COMPILED_DIR: &str = "compiled";
 const MODELS_DIR: &str = "models";
@@ -617,7 +617,7 @@ fn write_static_tests<'py>(
         }
     }
     let cache_dir: Bound<'py, PyAny> = native_field(project, "compile_cache_dir")?;
-    if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+    if crate::bindings::_helpers::compile_context::delta::injection().is_some() {
         let mut kept: HashMap<String, SqlTestArtifactRecord> = read_cache(&cache_dir)?;
         for (key, record) in records.drain(..) {
             kept.insert(key, record);
@@ -638,7 +638,7 @@ pub(crate) fn write_static_target<'py>(
 ) -> PyResult<Bound<'py, PyAny>> {
     let py: Python<'py> = target_dir.py();
     let remove_stale_files: bool = prepared_target(target_dir)?
-        && crate::bindings::_helpers::compile_delta::context::injection().is_none();
+        && crate::bindings::_helpers::compile_context::delta::injection().is_none();
     let mut batch: ArtifactBatch = ArtifactBatch::new(remove_stale_files, prepared.recorder);
     let mut managed: Vec<Bound<'py, PyAny>> = Vec::new();
     let mut managed_models: Vec<PathBuf> = Vec::new();

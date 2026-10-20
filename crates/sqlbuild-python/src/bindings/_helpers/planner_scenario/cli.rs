@@ -1,8 +1,8 @@
 //! Assemble CLI scenario plans while retaining adapter and executor boundaries.
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_scenario::artifacts::build_scenario_hash_index;
 use crate::bindings::_helpers::planner_scenario::artifacts::build_scenario_relation_map;

@@ -18,9 +18,7 @@ use sqlbuild_core::dbt_cli::models::{
 use sqlbuild_core::text::main::python_splitlines::python_splitlines;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{
     enum_from_value, new_record_with, record_class,

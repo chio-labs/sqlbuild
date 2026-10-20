@@ -13,14 +13,14 @@ use sqlbuild_rules::project_tree::main::resolve_project_path::resolve_project_pa
 use sqlbuild_rules::project_tree::main::tracked_text_path::tracked_text_path;
 use sqlbuild_rules::project_tree::models::ProjectTreeEntry;
 
-use crate::bindings::_helpers::compiled_project::audit_views::NativeCompiledAudit;
-use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+use crate::bindings::_helpers::compiled_views::audit_views::NativeCompiledAudit;
+use crate::bindings::_helpers::compiled_views::compiled_model_view::{
     InferredRow, NativeCompiledModel,
 };
-use crate::bindings::_helpers::compiled_project::function_views::NativeCompiledFunction;
-use crate::bindings::_helpers::compiled_project::project_view::NativeProjectView;
-use crate::bindings::_helpers::compiled_project::seed_views::NativeCompiledSeed;
-use crate::bindings::_helpers::compiled_project::source_views::NativeCompiledSource;
+use crate::bindings::_helpers::compiled_views::function_views::NativeCompiledFunction;
+use crate::bindings::_helpers::compiled_views::project_view::NativeProjectView;
+use crate::bindings::_helpers::compiled_views::seed_views::NativeCompiledSeed;
+use crate::bindings::_helpers::compiled_views::source_views::NativeCompiledSource;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as record_field_or_attribute;
 use crate::bindings::_helpers::records::fields::record_spec;

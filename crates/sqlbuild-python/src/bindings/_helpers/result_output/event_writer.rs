@@ -9,7 +9,7 @@ use pyo3::{pyclass, pymethods};
 use sqlbuild_core::integration_results::errors::IntegrationRecordError;
 use sqlbuild_core::terminal_events::models::TerminalRequest;
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_records::{
     clone_record, degraded_record, degraded_warning, execution_succeeded, integration_record,

@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 
-use crate::bindings::_helpers::compile_delta::coverage::{
-    ModelCoverage, coverage_reasons, merged_coverage, merged_order,
+use crate::bindings::_helpers::compile_context::coverage::{
+    coverage_reasons, merged_coverage, merged_order,
 };
+use crate::bindings::_helpers::compile_context::delta::ModelCoverage;
 use crate::bindings::_helpers::compile_delta::driver::names_uncompiled_model;
 use crate::bindings::tests::helpers::{coverage, names, order, strings};
 use crate::bindings::tests::test_types::{CoverageTestCase, UncompiledModelTestCase};

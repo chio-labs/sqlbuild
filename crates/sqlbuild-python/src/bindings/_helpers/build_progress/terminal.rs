@@ -4,9 +4,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
+use crate::bindings::_helpers::build_progress::progress::current_native_progress_projector;
 use crate::bindings::_helpers::build_progress::transient_lines::shared_coordinator;
-use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const DEFAULT_TERMINAL_SIZE: (i64, i64) = (120, 24);

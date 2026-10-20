@@ -12,9 +12,13 @@ use sqlbuild_cli::replay::main::write_launch_record::write_launch_record as writ
 use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 
 use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FORMAT};
+use sqlbuild_host::entries::models::{ExecutorHost, FacadeHost};
 
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::build_progress::progress::{
+    NativeProgressProjector, current_projector,
+};
 use crate::bindings::_helpers::cli::launch_state::launch_record_path;
-use crate::bindings::_helpers::cli::progress::{NativeProgressProjector, current_projector};
 use crate::bindings::_helpers::compile_command::constants::{
     COMPILE_CACHE_DISABLE_ENV_VAR, COMPILE_CACHE_DISABLE_VALUE, COMPILE_COMMAND_NAME,
     COMPILED_DIRECTORY_NAME, COMPUTE_LOG_DIRECTORY_NAME, EXCLUDED_DIRECTORIES,
@@ -31,19 +35,17 @@ use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::runtime_identity::{
     invocation_identity, redirected_output_files, runtime_identity,
 };
+use crate::bindings::_helpers::compile_context::delta;
 use crate::bindings::_helpers::compile_delta::driver::{
     self, DELTA_VERIFY_ENV_VAR, DeltaOutcome, delta_enabled, env_enabled,
 };
-use crate::bindings::_helpers::compile_delta::{context, verify};
+use crate::bindings::_helpers::compile_delta::verify;
 use crate::bindings::_helpers::compile_driver::command::run_compile_command;
 use crate::bindings::_helpers::compile_driver::phases::{elapsed_ms, monotonic};
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::compile_outputs::reuse::{ReuseCheckPy, check_compile_reuse};
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
 use crate::bindings::_helpers::macro_bridge::first_compile::keep_delta_claim;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -511,7 +513,7 @@ pub(crate) fn run_compile<'py>(request: &Bound<'py, PyAny>) -> PyResult<Bound<'p
     } else {
         run_compile_command(py, request.clone(), Some(attempt))
     };
-    context::reset();
+    delta::reset();
     verify::disarm();
     code.and_then(|value| pyo3::IntoPyObjectExt::into_bound_py_any(value, py))
 }
@@ -543,7 +545,7 @@ fn compiled_with_delta<'py>(
             None => Ok(()),
         }
     };
-    context::reset();
+    delta::reset();
     let project_dir: Bound<'py, PyAny> = native_field(attempt, "project_dir")?;
     let cache: Bound<'py, PyAny> = cache_directory(&project_dir)?;
     let compiled_root: PathBuf = std::path::absolute(
@@ -583,7 +585,7 @@ fn compiled_with_delta<'py>(
                     &format!("delta compile fell back: {reason}").into_bound_py_any(py)?,
                 )?;
             }
-            context::start_capture();
+            delta::start_capture();
             return run_compile_command(py, request.clone(), Some(attempt.clone()));
         }
         DeltaOutcome::Finished(finished) => verify::hold_expected(verify::Expected {
@@ -600,7 +602,7 @@ fn compiled_with_delta<'py>(
             ..verify::Expected::default()
         }),
     }
-    context::start_capture();
+    delta::start_capture();
     let full: PyResult<i64> = run_compile_command(py, request.clone(), Some(attempt.clone()));
     let raised: Option<String> = full.as_ref().err().map(ToString::to_string);
     let differences: Vec<String> = verify::differences(raised);

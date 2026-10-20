@@ -13,7 +13,7 @@ use sqlbuild_rules::rule_results::main::format_rules_progress::format_rules_prog
 use sqlbuild_rules::rule_results::main::format_skipped_rules::format_skipped_rules;
 use sqlbuild_rules::rule_results::models::{ResultCounts, RuleFinding};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::{field, path_posix, replaced};
 

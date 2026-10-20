@@ -1,24 +1,25 @@
 //! `sqb janitor` phases: compile, connect, inspect and plan, clean up and close.
 
+use sqlbuild_host::entries::models::ExecutorHost;
+
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use std::time::Instant;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 
-use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
-use crate::bindings::_helpers::cli::progress_reporters::{
+use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
+use crate::bindings::_helpers::build_progress::progress_reporters::{
     ConnectionProgressReporter, PlanningProgressReporter,
 };
+use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, within};
 use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
 use crate::bindings::_helpers::janitor::janitor_planning::{
     JanitorSettings, RelationScope, build_plan,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;

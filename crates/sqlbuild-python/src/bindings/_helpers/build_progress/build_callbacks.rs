@@ -20,6 +20,7 @@ use sqlbuild_core::build_progress::models::{
 };
 use sqlbuild_core::cli_text::models::CliStyle;
 
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported, within};
 use crate::bindings::_helpers::build_progress::plan_facts::{BuildPlanFacts, build_plan_facts};
 use crate::bindings::_helpers::build_progress::result_text::{
     function_text, load_text, model_text, optional, seed_text, test_text, text,
@@ -29,7 +30,6 @@ use crate::bindings::_helpers::build_progress::terminal::{
     consume_terminal, flush, join_spinner, projector, release, shared_lines, start_spinner,
     terminal_columns, tty_flag, write,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use crate::bindings::_helpers::result_output::event_writer::ExecutionEventWriter;

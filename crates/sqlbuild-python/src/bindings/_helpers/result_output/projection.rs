@@ -2,8 +2,8 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyRef, PyResult, Python};
 use pyo3::types::{PyFloat, PyInt};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::values::text;
 use crate::bindings::_helpers::records::fields::field as native_field;

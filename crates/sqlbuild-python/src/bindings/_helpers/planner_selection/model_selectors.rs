@@ -12,7 +12,7 @@ use sqlbuild_analysis::planner_selection::models::{
     ModelSelectorNames, SelectableModel, SelectorExpansion,
 };
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::planner_selection::carrier::Carrier;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

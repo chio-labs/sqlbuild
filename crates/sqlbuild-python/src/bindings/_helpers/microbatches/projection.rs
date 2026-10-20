@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyString, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_state::microbatches::main::latest_requirement::latest_requirement;
 use sqlbuild_state::microbatches::main::project_coverage::project_coverage;
 use sqlbuild_state::microbatches::main::project_replay::project_replay;
@@ -12,11 +13,10 @@ use sqlbuild_state::microbatches::models::{
 };
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::microbatches::conversion::{
     BoundParser, enum_text, optional_text, timestamp,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

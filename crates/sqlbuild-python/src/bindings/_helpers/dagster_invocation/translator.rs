@@ -9,11 +9,11 @@ use sqlbuild_core::dagster_invocation::main::dagster_name_segment::dagster_name_
 use sqlbuild_core::dagster_invocation::main::dagster_tag_key::dagster_tag_key;
 use sqlbuild_core::dagster_invocation::main::fallback_asset_description::fallback_asset_description;
 use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::dagster_invocation::access::{get, value_or};
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 
 const ABC_MODULE: &str = "collections.abc";
 const BUILTINS_MODULE: &str = "builtins";

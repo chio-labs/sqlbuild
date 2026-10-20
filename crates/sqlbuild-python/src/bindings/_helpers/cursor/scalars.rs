@@ -23,11 +23,11 @@ use sqlbuild_cursor::algebra::main::normalize_timestamp_text::normalize_timestam
 use sqlbuild_cursor::algebra::main::parse_integer_text::parse_integer_text;
 use sqlbuild_cursor::algebra::main::render::render;
 use sqlbuild_cursor::algebra::models::{Extreme, Grain, Scalar, ScalarValue, SortKey, ZoneOffset};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cursor::conversion::{CursorSession, algebra_error};
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, naive_date_time};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

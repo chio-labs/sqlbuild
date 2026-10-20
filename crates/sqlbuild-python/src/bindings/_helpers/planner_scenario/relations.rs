@@ -1,6 +1,6 @@
 //! Build scenario relation locations through adapter qualification callbacks.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::planner_scenario::constants::{REF, SOURCE};
 use crate::bindings::_helpers::planner_scenario::constants::{
     SCENARIO_PLAN_INTERNAL, SCENARIO_PLAN_MISSING_RELATION_TARGET,

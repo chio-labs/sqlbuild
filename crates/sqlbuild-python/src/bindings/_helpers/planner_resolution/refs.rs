@@ -1,7 +1,8 @@
 //! Reference lookup and adapter callbacks for planner SQL.
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use sqlbuild_host::entries::models::AdapterHost;
+
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
 use crate::bindings::_helpers::planner_resolution::values::{

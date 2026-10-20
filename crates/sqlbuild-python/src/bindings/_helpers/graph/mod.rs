@@ -1,5 +1,6 @@
 pub(crate) mod algorithms;
 pub(crate) mod execution_gates;
+pub(crate) mod getters;
 pub(crate) mod keys;
 pub(crate) mod node_set;
 pub(crate) mod project_graph;

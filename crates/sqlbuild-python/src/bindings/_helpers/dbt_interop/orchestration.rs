@@ -13,9 +13,7 @@ use sqlbuild_core::dbt_plan::main::dbt_plan_argvs::dbt_plan_argvs;
 use sqlbuild_core::dbt_plan::main::dbt_required_selector_terms::dbt_required_selector_terms;
 use sqlbuild_core::dbt_plan::models::{DbtPlanArgvRequest, DbtPlanArgvs, DbtReferencedModel};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, keywords};
 use crate::bindings::_helpers::dbt_interop::cli::{option_values, raised};
 use crate::bindings::_helpers::dbt_interop::graph::{
     PlannerResolver, planner_resolver, resolve_dbt_interop_sqlbuild_selection, texts,

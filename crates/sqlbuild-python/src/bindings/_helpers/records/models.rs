@@ -7,14 +7,16 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyclass::CompareOp;
 use pyo3::types::{PyDict, PyTuple, PyType};
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
+use sqlbuild_host::entries::models::HostId;
 
-use crate::bindings::_helpers::native_host::models::HostId;
 use crate::bindings::_helpers::records::fields::{
     build_values, cached_value, compared_values, frozen_error, ordered_comparison, record_spec,
     repr_text, store_cached,
 };
 use crate::bindings::_helpers::records::ids::RecordId;
-use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, RecordFactory};
+use crate::bindings::_helpers::records::types::{
+    ClassMethod, ClassProperty, GetterClass, GetterRead, RecordFactory, RecordFinish,
+};
 
 /// How a record field is filled when the caller does not pass it.
 #[derive(Debug, Clone, Copy)]
@@ -313,4 +315,29 @@ impl FieldSpec {
             shown: false,
         }
     }
+}
+
+/// One native pyclass and the reader of its `#[getter]` attributes.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct GetterEntry {
+    pub(crate) class: GetterClass,
+    pub(crate) read: GetterRead,
+}
+
+/// The record behaviours registration installs, each as groups searched in order.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RecordBehaviours {
+    /// Records whose bound values are normalized or validated before the record is created.
+    pub(crate) finishers: &'static [&'static [(&'static str, RecordFinish)]],
+    /// `(class, attribute, getter)` computed attributes set on native classes after registration.
+    pub(crate) properties: &'static [&'static [(&'static str, &'static str, ClassProperty)]],
+    /// `(class, attribute, getter)` computed attributes a record computes once and keeps.
+    pub(crate) cached_properties:
+        &'static [&'static [(&'static str, &'static str, ClassProperty)]],
+    /// `(class, attribute, method)` methods set on native classes after registration.
+    pub(crate) methods: &'static [&'static [(&'static str, &'static str, ClassMethod)]],
+    /// Records ordered by their compared fields, as `order=True` dataclasses are.
+    pub(crate) ordered: &'static [&'static [&'static str]],
+    /// Native records registered as `collections.abc.Sequence` virtual subclasses.
+    pub(crate) sequences: &'static [&'static [&'static str]],
 }

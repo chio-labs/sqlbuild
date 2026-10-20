@@ -1,7 +1,7 @@
 //! Resolve the selected, stale-warning and inspection scopes of one plan.
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::graph::algorithms::transitive_closure_many;
 use crate::bindings::_helpers::planner_phases::models::PlannerScopeResolution;
 use crate::bindings::_helpers::planner_phases::objects::object;

@@ -12,11 +12,11 @@ use sqlbuild_core::query_command::main::render_query_json::render_query_json;
 use sqlbuild_core::query_command::main::render_query_long::render_query_long;
 use sqlbuild_core::query_command::main::render_query_table::render_query_table;
 use sqlbuild_core::query_command::models::QueryDisplay;
+use sqlbuild_host::entries::models::AdapterHost;
 
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::query_command::project::{

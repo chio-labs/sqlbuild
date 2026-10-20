@@ -225,11 +225,11 @@ impl NativeReuseAttempt {
                 artifacts_written: record.artifacts_written,
                 dag_path: record.dag_path,
                 json_output: record.json_output,
-                image: crate::bindings::_helpers::compile_delta::context::take_pending_image(),
+                image: crate::bindings::_helpers::compile_context::delta::take_pending_image(),
                 vouched_target_stamps: None,
             };
             if let Some(merge) =
-                crate::bindings::_helpers::compile_delta::context::take_record_merge()
+                crate::bindings::_helpers::compile_context::delta::take_record_merge()
             {
                 for stamp in &merge.kept {
                     compile

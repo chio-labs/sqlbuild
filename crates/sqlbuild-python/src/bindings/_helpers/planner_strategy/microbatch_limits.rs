@@ -12,7 +12,7 @@ use sqlbuild_core::plan_display::errors::UnknownCursorGrain;
 use sqlbuild_core::plan_display::main::effective_timestamp_grain::effective_timestamp_grain;
 use sqlbuild_core::plan_display::models::TimestampGrainFacts;
 
-use crate::bindings::_helpers::compiled_project::records::replace;
+use crate::bindings::_helpers::compiled_views::records::replace;
 use crate::bindings::_helpers::plan_output::display::resolve_effective_microbatch_batch_size;
 use crate::bindings::_helpers::planner_strategy::microbatches::{
     CAP_ACTIONS, capped_microbatch_bounds, count_microbatches,

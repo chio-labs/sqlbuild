@@ -9,7 +9,7 @@ use sqlbuild_analysis::planner_strategy::main::effective_run_scope::effective_ru
 use sqlbuild_analysis::planner_strategy::main::singular_attachment::singular_attachment;
 use sqlbuild_analysis::planner_strategy::models::{AuditAttachmentKind, AuditRunScope};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::graph::algorithms::closure;
 use crate::bindings::_helpers::planner_strategy::values::{input_error, optional_string, text};
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record_with};

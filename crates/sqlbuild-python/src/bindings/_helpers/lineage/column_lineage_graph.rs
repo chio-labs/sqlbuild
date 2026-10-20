@@ -10,10 +10,8 @@ use pyo3::{pyclass, pymethods};
 use sqlbuild_analysis::lineage_graph::main::edge_index::edge_index;
 use sqlbuild_analysis::lineage_graph::models::{EdgeIndex, EdgeKey};
 
+use crate::bindings::_helpers::lineage::lineage_facts::{confidence_member, transform_kind_member};
 use crate::bindings::_helpers::lineage::lineage_objects::LineageClasses;
-use crate::bindings::_helpers::record_behaviours::lineage_facts::{
-    confidence_member, transform_kind_member,
-};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_items;

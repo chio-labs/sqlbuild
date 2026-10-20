@@ -16,6 +16,7 @@ use sqlbuild_analysis::janitor_planning::main::matching_exclude_pattern::matchin
 use sqlbuild_analysis::janitor_planning::main::parse_archive_name::parse_archive_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_parts::query_diff_artifact_parts;
 use sqlbuild_analysis::janitor_planning::main::unaddressable_relation_reason::unaddressable_relation_reason;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::janitor::janitor_facts::{
     Warehouse, WarehouseFacts, skipped_relation,
@@ -24,7 +25,6 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
     Folded, Key, SchemaKey, archive_timestamp, days, folded_schema, optional, record,
     relation_age_timestamp, sorted_schemas, text, timestamp_fields, tuple, utc_datetime,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::planner_scenario::artifacts::is_scenario_artifact_physical_name;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::relation_naming::fitting::shared_error;

@@ -6,8 +6,14 @@ use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyMapping, PyString, PyTuple,
 };
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use sqlbuild_host::compile_context::main::collect_compile_timings::collect_compile_timings;
+use sqlbuild_host::compile_context::main::timing_milliseconds::timing_milliseconds;
+use sqlbuild_host::compile_context::types::CompileTimingsHandle;
 use std::rc::Rc;
 
+use crate::bindings::_helpers::boundary::python_calls::{
+    Status, call_with, imported, keywords, within,
+};
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_command::models::CompileReuseAttempt;
 use crate::bindings::_helpers::compile_command::report::{
@@ -17,17 +23,11 @@ use crate::bindings::_helpers::compile_command::reuse_recording::write_reusable_
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     CompileArtifactWrites, RecordedCompileOutput, compile_reuse_timings, new_artifact_recorder,
 };
+use crate::bindings::_helpers::compile_context::input_reads::record_compile_input_reads;
 use crate::bindings::_helpers::compile_driver::analysis::analyze;
-use crate::bindings::_helpers::compile_driver::compile_timings::{
-    CompileTimingsHandle, collect_compile_timings, timing_milliseconds,
-};
-use crate::bindings::_helpers::compile_driver::input_reads::record_compile_input_reads;
 use crate::bindings::_helpers::compile_driver::phases::{
     elapsed_ms, manifest_payload, monotonic, resolved_dag_path, sql_test_planning_diagnostics,
     target_dir, write_artifacts, write_dag_artifact,
-};
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    Status, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};
@@ -265,7 +265,7 @@ pub(crate) fn compile_phases<'py>(
         .getattr("skip_write")?
         .is_truthy()?;
     let staging: bool =
-        !skip_write && crate::bindings::_helpers::compile_delta::context::injection().is_none();
+        !skip_write && crate::bindings::_helpers::compile_context::delta::injection().is_none();
     let (outcome, input_reads, artifact_writes): (
         CommandOutcome<'py>,
         Bound<'py, PyAny>,

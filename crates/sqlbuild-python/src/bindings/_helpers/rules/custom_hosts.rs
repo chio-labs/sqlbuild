@@ -13,6 +13,7 @@ use pyo3::exceptions::PyKeyboardInterrupt;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyBytes;
 use serde_json::{Map, Value, json};
+use sqlbuild_host::entries::constants::CUSTOM_HOST_LAUNCH_MODULE;
 use sqlbuild_rules::custom_host_pool::constants::{
     CGROUP_ROOT, HOST_TIMEOUT_MILLIS, MIN_INVOCATIONS_PER_HOST, PROC_CGROUP,
 };
@@ -27,8 +28,7 @@ use sqlbuild_rules::custom_host_pool::models::{HostRuleSubject, HostRun, HostSli
 use sqlbuild_rules::custom_host_pool::types::{HostInvocation, HostPlan};
 use sqlbuild_rules::engine::main::custom_host::run_custom_host_json;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use crate::bindings::_helpers::rules::constants::{

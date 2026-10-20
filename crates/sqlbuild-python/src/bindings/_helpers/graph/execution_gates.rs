@@ -4,14 +4,14 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::analysis::explicit_references::{
-    GateRow, HookRow, native_execution_gate_edges,
-};
 use crate::bindings::_helpers::graph::keys::KeyCache;
 use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;
+use crate::bindings::_helpers::references::explicit_references::{
+    GateRow, HookRow, native_execution_gate_edges,
+};
 
 const PATHLIB_MODULE: &str = "pathlib";
 /// The model config keys whose entries are hooks, in lifecycle order.

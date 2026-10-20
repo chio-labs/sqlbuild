@@ -9,8 +9,9 @@ use sqlbuild_analysis::janitor_planning::constants::OLD_NAME_VIEW_REASON;
 use sqlbuild_analysis::janitor_planning::main::build_archive_name::build_archive_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_name::query_diff_artifact_name;
 use sqlbuild_analysis::janitor_planning::main::query_diff_artifact_parts::query_diff_artifact_parts;
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, within};
 use crate::bindings::_helpers::janitor::janitor_classification::{
     Candidate, Policy, Protection, SchemaClassification, classify_target_schemas, plan_archives,
 };
@@ -25,7 +26,6 @@ use crate::bindings::_helpers::janitor::janitor_keys::{
 use crate::bindings::_helpers::janitor::janitor_old_names::{
     OldNamePlanning, pending_migration_origins, plan_old_name_views,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;

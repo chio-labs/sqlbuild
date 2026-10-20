@@ -1,24 +1,19 @@
 //! The layouts of every native record class.
 
+use sqlbuild_host::entries::models::ExecutorHost;
+
 use crate::bindings::_helpers::compile_records::constants::COMPILE_VALUE_RECORDS;
 use crate::bindings::_helpers::compiler_enums::constants::COMPILER_ENUMS;
 use crate::bindings::_helpers::compiler_errors::constants::COMPILER_ERRORS;
 use crate::bindings::_helpers::compiler_records::constants::COMPILER_RECORDS;
 use crate::bindings::_helpers::contract_records::constants::CONTRACT_RECORDS;
-use crate::bindings::_helpers::freshness::observation::normalize_observation;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::planner_records::constants::{
     PLANNER_ENUMS, PLANNER_RECORDS, PLANNER_VALUE_RECORDS,
 };
-use crate::bindings::_helpers::record_behaviours::constants::{
-    BEHAVIOUR_CACHED_PROPERTIES, BEHAVIOUR_FINISHERS, BEHAVIOUR_METHODS, BEHAVIOUR_ORDERED,
-    BEHAVIOUR_PROPERTIES, BEHAVIOUR_SEQUENCES,
-};
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{
-    ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordSpec,
+    ClassValue, EnumSpec, ErrorSpec, FieldDefault, FieldSpec, RecordBehaviours, RecordSpec,
 };
-use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, RecordFinish};
 use crate::bindings::_helpers::rule_records::constants::RULE_RECORDS;
 use crate::bindings::_helpers::scope_records::constants::SCOPE_RECORDS;
 
@@ -167,22 +162,15 @@ pub(crate) const RECORDS: &[&[RecordSpec]] = &[
 
 /// `str(PurePath("."))`, the path whose name and stem are empty.
 pub(crate) const CURRENT_DIRECTORY_PATH: &str = ".";
-/// Records whose bound values are normalized or validated before the record is created.
-pub(crate) const RECORD_FINISHERS: &[&[(&str, RecordFinish)]] = &[
-    &[("SourceFreshnessObservation", normalize_observation)],
-    BEHAVIOUR_FINISHERS,
-];
-/// `(class, attribute, getter)` computed attributes set on native classes after registration.
-pub(crate) const CLASS_PROPERTIES: &[&[(&str, &str, ClassProperty)]] = &[BEHAVIOUR_PROPERTIES];
-/// `(class, attribute, getter)` computed attributes a record computes once and keeps.
-pub(crate) const CACHED_PROPERTIES: &[&[(&str, &str, ClassProperty)]] =
-    &[BEHAVIOUR_CACHED_PROPERTIES];
-/// `(class, attribute, method)` methods set on native classes after registration.
-pub(crate) const CLASS_METHODS: &[&[(&str, &str, ClassMethod)]] = &[BEHAVIOUR_METHODS];
-/// Records ordered by their compared fields, as `order=True` dataclasses are.
-pub(crate) const ORDERED_RECORDS: &[&[&str]] = &[BEHAVIOUR_ORDERED];
-/// Native records registered as `collections.abc.Sequence` virtual subclasses.
-pub(crate) const SEQUENCE_RECORDS: &[&[&str]] = &[BEHAVIOUR_SEQUENCES];
+/// The behaviours before registration installs them: none.
+pub(crate) const NO_RECORD_BEHAVIOURS: RecordBehaviours = RecordBehaviours {
+    finishers: &[],
+    properties: &[],
+    cached_properties: &[],
+    methods: &[],
+    ordered: &[],
+    sequences: &[],
+};
 /// `SourceFreshnessObservation` field positions.
 pub(crate) const DATA_VERSION_FIELD: usize = 2;
 pub(crate) const OBSERVED_AT_FIELD: usize = 4;

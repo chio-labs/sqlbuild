@@ -11,8 +11,8 @@ use sqlbuild_analysis::planner_fixtures::main::fixture_schema::fixture_schema;
 use sqlbuild_analysis::planner_fixtures::models::FixtureColumn;
 use sqlbuild_core::text::main::python_casefold::python_casefold;
 
-use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::analysis_session::fixture_inferences::FixtureColumnInferences;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::planner_strategy::constants::{
     MODEL_REFERENCE_KIND, SEED_REFERENCE_KIND, SOURCE_REFERENCE_KIND,
 };

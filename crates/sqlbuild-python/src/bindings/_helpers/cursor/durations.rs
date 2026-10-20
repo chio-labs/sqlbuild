@@ -8,7 +8,7 @@ use sqlbuild_cursor::algebra::main::parse_duration::parse_duration;
 use sqlbuild_cursor::algebra::main::shift_by_duration::shift_by_duration;
 use sqlbuild_cursor::algebra::models::{DurationDigits, DurationSpan, Moment};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::values::{
     DATETIME_MODULE, civil_date, local_date_time, replaced,

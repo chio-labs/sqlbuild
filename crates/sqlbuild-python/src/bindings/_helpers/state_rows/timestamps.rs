@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use sqlbuild_cursor::algebra::models::LocalDateTime;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
 use crate::bindings::_helpers::records::fields::field as native_field;
 

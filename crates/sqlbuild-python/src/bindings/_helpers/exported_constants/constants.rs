@@ -29,6 +29,7 @@ use sqlbuild_core::constants::{
 use sqlbuild_core::diagnostic_routing::constants::{
     SQL_DIGEST_FIELD, SQL_PRIVATE_RECORD_FIELD, SQL_TEXT_FIELD,
 };
+use sqlbuild_host::entries::constants::CUSTOM_HOST_LAUNCH_MODULE;
 use sqlbuild_rules::constants::MIN_CUSTOM_RULE_TEST_CASES_KEY;
 use sqlbuild_rules::custom_host_pool::constants::CUSTOM_RULE_PROJECT_SUBJECT;
 use sqlbuild_state::execution_history::constants::{
@@ -45,7 +46,6 @@ use crate::bindings::_helpers::compile_delta::driver::{
     DELTA_DISABLE_ENV_VAR, DELTA_VERIFY_ENV_VAR,
 };
 use crate::bindings::_helpers::frontier::stage_capture::CAPTURE_DIR_ENV_VAR;
-use crate::bindings::_helpers::native_host::constants::CUSTOM_HOST_LAUNCH_MODULE;
 use crate::bindings::_helpers::result_output::event_writer::RESULT_PATH_ENV;
 use crate::bindings::_helpers::rules::constants::CUSTOM_HOST_RUNTIME_VERSION;
 use crate::bindings::_helpers::semantic_shapes::shapes::{VALID_FROM_DEFAULT, VALID_TO_DEFAULT};

@@ -7,6 +7,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyString, PyStringMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::constants::SOURCE_FRESHNESS_TABLE_NAME;
+use sqlbuild_host::entries::models::AdapterHost;
 use sqlbuild_state::freshness::constants::{
     SOURCE_FRESHNESS_COLUMN_TYPES, STRING_STATE_VALUE_TYPE, TEXT_TIMESTAMP_STATE_VALUE_TYPE,
 };
@@ -15,9 +16,8 @@ use sqlbuild_state::state_tables::main::values_insert_sql::values_insert_sql;
 use sqlbuild_state::state_tables::models::TableColumn;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::contracts::state_literals::render_state_sql_literal;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

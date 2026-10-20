@@ -8,8 +8,8 @@ use pyo3::types::{
 use sqlbuild_core::integration_results::errors::IntegrationRecordError;
 use sqlbuild_core::integration_results::main::encode_integration_value::encode_integration_value;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 
 /// A contract failure, or a Python failure while reading the values.

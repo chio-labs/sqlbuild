@@ -5,7 +5,7 @@ use pyo3::types::{PyBytes, PyBytesMethods, PyStringMethods, PyTuple};
 
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::frontier::encoder::qualified_name;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

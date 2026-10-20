@@ -7,7 +7,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyModule, PyResult, P
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 /// Each `RecordId`'s class, captured when the extension module is initialised.

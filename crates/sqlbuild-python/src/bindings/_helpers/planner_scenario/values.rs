@@ -1,6 +1,6 @@
 //! Existing Python model constructors and scenario diagnostics.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;
 use pyo3::prelude::{Bound, PyAny, PyErr, PyResult, Python};

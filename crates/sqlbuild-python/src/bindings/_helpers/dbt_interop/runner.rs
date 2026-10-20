@@ -15,12 +15,12 @@ use pyo3::{pyclass, pymethods};
 use sqlbuild_core::dbt_cli::models::DbtArgvCommand;
 use sqlbuild_core::dbt_process::main::run_dbt_process::run_dbt_process;
 use sqlbuild_core::dbt_process::models::DbtProcessOutput;
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, within};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, within};
 use crate::bindings::_helpers::dbt_interop::cli::{
     argv, ls_nodes, resolve_dbt_executable, sequence,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;

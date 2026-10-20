@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
-use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
+use crate::bindings::_helpers::boundary::call_arguments::call_argument;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const HELP_FIELD: &str = "help";

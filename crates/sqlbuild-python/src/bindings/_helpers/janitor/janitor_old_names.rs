@@ -7,9 +7,11 @@ use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_analysis::janitor_planning::main::migration_origin_keys::migration_origin_keys;
 use sqlbuild_analysis::janitor_planning::main::old_name_request_matches::old_name_request_matches;
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use sqlbuild_host::entries::models::ExecutorHost;
+
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::janitor::janitor_facts::{
     SchemaRelations, Warehouse, model_destinations,
 };
@@ -22,7 +24,6 @@ use crate::bindings::_helpers::state_rows::migration_io::{
 };
 
 const IS_COMPATIBILITY_VIEW: ExecutorHost = ExecutorHost::IsCompatibilityView;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;

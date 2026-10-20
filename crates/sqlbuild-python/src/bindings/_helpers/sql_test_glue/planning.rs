@@ -11,8 +11,8 @@ use sqlbuild_analysis::compiler::models::{
     SqlTestPlanFunction, SqlTestPlanModel, SqlTestPlanPayload, SqlTestPlanTest,
 };
 
-use crate::bindings::_helpers::analysis::model_reads;
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::sqltext::lexical_syntax::LexicalSyntaxInput;
 use crate::bindings::types::CompilerDetach;

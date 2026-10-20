@@ -1,14 +1,13 @@
 //! Resolve host entries: targets read once from `sqlbuild._native_host`, attributes read live.
 
+use pyo3::PyErr;
 use pyo3::exceptions::PyImportError;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
-
-use crate::bindings::_helpers::native_host::constants::{
-    HOST_ENTRIES, HOST_MODULE, HOST_TARGETS_FUNCTION,
-};
-use crate::bindings::_helpers::native_host::models::HostId;
+use sqlbuild_host::entries::constants::{HOST_ENTRIES, HOST_MODULE, HOST_TARGETS_FUNCTION};
+use sqlbuild_host::entries::models::HostId;
+use sqlbuild_host::entries::types::HostEntries;
 
 /// One entry's target module path and attribute name.
 type Target = (Py<PyString>, Py<PyString>);
@@ -16,7 +15,7 @@ type Target = (Py<PyString>, Py<PyString>);
 /// Every entry's target, grouped and ordered as `HOST_ENTRIES`.
 static TARGETS: PyOnceLock<Vec<Vec<Target>>> = PyOnceLock::new();
 
-fn missing(name: &str) -> pyo3::PyErr {
+fn missing(name: &str) -> PyErr {
     PyImportError::new_err(format!("{HOST_MODULE} does not define host entry '{name}'"))
 }
 
@@ -45,10 +44,23 @@ fn host_targets(py: Python<'_>) -> PyResult<Vec<Vec<Target>>> {
     Ok(groups)
 }
 
+/// The host entries of one interpreter, read through `sqlbuild._native_host`.
+#[derive(Clone, Copy)]
+pub(crate) struct PythonHost<'py>(pub(crate) Python<'py>);
+
+impl<'py> HostEntries for PythonHost<'py> {
+    type Entry = Bound<'py, PyAny>;
+    type Error = PyErr;
+
+    fn entry(&self, id: HostId) -> PyResult<Bound<'py, PyAny>> {
+        let py: Python<'py> = self.0;
+        let targets: &Vec<Vec<Target>> = TARGETS.get_or_try_init(py, || host_targets(py))?;
+        let (module, attribute): &Target = &targets[id.edge as usize][id.index];
+        py.import(module.bind(py))?.getattr(attribute.bind(py))
+    }
+}
+
 /// The host entry `id`: its target module imported and the attribute read on every call.
 pub(crate) fn entry<'py>(py: Python<'py>, id: impl Into<HostId>) -> PyResult<Bound<'py, PyAny>> {
-    let id: HostId = id.into();
-    let targets: &Vec<Vec<Target>> = TARGETS.get_or_try_init(py, || host_targets(py))?;
-    let (module, attribute): &Target = &targets[id.edge as usize][id.index];
-    py.import(module.bind(py))?.getattr(attribute.bind(py))
+    PythonHost(py).entry(id.into())
 }

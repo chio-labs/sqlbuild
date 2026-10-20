@@ -1,5 +1,9 @@
 //! Native behaviour of the hosted shapes: computed attributes, methods, ordering and validation.
 
+use crate::bindings::_helpers::freshness::observation::normalize_observation;
+use crate::bindings::_helpers::lineage::lineage_facts::{
+    facts_eq, facts_getitem, facts_iter, facts_len, facts_projected, facts_resource_name,
+};
 use crate::bindings::_helpers::record_behaviours::auditing::{
     finish_measurement_contract, finish_threshold_bound, finish_thresholds,
 };
@@ -33,9 +37,6 @@ use crate::bindings::_helpers::record_behaviours::freshness::{
 };
 use crate::bindings::_helpers::record_behaviours::lexical::{
     finish_lexical_syntax, lexical_cache_key, lexical_native_mapping, lexical_reads_differently,
-};
-use crate::bindings::_helpers::record_behaviours::lineage_facts::{
-    facts_eq, facts_getitem, facts_iter, facts_len, facts_projected, facts_resource_name,
 };
 use crate::bindings::_helpers::record_behaviours::macros::{
     context_render_constant, context_render_enum_member, macro_injects_context,
@@ -71,6 +72,7 @@ use crate::bindings::_helpers::record_behaviours::scopes::{
 use crate::bindings::_helpers::record_behaviours::values::{
     finish_fingerprint_set, logical_type_display_name, sql_value_kind,
 };
+use crate::bindings::_helpers::records::models::RecordBehaviours;
 use crate::bindings::_helpers::records::types::{ClassMethod, ClassProperty, RecordFinish};
 
 /// Compiler records whose bound values are normalized or validated natively.
@@ -342,3 +344,16 @@ pub(crate) const BEHAVIOUR_ORDERED: &[&str] = &[
     "OwnershipRoot",
     "ProjectPath",
 ];
+
+/// Every record behaviour, installed into `records::behaviours` at registration.
+pub(crate) const RECORD_BEHAVIOURS: RecordBehaviours = RecordBehaviours {
+    finishers: &[
+        &[("SourceFreshnessObservation", normalize_observation)],
+        BEHAVIOUR_FINISHERS,
+    ],
+    properties: &[BEHAVIOUR_PROPERTIES],
+    cached_properties: &[BEHAVIOUR_CACHED_PROPERTIES],
+    methods: &[BEHAVIOUR_METHODS],
+    ordered: &[BEHAVIOUR_ORDERED],
+    sequences: &[BEHAVIOUR_SEQUENCES],
+};

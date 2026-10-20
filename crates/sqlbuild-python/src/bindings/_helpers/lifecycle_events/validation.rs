@@ -6,7 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::lifecycle_events::main::validate_known_event::validate_known_event;
 use sqlbuild_core::lifecycle_events::models::KnownEventFacts;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::lifecycle_events::payloads::{
     PathSegment, frozen, object_entries, validation_error,
 };

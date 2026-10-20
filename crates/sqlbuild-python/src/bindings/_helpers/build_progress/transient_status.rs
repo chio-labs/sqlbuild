@@ -8,11 +8,11 @@ use pyo3::{pyclass, pymethods};
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::progress::main::format_status_spinner_line::format_status_spinner_line;
 
+use crate::bindings::_helpers::boundary::python_calls::{imported, within};
 use crate::bindings::_helpers::build_progress::terminal::{
     CLEAR_LINE, HIDE_CURSOR, SHOW_CURSOR, SPINNER_FRAMES, SPINNER_TICK_SECONDS, claim, flush,
     join_spinner, release, shared_lines, start_spinner, terminal_columns, tty_flag, write,
 };
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, within};
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const NO_PROGRESS_VARIABLE: &str = "SQLBUILD_NO_PROGRESS";

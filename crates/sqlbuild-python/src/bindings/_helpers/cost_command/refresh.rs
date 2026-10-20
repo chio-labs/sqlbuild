@@ -8,19 +8,19 @@ use sqlbuild_core::cost_command::constants::{
 };
 use sqlbuild_core::cost_command::main::accepts_cost_refresh::accepts_cost_refresh;
 use sqlbuild_core::cost_command::models::CostCoverage;
+use sqlbuild_host::entries::models::ExecutorHost;
 
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::command_runtime::connection::resolve_project_connection_config;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_target_config;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::cost_report::functions::read_cost_run;
 use crate::bindings::_helpers::cost_report::functions::resolve_cost_run;
 use crate::bindings::_helpers::cost_report::functions::write_cost_run;
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;

@@ -12,13 +12,13 @@ use sqlbuild_cursor::algebra::models::{
     Grain, Interval, LocalDateTime, Scalar, ScalarValue, Timestamp, ZoneOffset,
 };
 use sqlbuild_cursor::algebra::types::ZoneRules;
+use sqlbuild_host::entries::models::FacadeHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::cursor::values::{
     DATETIME_MODULE, civil_date, local_date_time, naive_date_time, plain_date, replaced,
     timedelta_micros,
 };
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{
     enum_from_value, new_record_with, record_class,

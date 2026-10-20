@@ -9,7 +9,7 @@ use sqlbuild_discovery::model_files::models::{DiscoveredModelFile, ModelFileOpti
 use sqlbuild_discovery::models::{DiscoveredFile, FileOutcome, StageFailure};
 use std::path::Path;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::model_file_record::DiscoveredPaths;
@@ -69,7 +69,7 @@ fn model_items<'py>(
         for file in files {
             let raw: bool = tree.get().inner.raw_relative(&file.relative_path).is_some();
             if !raw && let FileOutcome::Parsed(model) = file.outcome {
-                crate::bindings::_helpers::compile_delta::header_keys::record_header_keys(
+                crate::bindings::_helpers::discovery::header_keys::record_header_keys(
                     &file.relative_path,
                     &model.header_values,
                 );
@@ -130,7 +130,7 @@ pub(crate) fn discovered_model_files<'py>(
         removed_keys: sorted_keys(&constants::REMOVED_SQL_MODEL_HEADER_KEYS),
         extract_implicit_alias_columns,
         extract_output_column_locations,
-        path_filter: crate::bindings::_helpers::compile_delta::context::injection()
+        path_filter: crate::bindings::_helpers::compile_context::delta::injection()
             .map(|injection| std::sync::Arc::new(injection.model_paths.clone())),
     };
     let items: Vec<ModelItem<'py>> = model_items(project_dir, &options)?;

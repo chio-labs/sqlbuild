@@ -1,6 +1,6 @@
 //! Read-only warehouse evidence gathered once for all model migrations in one plan.
 
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use std::collections::{HashMap, HashSet};
 
@@ -14,7 +14,7 @@ use sqlbuild_core::constants::OLD_NAME_VIEW_TABLE_NAME;
 use sqlbuild_state::events::main::newest_fingerprint::newest_fingerprint;
 use sqlbuild_state::events::models::{EventRelation, FingerprintKey, FingerprintOrder};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::constants::{
     GET_COLUMNS_FOR_INSPECTION, LIST_RELATIONS_FOR_INSPECTION,

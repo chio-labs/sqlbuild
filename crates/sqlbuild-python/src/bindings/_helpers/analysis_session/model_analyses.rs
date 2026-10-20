@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{IntoPyDict, PyDict, PyDictMethods, PyFrozenSet, PyString};
 use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::analysis::binding_catalog::BindingCatalog;
 use crate::bindings::_helpers::project_assembly::declared_relations::DeclaredShapes;
@@ -22,12 +23,11 @@ use crate::bindings::_helpers::cache::native_store::{content_digest, current_cod
 use crate::bindings::_helpers::compile_driver::analysis_cache::{
     AnalysisCacheCounts, record_analysis_cache_metrics,
 };
-use crate::bindings::_helpers::compiled_project::model_input_view::{
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use crate::bindings::_helpers::compiled_views::model_input_view::{
     AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
     input_reference_rows,
 };
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -224,7 +224,7 @@ fn run_session<'py>(
         .finished_session()
         .and_then(|finished| finished.relation_tables())
     {
-        crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+        crate::bindings::_helpers::compile_context::delta::capture(|capture| {
             capture.relations = Some(tables.clone());
         });
     }

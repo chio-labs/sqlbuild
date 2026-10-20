@@ -1,7 +1,7 @@
 //! Layouts of the compile and discovery value records hosted natively.
 
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use sqlbuild_host::entries::models::{FacadeHost, UserCodeHost};
+
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{FieldDefault, FieldSpec, RecordSpec};
 

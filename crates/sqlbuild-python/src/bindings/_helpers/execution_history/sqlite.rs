@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3::types::{PyDict, PyTuple};
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_state::execution_history::constants::{
     DEFAULT_PAGE_LIMIT, MEMORY_PATH, RUN_CURSOR_TIMESTAMP, SCHEMA_VERSION, SQLITE_ALL_EVENTS,
     SQLITE_ALL_RUNS, SQLITE_BEGIN, SQLITE_BUSY_TIMEOUT_MS, SQLITE_COMMIT, SQLITE_DELETE_RUNS,
@@ -39,8 +40,8 @@ use sqlbuild_state::execution_history::models::{
 };
 use sqlbuild_state::execution_history::types::UtcTime;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::execution_history::appends::prepared_batch;
 use crate::bindings::_helpers::execution_history::conversion::{
     checked, event_filter_spec, exact_int, history_error_of_kind, new_namespace, now,
@@ -51,7 +52,6 @@ use crate::bindings::_helpers::execution_history::conversion::{
 use crate::bindings::_helpers::execution_history::statements::{
     column, execute, execute_plain, execute_query, fetch_one, locked, tuple_of,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
@@ -634,7 +634,7 @@ impl SqliteExecutionHistory {
                 Some(record) => native_field(record, "cursor")?,
                 None => py.None().into_bound(py),
             };
-            crate::bindings::_helpers::compile_driver::python_calls::call_with(
+            crate::bindings::_helpers::boundary::python_calls::call_with(
                 &host::entry(py, ExecutorHost::EventPage)?,
                 &[
                     ("records", tuple_of(py, records)?.into_any()),
@@ -703,7 +703,7 @@ impl SqliteExecutionHistory {
                 }
                 None => py.None().into_bound(py),
             };
-            crate::bindings::_helpers::compile_driver::python_calls::call_with(
+            crate::bindings::_helpers::boundary::python_calls::call_with(
                 &host::entry(py, ExecutorHost::RunPage)?,
                 &[
                     ("records", run_records(py, &runs)?.into_any()),

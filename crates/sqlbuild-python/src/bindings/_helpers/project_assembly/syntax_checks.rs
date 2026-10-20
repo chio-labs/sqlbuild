@@ -6,7 +6,7 @@ use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_sqltext::compiler::main::placeholder_defaults::placeholder_defaults;
 
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
-use crate::bindings::_helpers::compiled_project::model_input_view::attached_schema;
+use crate::bindings::_helpers::compiled_views::model_input_view::attached_schema;
 use crate::bindings::_helpers::project_assembly::syntax_validation::hook_sql_statements;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

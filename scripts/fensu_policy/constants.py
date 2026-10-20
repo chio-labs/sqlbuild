@@ -304,7 +304,6 @@ NATIVE_TEST_MODULE_MARKER: str = "#[cfg(test)]"
 NATIVE_RUST_SUFFIX: str = ".rs"
 NATIVE_TEST_DIRECTORY: str = "tests"
 NATIVE_TEST_FILE_NAME: str = "tests.rs"
-NATIVE_TEST_FILE_PREFIX: str = "test_"
 NATIVE_LINE_COMMENT: str = "//"
 NATIVE_STRING_QUOTE: str = '"'
 NATIVE_SKIPPED_LINE_PREFIXES: tuple[str, ...] = (
@@ -326,6 +325,33 @@ NATIVE_PENDING_BUDGETS: RuleOption[tuple[str, ...]] = RuleOption.string_list(
     name="pending_budgets",
     default=(),
     description="`path=count` budgets for files that still cross; each may only fall.",
+)
+NATIVE_HELPERS_ROOT: str = "crates/sqlbuild-python/src/bindings/_helpers/"
+NATIVE_HELPERS_PATH: str = "crate::bindings::_helpers::"
+NATIVE_MODULE_FILE_STEM: str = "mod"
+NATIVE_MODULE_PATH_SEPARATOR: str = "/"
+NATIVE_LAYER_SIBLING_SEPARATOR: str = "|"
+NATIVE_LAYER_WILDCARD: str = "*"
+NATIVE_GROUP_OPEN: str = "{"
+NATIVE_GROUP_CLOSE: str = "}"
+NATIVE_GROUP_SEPARATOR: str = ","
+NATIVE_PATH_SEPARATOR: str = "::"
+NATIVE_PATH_SELF: str = "self"
+NATIVE_LAYER_ORDER: RuleOption[tuple[str, ...]] = RuleOption.string_list(
+    name="layer_order",
+    default=(),
+    description=(
+        "Helper module layers from the bottom up; `a|b` makes sibling layers that may not "
+        "import each other."
+    ),
+)
+NATIVE_MODULE_LAYERS: RuleOption[tuple[str, ...]] = RuleOption.string_list(
+    name="module_layers",
+    default=(),
+    description=(
+        "`module/path=layer` assignments of helper modules under bindings/_helpers; the longest "
+        "matching path decides."
+    ),
 )
 NATIVE_MODULE_PATH: str = "sqlbuild._native"
 NATIVE_MODULE_PACKAGE: str = "sqlbuild"

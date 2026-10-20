@@ -5,6 +5,9 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTu
 
 use sqlbuild_analysis::assembly::project::main::configured_namespace::configured_namespace;
 
+use sqlbuild_host::entries::models::AdapterHost;
+
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
     AnalysisContext, analysis_context, and_not,
@@ -17,14 +20,12 @@ use crate::bindings::_helpers::compile_driver::assembly_models::{
     binding_rows, compiled_models, project_binding_diagnostics,
 };
 use crate::bindings::_helpers::compile_driver::assembly_sql_tests::assembled_sql_tests;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::{SEMANTIC_COMPLETION, count_stage};
-use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
 use crate::bindings::_helpers::contracts::spec_resolution::{
     resolve_effective_adapter_name, resolve_effective_scenario_config,
 };
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -108,7 +109,7 @@ pub(crate) fn assembled_project<'py>(
     let native: Bound<'py, PyAny> = native_project_facts(inputs, &context, names, &native_session)?;
     let resources: Bound<'py, PyAny> = native_field(&native, "resources")?;
     let scope_index: Bound<'py, PyAny> = scope_index_with_compile_usages(inputs)?;
-    if crate::bindings::_helpers::compile_delta::context::injection().is_none() {
+    if crate::bindings::_helpers::compile_context::delta::injection().is_none() {
         report_scope_index_errors(&scope_index)?;
     }
     let target_values: Bound<'py, PyAny> = effective_target_values(inputs)?;

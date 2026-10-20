@@ -14,8 +14,8 @@ use sqlbuild_core::check_command::models::{CheckGrouping, CheckResultText, Check
 use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::json::models::JsonValue;
 
-use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::build_progress::progress::current_native_progress_projector;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::integration_values::json_value;
 use crate::bindings::_helpers::result_output::terminal_index::current_terminal_event_index;

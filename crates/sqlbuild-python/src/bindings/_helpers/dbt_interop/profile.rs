@@ -11,10 +11,10 @@ use sqlbuild_config::dbt_profile::main::normalize_dbt_profile::normalize_dbt_pro
 use sqlbuild_config::dbt_profile::models::{
     ConnectionKey, ConnectionSource, DbtInitConfig, NormalizedProfile, ProfileEntry, ProfileValue,
 };
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;

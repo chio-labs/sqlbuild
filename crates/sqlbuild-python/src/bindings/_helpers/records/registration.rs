@@ -5,24 +5,62 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PyDictMethods, PyString, PyTuple};
 
 use crate::bindings::_helpers::records::constants::{
-    BUILTIN_PARENT_PREFIX, BUILTINS_MODULE, CACHED_PROPERTIES, CLASS_METHODS, CLASS_PROPERTIES,
-    DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE, DATACLASSES_MODULE, ENUM_MODULE, ENUMS,
-    ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE,
-    SEQUENCE_RECORDS, STR_ENUM, VALUE_ERROR_PARENT,
+    BUILTIN_PARENT_PREFIX, BUILTINS_MODULE, DATACLASS_FIELD_KIND, DATACLASS_FIELDS_ATTRIBUTE,
+    DATACLASSES_MODULE, ENUM_MODULE, ENUMS, ERROR_SPEC_ATTRIBUTE, ERRORS, EXCEPTION_PARENT,
+    NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE, STR_ENUM, VALUE_ERROR_PARENT,
 };
 use crate::bindings::_helpers::records::error_classes::{
     BoundErrorInitializer, ErrorInitializer, class_value,
 };
 use std::collections::HashMap;
 
+use crate::bindings::_helpers::record_behaviours::constants::RECORD_BEHAVIOURS;
+use crate::bindings::_helpers::records::behaviours::{self, behaviours};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::{all_specs, register_specs};
+use crate::bindings::_helpers::records::getters;
+use crate::bindings::_helpers::records::models::GetterEntry;
 use crate::bindings::_helpers::records::models::{
     BoundNativeMethod, EnumSpec, ErrorSpec, NativeMethod, NativeProperty, NativeRecord,
     RecordAttribute, RecordSpec,
 };
+use crate::bindings::_helpers::{
+    analysis, analysis_session, build_progress, compile_command, compile_context, compiled_views,
+    compute_logs, dbt_events, dbt_interop, diagnostics, discovery, event_exporting,
+    execution_history, graph, model_config, planner_entries, planner_migrations, planner_phases,
+    presentation_text, project_assembly, result_output, rules, scopes,
+};
+
+/// The getter tables of every module that defines native pyclasses.
+static GETTER_TABLES: &[&[GetterEntry]] = &[
+    analysis::getters::GETTERS,
+    analysis_session::getters::GETTERS,
+    build_progress::getters::GETTERS,
+    compile_command::getters::GETTERS,
+    compile_context::getters::GETTERS,
+    compiled_views::getters::GETTERS,
+    compute_logs::getters::GETTERS,
+    dbt_events::getters::GETTERS,
+    dbt_interop::getters::GETTERS,
+    diagnostics::getters::GETTERS,
+    discovery::getters::GETTERS,
+    event_exporting::getters::GETTERS,
+    execution_history::getters::GETTERS,
+    graph::getters::GETTERS,
+    model_config::getters::GETTERS,
+    planner_entries::getters::GETTERS,
+    planner_migrations::getters::GETTERS,
+    planner_phases::getters::GETTERS,
+    presentation_text::getters::GETTERS,
+    project_assembly::getters::GETTERS,
+    result_output::getters::GETTERS,
+    rules::getters::GETTERS,
+    scopes::getters::GETTERS,
+];
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    getters::install(GETTER_TABLES);
+    behaviours::install(&RECORD_BEHAVIOURS);
     let py: Python<'_> = module.py();
     module.add_class::<NativeRecord>()?;
     module.add_class::<RecordAttribute>()?;
@@ -60,7 +98,11 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         module.add(spec.name, class)?;
     }
     register_specs(py, registered)?;
-    for (class, name, property) in CLASS_PROPERTIES.iter().flat_map(|group| group.iter()) {
+    for (class, name, property) in behaviours()
+        .properties
+        .iter()
+        .flat_map(|group| group.iter())
+    {
         let descriptor: Py<NativeProperty> = Py::new(
             py,
             NativeProperty {
@@ -71,7 +113,11 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         )?;
         module.getattr(*class)?.setattr(*name, descriptor)?;
     }
-    for (class, name, property) in CACHED_PROPERTIES.iter().flat_map(|group| group.iter()) {
+    for (class, name, property) in behaviours()
+        .cached_properties
+        .iter()
+        .flat_map(|group| group.iter())
+    {
         let descriptor: Py<NativeProperty> = Py::new(
             py,
             NativeProperty {
@@ -82,12 +128,12 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         )?;
         module.getattr(*class)?.setattr(*name, descriptor)?;
     }
-    for (class, name, method) in CLASS_METHODS.iter().flat_map(|group| group.iter()) {
+    for (class, name, method) in behaviours().methods.iter().flat_map(|group| group.iter()) {
         let descriptor: Py<NativeMethod> = Py::new(py, NativeMethod { method: *method })?;
         module.getattr(*class)?.setattr(*name, descriptor)?;
     }
     let sequence: Bound<'_, PyAny> = py.import("collections.abc")?.getattr("Sequence")?;
-    for class in SEQUENCE_RECORDS.iter().flat_map(|group| group.iter()) {
+    for class in behaviours().sequences.iter().flat_map(|group| group.iter()) {
         sequence.call_method1("register", (module.getattr(*class)?,))?;
     }
     Ok(())

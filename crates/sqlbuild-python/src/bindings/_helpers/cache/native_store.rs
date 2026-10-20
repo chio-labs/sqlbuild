@@ -14,10 +14,10 @@ use sqlbuild_cache::digest::main::installed_code_identity::installed_code_identi
 use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::main::open_native_store::open_native_store;
 use sqlbuild_cache::store::models::NativeStore;
+use sqlbuild_host::entries::models::FacadeHost;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::ids::NativeAttr;
 use crate::bindings::_helpers::records::registry;

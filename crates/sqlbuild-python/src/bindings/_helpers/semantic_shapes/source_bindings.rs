@@ -15,7 +15,7 @@ use crate::bindings::_helpers::analysis::schema_request::{
 use crate::bindings::_helpers::analysis_session::stage_functions::infer_native_query_columns;
 use crate::bindings::_helpers::attachments::cursor_intrinsics::analysis_cursor_sql;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::records::construct::{enum_from_value, enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;

@@ -1,7 +1,7 @@
 //! Fixture column inference computed once per fixture body and inference profile.
 
 use crate::bindings::_helpers::analysis_session::fixture_columns::infer_fixture_column_facts;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
