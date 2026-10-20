@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.162.1](https://github.com/chio-labs/sqlbuild/compare/v0.162.0...v0.162.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* stop compute log capture deadlocking a command at exit ([#1165](https://github.com/chio-labs/sqlbuild/issues/1165)) ([21727f6](https://github.com/chio-labs/sqlbuild/commit/21727f6320690e04548d08fece08fa22a0e2138b))
+
 ## [0.162.0](https://github.com/chio-labs/sqlbuild/compare/v0.161.0...v0.162.0) (2026-10-19)
 
 
