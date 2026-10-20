@@ -13,6 +13,8 @@ use sqlbuild_cli::dispatch::main::failure_report::failure_report;
 use sqlbuild_cli::dispatch::main::invocation_policy::invocation_policy;
 use sqlbuild_cli::dispatch::models::{CommandFacts, CommandFailure, InvocationPolicy};
 
+use sqlbuild_host::entries::models::{ExecutorHost, FacadeHost};
+
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords, within};
 use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
 use crate::bindings::_helpers::cli::argv::parse_cli_invocation;
@@ -23,8 +25,6 @@ use crate::bindings::_helpers::cli::observability::{
 };
 use crate::bindings::_helpers::compile_command::report::format_compile_error_json;
 use crate::bindings::_helpers::diff_report::output::render_diff_error_json;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::output_capture::records::invocation_context;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;

@@ -10,6 +10,7 @@ use sqlbuild_core::cli_text::main::semantic_coverage_notice::semantic_coverage_n
 use sqlbuild_core::cli_text::models::{
     CliStyle, CompileTextReport, DiagnosticText, LineageNote, LocationText, ModelLine, RelatedText,
 };
+use sqlbuild_host::entries::models::UserCodeHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::compile_command::surrogates::SurrogateText;
@@ -19,7 +20,6 @@ use crate::bindings::_helpers::compile_outputs::json_report::{
 use crate::bindings::_helpers::discovery::constants::SQL_HOOK_OUTPUT_FIELDS;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::{new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;

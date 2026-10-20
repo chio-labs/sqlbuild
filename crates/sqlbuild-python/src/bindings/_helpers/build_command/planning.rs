@@ -6,6 +6,7 @@ use sqlbuild_core::build_command::constants::{
     SNAPSHOT_FULL_REFRESH_BUILD_HELP, TABLE_TYPE_DOWNGRADE_BUILD_HELP,
 };
 use sqlbuild_core::build_command::models::PlanSafetyGates;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::build_command::defer_clone::run_defer_clone_boundary_prephase;
@@ -18,7 +19,6 @@ use crate::bindings::_helpers::build_progress::progress_text::with_verbose_inspe
 use crate::bindings::_helpers::compile_driver::plan_pipeline::run_compile_pipeline;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::manifest::builder::build_manifest;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::plan_text::format_plan;
 use crate::bindings::_helpers::records::construct::new_record_with;

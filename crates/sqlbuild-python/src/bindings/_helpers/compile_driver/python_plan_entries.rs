@@ -1,5 +1,7 @@
 //! Display-ready Python plan entries and Python-aware selection warnings of a plan.
 
+use sqlbuild_host::entries::models::UserCodeHost;
+
 use crate::bindings::_helpers::graph::python_lifecycle::build_python_sql_run_lifecycle;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::replaced;
@@ -15,7 +17,6 @@ use sqlbuild_analysis::python_plan::main::upstream_closure::upstream_closure;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::RecordId;

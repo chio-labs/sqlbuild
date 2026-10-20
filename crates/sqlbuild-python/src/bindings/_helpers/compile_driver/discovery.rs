@@ -4,6 +4,8 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyDict, PySet, PySetMethods, PyTuple};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use sqlbuild_host::entries::models::{ExecutorHost, UserCodeHost};
+
 use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, keywords, within,
 };
@@ -40,9 +42,7 @@ use crate::bindings::_helpers::discovery::yaml_records::{
 };
 use crate::bindings::_helpers::event_exporting::scope::configure_discovered_event_exporters;
 use crate::bindings::_helpers::frontier::compile_frontier::{FrontierStage, produced};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;

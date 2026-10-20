@@ -5,6 +5,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::wrap_pyfunction;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
@@ -19,7 +20,6 @@ use crate::bindings::_helpers::compile_attachment::effective_config::build_effec
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::plan_pipeline::run_compile_pipeline;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::plan_json::format_plan_json;
 use crate::bindings::_helpers::plan_output::plan_text::format_plan;

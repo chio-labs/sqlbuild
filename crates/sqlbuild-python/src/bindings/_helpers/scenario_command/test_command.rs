@@ -12,11 +12,11 @@ use sqlbuild_core::scenario_command::main::validate_scenario_test_flags::validat
 use sqlbuild_core::scenario_command::models::{
     ScenarioNamespace, ScenarioTestFlags, SqlAnalysisCommand,
 };
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::result_output::documents::format_scenario_execution_json;

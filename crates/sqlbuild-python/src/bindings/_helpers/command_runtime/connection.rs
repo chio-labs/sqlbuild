@@ -12,6 +12,7 @@ use sqlbuild_config::command_connection::constants::{
 use sqlbuild_config::command_connection::main::missing_connection_error::missing_connection_error;
 use sqlbuild_config::command_connection::main::snowflake_key_warning::snowflake_key_warning;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME;
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported, keywords};
 use crate::bindings::_helpers::command_runtime::runtime_errors::raised;
@@ -22,7 +23,6 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::dbt_interop::profile_connection::resolve_raw_dbt_profile_connection;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const CONNECTION_OPTIONS: (&[&str], &[&str]) = (

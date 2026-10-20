@@ -1,5 +1,7 @@
 //! Detect how each selected model and function changed since its recorded build.
 
+use sqlbuild_host::entries::models::{ExecutorHost, UserCodeHost};
+
 use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::contracts::spec_resolution::matching_dynamic_families;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
@@ -28,9 +30,7 @@ use sqlbuild_analysis::planner_changes::models::{
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::compiled_views::compiled_model_view::InferredRow;
 use crate::bindings::_helpers::compiled_views::model_reads::{inferred_rows, star_flags};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_changes::renames::origin_names;
 use crate::bindings::_helpers::planner_changes::results::{
     backfill_result, change_kind, planner_enum, replay_policy_error, schema_findings,

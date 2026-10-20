@@ -5,6 +5,8 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyString, PyStringMethods, PyTu
 
 use sqlbuild_analysis::assembly::project::main::configured_namespace::configured_namespace;
 
+use sqlbuild_host::entries::models::AdapterHost;
+
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::assembly::{AssemblyRequest, AssemblyStage};
 use crate::bindings::_helpers::compile_driver::assembly_analysis::{
@@ -24,7 +26,6 @@ use crate::bindings::_helpers::contracts::spec_resolution::{
     resolve_effective_adapter_name, resolve_effective_scenario_config,
 };
 use crate::bindings::_helpers::model_config::template_data::early_model_templates;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;

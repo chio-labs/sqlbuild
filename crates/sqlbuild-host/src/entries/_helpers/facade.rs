@@ -1,25 +1,6 @@
-//! Public facade entry points: the CLI entry point, compile reuse and the package itself.
+//! Every facade entry of `sqlbuild._native_host`.
 
-use crate::bindings::_helpers::native_host::models::{HostEdge, HostEntry, HostId, HostKind};
-
-/// One facade entry of `sqlbuild._native_host`, indexing `ENTRIES`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum FacadeHost {
-    PackageFile,
-    DispatchWithComputeLogs,
-    ProviderSettingsInputs,
-    StartupInputs,
-    CompileReuseRequest,
-    AuditEvaluationMode,
-    AuditOutcome,
-    AuditSeverity,
-    ThresholdOperator,
-    AttachedAuditTargetKind,
-    FunctionLanguage,
-    SqlTestMode,
-    CursorAlgebraError,
-    SharedInputError,
-}
+use crate::entries::models::{HostEdge, HostEntry, HostKind};
 
 /// Every facade entry, in `FacadeHost` order.
 pub(crate) const ENTRIES: &[HostEntry] = &[
@@ -94,19 +75,3 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         edge: HostEdge::Facade,
     },
 ];
-
-impl FacadeHost {
-    /// The entry's position in `HOST_ENTRIES`, usable in constant tables.
-    pub(crate) const fn id(self) -> HostId {
-        HostId {
-            edge: HostEdge::Facade,
-            index: self as usize,
-        }
-    }
-}
-
-impl From<FacadeHost> for HostId {
-    fn from(entry: FacadeHost) -> Self {
-        entry.id()
-    }
-}

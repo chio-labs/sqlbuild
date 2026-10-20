@@ -4,8 +4,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyBool, PyCFunction, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
+use sqlbuild_host::compile_context::main::record_compile_timing::record_compile_timing;
+
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
-use crate::bindings::_helpers::compile_context::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_driver::inputs::{InputsRequest, attached_inputs};
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::project_graph;

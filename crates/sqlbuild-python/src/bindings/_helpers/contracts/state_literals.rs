@@ -13,7 +13,8 @@ use sqlbuild_state::freshness::constants::STRING_STATE_VALUE_TYPE as STRING_TYPE
 const INTEGER_TYPE: &str = "integer";
 const BOOLEAN_TYPE: &str = "boolean";
 const TIMESTAMP_TYPE: &str = "timestamp";
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use sqlbuild_host::entries::models::ExecutorHost;
+
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_state::freshness::constants::TEXT_TIMESTAMP_STATE_VALUE_TYPE as TEXT_TIMESTAMP_TYPE;

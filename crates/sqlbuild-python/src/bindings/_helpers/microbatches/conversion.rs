@@ -6,11 +6,11 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::PyString;
 use sqlbuild_cursor::algebra::main::cursor_sort_key::cursor_sort_key;
 use sqlbuild_cursor::algebra::models::{Scalar, SortKey};
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_state::microbatches::models::{BoundInterval, CursorBound};
 
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::as_scalar;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

@@ -13,10 +13,10 @@ use sqlbuild_analysis::dag_artifact::models::{
     AssetNodePlan, AssetProjectionPolicy, AssetSpecKindPolicy, CheckKindFilter, CheckPlan,
     DagProjectionCheck, DagProjectionGraph, DagProjectionNode,
 };
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
 use crate::bindings::_helpers::dag_artifact::selection::selected_node_ids;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 

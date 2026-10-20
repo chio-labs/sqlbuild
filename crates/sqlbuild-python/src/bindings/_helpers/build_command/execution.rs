@@ -8,6 +8,7 @@ use sqlbuild_config::effective::models::EffectiveConcurrency;
 use sqlbuild_core::build_command::main::render_run_context::render_run_context;
 use sqlbuild_core::build_command::models::{RunContextFacts, SelectorFileFact};
 use sqlbuild_core::cli_text::models::CliStyle;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords, within};
 use crate::bindings::_helpers::build_command::invocation::BuildContext;
@@ -31,7 +32,6 @@ use crate::bindings::_helpers::cost_telemetry::context::CostContext;
 use crate::bindings::_helpers::cursor::overrides::{cursor_integer, cursor_timestamp};
 use crate::bindings::_helpers::freshness::publication::append_freshness_records;
 use crate::bindings::_helpers::graph::python_node_graph::python_node_graph;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_resolution::cursor_overrides::type_cursor_overrides;
 use crate::bindings::_helpers::records::construct::new_record;

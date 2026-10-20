@@ -6,9 +6,9 @@ use pyo3::prelude::{
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::auditing::main::evaluate_measurement::evaluate_measurement as evaluate;
 use sqlbuild_analysis::auditing::models::{MeasurementOutcome, Thresholds};
+use sqlbuild_host::entries::models::FacadeHost;
 
 use crate::bindings::_helpers::auditing::identity::thresholds as read_thresholds;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::ids::ErrorId;

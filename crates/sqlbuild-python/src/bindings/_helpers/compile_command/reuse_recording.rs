@@ -11,6 +11,7 @@ use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyStri
 use pyo3::{IntoPyObjectExt, pyclass, pyfunction, pymethods, wrap_pyfunction};
 
 use sqlbuild_core::posix_path::main::posix_abspath::posix_abspath;
+use sqlbuild_host::entries::models::{FacadeHost, UserCodeHost};
 
 use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, imported, keywords,
@@ -22,9 +23,7 @@ use crate::bindings::_helpers::compile_command::constants::{
 };
 use crate::bindings::_helpers::compile_command::reuse_attempt::{reuse_rules, write_launch_record};
 use crate::bindings::_helpers::compile_outputs::reuse::artifact_digest;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const MISS_OUTCOME: &str = "miss";

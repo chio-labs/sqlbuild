@@ -12,6 +12,8 @@ use sqlbuild_cli::diff_report::main::read_only_query_problem::read_only_query_pr
 use sqlbuild_cli::diff_report::models::QueryShapeFacts;
 use sqlbuild_cli::diff_report::types::PhaseSeconds;
 
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
+
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
@@ -23,8 +25,6 @@ use crate::bindings::_helpers::diff_report::support::{
     call, cli_error, error_text, none, object, progress_line,
 };
 use crate::bindings::_helpers::diff_report::tolerances::cli_tolerance_overrides;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;

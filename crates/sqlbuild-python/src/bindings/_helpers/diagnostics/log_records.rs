@@ -20,11 +20,11 @@ use sqlbuild_core::diagnostic_routing::main::route_admits::route_admits;
 use sqlbuild_core::diagnostic_routing::main::sql_digest::sql_digest;
 use sqlbuild_core::diagnostic_routing::models::{RecordFacts, RouteOptions};
 use sqlbuild_core::redaction::main::redact_text::redact_text;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::diagnostics::redaction::redacted_value;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;

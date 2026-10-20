@@ -1,6 +1,7 @@
 //! Layouts of the planner, migration, cursor and fingerprint value records hosted natively.
 
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use sqlbuild_host::entries::models::ExecutorHost;
+
 use crate::bindings::_helpers::planner_records::defaults::forward_only_backfill;
 use crate::bindings::_helpers::records::ids::RecordId;
 use crate::bindings::_helpers::records::models::{EnumSpec, FieldDefault, FieldSpec, RecordSpec};

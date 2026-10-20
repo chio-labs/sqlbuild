@@ -13,12 +13,12 @@ use sqlbuild_core::ingestr_command::main::ingestr_destination_table::ingestr_des
 use sqlbuild_core::ingestr_command::main::ingestr_destination_uri::ingestr_destination_uri;
 use sqlbuild_core::ingestr_command::models::{IngestrDestination, IngestrSource};
 use sqlbuild_core::loader_connection::models::LoaderConnection;
+use sqlbuild_host::entries::models::ThirdPartyHost;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const INGESTR_ERROR: ThirdPartyHost = ThirdPartyHost::IngestrIntegrationError;

@@ -1,5 +1,7 @@
 //! `sqb janitor` phases: compile, connect, inspect and plan, clean up and close.
 
+use sqlbuild_host::entries::models::ExecutorHost;
+
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
@@ -18,7 +20,6 @@ use crate::bindings::_helpers::janitor::janitor_facts::Warehouse;
 use crate::bindings::_helpers::janitor::janitor_planning::{
     JanitorSettings, RelationScope, build_plan,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;

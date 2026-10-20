@@ -24,6 +24,7 @@ use sqlbuild_core::event_export::models::{
     EventQueue, ExportPolicy, ExportSeverity, ExportSnapshot, ExporterCounts, ExporterFilter,
     QueuedEvent, SnapshotInputs,
 };
+use sqlbuild_host::entries::models::UserCodeHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::event_exporting::constants::{
@@ -39,7 +40,6 @@ use crate::bindings::_helpers::event_exporting::values::{
 };
 use crate::bindings::_helpers::event_exporting::workers::{DispatcherWorker, Lane, WorkerRole};
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
 use crate::bindings::_helpers::native_threads::exit_signal::{
     interpreter_exiting, signal_interpreter_exit,

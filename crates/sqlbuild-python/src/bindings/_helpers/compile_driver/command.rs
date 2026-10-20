@@ -6,6 +6,9 @@ use pyo3::types::{
     PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PyMapping, PyString, PyTuple,
 };
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use sqlbuild_host::compile_context::main::collect_compile_timings::collect_compile_timings;
+use sqlbuild_host::compile_context::main::timing_milliseconds::timing_milliseconds;
+use sqlbuild_host::compile_context::types::CompileTimingsHandle;
 use std::rc::Rc;
 
 use crate::bindings::_helpers::boundary::python_calls::{
@@ -19,9 +22,6 @@ use crate::bindings::_helpers::compile_command::report::{
 use crate::bindings::_helpers::compile_command::reuse_recording::write_reusable_compile;
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     CompileArtifactWrites, RecordedCompileOutput, compile_reuse_timings, new_artifact_recorder,
-};
-use crate::bindings::_helpers::compile_context::compile_timings::{
-    CompileTimingsHandle, collect_compile_timings, timing_milliseconds,
 };
 use crate::bindings::_helpers::compile_context::input_reads::record_compile_input_reads;
 use crate::bindings::_helpers::compile_driver::analysis::analyze;

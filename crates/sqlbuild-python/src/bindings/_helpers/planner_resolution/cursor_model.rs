@@ -1,5 +1,7 @@
 //! Model cursor orchestration over live warehouse snapshot facts.
 
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
+
 use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_attachment::cursor_roles::resolve_cursor_input_roles;
@@ -7,8 +9,6 @@ use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::model_config::config_values::{
     config_cursor_bound, config_str as authored_config_str,
 };
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::display::resolve_bounded_cursor_override;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;

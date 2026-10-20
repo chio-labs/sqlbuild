@@ -17,6 +17,7 @@ use sqlbuild_core::clone_text::main::render_clone_header::render_clone_header;
 use sqlbuild_core::clone_text::main::validate_clone_policy::validate_clone_policy;
 use sqlbuild_core::clone_text::main::validate_clone_target_names::validate_clone_target_names;
 use sqlbuild_core::clone_text::models::CloneItemText;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
@@ -34,7 +35,6 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;

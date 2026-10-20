@@ -1,64 +1,6 @@
-//! Entry points that run user Python: macros, Python nodes, providers, custom rules and sinks.
+//! Every user code entry of `sqlbuild._native_host`.
 
-use crate::bindings::_helpers::native_host::models::{HostEdge, HostEntry, HostId, HostKind};
-
-/// One user-code entry of `sqlbuild._native_host`, indexing `ENTRIES`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum UserCodeHost {
-    PythonResourceRows,
-    TargetContextWithMacroCallStore,
-    InventoryProjectMacros,
-    LoadProjectMacros,
-    MacroInvocationContext,
-    DiscoverCommandOutputSinkFunctions,
-    ImportPythonRootModule,
-    InstallPythonRootPackage,
-    LoadMaterializeFunction,
-    LoadProviderModule,
-    LoadPythonNodeModule,
-    LoadSinkModule,
-    ModuleFunctions,
-    ModuleProviderClasses,
-    ParameterAnnotations,
-    ProviderUsages,
-    RequiresArguments,
-    RestorePythonRootModules,
-    SourceLine,
-    ValidateEventExporterSignature,
-    ValidateDiscoveredInputs,
-    DiscoverRuntimeExtensions,
-    RunWithMacroBridge,
-    MacroStoreModulePaths,
-    ActiveMacroBridge,
-    LoadCustomMaterializations,
-    PythonNodeDependencyKey,
-    PythonNodeIdentity,
-    BuildHookIdentities,
-    PythonNodeKind,
-    PythonNodeStatus,
-    ProviderInputError,
-    BuildProviderSession,
-    ReadAssetDefinition,
-    ReadAuditFactoryDefinition,
-    ReadCheckDefinition,
-    ReadFactoryDefinition,
-    ReadHookDefinition,
-    ReadLoaderDefinition,
-    ReadTaskDefinition,
-    AuditCase,
-    RelationRenderer,
-    SqlResourceRef,
-    PythonCheckSeverity,
-    SqlResourceRefKind,
-    LoadCustomRules,
-    CustomRulePayloads,
-    EventExporterInputError,
-    EventExporterStateError,
-    InvokeLifecycleEventSink,
-    RunCommandOutputSinks,
-    GetLifecycleEventSinkDefinition,
-    InvokeRecallSink,
-}
+use crate::entries::models::{HostEdge, HostEntry, HostKind};
 
 /// Every user-code entry, in `UserCodeHost` order.
 pub(crate) const ENTRIES: &[HostEntry] = &[
@@ -328,19 +270,3 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         edge: HostEdge::UserCode,
     },
 ];
-
-impl UserCodeHost {
-    /// The entry's position in `HOST_ENTRIES`, usable in constant tables.
-    pub(crate) const fn id(self) -> HostId {
-        HostId {
-            edge: HostEdge::UserCode,
-            index: self as usize,
-        }
-    }
-}
-
-impl From<UserCodeHost> for HostId {
-    fn from(entry: UserCodeHost) -> Self {
-        entry.id()
-    }
-}

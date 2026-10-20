@@ -6,9 +6,10 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_attachments::audits::constants::BUILTIN_AUDITS;
+use sqlbuild_host::compile_context::main::record_compile_timing::record_compile_timing;
+use sqlbuild_host::entries::models::{ExecutorHost, FacadeHost, UserCodeHost};
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
-use crate::bindings::_helpers::compile_context::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::AuditBlockRow;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::AuditFileRow;
 use crate::bindings::_helpers::compiled_project::attachment_inputs::DiagnosticSettings;
@@ -25,10 +26,7 @@ use crate::bindings::_helpers::input_loops::resource_attachment::{
     attach_audits, attach_functions, attach_sources, attach_sql_tests,
 };
 use crate::bindings::_helpers::input_loops::resource_diagnostics::resource_diagnostics;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -611,7 +609,7 @@ pub(crate) fn attach_checks<'py>(
     ) = arguments.value("settings")?.extract()?;
     let scan_cache: &Bound<'py, PyAny> = &arguments.value("scan_cache")?;
     let source_inputs: &Bound<'py, PyAny> = &arguments.value("source_inputs")?;
-    let (tests, scenarios) = record_compile_timing(TEST_TIMING_KEY, || {
+    let (tests, scenarios) = record_compile_timing(TEST_TIMING_KEY, || -> PyResult<_> {
         let attached = attach_sql_tests(
             native_project,
             items(discovered_inputs, "test_files")?

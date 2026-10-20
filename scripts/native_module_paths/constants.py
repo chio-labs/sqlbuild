@@ -2,7 +2,11 @@
 
 import re
 
-SCANNED_SOURCE_ROOTS: tuple[str, ...] = ("crates/sqlbuild-python/src", "crates/sqlbuild-cli/src")
+SCANNED_SOURCE_ROOTS: tuple[str, ...] = (
+    "crates/sqlbuild-python/src",
+    "crates/sqlbuild-cli/src",
+    "crates/sqlbuild-host/src",
+)
 RUST_SOURCE_GLOB: str = "*.rs"
 PACKAGE_LITERAL: re.Pattern[str] = re.compile(r'"(sqlbuild\.[^"\\]*)"')
 DOTTED_PATH: re.Pattern[str] = re.compile(r"sqlbuild(?:\.[A-Za-z_][A-Za-z0-9_]*)+")

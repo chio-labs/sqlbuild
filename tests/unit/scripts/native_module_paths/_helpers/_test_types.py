@@ -47,3 +47,10 @@ class HostDeadCodeRootCase:
     description: str
     expected_missing_targets: tuple[tuple[str, str], ...]
     expected_extra_targets: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class HostResultMirrorCase:
+    description: str
+    expected_mirror_count: int
+    expected_mismatches: tuple[str, ...]

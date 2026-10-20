@@ -10,6 +10,7 @@ use pyo3::types::{
     PyDict, PyDictMethods, PyFrozenSet, PyList, PyListMethods, PyString, PyStringMethods, PyTuple,
 };
 use sqlbuild_core::text::main::python_strip::python_strip;
+use sqlbuild_host::entries::models::AdapterHost;
 use sqlbuild_rules::fix_verification::main::refusal::refusal;
 use sqlbuild_rules::fix_verification::main::with_edits::with_edits;
 use sqlbuild_rules::fix_verification::models::{FixEdit, FixEligibility};
@@ -20,7 +21,6 @@ use crate::bindings::_helpers::compiled_views::relation_keys::{
     RelationKeys, project_relation_keys,
 };
 use crate::bindings::_helpers::discovery::model_file_record::NativeModelFile;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;

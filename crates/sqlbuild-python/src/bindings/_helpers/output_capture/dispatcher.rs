@@ -21,9 +21,9 @@ use sqlbuild_core::command_output::main::queue_output_record::queue_output_recor
 use sqlbuild_core::command_output::models::{
     BufferOutcome, IdleStep, OutputBuffer, OutputQueue, OutputStream, RecordDraft, RecordPriority,
 };
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
 use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;

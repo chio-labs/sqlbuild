@@ -1,8 +1,9 @@
 //! Diagnose literal references to compatibility-only old names.
 
+use sqlbuild_host::entries::models::UserCodeHost;
+
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_migrations::column_objects::{native, text};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::records::construct::enum_member;

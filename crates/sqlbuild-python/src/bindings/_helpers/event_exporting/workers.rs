@@ -13,6 +13,7 @@ use sqlbuild_core::event_export::main::take_lifecycle_event::take_lifecycle_even
 use sqlbuild_core::event_export::models::{
     EventQueue, ExportSeverity, ExportSnapshot, QueuedEvent,
 };
+use sqlbuild_host::entries::models::UserCodeHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::event_exporting::constants::{
@@ -24,7 +25,6 @@ use crate::bindings::_helpers::event_exporting::models::{
 };
 use crate::bindings::_helpers::event_exporting::values::error_type_of;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 
 /// Which long-lived dispatcher thread a worker runs.
 #[derive(Clone, Copy)]

@@ -1,55 +1,6 @@
-//! Adapter runtime entry points: adapter discovery, relation inspection, type system and the shapes adapters consume.
+//! Every adapter entry of `sqlbuild._native_host`.
 
-use crate::bindings::_helpers::native_host::models::{HostEdge, HostEntry, HostId, HostKind};
-
-/// One adapter entry of `sqlbuild._native_host`, indexing `ENTRIES`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AdapterHost {
-    BaseAdapter,
-    AdapterUserError,
-    ColumnInfo,
-    ExpressionInferenceProfile,
-    RelationInfo,
-    RelationLookup,
-    RetentionRequest,
-    RowDiffSampling,
-    RowDiffTolerance,
-    RowDiffTolerances,
-    TableFreshnessMetadata,
-    TableFreshnessRequest,
-    BuiltinAdapter,
-    FrameworkType,
-    LifeCycleEventKind,
-    MigrationTransfer,
-    RetentionScope,
-    TableFreshnessStatus,
-    AdapterSupportsSessionWarehouse,
-    BuiltinAdapterClasses,
-    DiscoverProjectAdapters,
-    ResolveAdapter,
-    GetColumnsForInspection,
-    ListRelationsForInspection,
-    ActiveInspectionCatalog,
-    InspectionQuerySink,
-    OpenInspectionCatalog,
-    RecordInspectionQuery,
-    BuildRelationLookup,
-    ResolveRelationLocationQualifiedName,
-    RunBoundedInspections,
-    RunRecordedInspectionQuery,
-    InspectionQueryRecord,
-    StatementMetadataEffect,
-    ConditionalResultNullability,
-    FirstArgNullability,
-    NormalizeRelationType,
-    NormalizeType,
-    SafeCastNullability,
-    ConnectRecallStore,
-    RunRecallQuery,
-    RunRecallCommand,
-    InsertRecallRows,
-    CloseRecallStore,
-}
+use crate::entries::models::{HostEdge, HostEntry, HostKind};
 
 /// Every adapter entry, in `AdapterHost` order.
 pub(crate) const ENTRIES: &[HostEntry] = &[
@@ -274,19 +225,3 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         edge: HostEdge::Adapter,
     },
 ];
-
-impl AdapterHost {
-    /// The entry's position in `HOST_ENTRIES`, usable in constant tables.
-    pub(crate) const fn id(self) -> HostId {
-        HostId {
-            edge: HostEdge::Adapter,
-            index: self as usize,
-        }
-    }
-}
-
-impl From<AdapterHost> for HostId {
-    fn from(entry: AdapterHost) -> Self {
-        entry.id()
-    }
-}

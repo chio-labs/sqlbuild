@@ -16,6 +16,7 @@ use sqlbuild_cli::diff_report::models::{
 use sqlbuild_cli::diff_report::types::QueryDiffPhase;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, StdlibJsonOptions};
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
 
 use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
@@ -36,9 +37,7 @@ use crate::bindings::_helpers::diff_report::support::{
 };
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::error_class;

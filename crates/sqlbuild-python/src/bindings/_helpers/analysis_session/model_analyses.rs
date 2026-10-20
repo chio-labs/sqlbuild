@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{IntoPyDict, PyDict, PyDictMethods, PyFrozenSet, PyString};
 use sqlbuild_analysis::assembly::analysis_session::types::Shapes;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::analysis::binding_catalog::BindingCatalog;
 use crate::bindings::_helpers::project_assembly::declared_relations::DeclaredShapes;
@@ -27,7 +28,6 @@ use crate::bindings::_helpers::compiled_views::model_input_view::{
     AttachedSchema, NativeModelInput, attached_schema, input_model_name, input_query_sql,
     input_reference_rows,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::field as native_field;

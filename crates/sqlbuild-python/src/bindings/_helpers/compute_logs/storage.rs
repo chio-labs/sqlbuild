@@ -27,6 +27,7 @@ use sqlbuild_cli::compute_logs::main::read_stream_chunk::read_stream_chunk;
 use sqlbuild_cli::compute_logs::main::stream_byte_counts::stream_byte_counts;
 use sqlbuild_cli::compute_logs::main::validate_capture_id::validate_capture_id;
 use sqlbuild_cli::compute_logs::models::CaptureDocument;
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_recall::writer::models::RecallSession;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
@@ -34,7 +35,6 @@ use crate::bindings::_helpers::compute_logs::conversion::{
     capture_id, document, inventory_item, is_exact_int, metadata_model, rejection, storage_error,
     stream_index,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::recall::session::{forward_diagnostic, forward_output};
 use crate::bindings::_helpers::recall::sinks::RecallLifecycleSink;

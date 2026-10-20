@@ -1,48 +1,6 @@
-//! Glue around Python-only third-party integrations: dbt, dlt, ingestr, Dagster and rivers.
+//! Every third party entry of `sqlbuild._native_host`.
 
-use crate::bindings::_helpers::native_host::models::{HostEdge, HostEntry, HostId, HostKind};
-
-/// One third-party entry of `sqlbuild._native_host`, indexing `ENTRIES`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ThirdPartyHost {
-    AssetSelectionCommands,
-    CheckMetadataExcludedKeys,
-    CloneCommand,
-    CompletedExecutionStatuses,
-    DagsterAssetEnabledField,
-    DagsterAssetNodeKinds,
-    DagsterCheckEnabledField,
-    DagsterCheckNameField,
-    DagsterDirectKindNodeKinds,
-    DefaultSelectableNodeKinds,
-    ExplicitSelectionFlags,
-    InsufficientCheckStatus,
-    LiveEventCommands,
-    LoaderNodeKind,
-    LoadSelectableNodeKinds,
-    MaterializableNodeKinds,
-    ModelNodeKind,
-    ScenarioCheckKind,
-    SourceNodeKind,
-    StandaloneCheckCommands,
-    SuccessExecutionStatus,
-    ViewMaterializationType,
-    WarningCheckSeverity,
-    DagsterDagInputError,
-    LoadDbtYaml,
-    RenderSelectedDbtProfileOutput,
-    DbtProfileError,
-    DltIntegrationKind,
-    DltIntegrationError,
-    DltLoaderFunction,
-    DltResourceConfig,
-    DltSourceConfig,
-    IngestrIntegrationKind,
-    IngestrIntegrationError,
-    IngestrLoaderFunction,
-    IngestrSourceConfig,
-    RiversAssetNodeKinds,
-}
+use crate::entries::models::{HostEdge, HostEntry, HostKind};
 
 /// Every third-party entry, in `ThirdPartyHost` order.
 pub(crate) const ENTRIES: &[HostEntry] = &[
@@ -232,19 +190,3 @@ pub(crate) const ENTRIES: &[HostEntry] = &[
         edge: HostEdge::ThirdParty,
     },
 ];
-
-impl ThirdPartyHost {
-    /// The entry's position in `HOST_ENTRIES`, usable in constant tables.
-    pub(crate) const fn id(self) -> HostId {
-        HostId {
-            edge: HostEdge::ThirdParty,
-            index: self as usize,
-        }
-    }
-}
-
-impl From<ThirdPartyHost> for HostId {
-    fn from(entry: ThirdPartyHost) -> Self {
-        entry.id()
-    }
-}

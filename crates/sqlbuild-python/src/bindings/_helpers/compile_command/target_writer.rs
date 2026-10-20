@@ -12,6 +12,8 @@ use pyo3::{IntoPyObjectExt, pyclass, pyfunction, wrap_pyfunction};
 use sqlbuild_cache::artifacts::main::new_sql_test_record::new_sql_test_record;
 use sqlbuild_cache::artifacts::main::reusable_sql_test_record::reusable_sql_test_record;
 use sqlbuild_cache::artifacts::models::SqlTestArtifactRecord;
+use sqlbuild_host::compile_context::main::record_compile_timing::record_compile_timing;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::analysis::sql_test_comparisons::single_comparison_sql;
 use crate::bindings::_helpers::boundary::python_calls::{
@@ -26,7 +28,6 @@ use crate::bindings::_helpers::compile_command::test_artifact_cache::{
     IdentityContext, artifact_identity_payload, artifact_record_key_payload, identity_context,
     payload_digests, read_cache, write_cache, yield_interpreter,
 };
-use crate::bindings::_helpers::compile_context::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_driver::stage_work::{
     SQL_TEST_ARTIFACT_PLANS, SQL_TEST_MODEL_CHAINS, count_stage,
 };
@@ -37,7 +38,6 @@ use crate::bindings::_helpers::compile_outputs::runtime_target::{
     compiled_sql_test_path, planned_sql_test_path,
 };
 use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;

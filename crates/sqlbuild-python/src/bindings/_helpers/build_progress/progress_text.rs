@@ -14,10 +14,10 @@ use sqlbuild_core::progress::main::format_expectation_name::format_expectation_n
 use sqlbuild_core::progress::main::format_inspection_record::format_inspection_record;
 use sqlbuild_core::progress::models::{ExpectationStep, InspectionRecord};
 use sqlbuild_core::progress::types::DifferenceSample;
+use sqlbuild_host::entries::models::AdapterHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, within};
 use crate::bindings::_helpers::build_progress::progress::write_persistent;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

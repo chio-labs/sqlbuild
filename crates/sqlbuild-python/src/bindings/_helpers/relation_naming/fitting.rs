@@ -5,9 +5,9 @@ use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_analysis::identifier_fitting::main::fit_artifact_logical_name::fit_artifact_logical_name as fit_logical;
 use sqlbuild_analysis::identifier_fitting::main::fit_auxiliary_relation_name::fit_auxiliary_relation_name as fit_auxiliary;
+use sqlbuild_host::entries::models::FacadeHost;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 
 pub(crate) fn shared_error(py: Python<'_>, message: String) -> PyErr {

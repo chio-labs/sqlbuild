@@ -2,6 +2,7 @@
 
 use pyo3::prelude::{Bound, PyAny, PyResult, Python};
 use pyo3::types::PyString;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, within};
 use crate::bindings::_helpers::compile_driver::config_validation::{
@@ -10,7 +11,6 @@ use crate::bindings::_helpers::compile_driver::config_validation::{
 use crate::bindings::_helpers::discovery::project_config::{
     load_local_config_file, load_project_config_file,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::ids::RecordId;

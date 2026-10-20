@@ -8,6 +8,7 @@ use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyfunction};
 use sqlbuild_core::dagster_invocation::main::normalize_check_name::normalize_check_name;
 use sqlbuild_core::dagster_invocation::main::topological_order::topological_order;
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::dagster_invocation::access::{
@@ -15,7 +16,6 @@ use crate::bindings::_helpers::dagster_invocation::access::{
     constant_contains, get, items, merged, node_with_id, nodes_by_id, path_set, string_list,
     text_of, value_or,
 };
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_items;

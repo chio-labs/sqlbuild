@@ -7,6 +7,8 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyBool;
 use sqlbuild_analysis::janitor_planning::constants::UNTRACKED_QUERY_DIFF_REASON;
 
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
+
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::fingerprints::storage_io::read_latest_fingerprints;
 use crate::bindings::_helpers::janitor::janitor_keys::{
@@ -19,8 +21,6 @@ const QUERY_ARTIFACT_LIFECYCLE: ExecutorHost = ExecutorHost::QueryDiffArtifactLi
 const RELATION_LOOKUP: AdapterHost = AdapterHost::BuildRelationLookup;
 const LOG_DEBUG_EVENT: ExecutorHost = ExecutorHost::LogDebugEvent;
 const EXECUTION_LOGGER: &str = "sqlbuild.execution";
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use sqlbuild_core::constants::FINGERPRINT_TABLE_NAME;

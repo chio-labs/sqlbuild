@@ -7,8 +7,8 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::pyclass::CompareOp;
 use pyo3::types::{PyDict, PyTuple, PyType};
 use pyo3::{IntoPyObjectExt, pyclass, pymethods};
+use sqlbuild_host::entries::models::HostId;
 
-use crate::bindings::_helpers::native_host::models::HostId;
 use crate::bindings::_helpers::records::fields::{
     build_values, cached_value, compared_values, frozen_error, ordered_comparison, record_spec,
     repr_text, store_cached,

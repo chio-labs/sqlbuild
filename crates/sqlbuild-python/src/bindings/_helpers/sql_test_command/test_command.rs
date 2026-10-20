@@ -16,6 +16,7 @@ use sqlbuild_core::test_command::main::test_group_name::test_group_name;
 use sqlbuild_core::test_command::main::test_name_width::test_name_width;
 use sqlbuild_core::test_command::main::test_outcome_status::test_outcome_status;
 use sqlbuild_core::test_command::models::{TestFailure, TestInspectionEntry, TestPlanWarning};
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
@@ -33,7 +34,6 @@ use crate::bindings::_helpers::compile_driver::pipeline_entries::build_static_pi
 use crate::bindings::_helpers::compile_driver::static_context::compile_static_command_context;
 use crate::bindings::_helpers::compile_outputs::runtime_target::write_test_runtime_target;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::command_plans::build_test_command_plan;
 use crate::bindings::_helpers::records::construct::error_class;

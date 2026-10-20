@@ -10,6 +10,7 @@ use sqlbuild_analysis::planner_strategy::main::microbatch_lookback::microbatch_l
 use sqlbuild_analysis::planner_strategy::main::physical_layout_warning::physical_layout_warning;
 use sqlbuild_analysis::planner_strategy::main::table_type_ddl::table_type_ddl;
 use sqlbuild_analysis::planner_strategy::models::{CursorTypeCheck, LookbackConfig};
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
 use sqlbuild_model_config::execution_limits::constants::MODEL_MAX_DURATION_KEY;
 use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
 use sqlbuild_model_config::execution_limits::models::ExecutionLimit;
@@ -21,8 +22,6 @@ use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::model_config::config_values::{
     config_bool, config_cursor_bound, config_int, config_str, config_string_tuple,
 };
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_strategy::constants::{
     CUSTOM_MATERIALIZATION, DDL_SEPARATOR, ENFORCED_CONTRACT, MICROBATCH_MODE,

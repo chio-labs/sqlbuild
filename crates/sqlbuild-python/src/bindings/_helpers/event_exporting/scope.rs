@@ -9,15 +9,14 @@ use pyo3::prelude::{
 };
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyTuple};
+use sqlbuild_host::entries::models::{ExecutorHost, UserCodeHost};
 
 use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, context_variable,
 };
 use crate::bindings::_helpers::event_exporting::constants::SCOPE_CONTEXT_VARIABLE;
 use crate::bindings::_helpers::event_exporting::models::BoundEventExporter;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 

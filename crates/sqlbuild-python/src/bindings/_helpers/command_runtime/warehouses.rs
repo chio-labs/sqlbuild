@@ -16,6 +16,7 @@ use sqlbuild_config::command_connection::main::unsupported_cli_warehouse::unsupp
 use sqlbuild_config::command_connection::models::AuthoredWarehouse;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
+use sqlbuild_host::entries::models::AdapterHost;
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
@@ -28,7 +29,6 @@ use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_ada
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::model_config::template_data::expanded_template_data;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

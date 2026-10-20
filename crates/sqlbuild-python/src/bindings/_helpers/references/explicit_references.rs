@@ -20,6 +20,7 @@ use sqlbuild_analysis::explicit_references::models::{
 use sqlbuild_analysis::explicit_references::types::ResourceKey;
 use sqlbuild_config::project::main::explicit_references_help::explicit_references_help as references_help;
 use sqlbuild_core::panics::main::native_failure::native_failure;
+use sqlbuild_host::entries::models::UserCodeHost;
 use sqlbuild_pysource::literal_sql::main::literal_sql_calls::literal_sql_calls;
 use sqlbuild_pysource::literal_sql::models::FunctionSource;
 
@@ -27,7 +28,6 @@ use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::graph::execution_gates::model_python_hook_names;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;

@@ -1,5 +1,7 @@
 //! Plan a compiled project over an open warehouse connection, and open that connection.
 
+use sqlbuild_host::entries::models::UserCodeHost;
+
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::deferral::build_deferred_locations;
 use crate::bindings::_helpers::compile_driver::deferral::gather_deferred_relations;
@@ -21,7 +23,6 @@ use crate::bindings::_helpers::compile_driver::phases::monotonic;
 use crate::bindings::_helpers::graph::python_node_graph::run_selection_from_inputs;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 

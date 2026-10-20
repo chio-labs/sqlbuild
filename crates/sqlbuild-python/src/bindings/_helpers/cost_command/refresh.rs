@@ -8,6 +8,7 @@ use sqlbuild_core::cost_command::constants::{
 };
 use sqlbuild_core::cost_command::main::accepts_cost_refresh::accepts_cost_refresh;
 use sqlbuild_core::cost_command::models::CostCoverage;
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
@@ -20,7 +21,6 @@ use crate::bindings::_helpers::cost_report::functions::read_cost_run;
 use crate::bindings::_helpers::cost_report::functions::resolve_cost_run;
 use crate::bindings::_helpers::cost_report::functions::write_cost_run;
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;

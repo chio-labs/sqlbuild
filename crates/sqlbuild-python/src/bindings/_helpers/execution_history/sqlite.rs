@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3::types::{PyDict, PyTuple};
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_state::execution_history::constants::{
     DEFAULT_PAGE_LIMIT, MEMORY_PATH, RUN_CURSOR_TIMESTAMP, SCHEMA_VERSION, SQLITE_ALL_EVENTS,
     SQLITE_ALL_RUNS, SQLITE_BEGIN, SQLITE_BUSY_TIMEOUT_MS, SQLITE_COMMIT, SQLITE_DELETE_RUNS,
@@ -51,7 +52,6 @@ use crate::bindings::_helpers::execution_history::conversion::{
 use crate::bindings::_helpers::execution_history::statements::{
     column, execute, execute_plain, execute_query, fetch_one, locked, tuple_of,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

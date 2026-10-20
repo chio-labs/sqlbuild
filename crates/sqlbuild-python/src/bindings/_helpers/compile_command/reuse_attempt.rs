@@ -12,6 +12,7 @@ use sqlbuild_cli::replay::main::write_launch_record::write_launch_record as writ
 use sqlbuild_core::command_output::constants::INVOCATION_CONTEXT_ENV;
 
 use sqlbuild_cli::replay::constants::{LAUNCH_RECORD_DIRECTORY, LAUNCH_RECORD_FORMAT};
+use sqlbuild_host::entries::models::{ExecutorHost, FacadeHost};
 
 use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::build_progress::progress::{
@@ -45,8 +46,6 @@ use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::compile_outputs::reuse::{ReuseCheckPy, check_compile_reuse};
 use crate::bindings::_helpers::frontier::cache_directory::cache_directory;
 use crate::bindings::_helpers::macro_bridge::first_compile::keep_delta_claim;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 use crate::bindings::_helpers::records::fields::field as native_field;

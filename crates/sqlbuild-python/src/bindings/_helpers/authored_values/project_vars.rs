@@ -1,6 +1,7 @@
 //! Project variable values rendered as the text SQL and config interpolation inserts.
 
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
+use sqlbuild_host::entries::models::FacadeHost;
+
 use crate::bindings::_helpers::native_host::host;
 use pyo3::prelude::{
     Bound, PyAny, PyAnyMethods, PyErr, PyModule, PyModuleMethods, PyResult, Python,

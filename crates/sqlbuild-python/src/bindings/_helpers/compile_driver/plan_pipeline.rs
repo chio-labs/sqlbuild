@@ -3,6 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::PyDict;
 use pyo3::{IntoPyObject, PyErr, pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::compile_driver::phases::monotonic;
@@ -17,7 +18,6 @@ use crate::bindings::_helpers::compile_driver::selection_phases::{
     apply_unit_test_selectors, resolve_configured_rule_selection,
 };
 use crate::bindings::_helpers::frontier::stage_capture::write_plan_capture;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;

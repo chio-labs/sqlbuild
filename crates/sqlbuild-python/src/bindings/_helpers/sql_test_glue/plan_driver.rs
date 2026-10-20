@@ -2,9 +2,9 @@
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use sqlbuild_host::compile_context::main::add_compile_timing::add_compile_timing;
 
 use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
-use crate::bindings::_helpers::compile_context::compile_timings::add_compile_timing;
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
 use crate::bindings::_helpers::records::construct::{error_class, new_record_with};

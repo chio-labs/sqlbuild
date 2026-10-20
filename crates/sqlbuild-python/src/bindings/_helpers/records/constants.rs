@@ -1,11 +1,12 @@
 //! The layouts of every native record class.
 
+use sqlbuild_host::entries::models::ExecutorHost;
+
 use crate::bindings::_helpers::compile_records::constants::COMPILE_VALUE_RECORDS;
 use crate::bindings::_helpers::compiler_enums::constants::COMPILER_ENUMS;
 use crate::bindings::_helpers::compiler_errors::constants::COMPILER_ERRORS;
 use crate::bindings::_helpers::compiler_records::constants::COMPILER_RECORDS;
 use crate::bindings::_helpers::contract_records::constants::CONTRACT_RECORDS;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::planner_records::constants::{
     PLANNER_ENUMS, PLANNER_RECORDS, PLANNER_VALUE_RECORDS,
 };

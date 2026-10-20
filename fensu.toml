@@ -1573,6 +1573,7 @@ crate_names = [
     "sqlbuild-core",
     "sqlbuild-cursor",
     "sqlbuild-discovery",
+    "sqlbuild-host",
     "sqlbuild-model-config",
     "sqlbuild-pysource",
     "sqlbuild-python",
