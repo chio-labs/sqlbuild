@@ -24,7 +24,7 @@ use crate::bindings::_helpers::format_command::files::{
     FormatChange, PendingWrite, persist_changes,
 };
 use crate::bindings::_helpers::format_command::stages::{
-    each_file, format_header_text, lint_header_text, parse_faults,
+    each_file, format_header_text, lint_header_text, on_format_workers, parse_faults,
 };
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
@@ -132,7 +132,8 @@ fn native<T: Send>(
     py: Python<'_>,
     operation: impl FnOnce() -> Result<T, String> + Send,
 ) -> PyResult<T> {
-    py.compiler_detach(operation).map_err(value_error)
+    py.compiler_detach(|| on_format_workers(operation))
+        .map_err(value_error)
 }
 
 impl<'py> Run<'_, '_, 'py> {
