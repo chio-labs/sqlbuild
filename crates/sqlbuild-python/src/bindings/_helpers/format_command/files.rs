@@ -18,12 +18,15 @@ const CARRIAGE_RETURN_LINE_FEED: &str = "\r\n";
 /// One file the formatter would change: its path and its text before and after.
 pub(crate) struct FormatChange<'py> {
     pub(crate) path: Bound<'py, PyAny>,
+    /// The run's index of the changed file.
+    pub(crate) entry: usize,
     pub(crate) before: String,
     pub(crate) after: String,
 }
 
 /// One file a format run would leave in its final text.
 pub(crate) struct PendingWrite<'t> {
+    pub(crate) entry: usize,
     pub(crate) path: &'t Path,
     /// The text read, or empty for a file the run did not collect.
     pub(crate) authored: &'t str,
@@ -87,19 +90,18 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(write_file_atomically, module)?)
 }
 
-/// The changed files of `writes`, in their order, written in place across the worker threads
-/// when `write` is set; a failed write raises the first failure in order.
+/// The changed files of `writes` in order, written in parallel when `write` is set.
 pub(crate) fn persist_changes<'py>(
     py: Python<'py>,
     writes: &[PendingWrite<'_>],
     write: bool,
 ) -> PyResult<Vec<FormatChange<'py>>> {
-    let changed: Vec<(&Path, String, String)> = writes
+    let changed: Vec<(&PendingWrite<'_>, String, String)> = writes
         .iter()
         .filter_map(|pending| {
             let after: String = with_newline_style(pending.contents, pending.newline);
             let before: String = with_newline_style(pending.authored, pending.newline);
-            (after != before).then_some((pending.path, before, after))
+            (after != before).then_some((pending, before, after))
         })
         .collect();
     if write {
@@ -107,7 +109,7 @@ pub(crate) fn persist_changes<'py>(
             on_format_workers(|| {
                 let written: Vec<Result<(), String>> = changed
                     .par_iter()
-                    .map(|(path, _, after)| replace_file(path, after))
+                    .map(|(pending, _, after)| replace_file(pending.path, after))
                     .collect();
                 written.into_iter().collect::<Result<(), String>>()
             })
@@ -116,9 +118,10 @@ pub(crate) fn persist_changes<'py>(
     }
     changed
         .into_iter()
-        .map(|(path, before, after)| {
+        .map(|(pending, before, after)| {
             Ok(FormatChange {
-                path: path.into_pyobject(py)?.into_any(),
+                path: pending.path.into_pyobject(py)?.into_any(),
+                entry: pending.entry,
                 before,
                 after,
             })

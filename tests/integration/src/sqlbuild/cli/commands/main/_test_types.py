@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import pytest
+
 from sqlbuild._native import CursorOverrides
 
 
@@ -1208,3 +1210,38 @@ class TypedConfigReadsTestCase:
     description: str
     unread_keys: str
     expected_same_reads: bool
+
+
+@dataclass(frozen=True)
+class FormatCacheReuseTestCase:
+    """A second `format --check` of an unchanged project and the work its cache saves."""
+
+    description: str
+    arguments: tuple[str, ...]
+    expected_hits: int
+    expected_misses: int
+    expected_formatted_files: int
+
+
+@dataclass(frozen=True)
+class FormatCacheInvalidationTestCase:
+    """A change after a clean `format --check` and the files the next check formats again."""
+
+    description: str
+    change: Callable[[Path, pytest.MonkeyPatch], None]
+    expected_hits: int
+    expected_misses: int
+    expected_exit_code: int
+    expected_recheck_hits: int
+    expected_output_fragment: str = ""
+
+
+@dataclass(frozen=True)
+class FormatCacheFaultTestCase:
+    """A file whose remaining fault keeps it out of the format result cache."""
+
+    description: str
+    removed_text: str
+    expected_code: str
+    expected_hits: int
+    expected_misses: int

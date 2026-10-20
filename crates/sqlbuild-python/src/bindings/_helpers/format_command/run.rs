@@ -1,11 +1,13 @@
 //! Format every authored SQL file and collect the violations that remain.
 
 use std::collections::{BTreeSet, HashMap};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods};
 use pyo3::{IntoPyObject, IntoPyObjectExt};
+use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_core::format_command::main::collect_lint_files::collect_lint_files;
 use sqlbuild_rules::dsl_headers::models::{HeaderRulesConfig, HeaderViolation};
 use sqlbuild_rules::lint_text::main::format_sql_bodies::format_sql_bodies;
@@ -17,9 +19,10 @@ use sqlbuild_rules::lint_text::models::{
 use crate::bindings::_helpers::boundary::panics::value_error;
 use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_driver::stage_work::{
-    FORMAT_LINT_BATCHES, FORMAT_LINT_FILES, count_stage,
+    FORMAT_CACHE_HITS, FORMAT_CACHE_MISSES, FORMAT_LINT_BATCHES, FORMAT_LINT_FILES, count_stage,
 };
 use crate::bindings::_helpers::discovery::description_inputs::externally_described_models;
+use crate::bindings::_helpers::format_command::cache::FormatCache;
 use crate::bindings::_helpers::format_command::files::{
     FormatChange, PendingWrite, persist_changes,
 };
@@ -51,6 +54,8 @@ pub(crate) struct FormatRequest<'a, 'py> {
     pub(crate) fixtures_only: bool,
     pub(crate) write: bool,
     pub(crate) fix: bool,
+    /// Whether files a previous run found clean are skipped, and clean files remembered.
+    pub(crate) cache: bool,
 }
 
 /// The outcome of one format run, with Python violations and Rule fix reports.
@@ -61,7 +66,7 @@ pub(crate) struct FormatOutcome<'py> {
     pub(crate) rule_fixes: Vec<Bound<'py, PyAny>>,
     /// Paths whose formatting was declined, so their applied fixes were not kept.
     pub(crate) declined: BTreeSet<PathBuf>,
-    /// The final text of every collected file.
+    /// The final text of every collected file a violation may quote.
     pub(crate) final_contents: HashMap<PathBuf, String>,
 }
 
@@ -501,6 +506,91 @@ fn lint_final_contents<'py>(
     Ok(findings)
 }
 
+/// The entries `findings` are about; Python findings come only from uncached Rule fixes.
+fn dirty_entries<'f>(findings: &'f [Finding<'_>]) -> impl Iterator<Item = usize> + 'f {
+    findings.iter().filter_map(|finding| match finding {
+        Finding::Header(index, _) | Finding::Unsafe(index, _) | Finding::Suppression(index, _) => {
+            Some(*index)
+        }
+        Finding::Python(_) => None,
+    })
+}
+
+/// The effective settings that shape formatting, part of every cache key.
+fn cache_settings(request: &FormatRequest<'_, '_>) -> PyResult<String> {
+    let config: &Bound<'_, PyAny> = request.config;
+    let mut settings: Vec<String> = Vec::new();
+    for name in [
+        "line_width",
+        "max_description_lines",
+        "max_literal_length",
+        "max_ranking_order_by",
+    ] {
+        settings.push(native_field(config, name)?.extract::<i64>()?.to_string());
+    }
+    settings.push(native_field(config, "dialect")?.extract()?);
+    settings.push(request.fixtures_only.to_string());
+    Ok(settings.join("\0"))
+}
+
+/// SQL test files fixture-null formatting rewrites from model contracts, never skipped.
+fn fixture_paths(
+    directory: &Path,
+    fixture_inputs: Option<&(Bound<'_, PyAny>, Bound<'_, PyAny>)>,
+) -> PyResult<BTreeSet<PathBuf>> {
+    let Some((discovered, _)) = fixture_inputs else {
+        return Ok(BTreeSet::new());
+    };
+    let mut paths: BTreeSet<PathBuf> = BTreeSet::new();
+    for file in native_field(discovered, "test_files")?.try_iter()? {
+        let relative: PathBuf = native_field(&file?, "relative_path")?.extract()?;
+        let path: PathBuf = directory.join(relative);
+        let _ = paths.insert(fs::canonicalize(&path).unwrap_or_else(|_| path.clone()));
+        let _ = paths.insert(path);
+    }
+    Ok(paths)
+}
+
+/// Collected files not cached as clean, each with its cache key, or none when not skippable.
+fn uncached_entries(
+    py: Python<'_>,
+    (cache, uncacheable): (&mut FormatCache, &BTreeSet<PathBuf>),
+    directory: &Path,
+    collected: Vec<(PathBuf, String)>,
+) -> PyResult<(Vec<Entry>, Vec<Option<ContentDigest>>)> {
+    let shared: &FormatCache = cache;
+    let keys: Vec<Option<ContentDigest>> = native(py, || {
+        each_file(&collected, |(path, contents)| {
+            let skippable: bool = uncacheable.is_empty()
+                || !(uncacheable.contains(path)
+                    || fs::canonicalize(path)
+                        .is_ok_and(|resolved| uncacheable.contains(&resolved)));
+            Ok(skippable.then(|| shared.key(&project_relative_path(path, directory), contents)))
+        })
+    })?;
+    let mut entries: Vec<Entry> = Vec::new();
+    let mut kept: Vec<Option<ContentDigest>> = Vec::new();
+    let (mut hits, mut misses): (u64, u64) = (0, 0);
+    for ((path, original), key) in collected.into_iter().zip(keys) {
+        if let Some(key) = key.as_ref() {
+            if cache.is_clean(key) {
+                hits += 1;
+                continue;
+            }
+            misses += 1;
+        }
+        entries.push(Entry {
+            path,
+            original,
+            collected: true,
+        });
+        kept.push(key);
+    }
+    count_stage(py, FORMAT_CACHE_HITS, hits)?;
+    count_stage(py, FORMAT_CACHE_MISSES, misses)?;
+    Ok((entries, kept))
+}
+
 /// Format the project's authored SQL files and report what remains.
 pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<FormatOutcome<'py>> {
     let py: Python<'py> = request.project_dir.py();
@@ -521,14 +611,30 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     let collected: Vec<(PathBuf, String)> = collect_lint_files(&directory, request.selected)
         .map_err(|error| pyo3::exceptions::PyOSError::new_err(error.to_string()))?;
     let files_checked: usize = collected.len();
-    let entries: Vec<Entry> = collected
-        .into_iter()
-        .map(|(path, original)| Entry {
-            path,
-            original,
-            collected: true,
-        })
-        .collect();
+    let mut cache: Option<FormatCache> = if request.cache {
+        FormatCache::open(py, &directory, cache_settings(request)?)?
+    } else {
+        None
+    };
+    let (entries, keys): (Vec<Entry>, Vec<Option<ContentDigest>>) = match cache.as_mut() {
+        Some(cache) => {
+            let uncacheable: BTreeSet<PathBuf> =
+                fixture_paths(&directory, fixture_inputs.as_ref())?;
+            uncached_entries(py, (cache, &uncacheable), &directory, collected)?
+        }
+        None => {
+            let entries: Vec<Entry> = collected
+                .into_iter()
+                .map(|(path, original)| Entry {
+                    path,
+                    original,
+                    collected: true,
+                })
+                .collect();
+            let keys: Vec<Option<ContentDigest>> = vec![None; entries.len()];
+            (entries, keys)
+        }
+    };
     let config: HeaderRulesConfig = rules_config(request.config)?;
     let original_lints: Vec<Vec<HeaderViolation>> = native(py, || {
         each_file(&entries, |entry| lint_header_text(&entry.original, config))
@@ -582,6 +688,7 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
         .map(|index| {
             let entry: &Entry = &run.entries[index];
             PendingWrite {
+                entry: index,
                 path: &entry.path,
                 authored: &entry.original,
                 contents: final_texts[&index],
@@ -600,6 +707,10 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
         lint_final_contents(&run, (&final_texts, &original_lints), &applied)?
     };
     findings.append(&mut applied.faults);
+    let findings_seen: BTreeSet<usize> = dirty_entries(&findings).collect();
+    let python_findings: bool = findings
+        .iter()
+        .any(|finding| matches!(finding, Finding::Python(_)));
     let violations: Vec<Bound<'py, PyAny>> = drop_resolved_description_faults(
         request.project_dir,
         violation_records(py, &run.entries, findings)?,
@@ -630,10 +741,30 @@ pub(crate) fn run_format<'py>(request: &FormatRequest<'_, 'py>) -> PyResult<Form
     .into_iter()
     .map(|finding| Finding::Suppression(collected[finding.file], finding))
     .collect();
+    if let Some(cache) = cache.as_mut() {
+        let dirty: BTreeSet<usize> = changes
+            .iter()
+            .map(|change| change.entry)
+            .chain(findings_seen.iter().copied())
+            .chain(dirty_entries(&suppressions))
+            .collect();
+        for (index, key) in keys.iter().enumerate() {
+            if let Some(key) = key.filter(|_| !dirty.contains(&index)) {
+                cache.record_clean(key);
+            }
+        }
+        cache.save(py);
+    }
+    let reported: BTreeSet<usize> = findings_seen
+        .iter()
+        .copied()
+        .chain(dirty_entries(&suppressions))
+        .collect();
     let mut violations: Vec<Bound<'py, PyAny>> = violations;
     violations.extend(violation_records(py, &run.entries, suppressions)?);
     let final_contents: HashMap<PathBuf, String> = collected
         .iter()
+        .filter(|index| python_findings || reported.contains(index))
         .map(|index| {
             let entry: &Entry = &run.entries[*index];
             let text: &str = final_texts
