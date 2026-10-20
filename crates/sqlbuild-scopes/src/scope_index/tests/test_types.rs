@@ -115,3 +115,11 @@ pub(super) struct MacroDigestTestCase {
     pub(super) source: &'static str,
     pub(super) expected_digest: &'static str,
 }
+
+/// A `/`-separated path and how Python prints it and its parent.
+pub(super) struct PosixPathTestCase {
+    pub(super) description: &'static str,
+    pub(super) path: &'static str,
+    pub(super) expected_text: &'static str,
+    pub(super) expected_parent: &'static str,
+}

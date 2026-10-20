@@ -58,7 +58,8 @@ pub(crate) const AUDIT_DECLARATION: NamedKind = NamedKind {
     label: "Generic audit",
     role: "audits/generic",
 };
-use crate::bindings::_helpers::scopes::compile_usages::{CURRENT_FOLDER, scope_path_message};
+use crate::bindings::_helpers::scopes::compile_usages::CURRENT_FOLDER;
+use sqlbuild_scopes::scope_index::main::declared_scope_path_message::declared_scope_path_message;
 
 /// The usage of the indexed declaration `name`, if any, reporting S006 when it is hidden.
 pub(crate) fn named_usages<'py>(
@@ -114,7 +115,7 @@ fn path_error(context: &LoopContext<'_, '_>, declared: &DeclaredScope, label: &s
     match context
         .classes
         .scope_path_error
-        .call1((scope_path_message(declared, label),))
+        .call1((declared_scope_path_message(declared, label),))
     {
         Ok(instance) => PyErr::from_value(instance),
         Err(failure) => failure,

@@ -5,6 +5,7 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_scopes::compile_usages::models::UsageKey;
 use sqlbuild_scopes::placement::main::diagnostic_order::diagnostic_order;
 use sqlbuild_scopes::placement::main::placement_diagnostics::placement_diagnostics;
 use sqlbuild_scopes::placement::main::relocate_for_resource_move::relocate_for_resource_move;
@@ -14,13 +15,11 @@ use sqlbuild_scopes::placement::models::{
 use sqlbuild_scopes::scope_index::models::ResourceIdentity;
 
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::records::construct::enum_member;
-use crate::bindings::_helpers::records::construct::error_class;
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::replaced_keywords;
+use crate::bindings::_helpers::records::construct::{enum_member, error_class};
+use crate::bindings::_helpers::records::fields::{field as native_field, replaced_keywords};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::scopes::compile_usages::{
-    MergeRows, SourceRow, UsageRow, merged_usage_rows, model_schema_scope_usages,
+    MergeRows, SourceRow, merged_usage_rows, model_schema_scope_usages,
 };
 use crate::bindings::_helpers::scopes::placement::{QualifiedRow, resource_identity};
 use crate::bindings::_helpers::scopes::scope_objects::{
@@ -56,8 +55,8 @@ fn tuple_from<'py>(py: Python<'py>, items: Vec<Bound<'py, PyAny>>) -> PyResult<B
     Ok(PyTuple::new(py, items)?.into_any())
 }
 
-fn usage_row(usage: &Bound<'_, PyAny>) -> PyResult<UsageRow> {
-    Ok(UsageRow {
+fn usage_row(usage: &Bound<'_, PyAny>) -> PyResult<UsageKey> {
+    Ok(UsageKey {
         consumer: qualified_row(&native_field(usage, "consumer")?)?,
         declaration: qualified_row(&native_field(usage, "declaration")?)?,
         kind: value_of(usage, "kind")?,
@@ -125,11 +124,11 @@ fn merged_usage_index<'py>(
         .iter()
         .map(|record| dependency_row(&record))
         .collect::<PyResult<_>>()?;
-    let prior_rows: Vec<UsageRow> = prior
+    let prior_rows: Vec<UsageKey> = prior
         .iter()
         .map(|usage| usage_row(&usage))
         .collect::<PyResult<_>>()?;
-    let collected_rows: Vec<UsageRow> = collected
+    let collected_rows: Vec<UsageKey> = collected
         .iter()
         .map(|usage| usage_row(&usage))
         .collect::<PyResult<_>>()?;

@@ -1,5 +1,6 @@
 //! The schema declarations and indexed records compile usage facts are read from.
 
+use crate::compile_usages::types::QualifiedKey;
 use crate::scope_index::models::DeclaredScope;
 
 /// The first indexed record of a named schema or enum, by its caller handle.
@@ -50,4 +51,25 @@ pub enum DependencySource {
     Own(usize),
     /// The declaration of the collected usage at this position.
     Usage(usize),
+}
+
+/// One usage: consumer, declaration, usage kind, what it is used through, and the enum member.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct UsageKey {
+    pub consumer: QualifiedKey,
+    pub declaration: QualifiedKey,
+    pub kind: String,
+    pub through: Option<QualifiedKey>,
+    pub enum_member: Option<String>,
+}
+
+/// Distinct collected usages, merged macro dependencies, and the distinct prior-then-new usages.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MergedUsages {
+    /// Positions of the distinct collected usages.
+    pub distinct: Vec<usize>,
+    /// Per declaration, its merged dependency sources; `None` without macro metadata.
+    pub merged: Vec<Option<Vec<DependencySource>>>,
+    /// Positions of the distinct usages among the prior usages followed by the new ones.
+    pub combined: Vec<usize>,
 }

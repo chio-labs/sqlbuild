@@ -1,5 +1,5 @@
-use crate::compile_usages::main::distinct_positions::distinct_positions;
-use crate::compile_usages::main::merged_dependencies::merged_dependencies;
+use crate::compile_usages::_helpers::distinct_positions::distinct_positions;
+use crate::compile_usages::_helpers::merged_dependencies::merged_dependencies;
 use crate::compile_usages::main::schema_scope_usages::schema_scope_usages;
 use crate::compile_usages::models::{DependencySource, SchemaUsages};
 use crate::compile_usages::tests::helpers::{

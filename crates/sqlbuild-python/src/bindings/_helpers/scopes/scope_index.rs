@@ -12,6 +12,7 @@ use sqlbuild_scopes::relationship_names::models::RelationshipScan;
 use sqlbuild_scopes::scope_index::main::build_scope_index::build_scope_index;
 use sqlbuild_scopes::scope_index::main::macro_source_digest::macro_source_digest;
 use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
+use sqlbuild_scopes::scope_index::main::rejected_path_message::rejected_path_message;
 use sqlbuild_scopes::scope_index::main::relationship_grants::relationship_grants;
 use sqlbuild_scopes::scope_index::models::{
     DeclarationIdentity, DeclarationInput, DeclarationKind, GrantRecord, GrantThrough,
@@ -22,13 +23,14 @@ use sqlbuild_scopes::scope_index::models::{
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::discovery::model_file_record::{ModelFileTexts, NativeModelFile};
 use crate::bindings::_helpers::records::construct::error_class;
-use crate::bindings::_helpers::records::fields::mapping_values;
-use crate::bindings::_helpers::records::fields::{field as native_field, path_stem};
+use crate::bindings::_helpers::records::fields::{
+    field as native_field, mapping_values, path_stem,
+};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::scopes::relationship_scan::{
     RelationshipScanSettings, ScenarioRow, TestFileRow, scanned_relationships,
 };
-use crate::bindings::_helpers::scopes::scope_lookup::{path_message, scope_path_error};
+use crate::bindings::_helpers::scopes::scope_lookup::scope_path_error;
 use crate::bindings::_helpers::scopes::scope_objects::{
     ScopeClasses, field, optional_item, root_object, value_of,
 };
@@ -662,7 +664,7 @@ impl<'py> Walk<'py> {
 fn normalized(py: Python<'_>, path: &Bound<'_, PyAny>) -> PyResult<String> {
     let path: String = text(path)?;
     normalize_scope_path(&path).map_err(|failure| {
-        scope_path_error(py, path_message(&RejectedPath { failure, path }))
+        scope_path_error(py, rejected_path_message(&RejectedPath { failure, path }))
             .unwrap_or_else(|error| error)
     })
 }

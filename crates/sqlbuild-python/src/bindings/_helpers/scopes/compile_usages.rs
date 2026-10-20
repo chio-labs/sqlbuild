@@ -8,22 +8,20 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
-use sqlbuild_scopes::compile_usages::main::distinct_positions::distinct_positions;
-use sqlbuild_scopes::compile_usages::main::merged_dependencies::merged_dependencies;
+use sqlbuild_scopes::compile_usages::main::merged_usages::merged_usages;
 use sqlbuild_scopes::compile_usages::main::schema_scope_usages::schema_scope_usages;
 use sqlbuild_scopes::compile_usages::models::{
-    DependencySource, InaccessibleDiagnostic, NamedRecord, SchemaDeclaration, SchemaUsages,
+    DependencySource, InaccessibleDiagnostic, MergedUsages, NamedRecord, SchemaDeclaration,
+    SchemaUsages, UsageKey,
 };
-use sqlbuild_scopes::scope_index::main::normalize_scope_path::normalize_scope_path;
+use sqlbuild_scopes::scope_index::main::declared_scope_path_message::declared_scope_path_message;
 use sqlbuild_scopes::scope_index::models::{
-    DeclarationKind, DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind, ScopePathFailure,
+    DeclarationKind, DeclaredScope, ResourceIdentity, ResourceKind, ScopeKind,
 };
 
 use crate::bindings::_helpers::compile_context::diagnostic_collector::report_compile_diagnostic;
-use crate::bindings::_helpers::records::construct::error_class;
-use crate::bindings::_helpers::records::construct::new_record;
-use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::records::fields::mapping_items;
+use crate::bindings::_helpers::records::construct::{error_class, new_record};
+use crate::bindings::_helpers::records::fields::{field as native_field, mapping_items};
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
 /// The folder a scope path is relative to when its owner names none.
@@ -34,15 +32,6 @@ const SCHEMA_USAGE_KINDS: [&str; 2] = ["schema", "enum"];
 type IdentityRow = (String, String);
 /// A declaration's kind, name and private owner; a resource's kind and name with no owner.
 type QualifiedRow = (String, String, Option<IdentityRow>);
-/// Consumer, declaration, usage kind, what it is used through, and the enum member.
-#[derive(Clone, Hash, PartialEq, Eq)]
-pub(crate) struct UsageRow {
-    pub(crate) consumer: QualifiedRow,
-    pub(crate) declaration: QualifiedRow,
-    pub(crate) kind: String,
-    pub(crate) through: Option<QualifiedRow>,
-    pub(crate) enum_member: Option<String>,
-}
 /// Path, scope, private owner, owning path and ownership root path of a named record.
 struct RecordRow {
     path: String,
@@ -249,7 +238,10 @@ fn scope_schema_usages(
             Err(rejected) => (
                 Vec::new(),
                 Vec::new(),
-                Some(scope_path_message(&rejected.declared, &rejected.path)),
+                Some(declared_scope_path_message(
+                    &rejected.declared,
+                    &rejected.path,
+                )),
             ),
         },
     )
@@ -269,56 +261,22 @@ fn source_rows(sources: Option<Vec<DependencySource>>) -> Option<Vec<SourceRow>>
 /// Distinct collected usages, merged macro dependencies, and the distinct prior-then-new usages.
 pub(crate) fn merged_usage_rows(
     declarations: &[(QualifiedRow, Option<Vec<QualifiedRow>>)],
-    prior: &[UsageRow],
-    collected: &[UsageRow],
+    prior: &[UsageKey],
+    collected: &[UsageKey],
 ) -> MergeRows {
-    let distinct: Vec<usize> = distinct_positions(collected);
-    let mut consumed: Vec<(Option<QualifiedRow>, QualifiedRow)> =
-        Vec::with_capacity(distinct.len());
-    for position in &distinct {
-        let UsageRow {
-            consumer,
-            declaration,
-            ..
-        } = &collected[*position];
-        let by_declaration: Option<QualifiedRow> = DeclarationKind::parse(&consumer.0)
-            .is_some()
-            .then(|| consumer.clone());
-        consumed.push((by_declaration, declaration.clone()));
-    }
-    let merged: Vec<Option<Vec<SourceRow>>> = merged_dependencies(declarations, &consumed)
-        .into_iter()
-        .map(source_rows)
-        .collect();
-    let mut combined: Vec<&UsageRow> = prior.iter().collect();
-    combined.extend(distinct.iter().map(|position| &collected[*position]));
-    let combined_positions: Vec<usize> = distinct_positions(&combined);
-    (distinct, merged, combined_positions)
+    let MergedUsages {
+        distinct,
+        merged,
+        combined,
+    } = merged_usages(declarations, prior, collected);
+    (
+        distinct,
+        merged.into_iter().map(source_rows).collect(),
+        combined,
+    )
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(model_schema_scope_usages, module)?)?;
     Ok(())
-}
-
-/// The `InvalidScopePathError` message of the first path Python's visibility check rejects.
-pub(crate) fn scope_path_message(declared: &DeclaredScope, label: &str) -> String {
-    let owner: &str = declared
-        .owning_path
-        .as_deref()
-        .filter(|path| !path.is_empty())
-        .unwrap_or(CURRENT_FOLDER);
-    let (path, failure) = match normalize_scope_path(label) {
-        Err(failure) => (label, failure),
-        Ok(_) => match normalize_scope_path(owner) {
-            Err(failure) => (owner, failure),
-            Ok(_) => (label, ScopePathFailure::NotProjectRelative),
-        },
-    };
-    match failure {
-        ScopePathFailure::NotProjectRelative => {
-            format!("Scope path must be project-relative: {path}")
-        }
-        ScopePathFailure::EscapesProject => format!("Scope path escapes the project: {path}"),
-    }
 }

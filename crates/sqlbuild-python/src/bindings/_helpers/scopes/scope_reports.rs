@@ -7,8 +7,13 @@ use pyo3::prelude::{
 use pyo3::types::PyDict;
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::json::models::JsonValue;
+use sqlbuild_scopes::scope_index::main::identity_failure_message::identity_failure_message;
+use sqlbuild_scopes::scope_index::main::rejected_path_message::rejected_path_message;
 use sqlbuild_scopes::scope_report::main::browse_scope_folders::browse_scope_folders;
 use sqlbuild_scopes::scope_report::main::build_scope_report::build_scope_report;
+use sqlbuild_scopes::scope_report::main::cached_completeness::cached_completeness;
+use sqlbuild_scopes::scope_report::main::cached_declaration_values::cached_declaration_values;
+use sqlbuild_scopes::scope_report::main::cached_projection_index::cached_projection_index;
 use sqlbuild_scopes::scope_report::main::explain_scope_declaration::explain_scope_declaration;
 use sqlbuild_scopes::scope_report::main::list_scope_declarations::list_scope_declarations;
 use sqlbuild_scopes::scope_report::main::preview_scope_move::preview_scope_move;
@@ -24,12 +29,9 @@ use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::scopes::scope_lookup::{
-    NativeScopeLookup, identity_message, path_message,
-};
+use crate::bindings::_helpers::scopes::scope_lookup::NativeScopeLookup;
 use crate::bindings::_helpers::scopes::scope_objects::{
-    ScopeClasses, completeness, declaration_values, projection_index, read_completeness,
-    read_declaration, read_index,
+    ScopeClasses, read_completeness, read_declaration, read_index,
 };
 use crate::bindings::_helpers::scopes::scope_report_objects::{
     browse_object, diagnostics_object, explanation_object, json_to_plain, json_to_python,
@@ -85,7 +87,7 @@ fn lookup_reports(lookup: &Bound<'_, PyAny>) -> PyResult<LookupReports> {
     let native: Py<NativeScopeLookup> = native_field(lookup, "native")?.extract()?;
     let rows: Vec<DeclarationValues> = native_field(&index, "declarations")?
         .try_iter()?
-        .map(|record| Ok(declaration_values(&read_declaration(&record?)?)))
+        .map(|record| Ok(cached_declaration_values(&read_declaration(&record?)?)))
         .collect::<PyResult<_>>()?;
     let canonical: &[usize] = &native.get().lookup.declarations;
     if rows.len() != canonical.len() {
@@ -101,7 +103,7 @@ fn lookup_reports(lookup: &Bound<'_, PyAny>) -> PyResult<LookupReports> {
         lookup: native,
         values: ReportValues {
             declarations,
-            completeness: completeness(read_completeness(&index)?),
+            completeness: cached_completeness(read_completeness(&index)?),
         },
     })
 }
@@ -115,13 +117,15 @@ fn scope_error(py: Python<'_>, class: ErrorId, message: String) -> PyResult<PyEr
 /// The error Python raises for a failed query.
 fn failure_error(py: Python<'_>, failure: &ReportFailure) -> PyResult<PyErr> {
     match failure {
-        ReportFailure::Path(rejected) => {
-            scope_error(py, ErrorId::InvalidScopePath, path_message(rejected))
-        }
+        ReportFailure::Path(rejected) => scope_error(
+            py,
+            ErrorId::InvalidScopePath,
+            rejected_path_message(rejected),
+        ),
         ReportFailure::Identity(failure, text) => scope_error(
             py,
             ErrorId::InvalidQualifiedIdentity,
-            identity_message(failure, text),
+            identity_failure_message(failure, text),
         ),
         ReportFailure::Serialization(message) => Ok(PyValueError::new_err(message.clone())),
         ReportFailure::IndexOutOfRange => Ok(PyIndexError::new_err("tuple index out of range")),
@@ -342,7 +346,7 @@ pub(crate) fn metadata_projection_value(index: &Bound<'_, PyAny>) -> PyResult<se
 }
 
 fn projection_json(index: &Bound<'_, PyAny>) -> PyResult<JsonValue> {
-    let index: ProjectionIndex = projection_index(read_index(index)?);
+    let index: ProjectionIndex = cached_projection_index(read_index(index)?);
     Ok(scope_metadata_projection(&index))
 }
 
