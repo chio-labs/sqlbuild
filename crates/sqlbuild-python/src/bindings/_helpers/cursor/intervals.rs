@@ -16,11 +16,11 @@ use sqlbuild_cursor::algebra::main::observed_partition::observed_partition;
 use sqlbuild_cursor::algebra::main::split_into_batches::split_into_batches;
 use sqlbuild_cursor::algebra::main::validate_interval::validate_interval;
 use sqlbuild_cursor::algebra::models::{Interval, Scalar};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::as_scalar;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

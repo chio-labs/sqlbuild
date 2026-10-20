@@ -12,7 +12,7 @@ use sqlbuild_core::cli_text::models::{
 };
 use sqlbuild_core::plan_display::main::format_query_diff::format_query_diff;
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::cursor::scalars::sentinel_to_token;
 use crate::bindings::_helpers::plan_output::cursor_details::{
     CursorDetails, DEFERRED, RESOLVED, cursor_details, runtime_inputs_clause,

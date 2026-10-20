@@ -7,7 +7,7 @@ use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyTuple};
 use sqlbuild_core::cost_allocation::models::PyDecimal;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::timestamps::offset_aware;

@@ -2,7 +2,7 @@
 
 use pyo3::prelude::{Bound, PyAnyMethods, PyModule, PyModuleMethods, PyResult, wrap_pyfunction};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::event_exporting::dispatcher::{
     EventExporterDispatcher, stop_event_exporter_threads,
 };

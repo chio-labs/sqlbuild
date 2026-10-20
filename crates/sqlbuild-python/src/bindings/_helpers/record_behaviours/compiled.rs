@@ -4,11 +4,11 @@ use pyo3::IntoPyObjectExt;
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyTuple};
 
+use crate::bindings::_helpers::compiled_views::relation_keys::entry_relation_key_row;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use crate::bindings::_helpers::rules::relation_keys::entry_relation_key_row;
 
 /// `CompilerDiagnostic` positions.
 const DIAGNOSTIC_PHASE_FIELD: usize = 0;

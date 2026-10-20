@@ -11,8 +11,8 @@ use sqlbuild_rules::models::{
 };
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compiled_project::records::plain_typed_value;
 use crate::bindings::_helpers::compiled_project::values::plain_value;
+use crate::bindings::_helpers::compiled_views::records::plain_typed_value;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::RecordId;

@@ -5,20 +5,20 @@ use std::time::Instant;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::ExecutorHost;
 
+use crate::bindings::_helpers::boundary::python_calls::{
+    Status, call_with, imported, keywords, within,
+};
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::project::build_project_graph_with_analysis_selection;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    Status, call_with, imported, keywords, within,
-};
 use crate::bindings::_helpers::compile_driver::stage_work::{
     COLUMN_LINEAGE, MODEL_CONTRACTS, count_stage,
 };
 use crate::bindings::_helpers::contracts::contract_diagnostics::evaluate_model_contracts;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::lineage::project_lineage::build_project_column_lineage;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
@@ -150,7 +150,7 @@ pub(crate) fn analyze<'py>(
     let selection: &Bound<'py, PyAny> = &options.analysis_selection;
     let enabled: bool = !(native_field(selection, "select")?.is_truthy()?
         || native_field(selection, "exclude")?.is_truthy()?)
-        && crate::bindings::_helpers::compile_delta::context::injection().is_none();
+        && crate::bindings::_helpers::compile_context::delta::injection().is_none();
     let early_lint: Bound<'py, EarlySqlLint> = Bound::new(py, EarlySqlLint::new(enabled))?;
     let early_rules: EarlyRulesScope = EarlyRulesScope::new();
     let analysis: PyResult<Bound<'py, PyAny>> =
@@ -210,7 +210,7 @@ fn analyzed<'py>(
         driver.graph((&discovered, &adapter), &lint_dialect)?;
     let project: Bound<'py, PyAny> = native_field(&graph, "project")?;
     let graph_failed: bool = any_error(&native_field(&project, "diagnostics")?)?;
-    crate::bindings::_helpers::compile_delta::context::stop_on_errors(graph_failed)?;
+    crate::bindings::_helpers::compile_context::delta::stop_on_errors(graph_failed)?;
     let mut early_lint_wait_ms: Bound<'py, PyAny> = 0_i64.into_pyobject(py)?.into_any();
     if graph_failed {
         if let Some(early_rules) = early_rules {
@@ -220,7 +220,7 @@ fn analyzed<'py>(
     }
     let (lineage, lineage_ms): (Bound<'py, PyAny>, u64) = driver.lineage(&graph, &dialect)?;
     let contracts: ContractPhase<'py> = driver.contracts(&project, &dialect)?;
-    crate::bindings::_helpers::compile_delta::context::stop_on_errors(any_error(&native_field(
+    crate::bindings::_helpers::compile_context::delta::stop_on_errors(any_error(&native_field(
         &contracts.result,
         "diagnostics",
     )?)?)?;

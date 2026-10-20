@@ -15,9 +15,9 @@ use sqlbuild_rules::custom_host_pool::types::{FactKey, HostPlan};
 use sqlbuild_rules::custom_rule_cache::models::CustomEvaluation;
 use sqlbuild_rules::custom_rule_cache::types::ReadSet;
 
+use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
@@ -98,11 +98,11 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
     let project_dir: PathBuf = run.project_dir.extract()?;
     let mut digests: FactDigests<'py> = FactDigests::new(run.project, &project_dir)?;
     let models: Vec<(String, String, Option<String>)> =
-        match crate::bindings::_helpers::compile_delta::context::injection() {
+        match crate::bindings::_helpers::compile_context::delta::injection() {
             Some(injection) => {
                 let Some(mut rows) = injection.model_subjects.clone() else {
                     return Err(
-                        crate::bindings::_helpers::compile_delta::context::delta_unsupported(
+                        crate::bindings::_helpers::compile_context::delta::delta_unsupported(
                             "the custom rules' subjects were not recorded",
                         ),
                     );
@@ -117,7 +117,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
             }
             None => {
                 let rows: Vec<(String, String, Option<String>)> = digests.replay.model_rows()?;
-                crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+                crate::bindings::_helpers::compile_context::delta::capture(|capture| {
                     capture.model_subjects = Some(rows.clone());
                 });
                 rows
@@ -137,10 +137,10 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         readset_digests.push(reproducible(digests.combined(readset))?);
     }
     let plan: HostPlan = cache.plan(readset_digests);
-    if !plan.is_empty() && crate::bindings::_helpers::compile_delta::context::injection().is_some()
+    if !plan.is_empty() && crate::bindings::_helpers::compile_context::delta::injection().is_some()
     {
         return Err(
-            crate::bindings::_helpers::compile_delta::context::delta_unsupported(
+            crate::bindings::_helpers::compile_context::delta::delta_unsupported(
                 "a custom rule must run again",
             ),
         );
@@ -168,7 +168,7 @@ pub(crate) fn evaluate_custom_rules_cached<'py>(
         let evaluations: Vec<CustomEvaluation> = evaluations(host_run, &mut digests, enabled)?;
         cache.record(py, evaluations)?;
     }
-    crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+    crate::bindings::_helpers::compile_context::delta::capture(|capture| {
         capture.fact_digests.extend(
             digests
                 .digests
@@ -275,7 +275,7 @@ impl<'py> FactDigests<'py> {
             return Ok(cached.clone());
         }
         if let Some(injected) =
-            crate::bindings::_helpers::compile_delta::context::injected_fact_digest(key)
+            crate::bindings::_helpers::compile_context::delta::injected_fact_digest(key)
         {
             self.digests.insert(key.clone(), injected.clone());
             return Ok(injected);

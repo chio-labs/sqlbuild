@@ -10,7 +10,7 @@ use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 use sqlbuild_sqltext::compiler::main::model_output_columns::model_output_columns;
 
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
-use crate::bindings::_helpers::compiled_project::records::compiled_project_facts;
+use crate::bindings::_helpers::compiled_views::records::compiled_project_facts;
 use crate::bindings::_helpers::contracts::model_contracts::{
     ConflictRow, DiagnosticRow, evaluate_project_model_contracts, project_promotion_conflicts,
 };

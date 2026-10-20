@@ -20,7 +20,6 @@ from scripts.fensu_policy.constants import (
     NATIVE_STRING_QUOTE,
     NATIVE_TEST_DIRECTORY,
     NATIVE_TEST_FILE_NAME,
-    NATIVE_TEST_FILE_PREFIX,
     NATIVE_TEST_MODULE_MARKER,
 )
 
@@ -31,17 +30,13 @@ _FIELD: re.Pattern[str] = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?\w+\s*:")
 
 
 def is_checked_binding(*, path: str) -> bool:
-    """Whether `path` is non-test source of the native bindings crate."""
+    """Whether `path` is non-test bindings source; tests live under `tests/` or in `tests.rs`."""
 
     if not path.startswith(NATIVE_BINDINGS_ROOT) or not path.endswith(NATIVE_RUST_SUFFIX):
         return False
     parts: list[str] = path.split("/")
     name: str = parts[-1]
-    return (
-        NATIVE_TEST_DIRECTORY not in parts[:-1]
-        and name != NATIVE_TEST_FILE_NAME
-        and not name.startswith(NATIVE_TEST_FILE_PREFIX)
-    )
+    return NATIVE_TEST_DIRECTORY not in parts[:-1] and name != NATIVE_TEST_FILE_NAME
 
 
 def is_edge_path(*, path: str, edge_paths: Iterable[str]) -> bool:
@@ -119,7 +114,12 @@ def budgeted_faults(
         path=path, edge_paths=ctx.option(NATIVE_EDGE_PATHS)
     ):
         return []
-    found: list[int] = lines(source=ctx.source)
+    return budget_faults(ctx=ctx, path=path, found=lines(source=ctx.source), what=what)
+
+
+def budget_faults(*, ctx: RuleContext, path: str, found: list[int], what: str) -> list[Fault]:
+    """Faults when the `found` lines of `path` exceed, or fall below, its pending budget."""
+
     budget: int | None = budgets_by_path(entries=ctx.option(NATIVE_PENDING_BUDGETS)).get(path)
     if budget is None:
         return [ctx.fault_for(path=ctx.path, line=line, column=0) for line in found]

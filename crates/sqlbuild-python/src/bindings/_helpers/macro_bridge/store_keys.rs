@@ -15,7 +15,7 @@ use sqlbuild_cache::macro_store_keys::main::context_store_token::context_store_t
 use sqlbuild_cache::macro_store_keys::main::macro_store_token::macro_store_token as macro_key;
 use sqlbuild_core::json::models::{JsonInteger, JsonValue};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::frontier::encoder::emit_error;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_items;

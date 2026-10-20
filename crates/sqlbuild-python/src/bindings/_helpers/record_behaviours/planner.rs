@@ -9,13 +9,11 @@ use sqlbuild_core::migration_values::main::model_migration_blocks_build::model_m
 use sqlbuild_core::migration_values::main::storage_transition::storage_transition;
 use sqlbuild_core::migration_values::models::{DecisionTraits, ModelMigrationFacts};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::call_arguments::call_argument;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::parse_value;
-use crate::bindings::_helpers::record_behaviours::call_arguments::call_argument;
 use crate::bindings::_helpers::records::construct::error_class;
-use crate::bindings::_helpers::records::construct::{
-    enum_from_value, enum_member, new_record, record_class,
-};
+use crate::bindings::_helpers::records::construct::{enum_from_value, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 
@@ -301,16 +299,6 @@ pub(crate) fn overrides_typed_as(
         keywords.set_item("end_int", field("end_int")?)?;
     }
     Ok(instance.get_type().call((), Some(&keywords))?.unbind())
-}
-
-/// `ModelPlanEntry.backfill`'s default: a forward-only backfill.
-pub(crate) fn forward_only_backfill(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    let keywords: Bound<'_, PyDict> = PyDict::new(py);
-    keywords.set_item(
-        "action",
-        enum_member(py, RecordId::BackfillAction, "FORWARD_ONLY")?,
-    )?;
-    new_record(py, RecordId::BackfillResult, (), Some(&keywords))
 }
 
 /// `ScenarioArtifactIdentity.kind` coerced to `ScenarioArtifactKind`.

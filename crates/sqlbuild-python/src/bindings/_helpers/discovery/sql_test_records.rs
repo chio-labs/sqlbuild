@@ -16,7 +16,7 @@ use sqlbuild_discovery::sql_tests::models::{
 use sqlbuild_discovery::tree::models::ProjectTree;
 use sqlbuild_model_config::execution_limits::main::parse_execution_limit::parse_execution_limit;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::project_files::path_object;
@@ -57,7 +57,7 @@ fn options() -> PyResult<SqlTestFileOptions> {
     Ok(SqlTestFileOptions {
         test_keys: sorted_keys(&constants::SQL_TEST_HEADER_KEYS),
         scenario_keys: sorted_keys(&constants::SQL_SCENARIO_HEADER_KEYS),
-        path_filter: crate::bindings::_helpers::compile_delta::context::injection()
+        path_filter: crate::bindings::_helpers::compile_context::delta::injection()
             .map(|injection| std::sync::Arc::new(injection.test_paths.clone())),
     })
 }

@@ -5,8 +5,9 @@ use std::collections::HashMap;
 use pyo3::PyResult;
 use sqlbuild_rules::models::{EvaluateRequest, Model, SqlTestFact};
 
-use crate::bindings::_helpers::compile_delta::context::{delta_unsupported, injection};
-use crate::bindings::_helpers::compile_delta::image::{BaseRules, PendingRules};
+use crate::bindings::_helpers::compile_context::delta::BaseRules;
+use crate::bindings::_helpers::compile_context::delta::PendingRules;
+use crate::bindings::_helpers::compile_context::delta::{delta_unsupported, injection};
 
 /// In a delta, the whole project's rules request with the rerun rows taken from `request`.
 pub(crate) fn whole_project_request(request: EvaluateRequest) -> PyResult<EvaluateRequest> {

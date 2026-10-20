@@ -4,24 +4,21 @@ use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyBytes, PyDict, PyDictMethods, PyList, PyString, PyTuple};
-use pyo3::{pyfunction, wrap_pyfunction};
+use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
+use sqlbuild_core::constants::PYTHON_NODE_ROOT;
+use sqlbuild_host::entries::models::UserCodeHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::discovery::imported_modules::{
     ProjectDir, definition, discovered, discovery_error, discovery_error_from, is_exception,
     module_functions, provider_by_name, provider_usages, shim, tuple_of,
 };
 use crate::bindings::_helpers::discovery::imported_providers;
-use crate::bindings::_helpers::records::construct::new_record;
-
 use crate::bindings::_helpers::discovery::python_hook_files::discover_python_hook_files;
-use crate::bindings::_helpers::graph::python_node_graph::node_identity;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
+use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
-use pyo3::IntoPyObjectExt;
-use sqlbuild_core::constants::PYTHON_NODE_ROOT;
 const NODE_ERROR: ErrorId = ErrorId::PythonNodeDiscovery;
 const AUDIT_CASE: UserCodeHost = UserCodeHost::AuditCase;
 const READ_FACTORY: UserCodeHost = UserCodeHost::ReadFactoryDefinition;
@@ -577,4 +574,68 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
         imported_providers::discover_event_exporter_functions,
         module
     )?)
+}
+
+fn optional_value<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    if value.is_none() {
+        return Ok(value.clone());
+    }
+    native_field(value, "value")
+}
+
+/// The decorator configuration the identity of one node of `kind` hashes, read through `get`.
+fn decorator_config<'py>(
+    py: Python<'py>,
+    (kind, documented): (&str, bool),
+    get: &dyn Fn(&str) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let config: Bound<'py, PyDict> = PyDict::new(py);
+    match kind {
+        "LOADER" => {
+            config.set_item("columns", get("columns")?)?;
+            config.set_item("contract", get("contract")?)?;
+            config.set_item("cursor_column", get("cursor_column")?)?;
+            config.set_item("destination", get("destination")?)?;
+            config.set_item("unique_key", get("unique_key")?)?;
+            config.set_item("write_strategy", optional_value(&get("write_strategy")?)?)?;
+        }
+        "ASSET" => {
+            config.set_item("columns", get("columns")?)?;
+            config.set_item("column_lineage", get("column_lineage")?)?;
+        }
+        "CHECK" => {
+            config.set_item("severity", get("severity")?.getattr("value")?)?;
+        }
+        _ => {}
+    }
+    if documented {
+        for field in ["description", "group", "meta", "tags"] {
+            config.set_item(field, get(field)?)?;
+        }
+    }
+    Ok(config)
+}
+
+/// The identity of one discovered node of `(kind, documented)`, hashed once by the user-code host.
+pub(crate) fn node_identity<'py>(
+    py: Python<'py>,
+    (kind, documented): (&str, bool),
+    get: &dyn Fn(&str) -> PyResult<Bound<'py, PyAny>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kind_value: Bound<'py, PyAny> = host::entry(py, UserCodeHost::PythonNodeKind)?
+        .getattr(kind)?
+        .getattr("value")?;
+    call_with(
+        &host::entry(py, UserCodeHost::PythonNodeIdentity)?,
+        &[
+            ("kind", kind_value),
+            ("name", get("name")?),
+            ("function", get("function")?),
+            ("file_path", get("file_path")?),
+            (
+                "decorator_config",
+                decorator_config(py, (kind, documented), get)?.into_any(),
+            ),
+        ],
+    )
 }

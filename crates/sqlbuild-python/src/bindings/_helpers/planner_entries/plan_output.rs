@@ -1,7 +1,7 @@
 //! `PlanOutput` assembly from planned model entries, seeds, sources, functions, audits and tests.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::planner_entries::model_entries::scope_overlaps;
 use crate::bindings::_helpers::planner_entries::models::PlanOutputInputs;
 use crate::bindings::_helpers::planner_entries::values::{
@@ -20,7 +20,7 @@ use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestAssembly;
 use crate::bindings::_helpers::sql_test_glue::plan_assembly::assemble_sql_test_plans;
-use crate::bindings::_helpers::sql_test_glue::plan_driver::resolve_sql_test_model_chains;
+use crate::bindings::_helpers::sql_test_glue::plan_driver::sql_test_model_chain_names_by_key;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyList, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
@@ -736,22 +736,6 @@ pub(crate) fn plan_selected_sql_tests<'py>(
     sql_test_selection: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyAny>> {
     planned_sql_tests(project, adapter, selected_keys, sql_test_selection)
-}
-
-/// Return model closures resolved natively in one project batch, keyed by SQL test key.
-#[pyfunction]
-#[pyo3(signature = (*, project, tests))]
-pub(crate) fn sql_test_model_chain_names_by_key<'py>(
-    project: &Bound<'py, PyAny>,
-    tests: &Bound<'py, PyAny>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let py = project.py();
-    let chains = resolve_sql_test_model_chains(project, tests)?;
-    let by_key = PyDict::new(py);
-    for (test, chain) in tests.try_iter()?.zip(chains.try_iter()?) {
-        by_key.set_item(native_field(&test?, "key")?, chain?)?;
-    }
-    Ok(by_key)
 }
 
 /// Whether a test is named by the selection or covers a selected resource, and not excluded.

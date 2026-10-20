@@ -11,11 +11,11 @@ use sqlbuild_cli::argv::models::{ArgvSettings, DbtExecutionFailure, DbtExecution
 use sqlbuild_core::dbt_cli::errors::DbtCliError;
 use sqlbuild_core::dbt_cli::main::dbt_flag_value::dbt_flag_value;
 use sqlbuild_core::dbt_cli::models::DbtParsedFlags;
+use sqlbuild_host::entries::models::AdapterHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, keywords};
 use crate::bindings::_helpers::dbt_interop::cli::resolve_dbt_config;
 use crate::bindings::_helpers::dbt_interop::cli::{raised, resolved_path};
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

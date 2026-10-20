@@ -19,7 +19,7 @@ use sqlbuild_rules::rule_catalogue::main::skill_lock_name::skill_lock_name;
 use sqlbuild_rules::rule_catalogue::models::{FingerprintRule, OptionText, RuleText, SkillTarget};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::records::fields::field as record_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::rules::catalogue::{

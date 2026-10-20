@@ -10,12 +10,13 @@ use pyo3::types::{PyDict, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::freshness_text::main::freshness_json::freshness_json;
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use sqlbuild_host::entries::models::ExecutorHost;
+
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::freshness::observation::{
     Observer, observation_record, observation_source, observe_adapter_batch, observe_configured,
     strategy,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;

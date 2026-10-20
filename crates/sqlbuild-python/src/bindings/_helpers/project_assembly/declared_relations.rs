@@ -8,11 +8,11 @@ use pyo3::types::{PyDict, PyDictMethods, PyString};
 use sqlbuild_analysis::assembly::analysis_session::types::{Pairs, Shapes};
 use sqlbuild_analysis::compiled_project::models::SchemaColumnFact;
 
-use crate::bindings::_helpers::compiled_project::model_input_view::{
+use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
+use crate::bindings::_helpers::compiled_views::model_input_view::{
     attached_columns, attached_schema,
 };
-use crate::bindings::_helpers::compiled_project::schema_facts::python_column_facts;
-use crate::bindings::_helpers::compiled_project::source_views::{AttachedSource, read_source_view};
+use crate::bindings::_helpers::compiled_views::source_views::{AttachedSource, read_source_view};
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::fields::{enum_member_value, field as native_field};
 use crate::bindings::_helpers::records::ids::RecordId;

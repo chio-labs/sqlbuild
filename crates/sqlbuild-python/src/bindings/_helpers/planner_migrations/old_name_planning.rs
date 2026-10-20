@@ -1,8 +1,9 @@
 //! Old-name planning orchestration over existing live state inspection.
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use sqlbuild_host::entries::models::AdapterHost;
+
+use crate::bindings::_helpers::boundary::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::models::{MigrationPhase, OldNameViewPlanning};
 use crate::bindings::_helpers::planner_migrations::old_name_objects::recorded_view;

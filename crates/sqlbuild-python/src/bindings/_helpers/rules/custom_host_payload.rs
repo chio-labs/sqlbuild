@@ -11,8 +11,8 @@ use pyo3::types::{
 use serde_json::{Map, Value, json};
 use sqlbuild_discovery::models::LineColumnSpan;
 
-use crate::bindings::_helpers::compiled_project::compiled_model_view::NativeCompiledModel;
-use crate::bindings::_helpers::compiled_project::records::{
+use crate::bindings::_helpers::compiled_views::compiled_model_view::NativeCompiledModel;
+use crate::bindings::_helpers::compiled_views::records::{
     compiled_audit_record, compiled_function_record, compiled_seed_record, compiled_source_record,
 };
 use crate::bindings::_helpers::records::fields::field as native_field;

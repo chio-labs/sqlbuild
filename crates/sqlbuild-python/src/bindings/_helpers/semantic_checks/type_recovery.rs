@@ -13,12 +13,12 @@ use sqlbuild_analysis::semantic_checks::types::RevisedBinding;
 use sqlbuild_analysis::semantic_validation::models as validation;
 
 use crate::bindings::_helpers::analysis::binding_catalog::schema_validations;
-use crate::bindings::_helpers::analysis::model_reads::{inferred_names, lineage_inputs};
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
 use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
-use crate::bindings::_helpers::compiled_project::compiled_model_view::LineageInput;
-use crate::bindings::_helpers::compiled_project::records::with_type_recovery;
+use crate::bindings::_helpers::compiled_views::compiled_model_view::LineageInput;
+use crate::bindings::_helpers::compiled_views::model_reads::{inferred_names, lineage_inputs};
+use crate::bindings::_helpers::compiled_views::records::with_type_recovery;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get_or;
 use crate::bindings::_helpers::records::fields::mapping_items;

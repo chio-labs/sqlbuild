@@ -6,10 +6,10 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyclass, pymethods};
 use pyo3::types::PyString;
 use serde_json::{Map, Value};
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_recall::records::main::parse_event::parse_event;
 use sqlbuild_recall::writer::models::RecallSession;
 
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::recall::events::{escaped_text, event_object};
 use crate::bindings::_helpers::recall::replacements::RecallReplacements;

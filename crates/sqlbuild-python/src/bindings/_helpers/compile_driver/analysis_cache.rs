@@ -7,9 +7,9 @@ use pyo3::prelude::{
 use pyo3::types::{PyBool, PyDict, PyDictMethods, PyList, PyListMethods, PySlice, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_cache::digest::main::sha256_hex::sha256_hex;
+use sqlbuild_host::compile_context::main::record_compile_metric::record_compile_metric;
 
-use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_metric;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, unicode_sorted_dumps};
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

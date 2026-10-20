@@ -1,10 +1,9 @@
 //! Top-level planner orchestration producing an execution plan.
 
+use sqlbuild_host::entries::models::AdapterHost;
+
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, within};
 use crate::bindings::_helpers::build_command::support::utc_now;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, within,
-};
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_changes::actions::resolve_model_actions;
 use crate::bindings::_helpers::planner_changes::detect::detect_changes;

@@ -1,11 +1,13 @@
 //! Host SQL-test request preparation, native planning, and Python result conversion.
 
-use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timing;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
+use pyo3::types::{PyDict, PyDictMethods, PyTuple};
+use sqlbuild_host::compile_context::main::add_compile_timing::add_compile_timing;
+
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::planner_phases::objects::object;
 use crate::bindings::_helpers::planner_strategy::fixture_context::count_chain_resolution;
-use crate::bindings::_helpers::records::construct::error_class;
-use crate::bindings::_helpers::records::construct::new_record_with;
+use crate::bindings::_helpers::records::construct::{error_class, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::{ErrorId, RecordId};
 use crate::bindings::_helpers::sql_test_glue::models::SqlTestPlanOptions;
@@ -13,8 +15,6 @@ use crate::bindings::_helpers::sql_test_glue::plan_values::tuple;
 use crate::bindings::_helpers::sql_test_glue::planning::{
     ChainRequest, PlanningRequest, plan_compiled_sql_tests, resolve_compiled_sql_test_chains,
 };
-use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyfunction};
-use pyo3::types::{PyDict, PyTuple};
 
 pub(super) fn chains<'py>(
     project: &Bound<'py, PyAny>,
@@ -230,4 +230,20 @@ pub(crate) fn sql_test_plan_error_messages<'py>(
         }
     }
     PyTuple::new(warnings.py(), messages)
+}
+
+/// Return model closures resolved natively in one project batch, keyed by SQL test key.
+#[pyfunction]
+#[pyo3(signature = (*, project, tests))]
+pub(crate) fn sql_test_model_chain_names_by_key<'py>(
+    project: &Bound<'py, PyAny>,
+    tests: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let py = project.py();
+    let chains = resolve_sql_test_model_chains(project, tests)?;
+    let by_key = PyDict::new(py);
+    for (test, chain) in tests.try_iter()?.zip(chains.try_iter()?) {
+        by_key.set_item(native_field(&test?, "key")?, chain?)?;
+    }
+    Ok(by_key)
 }

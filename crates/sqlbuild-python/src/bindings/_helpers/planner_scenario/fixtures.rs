@@ -1,6 +1,6 @@
 //! Materialize fixture SQL plans while preserving adapter and completion boundaries.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_scenario::constants::SCENARIO_PLAN_MISSING_FIXTURE_SQL;
 use crate::bindings::_helpers::planner_scenario::helper_scope::scenario_helper_scope;
 use crate::bindings::_helpers::planner_scenario::{

@@ -1303,6 +1303,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sqlbuild-host"
+version = "0.164.0"
+dependencies = [
+ "sqlbuild-core",
+]
+
+[[package]]
 name = "sqlbuild-model-config"
 version = "0.164.0"
 dependencies = [
@@ -1340,6 +1347,7 @@ dependencies = [
  "sqlbuild-core",
  "sqlbuild-cursor",
  "sqlbuild-discovery",
+ "sqlbuild-host",
  "sqlbuild-model-config",
  "sqlbuild-pysource",
  "sqlbuild-recall",

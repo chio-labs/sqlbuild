@@ -6,12 +6,12 @@ use pyo3::types::{PyDict, PyDictMethods, PyString};
 use sqlbuild_core::dagster_invocation::main::asset_failure_text::asset_failure_text;
 use sqlbuild_core::dagster_invocation::main::diagnostic_tail::diagnostic_tail;
 use sqlbuild_core::dagster_invocation::models::AssetFailure;
+use sqlbuild_host::entries::models::ThirdPartyHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::dagster_invocation::access::{
     constant_contains, get, items, text_of,
 };
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 const LIVE_FAILURE_MESSAGE: &str =

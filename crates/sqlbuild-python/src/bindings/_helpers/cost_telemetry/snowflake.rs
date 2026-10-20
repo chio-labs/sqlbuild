@@ -15,7 +15,7 @@ use sqlbuild_core::cost_allocation::constants::QUERY_HISTORY_RESULT_LIMIT;
 use sqlbuild_core::cost_allocation::main::query_history_sql::query_history_sql;
 use sqlbuild_core::cost_allocation::models::{QueryHistoryWindow, RunAllocation};
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported};
 use crate::bindings::_helpers::cost_telemetry::allocation::{
     SummaryState, allocate_observations, priced, summary_object,
 };

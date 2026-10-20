@@ -5,9 +5,9 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PyInt, PyList, PyString, PyTuple};
 use pyo3::{IntoPyObject, pyclass, pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{

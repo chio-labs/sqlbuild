@@ -10,12 +10,12 @@ use pyo3::types::{PyDict, PyDictMethods, PyString, PyTypeMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::cost_report::main::format_cost_breakdown::format_cost_breakdown;
 use sqlbuild_core::cost_report::models::BreakdownOptions;
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::cost_report::records::cost_run;
 use crate::bindings::_helpers::cost_report::store;
 use crate::bindings::_helpers::cost_telemetry::values::cost_aware;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

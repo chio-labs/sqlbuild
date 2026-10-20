@@ -62,7 +62,7 @@ impl MacroCallMemo {
         path: PathBuf,
         environment: &str,
     ) -> PyResult<(Vec<u8>, usize)> {
-        if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+        if crate::bindings::_helpers::compile_context::delta::injection().is_some() {
             return Err(pyo3::exceptions::PyRuntimeError::new_err(
                 "a delta compile leaves the macro call store to full compiles",
             ));
@@ -83,7 +83,7 @@ impl MacroCallMemo {
 
     /// Whether this compile may use the call store; a delta compile leaves it to full compiles.
     fn store_allowed(&self) -> bool {
-        crate::bindings::_helpers::compile_delta::context::injection().is_none()
+        crate::bindings::_helpers::compile_context::delta::injection().is_none()
     }
 
     /// Whether this compile recorded calls the attached store does not hold yet.

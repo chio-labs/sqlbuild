@@ -15,12 +15,10 @@ use sqlbuild_core::format_command::models::LintReport;
 use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_null_candidates;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
 use crate::bindings::_helpers::format_command::config::{FormatConfig, format_config, lint_config};
 use crate::bindings::_helpers::format_command::files::FormatChange;
 use crate::bindings::_helpers::format_command::report::lint_report;

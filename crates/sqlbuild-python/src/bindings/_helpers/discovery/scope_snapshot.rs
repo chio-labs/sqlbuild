@@ -7,15 +7,15 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyDictMethods, PyList, PyListMethods, PyString, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::contracts::project_config::{
-    load_local_config_file, load_project_config_file,
-};
 use crate::bindings::_helpers::discovery::declaration_records::{
     discover_audit_files, discover_constant_files, discover_enum_files, discover_macro_files,
     discover_model_schema_files, discover_sql_function_files, discover_sql_hook_files, path_class,
 };
 use crate::bindings::_helpers::discovery::model_records::{
     ModelFileSelection, discovered_model_files,
+};
+use crate::bindings::_helpers::discovery::project_config::{
+    load_local_config_file, load_project_config_file,
 };
 use crate::bindings::_helpers::discovery::snapshot::in_snapshot;
 use crate::bindings::_helpers::discovery::sql_test_records::{

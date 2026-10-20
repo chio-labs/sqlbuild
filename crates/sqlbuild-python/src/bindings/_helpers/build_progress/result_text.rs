@@ -1,21 +1,30 @@
 //! Executor result objects read into the plain data build progress output renders.
 
+use std::collections::HashMap;
+
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
+use pyo3::types::{PyDict, PyDictMethods};
 use sqlbuild_core::build_progress::models::{
     AuditResultText, BuildResultText, ErrorText, HookResultText, LifecycleEventText, LoadRowText,
     ModelResultText, NodeResultText, PythonNodeText, SkipText, TestResultText, TestStepText,
 };
+use sqlbuild_core::json::main::dumps::dumps;
+use sqlbuild_core::json::models::{JsonDialect, StdlibJsonOptions};
 use sqlbuild_core::progress::main::format_expectation_detail::format_expectation_detail;
+use sqlbuild_core::test_command::main::parameterized_test_label::parameterized_test_label;
+use sqlbuild_core::test_command::models::TestParameter;
 
-use crate::bindings::_helpers::cli::progress_text::expectation_step;
+use crate::bindings::_helpers::build_progress::progress_text::expectation_step;
 use crate::bindings::_helpers::plan_output::display::{cursor_bound_display, inclusive_cursor_end};
 use crate::bindings::_helpers::records::fields::field as native_field;
-use crate::bindings::_helpers::sql_test_command::test_command::test_label;
+use crate::bindings::_helpers::result_output::integration_values::json_value;
 
 const SQL_EVENT: &str = "sql";
 const PRE_HOOKS: &str = "pre_hooks";
 const MEASUREMENT: &str = "measurement";
 const FAILED: &str = "failed";
+const DECIMAL_KIND: &str = "decimal";
 
 pub(crate) fn text(value: &Bound<'_, PyAny>, name: &str) -> PyResult<String> {
     Ok(native_field(value, name)?.str()?.to_string())
@@ -240,4 +249,63 @@ pub(crate) fn build_text(result: &Bound<'_, PyAny>) -> PyResult<BuildResultText>
         source_audits: audits(result, "source_audit_results")?,
         end_audits: audits(result, "end_audit_results")?,
     })
+}
+
+/// The label of one test or result: its name, plus source and values for parameterized cases.
+pub(crate) fn test_label(item: &Bound<'_, PyAny>, name_field: &str) -> PyResult<String> {
+    let name: String = native_field(item, name_field)?.extract()?;
+    let source_path: Bound<'_, PyAny> = item.getattr("source_path")?;
+    let values: Vec<Bound<'_, PyAny>> = native_field(item, "parameter_values")?
+        .try_iter()?
+        .collect::<PyResult<_>>()?;
+    if source_path.is_none() || values.is_empty() {
+        return Ok(name);
+    }
+    let mut schema: HashMap<String, Bound<'_, PyAny>> = HashMap::new();
+    for declaration in item.getattr("parameter_schema")?.try_iter()? {
+        let declaration: Bound<'_, PyAny> = declaration?;
+        schema.insert(declaration.getattr("name")?.extract()?, declaration);
+    }
+    let mut parameters: Vec<TestParameter> = Vec::new();
+    for pair in values {
+        let (value_name, value): (String, Bound<'_, PyAny>) = pair.extract()?;
+        let declaration: &Bound<'_, PyAny> = schema
+            .get(&value_name)
+            .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(value_name.clone()))?;
+        let raw: Bound<'_, PyAny> = value.getattr("value")?;
+        let kind: String = value.getattr("kind")?.getattr("value")?.extract()?;
+        let payload: Bound<'_, PyAny> = if kind == DECIMAL_KIND {
+            raw.str()?.into_any()
+        } else {
+            raw
+        };
+        parameters.push(TestParameter {
+            name: value_name,
+            value_type: native_field(&native_field(declaration, "value_type")?, "value")?
+                .extract()?,
+            nullable: declaration.getattr("nullable")?.is_truthy()?,
+            rendered: compact_json(&payload)?,
+        });
+    }
+    let path: String = source_path.call_method0("as_posix")?.extract()?;
+    Ok(parameterized_test_label(&name, Some(&path), &parameters))
+}
+
+/// A payload as `json.dumps(payload, ensure_ascii=True, separators=(",", ":"))`.
+fn compact_json(payload: &Bound<'_, PyAny>) -> PyResult<String> {
+    let Some(value) = json_value(payload)? else {
+        let options: Bound<'_, PyDict> = PyDict::new(payload.py());
+        options.set_item("ensure_ascii", true)?;
+        options.set_item("separators", (",", ":"))?;
+        return payload
+            .py()
+            .import("json")?
+            .call_method("dumps", (payload,), Some(&options))?
+            .extract();
+    };
+    dumps(
+        &value,
+        &JsonDialect::Stdlib(StdlibJsonOptions::new(None).with_separators(",", ":")),
+    )
+    .map_err(|error| PyValueError::new_err(format!("{error:?}")))
 }

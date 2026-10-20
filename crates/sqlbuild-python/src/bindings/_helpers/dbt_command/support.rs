@@ -3,8 +3,8 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::PyBool;
 
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 use crate::bindings::_helpers::presentation_text::terminal::stdout_supports_color;
 
 /// `sys.stdout` or `sys.stderr`, looked up when written.

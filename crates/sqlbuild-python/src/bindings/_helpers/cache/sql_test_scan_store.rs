@@ -7,14 +7,14 @@ use sqlbuild_cache::digest::main::content_digest::content_digest;
 use sqlbuild_cache::digest::main::hex_digest::hex_digest;
 use sqlbuild_cache::digest::types::ContentDigest;
 use sqlbuild_cache::store::models::NativeStore;
+use sqlbuild_host::compile_context::main::record_compile_metric::record_compile_metric;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
 use crate::bindings::_helpers::cache::native_store::{open_store, save_store};
-use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_metric;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
 
 const SCAN_CACHE_LOGGER: &str = "sqlbuild.compile";
 

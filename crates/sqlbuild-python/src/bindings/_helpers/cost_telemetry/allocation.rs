@@ -8,12 +8,12 @@ use sqlbuild_core::cost_allocation::main::allocate_run_cost::allocate_run_cost a
 use sqlbuild_core::cost_allocation::models::{
     AllocationStatus, CostQuery, PyDecimal, ResourceAllocation, RunAllocation, WarehouseKey,
 };
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, call_with};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with};
 use crate::bindings::_helpers::cost_telemetry::values::{
     instant_micros, native_decimal, python_decimal,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

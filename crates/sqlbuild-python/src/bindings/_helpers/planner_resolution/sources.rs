@@ -1,6 +1,6 @@
 //! Source contract validation and adapter-controlled projection rendering.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_resolution::models::CursorFiltering;
 use crate::bindings::_helpers::planner_resolution::values::{
     cursor_wrap, filtering_of, method, string,

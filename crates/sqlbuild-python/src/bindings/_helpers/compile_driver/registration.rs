@@ -3,10 +3,11 @@
 use pyo3::prelude::{Bound, PyModule, PyModuleMethods, PyResult};
 use pyo3::wrap_pyfunction;
 
+use crate::bindings::_helpers::compile_context::{diagnostic_collector, input_reads};
 use crate::bindings::_helpers::compile_driver::{
-    analysis, analysis_cache, assembly, command, deferral, diagnostic_collector, diff, discovery,
-    input_reads, inputs, pipeline, pipeline_entries, plan_result, project, python_plan_entries,
-    relation_targets, selection_phases, stage_work, targets,
+    analysis, analysis_cache, assembly, command, deferral, diff, discovery, inputs, pipeline,
+    pipeline_entries, plan_pipeline, plan_result, project, python_plan_entries, relation_targets,
+    selection_phases, stage_work, static_context, targets,
 };
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -19,6 +20,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     input_reads::register(module)?;
     discovery::register(module)?;
     pipeline::register(module)?;
+    plan_pipeline::register(module)?;
     pipeline_entries::register(module)?;
     plan_result::register(module)?;
     deferral::register(module)?;
@@ -27,6 +29,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     python_plan_entries::register(module)?;
     relation_targets::register(module)?;
     selection_phases::register(module)?;
+    static_context::register(module)?;
     module.add_function(wrap_pyfunction!(
         stage_work::compile_stage_work_info,
         module

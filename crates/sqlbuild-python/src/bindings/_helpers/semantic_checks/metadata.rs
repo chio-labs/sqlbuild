@@ -14,11 +14,11 @@ use sqlbuild_analysis::semantic_checks::models::{
 };
 use sqlbuild_analysis::semantic_validation::models as validation;
 
-use crate::bindings::_helpers::analysis::model_reads::binding_validated;
 use crate::bindings::_helpers::boundary::panics::compiler_error;
-use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+use crate::bindings::_helpers::compiled_views::compiled_model_view::{
     ModelMetadataTexts, NativeCompiledModel,
 };
+use crate::bindings::_helpers::compiled_views::model_reads::binding_validated;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::mapping_get;
 use crate::bindings::_helpers::records::fields::mapping_get_or;

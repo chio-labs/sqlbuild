@@ -8,9 +8,7 @@ use sqlbuild_state::freshness::constants::{REQUIRED_STATE_COLUMNS, SOURCE_FRESHN
 use sqlbuild_state::freshness::main::read_latest_sql::read_latest_sql;
 use sqlbuild_state::freshness::main::relevant_sources_sql::relevant_sources_sql;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
 use crate::bindings::_helpers::cursor::values::DATETIME_MODULE;
 use crate::bindings::_helpers::freshness::support::{
     INPUT_ERROR, exception_text, freshness_error, optional_str, presumed_utc_datetime, text,

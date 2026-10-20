@@ -6,20 +6,18 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyCFunction, PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::UserCodeHost;
 
-use crate::bindings::_helpers::analysis::explicit_references::explicit_reference_report;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, within};
+use crate::bindings::_helpers::compile_context::diagnostic_collector::collect_compile_diagnostics;
 use crate::bindings::_helpers::compile_driver::assembly_project::assembled_project;
-use crate::bindings::_helpers::compile_driver::diagnostic_collector::collect_compile_diagnostics;
 use crate::bindings::_helpers::compile_driver::project::lineage_mode;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, within,
-};
-use crate::bindings::_helpers::compiled_project::records::project_with;
-use crate::bindings::_helpers::compiled_project::records::record_model_analyses;
+use crate::bindings::_helpers::compiled_views::records::project_with;
+use crate::bindings::_helpers::compiled_views::records::record_model_analyses;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
+use crate::bindings::_helpers::references::explicit_references::explicit_reference_report;
 
 const STAGE_REACHED: &str = "assembly stopped before the requested stage";
 const EXPRESSION_SHAPES_STAGE: &str = "expression_shapes";

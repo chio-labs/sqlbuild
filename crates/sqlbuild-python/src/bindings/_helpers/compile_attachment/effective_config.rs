@@ -6,7 +6,7 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 
 use sqlbuild_model_config::templates::models::TemplateOptions;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::contracts::effective_config::effective_config_connection;
 use crate::bindings::_helpers::contracts::effective_config::effective_config_settings;
 use crate::bindings::_helpers::contracts::effective_config::effective_config_vars;

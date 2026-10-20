@@ -18,7 +18,7 @@ use sqlbuild_core::plan_display::main::model_materialization_label::model_materi
 use sqlbuild_core::plan_display::main::model_resource_type::model_resource_type as resource_type;
 use sqlbuild_core::plan_display::models::{ModelLabelFacts, ParsedBound};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cursor::scalars::{
     render_value, to_exclusive, to_inclusive, try_parse,
 };

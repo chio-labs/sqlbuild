@@ -4,9 +4,9 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyList, PyTuple, PyTupleMethods};
 
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
+use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compile_context::diagnostic_collector::report_compile_diagnostic;
 use crate::bindings::_helpers::compile_driver::assembly_checks::test_model_query_overrides;
-use crate::bindings::_helpers::compile_driver::diagnostic_collector::report_compile_diagnostic;
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
 use crate::bindings::_helpers::compile_driver::stage_work::{SQL_TEST_ASSEMBLY, count_stage};
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::record_class;

@@ -1,8 +1,9 @@
 //! Existing old-name planner models at the native decision boundary.
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use sqlbuild_host::entries::models::AdapterHost;
+
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_migrations::old_name_objects::relation;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};

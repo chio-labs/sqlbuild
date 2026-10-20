@@ -1,9 +1,9 @@
 //! Convert existing planner contracts for origin compatibility checks.
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::analysis::model_reads::inferred_rows;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::compiled_views::model_reads;
+use crate::bindings::_helpers::compiled_views::model_reads::inferred_rows;
 use crate::bindings::_helpers::planner_changes::detect::detect_model_changes;
 use crate::bindings::_helpers::planner_migrations::models::{
     CompatibilityCheck, MigrationCompatibilityResult,

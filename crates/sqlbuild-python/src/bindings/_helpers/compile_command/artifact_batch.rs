@@ -4,12 +4,12 @@ use std::path::PathBuf;
 
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
+use sqlbuild_host::compile_context::main::add_compile_timing::add_compile_timing;
+use sqlbuild_host::compile_context::main::record_compile_timing::record_compile_timing;
 
 use crate::bindings::_helpers::compile_command::reuse_recording::{
     ArtifactRecorder, artifact_written, artifact_written_at,
 };
-use crate::bindings::_helpers::compile_driver::compile_timings::add_compile_timing;
-use crate::bindings::_helpers::compile_driver::compile_timings::record_compile_timing;
 use crate::bindings::_helpers::compile_outputs::artifacts::{
     BackgroundArtifactWriter, write_compiled_artifacts,
 };

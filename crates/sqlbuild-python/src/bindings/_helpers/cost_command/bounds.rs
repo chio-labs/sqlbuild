@@ -10,7 +10,7 @@ use sqlbuild_core::cost_command::constants::ISO_DATE_LENGTH;
 use sqlbuild_core::cost_command::errors::CostCommandError;
 use sqlbuild_core::cost_command::main::is_zero_cost_duration::is_zero_cost_duration;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::fields::field as native_field;

@@ -7,9 +7,9 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyBool, PyString, PyTuple};
 
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::compile_command::target_writer::static_sql_test_planning_diagnostics;
 use crate::bindings::_helpers::compile_driver::analysis::analyze_compile_project;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::field as native_field;

@@ -17,12 +17,13 @@ use sqlbuild_rules::rule_cache::main::file_rule_key::file_rule_key;
 use sqlbuild_rules::rule_results::main::duplicate_literal_hints::duplicate_literal_hints;
 use sqlbuild_rules::rule_results::models::RuleFinding;
 
-use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
-use crate::bindings::_helpers::compiled_project::compiled_model_view::{
+use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
+use crate::bindings::_helpers::compiled_views::compiled_model_view::{
     NativeCompiledModel, SqlRuleInputs, SqlRuleKey,
 };
+use crate::bindings::_helpers::compiled_views::model_reads::output_proven;
+use crate::bindings::_helpers::compiled_views::relation_keys::project_relation_keys;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
@@ -41,7 +42,6 @@ use crate::bindings::_helpers::rules::lint_pipeline::{
     CompiledSource, LintFile, LintOutcome, LintRequest, LintSettings, LintViolationRow, lint,
     lint_sources, outside_project, resolved,
 };
-use crate::bindings::_helpers::rules::relation_keys::project_relation_keys;
 use crate::bindings::_helpers::rules::rule_cache::{
     ModelRuleRow, StoredEntries, cached_rule_findings, encoded_findings, model_rule_keys,
     settings_lint_key, stored_entries, write_rule_cache,
@@ -148,7 +148,7 @@ pub(crate) fn run_planned_sql_rules<'py>(
     let project_files: Option<Vec<LintFile>> = if !identities.is_empty()
         && run.prepared().is_none()
         && !run.model_selection
-        && crate::bindings::_helpers::compile_delta::context::injection().is_none()
+        && crate::bindings::_helpers::compile_context::delta::injection().is_none()
     {
         Some(lint_sources(&run.project_dir, None, None)?)
     } else {
@@ -356,7 +356,7 @@ fn linted_files(
     let py: Python<'_> = run.project.py();
     let project_dir: &Path = &run.project_dir;
     let prepared = prepared_result(run, py);
-    if crate::bindings::_helpers::compile_delta::context::injection().is_some() {
+    if crate::bindings::_helpers::compile_context::delta::injection().is_some() {
         return crate::bindings::_helpers::compile_delta::lint_hooks::changed_files(project_dir);
     }
     Ok(match prepared {
@@ -613,9 +613,7 @@ fn path_rows(outcome: LintOutcome) -> Vec<(PathBuf, LintViolationRow)> {
 /// Build lint expansion, reusing the compiler's scope only for the same discovery.
 fn lint_expansion_context(
     run: &SqlRun<'_, '_>,
-) -> PyResult<
-    crate::bindings::_helpers::compile_attachment::sql_expansion_context::SqlExpansionInputs,
-> {
+) -> PyResult<crate::bindings::_helpers::render::authored_sql::SqlExpansionInputs> {
     let py: Python<'_> = run.project.py();
     let declaration_scope: Option<Bound<'_, PyAny>> = run
         .early_lint

@@ -1,6 +1,6 @@
 //! Selected-scope buildability validation before change planning.
 
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::planner_identity::graph::build_execution_edge_origins;
 use crate::bindings::_helpers::planner_identity::graph::check_buildability;
 use crate::bindings::_helpers::planner_identity::graph::missing_upstream_message;

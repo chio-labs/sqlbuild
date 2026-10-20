@@ -7,6 +7,7 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python, pyclass, pymethods};
 use pyo3::types::{PyBool, PyDateTime, PyDict, PyTuple};
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_state::execution_history::constants::{
     DEFAULT_PAGE_LIMIT, POSTGRES_ADVISORY_LOCK, POSTGRES_ALL_EVENTS, POSTGRES_ALL_RUNS,
     POSTGRES_CONNECT_TIMEOUT_SECONDS, POSTGRES_DELETE_RUNS, POSTGRES_EVENT_BY_ID,
@@ -37,7 +38,7 @@ use sqlbuild_state::execution_history::models::{
 };
 use sqlbuild_state::execution_history::types::UtcTime;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
+use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::execution_history::appends::prepared_batch;
@@ -49,7 +50,6 @@ use crate::bindings::_helpers::execution_history::conversion::{
 use crate::bindings::_helpers::execution_history::statements::{
     column, execute, execute_plain, execute_query, fetch_all, fetch_one, tuple_of,
 };
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

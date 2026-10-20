@@ -12,6 +12,8 @@ use sqlbuild_analysis::fingerprint_storage::main::read_latest_sql::read_latest_s
 use sqlbuild_analysis::fingerprint_storage::main::relevant_read_sql::relevant_read_sql;
 use sqlbuild_analysis::fingerprint_storage::models::RelevantRead;
 
+use sqlbuild_host::entries::models::AdapterHost;
+
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::fingerprints::latest_rows::{
     fingerprint_input_error, fingerprint_set_from_rows,
@@ -21,7 +23,6 @@ use crate::bindings::_helpers::fingerprints::storage_sql::{
 };
 use crate::bindings::_helpers::records::construct::new_record;
 
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;

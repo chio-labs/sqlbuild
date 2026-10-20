@@ -18,14 +18,14 @@ use sqlbuild_core::contract_command::models::{
     ContractFindingText, ContractProgress, ContractReport, ContractResourceText,
 };
 
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
+use crate::bindings::_helpers::build_progress::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
-use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::command_runtime::invocation::resolve_adapter_connection_context;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::pipeline_entries::build_project_graph_from_compiled_project;
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
 use crate::bindings::_helpers::contract_command::write::{ContractWrite, write_contracts};
 use crate::bindings::_helpers::native_host::connections::connection_failure;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;

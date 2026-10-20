@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::sync::PyOnceLock;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 
 static EXIT_SIGNAL: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
 

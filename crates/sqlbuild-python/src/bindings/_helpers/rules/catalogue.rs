@@ -8,14 +8,14 @@ use pyo3::types::{
     PyBool, PyCFunction, PyDict, PyDictMethods, PyInt, PyString, PyTuple, PyTupleMethods,
 };
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::UserCodeHost;
 use sqlbuild_rules::models::RulesConfig;
 use sqlbuild_rules::rule_catalogue::main::sorted_catalogue_order::sorted_catalogue_order;
 use sqlbuild_rules::rule_catalogue::models::{CatalogueRule, OptionKind, OptionSpec, OptionValue};
 
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::planner_scope::scope::build_planner_scope;
 use crate::bindings::_helpers::records::fields::{field as record_field, path_posix, replaced};
 use crate::bindings::_helpers::rules::builtin_catalogue::builtin_rules;

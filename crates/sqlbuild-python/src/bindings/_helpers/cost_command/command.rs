@@ -12,7 +12,7 @@ use sqlbuild_core::cost_command::main::cost_history_limit::cost_history_limit;
 use sqlbuild_core::cost_command::main::select_cost_run::select_cost_run;
 use sqlbuild_core::cost_command::main::validate_cost_request::validate_cost_request;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cost_command::bounds::{parse_bound, parse_since};
 use crate::bindings::_helpers::cost_command::refresh::refresh_pending_cost_run;
 use crate::bindings::_helpers::cost_command::refusal::cost_error;

@@ -1,16 +1,15 @@
 //! Plan-entry cursor windows: overrides, planner-owned bounds and microbatch ranges.
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, imported,
-};
+use sqlbuild_host::entries::models::ExecutorHost;
+
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, imported};
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::cursor::conversion::CursorSession;
 use crate::bindings::_helpers::cursor::scalars::{parse_value, sentinel_to_token};
 use crate::bindings::_helpers::cursor::values::{local_date_time, replaced};
 use crate::bindings::_helpers::model_config::config_values::config_cursor_bound;
 use crate::bindings::_helpers::model_config::config_values::config_str as authored_config_str;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::display::resolve_bounded_cursor_override;
 use crate::bindings::_helpers::planner_entries::models::ModelPlanContext;

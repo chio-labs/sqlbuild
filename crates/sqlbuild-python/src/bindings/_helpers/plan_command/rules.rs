@@ -8,11 +8,11 @@ use pyo3::wrap_pyfunction;
 use sqlbuild_rules::rule_catalogue::main::render_rule_list::render_rule_list;
 use sqlbuild_rules::rule_catalogue::models::RuleListing;
 
+use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::project::build_project_graph;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::planner_selection::selectors::select_project_graph;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;

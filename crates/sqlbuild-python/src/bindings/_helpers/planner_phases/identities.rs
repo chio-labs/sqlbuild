@@ -1,6 +1,6 @@
 //! Expected version identities and stale-warning change detection.
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::planner_changes::detect::scope_model_changes;
 use crate::bindings::_helpers::planner_identity::identities::direct_model_version_identities;
 use crate::bindings::_helpers::planner_phases::contexts::class_field;

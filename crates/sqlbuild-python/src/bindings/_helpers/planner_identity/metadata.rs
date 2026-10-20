@@ -14,8 +14,8 @@ use sqlbuild_analysis::planner_identity::main::function_fingerprint_sql::functio
 use sqlbuild_analysis::planner_identity::main::stable_identity_hash::stable_identity_hash;
 use sqlbuild_analysis::planner_identity::models::FunctionFingerprintFields;
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords, within};
+use crate::bindings::_helpers::boundary::python_calls::{imported, keywords, within};
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::discovery::hook_entries::hook_entries;
 use crate::bindings::_helpers::planner_identity::hashing::function_definition_hash;
 use crate::bindings::_helpers::planner_identity::json_values::{COMPACT, SPACED, sorted_dumps};

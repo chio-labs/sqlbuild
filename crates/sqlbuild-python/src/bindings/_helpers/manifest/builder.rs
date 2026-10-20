@@ -11,6 +11,7 @@ use sqlbuild_analysis::manifest::errors::{ManifestEncodeError, ManifestError};
 use sqlbuild_analysis::manifest::main::build_manifest_json::build_manifest_json;
 use sqlbuild_analysis::manifest::models::ManifestInput;
 use sqlbuild_core::json::errors::JsonEmitError;
+use sqlbuild_host::entries::models::UserCodeHost;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::compiler_guard;
@@ -20,7 +21,6 @@ use crate::bindings::_helpers::manifest::rows::{
     ProjectRows, plan_input, project_rows, python_hooks,
 };
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::ErrorId;

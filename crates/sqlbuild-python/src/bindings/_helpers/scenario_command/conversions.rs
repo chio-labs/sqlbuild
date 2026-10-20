@@ -14,9 +14,9 @@ use sqlbuild_core::scenario_command::models::{
     FixtureStatements, FunctionStatements, LoadedRelation, LocalRuntimeInputs, ModelArtifactEntry,
     NamedStatements, RetainedInputs, RetainedRelation, ScenarioResultRow, WarehouseRuntimeInputs,
 };
+use sqlbuild_host::entries::models::AdapterHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::enum_from_value;
 use crate::bindings::_helpers::records::fields::field as native_field;

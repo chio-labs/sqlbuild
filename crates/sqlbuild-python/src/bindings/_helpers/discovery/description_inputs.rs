@@ -4,11 +4,11 @@ use pyo3::prelude::{Bound, PyAny, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyCFunction, PyDict, PyFrozenSet};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::contracts::project_config::load_project_config_file;
 use crate::bindings::_helpers::discovery::declaration_records::discover_model_schema_files;
 use crate::bindings::_helpers::discovery::model_records::{
     ModelFileSelection, discovered_model_files,
 };
+use crate::bindings::_helpers::discovery::project_config::load_project_config_file;
 use crate::bindings::_helpers::discovery::snapshot::in_snapshot;
 use crate::bindings::_helpers::model_config::described_models::externally_described_models as described_models;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with};

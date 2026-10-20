@@ -3,7 +3,7 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
 use sqlbuild_core::dbt_command::constants::NO_CONNECTION_OPTION;
 
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::dbt_command::auto_init::args_tuple;
 use crate::bindings::_helpers::dbt_command::support::{color_enabled, flag, status, stream};
 use crate::bindings::_helpers::dbt_interop::pipeline::debug_dbt_from_project;

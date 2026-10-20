@@ -5,7 +5,7 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyResult, Python};
 use pyo3::types::{PyCFunction, PyDict, PyDictMethods, PyInt, PyList, PyTuple, PyTupleMethods};
 use sqlbuild_core::cost_command::constants::{HISTORY_METRIC_SORT_FIELDS, MISSING_METRIC_STATUSES};
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
 type SortKey = fn(&Bound<'_, PyAny>, &str) -> PyResult<Py<PyAny>>;

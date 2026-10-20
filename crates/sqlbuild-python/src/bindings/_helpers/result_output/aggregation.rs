@@ -5,10 +5,10 @@ use pyo3::types::{PyDict, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 use sqlbuild_core::build_aggregate::main::aggregate_build_counts::aggregate_build_counts;
 use sqlbuild_core::build_aggregate::models::{BuildCounts, BuildResultFacts, ModelResultFacts};
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

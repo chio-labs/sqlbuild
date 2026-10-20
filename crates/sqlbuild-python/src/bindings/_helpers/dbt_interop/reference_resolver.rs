@@ -5,16 +5,16 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PySet, PySetMethods, PyString, PyTuple, PyTupleMethods};
 use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction};
+use sqlbuild_host::entries::models::ExecutorHost;
 use std::collections::HashSet;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{
+use crate::bindings::_helpers::boundary::python_calls::{
     KeywordArguments, call_with, imported, keywords, within,
 };
 use crate::bindings::_helpers::dbt_interop::manifest::build_compile_dbt_manifest_index;
 use crate::bindings::_helpers::dbt_interop::manifest::resolve_dbt_reference_relation;
 use crate::bindings::_helpers::dbt_interop::manifest::validate_compile_dbt_model_names;
 use crate::bindings::_helpers::dbt_interop::manifest::validate_compile_dbt_model_reference;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;

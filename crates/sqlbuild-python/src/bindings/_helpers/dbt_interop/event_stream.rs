@@ -22,8 +22,8 @@ use sqlbuild_core::dbt_process::main::spawn_dbt_json_process::spawn_dbt_json_pro
 use sqlbuild_core::dbt_process::main::stop_dbt_process::stop_dbt_process;
 use sqlbuild_core::dbt_process::models::DbtJsonProcess;
 
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, imported, within};
 use crate::bindings::_helpers::build_progress::transient_status::status_reporter;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, imported, within};
 use crate::bindings::_helpers::dbt_events::stream::DbtEventStream;
 use crate::bindings::_helpers::dbt_interop::runner::{
     dbt_command_lifecycle, launch_failure, launch_os_error, report_exit,

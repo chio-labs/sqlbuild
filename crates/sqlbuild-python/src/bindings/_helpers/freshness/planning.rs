@@ -5,9 +5,10 @@ use pyo3::prelude::{
 };
 use pyo3::types::{PyDict, PyDictMethods, PyFrozenSet, PySet, PySetMethods, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::AdapterHost;
 use sqlbuild_state::freshness::main::configuration_error::configuration_error;
 
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::freshness::exception_types::SourceFreshnessObservationError;
 use crate::bindings::_helpers::freshness::observation::{
     Observer, observation_record, observation_source, observe_adapter_batch, observe_configured,
@@ -15,7 +16,6 @@ use crate::bindings::_helpers::freshness::observation::{
 };
 use crate::bindings::_helpers::freshness::state_io::{StateRead, read_latest};
 use crate::bindings::_helpers::freshness::support::text;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_identity::graph::build_downstream_model_name_closure;
 use crate::bindings::_helpers::records::construct::{enum_member, new_record_with};

@@ -1,9 +1,9 @@
 //! One planned model's requested, resolved and deferred cursor state, for text and JSON plans.
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python};
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::cursor::conversion::GRAIN_NAMES;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::plan_output::display::{
     aligned_timestamp_bounds, resolve_effective_microbatch_batch_size,

@@ -1,7 +1,8 @@
 //! Existing source and load plan models materialised at the Python boundary.
 
+use sqlbuild_host::entries::models::ExecutorHost;
+
 use crate::bindings::_helpers::graph::algorithms::closure;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_scope::loaders::intermediate_map;
 use crate::bindings::_helpers::records::construct::new_record;

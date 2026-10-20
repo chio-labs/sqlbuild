@@ -1,7 +1,7 @@
 //! Migration identity binding with unchanged metadata and hash format.
 
-use crate::bindings::_helpers::analysis::model_reads;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::fields::replaced_keywords;
 use pyo3::exceptions::PyValueError;
@@ -91,7 +91,7 @@ pub(crate) fn with_migration_fingerprints<'py>(
     py: Python<'py>,
     options: Option<Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
-    use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+    use crate::bindings::_helpers::boundary::python_calls::call_with;
     let arguments = KeywordArguments::read(
         py,
         "with_migration_fingerprints",

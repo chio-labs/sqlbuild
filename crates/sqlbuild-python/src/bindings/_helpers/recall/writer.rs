@@ -7,8 +7,8 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult, Python, pyclass, pymethods};
 use pyo3::types::{PyBytes, PyBytesMethods};
 use serde_json::{Map, Value};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::recall::sinks::lifecycle_event_object;
 use crate::bindings::_helpers::records::fields::field as native_field;

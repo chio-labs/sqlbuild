@@ -1,7 +1,7 @@
 use sqlbuild_cache::project_reuse::types::ImageSections;
 use sqlbuild_config::models::ConfigValue;
 
-use crate::bindings::_helpers::compile_delta::coverage::ModelCoverage;
+use crate::bindings::_helpers::compile_context::delta::ModelCoverage;
 use crate::bindings::_helpers::compile_delta::image::ProjectImage;
 
 /// A stored report, a delta report and what splicing the delta into the stored one gives.

@@ -7,6 +7,7 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyString};
 use pyo3::{pyfunction, wrap_pyfunction};
 use sqlbuild_core::json::errors::JsonEmitError;
+use sqlbuild_host::entries::models::ExecutorHost;
 use sqlbuild_state::events::errors::StateSqlError;
 use sqlbuild_state::events::main::column_migration_event_id::column_migration_event_id;
 use sqlbuild_state::events::main::event_cells::event_cells;
@@ -16,7 +17,6 @@ use sqlbuild_state::events::main::old_name_view_event_id::old_name_view_event_id
 use sqlbuild_state::events::models::{EventRelation, StateCell, StateColumnType, StateValue};
 
 use crate::bindings::_helpers::boundary::keyword_request::Request;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::state_rows::timestamps::{date_time_typed, presumed_utc};

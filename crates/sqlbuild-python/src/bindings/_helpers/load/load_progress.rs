@@ -10,12 +10,12 @@ use sqlbuild_core::cli_text::models::CliStyle;
 use sqlbuild_core::load_command::main::render_load_result::render_load_result;
 use sqlbuild_core::load_command::main::render_load_spinner_line::render_load_spinner_line;
 use sqlbuild_core::load_command::models::{LoadResultText, LoadSpinnerRow, LoadStatus};
+use sqlbuild_host::entries::models::AdapterHost;
 
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, within};
+use crate::bindings::_helpers::build_progress::progress::current_native_progress_projector;
 use crate::bindings::_helpers::build_progress::terminal::start_spinner;
 use crate::bindings::_helpers::build_progress::transient_lines::shared_transient_line_coordinator;
-use crate::bindings::_helpers::cli::progress::current_native_progress_projector;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, within};
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::fields::field as native_field;
 

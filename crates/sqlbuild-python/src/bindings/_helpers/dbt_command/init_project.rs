@@ -12,7 +12,9 @@ use sqlbuild_core::dbt_process::main::run_dbt_process::run_dbt_process;
 use sqlbuild_core::dbt_process::models::DbtProcessOutput;
 use sqlbuild_core::text::main::python_strip::python_strip;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported, keywords};
+use sqlbuild_host::entries::models::ThirdPartyHost;
+
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported, keywords};
 use crate::bindings::_helpers::dbt_interop::profile::build_dbt_init_project_toml;
 use crate::bindings::_helpers::dbt_interop::profile::normalize_dbt_profile_connection;
 use crate::bindings::_helpers::dbt_interop::profile_load::{
@@ -24,7 +26,6 @@ use crate::bindings::types::CompilerDetach;
 use sqlbuild_config::dbt_profile::models::DbtProjectMetadata;
 
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::third_party::ThirdPartyHost;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::records::ids::RecordId;
 use sqlbuild_core::constants::PROJECT_CONFIG_FILENAME as PROJECT_FILE;

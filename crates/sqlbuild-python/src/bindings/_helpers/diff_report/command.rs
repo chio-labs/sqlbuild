@@ -16,29 +16,28 @@ use sqlbuild_cli::diff_report::models::{
 use sqlbuild_cli::diff_report::types::QueryDiffPhase;
 use sqlbuild_core::json::main::dumps::dumps;
 use sqlbuild_core::json::models::{JsonDialect, StdlibJsonOptions};
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
 
+use crate::bindings::_helpers::boundary::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
 use crate::bindings::_helpers::command_runtime::connection::resolve_target_connection_config;
 use crate::bindings::_helpers::compile_driver::diff::run_diff_pipeline;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_name;
 use crate::bindings::_helpers::dbt_interop::reference_resolver::resolve_external_sql_reference_resolver;
 use crate::bindings::_helpers::diff_report::facts::diff_facts;
+use crate::bindings::_helpers::diff_report::output::publish_diff_output;
 use crate::bindings::_helpers::diff_report::query::{
     execute_query_diff, execution_options, prepare_query_diff, project_adapter,
 };
-use crate::bindings::_helpers::diff_report::registration::publish_diff_output;
 use crate::bindings::_helpers::diff_report::support::{
     call, caused, cli_error, error_text, is_exception, matches_class, matches_native, none, object,
     request_facts, user_error_parts,
 };
 use crate::bindings::_helpers::discovery::configuration::discover_project_configuration;
 use crate::bindings::_helpers::frontier::encoder::emit_error;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::connections::connection_failure;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_selection::unit_tests::reject_unit_test_selectors;
 use crate::bindings::_helpers::records::construct::error_class;

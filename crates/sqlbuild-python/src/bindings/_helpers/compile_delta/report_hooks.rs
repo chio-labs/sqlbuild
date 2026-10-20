@@ -1,25 +1,20 @@
 //! Where the compile's report and output stages leave image facts or take a delta's injection.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyResult};
 use pyo3::types::{PyDict, PyDictMethods, PyStringMethods, PyTuple, PyTupleMethods};
 use sqlbuild_core::cli_text::models::ModelLine;
 
 use crate::bindings::_helpers::compile_command::report::diagnostic_item;
-use crate::bindings::_helpers::compile_delta::context::{
-    CapturedDiagnostic, CapturedModel, CapturedTest, ModelShape, capture, capture_unsupported,
-    capturing, delta_unsupported, injection,
-};
-use crate::bindings::_helpers::compile_delta::coverage::{
-    ModelCoverage, coverage_reasons, merged_coverage, merged_order,
+use crate::bindings::_helpers::compile_context::delta::guarded;
+use crate::bindings::_helpers::compile_context::delta::{
+    CapturedDiagnostic, CapturedModel, CapturedTest, capture, capturing, injection,
 };
 use crate::bindings::_helpers::compile_outputs::json_report::plain_json;
 use crate::bindings::_helpers::graph::project_graph::NativeProjectGraph;
 use crate::bindings::_helpers::records::fields::field as native_field;
 
-const SOURCES_KEY: &str = "sources";
-const NAME_KEY: &str = "name";
 /// The graph key kind of a model.
 const MODEL_KIND: &str = "model";
 
@@ -153,112 +148,6 @@ pub(crate) fn captured_diagnostic(diagnostic: &Bound<'_, PyAny>) -> PyResult<Cap
     })
 }
 
-/// The partial-check reasons of the `fresh` models, merged in a delta with the stored models'.
-pub(crate) fn semantic_reasons(
-    order: Vec<(String, Vec<String>)>,
-    fresh: Vec<ModelCoverage>,
-) -> PyResult<Vec<(String, Vec<String>)>> {
-    let (order, facts): (Vec<(String, Vec<String>)>, Vec<ModelCoverage>) = match injection() {
-        None => (
-            order,
-            fresh.into_iter().filter(ModelCoverage::notable).collect(),
-        ),
-        Some(injection) => {
-            let Some(stored) = &injection.coverage else {
-                return Err(delta_unsupported(
-                    "the stored compile recorded no semantic coverage",
-                ));
-            };
-            (
-                merged_order(&injection.coverage_order, &order),
-                merged_coverage(stored, &fresh),
-            )
-        }
-    };
-    let reasons: Vec<(String, Vec<String>)> = coverage_reasons(&order, &facts);
-    if capturing() {
-        capture(|capture| {
-            if capture.coverage.is_none() {
-                capture.coverage = Some(facts);
-            }
-        });
-    }
-    Ok(reasons)
-}
-
-/// In a delta compile, publish the shapes of every model it does not compile again first.
-pub(crate) fn inject_model_shapes(
-    models: &[Bound<'_, PyAny>],
-    shapes: &Bound<'_, PyDict>,
-) -> PyResult<()> {
-    let Some(injection) = injection() else {
-        return Ok(());
-    };
-    let mut rerun: HashSet<String> = HashSet::with_capacity(models.len());
-    for model in models {
-        rerun.insert(native_field(model, "name")?.extract()?);
-    }
-    let py = shapes.py();
-    for (name, columns) in &injection.model_shapes {
-        if rerun.contains(name) {
-            continue;
-        }
-        let shape: Bound<'_, PyDict> = PyDict::new(py);
-        for (column, column_type) in columns {
-            shape.set_item(column, column_type)?;
-        }
-        shapes.set_item(name, shape)?;
-    }
-    Ok(())
-}
-
-/// Record the model shapes the first semantic shape pass published.
-fn record_model_shapes_inner(
-    project: &Bound<'_, PyAny>,
-    shapes: &Bound<'_, PyDict>,
-) -> PyResult<()> {
-    if !capturing() {
-        return Ok(());
-    }
-    let mut names: HashSet<String> = HashSet::new();
-    for model in native_field(project, "models")?.try_iter()? {
-        names.insert(native_field(&model?, "name")?.extract()?);
-    }
-    if let Some(injection) = injection() {
-        names.extend(injection.model_shapes.iter().map(|(name, _)| name.clone()));
-    }
-    let mut published: Vec<ModelShape> = Vec::new();
-    for (name, shape) in shapes.iter() {
-        let name: String = name.extract()?;
-        if !names.contains(&name) {
-            continue;
-        }
-        let shape: Bound<'_, PyDict> = shape.cast_into()?;
-        let mut columns: Vec<(String, String)> = Vec::with_capacity(shape.len());
-        for (column, column_type) in shape.iter() {
-            columns.push((column.extract()?, column_type.extract()?));
-        }
-        published.push((name, columns));
-    }
-    capture(|capture| {
-        if capture.model_shapes.is_none() {
-            capture.model_shapes = Some(published);
-        }
-    });
-    Ok(())
-}
-
-/// Run a capture hook; a failure only rules the compile out as a delta base.
-fn guarded(hook: impl FnOnce() -> PyResult<()>) -> PyResult<()> {
-    if !capturing() {
-        return Ok(());
-    }
-    if let Err(error) = hook() {
-        capture_unsupported(&format!("an image fact could not be recorded: {error}"));
-    }
-    Ok(())
-}
-
 /// Record which models each SQL test's compiled artifact is keyed by.
 pub(crate) fn record_test_chains(
     tests: &Bound<'_, PyAny>,
@@ -273,14 +162,6 @@ pub(crate) fn record_compile_facts(
     diagnostics: &Bound<'_, PyTuple>,
 ) -> PyResult<()> {
     guarded(|| record_compile_facts_inner(graph, diagnostics))
-}
-
-/// Record the model shapes the first semantic shape pass published.
-pub(crate) fn record_model_shapes(
-    project: &Bound<'_, PyAny>,
-    shapes: &Bound<'_, PyDict>,
-) -> PyResult<()> {
-    guarded(|| record_model_shapes_inner(project, shapes))
 }
 
 /// In a delta, add the text of files that stored diagnostics point into but were not rerun.
@@ -315,50 +196,4 @@ pub(crate) fn complete_source_texts(
         }
     }
     Ok(())
-}
-
-/// In a delta reading only some sources, drop every other loaded source YAML entry.
-pub(crate) fn retain_read_sources(
-    outcomes: &mut [sqlbuild_discovery::yaml_files::models::YamlFileOutcome],
-) {
-    use sqlbuild_config::models::ConfigValue;
-    use sqlbuild_discovery::yaml_files::models::YamlFileOutcome;
-    let Some(injection) = injection() else {
-        return;
-    };
-    let Some(read) = injection.source_names.as_ref() else {
-        return;
-    };
-    fn text(value: &ConfigValue) -> Option<&str> {
-        match value {
-            ConfigValue::String(text) => Some(text.as_str()),
-            _ => None,
-        }
-    }
-    for outcome in outcomes {
-        let YamlFileOutcome::Loaded {
-            value: ConfigValue::Map(entries),
-            ..
-        } = outcome
-        else {
-            continue;
-        };
-        for (key, value) in entries {
-            if text(key) != Some(SOURCES_KEY) {
-                continue;
-            }
-            let ConfigValue::List(sources) = value else {
-                continue;
-            };
-            sources.retain(|source| {
-                let name: Option<&str> = source.as_map().and_then(|entries| {
-                    entries
-                        .iter()
-                        .find(|(key, _)| text(key) == Some(NAME_KEY))
-                        .and_then(|(_, name)| text(name))
-                });
-                name.is_none_or(|name| read.contains(name))
-            });
-        }
-    }
 }

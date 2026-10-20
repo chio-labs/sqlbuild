@@ -6,9 +6,9 @@ use pyo3::prelude::{Bound, Py, PyAny, PyAnyMethods, PyModule, PyModuleMethods, P
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyType};
 use pyo3::{pyclass, pymethods};
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{context_variable, imported};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::boundary::python_calls::{context_variable, imported};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::new_record;
 use crate::bindings::_helpers::records::ids::RecordId;

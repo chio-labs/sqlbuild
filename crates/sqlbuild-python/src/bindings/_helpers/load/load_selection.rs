@@ -11,12 +11,12 @@ use sqlbuild_core::load_command::errors::UnknownLoadSelector;
 use sqlbuild_core::load_command::main::load_reference_loaders::load_reference_loaders;
 use sqlbuild_core::load_command::main::select_load_entries::select_load_entries as select_entries;
 use sqlbuild_core::load_command::models::{LoadEntry, LoadGraph};
+use sqlbuild_host::entries::models::AdapterHost;
 
+use crate::bindings::_helpers::boundary::python_calls::KeywordArguments;
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
-use crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments;
 use crate::bindings::_helpers::contracts::spec_resolution::loader_destination_parts;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;

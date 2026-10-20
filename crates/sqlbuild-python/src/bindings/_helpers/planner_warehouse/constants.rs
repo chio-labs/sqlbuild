@@ -1,7 +1,7 @@
 //! Python modules and fixed names of warehouse inspection for planning.
 
-use crate::bindings::_helpers::native_host::adapter::AdapterHost;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use sqlbuild_host::entries::models::{AdapterHost, ExecutorHost};
+
 use crate::bindings::_helpers::records::ids::RecordId;
 
 pub(crate) const RELATIONS_MAIN_LIST: AdapterHost = AdapterHost::ListRelationsForInspection;

@@ -68,7 +68,7 @@ pub(crate) fn emit_json_report(report: &Bound<'_, PyAny>) -> PyResult<String> {
         if let Some(error) = conversion.stdlib_error {
             return Err(error);
         }
-        crate::bindings::_helpers::compile_delta::context::capture(|capture| {
+        crate::bindings::_helpers::compile_context::delta::capture(|capture| {
             capture.stdlib_json = true;
         });
         emitted(

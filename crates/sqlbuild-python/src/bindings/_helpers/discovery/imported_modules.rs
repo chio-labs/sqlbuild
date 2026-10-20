@@ -4,12 +4,13 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyErr, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods, PyTuple, PyTupleMethods};
 
-use crate::bindings::_helpers::compile_driver::python_calls::call_with;
+use sqlbuild_host::entries::models::UserCodeHost;
+
+use crate::bindings::_helpers::boundary::python_calls::call_with;
 use crate::bindings::_helpers::discovery::locations::project_relative_path;
 use crate::bindings::_helpers::discovery::python_module_files::discover_python_module_files;
 use crate::bindings::_helpers::event_exporting::scope::current_scope;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::error_class;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field as native_field;

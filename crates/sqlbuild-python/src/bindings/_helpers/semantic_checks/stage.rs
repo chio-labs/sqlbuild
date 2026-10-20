@@ -6,10 +6,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRef
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{pyfunction, wrap_pyfunction};
 
-use crate::bindings::_helpers::analysis::model_reads::output_proven;
 use crate::bindings::_helpers::analysis_session::session::NativeModelAnalysisSession;
 use crate::bindings::_helpers::boundary::keyword_request::Request;
 use crate::bindings::_helpers::boundary::panics::NativeCompilerError;
+use crate::bindings::_helpers::compiled_views::model_reads::output_proven;
 use crate::bindings::_helpers::records::fields::field as native_field;
 use crate::bindings::_helpers::rules::early_builtin_rules::start_early_rules;
 use crate::bindings::_helpers::semantic_checks::completion::completed_diagnostics;

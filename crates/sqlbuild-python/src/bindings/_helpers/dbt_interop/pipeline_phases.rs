@@ -4,10 +4,10 @@ use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyRes
 use pyo3::types::PyDict;
 use pyo3::{IntoPyObject, pyfunction, wrap_pyfunction};
 
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::build_command::support::{boolean, emit, none, text, tuple};
-use crate::bindings::_helpers::cli::progress_reporters::ConnectionProgressReporter;
+use crate::bindings::_helpers::build_progress::progress_reporters::ConnectionProgressReporter;
 use crate::bindings::_helpers::command_runtime::concurrency::resolve_concurrency;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_target_config;
 use crate::bindings::_helpers::dbt_interop::execution::render_dbt_execution_summary_footer;
 use crate::bindings::_helpers::dbt_interop::pipeline_prologue::progress;

@@ -14,16 +14,16 @@ use sqlbuild_core::format_command::main::resolve_lint_paths::resolve_lint_paths;
 use sqlbuild_rules::lint_text::main::scan_fixture_null_candidates::scan_fixture_null_candidates;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
+use crate::bindings::_helpers::boundary::python_calls::keywords;
+use crate::bindings::_helpers::boundary::python_calls::within;
 use crate::bindings::_helpers::command_runtime::adapters::resolve_cli_adapter;
 use crate::bindings::_helpers::compile_driver::discovery::discover_project_inputs;
 use crate::bindings::_helpers::compile_driver::project::build_project_graph;
-use crate::bindings::_helpers::compile_driver::python_calls::keywords;
-use crate::bindings::_helpers::compile_driver::python_calls::within;
-use crate::bindings::_helpers::contracts::project_config::load_local_config_file;
-use crate::bindings::_helpers::contracts::project_config::load_project_config_file;
 use crate::bindings::_helpers::contracts::spec_resolution::resolve_effective_adapter_name;
 use crate::bindings::_helpers::discovery::declaration_records::discover_model_schema_files;
 use crate::bindings::_helpers::discovery::model_records::discover_model_files;
+use crate::bindings::_helpers::discovery::project_config::load_local_config_file;
+use crate::bindings::_helpers::discovery::project_config::load_project_config_file;
 use crate::bindings::_helpers::discovery::snapshot::directory_snapshot_scope;
 use crate::bindings::_helpers::discovery::sql_test_records::discover_test_files;
 use crate::bindings::_helpers::discovery::yaml_records::{

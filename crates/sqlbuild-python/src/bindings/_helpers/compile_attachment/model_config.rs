@@ -5,7 +5,7 @@ use pyo3::pyfunction;
 use pyo3::types::{PyDict, PyDictMethods, PyTuple};
 
 use crate::bindings::_helpers::compile_attachment::storage_policies::inherited_storage;
-use crate::bindings::_helpers::compiled_project::loop_classes::table_backed;
+use crate::bindings::_helpers::input_loops::loop_classes::table_backed;
 use crate::bindings::_helpers::model_config::model_config_builder::NativeModelConfigBuilder;
 use crate::bindings::_helpers::model_config::unicode_environment::unicode_environment;
 use crate::bindings::_helpers::records::construct::{new_record, new_record_with, record_class};

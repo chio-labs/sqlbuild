@@ -6,9 +6,9 @@ use pyo3::types::{
     PyStringMethods, PyTuple,
 };
 use serde_json::{Map, Number, Value};
+use sqlbuild_host::entries::models::ExecutorHost;
 
 use crate::bindings::_helpers::discovery::snapshot::escaped;
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::recall::constants::{
     EVENT_OPTIONAL_TEXT_FIELDS, EVENT_TEXT_FIELDS, INVOCATION_METADATA_SCHEMA_VERSION,

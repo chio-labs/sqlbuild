@@ -12,7 +12,7 @@ use sqlbuild_cache::artifacts::models::{SqlTestArtifactRecord, StoredSqlTestReco
 use sqlbuild_cache::digest::main::bytes_digest::bytes_digest;
 use sqlbuild_cache::digest::main::hex_digest::hex_digest;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::compile_outputs::json_report::{compact_sorted_json, orjson_sorted};
 use crate::bindings::_helpers::records::construct::record_class;
 use crate::bindings::_helpers::records::ids::RecordId;

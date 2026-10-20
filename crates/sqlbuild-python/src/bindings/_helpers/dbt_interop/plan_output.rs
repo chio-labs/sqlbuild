@@ -3,7 +3,9 @@
 use pyo3::prelude::{Bound, PyAny, PyAnyMethods, PyModule, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyDict, PyDictMethods};
 use pyo3::{pyfunction, wrap_pyfunction};
+use sqlbuild_host::entries::models::ExecutorHost;
 
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, keywords};
 use crate::bindings::_helpers::build_command::support::{boolean, keyword_relay, none};
 use crate::bindings::_helpers::command_runtime::connection::{
     anchor_local_database_path, with_dbt_profile,
@@ -12,10 +14,6 @@ use crate::bindings::_helpers::command_runtime::warehouses::apply_command_wareho
 use crate::bindings::_helpers::compile_attachment::effective_config::build_effective_connection_config;
 use crate::bindings::_helpers::compile_driver::deferral::resolve_model_deferral_inputs;
 use crate::bindings::_helpers::compile_driver::plan_result::connection_with_hooks;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::planner_entries::display_plan::build_display_only_sqlbuild_plan;
 use crate::bindings::_helpers::planner_entries::execution_plan::build_execution_plan;

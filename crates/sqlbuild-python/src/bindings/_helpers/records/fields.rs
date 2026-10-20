@@ -16,11 +16,11 @@ use pyo3::types::{
 use sqlbuild_discovery::model_files::main::model_file_stem::model_file_stem;
 use sqlbuild_rules::project_tree::main::pure_path_posix::pure_path_posix;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::native_host::host;
+use crate::bindings::_helpers::records::behaviours::behaviours;
 use crate::bindings::_helpers::records::constants::{
-    CACHED_PROPERTIES, CLASS_METHODS, CLASS_PROPERTIES, CURRENT_DIRECTORY_PATH, ENUMS,
-    FROZEN_INSTANCE_ERROR, NATIVE_MODULE, ORDERED_RECORDS, RECORD_FINISHERS, RECORD_SPEC_ATTRIBUTE,
+    CURRENT_DIRECTORY_PATH, ENUMS, FROZEN_INSTANCE_ERROR, NATIVE_MODULE, RECORD_SPEC_ATTRIBUTE,
     RECORDS,
 };
 use crate::bindings::_helpers::records::construct::{enum_member, new_record};
@@ -130,7 +130,8 @@ pub(crate) fn record_attribute_opt<'py>(
             property_value(cell, property, cached_name)
                 .map(|found| Some(found.into_bound(value.py()))),
         ),
-        None if CLASS_METHODS
+        None if behaviours()
+            .methods
             .iter()
             .flat_map(|group| group.iter())
             .any(|(class, method, _)| *class == record.spec.name && *method == name) =>
@@ -230,10 +231,18 @@ fn record_properties() -> &'static PropertyTable {
     static TABLE: OnceLock<PropertyTable> = OnceLock::new();
     TABLE.get_or_init(|| {
         let mut table: PropertyTable = HashMap::new();
-        for &(class, name, property) in CLASS_PROPERTIES.iter().flat_map(|group| group.iter()) {
+        for &(class, name, property) in behaviours()
+            .properties
+            .iter()
+            .flat_map(|group| group.iter())
+        {
             let _ = table.insert((class, name), (property, None));
         }
-        for &(class, name, property) in CACHED_PROPERTIES.iter().flat_map(|group| group.iter()) {
+        for &(class, name, property) in behaviours()
+            .cached_properties
+            .iter()
+            .flat_map(|group| group.iter())
+        {
             let _ = table.insert((class, name), (property, Some(name)));
         }
         table
@@ -440,7 +449,8 @@ pub(crate) fn build_values(
 fn record_finishers() -> &'static HashMap<&'static str, RecordFinish> {
     static FINISHERS: OnceLock<HashMap<&'static str, RecordFinish>> = OnceLock::new();
     FINISHERS.get_or_init(|| {
-        RECORD_FINISHERS
+        behaviours()
+            .finishers
             .iter()
             .flat_map(|group| group.iter())
             .map(|&(record, finish)| (record, finish))
@@ -526,7 +536,10 @@ pub(crate) fn ordered_comparison(
 ) -> PyResult<Py<PyAny>> {
     let py: Python<'_> = slf.py();
     let name: &str = slf.get().spec.name;
-    let ordered: bool = ORDERED_RECORDS.iter().any(|group| group.contains(&name));
+    let ordered: bool = behaviours()
+        .ordered
+        .iter()
+        .any(|group| group.contains(&name));
     if !ordered || !other.get_type().is(slf.get_type()) {
         return Ok(py.NotImplemented());
     }
@@ -603,4 +616,17 @@ pub(crate) fn path_stem(path: &Bound<'_, PyAny>) -> PyResult<String> {
 pub(crate) fn path_posix_text(path: &Bound<'_, PyAny>) -> PyResult<String> {
     let text: Bound<'_, PyString> = path.str()?;
     Ok(text.to_str()?.replace(std::path::MAIN_SEPARATOR, "/"))
+}
+
+/// `{item.<attribute>: item for item in items}`.
+pub(crate) fn by_attribute<'py>(
+    items: &Bound<'py, PyAny>,
+    attribute: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let keyed: Bound<'py, PyDict> = PyDict::new(items.py());
+    for item in items.try_iter()? {
+        let item: Bound<'py, PyAny> = item?;
+        keyed.set_item(field(&item, attribute)?, item)?;
+    }
+    Ok(keyed)
 }

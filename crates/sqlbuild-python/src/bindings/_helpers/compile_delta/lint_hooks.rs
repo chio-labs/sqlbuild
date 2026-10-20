@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use pyo3::PyResult;
 
-use crate::bindings::_helpers::compile_delta::context::{
+use crate::bindings::_helpers::compile_context::delta::{
     capture, capturing, delta_unsupported, injection,
 };
 use sqlbuild_core::format_command::constants::LINT_DIRECTORY_NAMES;

@@ -21,9 +21,9 @@ use sqlbuild_core::command_output::main::queue_output_record::queue_output_recor
 use sqlbuild_core::command_output::models::{
     BufferOutcome, IdleStep, OutputBuffer, OutputQueue, OutputStream, RecordDraft, RecordPriority,
 };
+use sqlbuild_host::entries::models::ExecutorHost;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{call_with, imported};
-use crate::bindings::_helpers::native_host::executor::ExecutorHost;
+use crate::bindings::_helpers::boundary::python_calls::{call_with, imported};
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::native_threads::constants::OUTPUT_SUPPRESSED_ATTRIBUTE;
 use crate::bindings::_helpers::native_threads::exit_signal::signal_interpreter_exit;
@@ -354,25 +354,24 @@ impl OutputCaptureDispatcher {
     #[new]
     #[pyo3(signature = (**options))]
     fn new(py: Python<'_>, options: Option<Bound<'_, PyDict>>) -> PyResult<Self> {
-        let options =
-            crate::bindings::_helpers::compile_driver::python_calls::KeywordArguments::read(
-                py,
-                "OutputCaptureDispatcher",
-                options,
-                (
-                    &["exporter", "invocation_id"],
-                    &[
-                        "run_id",
-                        "external_context",
-                        "queue_capacity",
-                        "batch_size",
-                        "max_record_bytes",
-                        "shutdown_timeout_seconds",
-                        "clock",
-                        "failure_callback",
-                    ],
-                ),
-            )?;
+        let options = crate::bindings::_helpers::boundary::python_calls::KeywordArguments::read(
+            py,
+            "OutputCaptureDispatcher",
+            options,
+            (
+                &["exporter", "invocation_id"],
+                &[
+                    "run_id",
+                    "external_context",
+                    "queue_capacity",
+                    "batch_size",
+                    "max_record_bytes",
+                    "shutdown_timeout_seconds",
+                    "clock",
+                    "failure_callback",
+                ],
+            ),
+        )?;
         let number = |name: &str, default: i64| -> PyResult<i64> {
             let value = options.value(name)?;
             if value.is_none() {

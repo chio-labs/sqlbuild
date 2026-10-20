@@ -13,8 +13,8 @@ use sqlbuild_analysis::compiler::models::{
 use sqlbuild_core::panics::main::native_failure::native_failure;
 
 use crate::bindings::_helpers::boundary::panics::value_error;
-use crate::bindings::_helpers::compiled_project::model_input_view::NativeModelInput;
-use crate::bindings::_helpers::compiled_project::model_loop_host::ReferenceRow;
+use crate::bindings::_helpers::compiled_project::rows::ReferenceRow;
+use crate::bindings::_helpers::compiled_views::model_input_view::NativeModelInput;
 use crate::bindings::_helpers::records::fields::{
     field as native_field, path_posix_text, path_stem,
 };

@@ -17,7 +17,7 @@ use sqlbuild_state::freshness::main::records_equivalent::records_equivalent;
 use sqlbuild_state::freshness::models::{AgeStatus, ComparableRecord, DataVersion};
 use sqlbuild_state::freshness::types::TimestampParser;
 
-use crate::bindings::_helpers::compile_driver::python_calls::imported;
+use crate::bindings::_helpers::boundary::python_calls::imported;
 use crate::bindings::_helpers::cursor::values::{DATETIME_MODULE, local_date_time};
 use crate::bindings::_helpers::records::construct::{enum_member, record_class};
 use crate::bindings::_helpers::records::fields::field as native_field;

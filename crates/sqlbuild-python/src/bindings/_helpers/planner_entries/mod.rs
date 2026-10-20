@@ -5,6 +5,7 @@ pub(crate) mod command_plans;
 pub(crate) mod contexts;
 pub(crate) mod display_plan;
 pub(crate) mod execution_plan;
+pub(crate) mod getters;
 pub(crate) mod model_entries;
 pub(crate) mod models;
 pub(crate) mod plan_output;

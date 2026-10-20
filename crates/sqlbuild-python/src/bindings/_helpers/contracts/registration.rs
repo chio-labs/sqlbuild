@@ -2,10 +2,12 @@
 
 use pyo3::prelude::{Bound, PyModule, PyResult};
 
+use crate::bindings::_helpers::authored_values::sql_values;
 use crate::bindings::_helpers::contracts::{
-    contract_diagnostics, effective_config, exception_types, project_config, resource_identities,
-    spec_resolution, sql_values, state_literals,
+    contract_diagnostics, effective_config, exception_types, resource_identities, spec_resolution,
+    state_literals,
 };
+use crate::bindings::_helpers::discovery::project_config;
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     contract_diagnostics::register(module)?;

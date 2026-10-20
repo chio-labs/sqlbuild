@@ -12,9 +12,9 @@ use sqlbuild_analysis::diff_selection::errors::SelectorError;
 use sqlbuild_analysis::diff_selection::main::resolve_diff_selection::resolve_diff_selection;
 use sqlbuild_analysis::diff_selection::models::DiffGraph;
 
-use crate::bindings::_helpers::analysis::model_reads;
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, keywords};
 use crate::bindings::_helpers::compile_driver::project::build_compiled_project;
-use crate::bindings::_helpers::compile_driver::python_calls::{KeywordArguments, keywords};
+use crate::bindings::_helpers::compiled_views::model_reads;
 use crate::bindings::_helpers::graph::views::project_lineage_views;
 use crate::bindings::_helpers::records::construct::enum_member;
 use crate::bindings::_helpers::records::construct::error_class;

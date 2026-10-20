@@ -14,14 +14,13 @@ use pyo3::prelude::{
 use pyo3::types::{PyDict, PyTuple};
 use pyo3::{IntoPyObjectExt, pyfunction, wrap_pyfunction};
 
+use sqlbuild_host::entries::models::UserCodeHost;
+
+use crate::bindings::_helpers::boundary::python_calls::{KeywordArguments, call_with, keywords};
 use crate::bindings::_helpers::cache::native_store::current_code_identity;
-use crate::bindings::_helpers::compile_driver::python_calls::{
-    KeywordArguments, call_with, keywords,
-};
 use crate::bindings::_helpers::compile_driver::stage_work::count_stage;
 use crate::bindings::_helpers::compiled_project::project::NativeCompiledProject;
 use crate::bindings::_helpers::native_host::host;
-use crate::bindings::_helpers::native_host::user_code::UserCodeHost;
 use crate::bindings::_helpers::records::construct::new_record_with;
 use crate::bindings::_helpers::records::fields::field;
 use crate::bindings::_helpers::records::ids::RecordId;

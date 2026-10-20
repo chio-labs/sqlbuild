@@ -341,7 +341,7 @@ pub(crate) fn start_model_analysis_session(
 ) -> PyResult<NativeModelAnalysisSession> {
     let py: Python<'_> = catalog.py();
     let mut request: SessionRequest =
-        crate::bindings::_helpers::compile_delta::context::inject_relations(session_request(
+        crate::bindings::_helpers::compile_context::delta::inject_relations(session_request(
             request,
         ))?;
     let rule_failure: RuleFailure = RuleFailure::default();
@@ -352,7 +352,7 @@ pub(crate) fn start_model_analysis_session(
         .compiler_detach(|| start_analysis_session(request, catalog))
         .map_err(|reason| internal_error(&reason))?;
     let cache: Option<(PathBuf, String)> =
-        cache.filter(|_| crate::bindings::_helpers::compile_delta::context::injection().is_none());
+        cache.filter(|_| crate::bindings::_helpers::compile_context::delta::injection().is_none());
     let mut cache_path: Option<PathBuf> = None;
     let mut cache_stats: Option<CacheStatsRow> = None;
     if let Some((path, environment)) = cache {
@@ -452,7 +452,7 @@ fn session_request(request: RequestRow) -> SessionRequest {
         dynamic_families_by_table: families_by_table(dynamic_families_by_table),
         models: models.into_iter().map(model_request).collect(),
         forced_order: None,
-        retain_relations: crate::bindings::_helpers::compile_delta::context::capturing(),
+        retain_relations: crate::bindings::_helpers::compile_context::delta::capturing(),
     }
 }
 

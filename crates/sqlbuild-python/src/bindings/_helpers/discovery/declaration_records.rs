@@ -13,10 +13,11 @@ use sqlbuild_discovery::declaration_files::models::{
 use sqlbuild_discovery::declaration_files::types::Collection;
 use sqlbuild_discovery::models::{FileOutcome, LineColumnSpan};
 use sqlbuild_discovery::tree::models::ProjectTree;
+use sqlbuild_host::entries::models::FacadeHost;
 use sqlbuild_sqltext::compiler::models::AuthoredValue;
 use std::sync::Arc;
 
-use crate::bindings::_helpers::compile_driver::python_calls::{imported, keywords};
+use crate::bindings::_helpers::boundary::python_calls::{imported, keywords};
 use crate::bindings::_helpers::discovery::constants;
 use crate::bindings::_helpers::discovery::faults::{FileFaults, record_tuple};
 use crate::bindings::_helpers::discovery::header_declarations::typed_constant_record;
@@ -27,7 +28,6 @@ use crate::bindings::_helpers::discovery::snapshot::{
 };
 use crate::bindings::_helpers::discovery::sorted_keys::sorted_keys;
 use crate::bindings::_helpers::model_config::header_columns::schema_columns;
-use crate::bindings::_helpers::native_host::facade::FacadeHost;
 use crate::bindings::_helpers::native_host::host;
 use crate::bindings::_helpers::records::construct::{enum_from_value, new_record, new_record_with};
 use crate::bindings::_helpers::records::fields::mapping_get;
